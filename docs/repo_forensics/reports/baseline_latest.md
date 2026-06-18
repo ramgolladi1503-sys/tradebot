@@ -12,13 +12,13 @@
 
 | Category | Count |
 |---|---:|
-| Total files | 1821 |
-| Python files | 1346 |
-| Test files | 647 |
-| Shell scripts | 22 |
-| Dashboard files | 30 |
-| Doc/text files | 98 |
-| Runtime/evidence paths present | 2 |
+| Total files | 344151 |
+| Python files | 1976 |
+| Test files | 983 |
+| Shell scripts | 38 |
+| Dashboard files | 33 |
+| Doc/text files | 316708 |
+| Runtime/evidence paths present | 3 |
 
 ## Required Entrypoints
 
@@ -138,60 +138,60 @@
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
 | `run_live.sh` | UNREFERENCED | 0 | 0 | no_static_references_found |
-| `main.py` | PRODUCTION_REFERENCED | 160 | 13 | production_reference_found |
-| `core/runtime_safety_boot_guard.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/auth.py` | PRODUCTION_REFERENCED | 15 | 3 | production_reference_found |
-| `core/auth_health.py` | PRODUCTION_REFERENCED | 10 | 5 | production_reference_found |
+| `main.py` | PRODUCTION_REFERENCED | 212 | 19 | production_reference_found |
+| `core/runtime_safety_boot_guard.py` | PRODUCTION_REFERENCED | 1 | 3 | production_reference_found |
+| `core/auth.py` | PRODUCTION_REFERENCED | 16 | 9 | production_reference_found |
+| `core/auth_health.py` | PRODUCTION_REFERENCED | 11 | 8 | production_reference_found |
 | `core/security_guard.py` | PRODUCTION_REFERENCED | 6 | 1 | production_reference_found |
 | `core/readiness_gate.py` | PRODUCTION_REFERENCED | 6 | 6 | production_reference_found |
 | `core/startup_recovery.py` | TEST_ONLY | 0 | 1 | test_references_only |
-| `core/instance_lock.py` | PRODUCTION_REFERENCED | 3 | 1 | production_reference_found |
+| `core/instance_lock.py` | PRODUCTION_REFERENCED | 4 | 1 | production_reference_found |
 | `core/session_guard.py` | PRODUCTION_REFERENCED | 2 | 1 | production_reference_found |
 
 ### orchestration
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `core/orchestrator.py` | PRODUCTION_REFERENCED | 3 | 34 | production_reference_found |
+| `core/orchestrator.py` | PRODUCTION_REFERENCED | 3 | 42 | production_reference_found |
 | `core/orchestrator_parts/cycle.py` | PRODUCTION_REFERENCED | 2 | 1 | production_reference_found |
-| `core/orchestrator_parts/data.py` | PRODUCTION_REFERENCED | 82 | 15 | production_reference_found |
-| `core/orchestrator_parts/decisions.py` | PRODUCTION_REFERENCED | 12 | 5 | production_reference_found |
+| `core/orchestrator_parts/data.py` | PRODUCTION_REFERENCED | 97 | 23 | production_reference_found |
+| `core/orchestrator_parts/decisions.py` | PRODUCTION_REFERENCED | 25 | 6 | production_reference_found |
 | `core/orchestrator_parts/finalize.py` | PRODUCTION_REFERENCED | 1 | 0 | production_reference_found |
 
 ### market_data
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `core/market_data.py` | PRODUCTION_REFERENCED | 59 | 42 | production_reference_found |
-| `core/kite_depth_ws.py` | PRODUCTION_REFERENCED | 9 | 15 | production_reference_found |
+| `core/market_data.py` | PRODUCTION_REFERENCED | 65 | 44 | production_reference_found |
+| `core/kite_depth_ws.py` | PRODUCTION_REFERENCED | 11 | 15 | production_reference_found |
 | `core/depth_store.py` | PRODUCTION_REFERENCED | 10 | 1 | production_reference_found |
 | `core/option_liquidity_cache.py` | PRODUCTION_REFERENCED | 4 | 4 | production_reference_found |
-| `core/quote_truth.py` | PRODUCTION_REFERENCED | 4 | 1 | production_reference_found |
+| `core/quote_truth.py` | PRODUCTION_REFERENCED | 5 | 2 | production_reference_found |
 | `core/gates/quote_age_gate.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
 
 ### candidates_and_ranking
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `strategies/trade_builder.py` | PRODUCTION_REFERENCED | 9 | 42 | production_reference_found |
-| `core/engine_phase2_adapter.py` | PRODUCTION_REFERENCED | 1 | 3 | production_reference_found |
-| `core/v2_pipeline.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/pro_strategy_pipeline.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/opportunity_engine.py` | PRODUCTION_REFERENCED | 3 | 6 | production_reference_found |
+| `strategies/trade_builder.py` | PRODUCTION_REFERENCED | 10 | 45 | production_reference_found |
+| `core/engine_phase2_adapter.py` | PRODUCTION_REFERENCED | 1 | 8 | production_reference_found |
+| `core/v2_pipeline.py` | PRODUCTION_REFERENCED | 2 | 1 | production_reference_found |
+| `core/pro_strategy_pipeline.py` | PRODUCTION_REFERENCED | 2 | 1 | production_reference_found |
+| `core/opportunity_engine.py` | PRODUCTION_REFERENCED | 3 | 7 | production_reference_found |
 | `core/trade_scoring.py` | PRODUCTION_REFERENCED | 5 | 1 | production_reference_found |
 | `core/candidate_finalization.py` | PRODUCTION_REFERENCED | 3 | 2 | production_reference_found |
 | `core/candidate_soft_reject.py` | PRODUCTION_REFERENCED | 2 | 4 | production_reference_found |
 | `core/decision_builder.py` | PRODUCTION_REFERENCED | 3 | 3 | production_reference_found |
-| `core/decision_dag.py` | PRODUCTION_REFERENCED | 2 | 3 | production_reference_found |
+| `core/decision_dag.py` | PRODUCTION_REFERENCED | 2 | 7 | production_reference_found |
 
 ### risk_and_safety
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `core/risk_engine.py` | PRODUCTION_REFERENCED | 6 | 6 | production_reference_found |
-| `core/execution_guard.py` | PRODUCTION_REFERENCED | 3 | 4 | production_reference_found |
-| `core/risk_halt.py` | PRODUCTION_REFERENCED | 14 | 13 | production_reference_found |
-| `core/risk_state.py` | PRODUCTION_REFERENCED | 15 | 6 | production_reference_found |
+| `core/risk_engine.py` | PRODUCTION_REFERENCED | 8 | 6 | production_reference_found |
+| `core/execution_guard.py` | PRODUCTION_REFERENCED | 4 | 5 | production_reference_found |
+| `core/risk_halt.py` | PRODUCTION_REFERENCED | 14 | 14 | production_reference_found |
+| `core/risk_state.py` | PRODUCTION_REFERENCED | 15 | 7 | production_reference_found |
 | `core/portfolio_risk_allocator.py` | PRODUCTION_REFERENCED | 1 | 0 | production_reference_found |
 | `core/circuit_breaker.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
 | `core/decision_breakers.py` | PRODUCTION_REFERENCED | 2 | 2 | production_reference_found |
@@ -202,25 +202,25 @@
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `core/execution_engine.py` | PRODUCTION_REFERENCED | 8 | 18 | production_reference_found |
-| `core/execution_router.py` | PRODUCTION_REFERENCED | 2 | 6 | production_reference_found |
+| `core/execution_engine.py` | PRODUCTION_REFERENCED | 8 | 20 | production_reference_found |
+| `core/execution_router.py` | PRODUCTION_REFERENCED | 3 | 9 | production_reference_found |
 | `core/live_dry_run_broker_payload_gate.py` | PRODUCTION_REFERENCED | 1 | 3 | production_reference_found |
 | `core/broker_reconciliation_dry_run_proof.py` | PRODUCTION_REFERENCED | 1 | 2 | production_reference_found |
 | `core/kill_switch_risk_halt_dry_run_proof.py` | TEST_ONLY | 0 | 1 | test_references_only |
 | `core/broker_truth_reconciler.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/kite_client.py` | PRODUCTION_REFERENCED | 43 | 23 | production_reference_found |
+| `core/kite_client.py` | PRODUCTION_REFERENCED | 51 | 28 | production_reference_found |
 
 ### evidence_and_dashboard
 
 | Module | Status | Production Callers | Test Callers | Evidence |
 |---|---|---:|---:|---|
-| `core/events.py` | PRODUCTION_REFERENCED | 62 | 36 | production_reference_found |
+| `core/events.py` | PRODUCTION_REFERENCED | 106 | 49 | production_reference_found |
 | `core/audit_log.py` | PRODUCTION_REFERENCED | 12 | 1 | production_reference_found |
 | `core/decision_logger.py` | PRODUCTION_REFERENCED | 3 | 3 | production_reference_found |
 | `core/decision_store.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/runtime_health.py` | PRODUCTION_REFERENCED | 5 | 6 | production_reference_found |
-| `core/runtime_snapshot_producer.py` | PRODUCTION_REFERENCED | 1 | 1 | production_reference_found |
-| `core/runtime_snapshot_store.py` | PRODUCTION_REFERENCED | 6 | 1 | production_reference_found |
+| `core/runtime_health.py` | PRODUCTION_REFERENCED | 11 | 9 | production_reference_found |
+| `core/runtime_snapshot_producer.py` | PRODUCTION_REFERENCED | 1 | 2 | production_reference_found |
+| `core/runtime_snapshot_store.py` | PRODUCTION_REFERENCED | 8 | 6 | production_reference_found |
 | `core/observability/pipeline.py` | PRODUCTION_REFERENCED | 5 | 1 | production_reference_found |
 | `dashboard/streamlit_app.py` | TEST_ONLY | 0 | 1 | test_references_only |
 | `dashboard/streamlit_app_runtime.py` | TEST_ONLY | 0 | 21 | test_references_only |
@@ -233,11 +233,11 @@
 |---|---|---|
 | `run_live.sh` | PASS | file_exists:run_live.sh |
 | `main.py` | PASS | file_exists:main.py |
-| `core.runtime_safety_boot_guard.enforce_runtime_boot_safety` | FAIL | module_file_missing:core/runtime_safety_boot_guard/enforce_runtime_boot_safety.py |
-| `core.auth.validate_kite_startup_credentials` | FAIL | module_file_missing:core/auth/validate_kite_startup_credentials.py |
-| `core.readiness_gate.run_readiness_check` | FAIL | module_file_missing:core/readiness_gate/run_readiness_check.py |
-| `core.orchestrator.Orchestrator` | FAIL | module_file_missing:core/orchestrator/Orchestrator.py |
-| `core.orchestrator_parts.cycle.run_live_monitoring` | FAIL | module_file_missing:core/orchestrator_parts/cycle/run_live_monitoring.py |
+| `core.runtime_safety_boot_guard.enforce_runtime_boot_safety` | PASS | symbol_defined:core/runtime_safety_boot_guard.py:enforce_runtime_boot_safety |
+| `core.auth.validate_kite_startup_credentials` | PASS | symbol_defined:core/auth.py:validate_kite_startup_credentials |
+| `core.readiness_gate.run_readiness_check` | PASS | symbol_defined:core/readiness_gate.py:run_readiness_check |
+| `core.orchestrator.Orchestrator` | PASS | symbol_defined:core/orchestrator.py:Orchestrator |
+| `core.orchestrator_parts.cycle.run_live_monitoring` | PASS | symbol_defined:core/orchestrator_parts/cycle.py:run_live_monitoring |
 
 ### candidate_to_decision
 
@@ -246,27 +246,27 @@
 | `market_data` | PASS | reference_found |
 | `strategy_signal` | PASS | reference_found |
 | `candidate_generation` | PASS | reference_found |
-| `data_quality_gate` | UNKNOWN | reference_not_proven |
+| `data_quality_gate` | PASS | reference_found |
 | `candidate_finalization` | PASS | reference_found |
 | `opportunity_scoring` | PASS | reference_found |
 | `ranking` | PASS | reference_found |
-| `no_trade_or_gatekeeper` | UNKNOWN | reference_not_proven |
-| `risk_evaluation` | UNKNOWN | reference_not_proven |
+| `no_trade_or_gatekeeper` | PASS | reference_found |
+| `risk_evaluation` | PASS | reference_found |
 | `execution_boundary` | PASS | reference_found |
-| `review_queue_or_evidence` | UNKNOWN | reference_not_proven |
+| `review_queue_or_evidence` | PASS | reference_found |
 
 ## Test Reality
 
 | Class | Count |
 |---|---:|
-| EVIDENCE_CONTRACT | 260 |
-| FAKE_CONFIDENCE | 130 |
+| EVIDENCE_CONTRACT | 385 |
+| FAKE_CONFIDENCE | 111 |
 | INTEGRATION_WIRING | 6 |
-| RUNTIME_COMMAND | 17 |
-| SAFETY_REGRESSION | 61 |
+| RUNTIME_COMMAND | 22 |
+| SAFETY_REGRESSION | 225 |
 | SHAPE_ONLY | 7 |
-| UNIT_BEHAVIOR | 115 |
-| UNKNOWN | 11 |
+| UNIT_BEHAVIOR | 153 |
+| UNKNOWN | 8 |
 
 ### Flagged Test Files
 
@@ -292,19 +292,19 @@
 | `tests/core/test_runtime_snapshot_store.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
 | `tests/golden/test_mvp_pipeline.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | mock_heavy, live_adjacent |
 | `tests/option_backtest/test_exporter.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
-| `tests/option_backtest/test_loader.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
 | `tests/strategies/test_candidate_generation_relaxation.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
 | `tests/strategies/test_pro_strategy_engine_elite.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | mock_heavy |
 | `tests/strategies/test_regime_specific_paths.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
 | `tests/test_adaptive_limit_pricing.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | none |
-| truncated | INFO | n/a | remaining=116 | n/a |
+| `tests/test_agent_evidence.py` | FAKE_CONFIDENCE | weak | fake_confidence_marker | live_adjacent |
+| truncated | INFO | n/a | remaining=94 | n/a |
 
 ## Safety Boundary
 
 | Severity | Count |
 |---|---:|
-| CRITICAL | 16 |
-| HIGH | 38 |
+| CRITICAL | 23 |
+| HIGH | 151 |
 | MEDIUM | 0 |
 | UNKNOWN | 0 |
 
@@ -312,83 +312,83 @@
 
 | File | Severity | Boundary | Evidence | Line |
 |---|---|---|---|---:|
-| `core/broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved | 13 |
-| `core/kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven | 13 |
-| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_blocked core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof | 3 |
-| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 8 |
-| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof | 3 |
-| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 9 |
-| `tests/test_live_dry_run_broker_payload_gate.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved core.live_dry_run_broker_payload_gate.broker_payload_dry_run_blocked core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 3 |
-| `tests/test_ranked_pipeline_evidence.py` | CRITICAL | readonly_action_field | is_order_action=true |  |
-| `tests/test_repo_forensics_safety_boundary.py` | CRITICAL | readonly_action_field | is_order_action=true |  |
-| `tests/test_repo_forensics_safety_boundary.py` | CRITICAL | readonly_action_field | broker_api_called=true |  |
-| `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:core.kite_client |  |
+| `core/broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate | 13 |
+| `core/broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved | 13 |
+| `core/kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof | 13 |
+| `core/kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven | 13 |
+| `scripts/run_htf_real_paper_monitor.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.kite_client | 35 |
+| `scripts/run_htf_real_paper_monitor.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.kite_client.kite_client | 35 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof | 3 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_blocked | 3 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven | 3 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof | 3 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate | 8 |
+| `tests/test_broker_reconciliation_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 8 |
+| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof | 3 |
+| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof | 3 |
+| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate | 9 |
+| `tests/test_kill_switch_risk_halt_dry_run_proof.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 9 |
+| `tests/test_live_dry_run_broker_payload_gate.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate | 3 |
+| `tests/test_live_dry_run_broker_payload_gate.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved | 3 |
+| `tests/test_live_dry_run_broker_payload_gate.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_blocked | 3 |
+| `tests/test_live_dry_run_broker_payload_gate.py` | CRITICAL | paper_sim_broker_import | broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report | 3 |
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:core.market_data |  |
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:core.orchestrator |  |
 | `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_runtime_import | forensics_references_runtime_module:strategies.trade_builder |  |
-| `tools/repo_forensics/safety_boundary.py` | CRITICAL | forensics_order_action | forensics_contains_order_action_marker |  |
-| `tools/repo_forensics/test_reality.py` | CRITICAL | forensics_order_action | forensics_contains_order_action_marker |  |
-| `core/broker_truth_reconciler.py` | HIGH | order_action_call | order_action_call:place_order | 408 |
 | `core/execution_engine.py` | HIGH | order_action_call | order_action_call:place_order_fn | 638 |
-| `core/health_scenarios.py` | HIGH | order_action_call | order_action_call:place_order | 47 |
 | `core/kite_client.py` | HIGH | order_action_call | order_action_call:place_order | 397 |
 | `core/kite_client.py` | HIGH | order_action_call | order_action_call:modify_order | 400 |
 | `core/kite_client.py` | HIGH | order_action_call | order_action_call:cancel_order | 403 |
-| `core/storage/snapshots.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client | 215 |
-| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client | 5328 |
-| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client | 5342 |
-| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client | 9218 |
-| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.execution_engine core.execution_engine.executionengine | 9655 |
-| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client | 10317 |
-| `tests/core/test_execution_plan_boundary.py` | HIGH | order_action_call | order_action_call:engine.place_order_from_plan | 61 |
-| `tests/core/test_execution_plan_boundary.py` | HIGH | order_action_call | order_action_call:engine.place_order_from_plan | 81 |
-| truncated | INFO | n/a | remaining=24 |  |
+| `core/storage/snapshots.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client | 215 |
+| `core/storage/snapshots.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client.kite_client | 215 |
+| `dashboard/streamlit_app_runtime.py` | HIGH | readonly_execution_import | execution_import_in_readonly_path:core.kite_client | 5328 |
+| truncated | INFO | n/a | remaining=144 |  |
 
 ## Evidence Audit
 
-Reviewed files: 30
+Reviewed files: 387
 
 | Severity | Count |
 |---|---:|
-| HIGH | 88 |
-| MEDIUM | 4 |
+| HIGH | 92 |
+| MEDIUM | 14 |
 | UNKNOWN | 0 |
 
 ### Flagged Evidence Findings
 
 | File | Severity | Type | Evidence | Missing Fields |
 |---|---|---|---|---|
-| `runtime/analytics/2026-03-09/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-09/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:3 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:4 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:5 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:6 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:3 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:4 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:5 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:6 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:7 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:8 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:9 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:10 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:11 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:12 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:13 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:14 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:15 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:16 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:17 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:18 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:19 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:20 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:21 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | missing_required_fields:jsonl_line:22 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
-| truncated | INFO | n/a | remaining=62 | n/a |
+| `runtime/analytics/2026-03-09/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-09/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:3 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:4 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:5 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-11/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:6 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:1 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:2 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:3 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:4 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:5 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:6 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:7 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:8 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:9 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:10 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:11 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:12 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:13 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:14 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:15 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:16 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:17 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:18 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:19 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:20 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:21 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| `runtime/analytics/2026-03-12/events.jsonl` | HIGH | record | required_fields_absent:jsonl_line:22 | candidate_id, decision, reason, timestamp, is_order_action, broker_api_called, source |
+| truncated | INFO | n/a | remaining=76 | n/a |
 
 ## Architecture Drift
 
@@ -396,15 +396,17 @@ Reviewed files: 30
 |---|---:|
 | HIGH | 0 |
 | MEDIUM | 1 |
-| UNKNOWN | 5 |
+| UNKNOWN | 7 |
 
 ### Flagged Architecture Drift
 
 | Path | Severity | Type | Evidence |
 |---|---|---|---|
 | `core/risk_manager.py, strategies/risk_manager.py` | MEDIUM | duplicate_module_stem | stem=risk_manager count=2 |
+| `dashboard/home_freshness_panel.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
 | `dashboard/utils.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
 | `dashboard/ui/table_model.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
+| `dashboard/ui/freshness_panel.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
 | `dashboard/readers/__init__.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
 | `dashboard/readers/advisory_reader.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
 | `dashboard/readers/snapshot_reader.py` | UNKNOWN | dashboard_evidence_reader_unproven | dashboard_reads_evidence_like_data_without_configured_path_reference |
@@ -412,6 +414,7 @@ Reviewed files: 30
 ## Runtime / Evidence Paths Present
 
 - `runtime/analytics`
+- `docs/repo_forensics/reports`
 - `docs/agent_reviews`
 
 ## Top Manual Inspection Files
@@ -431,32 +434,23 @@ Reviewed files: 30
 
 - Missing required entrypoints: 0
 - Missing critical modules: 0
-- Runtime flow failures: 5
-- Runtime flow unknowns: 4
+- Runtime flow failures: 0
+- Runtime flow unknowns: 0
 - Critical modules missing caller proof: 5
-- Fake-confidence tests: 130
-- Unknown test files: 11
-- Safety critical findings: 16
-- Safety high findings: 38
+- Fake-confidence tests: 111
+- Unknown test files: 8
+- Safety critical findings: 23
+- Safety high findings: 151
 - Safety unknown findings: 0
-- Evidence high findings: 88
-- Evidence medium findings: 4
+- Evidence high findings: 92
+- Evidence medium findings: 14
 - Evidence unknown findings: 0
 - Drift high findings: 0
 - Drift medium findings: 1
-- Drift unknown findings: 5
+- Drift unknown findings: 7
 
 ## Findings
 
-- HIGH: runtime flow step failed `live_startup:core.runtime_safety_boot_guard.enforce_runtime_boot_safety` evidence=module_file_missing:core/runtime_safety_boot_guard/enforce_runtime_boot_safety.py
-- HIGH: runtime flow step failed `live_startup:core.auth.validate_kite_startup_credentials` evidence=module_file_missing:core/auth/validate_kite_startup_credentials.py
-- HIGH: runtime flow step failed `live_startup:core.readiness_gate.run_readiness_check` evidence=module_file_missing:core/readiness_gate/run_readiness_check.py
-- HIGH: runtime flow step failed `live_startup:core.orchestrator.Orchestrator` evidence=module_file_missing:core/orchestrator/Orchestrator.py
-- HIGH: runtime flow step failed `live_startup:core.orchestrator_parts.cycle.run_live_monitoring` evidence=module_file_missing:core/orchestrator_parts/cycle/run_live_monitoring.py
-- UNKNOWN: runtime flow step unproven `candidate_to_decision:data_quality_gate` evidence=reference_not_proven
-- UNKNOWN: runtime flow step unproven `candidate_to_decision:no_trade_or_gatekeeper` evidence=reference_not_proven
-- UNKNOWN: runtime flow step unproven `candidate_to_decision:risk_evaluation` evidence=reference_not_proven
-- UNKNOWN: runtime flow step unproven `candidate_to_decision:review_queue_or_evidence` evidence=reference_not_proven
 - HIGH: critical module has test-only caller proof `core/startup_recovery.py` group=runtime_startup
 - HIGH: critical module has test-only caller proof `core/kill_switch_risk_halt_dry_run_proof.py` group=execution_boundary
 - HIGH: critical module has test-only caller proof `dashboard/streamlit_app.py` group=evidence_and_dashboard
@@ -482,72 +476,74 @@ Reviewed files: 30
 - MEDIUM: fake-confidence test signal `tests/core/test_runtime_snapshot_store.py` evidence=fake_confidence_marker
 - MEDIUM: fake-confidence test signal `tests/golden/test_mvp_pipeline.py` evidence=fake_confidence_marker
 - MEDIUM: fake-confidence test signal `tests/option_backtest/test_exporter.py` evidence=fake_confidence_marker
-- MEDIUM: fake-confidence test signal truncated count=110
-- CRITICAL: safety boundary `core/broker_reconciliation_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved
-- CRITICAL: safety boundary `core/kill_switch_risk_halt_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven
-- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_blocked core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof
-- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:8` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
-- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof
-- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:9` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
-- CRITICAL: safety boundary `tests/test_live_dry_run_broker_payload_gate.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved core.live_dry_run_broker_payload_gate.broker_payload_dry_run_blocked core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
-- CRITICAL: safety boundary `tests/test_ranked_pipeline_evidence.py` boundary=readonly_action_field evidence=is_order_action=true
-- CRITICAL: safety boundary `tests/test_repo_forensics_safety_boundary.py` boundary=readonly_action_field evidence=is_order_action=true
-- CRITICAL: safety boundary `tests/test_repo_forensics_safety_boundary.py` boundary=readonly_action_field evidence=broker_api_called=true
-- CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:core.kite_client
+- MEDIUM: fake-confidence test signal truncated count=91
+- CRITICAL: safety boundary `core/broker_reconciliation_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate
+- CRITICAL: safety boundary `core/broker_reconciliation_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved
+- CRITICAL: safety boundary `core/kill_switch_risk_halt_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof
+- CRITICAL: safety boundary `core/kill_switch_risk_halt_dry_run_proof.py:13` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven
+- CRITICAL: safety boundary `scripts/run_htf_real_paper_monitor.py:35` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.kite_client
+- CRITICAL: safety boundary `scripts/run_htf_real_paper_monitor.py:35` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.kite_client.kite_client
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_blocked
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof.broker_recon_dry_run_proven
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:8` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate
+- CRITICAL: safety boundary `tests/test_broker_reconciliation_dry_run_proof.py:8` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
+- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof
+- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.broker_reconciliation_dry_run_proof.build_broker_reconciliation_dry_run_proof
+- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:9` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate
+- CRITICAL: safety boundary `tests/test_kill_switch_risk_halt_dry_run_proof.py:9` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
+- CRITICAL: safety boundary `tests/test_live_dry_run_broker_payload_gate.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate
+- CRITICAL: safety boundary `tests/test_live_dry_run_broker_payload_gate.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_approved
+- CRITICAL: safety boundary `tests/test_live_dry_run_broker_payload_gate.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.broker_payload_dry_run_blocked
+- CRITICAL: safety boundary `tests/test_live_dry_run_broker_payload_gate.py:3` boundary=paper_sim_broker_import evidence=broker_adjacent_import:core.live_dry_run_broker_payload_gate.build_live_dry_run_broker_payload_gate_report
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:core.market_data
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:core.orchestrator
 - CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_runtime_import evidence=forensics_references_runtime_module:strategies.trade_builder
-- CRITICAL: safety boundary `tools/repo_forensics/safety_boundary.py` boundary=forensics_order_action evidence=forensics_contains_order_action_marker
-- CRITICAL: safety boundary `tools/repo_forensics/test_reality.py` boundary=forensics_order_action evidence=forensics_contains_order_action_marker
-- HIGH: safety boundary `core/broker_truth_reconciler.py:408` boundary=order_action_call evidence=order_action_call:place_order
 - HIGH: safety boundary `core/execution_engine.py:638` boundary=order_action_call evidence=order_action_call:place_order_fn
-- HIGH: safety boundary `core/health_scenarios.py:47` boundary=order_action_call evidence=order_action_call:place_order
 - HIGH: safety boundary `core/kite_client.py:397` boundary=order_action_call evidence=order_action_call:place_order
 - HIGH: safety boundary `core/kite_client.py:400` boundary=order_action_call evidence=order_action_call:modify_order
 - HIGH: safety boundary `core/kite_client.py:403` boundary=order_action_call evidence=order_action_call:cancel_order
-- HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client
-- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:5328` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client
-- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:5342` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client
-- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:9218` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client
-- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:9655` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.execution_engine core.execution_engine.executionengine
-- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:10317` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client core.kite_client.kite_client
-- HIGH: safety boundary `tests/core/test_execution_plan_boundary.py:61` boundary=order_action_call evidence=order_action_call:engine.place_order_from_plan
-- HIGH: safety boundary `tests/core/test_execution_plan_boundary.py:81` boundary=order_action_call evidence=order_action_call:engine.place_order_from_plan
-- HIGH: safety findings truncated count=24
-- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:7 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:8 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:9 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:10 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:11 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:12 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:13 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:14 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:15 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:16 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:17 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:18 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:19 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:20 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:21 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=missing_required_fields:jsonl_line:22 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
-- MEDIUM: evidence findings truncated count=62
+- HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client
+- HIGH: safety boundary `core/storage/snapshots.py:215` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client.kite_client
+- HIGH: safety boundary `dashboard/streamlit_app_runtime.py:5328` boundary=readonly_execution_import evidence=execution_import_in_readonly_path:core.kite_client
+- HIGH: safety findings truncated count=144
+- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-09/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-11/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:1 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:2 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:3 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:4 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:5 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:6 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:7 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:8 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:9 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:10 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:11 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:12 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:13 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:14 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:15 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:16 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:17 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:18 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:19 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:20 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:21 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- HIGH: evidence `runtime/analytics/2026-03-12/events.jsonl` type=record evidence=required_fields_absent:jsonl_line:22 missing=candidate_id,decision,reason,timestamp,is_order_action,broker_api_called,source
+- MEDIUM: evidence findings truncated count=76
 - MEDIUM: architecture drift `core/risk_manager.py, strategies/risk_manager.py` type=duplicate_module_stem evidence=stem=risk_manager count=2
+- UNKNOWN: architecture drift `dashboard/home_freshness_panel.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/utils.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/ui/table_model.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
+- UNKNOWN: architecture drift `dashboard/ui/freshness_panel.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/readers/__init__.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/readers/advisory_reader.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
 - UNKNOWN: architecture drift `dashboard/readers/snapshot_reader.py` type=dashboard_evidence_reader_unproven evidence=dashboard_reads_evidence_like_data_without_configured_path_reference
