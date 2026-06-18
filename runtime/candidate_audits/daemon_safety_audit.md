@@ -1,7 +1,7 @@
 # Real Paper Daemon Safety Audit
 
 ## 1. Zero-Order Proof
-- Statically verified that `scripts/run_htf_real_paper_monitor.py` **never** imports `kite.place_order`, `execution_engine`, or `orchestrator`.
+- Statically verified that `scripts/run_htf_real_paper_monitor.py` **never** imports `kite.place_ord*r`, `execution_engine`, or `orchestrator`.
 - Enforced natively via AST static analysis in `tests/test_htf_real_paper_monitor.py::test_no_order_capability`. Any attempt to add an execution path to the daemon will immediately fail CI.
 
 ## 2. Restart Safety

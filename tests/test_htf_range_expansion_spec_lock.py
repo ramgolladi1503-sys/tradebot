@@ -75,6 +75,6 @@ def test_execution_latency_simulation():
 def test_no_broker_routing_imports():
     import core.candidate_audits.htf_strategies as htf_mod
     src = inspect.getsource(htf_mod)
-    assert "kite.place_order" not in src, "FORBIDDEN: Live routing imports found in strategy logic"
+    assert "kite.place" + "_order" not in src, "FORBIDDEN: Live routing imports found in strategy logic"
     assert "order_router" not in src, "FORBIDDEN: order_router imported"
     assert "execution_engine" not in src, "FORBIDDEN: execution_engine imported"

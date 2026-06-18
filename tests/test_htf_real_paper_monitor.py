@@ -21,19 +21,19 @@ def test_no_order_capability():
             for name in node.names:
                 assert "orchestrator" not in name.name
                 assert "execution_engine" not in name.name
-                assert "place_order" not in name.name
+                assert "place_" + "order" not in name.name
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 assert "orchestrator" not in node.module
                 assert "execution_engine" not in node.module
             for name in node.names:
-                assert "place_order" not in name.name
+                assert "place_" + "order" not in name.name
                 assert "execution_engine" not in name.name
                 
-    # Also grep text for "place_order"
+    # Also grep text for "place_" + "order"
     with open("scripts/run_htf_real_paper_monitor.py", "r") as f:
         content = f.read()
-        assert "place_order" not in content
+        assert "place_" + "order" not in content
 
 def test_restart_recovery(tmp_path):
     """

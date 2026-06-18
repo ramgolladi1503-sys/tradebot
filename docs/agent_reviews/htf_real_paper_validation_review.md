@@ -1,5 +1,13 @@
 # HTF Range Expansion Real-Paper Validation Review
 
+mode: PAPER
+candidate_id: HTF_RANGE_EXPANSION
+decision: VALIDATE
+reason: real paper observation
+timestamp: 2026-06-18
+is_order_action: false
+broker_api_called: false
+source: Antigravity
 ## Agent Work Contract
 source_agent: Antigravity
 action: PLAN_PR, GENERATE_TESTS, GENERATE_PATCH, FIX_TEST_FAILURE, UPDATE_DOCS
