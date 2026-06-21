@@ -162,7 +162,9 @@ def test_htf_pipeline_safety_revival():
 
     # Run adapter
     report = build_htf_candidate_intents(res)
-    assert len(report.eligible_intents) == 1
+    intents = report.eligible_intents
+    assert intents, "Expected at least one eligible intent"
+    assert [i.intent.family for i in intents] == ["htf"], "Expected exactly one htf intent"
 
     intent = report.eligible_intents[0].intent
     assert intent.family == "htf"
@@ -278,7 +280,7 @@ def test_paper_telemetry_no_live_orders_placed(monkeypatch, tmp_path):
     assert tmp_cand.exists()
     with open(tmp_cand, "r") as f:
         lines = f.readlines()
-        assert len(lines) >= 1
+        assert lines, "Expected at least one line of telemetry"
         records = [json.loads(line) for line in lines]
         assert any("OPENING_DRIVE_CONT" in r["strategy"] and isinstance(r["execution_ok"], bool) for r in records)
 

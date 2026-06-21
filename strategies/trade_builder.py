@@ -7652,10 +7652,10 @@ class TradeBuilder:
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
         symbol = str(market_data.get("symbol") or "UNKNOWN")
+        ctx = market_data.get("market_context")
+        ctx_mode = ctx.get("execution_mode") if isinstance(ctx, dict) else ""
         exec_mode = str(
-            market_data.get("execution_mode")
-            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
-            or getattr(cfg, "EXECUTION_MODE", "")
+            market_data.get("execution_mode") or ctx_mode or getattr(cfg, "EXECUTION_MODE", "")
         ).strip().upper()
         nonlive_feature_fallback = bool(market_data.get("nonlive_feature_fallback"))
         regime_day = self._resolve_regime(market_data)
@@ -11240,10 +11240,10 @@ class TradeBuilder:
         # PAPER TELEMETRY: Hook OPENING_DRIVE_CONT candidates for option quote validation
         # STRICT GUARD: Only run for PAPER mode and if explicitly enabled.
         try:
+            ctx = (market_data or {}).get("market_context")
+            ctx_mode = ctx.get("execution_mode") if isinstance(ctx, dict) else ""
             exec_mode = str(
-                (market_data or {}).get("execution_mode")
-                or ((market_data or {}).get("market_context") or {}).get("execution_mode") if isinstance((market_data or {}).get("market_context"), dict) else ""
-                or getattr(cfg, "EXECUTION_MODE", "")
+                (market_data or {}).get("execution_mode") or ctx_mode or getattr(cfg, "EXECUTION_MODE", "")
             ).strip().upper()
 
             paper_telemetry_enabled = bool(getattr(cfg, "PAPER_TELEMETRY_ENABLED", False))
