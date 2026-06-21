@@ -964,6 +964,27 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
                     candidate["gate_reasons"].append("missing_rr_context")
                 candidate["execution_ok"] = False
                 candidate["execution_quality_reason_code"] = "rr_estimated_context" if "RR_ESTIMATED_CONTEXT" in reason_codes else "missing_rr_context"
+
+            # HARD FALLBACK BLOCK
+            is_fallback = bool(
+                candidate.get("fallback_used") or
+                candidate.get("recovered_fallback") or
+                candidate.get("quote_source") == "recovered_fallback" or
+                candidate.get("advisory_only") or
+                candidate.get("phase2_quote_age_fallback_used") or
+                candidate.get("phase2_spread_fallback_used") or
+                candidate.get("phase2_liquidity_fallback_used")
+            )
+            if is_fallback:
+                candidate["execution_ok"] = False
+                candidate["execution_allowed"] = False
+                candidate["execution_status"] = "not_executable"
+                candidate["candidate_status"] = "advisory_only"
+                candidate["paper_eligible"] = False
+                candidate.setdefault("gate_reasons", [])
+                if is_fallback and "live_fallback_blocked" not in candidate["gate_reasons"]:
+                    candidate["gate_reasons"].append("live_fallback_blocked")
+
         candidate["liquidity_score"] = float(_liquidity_score(candidate))
         _apply_profile_rejection_setup(candidate)
         if bool(getattr(cfg, "PHASE2_PLAYBOOK_SELECTION_ENABLE", False)):
