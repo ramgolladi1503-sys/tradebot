@@ -247,7 +247,6 @@ def build_paper_exit_outcome(exit_event: Any) -> PaperExitOutcomeRecord:
         },
     )
 
-
 def record_paper_exit_outcome(
     exit_event: Any,
     *,
@@ -255,6 +254,15 @@ def record_paper_exit_outcome(
     state_path: str | Path | None = None,
 ) -> dict[str, Any]:
     record = build_paper_exit_outcome(exit_event)
+
+    try:
+        if "OPENING_DRIVE_CONT" in str(record.strategy_family).upper():
+            from core.htf_paper_telemetry import log_htf_opening_drive_paper_exit
+            log_htf_opening_drive_paper_exit(record.to_dict())
+    except Exception as e:
+        import logging
+        logging.getLogger("htf_telemetry").warning("Failed to log paper exit: %s", e)
+
     return record_paper_outcome(record.to_dict(), records_path=records_path, state_path=state_path)
 
 
