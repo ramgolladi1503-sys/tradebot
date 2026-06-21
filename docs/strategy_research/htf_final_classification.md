@@ -1,0 +1,9 @@
+# HTF Final Classification
+
+| Strategy | Trades | Win Rate | Gross Expectancy | Realistic Net | Status |
+|---|---|---|---|---|---|
+| OPENING_DRIVE_CONT | 427 | 39.34% | 1.16 | 0.36 | READY_FOR_PAPER_RETEST |
+| 15M_TREND_CONT | 0 | 0.00% | 0.00 | 0.00 | FEATURE_ONLY_NOT_EXECUTABLE |
+| 15M_VWAP_PULLBACK | 0 | 0.00% | 0.00 | 0.00 | FEATURE_ONLY_NOT_EXECUTABLE |
+| FAILED_BREAKOUT_REVERSAL | 0 | 0.00% | 0.00 | 0.00 | FEATURE_ONLY_NOT_EXECUTABLE |
+| PDH_PDL_HOLD | 8766 | 36.84% | 0.66 | -0.14 | COST_KILLED_AFTER_CORRECT_IMPLEMENTATION |
