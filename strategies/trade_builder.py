@@ -11253,6 +11253,14 @@ class TradeBuilder:
                 t_fam = getattr(cand_to_log, "strategy_family", getattr(cand_to_log, "family", cand_to_log.get("family", "") if isinstance(cand_to_log, dict) else ""))
                 t_strat = getattr(cand_to_log, "strategy", cand_to_log.get("strategy", "") if isinstance(cand_to_log, dict) else "")
 
+                if not t_fam and not t_strat:
+                    sig = self._signal_for_symbol(market_data) or {}
+                    t_fam = sig.get("strategy_family", sig.get("family", ""))
+                    t_strat = sig.get("strategy", "")
+                    if isinstance(cand_to_log, dict):
+                        cand_to_log["strategy"] = t_strat
+                        cand_to_log["family"] = t_fam
+
                 if "OPENING_DRIVE_CONT" in str(t_fam) or "OPENING_DRIVE_CONT" in str(t_strat):
                     from core.htf_paper_telemetry import log_htf_opening_drive_paper_candidate
                     log_htf_opening_drive_paper_candidate(cand_to_log if isinstance(cand_to_log, dict) else vars(cand_to_log), market_data)
