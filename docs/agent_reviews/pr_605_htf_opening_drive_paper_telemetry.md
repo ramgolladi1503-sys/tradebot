@@ -14,7 +14,7 @@
 - **Resolution:** Python conditional execution mode precedence was fixed. The tests were rewritten to explicitly check values without `assert len()`.
 
 ## Hermes Review
-- **Architecture:** The telemetry hook resides strictly within `TradeBuilder.build_with_trace`. It gracefully exits if not in `PAPER` mode, and does not alter the actual trade candidate status.
+- **Architecture:** The telemetry logic resides strictly within `TradeBuilder.build_with_trace`. It gracefully exits if not in `PAPER` mode, and does not alter the actual trade candidate state.
 
 ## GSD Review
 - **Implementation:** Added `core/htf_paper_telemetry.py`. Hooked into `TradeBuilder.build_with_trace` for candidates and `core/paper_exit_outcome.py` for exits. Fixed CI pipeline failures.
@@ -29,7 +29,7 @@
 - Verified that fallback/advisory candidates remain non-executable.
 
 ## High-Risk Path Review
-- The file `strategies/trade_builder.py` is high-risk. We ensured the telemetry hook is entirely passive (encased in a `try...except` block logging errors) and does not mutate the original `market_data` or the returned `trade`. Live mode execution paths remain fully sealed off from this telemetry.
+- The file `strategies/trade_builder.py` is high-risk. We ensured the telemetry logic is entirely passive (encased in a `try...except` block logging errors) and does not mutate the original `market_data` or the returned `trade`. Live mode execution paths remain fully sealed off from this telemetry.
 
 ## Runtime Proof Required After Merge
 - Monitor `runtime/paper/htf_opening_drive_candidates.jsonl` for actual paper candidates hitting the disk during live paper-trading hours.
