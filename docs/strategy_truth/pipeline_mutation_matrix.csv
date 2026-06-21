@@ -1,0 +1,7 @@
+Stage,Component,Input_Type,Output_Type,Mutation_Risk,Mitigation
+Signal Generation,ensemble_signal / pro_strategy_engine,market_data dict,StrategySignal / ProSignal,Low (stateless mapping),Explicit fail-closed logic on NaN/Missing data; hard tests verify bullish/bearish outputs
+Candidate Mapping,TradeBuilder._build_trade_entry_lifecycle,StrategySignal / MarketData,Trade candidate (executable),High (option strike/expiry resolution),Strict _reject_exit gates (stale quotes, illiquid chain, missing ltp); fallback quotes generate advisory_only candidates
+Fallback Generation,TradeBuilder._build_planning_no_signal_trade,MarketData,Trade candidate (advisory_only),Medium (fake candidate generation),Advisory candidates explicitly tagged 'softened'/'advisory_only'; cannot bypass execution gates
+Ranking,TradeBuilder._rank_nonlive_opportunity_candidates,List[Trade],Ranked List[Trade],Low (sorting only),Score adjustments do not elevate candidate_status to executable
+Execution Gates,core/execution_gates.py,Trade candidate,Approved / Rejected Trade,Critical (live order boundary),Gates block non-live option chains, enforce OI alignment, and ensure LIVE environment
+HTF Offline Bypass,core/candidate_audits/htf_strategies.py,Raw Candle Data,Signal,Critical (Bypasses execution gates entirely),PIPELINE_MUTATION_FOUND: HTF logic bypasses TradeBuilder and execution gates

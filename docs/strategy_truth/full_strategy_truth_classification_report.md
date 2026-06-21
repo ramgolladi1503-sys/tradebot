@@ -1,0 +1,19 @@
+# Full Strategy Truth Classification Report
+
+| Strategy Name | Truth Layer Status | Notes |
+|---|---|---|
+| `PRO_TREND_CONTINUATION` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `PRO_MEAN_REVERSION` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `PRO_MOMENTUM_BREAKOUT` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `PRO_VOLATILITY_EXPANSION` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `PRO_RANGE_FADE` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `MEAN_REVERSION` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `ORB_BREAKOUT` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `VWAP_ORB` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `VOLATILITY_SCALED_TREND` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `INTRADAY_DIRECTIONAL` | IMPLEMENTATION_VERIFIED | Ready for edge retest. |
+| `HTF_OPENING_DRIVE_CONT` | IMPLEMENTATION_BUG_FOUND / PIPELINE_MUTATION_FOUND | Bypasses safety gates; buggy. |
+| `HTF_15M_TREND_CONT` | IMPLEMENTATION_BUG_FOUND / PIPELINE_MUTATION_FOUND | Bypasses safety gates; buggy. |
+| `HTF_15M_VWAP_PULLBACK` | IMPLEMENTATION_BUG_FOUND / PIPELINE_MUTATION_FOUND | Bypasses safety gates. |
+| `HTF_FAILED_BREAKOUT_REVERSAL` | IMPLEMENTATION_BUG_FOUND / PIPELINE_MUTATION_FOUND | Bypasses safety gates; buggy. |
+| `HTF_PDH_PDL_HOLD` | IMPLEMENTATION_BUG_FOUND / PIPELINE_MUTATION_FOUND | Bypasses safety gates; buggy. |
