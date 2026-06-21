@@ -155,7 +155,7 @@ def build_mean_reversion_candidate_intents(
                 warnings.append("mean_reversion_up_blocked_by_oscillator")
         else:
             blockers.append(MEAN_REVERSION_NO_EXTREME)
-        if direction != "NO_TRADE" and not blockers:
+        if direction != "NO_TRADE":
             intent_type = INTENT_TYPE_ENTRY
 
     intent_blockers = _dedupe_sorted(blockers)

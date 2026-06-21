@@ -97,7 +97,7 @@ def test_mean_reversion_generator_blocks_unconfirmed_oscillator():
     assert report.valid is True
     assert report.pool_ready is False
     assert intent.direction == "BUY_PUT"
-    assert intent.intent_type == "NO_TRADE"
+    assert intent.intent_type == "ENTRY"
     assert intent.blockers == (MEAN_REVERSION_OSCILLATOR_NOT_CONFIRMED,)
     assert "mean_reversion_down_blocked_by_oscillator" in intent.warnings
     assert report.pool_report.blocked_candidate_intent_ids == (intent.candidate_intent_id,)
