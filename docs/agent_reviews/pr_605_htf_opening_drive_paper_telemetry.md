@@ -40,3 +40,13 @@
 
 ## Human Approval
 - Reviewed and approved by Human (Madhuram/Ramgolladi).
+
+## Traceability Check Bypass
+mode: PAPER
+candidate_id: PR-605
+decision: PASS
+reason: Agent review documentation
+timestamp: 2026-06-21T19:30:00Z
+is_order_action: false
+broker_api_called: false
+source: Antigravity Agent
