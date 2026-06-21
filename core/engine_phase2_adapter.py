@@ -331,16 +331,34 @@ def _phase2_contract_spread_ok(row: dict[str, Any]) -> bool:
     return float(spread) <= float(_effective_max_spread_pct(row))
 
 
+def _phase2_contract_has_fallback_or_advisory(row: dict[str, Any]) -> bool:
+    return bool(
+        row.get("fallback_used")
+        or row.get("recovered_fallback")
+        or str(row.get("quote_source") or "") == "recovered_fallback"
+        or row.get("advisory_only")
+        or row.get("phase2_quote_age_fallback_used")
+        or row.get("phase2_spread_fallback_used")
+        or row.get("phase2_liquidity_fallback_used")
+        or row.get("contract_resolution_fallback_used")
+        or row.get("contract_fallback_used")
+    )
+
+
 def _phase2_contract_normal_ok(row: dict[str, Any]) -> bool:
     min_exec = float(_cfg("PHASE2_MIN_EXECUTION_SCORE", 0.0) or 0.0)
     min_liq = float(_cfg("PHASE2_MIN_LIQUIDITY_SCORE", 0.0) or 0.0)
+    
+    if _phase2_contract_has_fallback_or_advisory(row):
+        return False
+        
     return bool(
         row.get("trade_id")
         and row.get("symbol")
         and not _phase2_contract_hard_drop(row)
         and row.get("execution_allowed", True)
         and row.get("tradable", True)
-        and row.get("execution_ok", True)
+        and row.get("execution_ok") is True
         and (_sf(row.get("execution_score"), 1.0) or 0.0) >= min_exec
         and (_sf(row.get("liquidity_score"), 1.0) or 0.0) >= min_liq
         and _phase2_contract_spread_ok(row)
