@@ -1,0 +1,15 @@
+strategy_name,family,current_status,live_entrypoint,logic_file,candidate_generator,pro_engine_path,trade_builder_path,phase2_path,ranking_path,ui_path,backtest_path,research_path,config_path,tests_found,tests_missing,notes
+ORB_BREAKOUT,breakout,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+VWAP_ORB,breakout,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+VWAP_MEAN_REVERSION,mean_reversion,IMPLEMENTATION_BUG_FOUND,pro_engine,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Intent bug fixed recently
+MEAN_REVERSION,mean_reversion,IMPLEMENTATION_VERIFIED_NEEDS_EDGE_RETEST,core,core/mean_reversion_candidate_generator.py,core/mean_reversion_candidate_generator.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,7,0,Tests pass
+VOL_EXPANSION_NAIVE,volatility_expansion,IMPLEMENTATION_BUG_FOUND,pro_engine,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,NaN bug fixed recently
+VOLATILITY_SCALED_TREND,trend,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+OPTIONS_FLOW_ALIGNMENT,options_flow,UNKNOWN,pro_engine,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+LIQUIDITY_IMBALANCE,order_flow,IMPLEMENTATION_BUG_FOUND,pro_engine,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,strategies/pro_layer/pro_strategy_engine.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,NaN bug fixed recently
+INTRADAY_DIRECTIONAL,trend,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+HTF_OPENING_DRIVE_CONT,htf_continuation,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+HTF_15M_TREND_CONT,htf_continuation,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+HTF_15M_VWAP_PULLBACK,pullback,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+HTF_FAILED_BREAKOUT_REVERSAL,reversal,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
+HTF_PDH_PDL_HOLD,range,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,strategies/trade_builder.py,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,UNKNOWN,0,1,Needs audit
