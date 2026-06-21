@@ -12,17 +12,22 @@ from dataclasses import dataclass
 from datetime import datetime, time as dtime, timedelta
 import hashlib
 import json
+import logging
 from pathlib import Path
 import sqlite3
 from typing import Any
 from zoneinfo import ZoneInfo
+from collections import defaultdict
 
+from core.audit_log import append_event
+from core.persistence_state_compression import should_write_persistent_state, record_written_state
 from config import config as cfg
 from core.runtime_paths import DB_ROOT, LOGS_ROOT
 from core.time_utils import now_utc_epoch
 
 
 IST = ZoneInfo("Asia/Kolkata")
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value: Any, default: float | None = None) -> float | None:
@@ -371,6 +376,9 @@ def record_price_trace(
 
 
 def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
+    if not isinstance(event, dict):
+        return {}
+
     """Persist candidate decision trace and, when blocked/non-executable, shadow row."""
     payload = dict(event or {})
     hard_reason = str(payload.get("hard_reject_reason") or "").strip().lower()
@@ -489,6 +497,7 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
         "final_action": payload.get("final_action"),
         "instrument_id": payload.get("instrument_id"),
         "derived_levels": bool(derived),
+        "status": str(payload.get("candidate_status") or "rejected"),
     }
 
     # JSONL trace for quick operator inspection.
@@ -499,6 +508,16 @@ def record_candidate_decision(event: dict, *, desk: str | None = None) -> dict:
             handle.write(json.dumps(decision_event, ensure_ascii=True) + "\n")
     except Exception:
         pass
+
+    if not should_write_persistent_state(payload, "candidate_decision_events"):
+        return {
+            "status": "ok",
+            "candidate_id": candidate_id,
+            "db_path": "",
+            "warning": "skipped by persistence compression",
+        }
+
+    record_written_state(payload, "candidate_decision_events")
 
     conn, db_path, warning = _connect_db(desk_id)
     with conn:

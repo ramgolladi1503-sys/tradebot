@@ -14,7 +14,10 @@ from core.audit_log import append_event as audit_append
 from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.reason_codes import normalize_reason_codes
+import os
+import copy
 
+from core.persistence_state_compression import should_write_persistent_state, record_written_state
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +319,11 @@ def log_decision(event: Dict[str, Any]):
     DECISION_JSONL.parent.mkdir(parents=True, exist_ok=True)
     with DECISION_JSONL.open("a") as f:
         f.write(_canonical_json(event) + "\n")
+
+    if not should_write_persistent_state(event, "decision_events"):
+        return trade_id
+
+    record_written_state(event, "decision_events")
 
     cols = [
         "trade_id",
