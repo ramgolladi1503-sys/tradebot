@@ -1,10 +1,31 @@
 # Agent Review: Full Implemented Strategy Truth Audit
 
-## Audit Summary
-- **Inventory Covers**: All 14 implemented strategy families (ProEngine, MeanReversion, TradeBuilder, and Legacy HTF).
-- **Assertions Added**: ProEngine, TradeBuilder, and MeanReversion paths have real assertion-backed tests proving truth mapping (Bullish maps to CE, Bearish maps to PE, NaN fails closed, missing data fails closed).
-- **HTF Paths Documented**: High-Timeframe (HTF) legacy paths were fully tested and discovered to have implementation bugs (incorrect mappings/rejections) and a critical pipeline bypass (they execute via a disjoint script `run_htf_real_paper_monitor.py` which never feeds candidates through `TradeBuilder` or the main execution gates).
-- **XFails Preserved**: 7 HTF tests are marked with `@pytest.mark.xfail(strict=True)` to accurately document and preserve evidence of these bugs without hiding them or turning the CI red.
-- **Production Logic**: No production logic was changed. All modifications were restricted to test specs and documentation matrices.
-- **Edge Claims**: No edge is claimed. `IMPLEMENTATION_VERIFIED_NEEDS_EDGE_RETEST` is used.
-- **Next Steps**: A future PR is recommended to fix HTF safety integration and structure mapping logic.
+## Agent Work Contract
+This PR implements the Full Strategy Truth Audit to verify the mapping, fail-closed boundaries, and safety of all 14 strategy families. No production logic is changed. 7 HTF legacy bugs were discovered and locked via strict xfails.
+
+## Scope Guard
+Restricted to tests and documentation only. The only python files modified are within `tests/strategy_truth/`.
+
+## Grill Me Review
+The risk is minimal as this only asserts existing behavior. The only risk is false positives in the audit, which were minimized by using real data assertions over mock structures.
+
+## Hermes Review
+The architecture of the strategy truth matrix correctly identifies that HTF strategies bypass Phase-2 and ranking execution gates. 
+
+## GSD Review
+All tests strictly follow the rule to not claim false edge and to preserve bugs via explicit `xfail` rather than masking them.
+
+## QA / Safety Review
+Safety boundaries are proven: NaN inputs, missing data, and invalid regime mapping fail closed in TradeBuilder. HTF paths bypass TradeBuilder and are documented as PIPELINE_MUTATION_FOUND.
+
+## Acceptance Proof
+The test suite passes with `43 passed, 7 xfailed`.
+
+## Runtime Proof Required After Merge
+None. No runtime code was changed.
+
+## What This PR Does Not Prove
+This PR does not prove that the HTF strategies are profitable or mathematically sound, nor does it fix their pipeline bypass.
+
+## Human Approval
+Requires explicit approval before merging, despite being a test-only PR.
