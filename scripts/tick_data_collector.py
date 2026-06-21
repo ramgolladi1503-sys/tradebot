@@ -78,14 +78,23 @@ def main():
     API_KEY = os.getenv("KITE_API_KEY", "").strip()
     ACCESS_TOKEN = os.getenv("KITE_ACCESS_TOKEN", "").strip()
     
-    if not ACCESS_TOKEN and TOKEN_PATH.exists():
-        try:
-            ACCESS_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
-        except Exception:
-            pass
+    # Wait 15 minutes per retry, for up to 10 tries (2.5 hours total)
+    max_retries = 10
+    for attempt in range(max_retries):
+        if not ACCESS_TOKEN and TOKEN_PATH.exists():
+            try:
+                ACCESS_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
+            except Exception:
+                pass
+                
+        if API_KEY and ACCESS_TOKEN:
+            break
+            
+        logger.warning(f"Waiting 15m for Kite API credentials... (Attempt {attempt+1}/{max_retries})")
+        time.sleep(15 * 60)
             
     if not API_KEY or not ACCESS_TOKEN:
-        logger.error("Missing Kite API credentials. Exiting.")
+        logger.error("Missing Kite API credentials after timeout. Exiting.")
         sys.exit(1)
         
     date_str = datetime.now().strftime("%Y%m%d")
