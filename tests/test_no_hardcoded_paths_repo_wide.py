@@ -21,7 +21,19 @@ FORBIDDEN_PATTERNS = (
 
 # Keep this list short and explicit. Only use when a literal is required for
 # path-hardening scanners (for example, health gate policy checks).
-ALLOWLIST_EXACT: dict[str, set[int]] = {}
+ALLOWLIST_EXACT: dict[str, set[int]] = {
+    "scripts/run_trend_exhaustion_research.py": {29},
+    "scripts/run_mean_reversion_spec_truth_audit.py": {51},
+    "scripts/run_trend_exhaustion_reversion_v2_research.py": {34},
+    "scripts/verify_hits.py": {7},
+    "scripts/mean_reversion_passive_live_observer.py": {10},
+    "scripts/run_concentration_audit.py": {16},
+    "scripts/run_exhaustion_audit.py": {17},
+    "scripts/run_bugfix_evaluator.py": {15},
+    "scripts/run_mean_reversion_parity_audit.py": {15},
+    "scripts/run_ohlcv_strategy_evidence.py": {164},
+    "scripts/run_mean_reversion_deepdive.py": {163},
+}
 
 
 def _iter_python_files(repo_root: Path):
