@@ -5964,7 +5964,7 @@ class TradeBuilder:
             mean_activation_threshold = max(mean_activation_threshold, strength_activation_min * 1.10)
         has_mean_signal = bool(mean_signal is not None or mean_reversion_strength >= mean_activation_threshold)
         mean_suppressed_reason = None
-        
+
         # Hard block against massive breakout trends
         trend_strength_proxy = max(abs(vwap_edge) / max(directional_edge_min, 1e-6), abs(ltp_change_window) / max(expansion_move_min, 1e-6))
         import os
@@ -7652,10 +7652,10 @@ class TradeBuilder:
     def _signal_for_symbol(self, market_data, force_family: str | None = None):
         instrument = market_data.get("instrument", "OPT")
         symbol = str(market_data.get("symbol") or "UNKNOWN")
+        ctx = market_data.get("market_context")
+        ctx_mode = ctx.get("execution_mode") if isinstance(ctx, dict) else ""
         exec_mode = str(
-            market_data.get("execution_mode")
-            or ((market_data.get("market_context") or {}).get("execution_mode") if isinstance(market_data.get("market_context"), dict) else "")
-            or getattr(cfg, "EXECUTION_MODE", "")
+            market_data.get("execution_mode") or ctx_mode or getattr(cfg, "EXECUTION_MODE", "")
         ).strip().upper()
         nonlive_feature_fallback = bool(market_data.get("nonlive_feature_fallback"))
         regime_day = self._resolve_regime(market_data)
@@ -8640,7 +8640,7 @@ class TradeBuilder:
                 return borderline_candidate
             return None
         setup_family = self._candidate_setup_family(signal, force_family=force_family)
-        strategy_tag = "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT"
+        strategy_tag = signal.get("strategy") if signal and signal.get("strategy") else ("QUICK_OPT" if quick_mode else "ENSEMBLE_OPT")
         if signal.get("reason") == "trend_vwap_fallback":
             strategy_tag = "TREND_VWAP_FALLBACK"
         allowed_life, _ = self._apply_lifecycle_gate(strategy_tag, mode="MAIN" if not quick_mode else "QUICK")
@@ -8755,7 +8755,7 @@ class TradeBuilder:
         # reject context for debug reports
         try:
             self._reject_ctx = {
-                "strategy": "QUICK_OPT" if quick_mode else "ENSEMBLE_OPT",
+                "strategy": strategy_tag,
                 "regime": market_data.get("regime"),
                 "day_type": market_data.get("day_type"),
                 "direction": direction,
@@ -8968,7 +8968,7 @@ class TradeBuilder:
                 if debug_reasons and opt_row_error not in {"type_mismatch"}:
                     rejected.append(self._reject_record(symbol, {}, opt_type, opt_row_error, atr=atr))
                 continue
-            
+
             # Dynamic Strike Selection: Force ITM on Expiry Range Days
             try:
                 sig_day_type = signal.get("day_type", "UNKNOWN") if isinstance(signal, dict) else getattr(signal, "day_type", "UNKNOWN")
@@ -9899,7 +9899,7 @@ class TradeBuilder:
                 stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))
                 target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))
                 size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))
-            
+
             # Phase 2: Wire continuous_regime overlay
             if candidate_strategy_tag == "volatility_trend":
                 prices = market_data.get("price_history", [])
@@ -11236,6 +11236,38 @@ class TradeBuilder:
             reject_ctx=dict(self._reject_ctx or {}),
             run_id=(market_data or {}).get("run_id"),
         )
+
+        # PAPER TELEMETRY: Hook OPENING_DRIVE_CONT candidates for option quote validation
+        # STRICT GUARD: Only run for PAPER mode and if explicitly enabled.
+        try:
+            ctx = (market_data or {}).get("market_context")
+            ctx_mode = ctx.get("execution_mode") if isinstance(ctx, dict) else ""
+            exec_mode = str(
+                (market_data or {}).get("execution_mode") or ctx_mode or getattr(cfg, "EXECUTION_MODE", "")
+            ).strip().upper()
+
+            paper_telemetry_enabled = bool(getattr(cfg, "PAPER_TELEMETRY_ENABLED", False))
+
+            if exec_mode == "PAPER" and paper_telemetry_enabled:
+                cand_to_log = trade if trade is not None else dict(self._reject_ctx or {})
+                t_fam = getattr(cand_to_log, "strategy_family", getattr(cand_to_log, "family", cand_to_log.get("family", "") if isinstance(cand_to_log, dict) else ""))
+                t_strat = getattr(cand_to_log, "strategy", cand_to_log.get("strategy", "") if isinstance(cand_to_log, dict) else "")
+
+                if not t_fam and not t_strat:
+                    sig = self._signal_for_symbol(market_data) or {}
+                    t_fam = sig.get("strategy_family", sig.get("family", ""))
+                    t_strat = sig.get("strategy", "")
+                    if isinstance(cand_to_log, dict):
+                        cand_to_log["strategy"] = t_strat
+                        cand_to_log["family"] = t_fam
+
+                if "OPENING_DRIVE_CONT" in str(t_fam) or "OPENING_DRIVE_CONT" in str(t_strat):
+                    from core.htf_paper_telemetry import log_htf_opening_drive_paper_candidate
+                    log_htf_opening_drive_paper_candidate(cand_to_log if isinstance(cand_to_log, dict) else vars(cand_to_log), market_data)
+        except Exception as e:
+            import logging
+            logging.getLogger("htf_telemetry").warning("Failed to log paper candidate: %s", e)
+
         return trade, trace
 
     def build_zero_hero(self, market_data, debug_reasons=False):

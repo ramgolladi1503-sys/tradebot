@@ -2869,6 +2869,7 @@ def annotate_ranked_opportunities(
                 source_flags=source_flags,
             )
         )
+
     return post_annotated
 
 
