@@ -40,7 +40,11 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None or value == "":
             return default
-        return float(value)
+        import math
+        f = float(value)
+        if math.isnan(f):
+            return default
+        return f
     except Exception:
         return default
 
