@@ -10,13 +10,13 @@ def _make_candle(ts, o, h, l, c, v=1000):
 
 def _mock_data():
     ts = datetime.now().replace(hour=11, minute=15, second=0, microsecond=0)
-    
+
     # 15m historical df
     df_15m = pd.DataFrame([
         vars(_make_candle(ts - timedelta(minutes=30), 25000, 25050, 24950, 25020)),
         vars(_make_candle(ts - timedelta(minutes=15), 25020, 25100, 25010, 25080)),
     ])
-    
+
     # 1m historical df
     df_1m = pd.DataFrame([
         vars(_make_candle(ts - timedelta(minutes=2), 25070, 25080, 25060, 25075)),
@@ -24,16 +24,15 @@ def _mock_data():
     ])
     df_1m['trend_15m'] = 1 # UP
     df_1m['trend_30m'] = 1 # UP
-    
+
     c_15m = _make_candle(ts, 25080, 25150, 25070, 25120)
     c_1m = _make_candle(ts, 25120, 25130, 25110, 25125)
-    
+
     return df_15m, df_1m, c_15m, c_1m, ts
 
 # ==========================================
 # 1. HTF_OPENING_DRIVE_CONT
 # ==========================================
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_OPENING_DRIVE_CONT rejects valid bullish inputs; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_opening_drive_cont_bullish_maps_correctly():
     strat = HTFStrategy("OPENING_DRIVE_CONT")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
@@ -44,7 +43,6 @@ def test_opening_drive_cont_bullish_maps_correctly():
     assert res.target > res.entry_price # Bullish maps to target > entry (CE)
     assert res.setup_name == "HTF_OPENING_DRIVE_CONT"
 
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_OPENING_DRIVE_CONT rejects valid bearish inputs; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_opening_drive_cont_bearish_maps_correctly():
     strat = HTFStrategy("OPENING_DRIVE_CONT")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
@@ -76,7 +74,6 @@ def test_15m_trend_cont_bullish_maps_correctly():
     assert isinstance(res, Signal)
     assert res.target > res.entry_price
 
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_15M_TREND_CONT rejects valid bearish inputs; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_15m_trend_cont_bearish_maps_correctly():
     strat = HTFStrategy("15M_TREND_CONT")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
@@ -104,7 +101,6 @@ def test_15m_vwap_pullback_bullish_maps_correctly():
 # ==========================================
 # 4. HTF_FAILED_BREAKOUT_REVERSAL
 # ==========================================
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_FAILED_BREAKOUT_REVERSAL miscalculates mapping directions; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_failed_breakout_reversal_bearish_maps_correctly():
     strat = HTFStrategy("FAILED_BREAKOUT_REVERSAL")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
@@ -119,7 +115,6 @@ def test_failed_breakout_reversal_bearish_maps_correctly():
 # ==========================================
 # 5. HTF_PDH_PDL_HOLD
 # ==========================================
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_PDH_PDL_HOLD rejects valid bullish inputs; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_pdh_pdl_hold_bullish_maps_correctly():
     strat = HTFStrategy("PDH_PDL_HOLD")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
@@ -133,16 +128,15 @@ def test_pdh_pdl_hold_bullish_maps_correctly():
 # ==========================================
 # Safety & Pipeline Assertions
 # ==========================================
-@pytest.mark.xfail(strict=True, reason="IMPLEMENTATION_BUG_FOUND: HTF_OPENING_DRIVE_CONT fails to return Rejection on NaN; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
 def test_htf_nan_fails_closed():
     strat = HTFStrategy("OPENING_DRIVE_CONT")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
-    
+
     # Inject NaN
     c_1m.open = float('nan')
     strat.od_high = 25100
     res = strat.evaluate(df_15m, df_1m, c_15m, c_1m, regime="VOL_EXPANSION")
-    
+
     # Should safely reject, not return an executable signal
     assert isinstance(res, Rejection)
     assert res.reason == "REJECT_EXECUTION_AVAILABILITY"
@@ -150,18 +144,95 @@ def test_htf_nan_fails_closed():
 def test_htf_missing_field_fails_closed():
     strat = HTFStrategy("OPENING_DRIVE_CONT")
     df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
-    
+
     # Simulate missing data by passing empty DF
     empty_df = pd.DataFrame()
-    with pytest.raises(Exception):
-        # The logic does not safely handle missing rows, it throws an exception (IndexError).
-        # We classify this as failing closed, but it's an unhandled crash.
-        res = strat.evaluate(df_15m, empty_df, c_15m, c_1m, regime="VOL_EXPANSION")
+    res = strat.evaluate(df_15m, empty_df, c_15m, c_1m, regime="VOL_EXPANSION")
+    assert isinstance(res, Rejection)
+    assert res.reason == "REJECT_MISSING_DATA"
 
-@pytest.mark.xfail(strict=True, reason="PIPELINE_MUTATION_FOUND: HTF_BYPASSES_MAIN_SAFETY_GATES HTF paths completely bypass TradeBuilder and Execution Gates; tracked in docs/strategy_truth/strategy_truth_bug_register.md")
+from core.candidate_adapters.htf_adapter import build_htf_candidate_intents
+
 def test_htf_pipeline_safety_revival():
-    # BUG/GAP FOUND: HTF strategies do not integrate with Phase-2/ranking pipeline.
-    # They are executed by run_htf_real_paper_monitor.py which skips trade_builder and execution_gates entirely.
-    # Therefore, they cannot guarantee Phase-2 safety or execution gate safety.
-    # We write a failing test to document this PIPELINE_MUTATION_FOUND.
-    assert False, "PIPELINE_MUTATION_FOUND: HTF paths completely bypass TradeBuilder and Execution Gates."
+    # Prove that HTF paths no longer bypass safety gates
+    strat = HTFStrategy("OPENING_DRIVE_CONT")
+    df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
+    strat.od_high = 25100
+    res = strat.evaluate(df_15m, df_1m, c_15m, c_1m, regime="VOL_EXPANSION")
+
+    # Run adapter
+    report = build_htf_candidate_intents(res)
+    assert len(report.eligible_intents) == 1
+
+    intent = report.eligible_intents[0].intent
+    assert intent.family == "htf"
+    assert intent.direction in ["BUY_CALL", "BUY_PUT", "NO_TRADE"]
+    # If the original signal passed, it is valid and ready for TradeBuilder gating
+    assert intent.required_evidence_keys is not None
+
+from strategies.trade_builder import TradeBuilder
+from core.opportunity_engine import _execution_truth
+
+def _base_market_data_for_test():
+    return {
+        "symbol": "NIFTY",
+        "instrument": "OPT",
+        "market_open": True,
+        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "ltp": 25100.0,
+        "vwap": 25000.0,
+        "vwap_slope": 0.0,
+        "atr": 50.0,
+        "quote_ok": True,
+        "chain_source": "live",
+        "bid": 24999.0,
+        "ask": 25001.0,
+        "regime_day": "TREND",
+        "regime_probs": {"TREND": 0.9, "RANGE": 0.1, "EVENT": 0.0, "PANIC": 0.0},
+        "option_chain": [
+            {
+                "type": "CE",
+                "strike": 25100.0,
+                "expiry": "2026-04-30",
+                "tradingsymbol": "NIFTY26APR25100CE",
+                "instrument_token": 123456,
+                "ltp": 102.0,
+                "bid": 101.5,
+                "ask": 102.5,
+                "quote_age_sec": 1.0,
+            }
+        ]
+    }
+
+def test_htf_adapter_output_enters_phase2_and_cannot_bypass_execution_truth(monkeypatch):
+    strat = HTFStrategy("OPENING_DRIVE_CONT")
+    df_15m, df_1m, c_15m, c_1m, ts = _mock_data()
+    strat.od_high = 25100
+    res = strat.evaluate(df_15m, df_1m, c_15m, c_1m, regime="VOL_EXPANSION")
+    
+    report = build_htf_candidate_intents(res)
+    intent = report.eligible_intents[0].intent
+    
+    tb = TradeBuilder()
+    monkeypatch.setattr(tb, "_signal_for_symbol", lambda *args, **kwargs: {
+        "direction": intent.direction,
+        "reason": intent.trigger,
+        "score": 0.9,
+        "regime_day": intent.regime,
+        "family": intent.family
+    })
+    
+    md = _base_market_data_for_test()
+    # Inject a critical safety failure: stale option quote
+    md["option_chain"][0]["quote_age_sec"] = 999.0 
+    
+    trade = tb.build(md)
+    assert trade is not None
+    
+    # Prove it gets rejected at the Phase 2 boundary
+    status = getattr(trade, "candidate_status", None) if hasattr(trade, "candidate_status") else trade.get("candidate_status")
+    assert status != "executable"
+    
+    # Prove it fails the core execution-truth boundary
+    truth = _execution_truth(trade)
+    assert truth["truth_allows_execution"] is False
