@@ -38,6 +38,10 @@ PREMARKET_SCRIPTS = [
     "scripts/premarket_plan.py",
 ]
 
+# Background scripts that are spawned and detached
+BACKGROUND_SCRIPTS = [
+    "scripts/tick_data_collector.py",
+]
 
 @dataclass
 class Decision:
@@ -130,6 +134,26 @@ def _run_scripts(date_key: str) -> None:
                 raise RuntimeError(f"script_failed:{script}:code={proc.returncode}")
     duration = time.time() - start
     _log_event("PREMARKET_RUN_OK", {"date_key": date_key, "duration_sec": round(duration, 2)})
+
+    # Launch background scripts as detached processes
+    _log_event("BACKGROUND_RUN_START", {"date_key": date_key, "scripts": BACKGROUND_SCRIPTS})
+    for script in BACKGROUND_SCRIPTS:
+        script_path = Path(script)
+        if not script_path.exists():
+            _log_event("BACKGROUND_SCRIPT_MISSING", {"date_key": date_key, "script": script})
+            continue
+        bg_log = LOG_DIR / f"{script_path.stem}_{date_key}.log"
+        with bg_log.open("a") as f:
+            f.write(f"=== Starting detached {script} ===\n")
+        
+        with open(bg_log, "a") as f:
+            subprocess.Popen(
+                [py, str(script_path)],
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                start_new_session=True
+            )
+        _log_event("BACKGROUND_SCRIPT_STARTED", {"date_key": date_key, "script": script})
 
 
 def _write_failure_marker(date_key: str, reason: str) -> None:
