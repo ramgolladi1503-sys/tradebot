@@ -27,6 +27,12 @@ Implemented the contract, calibration stub scripts, probability semantics logic,
 `is_order_action=false`
 `broker_api_called=false`
 `allowed_for_live_execution=false`
+`mode=PR_REVIEW`
+`candidate_id=N/A`
+`decision=APPROVED`
+`reason=STATIC_ANALYSIS_ONLY`
+`timestamp: 2026-06-22T000000Z`
+`source=GSD`
 Tests prove that semantic rules properly fallback and do not display unfounded probabilities for stale/advisory trades.
 
 ## Acceptance Proof
