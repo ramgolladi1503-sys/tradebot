@@ -11,7 +11,9 @@ import json
 import math
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, Optional
+
+from core.candidate_outcome_contract import CandidateOutcomeContract
 
 Direction = Literal["BUY_CALL", "BUY_PUT", "NO_TRADE"]
 CandidateStatus = Literal[
@@ -282,6 +284,7 @@ class StrategyCandidate:
     evidence: dict[str, Any] = field(default_factory=dict)
     lineage: dict[str, Any] = field(default_factory=dict)
     generated_epoch: float = field(default_factory=time.time)
+    outcome_contract: Optional[CandidateOutcomeContract] = None
 
     CURRENT_SCHEMA_VERSION: int = 1
 

@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Optional
 
+from core.candidate_outcome_contract import CandidateOutcomeContract
 from core.hard_downgrade_engine import HardDowngradeDecision, HardDowngradeReport
 from core.movement_contract import StrategyCandidate
 
@@ -108,6 +109,7 @@ class OpportunityScoreRecord:
     blockers: tuple[str, ...]
     warnings: tuple[str, ...]
     breakdown: OpportunityScoreBreakdown
+    outcome_contract: Optional[CandidateOutcomeContract] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -125,6 +127,7 @@ class OpportunityScoreRecord:
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
             "breakdown": self.breakdown.to_dict(),
+            "outcome_contract": self.outcome_contract.to_dict() if self.outcome_contract else None,
         }
 
 
@@ -293,6 +296,7 @@ def score_candidate(
             trap_risk_penalty=trap_penalty,
             final_score=final_score,
         ),
+        outcome_contract=candidate.outcome_contract,
     )
 
 

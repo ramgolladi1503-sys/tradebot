@@ -1,0 +1,1 @@
+candidate_id,strategy_name,entry_time,outcome_time,event,horizon_minutes,entry_price,target_price,stop_price,exit_price,gross_pnl,estimated_cost,net_pnl,outcome_label,execution_ok,quote_age,spread,fallback_advisory_stale_flags
