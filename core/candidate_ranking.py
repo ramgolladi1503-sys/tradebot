@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
+
+from core.candidate_outcome_contract import CandidateOutcomeContract
 
 from core.directional_balance import DirectionalBalanceReport, direction_family
 from core.opportunity_scoring import (
@@ -100,6 +102,18 @@ class CandidateRankRecord:
     safety_flags: tuple[str, ...]
     directional_warnings: tuple[str, ...]
     sort_key: tuple[Any, ...]
+    outcome_contract: Optional[CandidateOutcomeContract] = None
+
+    @property
+    def probability_ui_label(self) -> str:
+        if (
+            self.outcome_contract
+            and self.outcome_contract.prediction_event
+            and self.outcome_contract.prediction_horizon_minutes
+            and self.outcome_contract.calibration_source
+        ):
+            return f"Target-hit probability within {self.outcome_contract.prediction_horizon_minutes} min"
+        return "Setup score"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -120,6 +134,8 @@ class CandidateRankRecord:
             "safety_flags": list(self.safety_flags),
             "directional_warnings": list(self.directional_warnings),
             "sort_key": list(self.sort_key),
+            "probability_ui_label": self.probability_ui_label,
+            "outcome_contract": self.outcome_contract.to_dict() if self.outcome_contract else None,
         }
 
 
@@ -257,6 +273,7 @@ def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: t
         safety_flags=_rank_safety_flags(record, feed_risk_suppressed),
         directional_warnings=directional_warnings,
         sort_key=sort_key,
+        outcome_contract=record.outcome_contract,
     )
 
 
