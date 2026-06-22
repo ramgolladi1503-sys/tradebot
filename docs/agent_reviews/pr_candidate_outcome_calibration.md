@@ -14,16 +14,16 @@
 ## Scope Guard
 Verified that no runtime or live trading paths were touched. All modifications were restricted to data models, scripts for offline analysis, tests, and documentation.
 
-## Grill Me
+## Grill Me Review
 Risk Audit: No runtime execution risks. The outcome contract separates heuristics from execution probabilities, moving safety *forward*.
 
-## Hermes
+## Hermes Review
 Architecture designed an explicit dataclass for CandidateOutcomeContract and bounded probability semantics rules.
 
-## GSD
+## GSD Review
 Implemented the contract, calibration stub scripts, probability semantics logic, and associated test cases. All tests passed.
 
-## QA/Safety
+## QA / Safety Review
 `is_order_action=false`
 `broker_api_called=false`
 `allowed_for_live_execution=false`
