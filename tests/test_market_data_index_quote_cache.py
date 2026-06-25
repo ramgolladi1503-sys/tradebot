@@ -30,6 +30,30 @@ class _DummyRegimeModel:
         }
 
 
+def test_get_token_for_symbol_resolves_index_aliases(monkeypatch):
+    md._SYMBOL_TO_TOKEN_CACHE.clear()
+    monkeypatch.setattr(
+        md.cfg,
+        "INDEX_TOKEN_BY_SYMBOL",
+        {"NIFTY": 0, "BANKNIFTY": 0, "SENSEX": 0},
+        raising=False,
+    )
+
+    class _StubKite:
+        def instruments(self):
+            return [
+                {"tradingsymbol": "NIFTY 50", "instrument_token": 256265},
+                {"tradingsymbol": "NIFTY BANK", "instrument_token": 260105},
+                {"tradingsymbol": "SENSEX", "instrument_token": 265},
+            ]
+
+    monkeypatch.setattr(md, "kite_client", _StubKite())
+
+    assert md.get_token_for_symbol("NIFTY") == 256265
+    assert md.get_token_for_symbol("BANKNIFTY") == 260105
+    assert md.get_token_for_symbol("SENSEX") == 265
+
+
 def test_index_quote_cache_stores_bid_ask_mid_ts_source():
     md._DATA_CACHE.clear()
     md.update_index_quote_snapshot(
