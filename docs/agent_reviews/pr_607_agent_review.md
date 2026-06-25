@@ -36,8 +36,14 @@ Implemented the alias mapping logic and the test mock.
 - read_only=true
 - is_order_action=false
 - broker_api_called=false
-- allowed_for_live_execution=true (read-only fixes)
+- allowed_for_live_execution=true
 - append=false
+- mode=AGENT_REVIEW
+- candidate_id=none
+- decision=MERGE
+- reason=Fixes index token resolution
+- timestamp=2026-06-25
+- source=Antigravity
 
 ## Acceptance Proof
 ```
