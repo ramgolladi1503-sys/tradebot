@@ -14,7 +14,7 @@
 ## Scope Guard
 The scope is limited strictly to `core/market_data.py` token resolution and the associated unit test files.
 
-## Grill Me
+## Grill Me Review
 What changed?
 Added canonical alias mapping to `get_token_for_symbol`.
 Why does this move safety/stability/readiness forward?
@@ -26,13 +26,13 @@ What tests prove it?
 What could still fail?
 If the index token changes fundamentally on Kite, the hardcoded fallback token maps would need updating (which they do anyway).
 
-## Hermes
+## Hermes Review
 Architecture unchanged. Added explicit symbol mapping.
 
-## GSD
+## GSD Review
 Implemented the alias mapping logic and the test mock.
 
-## QA/Safety
+## QA / Safety Review
 - read_only=true
 - is_order_action=false
 - broker_api_called=false
