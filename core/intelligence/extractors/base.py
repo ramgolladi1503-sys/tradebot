@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 from core.intelligence.validators.schemas import ExtractionEvent, EvidenceValue
 
 class BaseExtractor(ABC):

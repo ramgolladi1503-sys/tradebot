@@ -17,12 +17,12 @@ class ContextAdapter:
         Attaches the intelligence to the candidate without mutating execution state.
         Returns the mutated candidate explicitly for clarity.
         """
-        
+
         # Hard Assertion: Never create candidates
         if not candidate:
             logger.error("Cannot inject context into a None candidate")
             return candidate
-            
+
         # Serialize the models for the payload
         payload = [
             {
@@ -43,14 +43,14 @@ class ContextAdapter:
         for rm in relevance_models:
             if rm.has_execution_influence():
                 logger.critical("MIP attempting to assert execution influence. This is currently disabled system-wide.")
-                # We do NOT flip execution_ok=True here. We let the execution engine 
+                # We do NOT flip execution_ok=True here. We let the execution engine
                 # read the payload if it is formally wired to do so later.
-        
+
         # Attach strictly as metadata
         existing_context = candidate.get(self.advisory_key, [])
         candidate[self.advisory_key] = existing_context + payload
-        
+
         # Also ensure we don't accidentally remove blockers by touching candidate_status
         # We leave candidate_status exactly as it was.
-        
+
         return candidate

@@ -6,39 +6,62 @@ class CalibrationStatus(Enum):
     CALIBRATED = "CALIBRATED"
     UNCALIBRATED = "UNCALIBRATED"
     INVALIDATED = "INVALIDATED"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+class FactorOrigin(Enum):
+    MEASURED = "MEASURED"
+    CONFIGURED = "CONFIGURED"
+    INFERRED = "INFERRED"
+    CALIBRATED = "CALIBRATED"
+
+ALLOWED_FACTOR_NAMES = {
+    "source_authority", "freshness_delta_seconds", "extraction_completeness",
+    "explicit_entity_mentions", "entity_resolver_confidence", "duplicate_status",
+    "document_category", "source_health", "historical_replay_impact",
+    "market_session_context", "replay_sample_size"
+}
 
 @dataclass(frozen=True)
 class Factor:
     """Strictly constrained intelligence factor. No fake edge allowed."""
-    name: str # e.g. "source_freshness", "replay-calibrated forward volatility impact"
+    name: str
     value: Any
-    unit: str # e.g. "seconds", "points", "boolean"
-    origin: str
+    unit: str
+    origin: FactorOrigin
     evidence_pointer: str
     reason: str
     measurement_method: str
     calibration_status: CalibrationStatus
+    stale_status: bool
     execution_influence_allowed: bool
     ranking_influence_allowed: bool
 
     def __post_init__(self):
+        # Validate allowed name
+        if self.name not in ALLOWED_FACTOR_NAMES:
+            raise ValueError(f"Factor name {self.name} is not in ALLOWED_FACTOR_NAMES")
+
         # Enforce Anti-Heuristic Rule:
         if self.calibration_status != CalibrationStatus.CALIBRATED:
-            # Bypass frozen nature using object.__setattr__
+            # Bypass frozen nature safely
+            object.__setattr__(self, 'execution_influence_allowed', False)
+            object.__setattr__(self, 'ranking_influence_allowed', False)
+
+        if self.stale_status:
             object.__setattr__(self, 'execution_influence_allowed', False)
             object.__setattr__(self, 'ranking_influence_allowed', False)
 
 def build_uncalibrated_factor(name: str, value: Any, unit: str, reason: str, evidence: str) -> Factor:
-    """Helper to safely construct uncalibrated factors that cannot influence execution."""
     return Factor(
         name=name,
         value=value,
         unit=unit,
-        origin="IntelligencePipeline",
+        origin=FactorOrigin.INFERRED,
         evidence_pointer=evidence,
         reason=reason,
         measurement_method="inferred_uncalibrated",
         calibration_status=CalibrationStatus.UNCALIBRATED,
+        stale_status=False,
         execution_influence_allowed=False,
         ranking_influence_allowed=False
     )

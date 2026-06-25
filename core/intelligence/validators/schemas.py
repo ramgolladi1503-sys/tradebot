@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Dict
+from typing import Any, Optional
 
 @dataclass
 class EvidenceValue:
@@ -28,6 +28,6 @@ class ExtractionEvent:
     raw_excerpt_pointers: EvidenceValue
     parser_version: str
     extraction_version: str
-    
+
     # Crucially, we omit market_relevance and trading_impact per Agent 5 instructions.
     # Those are strictly handled by Calibration/Replay downstream.

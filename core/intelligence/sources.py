@@ -1,4 +1,4 @@
-from typing import Callable, Any, Optional
+from typing import Callable, Optional
 from dataclasses import dataclass
 
 @dataclass
