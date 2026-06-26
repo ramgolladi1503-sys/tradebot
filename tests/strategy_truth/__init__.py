@@ -1,3 +1,3 @@
 """
-Strategy truth tests.
+test_reality: synthetic
 """

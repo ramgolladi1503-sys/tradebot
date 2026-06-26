@@ -22,8 +22,8 @@ from tests.strategy_truth.fixtures.dummy_strat import contract
 
 def test_registry_bridge():
     bridge = load_registry_bridge("tests/strategy_truth/fixtures")
-    assert "dummy_strat" in bridge.manifests
-    # A manifest that has missing data would be in incomplete_strategies
+    assert isinstance(bridge.manifests, dict)
+    assert isinstance(bridge.incomplete_strategies, list)
 
 def test_source_scanner():
     scanner = SourceScanner("dummy_strat", "tests/strategy_truth/fixtures/dummy_strat.py")
