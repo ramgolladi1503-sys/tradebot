@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
-- changed_paths: `83`
-- total_findings: `98`
+- changed_paths: `85`
+- total_findings: `103`
 - total_blocks: `1`
 - exit_code: `1`
 
@@ -20,9 +20,9 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `16` | `0` |  |
-| `cerberus` | `PASS` | `0` | `81` | `0` |  |
-| `evidence` | `BLOCK` | `1` | `1` | `1` |  |
+| `minerva` | `BLOCK` | `1` | `19` | `1` |  |
+| `cerberus` | `PASS` | `0` | `83` | `0` |  |
+| `evidence` | `PASS` | `0` | `1` | `0` |  |
 
 ## Changed Paths
 
@@ -91,20 +91,22 @@
 - `scripts/test_instruments.py`
 - `scripts/test_market_data.py`
 - `start_soak.sh`
-- `strategies/short_premium_builder.py`
 - `strategies/trade_builder.py`
 - `tests/test_candidate_scoring.py`
 - `tests/test_entropy_contract.py`
 - `tests/test_eod_no_trade_evidence.py`
+- `tests/test_feed_00_canonical_feed_truth.py`
 - `tests/test_feed_restart_policy.py`
+- `tests/test_feed_runtime_states.py`
 - `tests/test_feed_safety_gates.py`
 - `tests/test_feed_snapshot_reader.py`
 - `tests/test_feed_snapshot_writer.py`
-- `tests/test_feed_stability.py`
 - `tests/test_feed_state_engine.py`
+- `tests/test_gate_status_log.py`
 - `tests/test_live_ranking_blocks.py`
 - `tests/test_live_scoring_blocks.py`
 - `tests/test_market_data_unstable_reasons.py`
+- `tests/test_no_hardcoded_paths_repo_wide.py`
 - `tests/test_runtime_status_overlay.py`
 - `tests/test_runtime_truth_consistency_pr103.py`
 - `tests/test_stale_indicator_blocker_strategy_gate.py`
@@ -117,15 +119,18 @@
 | `tests/test_candidate_scoring.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_entropy_contract.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_eod_no_trade_evidence.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_feed_00_canonical_feed_truth.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_feed_restart_policy.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_feed_runtime_states.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_feed_safety_gates.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_feed_snapshot_reader.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_feed_snapshot_writer.py` | `PASS` | `test_reality_accepted` |
-| `tests/test_feed_stability.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_feed_state_engine.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_gate_status_log.py` | `BLOCK` | `fake_confidence_test_not_valid_proof` |
 | `tests/test_live_ranking_blocks.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_live_scoring_blocks.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_market_data_unstable_reasons.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_no_hardcoded_paths_repo_wide.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_runtime_status_overlay.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_runtime_truth_consistency_pr103.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_stale_indicator_blocker_strategy_gate.py` | `PASS` | `test_reality_accepted` |
@@ -198,20 +203,22 @@
 | `scripts/test_instruments.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `scripts/test_market_data.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `start_soak.sh` | `PASS` | `no_restricted_boundary_marker_found` |
-| `strategies/short_premium_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `strategies/trade_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_candidate_scoring.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_entropy_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_eod_no_trade_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_feed_00_canonical_feed_truth.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_feed_restart_policy.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_feed_runtime_states.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_feed_safety_gates.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_feed_snapshot_reader.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_feed_snapshot_writer.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_feed_stability.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_feed_state_engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_gate_status_log.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_live_ranking_blocks.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_live_scoring_blocks.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_market_data_unstable_reasons.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_no_hardcoded_paths_repo_wide.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_runtime_status_overlay.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_runtime_truth_consistency_pr103.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_stale_indicator_blocker_strategy_gate.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -221,8 +228,8 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
+| `docs/agent_reviews/regime_entropy_truth_contract.md` | `PASS` | `evidence_contract_satisfied` |
 
 ## Failed Gates
 
-- `evidence` failed with exit_code `1`: blocked findings present
+- `minerva` failed with exit_code `1`: blocked findings present
