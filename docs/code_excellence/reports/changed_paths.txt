@@ -1,8 +1,4 @@
 .pr_message
-bench.py
-bench2.py
-bench3.py
-bench4.py
 candidate_decisions.jsonl
 changed.txt
 changed_paths.txt
@@ -36,14 +32,10 @@ core/risk_state.py
 core/strategy_requirements.py
 dashboard/streamlit_app_runtime.py
 docs/agent_reviews/regime_entropy_truth_contract.md
+docs/code_excellence/reports/changed_paths.txt
 docs/code_excellence/reports/unified_ce_gate_latest.md
 eod_evidence_pack_20260625.md
 local_ce_report.md
-out.md
-out2.md
-out3.md
-out4.md
-out5.md
 parse.py
 patch_auth.py
 patch_auth_state.py
@@ -73,8 +65,6 @@ scripts/test_market_data.py
 start_soak.sh
 strategies/short_premium_builder.py
 strategies/trade_builder.py
-test_mp.py
-test_mp2.py
 tests/test_candidate_scoring.py
 tests/test_entropy_contract.py
 tests/test_eod_no_trade_evidence.py

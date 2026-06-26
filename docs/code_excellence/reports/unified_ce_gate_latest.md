@@ -11,26 +11,22 @@
 
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
-- changed_paths: `96`
-- total_findings: `124`
-- total_blocks: `15`
+- changed_paths: `86`
+- total_findings: `104`
+- total_blocks: `8`
 - exit_code: `1`
 
 ## Gate Status
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `BLOCK` | `1` | `21` | `5` |  |
-| `cerberus` | `BLOCK` | `1` | `95` | `2` |  |
-| `evidence` | `BLOCK` | `1` | `8` | `8` |  |
+| `minerva` | `PASS` | `0` | `16` | `0` |  |
+| `cerberus` | `BLOCK` | `1` | `82` | `2` |  |
+| `evidence` | `BLOCK` | `1` | `6` | `6` |  |
 
 ## Changed Paths
 
 - `.pr_message`
-- `bench.py`
-- `bench2.py`
-- `bench3.py`
-- `bench4.py`
 - `candidate_decisions.jsonl`
 - `changed.txt`
 - `changed_paths.txt`
@@ -64,14 +60,10 @@
 - `core/strategy_requirements.py`
 - `dashboard/streamlit_app_runtime.py`
 - `docs/agent_reviews/regime_entropy_truth_contract.md`
+- `docs/code_excellence/reports/changed_paths.txt`
 - `docs/code_excellence/reports/unified_ce_gate_latest.md`
 - `eod_evidence_pack_20260625.md`
 - `local_ce_report.md`
-- `out.md`
-- `out2.md`
-- `out3.md`
-- `out4.md`
-- `out5.md`
 - `parse.py`
 - `patch_auth.py`
 - `patch_auth_state.py`
@@ -101,8 +93,6 @@
 - `start_soak.sh`
 - `strategies/short_premium_builder.py`
 - `strategies/trade_builder.py`
-- `test_mp.py`
-- `test_mp2.py`
 - `tests/test_candidate_scoring.py`
 - `tests/test_entropy_contract.py`
 - `tests/test_eod_no_trade_evidence.py`
@@ -127,8 +117,6 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `test_mp.py` | `BLOCK` | `unknown_test_reality_not_valid_proof` |
-| `test_mp2.py` | `BLOCK` | `unknown_test_reality_not_valid_proof` |
 | `tests/test_candidate_scoring.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_entropy_contract.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_eod_no_trade_evidence.py` | `PASS` | `test_reality_accepted` |
@@ -141,11 +129,8 @@
 | `tests/test_live_ranking_blocks.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_live_scoring_blocks.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_market_data_unstable_reasons.py` | `PASS` | `test_reality_accepted` |
-| `tests/test_post_session_rca_patch.py` | `BLOCK` | `fake_confidence_test_not_valid_proof` |
 | `tests/test_runtime_status_overlay.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_runtime_truth_consistency_pr103.py` | `PASS` | `test_reality_accepted` |
-| `tests/test_short_premium_safety.py` | `BLOCK` | `fake_confidence_test_not_valid_proof` |
-| `tests/test_split_brain.py` | `BLOCK` | `fake_confidence_test_not_valid_proof` |
 | `tests/test_stale_indicator_blocker_strategy_gate.py` | `PASS` | `test_reality_accepted` |
 | `tests/test_strategy_gatekeeper_mode_thresholds.py` | `PASS` | `test_reality_accepted` |
 
@@ -153,10 +138,6 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `bench.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `bench2.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `bench3.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `bench4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `changed.txt` | `PASS` | `no_restricted_boundary_marker_found` |
 | `changed_paths.txt` | `PASS` | `no_restricted_boundary_marker_found` |
 | `check_chain.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -190,14 +171,10 @@
 | `core/strategy_requirements.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `dashboard/streamlit_app_runtime.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/regime_entropy_truth_contract.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/code_excellence/reports/changed_paths.txt` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/code_excellence/reports/unified_ce_gate_latest.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `eod_evidence_pack_20260625.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `local_ce_report.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `out.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `out2.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `out3.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `out4.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `out5.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `parse.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `patch_auth.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `patch_auth_state.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -227,8 +204,6 @@
 | `start_soak.sh` | `PASS` | `no_restricted_boundary_marker_found` |
 | `strategies/short_premium_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `strategies/trade_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `test_mp.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `test_mp2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_candidate_scoring.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_entropy_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_eod_no_trade_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -241,11 +216,8 @@
 | `tests/test_live_ranking_blocks.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_live_scoring_blocks.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_market_data_unstable_reasons.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_post_session_rca_patch.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_runtime_status_overlay.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_runtime_truth_consistency_pr103.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_short_premium_safety.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/test_split_brain.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_stale_indicator_blocker_strategy_gate.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/test_strategy_gatekeeper_mode_thresholds.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
@@ -259,11 +231,8 @@
 | `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
 | `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
 | `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
 
 ## Failed Gates
 
-- `minerva` failed with exit_code `1`: blocked findings present
 - `cerberus` failed with exit_code `1`: blocked findings present
 - `evidence` failed with exit_code `1`: blocked findings present
