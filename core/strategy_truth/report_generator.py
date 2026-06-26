@@ -17,7 +17,50 @@ class ReportGenerator:
         self._write_04_indicator_inventory(summary.reports)
         self._write_05_dependency_graph(summary.reports)
         self._write_06_strategy_truth_summary(summary)
+        # Hardened Reports
+        self._write_08_control_flow_graphs(summary.reports)
+        self._write_09_semantic_comparison(summary.reports)
+        self._write_10_mathematical_audit(summary.reports)
+        self._write_11_hardened_strategy_truth_summary(summary)
 
+    def _write_08_control_flow_graphs(self, reports: List[StrategyTruthReport]):
+        path = os.path.join(self.output_dir, "08_control_flow_graphs.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Control Flow Graphs\n\n")
+            for r in reports:
+                f.write(f"## {r.strategy_id}\n")
+                f.write(f"- Reconstructable: {r.cfg_is_reconstructable}\n")
+
+    def _write_09_semantic_comparison(self, reports: List[StrategyTruthReport]):
+        path = os.path.join(self.output_dir, "09_semantic_comparison.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Semantic Comparison\n\n")
+            for r in reports:
+                f.write(f"## {r.strategy_id}\n")
+                for s in r.semantic_results:
+                    f.write(f"- {s.classification.value}: {s.expected_concept} - {s.reason}\n")
+                    if s.missing_evidence:
+                        f.write(f"  - Missing: {s.missing_evidence}\n")
+
+    def _write_10_mathematical_audit(self, reports: List[StrategyTruthReport]):
+        path = os.path.join(self.output_dir, "10_mathematical_audit.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Mathematical Audit\n\n")
+            for r in reports:
+                f.write(f"## {r.strategy_id}\n")
+                if r.mathematical_result:
+                    f.write(f"- {r.mathematical_result.classification.value}: {r.mathematical_result.reason}\n")
+
+    def _write_11_hardened_strategy_truth_summary(self, summary: StrategyTruthSummary):
+        path = os.path.join(self.output_dir, "11_hardened_strategy_truth_summary.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Hardened Strategy Truth Summary\n\n")
+            for r in summary.reports:
+                f.write(f"## {r.strategy_id}\n")
+                f.write(f"- Final Verdict: {r.verdict.value}\n")
+                f.write(f"- Semantic Status: {r.semantic_results[0].classification.value if r.semantic_results else 'N/A'}\n")
+                f.write(f"- Mathematical Status: {r.mathematical_result.classification.value if r.mathematical_result else 'N/A'}\n")
+                
     def _write_01_loaded_registry(self, reports: List[StrategyTruthReport], incomplete: int):
         path = os.path.join(self.output_dir, "01_loaded_registry.md")
         with open(path, "w", encoding="utf-8") as f:

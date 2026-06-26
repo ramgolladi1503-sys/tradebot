@@ -1,5 +1,9 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.strategy_truth.semantic_comparator import SemanticResult
+    from core.strategy_truth.mathematical_auditor import MathematicalResult
 from core.strategy_truth.truth_types import (
     RuleComparisonStatus,
     ParameterClassification,
@@ -95,6 +99,10 @@ class StrategyTruthReport:
     indicator_findings: List[IndicatorFinding]
     dependency_findings: List[DependencyFinding]
     rule_evidence: List[RuleEvidence] = field(default_factory=list)
+    # Hardened Engine Additions
+    cfg_is_reconstructable: bool = False
+    semantic_results: List['SemanticResult'] = field(default_factory=list)
+    mathematical_result: Optional['MathematicalResult'] = None
 
 
 @dataclass(frozen=True)
