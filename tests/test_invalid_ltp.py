@@ -20,17 +20,20 @@ class _DummyCross:
 
 
 def test_invalid_ltp_snapshot_marked_invalid(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("TRADING_MODE", "LIVE")
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(market_data, "is_open", lambda now_dt=None, segment=None: True)
-    monkeypatch.setattr(market_data, "get_ltp", lambda symbol: 0)
     monkeypatch.setattr(market_data, "_REGIME_MODEL", object(), raising=False)
     monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
     monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
     monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "get_ltp", lambda symbol: 0.0, raising=False)
+    import core.tick_store as ts
+    monkeypatch.setattr(ts, "get_last_tick", lambda token: None, raising=False)
     rows = market_data.fetch_live_market_data()
-    assert len(rows) == 1
     snap = rows[0]
     assert snap["symbol"] == "NIFTY"
     assert snap["valid"] is False

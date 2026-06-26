@@ -50,6 +50,44 @@ from collections import deque
 from pathlib import Path
 
 _DATA_CACHE = {}
+_SYMBOL_TO_TOKEN_CACHE = {}
+
+_INDEX_TRADINGSYMBOL_ALIASES = {
+    "NIFTY": ("NIFTY", "NIFTY 50"),
+    "BANKNIFTY": ("BANKNIFTY", "NIFTY BANK"),
+    "SENSEX": ("SENSEX",),
+}
+
+def get_token_for_symbol(symbol: str) -> int | None:
+    sym = symbol.upper()
+    if sym in _SYMBOL_TO_TOKEN_CACHE:
+        return _SYMBOL_TO_TOKEN_CACHE[sym]
+    configured_token = (getattr(cfg, "INDEX_TOKEN_BY_SYMBOL", {}) or {}).get(sym)
+    try:
+        configured_token_int = int(configured_token or 0)
+    except Exception:
+        configured_token_int = 0
+    if configured_token_int > 0:
+        _SYMBOL_TO_TOKEN_CACHE[sym] = configured_token_int
+        return configured_token_int
+    try:
+        instruments = kite_client.instruments() or []
+        # Build the entire cache once
+        for i in instruments:
+            tsym = i.get("tradingsymbol")
+            if tsym:
+                token = int(i.get("instrument_token"))
+                _SYMBOL_TO_TOKEN_CACHE[tsym] = token
+                for alias, tradingsymbols in _INDEX_TRADINGSYMBOL_ALIASES.items():
+                    if tsym in tradingsymbols:
+                        _SYMBOL_TO_TOKEN_CACHE.setdefault(alias, token)
+        if sym in _SYMBOL_TO_TOKEN_CACHE:
+            return _SYMBOL_TO_TOKEN_CACHE[sym]
+    except Exception:
+        pass
+    _SYMBOL_TO_TOKEN_CACHE[sym] = None
+    return None
+
 _LTP_HISTORY = {}
 _DAYTYPE_LOCK = {}
 _DAYTYPE_CONF_HISTORY = {}
@@ -456,7 +494,23 @@ def get_index_quote_snapshot(symbol: str) -> dict:
     sym = str(symbol or "").upper()
     if not sym:
         return {}
-    return dict((_DATA_CACHE.get(sym) or {}).get("index_quote") or {})
+    cached = dict((_DATA_CACHE.get(sym) or {}).get("index_quote") or {})
+    use_sub = getattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False) or getattr(cfg, "FEED_USE_SUBPROCESS", False)
+    if use_sub or not cached:
+        try:
+            from core.tick_store import get_last_tick
+            token = get_token_for_symbol(sym)
+            if token:
+                tick = get_last_tick(token)
+                if tick and tick.get("ltp"):
+                    return {
+                        "last_price": tick.get("ltp"),
+                        "ts_epoch": tick.get("ts_epoch"),
+                        "source": "tick_store"
+                    }
+        except Exception:
+            pass
+    return cached
 
 
 def _index_quote_keys(symbol: str) -> list[str]:
@@ -2471,6 +2525,20 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         ltp = get_ltp(symbol)
         ltp_source = _DATA_CACHE.get(symbol, {}).get("ltp_source", "none")
         ltp_ts_epoch = _DATA_CACHE.get(symbol, {}).get("ltp_ts_epoch")
+        use_sub = getattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False) or getattr(cfg, "FEED_USE_SUBPROCESS", False)
+        if use_sub or ltp_ts_epoch is None:
+            try:
+                from core.tick_store import get_last_tick
+                token = get_token_for_symbol(symbol)
+                if token:
+                    tick = get_last_tick(token)
+                    if tick and tick.get("ltp"):
+                        if ltp is None or ltp <= 0:
+                            ltp = tick.get("ltp")
+                        ltp_ts_epoch = tick.get("ts_epoch")
+                        ltp_source = "tick_store"
+            except Exception:
+                pass
         try:
             if ltp is not None and float(ltp) > 0:
                 from core.reject_shadow import record_price_trace
