@@ -76,12 +76,12 @@ def main() -> int:
 
         payload["ok"] = True
         payload["reason_code"] = "AUTH_WARMUP_OK"
-        payload["details"]["user_last4"] = user_id[-4:] if user_id else ""
+        u_last4 = user_id[-4:] if user_id else ""
+        payload["details"]["user_last4"] = u_last4
         payload["details"]["margin_keys"] = margin_keys
         _write_payload(payload)
-        print(
-            f"[AUTH_WARMUP] ok user_last4={payload['details']['user_last4']} margin_keys={','.join(margin_keys)}"
-        )
+        m_keys_str = ','.join(margin_keys)
+        sys.stdout.write(f"[AUTH_WARMUP] ok user_last4={u_last4} margin_keys={m_keys_str}\n")
         return 0
     except Exception as exc:
         payload["ok"] = False

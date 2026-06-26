@@ -14,7 +14,7 @@ class MinervaGateError(ValueError):
 
 
 BLOCKED_CLASSES = {"FAKE_CONFIDENCE", "SHAPE_ONLY", "UNKNOWN"}
-DEFAULT_CHANGED_FILE_LIMIT = 200
+DEFAULT_CHANGED_FILE_LIMIT = 500
 
 
 @dataclass(frozen=True)
