@@ -1,4 +1,3 @@
-import pytest
 from core._engine_phase2_adapter_base import build_candidates_phase2
 
 def test_phase2_hard_blocks_fallback():

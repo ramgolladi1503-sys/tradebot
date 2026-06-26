@@ -1,0 +1,2 @@
+# Hardened Strategy Truth Summary
+

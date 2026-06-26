@@ -1,4 +1,3 @@
-import pytest
 from core.mean_reversion_candidate_generator import build_mean_reversion_candidate_intents
 
 def _mock_market_state(overrides):

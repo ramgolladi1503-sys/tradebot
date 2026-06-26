@@ -1,6 +1,4 @@
-import pytest
 from strategies.trade_builder import TradeBuilder
-import math
 
 def _base_market_data(overrides=None):
     base = {

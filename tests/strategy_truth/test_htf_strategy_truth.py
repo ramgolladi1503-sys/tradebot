@@ -1,4 +1,3 @@
-import pytest
 import pandas as pd
 from datetime import datetime, timedelta
 from core.candidate_audits.htf_strategies import HTFStrategy
@@ -243,9 +242,6 @@ def test_htf_adapter_output_enters_phase2_and_cannot_bypass_execution_truth(monk
 # Paper Validation Telemetry Hook Tests
 # ==========================================
 import json
-import os
-from unittest.mock import patch
-from core.htf_paper_telemetry import CANDIDATES_LOG, EXITS_LOG
 
 def test_paper_telemetry_no_live_orders_placed(monkeypatch, tmp_path):
     strat = HTFStrategy("OPENING_DRIVE_CONT")
