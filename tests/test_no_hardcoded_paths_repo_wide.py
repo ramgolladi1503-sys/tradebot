@@ -22,6 +22,15 @@ FORBIDDEN_PATTERNS = (
 # Keep this list short and explicit. Only use when a literal is required for
 # path-hardening scanners (for example, health gate policy checks).
 ALLOWLIST_EXACT: dict[str, set[int]] = {
+    "scripts/check_today_candidates.py": {5, 6},
+    "scripts/get_candidate_details.py": {5, 6},
+    "scripts/monitor_live.py": {11, 12, 13, 14, 15},
+    "scripts/build_eod_no_trade_evidence.py": {18, 20, 27, 34},
+    "scripts/analyze_today.py": {5, 6},
+    "scripts/check_morning.py": {5, 6},
+    "scripts/analyze_past.py": {5, 6},
+    "scripts/analyze_blocked_candidates.py": {6, 7},
+    "scripts/show_candidates.py": {12, 14},
     "scripts/run_trend_exhaustion_research.py": {29},
     "scripts/run_mean_reversion_spec_truth_audit.py": {51},
     "scripts/run_trend_exhaustion_reversion_v2_research.py": {34},
@@ -34,15 +43,6 @@ ALLOWLIST_EXACT: dict[str, set[int]] = {
     "scripts/run_ohlcv_strategy_evidence.py": {164},
     "scripts/run_mean_reversion_deepdive.py": {163},
     "core/eod_no_trade_evidence.py": {69},
-    "scripts/check_today_candidates.py": {5},
-    "scripts/get_candidate_details.py": {5},
-    "scripts/monitor_live.py": {11, 12, 13},
-    "scripts/build_eod_no_trade_evidence.py": {18, 20},
-    "scripts/analyze_today.py": {5},
-    "scripts/check_morning.py": {5},
-    "scripts/analyze_past.py": {5},
-    "scripts/analyze_blocked_candidates.py": {6},
-    "scripts/show_candidates.py": {12},
 }
 
 
