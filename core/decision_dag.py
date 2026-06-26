@@ -865,28 +865,34 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
 
     live_mode = snapshot.mode == "LIVE"
     regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-    regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
     if (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
         regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
-        regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
 
-    # Dynamic Entropy Override for Breakout Trends
-    depth_imb = float(snapshot.raw_data.get("depth_imbalance") or 0.0)
-    if primary_regime == "TREND" and (
-        snapshot.raw_data.get("volume_delta_override")
-        or depth_imb > 0.35
-        or (snapshot.regime_prob_max and float(snapshot.regime_prob_max) > 0.60)
-    ):
-        regime_entropy_max *= 1.30
+    # Evaluate regime entropy via the central normalized gate
+    from core.regime_entropy_gate import evaluate_regime_entropy_gate
 
-    # Dynamic Entropy Override for Ranging Regimes
-    if primary_regime in {"RANGE", "RANGE_VOLATILE", "SIDEWAYS"}:
-        regime_entropy_max *= 2.0
+    session_bucket = snapshot.raw_data.get("session_bucket", "DEFAULT") if isinstance(snapshot.raw_data, dict) else "DEFAULT"
+    expiry_day = bool(snapshot.raw_data.get("is_expiry_day")) if isinstance(snapshot.raw_data, dict) else False
+    event_mode = bool(snapshot.raw_data.get("is_event_mode")) if isinstance(snapshot.raw_data, dict) else False
+
+    entropy_gate = evaluate_regime_entropy_gate(
+        raw_entropy=float(snapshot.regime_entropy) if snapshot.regime_entropy is not None else None,
+        probabilities=snapshot.raw_data.get("regime_probs") if isinstance(snapshot.raw_data, dict) else None,
+        session_bucket=session_bucket,
+        expiry_day=expiry_day,
+        event_mode=event_mode,
+        market_data=snapshot.raw_data if isinstance(snapshot.raw_data, dict) else None,
+        primary_regime=primary_regime,
+        regime_prob_max=float(snapshot.regime_prob_max) if snapshot.regime_prob_max is not None else None,
+    )
 
     if snapshot.regime_prob_max is not None and float(snapshot.regime_prob_max) < regime_prob_min:
         unstable_reasons.append("prob_too_low")
-    if snapshot.regime_entropy is not None and float(snapshot.regime_entropy) > regime_entropy_max:
+
+    if entropy_gate["uncertain"]:
         unstable_reasons.append("entropy_too_high")
+
+
 
     # Strongly deterministic regime with clean indicators should not be marked unstable.
     if (
@@ -950,9 +956,13 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
         "primary_regime": primary_regime,
         "regime_prob_max": snapshot.regime_prob_max,
         "regime_entropy": snapshot.regime_entropy,
-        "unstable_reasons": unstable_reasons,
+        "market_entropy_raw": entropy_gate["raw_entropy"],
+        "market_entropy_normalized": entropy_gate["normalized_entropy"],
+        "market_entropy_threshold": entropy_gate["threshold"],
+        "market_entropy_source": entropy_gate["threshold_source"],
+        "market_entropy_diagnostics": entropy_gate["diagnostics"],
+        "unstable_reasons": tuple(unstable_reasons),
         "regime_prob_min": regime_prob_min,
-        "regime_entropy_max": regime_entropy_max,
         "regime_unstable_streak": debounce_streak,
         "regime_unstable_block_after": debounce_block_after,
         "regime_unstable_debounced": debounced_unstable,

@@ -39,7 +39,6 @@ def test_live_ready_indicator_values_do_not_get_reblocked_as_indicators_missing(
         "ask": 72005.0,
         "quote_ok": True,
         "primary_regime": "TREND",
-        "regime_probs": {"TREND": 0.8},
         "regime_entropy": 0.1,
         "indicators_ok": False,
         "indicators_age_sec": 0.1,

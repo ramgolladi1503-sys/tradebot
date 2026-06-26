@@ -115,7 +115,7 @@ class RiskState:
 
     def update_market(self, symbol, market_data):
         self.current_regime = (market_data.get("primary_regime") or market_data.get("regime") or "NEUTRAL")
-        self.current_regime_entropy = float(market_data.get("regime_entropy") or 0.0)
+        self.current_regime_entropy = float(market_data.get("market_entropy_normalized") or market_data.get("regime_entropy_normalized") or 0.0)
         self.current_shock_score = float(market_data.get("shock_score") or 0.0)
 
         vol_z = market_data.get("vol_z")
@@ -209,7 +209,7 @@ class RiskState:
         mult = 1.0
         if self.current_regime == "EVENT" or self.current_shock_score >= float(getattr(cfg, "RISK_SHOCK_SCORE_SOFT", 0.65)):
             mult *= float(getattr(cfg, "EVENT_REGIME_RISK_MULT", 0.5))
-        if self.current_regime_entropy >= float(getattr(cfg, "RISK_ENTROPY_SOFT", 1.3)):
+        if self.current_regime_entropy >= float(getattr(cfg, "RISK_ENTROPY_NORMALIZED_SOFT", 0.80)):
             mult *= float(getattr(cfg, "HIGH_ENTROPY_RISK_MULT", 0.6))
         if self.mode == "SOFT_HALT":
             mult *= 0.5
@@ -262,7 +262,7 @@ class RiskState:
         fill_min = float(getattr(cfg, "RISK_MIN_FILL_RATIO", 0.5))
         vol_shock = float(getattr(cfg, "RISK_VOL_SHOCK", 2.0))
         shock_soft = float(getattr(cfg, "RISK_SHOCK_SCORE_SOFT", 0.65))
-        entropy_soft = float(getattr(cfg, "RISK_ENTROPY_SOFT", 1.3))
+        entropy_soft = float(getattr(cfg, "RISK_ENTROPY_NORMALIZED_SOFT", 0.80))
 
         drawdown_pct = min(self.daily_max_drawdown, self.all_time_max_drawdown)
         if self.daily_pnl_pct <= -max_daily_loss_pct or drawdown_pct <= -max_drawdown_pct or self.cvar <= cvar_limit:

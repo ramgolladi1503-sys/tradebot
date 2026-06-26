@@ -19,6 +19,7 @@ def test_fetch_option_chain_logs_error_on_live_failure(monkeypatch, tmp_path):
         kite = None
 
     monkeypatch.setattr(oc, "kite_client", _KC(), raising=False)
+    monkeypatch.setattr(oc, "_OPTION_CHAIN_ERROR_LAST_TS", {}, raising=False)
 
     chain = oc.fetch_option_chain("NIFTY", 100.0, strikes_around=1, force_synthetic=False, market_context={"execution_mode": "LIVE"})
     assert chain == []

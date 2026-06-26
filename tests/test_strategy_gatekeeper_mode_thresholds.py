@@ -62,9 +62,7 @@ def test_live_mode_keeps_strict_regime_thresholds(monkeypatch):
     monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
     monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", True, raising=False)
     monkeypatch.setattr(cfg, "REGIME_PROB_MIN", 0.45, raising=False)
-    monkeypatch.setattr(cfg, "REGIME_ENTROPY_MAX", 1.3, raising=False)
     monkeypatch.setattr(cfg, "PAPER_REGIME_PROB_MIN", 0.25, raising=False)
-    monkeypatch.setattr(cfg, "PAPER_REGIME_ENTROPY_MAX", 2.0, raising=False)
 
     gate = StrategyGatekeeper().evaluate(_base_market_data(), mode="MAIN")
 
@@ -77,9 +75,7 @@ def test_paper_mode_relaxes_thresholds_and_routes_neutral(monkeypatch):
     monkeypatch.setattr(cfg, "REQUIRE_CROSS_ASSET", False, raising=False)
     monkeypatch.setattr(cfg, "PAPER_RELAX_GATES", True, raising=False)
     monkeypatch.setattr(cfg, "REGIME_PROB_MIN", 0.45, raising=False)
-    monkeypatch.setattr(cfg, "REGIME_ENTROPY_MAX", 1.3, raising=False)
     monkeypatch.setattr(cfg, "PAPER_REGIME_PROB_MIN", 0.25, raising=False)
-    monkeypatch.setattr(cfg, "PAPER_REGIME_ENTROPY_MAX", 2.0, raising=False)
     monkeypatch.setattr(cfg, "PAPER_NEUTRAL_FAMILY", "DEFINED_RISK", raising=False)
 
     gate = StrategyGatekeeper().evaluate(_base_market_data(), mode="MAIN")

@@ -386,14 +386,18 @@ def build_candidates_phase2(raw_candidates: list[Any] | None = None) -> list[dic
     """Build Phase2 candidates with formerly hooked Phase2 contracts inline."""
     feed_path = logs_dir() / "feed_runtime_latest.json"
     feed_ok = False
+    tick_age = 0.0
+    depth_age = 0.0
     if feed_path.exists():
         try:
             feed_payload = json.loads(feed_path.read_text(encoding="utf-8"))
             feed_ok = bool(feed_payload.get("feed_ok"))
+            tick_age = float(feed_payload.get("last_tick_age_sec") or 0.0)
+            depth_age = float(feed_payload.get("last_depth_age_sec") or 0.0)
         except Exception:
             feed_ok = False
 
-    if not feed_ok:
+    if not feed_ok or tick_age > 2.5 or depth_age > 6.0:
         out = []
     else:
         raw = [dict(row) for row in list(raw_candidates or []) if isinstance(row, dict)]

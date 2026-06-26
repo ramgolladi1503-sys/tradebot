@@ -468,6 +468,16 @@ def log_decision_safe(orch, event: dict, trade=None, log_decision_fn=None):
         ac = tele.get("all_candidates")
         if isinstance(ac, list) and len(ac) <= 10:
             tele_compact["all_candidates"] = ac
+
+    if "FEED_STALE" in veto_reasons or "STALE_UNDERLYING" in veto_reasons:
+        try:
+            positions = orch.fetch_open_positions_dict()
+            if positions:
+                from core.telegram_alerts import send_telegram_message
+                send_telegram_message(f"[MONITORING-DEGRADED] Feed stale. Open positions at risk: {list(positions.keys())}")
+        except Exception:
+            pass
+
     if veto_reasons:
         blockers = event.get("decision_blockers")
         if not isinstance(blockers, list):

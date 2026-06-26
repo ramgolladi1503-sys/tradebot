@@ -7701,26 +7701,9 @@ class TradeBuilder:
         else:
             # Probabilistic regime gating
             if regime_probs and force_family is None:
-                entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
-                entropy_soft_max = float(
-                    getattr(cfg, "REGIME_CANDIDATE_ENTROPY_SOFT_MAX", getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", 1.8))
-                )
                 if unstable_regime:
                     return None
-                if regime_entropy > entropy_max:
-                    if regime_entropy > entropy_soft_max:
-                        return None
-                    sig = ensemble_signal(market_data)
-                    if sig:
-                        penalty = float(getattr(cfg, "REGIME_CANDIDATE_ENTROPY_SOFT_PENALTY", 0.08))
-                        sig.score = max(0.05, float(sig.score) - penalty)
-                        sig.reason = f"{sig.reason}; high entropy fallback"
-                        return {
-                            "direction": sig.direction,
-                            "reason": sig.reason,
-                            "score": sig.score,
-                            "regime_day": "HIGH_ENTROPY",
-                        }
+
                 trend_p = float(regime_probs.get("TREND", 0.0))
                 range_p = max(float(regime_probs.get("RANGE", 0.0)), float(regime_probs.get("RANGE_VOLATILE", 0.0)))
                 event_p = float(regime_probs.get("EVENT", 0.0))

@@ -532,6 +532,11 @@ def test_recovery_blocked_snapshot_sets_executable_false_everywhere(monkeypatch,
     repo_root = tmp_path / "repo"
     logs_path = repo_root / ".runtime" / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
+    (repo_root / "logs").mkdir(parents=True, exist_ok=True)
+    
+    monkeypatch.setenv("LOG_DIR", str(repo_root / "logs"))
+    import core.paths as paths
+    monkeypatch.setattr(paths, "repo_root", lambda: repo_root)
 
     db_path = tmp_path / "runtime.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
@@ -583,6 +588,11 @@ def test_healthy_runtime_snapshot_still_reports_executable_true_everywhere(monke
     repo_root = tmp_path / "repo"
     logs_path = repo_root / ".runtime" / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
+    (repo_root / "logs").mkdir(parents=True, exist_ok=True)
+    
+    monkeypatch.setenv("LOG_DIR", str(repo_root / "logs"))
+    import core.paths as paths
+    monkeypatch.setattr(paths, "repo_root", lambda: repo_root)
 
     db_path = tmp_path / "runtime.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
@@ -630,6 +640,11 @@ def test_runtime_snapshot_mirrors_share_canonical_blocked_truth(monkeypatch, tmp
     repo_root = tmp_path / "repo"
     logs_path = repo_root / ".runtime" / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
+    (repo_root / "logs").mkdir(parents=True, exist_ok=True)
+    
+    monkeypatch.setenv("LOG_DIR", str(repo_root / "logs"))
+    import core.paths as paths
+    monkeypatch.setattr(paths, "repo_root", lambda: repo_root)
 
     db_path = tmp_path / "runtime.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)

@@ -7523,19 +7523,24 @@ if nav == "Home":
                     _render_upstox_table(bucket, show_cols, key)
 
                 _render_candidate_section(
-                    "Top Executable Opportunities",
+                    "Top Opportunities",
                     class_series.eq("EXECUTABLE"),
                     "suggested_trades_executable",
                 )
                 _render_candidate_section(
-                    "Near-Executable Watchlist",
+                    "Watchlist / Near Executable",
                     class_series.eq("NEAR_EXECUTABLE"),
                     "suggested_trades_near",
                 )
                 _render_candidate_section(
-                    "Advisory / Fallback",
-                    ~class_series.isin(["EXECUTABLE", "NEAR_EXECUTABLE"]),
+                    "Advisory / Debug Candidates",
+                    class_series.isin(["ADVISORY_ONLY", "ADVISORY"]),
                     "suggested_trades_advisory",
+                )
+                _render_candidate_section(
+                    "Suppressed Candidates",
+                    class_series.isin(["SUPPRESSED", "SUPPRESSED_BY_DOWNGRADE", "NO_TRADE_ONLY"]) | ~class_series.isin(["EXECUTABLE", "NEAR_EXECUTABLE", "ADVISORY_ONLY", "ADVISORY"]),
+                    "suggested_trades_suppressed",
                 )
                 blocker_counts = _build_reject_reason_summary(suggested_display)
                 if not blocker_counts.empty:
