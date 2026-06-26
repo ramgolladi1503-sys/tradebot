@@ -20,6 +20,8 @@ class _DummyCross:
 
 
 def test_invalid_ltp_snapshot_marked_invalid(monkeypatch):
+    monkeypatch.setenv("EXECUTION_MODE", "LIVE")
+    monkeypatch.setenv("TRADING_MODE", "LIVE")
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["NIFTY"], raising=False)
