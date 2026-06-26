@@ -48,21 +48,15 @@ class EODNoTradeEvidence:
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
-        payload["read_only"] = True
-        is_order_action = False
-        allowed_for_live_execution = False
-        broker_api_called = False
-        read_only = True
-        append = False
-        live_order_action = False
-        broker_order_action = False
-        payload["is_order_action"] = is_order_action
-        payload["allowed_for_live_execution"] = allowed_for_live_execution
-        payload["broker_api_called"] = broker_api_called
-        payload["read_only"] = read_only
-        payload["append"] = append
-        payload["live_order_action"] = live_order_action
-        payload["broker_order_action"] = broker_order_action
+        payload.update({
+            "is_order_action": False,
+            "allowed_for_live_execution": False,
+            "broker_api_called": False,
+            "read_only": True,
+            "append": False,
+            "live_order_action": False,
+            "broker_order_action": False
+        })
         return payload
 
 

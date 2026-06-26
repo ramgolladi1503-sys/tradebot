@@ -11,7 +11,7 @@
 
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
-- changed_paths: `86`
+- changed_paths: `83`
 - total_findings: `104`
 - total_blocks: `8`
 - exit_code: `1`
@@ -105,11 +105,8 @@
 - `tests/test_live_ranking_blocks.py`
 - `tests/test_live_scoring_blocks.py`
 - `tests/test_market_data_unstable_reasons.py`
-- `tests/test_post_session_rca_patch.py`
 - `tests/test_runtime_status_overlay.py`
 - `tests/test_runtime_truth_consistency_pr103.py`
-- `tests/test_short_premium_safety.py`
-- `tests/test_split_brain.py`
 - `tests/test_stale_indicator_blocker_strategy_gate.py`
 - `tests/test_strategy_gatekeeper_mode_thresholds.py`
 
