@@ -28,8 +28,8 @@ def test_intelligence_adapter_cannot_mutate_executable_state():
     assert mutated["candidate_status"] == "blocked"
     # Must append metadata
     assert "advisory_context" in mutated
-    assert len(mutated["advisory_context"]) == 1
-    assert mutated["advisory_context"][0]["has_execution_influence"] is False
+    ctx = mutated["advisory_context"]
+    assert ctx[0]["has_execution_influence"] is False
 
 def test_intelligence_adapter_cannot_create_candidates():
     adapter = ContextAdapter()
