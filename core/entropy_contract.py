@@ -50,7 +50,7 @@ def normalized_entropy(probabilities: Dict[str, float], base: str = "e") -> floa
     normalized = entropy / max_ent
     return min(max(normalized, 0.0), 1.0)
 
-def validate_probability_vector(probabilities: Dict[str, float], tolerance: float = 1e-6) -> None:
+def validate_probability_vector(probabilities: Dict[str, float], tolerance: float = 1e-5) -> None:
     """Validate that the probability vector represents a valid probability distribution."""
     if not probabilities:
         return

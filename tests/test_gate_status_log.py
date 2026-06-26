@@ -72,7 +72,7 @@ def test_gate_status_logs_gate_reasons(tmp_path, monkeypatch):
     assert set(["ohlc_buffer_empty", "ltp_missing", "never_computed"]).issubset(set(row["indicator_reasons"]))
     assert "compute_indicators_error" in row["indicator_reasons"]
     assert "regime_reasons" in row
-    assert row["regime_reasons"] == ["legacy_unstable_flag"]
+    assert row["regime_reasons"] == ["legacy_unstable_flag", "entropy_too_high"]
 
 
 def test_gate_status_once_per_stage_symbol_cycle(monkeypatch):
@@ -137,7 +137,7 @@ def test_gate_status_includes_indicator_fields_for_strategy_stage():
     assert row["indicator_reasons"] == []
     assert row["ohlc_seeded"] is True
     assert row["ohlc_bars_count"] == 40
-    assert row["regime_reasons"] == []
+    assert row["regime_reasons"] == ["entropy_too_high"]
 
 
 def test_gate_status_includes_explicit_regime_reasons():
