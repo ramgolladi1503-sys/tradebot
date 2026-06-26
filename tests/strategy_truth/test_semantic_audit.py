@@ -10,6 +10,7 @@ def check_entry():
             if confirm_cross:
                 create_candidate()
     """
+    cfg = build_control_flow_graph("test.py", code)
     comp = SemanticComparator(cfg, "vwap pullback")
     res = comp.compare()
     # It should pass semantic match as all required patterns are in logic
@@ -25,6 +26,7 @@ def check_entry():
         if pullback:
             create_candidate()
     """
+    cfg = build_control_flow_graph("test.py", code)
     comp = SemanticComparator(cfg, "vwap pullback")
     res = comp.compare()
     # It should miss confirmation
@@ -41,6 +43,7 @@ def check_entry():
     if not regime_ok:
         return
     """
+    cfg = build_control_flow_graph("test.py", code)
     comp = SemanticComparator(cfg, "trend following")
     res = comp.compare()
     assert any(r.classification == SemanticClassification.SEMANTIC_CONTRADICTION for r in res)
@@ -65,6 +68,7 @@ def check_entry():
         if confirm:
             create_candidate()
     """
+    cfg = build_control_flow_graph("test.py", code)
     comp = SemanticComparator(cfg, "orb")
     res = comp.compare()
     assert any(r.classification == SemanticClassification.SEMANTIC_MISMATCH for r in res)
