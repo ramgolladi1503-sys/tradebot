@@ -4,14 +4,20 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tools.code_excellence.cerberus_gate import read_changed_paths_file, run_cerberus_gate, write_cerberus_gate_report
+from tools.code_excellence.cerberus_gate import (
+    read_changed_paths_file,
+    run_cerberus_gate,
+    write_cerberus_gate_report,
+)
 
 
 DEFAULT_OUTPUT = "docs/code_excellence/cerberus/reports/cerberus_gate_latest.md"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run Cerberus static safety regression gate.")
+    parser = argparse.ArgumentParser(
+        description="Run Cerberus static safety regression gate."
+    )
     parser.add_argument("--repo", default=".")
     parser.add_argument("--config", default=".gsd-forensics.yaml")
     parser.add_argument("--changed-paths-file", required=True)
@@ -22,7 +28,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     changed_paths = read_changed_paths_file(args.changed_paths_file)
-    report = run_cerberus_gate(repo_root=Path(args.repo), config_path=Path(args.config), changed_paths=changed_paths)
+    report = run_cerberus_gate(
+        repo_root=Path(args.repo),
+        config_path=Path(args.config),
+        changed_paths=changed_paths,
+    )
     output_path = write_cerberus_gate_report(report, Path(args.out))
     print(f"[cerberus-gate] report={output_path}")
     print(f"[cerberus-gate] findings={len(report.findings)}")

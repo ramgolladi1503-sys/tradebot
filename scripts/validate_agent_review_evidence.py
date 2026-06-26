@@ -42,7 +42,9 @@ def _run_git(args: list[str]) -> str:
         text=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or proc.stdout.strip() or f"git {' '.join(args)} failed")
+        raise RuntimeError(
+            proc.stderr.strip() or proc.stdout.strip() or f"git {' '.join(args)} failed"
+        )
     return proc.stdout.strip()
 
 
@@ -100,14 +102,20 @@ def validate(base_ref: str) -> int:
 
     for review_path in review_paths:
         if not review_path.exists():
-            errors.append(f"Agent review file is listed as changed but does not exist: {review_path}")
+            errors.append(
+                f"Agent review file is listed as changed but does not exist: {review_path}"
+            )
             continue
         text = review_path.read_text(encoding="utf-8")
         missing = _missing_sections(text)
         if missing:
-            errors.append(f"{review_path}: missing required sections: {', '.join(missing)}")
+            errors.append(
+                f"{review_path}: missing required sections: {', '.join(missing)}"
+            )
         if _has_unresolved_blocking_issue(text):
-            errors.append(f"{review_path}: unresolved blocking issue or FAIL verdict found")
+            errors.append(
+                f"{review_path}: unresolved blocking issue or FAIL verdict found"
+            )
 
     high_risk = _high_risk_changed(paths)
     if high_risk:
@@ -138,7 +146,9 @@ def validate(base_ref: str) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate mandatory agent review evidence for PRs.")
+    parser = argparse.ArgumentParser(
+        description="Validate mandatory agent review evidence for PRs."
+    )
     parser.add_argument(
         "--base-ref",
         default=os.environ.get("AGENT_REVIEW_BASE_REF", "origin/main"),

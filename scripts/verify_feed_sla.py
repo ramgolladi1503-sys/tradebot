@@ -4,6 +4,7 @@ from config import config as cfg
 from core.freshness_sla import get_freshness_status
 from core.time_utils import is_market_open_ist
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--market-open", action="store_true")
@@ -21,11 +22,15 @@ def main():
     if (payload.get("depth") or {}).get("age_sec") is None and market_open:
         print("FAIL: depth epoch missing")
         fail = True
-    if (payload.get("depth") or {}).get("age_sec") is None or (payload.get("depth") or {}).get("age_sec") > max_depth:
+    if (payload.get("depth") or {}).get("age_sec") is None or (
+        payload.get("depth") or {}
+    ).get("age_sec") > max_depth:
         msg = "depth feed stale"
         print(("FAIL: " if market_open else "WARN: ") + msg)
         fail = fail or market_open
-    if (payload.get("ltp") or {}).get("age_sec") is None or (payload.get("ltp") or {}).get("age_sec") > max_tick:
+    if (payload.get("ltp") or {}).get("age_sec") is None or (
+        payload.get("ltp") or {}
+    ).get("age_sec") > max_tick:
         msg = "tick feed stale"
         print(("FAIL: " if market_open else "WARN: ") + msg)
         fail = fail or market_open

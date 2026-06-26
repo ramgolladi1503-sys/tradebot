@@ -2,7 +2,12 @@ from core.paths import data_root, logs_dir
 import argparse
 from pathlib import Path
 
-from core.synthetic_market import SyntheticSessionConfig, generate_ohlcv_session, write_ohlcv_csv, write_sqlite_session
+from core.synthetic_market import (
+    SyntheticSessionConfig,
+    generate_ohlcv_session,
+    write_ohlcv_csv,
+    write_sqlite_session,
+)
 
 
 def main():

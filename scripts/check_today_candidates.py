@@ -1,5 +1,6 @@
 import json
 
+
 def run():
     count = 0
     with open(".runtime/logs/ranked_pipeline_runtime_2026-06-23.jsonl", "r") as f:
@@ -12,4 +13,6 @@ def run():
             except:
                 pass
     print(f"Total candidates ranked today in runtime pipeline: {count}")
+
+
 run()

@@ -15,7 +15,11 @@ def _now_epoch():
 
 
 def _iso_from_epoch(epoch: float) -> str:
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(epoch, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _ensure_columns(conn, table, cols):
@@ -27,7 +31,13 @@ def _ensure_columns(conn, table, cols):
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
 
-def _backfill_epoch_iso(conn, table, ts_col="timestamp", epoch_col="timestamp_epoch", iso_col="timestamp_iso"):
+def _backfill_epoch_iso(
+    conn,
+    table,
+    ts_col="timestamp",
+    epoch_col="timestamp_epoch",
+    iso_col="timestamp_iso",
+):
     cur = conn.execute(f"SELECT rowid, {ts_col}, {epoch_col}, {iso_col} FROM {table}")
     rows = cur.fetchall()
     updates = 0
@@ -60,21 +70,47 @@ def main():
         raise SystemExit("trades.db not found")
     conn = sqlite3.connect(db)
     _ensure_columns(conn, "ticks", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "depth_snapshots", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "decision_events", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "broker_fills", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "execution_stats", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "trades", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
-    _ensure_columns(conn, "outcomes", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"})
+    _ensure_columns(
+        conn, "depth_snapshots", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
+    _ensure_columns(
+        conn, "decision_events", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
+    _ensure_columns(
+        conn, "broker_fills", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
+    _ensure_columns(
+        conn, "execution_stats", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
+    _ensure_columns(
+        conn, "trades", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
+    _ensure_columns(
+        conn, "outcomes", {"timestamp_epoch": "REAL", "timestamp_iso": "TEXT"}
+    )
 
     stats = {}
-    stats["ticks"] = _backfill_epoch_iso(conn, "ticks", "timestamp", "timestamp_epoch", "timestamp_iso")
-    stats["depth_snapshots"] = _backfill_epoch_iso(conn, "depth_snapshots", "timestamp", "timestamp_epoch", "timestamp_iso")
-    stats["decision_events"] = _backfill_epoch_iso(conn, "decision_events", "ts", "timestamp_epoch", "timestamp_iso")
-    stats["broker_fills"] = _backfill_epoch_iso(conn, "broker_fills", "timestamp", "timestamp_epoch", "timestamp_iso")
-    stats["execution_stats"] = _backfill_epoch_iso(conn, "execution_stats", "timestamp", "timestamp_epoch", "timestamp_iso")
-    stats["trades"] = _backfill_epoch_iso(conn, "trades", "timestamp", "timestamp_epoch", "timestamp_iso")
-    stats["outcomes"] = _backfill_epoch_iso(conn, "outcomes", "exit_time", "timestamp_epoch", "timestamp_iso")
+    stats["ticks"] = _backfill_epoch_iso(
+        conn, "ticks", "timestamp", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["depth_snapshots"] = _backfill_epoch_iso(
+        conn, "depth_snapshots", "timestamp", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["decision_events"] = _backfill_epoch_iso(
+        conn, "decision_events", "ts", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["broker_fills"] = _backfill_epoch_iso(
+        conn, "broker_fills", "timestamp", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["execution_stats"] = _backfill_epoch_iso(
+        conn, "execution_stats", "timestamp", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["trades"] = _backfill_epoch_iso(
+        conn, "trades", "timestamp", "timestamp_epoch", "timestamp_iso"
+    )
+    stats["outcomes"] = _backfill_epoch_iso(
+        conn, "outcomes", "exit_time", "timestamp_epoch", "timestamp_iso"
+    )
     conn.commit()
     conn.close()
     print("migrate_timestamps:", stats)

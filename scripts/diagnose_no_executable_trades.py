@@ -26,24 +26,48 @@ from typing import Iterable, Any
 
 KEY_PATTERNS = {
     "final_emit": re.compile(r"FINAL EMIT[: ]+(?P<body>.*)", re.IGNORECASE),
-    "ranked_executable": re.compile(r"TB_RANKED_COUNT_EXECUTABLE\s+(?P<body>\{.*\})", re.IGNORECASE),
-    "contract_failed": re.compile(r"CONTRACT_RESOLUTION_FAILED|unresolved_contract", re.IGNORECASE),
+    "ranked_executable": re.compile(
+        r"TB_RANKED_COUNT_EXECUTABLE\s+(?P<body>\{.*\})", re.IGNORECASE
+    ),
+    "contract_failed": re.compile(
+        r"CONTRACT_RESOLUTION_FAILED|unresolved_contract", re.IGNORECASE
+    ),
     "contract_fallback": re.compile(r"CONTRACT_RESOLUTION_FALLBACK", re.IGNORECASE),
     "advisory": re.compile(r"ADVISORY_ONLY", re.IGNORECASE),
     "ready_not_approved": re.compile(r"READY_NOT_APPROVED", re.IGNORECASE),
     "executable": re.compile(r"\bEXECUTABLE\b", re.IGNORECASE),
-    "block": re.compile(r"\bBLOCK\b|non_executable|execution_allowed['\"]?\s*[:=]\s*False", re.IGNORECASE),
+    "block": re.compile(
+        r"\bBLOCK\b|non_executable|execution_allowed['\"]?\s*[:=]\s*False",
+        re.IGNORECASE,
+    ),
 }
 
 FIELD_PATTERNS = {
-    "primary_blocker": re.compile(r"primary_blocker['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE),
-    "readiness": re.compile(r"readiness['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE),
-    "candidate_status": re.compile(r"candidate_status['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE),
-    "execution_status": re.compile(r"execution_status['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE),
-    "quote_age_sec": re.compile(r"quote_age(?:_sec)?['\"]?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
-    "spread_pct": re.compile(r"spread(?:_pct)?['\"]?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE),
-    "tradingsymbol": re.compile(r"tradingsymbol['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-]+|None|null)", re.IGNORECASE),
-    "instrument_token": re.compile(r"instrument_token['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-]+|None|null)", re.IGNORECASE),
+    "primary_blocker": re.compile(
+        r"primary_blocker['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE
+    ),
+    "readiness": re.compile(
+        r"readiness['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE
+    ),
+    "candidate_status": re.compile(
+        r"candidate_status['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE
+    ),
+    "execution_status": re.compile(
+        r"execution_status['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-\.]+)", re.IGNORECASE
+    ),
+    "quote_age_sec": re.compile(
+        r"quote_age(?:_sec)?['\"]?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE
+    ),
+    "spread_pct": re.compile(
+        r"spread(?:_pct)?['\"]?\s*[:=]\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE
+    ),
+    "tradingsymbol": re.compile(
+        r"tradingsymbol['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-]+|None|null)", re.IGNORECASE
+    ),
+    "instrument_token": re.compile(
+        r"instrument_token['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-]+|None|null)",
+        re.IGNORECASE,
+    ),
 }
 
 
@@ -97,10 +121,16 @@ def diagnose(paths: list[Path]) -> dict[str, Any]:
                 counters[name] += 1
                 matched = True
                 if name == "ranked_executable":
-                    payload = _safe_jsonish(match.group("body")) or {"raw": match.group("body")}
-                    executable_counts.append({"file": str(path), "line": lineno, **payload})
+                    payload = _safe_jsonish(match.group("body")) or {
+                        "raw": match.group("body")
+                    }
+                    executable_counts.append(
+                        {"file": str(path), "line": lineno, **payload}
+                    )
                 elif name == "final_emit":
-                    final_emits.append({"file": str(path), "line": lineno, "body": match.group("body")})
+                    final_emits.append(
+                        {"file": str(path), "line": lineno, "body": match.group("body")}
+                    )
 
         for field, pattern in FIELD_PATTERNS.items():
             for match in pattern.finditer(line):
@@ -124,14 +154,20 @@ def diagnose(paths: list[Path]) -> dict[str, Any]:
     if counters["contract_failed"]:
         likely_causes.append("contract_resolution_failure")
     if field_values["quote_age_sec"]:
-        high_quote_age = [float(v) for v in field_values["quote_age_sec"] if _is_float(v) and float(v) > 3.0]
+        high_quote_age = [
+            float(v)
+            for v in field_values["quote_age_sec"]
+            if _is_float(v) and float(v) > 3.0
+        ]
         if high_quote_age:
             likely_causes.append("stale_quote_age")
     if counters["advisory"] or counters["ready_not_approved"]:
         likely_causes.append("gating_or_approval_block")
     if zero_executable_symbols:
         likely_causes.append("ranker_produced_zero_executable")
-    if field_values["tradingsymbol"].get("None") or field_values["instrument_token"].get("None"):
+    if field_values["tradingsymbol"].get("None") or field_values[
+        "instrument_token"
+    ].get("None"):
         likely_causes.append("missing_contract_identity")
 
     return {
@@ -154,8 +190,15 @@ def _is_float(value: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Diagnose no executable trades from tradebot logs.")
-    parser.add_argument("paths", nargs="*", default=["logs"], help="Log files or directories. Defaults to logs/")
+    parser = argparse.ArgumentParser(
+        description="Diagnose no executable trades from tradebot logs."
+    )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        default=["logs"],
+        help="Log files or directories. Defaults to logs/",
+    )
     parser.add_argument("--json", action="store_true", help="Print full JSON output")
     args = parser.parse_args()
 

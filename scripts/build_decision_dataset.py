@@ -38,7 +38,9 @@ def _load_jsonl(path: str) -> pd.DataFrame:
 def main():
     df = _load_sqlite(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
     if df.empty:
-        df = _load_jsonl(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
+        df = _load_jsonl(
+            getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))
+        )
     if df.empty:
         print("No decision events found")
         return

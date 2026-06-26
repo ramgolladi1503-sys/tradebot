@@ -33,7 +33,9 @@ def _load_truth_dataset() -> pd.DataFrame:
     return df
 
 
-def _synthetic_df(date_str: str, regime: str, bars: int, seed: int, symbol: str) -> pd.DataFrame:
+def _synthetic_df(
+    date_str: str, regime: str, bars: int, seed: int, symbol: str
+) -> pd.DataFrame:
     cfg = SyntheticSessionConfig(
         symbol=symbol,
         date=date_str,
@@ -72,7 +74,9 @@ def _summarize(df: pd.DataFrame) -> dict:
 
     data_quality_fail = pd.Series(False, index=df.index)
     if quote_age is not None:
-        data_quality_fail = data_quality_fail | quote_age.isna() | (quote_age > max_quote_age)
+        data_quality_fail = (
+            data_quality_fail | quote_age.isna() | (quote_age > max_quote_age)
+        )
     else:
         data_quality_fail = pd.Series(True, index=df.index)
     if spread is not None:
@@ -116,7 +120,8 @@ def _summarize(df: pd.DataFrame) -> dict:
     halt_count = 0
     for row in df.itertuples():
         md = {
-            "primary_regime": getattr(row, "primary_regime", None) or getattr(row, "regime", None),
+            "primary_regime": getattr(row, "primary_regime", None)
+            or getattr(row, "regime", None),
             "regime_entropy": getattr(row, "regime_entropy", None),
             "shock_score": getattr(row, "shock_score", None),
         }
@@ -140,7 +145,11 @@ def _summarize(df: pd.DataFrame) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--synthetic", action="store_true", help="Use synthetic session for stress tests")
+    parser.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Use synthetic session for stress tests",
+    )
     parser.add_argument("--synthetic-regime", default="RANGE")
     parser.add_argument("--synthetic-bars", type=int, default=360)
     parser.add_argument("--synthetic-seed", type=int, default=1)
@@ -171,40 +180,57 @@ def main():
         if "quote_ts_epoch" in df.columns:
             try:
                 now_epoch = datetime.utcnow().timestamp()
-                valid_quote = (now_epoch - pd.to_numeric(df["quote_ts_epoch"], errors="coerce"))
+                valid_quote = now_epoch - pd.to_numeric(
+                    df["quote_ts_epoch"], errors="coerce"
+                )
                 df["quote_age_sec"] = valid_quote
             except Exception:
                 valid_quote = None
         if valid_quote is None:
             valid_quote = pd.Series([], dtype=float)
     if isinstance(valid_quote, pd.Series) and not valid_quote.empty:
-        valid_quote_idx = df[(valid_quote.notna()) & (valid_quote <= max_quote_age)].index
+        valid_quote_idx = df[
+            (valid_quote.notna()) & (valid_quote <= max_quote_age)
+        ].index
     else:
         valid_quote_idx = pd.Index([])
 
     valid_spread = df.get("spread_pct")
     if valid_spread is not None:
-        valid_spread_idx = df[(valid_spread.notna()) & (valid_spread <= max_spread_pct)].index
+        valid_spread_idx = df[
+            (valid_spread.notna()) & (valid_spread <= max_spread_pct)
+        ].index
     else:
         valid_spread_idx = pd.Index([])
 
     valid_entropy = df.get("regime_entropy")
     if valid_entropy is not None:
-        valid_entropy_idx = df[(valid_entropy.notna()) & (valid_entropy < entropy_soft)].index
+        valid_entropy_idx = df[
+            (valid_entropy.notna()) & (valid_entropy < entropy_soft)
+        ].index
     else:
         valid_entropy_idx = pd.Index([])
 
     if len(valid_quote_idx) < min_valid_rows:
-        raise RuntimeError("Insufficient valid quote_age_sec rows to stress quote staleness. Ensure DecisionEvents include quote_ts_epoch or quote_age_sec.")
+        raise RuntimeError(
+            "Insufficient valid quote_age_sec rows to stress quote staleness. Ensure DecisionEvents include quote_ts_epoch or quote_age_sec."
+        )
     if len(valid_spread_idx) < min_valid_rows:
-        raise RuntimeError("Insufficient valid spread_pct rows to stress spread widening.")
+        raise RuntimeError(
+            "Insufficient valid spread_pct rows to stress spread widening."
+        )
     if len(valid_entropy_idx) < min_valid_rows:
-        raise RuntimeError("Insufficient valid regime_entropy rows to stress regime flip storm.")
+        raise RuntimeError(
+            "Insufficient valid regime_entropy rows to stress regime flip storm."
+        )
 
     baseline = _summarize(df)
 
     df_quote = _apply_to_selected(
-        df, valid_quote_idx[:min_valid_rows], quote_stale_burst, max_age_sec=max_quote_age
+        df,
+        valid_quote_idx[:min_valid_rows],
+        quote_stale_burst,
+        max_age_sec=max_quote_age,
     )
     quote_summary = _summarize(df_quote)
 
@@ -228,10 +254,19 @@ def main():
     iv_summary = _summarize(df_iv)
 
     # Assertions
-    assert quote_summary["no_trade"] > baseline["no_trade"], "quote_stale_burst did not increase NO_TRADE count"
-    assert quote_summary["data_quality_fail"] > baseline["data_quality_fail"], "quote_stale_burst did not increase data-quality failures"
-    assert spread_summary["exec_guard_block"] > baseline["exec_guard_block"], "spread_widen did not increase execution guard blocks"
-    assert regime_summary["entropy_gate"] > baseline["entropy_gate"] or regime_summary["halt_count"] > baseline["halt_count"], "regime_flip_storm did not increase entropy gating"
+    assert quote_summary["no_trade"] > baseline["no_trade"], (
+        "quote_stale_burst did not increase NO_TRADE count"
+    )
+    assert quote_summary["data_quality_fail"] > baseline["data_quality_fail"], (
+        "quote_stale_burst did not increase data-quality failures"
+    )
+    assert spread_summary["exec_guard_block"] > baseline["exec_guard_block"], (
+        "spread_widen did not increase execution guard blocks"
+    )
+    assert (
+        regime_summary["entropy_gate"] > baseline["entropy_gate"]
+        or regime_summary["halt_count"] > baseline["halt_count"]
+    ), "regime_flip_storm did not increase entropy gating"
 
     report = {
         "timestamp": datetime.now().isoformat(),

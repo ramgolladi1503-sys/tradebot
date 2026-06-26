@@ -32,6 +32,7 @@ exclude:
     - .runtime/cache
     - .runtime/db
     - logs/raw
+    - fixtures
   file_patterns:
     - "*.pyc"
     - "*.pyo"

@@ -65,14 +65,18 @@ def _line_for_offset(text: str, offset: int) -> int:
 
 def _scan_freshness_drift(repo_root: Path, files: list[Path]) -> list[Violation]:
     violations: list[Violation] = []
-    sql_pat = re.compile(r"SELECT\s+MAX\(timestamp_epoch\)\s+FROM\s+ticks", re.IGNORECASE)
+    sql_pat = re.compile(
+        r"SELECT\s+MAX\(timestamp_epoch\)\s+FROM\s+ticks", re.IGNORECASE
+    )
 
     for path in files:
         rel = _rel(path, repo_root)
         text = path.read_text(encoding="utf-8")
 
         # Enforce single authoritative public freshness function.
-        if rel != "core/freshness_sla.py" and re.search(r"^\s*def\s+get_freshness_status\s*\(", text, re.MULTILINE):
+        if rel != "core/freshness_sla.py" and re.search(
+            r"^\s*def\s+get_freshness_status\s*\(", text, re.MULTILINE
+        ):
             line_no = _line_for_offset(text, text.find("def get_freshness_status"))
             violations.append(
                 Violation(
@@ -108,7 +112,9 @@ def _scan_freshness_drift(repo_root: Path, files: list[Path]) -> list[Violation]
                 if node.module != "core.tick_store":
                     continue
                 imported = {alias.name for alias in node.names}
-                if not imported.intersection({"get_max_tick_epoch_db", "get_latest_tick_rows_db"}):
+                if not imported.intersection(
+                    {"get_max_tick_epoch_db", "get_latest_tick_rows_db"}
+                ):
                     continue
                 if rel in FRESHNESS_DB_HELPER_ALLOWLIST:
                     continue
@@ -222,15 +228,17 @@ def run_checks(repo_root: Path | None = None) -> list[Violation]:
 def _format_violations(violations: list[Violation]) -> str:
     lines = ["Contract check failed. Violations:"]
     for item in violations:
-        lines.append(
-            f"- [{item.code}] {item.file}:{item.line} {item.message}"
-        )
+        lines.append(f"- [{item.code}] {item.file}:{item.line} {item.message}")
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Static contract checker for drift-prone boundaries.")
-    parser.add_argument("--repo-root", type=str, default=str(REPO_ROOT), help="Repository root path")
+    parser = argparse.ArgumentParser(
+        description="Static contract checker for drift-prone boundaries."
+    )
+    parser.add_argument(
+        "--repo-root", type=str, default=str(REPO_ROOT), help="Repository root path"
+    )
     args = parser.parse_args(argv)
 
     violations = run_checks(Path(args.repo_root))

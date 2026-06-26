@@ -11,12 +11,21 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.feed_truth_audit import render_feed_truth_audit_markdown, write_feed_truth_audit_report
+from core.feed_truth_audit import (
+    render_feed_truth_audit_markdown,
+    write_feed_truth_audit_report,
+)
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Audit feed truth consistency from live evidence files.")
-    parser.add_argument("--log-file", required=True, help="Path to live_console.log or equivalent event log.")
+    parser = argparse.ArgumentParser(
+        description="Audit feed truth consistency from live evidence files."
+    )
+    parser.add_argument(
+        "--log-file",
+        required=True,
+        help="Path to live_console.log or equivalent event log.",
+    )
     parser.add_argument(
         "--runtime-file",
         required=True,
@@ -59,9 +68,13 @@ def main() -> int:
     )
     report["strict"] = bool(args.strict)
     if args.format == "markdown":
-        Path(out_path).write_text(render_feed_truth_audit_markdown(report), encoding="utf-8")
+        Path(out_path).write_text(
+            render_feed_truth_audit_markdown(report), encoding="utf-8"
+        )
     else:
-        Path(out_path).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+        Path(out_path).write_text(
+            json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
+        )
 
     missing_required_sources = _missing_required_source_codes(report)
     if args.strict and missing_required_sources:
@@ -74,7 +87,10 @@ def main() -> int:
 
     contradiction_count = len(report.get("contradictions") or [])
     if contradiction_count:
-        print(f"feed truth audit: {contradiction_count} contradiction(s) detected", file=sys.stderr)
+        print(
+            f"feed truth audit: {contradiction_count} contradiction(s) detected",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"feed truth audit report written: {out_path}")

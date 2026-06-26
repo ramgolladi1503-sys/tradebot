@@ -111,7 +111,12 @@ def main():
                 print(f"- {reason}")
         return
 
-    lifecycle.set_state(strategy_id, target, reason="manual_promotion", meta={"ts": datetime.utcnow().isoformat()})
+    lifecycle.set_state(
+        strategy_id,
+        target,
+        reason="manual_promotion",
+        meta={"ts": datetime.utcnow().isoformat()},
+    )
     print("Promotion: OK")
     print(f"strategy={strategy_id} -> {target}")
 

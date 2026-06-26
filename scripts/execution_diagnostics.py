@@ -31,7 +31,9 @@ def main():
         print(f"- fill_quality_day: {latest_day}")
         print(f"- fill_rate: {fill_daily[latest_day].get('fill_rate')}")
         print(f"- avg_time_to_fill: {fill_daily[latest_day].get('avg_time_to_fill')}")
-        print(f"- avg_slippage_vs_mid: {fill_daily[latest_day].get('avg_slippage_vs_mid')}")
+        print(
+            f"- avg_slippage_vs_mid: {fill_daily[latest_day].get('avg_slippage_vs_mid')}"
+        )
 
 
 if __name__ == "__main__":

@@ -29,14 +29,21 @@ def main() -> dict:
     except Exception as exc:
         conn.close()
         print(f"[repair_ticks][WARN] ticks table read failed: {exc}")
-        return {"status": "skipped", "reason": "ticks_table_unreadable", "detail": str(exc), "path": str(db)}
+        return {
+            "status": "skipped",
+            "reason": "ticks_table_unreadable",
+            "detail": str(exc),
+            "path": str(db),
+        }
     if df.empty:
         print("No ticks found.")
         conn.close()
         return {"status": "ok", "repaired": 0, "path": str(db)}
     try:
         # Prefer explicit mixed parsing to avoid noisy inference warnings.
-        ts_parsed = pd.to_datetime(df["timestamp"], errors="coerce", format="mixed", utc=True)
+        ts_parsed = pd.to_datetime(
+            df["timestamp"], errors="coerce", format="mixed", utc=True
+        )
     except TypeError:
         ts_parsed = pd.to_datetime(df["timestamp"], errors="coerce", utc=True)
     bad_mask = ts_parsed.isna() | df["timestamp"].apply(_is_bad)
@@ -63,7 +70,12 @@ def main() -> dict:
     except sqlite3.OperationalError as exc:
         # Degraded mode: keep ops pipeline running on readonly DB snapshots.
         print(f"[repair_ticks][WARN] skipped update: {exc}")
-        return {"status": "skipped", "reason": "update_failed", "detail": str(exc), "path": str(db)}
+        return {
+            "status": "skipped",
+            "reason": "update_failed",
+            "detail": str(exc),
+            "path": str(db),
+        }
     finally:
         conn.close()
 

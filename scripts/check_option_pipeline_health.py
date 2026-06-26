@@ -26,7 +26,9 @@ class _ExecStub:
             return False
         if px_f <= 0 or ask_f < bid_f:
             return False
-        return ((ask_f - bid_f) / px_f) <= float(getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35))
+        return ((ask_f - bid_f) / px_f) <= float(
+            getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35)
+        )
 
     def estimate_slippage(self, *_args, **_kwargs):
         return 0.0
@@ -55,20 +57,28 @@ def _synthetic_chain(atm: float, step: float, opt_type: str) -> list[dict[str, A
 def _build_synthetic_lotto_candidates(symbol: str = "NIFTY") -> int:
     cfg_prev = {
         "EXPIRY_LOTTO_MODE": getattr(cfg, "EXPIRY_LOTTO_MODE", False),
-        "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM": getattr(cfg, "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM", True),
-        "EXPIRY_LOTTO_TARGET_CANDIDATES": getattr(cfg, "EXPIRY_LOTTO_TARGET_CANDIDATES", 4),
-        "EXPIRY_LOTTO_MIN_OPTION_TOKENS": getattr(cfg, "EXPIRY_LOTTO_MIN_OPTION_TOKENS", 12),
+        "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM": getattr(
+            cfg, "EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM", True
+        ),
+        "EXPIRY_LOTTO_TARGET_CANDIDATES": getattr(
+            cfg, "EXPIRY_LOTTO_TARGET_CANDIDATES", 4
+        ),
+        "EXPIRY_LOTTO_MIN_OPTION_TOKENS": getattr(
+            cfg, "EXPIRY_LOTTO_MIN_OPTION_TOKENS", 12
+        ),
     }
     cfg.EXPIRY_LOTTO_MODE = True
     cfg.EXPIRY_LOTTO_REQUIRE_TREND_CONFIRM = False
     cfg.EXPIRY_LOTTO_TARGET_CANDIDATES = 4
     cfg.EXPIRY_LOTTO_MIN_OPTION_TOKENS = 4
     builder = TradeBuilder(predictor=object(), execution=_ExecStub())
-    builder._resolve_option_contract = lambda sym, strike, opt_type, expiry, market_data: {
-        "expiry": "2026-03-02",
-        "tradingsymbol": f"{sym}-2026-03-02-{int(float(strike))}-{opt_type}",
-        "instrument_token": int(float(strike) * 10),
-    }
+    builder._resolve_option_contract = (
+        lambda sym, strike, opt_type, expiry, market_data: {
+            "expiry": "2026-03-02",
+            "tradingsymbol": f"{sym}-2026-03-02-{int(float(strike))}-{opt_type}",
+            "instrument_token": int(float(strike) * 10),
+        }
+    )
     builder._identity_fields = lambda sym, instrument, expiry, strike, right, qty_lots: (
         "OPT",
         f"{sym}|{expiry}|{strike}|{right}",
@@ -84,9 +94,19 @@ def _build_synthetic_lotto_candidates(symbol: str = "NIFTY") -> int:
         "source_flags": {},
     }
     symbol_u = str(symbol or "NIFTY").upper()
-    step = float((getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}).get(symbol_u, getattr(cfg, "STRIKE_STEP", 50)))
-    atm = 24700.0 if symbol_u == "NIFTY" else (59600.0 if symbol_u == "BANKNIFTY" else 80000.0)
-    chain = _synthetic_chain(atm=atm, step=step, opt_type="CE") + _synthetic_chain(atm=atm, step=step, opt_type="PE")
+    step = float(
+        (getattr(cfg, "STRIKE_STEP_BY_SYMBOL", {}) or {}).get(
+            symbol_u, getattr(cfg, "STRIKE_STEP", 50)
+        )
+    )
+    atm = (
+        24700.0
+        if symbol_u == "NIFTY"
+        else (59600.0 if symbol_u == "BANKNIFTY" else 80000.0)
+    )
+    chain = _synthetic_chain(atm=atm, step=step, opt_type="CE") + _synthetic_chain(
+        atm=atm, step=step, opt_type="PE"
+    )
     market_data = {
         "symbol": symbol_u,
         "ltp": atm + 5.0,
@@ -162,7 +182,9 @@ def _derivative_cache_stats() -> dict[str, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify option feed/token/lotto pipeline health.")
+    parser = argparse.ArgumentParser(
+        description="Verify option feed/token/lotto pipeline health."
+    )
     parser.add_argument("--symbols", default="NIFTY,BANKNIFTY,SENSEX")
     parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
@@ -181,7 +203,11 @@ def main() -> int:
                 symbols=symbols,
                 max_tokens=int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 150)),
             )
-            option_total = sum(int((row or {}).get("option_count") or 0) for row in resolution if isinstance(row, dict))
+            option_total = sum(
+                int((row or {}).get("option_count") or 0)
+                for row in resolution
+                if isinstance(row, dict)
+            )
             if option_total > 0:
                 break
         except Exception as exc:
@@ -197,15 +223,23 @@ def main() -> int:
         if attempt < max_attempts:
             time.sleep(0.35)
     if build_exception is not None and not resolution:
-        errors.append(f"subscription_build_failed:{type(build_exception).__name__}:{build_exception}")
+        errors.append(
+            f"subscription_build_failed:{type(build_exception).__name__}:{build_exception}"
+        )
 
     feed_debug = get_feed_debug()
     freshness = get_freshness_status(force=True)
-    lotto_candidates = _build_synthetic_lotto_candidates(symbol=symbols[0] if symbols else "NIFTY")
+    lotto_candidates = _build_synthetic_lotto_candidates(
+        symbol=symbols[0] if symbols else "NIFTY"
+    )
     cache_stats = _derivative_cache_stats()
 
     resolved_option_tokens_count = int(
-        sum(int((row or {}).get("option_count") or 0) for row in resolution if isinstance(row, dict))
+        sum(
+            int((row or {}).get("option_count") or 0)
+            for row in resolution
+            if isinstance(row, dict)
+        )
     )
     live_option_tokens_count = int(resolved_option_tokens_count)
     live_option_tokens_source = "subscription_resolution"
@@ -218,7 +252,9 @@ def main() -> int:
     if live_option_tokens_count <= 0:
         subscribed_tokens_count = int(feed_debug.get("subscribed_tokens_count") or 0)
         intended_tokens_count = int(feed_debug.get("intended_tokens_count") or 0)
-        inferred_runtime_option_tokens = max(0, max(subscribed_tokens_count, intended_tokens_count) - len(symbols))
+        inferred_runtime_option_tokens = max(
+            0, max(subscribed_tokens_count, intended_tokens_count) - len(symbols)
+        )
         if inferred_runtime_option_tokens > 0:
             live_option_tokens_count = inferred_runtime_option_tokens
             live_option_tokens_source = "runtime_subscription_counts"
@@ -230,7 +266,9 @@ def main() -> int:
 
     min_option_tokens = int(getattr(cfg, "MIN_OPTION_TOKENS", 12))
     if resolved_option_tokens_count < min_option_tokens:
-        errors.append(f"resolved_option_tokens_under_min:{resolved_option_tokens_count}<{min_option_tokens}")
+        errors.append(
+            f"resolved_option_tokens_under_min:{resolved_option_tokens_count}<{min_option_tokens}"
+        )
     fail_reasons = sorted(
         {
             str((row or {}).get("option_fail_reason") or "").strip()
@@ -241,12 +279,18 @@ def main() -> int:
     if fail_reasons:
         errors.append(f"resolution_fail_reasons:{','.join(fail_reasons)}")
     if live_option_tokens_count < min_option_tokens:
-        errors.append(f"live_option_tokens_under_min:{live_option_tokens_count}<{min_option_tokens}")
+        errors.append(
+            f"live_option_tokens_under_min:{live_option_tokens_count}<{min_option_tokens}"
+        )
     if ws_connected is False:
         errors.append("ws_disconnected")
     if args.strict and (ws_connected is None):
         errors.append("ws_status_unknown")
-    if cache_stats.get("cache_exists") and (cache_stats.get("nfo_opt_rows", 0) + cache_stats.get("bfo_opt_rows", 0)) <= 0:
+    if (
+        cache_stats.get("cache_exists")
+        and (cache_stats.get("nfo_opt_rows", 0) + cache_stats.get("bfo_opt_rows", 0))
+        <= 0
+    ):
         errors.append("derivative_cache_empty:nfo_bfo_opt_rows=0")
     if lotto_candidates < 3:
         errors.append(f"lotto_candidates_under_min:{lotto_candidates}<3")

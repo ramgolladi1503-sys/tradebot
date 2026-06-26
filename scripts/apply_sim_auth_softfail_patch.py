@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-KITE_CLIENT = ROOT / 'core' / 'kite_client.py'
+KITE_CLIENT = ROOT / "core" / "kite_client.py"
 
 
 def patch_kite_client() -> None:
@@ -21,9 +21,9 @@ def _soften_kite_auth_failure(caller: str | None = None) -> bool:
     _ = caller
     return _execution_mode_is_nonlive()
 """
-    if 'def _execution_mode_is_nonlive()' not in text:
+    if "def _execution_mode_is_nonlive()" not in text:
         if helper_anchor not in text:
-            raise RuntimeError('Expected KiteClient class anchor not found')
+            raise RuntimeError("Expected KiteClient class anchor not found")
         text = text.replace(helper_anchor, helper_block + helper_anchor, 1)
 
     old = """            if self._is_historical_auth_error(e):
@@ -58,14 +58,14 @@ def _soften_kite_auth_failure(caller: str | None = None) -> bool:
                 )
                 raise RuntimeError(\"Kite auth failed\") from e
 """
-    if '[HIST_AUTH_SOFTFAIL]' not in text:
+    if "[HIST_AUTH_SOFTFAIL]" not in text:
         if old not in text:
-            raise RuntimeError('Expected historical auth failure block not found')
+            raise RuntimeError("Expected historical auth failure block not found")
         text = text.replace(old, new, 1)
 
     KITE_CLIENT.write_text(text)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     patch_kite_client()
-    print('Patched core/kite_client.py to soften Kite auth failures in nonlive modes')
+    print("Patched core/kite_client.py to soften Kite auth failures in nonlive modes")

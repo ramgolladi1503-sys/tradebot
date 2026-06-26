@@ -19,7 +19,9 @@ DEPRECATION_MESSAGE = (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Deprecated compatibility wrapper for canonical replay validation")
+    parser = argparse.ArgumentParser(
+        description="Deprecated compatibility wrapper for canonical replay validation"
+    )
     parser.add_argument("--data", default="", help="Ignored legacy argument")
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument("--start", default=None)

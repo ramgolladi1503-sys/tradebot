@@ -22,10 +22,26 @@ def _missingness_report(df: pd.DataFrame) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build the canonical truth dataset from DecisionEvents.")
-    parser.add_argument("--jsonl", default=getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")), help="DecisionEvents JSONL path.")
-    parser.add_argument("--sqlite", default=getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")), help="DecisionEvents SQLite path.")
-    parser.add_argument("--out-parquet", default=str(data_root() / "truth_dataset.parquet"), help="Output parquet path.")
+    parser = argparse.ArgumentParser(
+        description="Build the canonical truth dataset from DecisionEvents."
+    )
+    parser.add_argument(
+        "--jsonl",
+        default=getattr(
+            cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")
+        ),
+        help="DecisionEvents JSONL path.",
+    )
+    parser.add_argument(
+        "--sqlite",
+        default=getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")),
+        help="DecisionEvents SQLite path.",
+    )
+    parser.add_argument(
+        "--out-parquet",
+        default=str(data_root() / "truth_dataset.parquet"),
+        help="Output parquet path.",
+    )
     parser.add_argument("--out-csv", default="", help="Optional output CSV path.")
     args = parser.parse_args()
 
@@ -37,7 +53,11 @@ def main():
         out_csv=out_csv,
     )
 
-    executed = int(((df["gatekeeper_allowed"] == 1) & (df["risk_allowed"] == 1)).sum()) if "gatekeeper_allowed" in df.columns else 0
+    executed = (
+        int(((df["gatekeeper_allowed"] == 1) & (df["risk_allowed"] == 1)).sum())
+        if "gatekeeper_allowed" in df.columns
+        else 0
+    )
     rejected = int(len(df) - executed)
     filled = int((df["filled_bool"] == 1).sum()) if "filled_bool" in df.columns else 0
     missed = int(executed - filled)
@@ -54,7 +74,9 @@ def main():
             print(f"  {k}: {v:.2%}")
 
     if leakage_count > 0:
-        raise SystemExit("Leakage check failed: outcome timestamps <= decision timestamps.")
+        raise SystemExit(
+            "Leakage check failed: outcome timestamps <= decision timestamps."
+        )
 
 
 if __name__ == "__main__":

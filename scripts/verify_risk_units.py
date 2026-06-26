@@ -11,14 +11,22 @@ from core.risk_utils import to_pct
 def _check_case(label, portfolio, expected_ok):
     engine = RiskEngine()
     ok, reason = engine.allow_trade(portfolio)
-    print(f"{label}: ok={ok} reason={reason} daily_pnl_pct={portfolio.get('daily_pnl_pct'):.4f}")
-    assert ok == expected_ok, f"{label} failed: expected {expected_ok}, got {ok} ({reason})"
+    print(
+        f"{label}: ok={ok} reason={reason} daily_pnl_pct={portfolio.get('daily_pnl_pct'):.4f}"
+    )
+    assert ok == expected_ok, (
+        f"{label} failed: expected {expected_ok}, got {ok} ({reason})"
+    )
 
 
 if __name__ == "__main__":
     equity_high = 100000.0
     engine = RiskEngine()
-    max_loss_pct = getattr(engine, "max_daily_loss_pct", getattr(cfg, "MAX_DAILY_LOSS_PCT", getattr(cfg, "MAX_DAILY_LOSS", 0.15)))
+    max_loss_pct = getattr(
+        engine,
+        "max_daily_loss_pct",
+        getattr(cfg, "MAX_DAILY_LOSS_PCT", getattr(cfg, "MAX_DAILY_LOSS", 0.15)),
+    )
 
     # Case A: loss breaches MAX_DAILY_LOSS_PCT
     daily_pnl = -(max_loss_pct + 0.01) * equity_high  # breach by 1%

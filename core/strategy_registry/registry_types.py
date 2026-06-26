@@ -1,0 +1,48 @@
+from enum import Enum
+
+
+class ImplementationStatus(Enum):
+    UNKNOWN = "UNKNOWN"
+    NOT_REVIEWED = "NOT_REVIEWED"
+    IMPLEMENTED = "IMPLEMENTED"
+    IMPLEMENTATION_MISMATCH = "IMPLEMENTATION_MISMATCH"
+    VERIFIED = "VERIFIED"
+
+
+class ReplayStatus(Enum):
+    NOT_RUN = "NOT_RUN"
+    RUNNING = "RUNNING"
+    FAILED = "FAILED"
+    PASSED = "PASSED"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+
+
+class CertificationStatus(Enum):
+    NOT_STARTED = "NOT_STARTED"
+    RESEARCH = "RESEARCH"
+    PAPER = "PAPER"
+    SHADOW = "SHADOW"
+    PRODUCTION = "PRODUCTION"
+    REJECTED = "REJECTED"
+
+
+class PaperValidationStatus(Enum):
+    NOT_STARTED = "NOT_STARTED"
+    SOAKING = "SOAKING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+
+
+class AuditStatus(Enum):
+    UNAUDITED = "UNAUDITED"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
+class ProductionStatus(Enum):
+    NOT_APPROVED = "NOT_APPROVED"
+    APPROVED = "APPROVED"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    DEPRECATED = "DEPRECATED"

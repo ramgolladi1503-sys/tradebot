@@ -13,15 +13,29 @@ from core.candidate_executability_evidence import write_candidate_executability_
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Write a read-only candidate executability evidence pack from a log file.")
-    parser.add_argument("--log-file", required=True, help="Path to a log file or evidence transcript to parse.")
+    parser = argparse.ArgumentParser(
+        description="Write a read-only candidate executability evidence pack from a log file."
+    )
+    parser.add_argument(
+        "--log-file",
+        required=True,
+        help="Path to a log file or evidence transcript to parse.",
+    )
     parser.add_argument(
         "--output-dir",
         default=".runtime/reports/candidate_executability",
         help="Directory where the JSON and Markdown summaries will be written.",
     )
-    parser.add_argument("--source-name", default=None, help="Optional source label to embed in the report.")
-    parser.add_argument("--session-id", default=None, help="Optional session identifier to embed in the report.")
+    parser.add_argument(
+        "--source-name",
+        default=None,
+        help="Optional source label to embed in the report.",
+    )
+    parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Optional session identifier to embed in the report.",
+    )
     args = parser.parse_args()
 
     json_path, markdown_path, _report = write_candidate_executability_evidence(

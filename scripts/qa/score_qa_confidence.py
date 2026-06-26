@@ -26,7 +26,9 @@ def build_confidence_report(*, repo_root: Path) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Score QA confidence with conservative hard caps.")
+    parser = argparse.ArgumentParser(
+        description="Score QA confidence with conservative hard caps."
+    )
     parser.add_argument("--threshold", type=int, default=95)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)

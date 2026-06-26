@@ -28,7 +28,9 @@ def _load_incident(incident_id: str):
     return None
 
 
-def build_bundle(incident_id: str, out_dir: str = str(logs_dir() / "incident_bundles")) -> Path:
+def build_bundle(
+    incident_id: str, out_dir: str = str(logs_dir() / "incident_bundles")
+) -> Path:
     incident = _load_incident(incident_id)
     if not incident:
         raise SystemExit(f"incident_id not found: {incident_id}")

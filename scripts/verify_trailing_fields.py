@@ -12,7 +12,11 @@ from core.trade_store import init_db
 
 def main() -> int:
     init_db()
-    db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "desks" / "DEFAULT" / "trades.db")))
+    db_path = Path(
+        getattr(
+            cfg, "TRADE_DB_PATH", str(data_root() / "desks" / "DEFAULT" / "trades.db")
+        )
+    )
     if not db_path.exists():
         print("verify_trailing_fields: FAIL missing trades DB.")
         print("NEXT ACTION: run paper/live cycle to generate trades.")
@@ -21,7 +25,12 @@ def main() -> int:
     cur = con.cursor()
     cur.execute("PRAGMA table_info(trades)")
     cols = {row[1] for row in cur.fetchall()}
-    required = {"trailing_enabled", "trail_stop_init", "trail_stop_last", "trail_updates"}
+    required = {
+        "trailing_enabled",
+        "trail_stop_init",
+        "trail_stop_last",
+        "trail_updates",
+    }
     missing = sorted(required - cols)
     if missing:
         con.close()
@@ -33,7 +42,9 @@ def main() -> int:
     if total == 0:
         con.close()
         print("verify_trailing_fields: FAIL no trailing-enabled trades found.")
-        print("NEXT ACTION: run paper session with open trades to produce trailing records.")
+        print(
+            "NEXT ACTION: run paper session with open trades to produce trailing records."
+        )
         return 2
     cur.execute(
         """

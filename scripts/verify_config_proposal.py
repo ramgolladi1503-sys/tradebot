@@ -13,7 +13,9 @@ from core.analytics.proposal_verify import (
 )
 
 
-def _failed_report(*, proposal_path: Path, snapshot_path: Path, reason: str) -> dict[str, Any]:
+def _failed_report(
+    *, proposal_path: Path, snapshot_path: Path, reason: str
+) -> dict[str, Any]:
     return {
         "proposal_path": str(proposal_path),
         "snapshot_path": str(snapshot_path),
@@ -30,9 +32,17 @@ def _failed_report(*, proposal_path: Path, snapshot_path: Path, reason: str) -> 
 
 
 def _build_cli() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Verify offline config_delta proposal against user-supplied snapshot.")
-    parser.add_argument("--proposal", required=True, help="Path to config_delta_proposal.json")
-    parser.add_argument("--snapshot", required=True, help="Path to user-supplied config snapshot (json|yaml)")
+    parser = argparse.ArgumentParser(
+        description="Verify offline config_delta proposal against user-supplied snapshot."
+    )
+    parser.add_argument(
+        "--proposal", required=True, help="Path to config_delta_proposal.json"
+    )
+    parser.add_argument(
+        "--snapshot",
+        required=True,
+        help="Path to user-supplied config snapshot (json|yaml)",
+    )
     return parser
 
 

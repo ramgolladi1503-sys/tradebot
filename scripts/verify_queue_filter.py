@@ -16,8 +16,12 @@ def main():
     ts_time_only = now.strftime("%H:%M:%S")
 
     assert is_today_local(ts_today, now=now) is True, "today ts should be today"
-    assert is_today_local(ts_yesterday, now=now) is False, "yesterday ts should not be today"
-    assert is_today_local(ts_time_only, now=now) is False, "time-only ts should be rejected"
+    assert is_today_local(ts_yesterday, now=now) is False, (
+        "yesterday ts should not be today"
+    )
+    assert is_today_local(ts_time_only, now=now) is False, (
+        "time-only ts should be rejected"
+    )
 
     age = age_minutes_local(ts_yesterday, now=now)
     assert age is not None and age > 60, "yesterday age should be > 60 min"

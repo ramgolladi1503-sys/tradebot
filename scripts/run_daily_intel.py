@@ -6,14 +6,29 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from core.analytics.daily_intel import build_day_report, load_day_events, write_day_outputs
+from core.analytics.daily_intel import (
+    build_day_report,
+    load_day_events,
+    write_day_outputs,
+)
 
 
 def _build_cli() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run offline daily intelligence aggregator.")
+    parser = argparse.ArgumentParser(
+        description="Run offline daily intelligence aggregator."
+    )
     parser.add_argument("--day", required=True, help="Target day in YYYY-MM-DD.")
-    parser.add_argument("--base", default="runtime/analytics", help="Analytics base directory (default: runtime/analytics).")
-    parser.add_argument("--window-days", type=int, default=1, help="Trailing day window size (default: 1).")
+    parser.add_argument(
+        "--base",
+        default="runtime/analytics",
+        help="Analytics base directory (default: runtime/analytics).",
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=1,
+        help="Trailing day window size (default: 1).",
+    )
     return parser
 
 
@@ -26,7 +41,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     rows = load_day_events(base, day, window_days=window_days)
     report = build_day_report(rows, day)
     report["summary"]["window_days"] = window_days
-    md_path, json_path, proposal_md_path, proposal_json_path = write_day_outputs(report, base / "reports")
+    md_path, json_path, proposal_md_path, proposal_json_path = write_day_outputs(
+        report, base / "reports"
+    )
 
     print(
         json.dumps(

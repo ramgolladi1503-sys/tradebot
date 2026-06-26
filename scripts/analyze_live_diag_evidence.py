@@ -58,7 +58,9 @@ def main() -> int:
     options = EvidenceReplayOptions(
         today=_parse_date(args.today),
         max_jsonl_lines_per_file=max(1, int(args.max_jsonl_lines_per_file)),
-        quote_age_mismatch_tolerance_sec=max(0.0, float(args.quote_age_mismatch_tolerance_sec)),
+        quote_age_mismatch_tolerance_sec=max(
+            0.0, float(args.quote_age_mismatch_tolerance_sec)
+        ),
     )
     report = generate_evidence_replay_report(args.evidence_source, options=options)
 

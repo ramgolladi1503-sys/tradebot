@@ -12,7 +12,9 @@ def main():
     parser.add_argument("--id", required=True)
     args = parser.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
+    db_path = Path(
+        getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite"))
+    )
     with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cur.execute("SELECT status FROM experiments WHERE experiment_id=?", (args.id,))
@@ -21,7 +23,11 @@ def main():
             raise SystemExit("Experiment not found")
         if row[0] not in ("STOPPED",):
             raise SystemExit("Experiment must be STOPPED to analyze")
-    report = {"experiment_id": args.id, "status": "ANALYZED", "note": "analysis_placeholder"}
+    report = {
+        "experiment_id": args.id,
+        "status": "ANALYZED",
+        "note": "analysis_placeholder",
+    }
     out = logs_dir() / f"experiment_{args.id}_analysis.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(report, indent=2))

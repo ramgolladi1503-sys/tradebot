@@ -14,7 +14,9 @@ from core.replay_contract import assert_deterministic_runtime_replay
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Canonical system validation using ReplayEngine")
+    parser = argparse.ArgumentParser(
+        description="Canonical system validation using ReplayEngine"
+    )
     parser.add_argument("--symbol", default="NIFTY")
     parser.add_argument("--start", default=None)
     parser.add_argument("--end", default=None)

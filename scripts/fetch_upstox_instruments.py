@@ -59,9 +59,13 @@ def _fetch(url: str, timeout: int = 30) -> bytes:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Download Upstox instruments master file.")
+    parser = argparse.ArgumentParser(
+        description="Download Upstox instruments master file."
+    )
     parser.add_argument("--url", help="Direct URL to Upstox instruments file.")
-    parser.add_argument("--out", help="Output path (defaults to config UPSTOX_INSTRUMENTS_PATH).")
+    parser.add_argument(
+        "--out", help="Output path (defaults to config UPSTOX_INSTRUMENTS_PATH)."
+    )
     args = parser.parse_args()
 
     url = args.url or os.getenv("UPSTOX_INSTRUMENTS_URL")

@@ -4,14 +4,19 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tools.code_excellence.pr_evidence_pack import build_pr_evidence_pack_from_paths, write_pr_evidence_pack
+from tools.code_excellence.pr_evidence_pack import (
+    build_pr_evidence_pack_from_paths,
+    write_pr_evidence_pack,
+)
 
 
 DEFAULT_OUTPUT = "docs/code_excellence/reports/pr_evidence_pack_latest.md"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate a PR-ready Code Excellence evidence pack.")
+    parser = argparse.ArgumentParser(
+        description="Generate a PR-ready Code Excellence evidence pack."
+    )
     parser.add_argument("--repo", default=".")
     parser.add_argument("--config", default=".gsd-forensics.yaml")
     parser.add_argument("--changed-paths-file", required=True)

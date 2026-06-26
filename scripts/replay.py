@@ -18,7 +18,9 @@ def _to_float(value: str | None) -> float | None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Deterministic decision replay from recorded JSONL.")
+    parser = argparse.ArgumentParser(
+        description="Deterministic decision replay from recorded JSONL."
+    )
     parser.add_argument(
         "--input",
         "--file",
@@ -31,8 +33,12 @@ def main() -> int:
         default="paper",
         help="Replay mode. Supported: paper.",
     )
-    parser.add_argument("--start", default=None, help="Optional lower bound ts_epoch (inclusive).")
-    parser.add_argument("--end", default=None, help="Optional upper bound ts_epoch (inclusive).")
+    parser.add_argument(
+        "--start", default=None, help="Optional lower bound ts_epoch (inclusive)."
+    )
+    parser.add_argument(
+        "--end", default=None, help="Optional upper bound ts_epoch (inclusive)."
+    )
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -50,7 +56,9 @@ def main() -> int:
 
     start_ts = _to_float(args.start)
     end_ts = _to_float(args.end)
-    rows = replay_from_file(file_path, start_ts=start_ts, end_ts=end_ts, strict=bool(args.strict))
+    rows = replay_from_file(
+        file_path, start_ts=start_ts, end_ts=end_ts, strict=bool(args.strict)
+    )
     matched = sum(1 for row in rows if bool(row.get("match")))
     out = {
         "file": str(file_path),

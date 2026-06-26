@@ -49,7 +49,9 @@ if __name__ == "__main__":
     )
     ok, reason = lock.acquire()
     if not ok:
-        logger.warning("depth_ws_run_lock_blocked reason=%s state=%s", reason, lock.state_dict())
+        logger.warning(
+            "depth_ws_run_lock_blocked reason=%s state=%s", reason, lock.state_dict()
+        )
         raise SystemExit(2)
     atexit.register(lock.release)
 

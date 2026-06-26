@@ -85,9 +85,15 @@ def on_ticks(ws, ticks):
             {
                 "event": "WS_TICKS",
                 "count": len(ticks or []),
-                "sample_keys": sorted(sample.keys()) if isinstance(sample, dict) else [],
-                "sample_token": sample.get("instrument_token") if isinstance(sample, dict) else None,
-                "sample_ltp": sample.get("last_price") if isinstance(sample, dict) else None,
+                "sample_keys": sorted(sample.keys())
+                if isinstance(sample, dict)
+                else [],
+                "sample_token": sample.get("instrument_token")
+                if isinstance(sample, dict)
+                else None,
+                "sample_ltp": sample.get("last_price")
+                if isinstance(sample, dict)
+                else None,
             },
             default=str,
         )

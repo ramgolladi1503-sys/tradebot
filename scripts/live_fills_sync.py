@@ -12,6 +12,7 @@ from core.auth import validate_kite_startup_credentials
 from core.kite_client import kite_client
 from core.trade_store import insert_broker_fill
 
+
 def sync_once():
     validate_kite_startup_credentials(
         repo_root_path=Path(__file__).resolve().parents[1],
@@ -37,7 +38,9 @@ def sync_once():
             "side": tr.get("transaction_type"),
             "qty": tr.get("quantity"),
             "price": tr.get("average_price"),
-            "timestamp": tr.get("exchange_timestamp") or tr.get("order_timestamp") or str(datetime.now()),
+            "timestamp": tr.get("exchange_timestamp")
+            or tr.get("order_timestamp")
+            or str(datetime.now()),
             "exchange": tr.get("exchange"),
             "instrument_token": tr.get("instrument_token"),
         }
@@ -47,6 +50,7 @@ def sync_once():
         except Exception:
             pass
     return count
+
 
 if __name__ == "__main__":
     n = sync_once()

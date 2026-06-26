@@ -83,8 +83,14 @@ def build_training_dataset(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build merged training dataset from post-trade labels.")
-    parser.add_argument("--input-dir", default=str(data_root() / "training"), help="Directory containing trade_labels_*.jsonl")
+    parser = argparse.ArgumentParser(
+        description="Build merged training dataset from post-trade labels."
+    )
+    parser.add_argument(
+        "--input-dir",
+        default=str(data_root() / "training"),
+        help="Directory containing trade_labels_*.jsonl",
+    )
     parser.add_argument(
         "--output",
         default=str(data_root() / "training" / "trade_labels_training.jsonl"),
@@ -94,7 +100,9 @@ def main() -> int:
     ok, reason, count = build_training_dataset(args.input_dir, args.output)
     if not ok:
         print(f"build_training_dataset: FAIL reason={reason} rows={count}")
-        print("NEXT ACTION: run paper/live cycle to produce closed trades and trade_labels_*.jsonl")
+        print(
+            "NEXT ACTION: run paper/live cycle to produce closed trades and trade_labels_*.jsonl"
+        )
         return 2
     print(f"build_training_dataset: OK rows={count} output={args.output}")
     return 0
@@ -102,4 +110,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

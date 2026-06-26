@@ -16,7 +16,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.feed_staleness_observability import build_feed_staleness_report, write_feed_staleness_report
+from core.feed_staleness_observability import (
+    build_feed_staleness_report,
+    write_feed_staleness_report,
+)
 
 REQUIRED_SUMMARY_FIELDS = (
     "feed_ok",
@@ -86,7 +89,9 @@ def _parse_log_dict(line: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def scan_run_log_for_fallback_executable_traces(logs_dir: str | Path | None) -> list[dict[str, Any]]:
+def scan_run_log_for_fallback_executable_traces(
+    logs_dir: str | Path | None,
+) -> list[dict[str, Any]]:
     """Return fallback-contract traces that later appear executable in run_live.log.
 
     This is conservative and read-only. It groups fallback events by symbol and
@@ -149,7 +154,9 @@ def scan_run_log_for_fallback_executable_traces(logs_dir: str | Path | None) -> 
     return traces
 
 
-def validate_live_evidence(report: dict[str, Any], *, logs_dir: str | Path | None = None) -> dict[str, Any]:
+def validate_live_evidence(
+    report: dict[str, Any], *, logs_dir: str | Path | None = None
+) -> dict[str, Any]:
     """Return a read-only live validation summary for an observability report."""
 
     summary = dict(report.get("summary") or {})
@@ -183,7 +190,10 @@ def validate_live_evidence(report: dict[str, Any], *, logs_dir: str | Path | Non
     if visible_executable_count is not None and visible_executable_count < 0:
         violations.append("visible_executable_count_negative")
 
-    if _truthy_env("ORDER_RECON_ENABLED", default=False) is False and recon_daemon_running is True:
+    if (
+        _truthy_env("ORDER_RECON_ENABLED", default=False) is False
+        and recon_daemon_running is True
+    ):
         violations.append("order_recon_daemon_running_while_disabled")
 
     fallback_executable_traces = scan_run_log_for_fallback_executable_traces(
@@ -195,14 +205,28 @@ def validate_live_evidence(report: dict[str, Any], *, logs_dir: str | Path | Non
     missing_files = list(summary.get("missing_runtime_files") or [])
     errored_files = dict(summary.get("errored_runtime_files") or {})
     if missing_files:
-        warnings.append("missing_runtime_files:" + ",".join(sorted(str(x) for x in missing_files)))
+        warnings.append(
+            "missing_runtime_files:" + ",".join(sorted(str(x) for x in missing_files))
+        )
     if errored_files:
-        violations.append("errored_runtime_files:" + ",".join(sorted(str(k) for k in errored_files)))
+        violations.append(
+            "errored_runtime_files:" + ",".join(sorted(str(k) for k in errored_files))
+        )
 
     blocker_counts = dict(
-        ((report.get("blocker_evidence") or {}).get("suggestions_tail_blocker_counts") or {})
+        (
+            (report.get("blocker_evidence") or {}).get(
+                "suggestions_tail_blocker_counts"
+            )
+            or {}
+        )
     )
-    status_counts = dict(((report.get("status_counts") or {}).get("suggestions_tail_status_counts") or {}))
+    status_counts = dict(
+        (
+            (report.get("status_counts") or {}).get("suggestions_tail_status_counts")
+            or {}
+        )
+    )
 
     if not blocker_counts:
         warnings.append("no_suggestion_blocker_counts_visible")
@@ -230,7 +254,9 @@ def validate_live_evidence(report: dict[str, Any], *, logs_dir: str | Path | Non
         "summary": {
             "feed_ok": summary.get("feed_ok"),
             "ws_connected": summary.get("ws_connected"),
-            "subscribed_option_tokens_count": summary.get("subscribed_option_tokens_count"),
+            "subscribed_option_tokens_count": summary.get(
+                "subscribed_option_tokens_count"
+            ),
             "visible_executable_count": summary.get("visible_executable_count"),
             "recon_daemon_running": summary.get("recon_daemon_running"),
             "suggestions_tail_rows": summary.get("suggestions_tail_rows"),
@@ -265,10 +291,18 @@ def write_live_validation_report(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate live-market feed/staleness evidence")
-    parser.add_argument("--logs-dir", default=None, help="Runtime logs directory; defaults to core.paths.logs_dir()")
+    parser = argparse.ArgumentParser(
+        description="Validate live-market feed/staleness evidence"
+    )
+    parser.add_argument(
+        "--logs-dir",
+        default=None,
+        help="Runtime logs directory; defaults to core.paths.logs_dir()",
+    )
     parser.add_argument("--output", default=None, help="Output JSON path")
-    parser.add_argument("--print", action="store_true", help="Print validation JSON to stdout")
+    parser.add_argument(
+        "--print", action="store_true", help="Print validation JSON to stdout"
+    )
     args = parser.parse_args()
 
     if args.print:

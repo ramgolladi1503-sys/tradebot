@@ -26,7 +26,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     changed_paths = load_changed_paths(args.changed_paths_file)
-    report = run_unified_ce_gates(repo_root=Path(args.repo), config_path=Path(args.config), changed_paths=changed_paths)
+    report = run_unified_ce_gates(
+        repo_root=Path(args.repo),
+        config_path=Path(args.config),
+        changed_paths=changed_paths,
+    )
     output_path = write_unified_ce_gate_report(report, Path(args.out))
     print(f"[unified-ce-gates] report={output_path}")
     print(f"[unified-ce-gates] changed_paths={len(report.changed_paths)}")

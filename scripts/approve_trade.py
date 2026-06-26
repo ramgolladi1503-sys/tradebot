@@ -14,9 +14,13 @@ from core.review_packet import format_review_packet
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Approve a queued trade by exact payload hash.")
+    parser = argparse.ArgumentParser(
+        description="Approve a queued trade by exact payload hash."
+    )
     parser.add_argument("trade_id", help="Queued trade id")
-    parser.add_argument("--ttl-sec", type=int, default=None, help="Approval validity (seconds)")
+    parser.add_argument(
+        "--ttl-sec", type=int, default=None, help="Approval validity (seconds)"
+    )
     args = parser.parse_args()
 
     queued = get_queue_entry(args.trade_id)
@@ -40,7 +44,12 @@ def main():
         raise SystemExit(2)
 
     approver = os.getenv("USER") or "manual"
-    approve(args.trade_id, payload_hash=payload_hash, ttl_sec=args.ttl_sec, approver=approver)
+    approve(
+        args.trade_id,
+        payload_hash=payload_hash,
+        ttl_sec=args.ttl_sec,
+        approver=approver,
+    )
     ok, reason = approve_order_intent(
         payload_hash,
         approver_id=approver,
@@ -51,7 +60,9 @@ def main():
         print(f"Approval store update failed: {reason}")
         raise SystemExit(2)
     print(f"Approved {args.trade_id} with payload hash {payload_hash[:12]}...")
-    print("Next step for LIVE execution: arm this approval via `python scripts/arm_trade.py --trade-id <trade_id>`.")
+    print(
+        "Next step for LIVE execution: arm this approval via `python scripts/arm_trade.py --trade-id <trade_id>`."
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,12 @@ import runpy
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
-from core.time_utils import now_utc_epoch, now_ist, is_market_open_ist, next_market_open_ist
+from core.time_utils import (
+    now_utc_epoch,
+    now_ist,
+    is_market_open_ist,
+    next_market_open_ist,
+)
 
 
 def main():

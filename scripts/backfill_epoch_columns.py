@@ -45,7 +45,11 @@ def _backfill_table(conn, table):
         epoch = _parse_ts(ts)
         if epoch is None:
             epoch = now - (i * 0.001)
-        ts_iso = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        ts_iso = (
+            datetime.fromtimestamp(epoch, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
         conn.execute(
             f"UPDATE {table} SET timestamp_epoch=?, timestamp_iso=? WHERE rowid=?",
             (epoch, ts_iso, rowid),

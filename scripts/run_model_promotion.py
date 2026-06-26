@@ -49,7 +49,9 @@ def _ks(expected, actual):
     return float(np.max(np.abs(cdf_exp - cdf_act)))
 
 
-def _drift_gate(df: pd.DataFrame, features: list[str], psi_thr: float, ks_thr: float) -> tuple[bool, dict]:
+def _drift_gate(
+    df: pd.DataFrame, features: list[str], psi_thr: float, ks_thr: float
+) -> tuple[bool, dict]:
     if df is None or df.empty:
         return False, {"reason": "empty_df"}
     df = df.copy()
@@ -110,7 +112,9 @@ def decide_promotion(report: dict, gates: dict) -> tuple[bool, list[str]]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Promote challenger model using truth dataset and gates.")
+    parser = argparse.ArgumentParser(
+        description="Promote challenger model using truth dataset and gates."
+    )
     parser.add_argument("--family", default="xgb")
     parser.add_argument("--truth", default=str(data_root() / "truth_dataset.parquet"))
     parser.add_argument("--dry-run", action="store_true")
@@ -118,7 +122,9 @@ def main():
 
     truth_path = Path(args.truth)
     if not truth_path.exists():
-        raise SystemExit("truth_dataset.parquet not found. Run scripts/build_truth_dataset.py first.")
+        raise SystemExit(
+            "truth_dataset.parquet not found. Run scripts/build_truth_dataset.py first."
+        )
 
     df = pd.read_parquet(truth_path)
     if df.empty:
@@ -131,10 +137,14 @@ def main():
     required_cols = ["champion_proba", "challenger_proba"]
     for col in required_cols:
         if col not in df.columns or df[col].dropna().empty:
-            raise SystemExit(f"Missing required column: {col}. Promotion requires logged shadow predictions.")
+            raise SystemExit(
+                f"Missing required column: {col}. Promotion requires logged shadow predictions."
+            )
 
     try:
-        report = evaluate_promotion(df, start_day, gates={"ece_bins": 10, "tail_k": cfg.PROMOTION_TAIL_WORST_K})
+        report = evaluate_promotion(
+            df, start_day, gates={"ece_bins": 10, "tail_k": cfg.PROMOTION_TAIL_WORST_K}
+        )
     except ValueError as e:
         raise SystemExit(str(e))
     if len(df) < min_rows:

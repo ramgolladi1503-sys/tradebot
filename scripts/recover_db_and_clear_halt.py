@@ -3,7 +3,9 @@ from core.db_guard import ensure_db_ready
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Recover DB path and clear db_write_fail halt if applicable.")
+    parser = argparse.ArgumentParser(
+        description="Recover DB path and clear db_write_fail halt if applicable."
+    )
     parser.add_argument("--db-path", default=None, help="Override DB path for probe.")
     args = parser.parse_args()
 

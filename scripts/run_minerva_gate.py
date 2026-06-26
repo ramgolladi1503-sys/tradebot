@@ -4,7 +4,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from tools.code_excellence.minerva_gate import read_changed_paths_file, run_minerva_gate, write_minerva_gate_report
+from tools.code_excellence.minerva_gate import (
+    read_changed_paths_file,
+    run_minerva_gate,
+    write_minerva_gate_report,
+)
 
 
 DEFAULT_OUTPUT = "docs/code_excellence/minerva/reports/minerva_gate_latest.md"
@@ -21,8 +25,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    changed_paths = read_changed_paths_file(args.changed_paths_file) if args.changed_paths_file else None
-    report = run_minerva_gate(repo_root=Path(args.repo), config_path=Path(args.config), changed_paths=changed_paths)
+    changed_paths = (
+        read_changed_paths_file(args.changed_paths_file)
+        if args.changed_paths_file
+        else None
+    )
+    report = run_minerva_gate(
+        repo_root=Path(args.repo),
+        config_path=Path(args.config),
+        changed_paths=changed_paths,
+    )
     output_path = write_minerva_gate_report(report, Path(args.out))
     print(f"[minerva-gate] report={output_path}")
     print(f"[minerva-gate] findings={len(report.findings)}")

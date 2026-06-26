@@ -10,7 +10,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.backtesting.data_catalog import build_diagnostics_report, load_backtest_config, write_diagnostics_report
+from core.backtesting.data_catalog import (
+    build_diagnostics_report,
+    load_backtest_config,
+    write_diagnostics_report,
+)
 
 
 def _render_summary(report: dict) -> str:
@@ -23,7 +27,9 @@ def _render_summary(report: dict) -> str:
         f"symbols: {', '.join(report.get('questions', {}).get('what_symbols_are_covered') or []) or 'NONE'}",
     ]
     date_window = report.get("questions", {}).get("what_dates_are_covered") or {}
-    lines.append(f"date_coverage: {date_window.get('start_date')} -> {date_window.get('end_date')}")
+    lines.append(
+        f"date_coverage: {date_window.get('start_date')} -> {date_window.get('end_date')}"
+    )
     for item in report.get("mode_feasibility") or []:
         mode = item.get("mode")
         feasible = item.get("feasible")
@@ -33,15 +39,29 @@ def _render_summary(report: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Inspect local historical data and report feasible backtest modes.")
-    parser.add_argument("--config", required=True, help="Path to JSON config for the backtesting data catalog.")
-    parser.add_argument("--output", default="", help="Optional diagnostics JSON output path override.")
-    parser.add_argument("--json", action="store_true", help="Emit the full report JSON to stdout.")
+    parser = argparse.ArgumentParser(
+        description="Inspect local historical data and report feasible backtest modes."
+    )
+    parser.add_argument(
+        "--config",
+        required=True,
+        help="Path to JSON config for the backtesting data catalog.",
+    )
+    parser.add_argument(
+        "--output", default="", help="Optional diagnostics JSON output path override."
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="Emit the full report JSON to stdout."
+    )
     args = parser.parse_args(argv)
 
     config = load_backtest_config(args.config)
     report = build_diagnostics_report(config)
-    target = Path(args.output).expanduser() if args.output else config.diagnostics_output_path
+    target = (
+        Path(args.output).expanduser()
+        if args.output
+        else config.diagnostics_output_path
+    )
     out = write_diagnostics_report(report, target)
     readiness_out = write_diagnostics_report(report, config.readiness_output_path)
 

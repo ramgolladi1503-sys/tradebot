@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from core.observability import ObservabilityMetricsRegistry, build_default_metrics_registry
+from core.observability import (
+    ObservabilityMetricsRegistry,
+    build_default_metrics_registry,
+)
 
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 9108
@@ -41,7 +44,9 @@ def build_server(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Serve Tradebot observability metrics.")
+    parser = argparse.ArgumentParser(
+        description="Serve Tradebot observability metrics."
+    )
     parser.add_argument("--host", default=_DEFAULT_HOST)
     parser.add_argument("--port", default=_DEFAULT_PORT, type=int)
     args = parser.parse_args()

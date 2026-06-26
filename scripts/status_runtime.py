@@ -72,7 +72,9 @@ def _ps_rows() -> list[tuple[int | None, str]]:
     return rows
 
 
-def _process_state(name: str, root: Path, ps_rows: list[tuple[int | None, str]]) -> dict:
+def _process_state(
+    name: str, root: Path, ps_rows: list[tuple[int | None, str]]
+) -> dict:
     spec = PROCESS_SPECS[name]
     pidfile = root / "logs" / spec["pidfile"]
     pid = None
@@ -110,17 +112,16 @@ def _process_state(name: str, root: Path, ps_rows: list[tuple[int | None, str]])
     }
 
 
-def build_status_report(*, root: Path | None = None, runtime_logs: Path | None = None) -> dict:
+def build_status_report(
+    *, root: Path | None = None, runtime_logs: Path | None = None
+) -> dict:
     repo = Path(root or repo_root())
     runtime_dir = Path(runtime_logs or logs_dir())
     suggestions = _read_json(runtime_dir / "suggestions_status.json")
     engine = _read_json(runtime_dir / "engine_cycle_status.json")
     feed = _read_json(runtime_dir / "feed_runtime_latest.json")
     ps_rows = _ps_rows()
-    processes = {
-        name: _process_state(name, repo, ps_rows)
-        for name in PROCESS_SPECS
-    }
+    processes = {name: _process_state(name, repo, ps_rows) for name in PROCESS_SPECS}
     return {
         "repo_root": str(repo),
         "runtime_logs": str(runtime_dir),
@@ -176,8 +177,14 @@ def render_status_report(report: dict) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Show one-shot runtime status for tradebot.")
-    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON instead of text.")
+    parser = argparse.ArgumentParser(
+        description="Show one-shot runtime status for tradebot."
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of text.",
+    )
     args = parser.parse_args()
     report = build_status_report()
     if args.json:

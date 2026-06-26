@@ -5,10 +5,11 @@ import pkgutil
 import os
 
 # Add project root to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import strategies
 from core.strategy_spec import StrategySpec, build_strategy_spec_registry
+
 
 def get_all_subclasses(cls):
     all_subclasses = []
@@ -16,6 +17,7 @@ def get_all_subclasses(cls):
         all_subclasses.append(subclass)
         all_subclasses.extend(get_all_subclasses(subclass))
     return all_subclasses
+
 
 def main():
     # Dynamically import all modules in the strategies package
@@ -38,14 +40,17 @@ def main():
     for subclass in subclasses:
         mod = subclass.__module__
         if mod not in registered_modules:
-            print(f"Error: Subclass {subclass.__name__} in module {mod} is missing from the active strategy registry.")
+            print(
+                f"Error: Subclass {subclass.__name__} in module {mod} is missing from the active strategy registry."
+            )
             missing = True
 
     if missing:
         sys.exit(1)
-    
+
     print("Verification passed: All StrategySpec subclasses are registered.")
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

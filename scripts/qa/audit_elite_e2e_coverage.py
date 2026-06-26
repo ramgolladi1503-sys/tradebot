@@ -15,7 +15,11 @@ REQUIRED_EXECUTION_GUARD_TESTS = (
 
 
 def _execution_guard_status(repo_root: Path) -> tuple[str, list[str]]:
-    missing = [str(path) for path in REQUIRED_EXECUTION_GUARD_TESTS if not (repo_root / path).exists()]
+    missing = [
+        str(path)
+        for path in REQUIRED_EXECUTION_GUARD_TESTS
+        if not (repo_root / path).exists()
+    ]
     if missing:
         return "PARTIALLY_COVERED", missing
     return "FULLY_COVERED", []
@@ -38,7 +42,9 @@ def build_report(*, repo_root: Path) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit elite QA coverage with hard caps for critical gaps.")
+    parser = argparse.ArgumentParser(
+        description="Audit elite QA coverage with hard caps for critical gaps."
+    )
     parser.add_argument("--threshold", type=int, default=95)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -48,7 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
         print(f"execution_guard_status: {report['execution_guard_status']}")
-        print(f"critical_behavior_coverage_score: {report['critical_behavior_coverage_score']}/100")
+        print(
+            f"critical_behavior_coverage_score: {report['critical_behavior_coverage_score']}/100"
+        )
         print(f"elite_audit_score: {report['elite_audit_score']}/100")
         if report["execution_guard_required_tests_missing"]:
             print("execution_guard_required_tests_missing:")

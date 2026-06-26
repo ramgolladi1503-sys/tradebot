@@ -29,8 +29,13 @@ def main() -> int:
 
     for px in prices:
         if not tp1_done and px >= tp1 and rem > 1:
-            close_qty = min(rem - 1, max(1, int(round(rem * float(getattr(cfg, "TP1_FRACTION", 0.5))))))
-            pnl = (px - entry) * close_qty if side == "BUY" else (entry - px) * close_qty
+            close_qty = min(
+                rem - 1,
+                max(1, int(round(rem * float(getattr(cfg, "TP1_FRACTION", 0.5))))),
+            )
+            pnl = (
+                (px - entry) * close_qty if side == "BUY" else (entry - px) * close_qty
+            )
             rem -= close_qty
             realized += pnl
             weighted += px * close_qty
@@ -54,7 +59,9 @@ def main() -> int:
         print(f"partial_profit_smoketest: FAIL realized_pnl={realized} expected >0")
         return 1
     if legs[-1]["reason"] != "TRAIL_STOP":
-        print(f"partial_profit_smoketest: FAIL exit_reason_final={legs[-1]['reason']} expected=TRAIL_STOP")
+        print(
+            f"partial_profit_smoketest: FAIL exit_reason_final={legs[-1]['reason']} expected=TRAIL_STOP"
+        )
         return 1
 
     print("partial_profit_smoketest: OK")

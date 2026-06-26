@@ -43,7 +43,9 @@ DEFAULT_FEATURES = (
 
 
 def _pick_features(frame: pd.DataFrame, features: list[str] | None) -> list[str]:
-    selected = [str(col).strip() for col in (features or DEFAULT_FEATURES) if str(col).strip()]
+    selected = [
+        str(col).strip() for col in (features or DEFAULT_FEATURES) if str(col).strip()
+    ]
     missing = [col for col in selected if col not in frame.columns]
     if missing:
         raise ValueError(f"missing_feature_columns:{','.join(missing)}")
@@ -65,10 +67,20 @@ def _engineer_features(frame: pd.DataFrame) -> pd.DataFrame:
     return enriched
 
 
-def _best_reject_threshold(frame: pd.DataFrame, proba: pd.Series, *, return_col: str = "future_return", cost_bps: float = 10.0) -> dict[str, Any]:
+def _best_reject_threshold(
+    frame: pd.DataFrame,
+    proba: pd.Series,
+    *,
+    return_col: str = "future_return",
+    cost_bps: float = 10.0,
+) -> dict[str, Any]:
     if return_col not in frame.columns:
         return {"status": "missing_return_col"}
-    returns = pd.to_numeric(frame[return_col], errors="coerce").fillna(0.0).reset_index(drop=True)
+    returns = (
+        pd.to_numeric(frame[return_col], errors="coerce")
+        .fillna(0.0)
+        .reset_index(drop=True)
+    )
     proba = pd.Series(proba).reset_index(drop=True)
     best = {"threshold": 0.5, "net_expectancy": float("-inf"), "reject_rate": 1.0}
     for threshold in [i / 100 for i in range(30, 71, 2)]:
@@ -133,7 +145,10 @@ def train_offline_model(
         model = Pipeline(
             steps=[
                 ("scaler", StandardScaler()),
-                ("classifier", LogisticRegression(max_iter=3000, class_weight="balanced")),
+                (
+                    "classifier",
+                    LogisticRegression(max_iter=3000, class_weight="balanced"),
+                ),
             ]
         )
         model_type = "StandardScaledLogisticRegression"
@@ -163,7 +178,11 @@ def train_offline_model(
     reject_gate = _best_reject_threshold(
         test.reset_index(drop=True),
         pd.Series(proba, index=test.index),
-        return_col="future_return" if "future_return" in test.columns else "realized_pnl_pct" if "realized_pnl_pct" in test.columns else "future_return_1",
+        return_col="future_return"
+        if "future_return" in test.columns
+        else "realized_pnl_pct"
+        if "realized_pnl_pct" in test.columns
+        else "future_return_1",
     )
     payload = {
         "input_csv": str(source),
@@ -194,23 +213,53 @@ def train_offline_model(
     if metrics_output is not None:
         metrics_path = Path(metrics_output).expanduser()
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
-        metrics_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        metrics_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+        )
 
-    return {**payload, "model_output": str(model_path), "metrics_output": str(metrics_output) if metrics_output else None}
+    return {
+        **payload,
+        "model_output": str(model_path),
+        "metrics_output": str(metrics_output) if metrics_output else None,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Train a small offline classifier from labeled historical candles.")
-    parser.add_argument("--input-csv", required=True, help="Labeled CSV path from build_next_bar_labels.py")
-    parser.add_argument("--model-output", required=True, help="Joblib model artifact path")
-    parser.add_argument("--metrics-output", default="", help="Optional metrics JSON path")
-    parser.add_argument("--feature-columns", default="", help="Optional comma-separated feature columns")
+    parser = argparse.ArgumentParser(
+        description="Train a small offline classifier from labeled historical candles."
+    )
+    parser.add_argument(
+        "--input-csv",
+        required=True,
+        help="Labeled CSV path from build_next_bar_labels.py",
+    )
+    parser.add_argument(
+        "--model-output", required=True, help="Joblib model artifact path"
+    )
+    parser.add_argument(
+        "--metrics-output", default="", help="Optional metrics JSON path"
+    )
+    parser.add_argument(
+        "--feature-columns", default="", help="Optional comma-separated feature columns"
+    )
     parser.add_argument("--label-column", default="label_up", help="Label column name")
-    parser.add_argument("--test-fraction", type=float, default=0.2, help="Holdout fraction from the end of the series")
-    parser.add_argument("--model-family", default="logistic", choices=["logistic", "random_forest"], help="Offline model family")
+    parser.add_argument(
+        "--test-fraction",
+        type=float,
+        default=0.2,
+        help="Holdout fraction from the end of the series",
+    )
+    parser.add_argument(
+        "--model-family",
+        default="logistic",
+        choices=["logistic", "random_forest"],
+        help="Offline model family",
+    )
     args = parser.parse_args(argv)
 
-    features = [item.strip() for item in args.feature_columns.split(",") if item.strip()]
+    features = [
+        item.strip() for item in args.feature_columns.split(",") if item.strip()
+    ]
     report = train_offline_model(
         input_csv=args.input_csv,
         model_output=args.model_output,

@@ -43,9 +43,7 @@ def _json_safe(value: Any) -> Any:
     except Exception:
         pass
     if isinstance(value, dict):
-        return {
-            str(key): _json_safe(subvalue) for key, subvalue in value.items()
-        }
+        return {str(key): _json_safe(subvalue) for key, subvalue in value.items()}
     if isinstance(value, list):
         return [_json_safe(item) for item in value]
     if isinstance(value, tuple):
@@ -62,9 +60,7 @@ def load_offline_research_config(path: str | Path) -> dict[str, Any]:
         "source_root": payload.get("source_root", ""),
         "work_dir": payload.get("work_dir", ".runtime/aeron7_research"),
         "symbols": list(payload.get("symbols") or ["NIFTY_F1"]),
-        "horizons_bars": [
-            int(v) for v in list(payload.get("horizons_bars") or [1])
-        ],
+        "horizons_bars": [int(v) for v in list(payload.get("horizons_bars") or [1])],
         "train_window_days": int(payload.get("train_window_days") or 60),
         "test_window_days": int(payload.get("test_window_days") or 10),
         "step_days": int(payload.get("step_days") or 10),
@@ -200,18 +196,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the offline Aeron7 research pipeline end to end."
     )
-    parser.add_argument(
-        "--config", default="", help="Optional JSON config path"
-    )
-    parser.add_argument(
-        "--source-root", default="", help="Aeron7 dataset root"
-    )
+    parser.add_argument("--config", default="", help="Optional JSON config path")
+    parser.add_argument("--source-root", default="", help="Aeron7 dataset root")
     parser.add_argument(
         "--work-dir", default="", help="Workspace for generated artifacts"
     )
-    parser.add_argument(
-        "--symbols", default="", help="Comma-separated Aeron7 symbols"
-    )
+    parser.add_argument("--symbols", default="", help="Comma-separated Aeron7 symbols")
     parser.add_argument(
         "--horizons", default="", help="Comma-separated label horizons in bars"
     )
@@ -229,32 +219,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     config = (
-        load_offline_research_config(args.config)
-        if str(args.config).strip()
-        else {}
+        load_offline_research_config(args.config) if str(args.config).strip() else {}
     )
     source_root = args.source_root or config.get("source_root", "")
-    work_dir = args.work_dir or config.get(
-        "work_dir", ".runtime/aeron7_research"
-    )
+    work_dir = args.work_dir or config.get("work_dir", ".runtime/aeron7_research")
     symbols = [
         item.strip()
-        for item in str(
-            args.symbols or ",".join(config.get("symbols", []))
-        ).split(",")
+        for item in str(args.symbols or ",".join(config.get("symbols", []))).split(",")
         if item.strip()
     ]
     horizons = [
         int(item.strip())
         for item in str(
-            args.horizons
-            or ",".join(str(v) for v in config.get("horizons_bars", [1]))
+            args.horizons or ",".join(str(v) for v in config.get("horizons_bars", [1]))
         ).split(",")
         if item.strip()
     ]
-    model_family = args.model_family or config.get(
-        "model_family", "random_forest"
-    )
+    model_family = args.model_family or config.get("model_family", "random_forest")
     report = run_offline_aeron7_research(
         source_root=source_root,
         work_dir=work_dir,

@@ -50,7 +50,9 @@ def run(cmd: list[str], *, optional: bool = False) -> str:
         return "ok"
     except subprocess.CalledProcessError as exc:
         if optional:
-            print(f"[daily_ops][WARN] optional step failed: {' '.join(cmd)} rc={exc.returncode}")
+            print(
+                f"[daily_ops][WARN] optional step failed: {' '.join(cmd)} rc={exc.returncode}"
+            )
             return f"optional_failed:rc={exc.returncode}"
         raise
 
@@ -67,7 +69,13 @@ def _load_daily_audit_status() -> dict | None:
 
 
 def _load_outcome_truth_status() -> dict | None:
-    path = Path(getattr(cfg, "OUTCOME_TRUTH_STATUS_PATH", str(logs_dir() / "outcome_truth_status_latest.json")))
+    path = Path(
+        getattr(
+            cfg,
+            "OUTCOME_TRUTH_STATUS_PATH",
+            str(logs_dir() / "outcome_truth_status_latest.json"),
+        )
+    )
     if not path.exists():
         return None
     try:
@@ -109,7 +117,9 @@ def main() -> dict:
     audit_status = _load_daily_audit_status()
     if audit_status:
         audit_state = str(audit_status.get("status") or "").lower()
-        audit_reason = str(audit_status.get("reason_code") or audit_status.get("reason") or "").strip()
+        audit_reason = str(
+            audit_status.get("reason_code") or audit_status.get("reason") or ""
+        ).strip()
         if audit_state == "ok_with_skips" and audit_reason:
             key = f"daily_audit:{audit_reason}"
             if key not in optional_skips:
@@ -118,16 +128,23 @@ def main() -> dict:
     outcome_truth_status = _load_outcome_truth_status()
     if outcome_truth_status:
         truth_state = str(outcome_truth_status.get("status") or "").lower()
-        truth_blockers = [str(x) for x in list(outcome_truth_status.get("blockers") or []) if str(x).strip()]
+        truth_blockers = [
+            str(x)
+            for x in list(outcome_truth_status.get("blockers") or [])
+            if str(x).strip()
+        ]
         if truth_state in {"degraded", "fail"} and truth_blockers:
             for code in truth_blockers:
                 key = f"outcome_truth:{code}"
                 if key not in optional_skips:
                     optional_skips.append(key)
-            print(f"[daily_ops][INFO] outcome_truth degraded: {','.join(truth_blockers)}")
+            print(
+                f"[daily_ops][INFO] outcome_truth degraded: {','.join(truth_blockers)}"
+            )
     reasons.extend(optional_skips)
     status = "ok_with_skips" if reasons and not step_failures else "ok"
     return {"status": status, "reasons": reasons, "trade_log": str(trade_log)}
+
 
 if __name__ == "__main__":
     main()

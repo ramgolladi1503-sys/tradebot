@@ -67,7 +67,12 @@ def fetch_kite_candles(
     cursor = start_dt
     while cursor < end_dt:
         chunk_end = min(cursor + timedelta(days=chunk_days), end_dt)
-        payload = kite_client.historical_data(instrument_token, cursor, chunk_end, interval=interval) or []
+        payload = (
+            kite_client.historical_data(
+                instrument_token, cursor, chunk_end, interval=interval
+            )
+            or []
+        )
         if isinstance(payload, dict) and "candles" in payload:
             payload = payload.get("candles") or []
         for row in payload:
@@ -81,12 +86,14 @@ def fetch_kite_candles(
 def _normalize_candles(rows: list[dict[str, Any]], symbol: str) -> pd.DataFrame:
     frame = pd.DataFrame(rows or [])
     if frame.empty:
-        return pd.DataFrame(columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"])
+        return pd.DataFrame(
+            columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+        )
     if "date" in frame.columns and "timestamp" not in frame.columns:
         frame["timestamp"] = frame["date"]
-    
+
     frame["symbol"] = str(symbol).strip().upper()
-    
+
     needed = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
     for col in needed:
         if col not in frame.columns:
@@ -96,7 +103,9 @@ def _normalize_candles(rows: list[dict[str, Any]], symbol: str) -> pd.DataFrame:
         frame[col] = pd.to_numeric(frame[col], errors="coerce")
     frame = frame.dropna(subset=["timestamp", "open", "high", "low", "close"]).copy()
     frame["volume"] = frame["volume"].fillna(0.0)
-    frame = frame.sort_values("timestamp").drop_duplicates(subset=["timestamp", "symbol"], keep="last")
+    frame = frame.sort_values("timestamp").drop_duplicates(
+        subset=["timestamp", "symbol"], keep="last"
+    )
     return frame[needed].reset_index(drop=True)
 
 
@@ -142,19 +151,48 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fetch historical intraday data from Kite and format as canonical CSV."
     )
-    parser.add_argument("--symbol", default="NIFTY 50", help="Underlying symbol (e.g., NIFTY 50, NIFTY BANK)")
-    parser.add_argument("--interval", default="5minute", help="Kite interval (e.g., minute, 5minute, 15minute)")
-    parser.add_argument("--lookback-days", type=int, default=180, help="Lookback window in days when --start is omitted")
-    parser.add_argument("--chunk-days", type=int, default=60, help="Days per historical API chunk")
-    parser.add_argument("--start", default="", help="UTC/ISO start timestamp (optional)")
+    parser.add_argument(
+        "--symbol",
+        default="NIFTY 50",
+        help="Underlying symbol (e.g., NIFTY 50, NIFTY BANK)",
+    )
+    parser.add_argument(
+        "--interval",
+        default="5minute",
+        help="Kite interval (e.g., minute, 5minute, 15minute)",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=180,
+        help="Lookback window in days when --start is omitted",
+    )
+    parser.add_argument(
+        "--chunk-days", type=int, default=60, help="Days per historical API chunk"
+    )
+    parser.add_argument(
+        "--start", default="", help="UTC/ISO start timestamp (optional)"
+    )
     parser.add_argument("--end", default="", help="UTC/ISO end timestamp (optional)")
-    parser.add_argument("--output-dir", default="", help="Output directory (default: data/live_intraday)")
+    parser.add_argument(
+        "--output-dir",
+        default="",
+        help="Output directory (default: data/live_intraday)",
+    )
     args = parser.parse_args(argv)
 
     now_utc = datetime.now(timezone.utc)
     end_dt = _parse_dt(args.end) if str(args.end).strip() else now_utc
-    start_dt = _parse_dt(args.start) if str(args.start).strip() else (end_dt - timedelta(days=max(1, int(args.lookback_days))))
-    output_dir = Path(str(args.output_dir).strip()).resolve() if str(args.output_dir).strip() else _default_output_dir()
+    start_dt = (
+        _parse_dt(args.start)
+        if str(args.start).strip()
+        else (end_dt - timedelta(days=max(1, int(args.lookback_days))))
+    )
+    output_dir = (
+        Path(str(args.output_dir).strip()).resolve()
+        if str(args.output_dir).strip()
+        else _default_output_dir()
+    )
 
     report = build_kite_intraday_history(
         symbol=str(args.symbol).upper(),

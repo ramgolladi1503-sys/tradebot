@@ -124,7 +124,9 @@ def _run_server(host: str, port: int):
 
 
 def _resolve_api_key() -> str:
-    api_key = (os.getenv("KITE_API_KEY") or str(getattr(cfg, "KITE_API_KEY", "") or "")).strip()
+    api_key = (
+        os.getenv("KITE_API_KEY") or str(getattr(cfg, "KITE_API_KEY", "") or "")
+    ).strip()
     if _looks_placeholder_api_key(api_key):
         raise SystemExit(
             "Invalid or missing KITE_API_KEY. Set a real Kite app key in env/.env before login."
@@ -135,7 +137,9 @@ def _resolve_api_key() -> str:
 
 
 def _resolve_api_secret() -> str:
-    api_secret = (os.getenv("KITE_API_SECRET") or str(getattr(cfg, "KITE_API_SECRET", "") or "")).strip()
+    api_secret = (
+        os.getenv("KITE_API_SECRET") or str(getattr(cfg, "KITE_API_SECRET", "") or "")
+    ).strip()
     if not api_secret:
         raise SystemExit("Missing KITE_API_SECRET in env/.env.")
     if bool(re.search(r"\s", api_secret)):
@@ -183,7 +187,9 @@ def main():
         pass
 
     deadline = time.time() + DEFAULT_TIMEOUT_SEC
-    while time.time() < deadline and STATE.request_token is None and STATE.error is None:
+    while (
+        time.time() < deadline and STATE.request_token is None and STATE.error is None
+    ):
         time.sleep(0.2)
 
     if STATE.error:
@@ -194,7 +200,9 @@ def main():
     if not STATE.request_token:
         raise SystemExit("Timed out waiting for request_token. Retry login flow.")
 
-    data = kite_client.generate_session(STATE.request_token, api_secret=api_secret, api_key=api_key)
+    data = kite_client.generate_session(
+        STATE.request_token, api_secret=api_secret, api_key=api_key
+    )
     access_token = str(data.get("access_token", "")).strip()
     if not access_token:
         raise SystemExit("No access_token returned by Kite generate_session.")
@@ -219,11 +227,17 @@ def main():
             token_path.unlink()
         except Exception:
             pass
-        raise SystemExit(f"Kite session validation failed (profile): {auth_payload.get('error')}")
+        raise SystemExit(
+            f"Kite session validation failed (profile): {auth_payload.get('error')}"
+        )
 
     user_id = str(auth_payload.get("user_id", "") or "")
     broker = str(auth_payload.get("broker", "") or "")
-    margin_keys = ",".join(sorted(list((margins or {}).keys()))[:5]) if isinstance(margins, dict) else "UNKNOWN"
+    margin_keys = (
+        ",".join(sorted(list((margins or {}).keys()))[:5])
+        if isinstance(margins, dict)
+        else "UNKNOWN"
+    )
 
     print(f"Saved access_token to: {token_path}")
     print(f"Verified profile user_last4={_tail4(user_id)} broker={broker}")

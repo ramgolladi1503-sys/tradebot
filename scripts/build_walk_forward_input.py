@@ -48,7 +48,9 @@ def _resolve_index_token(symbol: str) -> int:
 def _normalize_candles(rows: list[dict[str, Any]]) -> pd.DataFrame:
     frame = pd.DataFrame(rows or [])
     if frame.empty:
-        return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+        return pd.DataFrame(
+            columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
     if "date" in frame.columns and "timestamp" not in frame.columns:
         frame["timestamp"] = frame["date"]
     needed = ["timestamp", "open", "high", "low", "close", "volume"]
@@ -60,7 +62,9 @@ def _normalize_candles(rows: list[dict[str, Any]]) -> pd.DataFrame:
         frame[col] = pd.to_numeric(frame[col], errors="coerce")
     frame = frame.dropna(subset=["timestamp", "open", "high", "low", "close"]).copy()
     frame["volume"] = frame["volume"].fillna(0.0)
-    frame = frame.sort_values("timestamp").drop_duplicates(subset=["timestamp"], keep="last")
+    frame = frame.sort_values("timestamp").drop_duplicates(
+        subset=["timestamp"], keep="last"
+    )
     return frame[needed].reset_index(drop=True)
 
 
@@ -81,7 +85,12 @@ def fetch_kite_candles(
     cursor = start_dt
     while cursor < end_dt:
         chunk_end = min(cursor + timedelta(days=chunk_days), end_dt)
-        payload = kite_client.historical_data(instrument_token, cursor, chunk_end, interval=interval) or []
+        payload = (
+            kite_client.historical_data(
+                instrument_token, cursor, chunk_end, interval=interval
+            )
+            or []
+        )
         if isinstance(payload, dict) and "candles" in payload:
             payload = payload.get("candles") or []
         for row in payload:
@@ -133,19 +142,48 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     parser = argparse.ArgumentParser(
         description="Build walk-forward input CSV by fetching historical candles from Kite."
     )
-    parser.add_argument("--symbol", default="NIFTY", help="Underlying symbol (e.g., NIFTY/BANKNIFTY/SENSEX)")
-    parser.add_argument("--interval", default="5minute", help="Kite interval (e.g., minute, 5minute, 15minute)")
-    parser.add_argument("--lookback-days", type=int, default=180, help="Lookback window in days when --start is omitted")
-    parser.add_argument("--chunk-days", type=int, default=60, help="Days per historical API chunk")
-    parser.add_argument("--start", default="", help="UTC/ISO start timestamp (optional)")
+    parser.add_argument(
+        "--symbol",
+        default="NIFTY",
+        help="Underlying symbol (e.g., NIFTY/BANKNIFTY/SENSEX)",
+    )
+    parser.add_argument(
+        "--interval",
+        default="5minute",
+        help="Kite interval (e.g., minute, 5minute, 15minute)",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=180,
+        help="Lookback window in days when --start is omitted",
+    )
+    parser.add_argument(
+        "--chunk-days", type=int, default=60, help="Days per historical API chunk"
+    )
+    parser.add_argument(
+        "--start", default="", help="UTC/ISO start timestamp (optional)"
+    )
     parser.add_argument("--end", default="", help="UTC/ISO end timestamp (optional)")
-    parser.add_argument("--output", default="", help="Output CSV path (default: data/<symbol>_<interval>_walk_forward.csv)")
+    parser.add_argument(
+        "--output",
+        default="",
+        help="Output CSV path (default: data/<symbol>_<interval>_walk_forward.csv)",
+    )
     args = parser.parse_args(argv)
 
     now_utc = datetime.now(timezone.utc)
     end_dt = _parse_dt(args.end) if str(args.end).strip() else now_utc
-    start_dt = _parse_dt(args.start) if str(args.start).strip() else (end_dt - timedelta(days=max(1, int(args.lookback_days))))
-    output = Path(str(args.output).strip()) if str(args.output).strip() else _default_output_path(args.symbol, args.interval)
+    start_dt = (
+        _parse_dt(args.start)
+        if str(args.start).strip()
+        else (end_dt - timedelta(days=max(1, int(args.lookback_days))))
+    )
+    output = (
+        Path(str(args.output).strip())
+        if str(args.output).strip()
+        else _default_output_path(args.symbol, args.interval)
+    )
 
     report = build_walk_forward_input(
         symbol=str(args.symbol).upper(),

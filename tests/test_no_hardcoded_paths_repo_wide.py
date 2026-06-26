@@ -43,15 +43,6 @@ ALLOWLIST_EXACT: dict[str, set[int]] = {
     "scripts/run_ohlcv_strategy_evidence.py": {164},
     "scripts/run_mean_reversion_deepdive.py": {163},
     "core/eod_no_trade_evidence.py": {69},
-    "scripts/check_today_candidates.py": {5},
-    "scripts/get_candidate_details.py": {5},
-    "scripts/monitor_live.py": {11, 12, 13},
-    "scripts/build_eod_no_trade_evidence.py": {18, 20},
-    "scripts/analyze_today.py": {5},
-    "scripts/check_morning.py": {5},
-    "scripts/analyze_past.py": {5},
-    "scripts/analyze_blocked_candidates.py": {6},
-    "scripts/show_candidates.py": {12},
 }
 
 

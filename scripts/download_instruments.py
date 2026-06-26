@@ -18,6 +18,7 @@ if __name__ == "__main__":
         print("No instruments fetched. Check Kite credentials/session.")
         raise SystemExit(1)
     import json
+
     out = data_root() / "kite_instruments.json"
     out.parent.mkdir(exist_ok=True)
     with open(out, "w") as f:

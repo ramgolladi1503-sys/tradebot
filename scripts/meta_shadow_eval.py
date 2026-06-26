@@ -22,7 +22,9 @@ def _read_jsonl(path: Path):
 
 
 def main():
-    path = Path(getattr(cfg, "META_SHADOW_LOG_PATH", str(logs_dir() / "meta_shadow.jsonl")))
+    path = Path(
+        getattr(cfg, "META_SHADOW_LOG_PATH", str(logs_dir() / "meta_shadow.jsonl"))
+    )
     rows = _read_jsonl(path)
     if not rows:
         print(f"Meta shadow log missing or empty: {path}")
@@ -48,18 +50,18 @@ def main():
     for reg, vals in sorted(by_regime.items()):
         if not vals:
             continue
-        print(f"  {reg}: avg_delta={sum(vals)/len(vals):.4f} n={len(vals)}")
+        print(f"  {reg}: avg_delta={sum(vals) / len(vals):.4f} n={len(vals)}")
     print("By predictor:")
     for pred, vals in sorted(by_predictor.items()):
         if not vals:
             continue
-        print(f"  {pred}: avg_delta={sum(vals)/len(vals):.4f} n={len(vals)}")
+        print(f"  {pred}: avg_delta={sum(vals) / len(vals):.4f} n={len(vals)}")
     print("By strategy (top 10):")
     top = sorted(by_strategy.items(), key=lambda x: len(x[1]), reverse=True)[:10]
     for strat, vals in top:
         if not vals:
             continue
-        print(f"  {strat}: avg_delta={sum(vals)/len(vals):.4f} n={len(vals)}")
+        print(f"  {strat}: avg_delta={sum(vals) / len(vals):.4f} n={len(vals)}")
 
     sys.exit(0)
 

@@ -52,8 +52,13 @@ report = {
     "date": str(today),
     "trades": int(len(daily)),
     "win_rate": float((daily["pnl"] > 0).mean()) if len(daily) else 0,
-    "profit_factor": float(daily.loc[daily["pnl"] > 0, "pnl"].sum() / abs(daily.loc[daily["pnl"] <= 0, "pnl"].sum())) if (daily["pnl"] <= 0).any() else "inf",
-    "total_pnl": float(daily["pnl"].sum())
+    "profit_factor": float(
+        daily.loc[daily["pnl"] > 0, "pnl"].sum()
+        / abs(daily.loc[daily["pnl"] <= 0, "pnl"].sum())
+    )
+    if (daily["pnl"] <= 0).any()
+    else "inf",
+    "total_pnl": float(daily["pnl"].sum()),
 }
 
 out_json = OUT_DIR / f"daily_report_{today}.json"
@@ -64,12 +69,20 @@ print(f"Saved {out_json} and {out_csv}")
 
 # Telegram delivery
 try:
-    send_telegram_message(f"Daily Report {today}\nTrades: {report['trades']}\nPnL: {report['total_pnl']}\nWin Rate: {report['win_rate']:.2f}\nPF: {report['profit_factor']}")
+    send_telegram_message(
+        f"Daily Report {today}\nTrades: {report['trades']}\nPnL: {report['total_pnl']}\nWin Rate: {report['win_rate']:.2f}\nPF: {report['profit_factor']}"
+    )
 except Exception:
     pass
 
 # Email delivery
-if cfg.EMAIL_REPORTS and cfg.SMTP_HOST and cfg.SMTP_USER and cfg.SMTP_PASSWORD and cfg.SMTP_TO:
+if (
+    cfg.EMAIL_REPORTS
+    and cfg.SMTP_HOST
+    and cfg.SMTP_USER
+    and cfg.SMTP_PASSWORD
+    and cfg.SMTP_TO
+):
     body = f"Daily Report {today}\nTrades: {report['trades']}\nPnL: {report['total_pnl']}\nWin Rate: {report['win_rate']:.2f}\nPF: {report['profit_factor']}"
     msg = MIMEText(body)
     msg["Subject"] = f"Trading Bot Daily Report {today}"

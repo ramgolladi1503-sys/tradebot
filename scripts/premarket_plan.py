@@ -18,20 +18,22 @@ def build_plan():
     plan = {
         "timestamp_epoch": now_utc_epoch(),
         "timestamp_ist": now_ist().isoformat(),
-        "symbols": []
+        "symbols": [],
     }
     for m in data:
         if m.get("instrument") != "OPT":
             continue
-        plan["symbols"].append({
-            "symbol": m.get("symbol"),
-            "ltp": m.get("ltp"),
-            "regime": m.get("regime"),
-            "day_type": m.get("day_type"),
-            "day_confidence": m.get("day_confidence"),
-            "orb_bias": m.get("orb_bias"),
-            "minutes_since_open": m.get("minutes_since_open"),
-        })
+        plan["symbols"].append(
+            {
+                "symbol": m.get("symbol"),
+                "ltp": m.get("ltp"),
+                "regime": m.get("regime"),
+                "day_type": m.get("day_type"),
+                "day_confidence": m.get("day_confidence"),
+                "orb_bias": m.get("orb_bias"),
+                "minutes_since_open": m.get("minutes_since_open"),
+            }
+        )
     return plan
 
 
@@ -43,6 +45,7 @@ if __name__ == "__main__":
     # Export CSV
     try:
         import pandas as pd
+
         rows = plan.get("symbols", [])
         if rows:
             df = pd.DataFrame(rows)
@@ -53,7 +56,9 @@ if __name__ == "__main__":
     try:
         lines = []
         for s in plan.get("symbols", []):
-            lines.append(f"{s.get('symbol')}: {s.get('day_type')} (conf {s.get('day_confidence')}) | ORB {s.get('orb_bias')}")
+            lines.append(
+                f"{s.get('symbol')}: {s.get('day_type')} (conf {s.get('day_confidence')}) | ORB {s.get('orb_bias')}"
+            )
         msg = "Pre‑Market Plan\n" + "\n".join(lines[:10])
         send_telegram_message(msg)
     except Exception:

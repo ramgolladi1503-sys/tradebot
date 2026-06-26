@@ -7,7 +7,10 @@ import runpy
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
-from core.edge_baseline_audit import build_edge_baseline_report, save_edge_baseline_report
+from core.edge_baseline_audit import (
+    build_edge_baseline_report,
+    save_edge_baseline_report,
+)
 
 
 def main() -> int:
@@ -36,7 +39,14 @@ def main() -> int:
         strategy_family_filter=args.strategy_family,
     )
     output_path = save_edge_baseline_report(report, path=args.out)
-    print(json.dumps({"report_path": str(output_path), **report}, indent=2, sort_keys=True, default=str))
+    print(
+        json.dumps(
+            {"report_path": str(output_path), **report},
+            indent=2,
+            sort_keys=True,
+            default=str,
+        )
+    )
     return 0
 
 

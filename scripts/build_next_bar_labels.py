@@ -15,7 +15,9 @@ if str(REPO_ROOT) not in sys.path:
 REQUIRED_COLUMNS = ("timestamp", "open", "high", "low", "close", "volume")
 
 
-def build_next_bar_labels(*, input_csv: str | Path, output_csv: str | Path, horizon_bars: int = 1) -> dict[str, object]:
+def build_next_bar_labels(
+    *, input_csv: str | Path, output_csv: str | Path, horizon_bars: int = 1
+) -> dict[str, object]:
     source = Path(input_csv).expanduser()
     if not source.exists():
         raise FileNotFoundError(f"input_csv_not_found:{source}")
@@ -27,10 +29,14 @@ def build_next_bar_labels(*, input_csv: str | Path, output_csv: str | Path, hori
 
     out = frame.copy()
     out["timestamp"] = pd.to_datetime(out["timestamp"], errors="coerce")
-    out = out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    out = (
+        out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    )
     from core.feature_builder import add_indicators
 
-    enriched = add_indicators(out[["timestamp", "open", "high", "low", "close", "volume"]].copy())
+    enriched = add_indicators(
+        out[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+    )
     out["regime_tag"] = _derive_regime_tag(enriched)
     out["session_bucket"] = out["timestamp"].dt.hour.map(_session_bucket_hour)
     out["future_close"] = out["close"].shift(-int(horizon_bars))
@@ -91,10 +97,14 @@ def build_multi_horizon_labels(
 
     out = frame.copy()
     out["timestamp"] = pd.to_datetime(out["timestamp"], errors="coerce")
-    out = out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    out = (
+        out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    )
     from core.feature_builder import add_indicators
 
-    enriched = add_indicators(out[["timestamp", "open", "high", "low", "close", "volume"]].copy())
+    enriched = add_indicators(
+        out[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+    )
     out["regime_tag"] = _derive_regime_tag(enriched)
     out["session_bucket"] = out["timestamp"].dt.hour.map(_session_bucket_hour)
     label_cols: list[str] = []
@@ -107,7 +117,9 @@ def build_multi_horizon_labels(
         out[ret_col] = (out[close_col] / out["close"]) - 1.0
         out[label_col] = (out[ret_col] > 0).astype("Int64")
         label_cols.append(label_col)
-    out = out.dropna(subset=[f"future_close_{int(h)}" for h in horizons_bars]).reset_index(drop=True)
+    out = out.dropna(
+        subset=[f"future_close_{int(h)}" for h in horizons_bars]
+    ).reset_index(drop=True)
 
     target = Path(output_csv).expanduser()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -122,14 +134,30 @@ def build_multi_horizon_labels(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a simple next-bar label dataset from canonical OHLCV CSV.")
-    parser.add_argument("--input-csv", required=True, help="Canonical CSV with timestamp/open/high/low/close/volume")
+    parser = argparse.ArgumentParser(
+        description="Build a simple next-bar label dataset from canonical OHLCV CSV."
+    )
+    parser.add_argument(
+        "--input-csv",
+        required=True,
+        help="Canonical CSV with timestamp/open/high/low/close/volume",
+    )
     parser.add_argument("--output-csv", required=True, help="Output labeled CSV path")
-    parser.add_argument("--horizon-bars", type=int, default=1, help="Bars ahead to label")
-    parser.add_argument("--multi-horizons", default="", help="Optional comma-separated list of horizons for multi-label output")
+    parser.add_argument(
+        "--horizon-bars", type=int, default=1, help="Bars ahead to label"
+    )
+    parser.add_argument(
+        "--multi-horizons",
+        default="",
+        help="Optional comma-separated list of horizons for multi-label output",
+    )
     args = parser.parse_args(argv)
     if str(args.multi_horizons).strip():
-        horizons = [int(item.strip()) for item in str(args.multi_horizons).split(",") if item.strip()]
+        horizons = [
+            int(item.strip())
+            for item in str(args.multi_horizons).split(",")
+            if item.strip()
+        ]
         report = build_multi_horizon_labels(
             input_csv=args.input_csv,
             output_csv=args.output_csv,

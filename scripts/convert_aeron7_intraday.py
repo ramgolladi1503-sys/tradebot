@@ -13,7 +13,17 @@ if str(REPO_ROOT) not in sys.path:
 
 
 RAW_COLUMNS_8 = ["symbol", "date", "time", "open", "high", "low", "close", "volume"]
-RAW_COLUMNS_9 = ["symbol", "date", "time", "open", "high", "low", "close", "volume", "oi"]
+RAW_COLUMNS_9 = [
+    "symbol",
+    "date",
+    "time",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "oi",
+]
 CANONICAL_COLUMNS = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
 
 
@@ -24,7 +34,7 @@ def _normalize_csv_frame(frame: pd.DataFrame) -> pd.DataFrame:
             frame[col] = None
     if "symbol" not in frame.columns:
         frame["symbol"] = "UNKNOWN"
-        
+
     frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce", utc=True)
     frame = frame.dropna(subset=["timestamp"])
@@ -72,7 +82,9 @@ def _read_intraday_file(path: Path) -> pd.DataFrame:
     return frame
 
 
-def convert_aeron7_intraday(*, source_root: str | Path, output_dir: str | Path, symbols: list[str] | None = None) -> dict[str, object]:
+def convert_aeron7_intraday(
+    *, source_root: str | Path, output_dir: str | Path, symbols: list[str] | None = None
+) -> dict[str, object]:
     src_root = Path(source_root).expanduser()
     out_root = Path(output_dir).expanduser()
     out_root.mkdir(parents=True, exist_ok=True)
@@ -119,15 +131,29 @@ def convert_aeron7_intraday(*, source_root: str | Path, output_dir: str | Path, 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Convert Aeron7 intraday text files into canonical OHLCV CSVs.")
-    parser.add_argument("--source-root", required=True, help="Root of the cloned Aeron7 dataset.")
-    parser.add_argument("--output-dir", required=True, help="Directory to write canonical CSVs.")
-    parser.add_argument("--symbols", default="", help="Optional comma-separated symbol filter, e.g. NIFTY_F1,BANKNIFTY")
+    parser = argparse.ArgumentParser(
+        description="Convert Aeron7 intraday text files into canonical OHLCV CSVs."
+    )
+    parser.add_argument(
+        "--source-root", required=True, help="Root of the cloned Aeron7 dataset."
+    )
+    parser.add_argument(
+        "--output-dir", required=True, help="Directory to write canonical CSVs."
+    )
+    parser.add_argument(
+        "--symbols",
+        default="",
+        help="Optional comma-separated symbol filter, e.g. NIFTY_F1,BANKNIFTY",
+    )
     args = parser.parse_args(argv)
 
     symbols = [item.strip() for item in args.symbols.split(",") if item.strip()]
-    report = convert_aeron7_intraday(source_root=args.source_root, output_dir=args.output_dir, symbols=symbols)
-    print(f"converted_files={len(report['written_files'])} rows_written={report['rows_written']}")
+    report = convert_aeron7_intraday(
+        source_root=args.source_root, output_dir=args.output_dir, symbols=symbols
+    )
+    print(
+        f"converted_files={len(report['written_files'])} rows_written={report['rows_written']}"
+    )
     for path in report["written_files"]:
         print(path)
     if report["skipped_files"]:

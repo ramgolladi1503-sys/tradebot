@@ -25,7 +25,10 @@ from core.reports.rl_shadow_report import build_rl_shadow_report
 
 def _status_paths(day: str) -> tuple[Path, Path]:
     log_root = logs_dir()
-    return log_root / f"daily_audit_status_{day}.json", log_root / "daily_audit_status_latest.json"
+    return (
+        log_root / f"daily_audit_status_{day}.json",
+        log_root / "daily_audit_status_latest.json",
+    )
 
 
 def _write_status(payload: dict) -> Path:
@@ -38,7 +41,9 @@ def _write_status(payload: dict) -> Path:
     return day_path
 
 
-def _return_ok_with_skips(day: str, reason_code: str, detail: str | None = None) -> dict:
+def _return_ok_with_skips(
+    day: str, reason_code: str, detail: str | None = None
+) -> dict:
     payload = {
         "status": "ok_with_skips",
         "date": day,
@@ -58,8 +63,14 @@ def _return_ok_with_skips(day: str, reason_code: str, detail: str | None = None)
 
 def main():
     parser = argparse.ArgumentParser(description="Run daily audit reports.")
-    parser.add_argument("--date", default=None, help="YYYY-MM-DD date (default: today).")
-    parser.add_argument("--truth", default=str(data_root() / "truth_dataset.parquet"), help="Truth dataset parquet path.")
+    parser.add_argument(
+        "--date", default=None, help="YYYY-MM-DD date (default: today)."
+    )
+    parser.add_argument(
+        "--truth",
+        default=str(data_root() / "truth_dataset.parquet"),
+        help="Truth dataset parquet path.",
+    )
     args = parser.parse_args()
 
     day = args.date or now_ist().strftime("%Y-%m-%d")

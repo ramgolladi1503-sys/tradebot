@@ -7,7 +7,9 @@ from core.candidate_outcome_report_writer import write_candidate_outcome_reports
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Write an offline candidate outcome report from committed fixtures.")
+    parser = argparse.ArgumentParser(
+        description="Write an offline candidate outcome report from committed fixtures."
+    )
     parser.add_argument(
         "--fixture-dir",
         default="tests/fixtures/candidate_outcomes",
@@ -20,7 +22,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    json_path, markdown_path = write_candidate_outcome_reports(Path(args.fixture_dir), Path(args.output_dir))
+    json_path, markdown_path = write_candidate_outcome_reports(
+        Path(args.fixture_dir), Path(args.output_dir)
+    )
     print(json_path)
     print(markdown_path)
     return 0

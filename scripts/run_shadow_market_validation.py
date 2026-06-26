@@ -14,12 +14,16 @@ from core.expectancy.shadow_validation import write_shadow_market_validation_rep
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the shadow market validation runner.")
+    parser = argparse.ArgumentParser(
+        description="Run the shadow market validation runner."
+    )
     parser.add_argument("--candidate-journal", required=True)
     parser.add_argument("--candidate-outcomes", required=True)
     parser.add_argument("--top-opportunities", required=True)
     parser.add_argument("--observations")
-    parser.add_argument("--out-dir", default=str(Path(".runtime") / "shadow_validation"))
+    parser.add_argument(
+        "--out-dir", default=str(Path(".runtime") / "shadow_validation")
+    )
     parser.add_argument("--session-date")
     return parser.parse_args(argv)
 
@@ -35,7 +39,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         session_date=args.session_date,
     )
     payload = report.to_payload()
-    print(f"shadow_market_validation summary: recommendation={payload['recommendation']} avg_cost_adjusted_r={payload['avg_cost_adjusted_r']}")
+    print(
+        f"shadow_market_validation summary: recommendation={payload['recommendation']} avg_cost_adjusted_r={payload['avg_cost_adjusted_r']}"
+    )
     print(f"json={json_path}")
     print(f"markdown={md_path}")
     print(f"session={session_path}")

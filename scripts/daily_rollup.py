@@ -16,6 +16,7 @@ from core.telegram_alerts import send_telegram_message
 LOG_PATH = data_root() / "trade_log.json"
 UPDATES_PATH = data_root() / "trade_updates.json"
 
+
 def load_log():
     if not LOG_PATH.exists():
         return pd.DataFrame()
@@ -38,15 +39,29 @@ def load_log():
             if not upd_df.empty and "trade_id" in upd_df.columns:
                 upd_df["timestamp"] = pd.to_datetime(upd_df["timestamp"])
                 latest = upd_df.sort_values("timestamp").groupby("trade_id").tail(1)
-                merge_cols = [c for c in latest.columns if c not in ("type", "timestamp")]
-                df = df.merge(latest[merge_cols], on="trade_id", how="left", suffixes=("", "_upd"))
-                for col in ["exit_price", "exit_time", "actual", "r_multiple", "r_label", "fill_price", "latency_ms", "slippage"]:
+                merge_cols = [
+                    c for c in latest.columns if c not in ("type", "timestamp")
+                ]
+                df = df.merge(
+                    latest[merge_cols], on="trade_id", how="left", suffixes=("", "_upd")
+                )
+                for col in [
+                    "exit_price",
+                    "exit_time",
+                    "actual",
+                    "r_multiple",
+                    "r_label",
+                    "fill_price",
+                    "latency_ms",
+                    "slippage",
+                ]:
                     if f"{col}_upd" in df.columns:
                         df[col] = df[col].fillna(df[f"{col}_upd"])
                         df.drop(columns=[f"{col}_upd"], inplace=True)
         except Exception:
             pass
     return df
+
 
 def compute_daily(df):
     if df.empty or "timestamp" not in df.columns:
@@ -72,16 +87,19 @@ def compute_daily(df):
         # drawdown
         cum = sub["pnl"].cumsum()
         dd = (cum - cum.cummax()).min() if len(cum) > 0 else 0
-        daily.append({
-            "date": str(date),
-            "trades": int(len(sub)),
-            "pnl": float(pnl),
-            "win_rate": float(win_rate),
-            "profit_factor": float(pf) if pf is not None else None,
-            "sharpe": float(sharpe) if sharpe is not None else None,
-            "max_drawdown": float(dd),
-        })
+        daily.append(
+            {
+                "date": str(date),
+                "trades": int(len(sub)),
+                "pnl": float(pnl),
+                "win_rate": float(win_rate),
+                "profit_factor": float(pf) if pf is not None else None,
+                "sharpe": float(sharpe) if sharpe is not None else None,
+                "max_drawdown": float(dd),
+            }
+        )
     return daily
+
 
 if __name__ == "__main__":
     df = load_log()
@@ -114,6 +132,11 @@ if __name__ == "__main__":
                     bad = False
             if bad:
                 from core import risk_halt
-                payload = risk_halt.set_halt("Soft-kill: PF/Sharpe below thresholds", {"days": n})
-                send_telegram_message(f"Soft-kill triggered for {n} days of poor PF/Sharpe.")
+
+                payload = risk_halt.set_halt(
+                    "Soft-kill: PF/Sharpe below thresholds", {"days": n}
+                )
+                send_telegram_message(
+                    f"Soft-kill triggered for {n} days of poor PF/Sharpe."
+                )
     print(f"Daily rollup rows: {len(daily)}")

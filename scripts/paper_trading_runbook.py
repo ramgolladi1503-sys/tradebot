@@ -18,7 +18,10 @@ from typing import Any
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
-from core.paper_trading_runbook_command import RUNBOOK_READY, build_paper_trading_runbook_report
+from core.paper_trading_runbook_command import (
+    RUNBOOK_READY,
+    build_paper_trading_runbook_report,
+)
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
@@ -35,8 +38,14 @@ def run_command(session_snapshot_path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate a completed PAPER session snapshot with the runbook gate.")
-    parser.add_argument("--session-snapshot", required=True, help="Path to completed paper session snapshot JSON")
+    parser = argparse.ArgumentParser(
+        description="Validate a completed PAPER session snapshot with the runbook gate."
+    )
+    parser.add_argument(
+        "--session-snapshot",
+        required=True,
+        help="Path to completed paper session snapshot JSON",
+    )
     args = parser.parse_args()
 
     payload = run_command(Path(args.session_snapshot))

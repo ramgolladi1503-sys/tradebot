@@ -5,15 +5,31 @@ import argparse
 from pathlib import Path
 
 from tools.repo_forensics.config_loader import ConfigError
-from tools.repo_forensics.pr_gate import DEFAULT_BASELINE_SUMMARY, DEFAULT_PR_GATE_REPORT, run_pr_gate
+from tools.repo_forensics.pr_gate import (
+    DEFAULT_BASELINE_SUMMARY,
+    DEFAULT_PR_GATE_REPORT,
+    run_pr_gate,
+)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run baseline-aware repo-forensics PR gate.")
-    parser.add_argument("--repo", default=".", help="Repository root. Default: current directory.")
-    parser.add_argument("--config", default=".gsd-forensics.yaml", help="Forensics config path.")
-    parser.add_argument("--baseline", default=DEFAULT_BASELINE_SUMMARY, help="Committed baseline summary path.")
-    parser.add_argument("--out", default=DEFAULT_PR_GATE_REPORT, help="PR gate report output path.")
+    parser = argparse.ArgumentParser(
+        description="Run baseline-aware repo-forensics PR gate."
+    )
+    parser.add_argument(
+        "--repo", default=".", help="Repository root. Default: current directory."
+    )
+    parser.add_argument(
+        "--config", default=".gsd-forensics.yaml", help="Forensics config path."
+    )
+    parser.add_argument(
+        "--baseline",
+        default=DEFAULT_BASELINE_SUMMARY,
+        help="Committed baseline summary path.",
+    )
+    parser.add_argument(
+        "--out", default=DEFAULT_PR_GATE_REPORT, help="PR gate report output path."
+    )
     return parser.parse_args()
 
 
@@ -30,6 +46,7 @@ def main() -> int:
         )
         import json
         from dataclasses import asdict
+
         with open("forensics_debug.json", "w") as f:
             json.dump(asdict(result.current), f, indent=2, default=str)
     except (ConfigError, FileNotFoundError, ValueError) as exc:
@@ -38,9 +55,15 @@ def main() -> int:
 
     print(f"[repo-forensics-pr-gate] verdict={result.verdict}")
     print(f"[repo-forensics-pr-gate] report={result.report_path}")
-    print(f"[repo-forensics-pr-gate] hard_failures_delta={result.current.counts.hard_failures - result.baseline_counts.hard_failures}")
-    print(f"[repo-forensics-pr-gate] unknowns_delta={result.current.counts.unknowns - result.baseline_counts.unknowns}")
-    print(f"[repo-forensics-pr-gate] warnings_delta={result.current.counts.warnings - result.baseline_counts.warnings}")
+    print(
+        f"[repo-forensics-pr-gate] hard_failures_delta={result.current.counts.hard_failures - result.baseline_counts.hard_failures}"
+    )
+    print(
+        f"[repo-forensics-pr-gate] unknowns_delta={result.current.counts.unknowns - result.baseline_counts.unknowns}"
+    )
+    print(
+        f"[repo-forensics-pr-gate] warnings_delta={result.current.counts.warnings - result.baseline_counts.warnings}"
+    )
     return result.exit_code
 
 

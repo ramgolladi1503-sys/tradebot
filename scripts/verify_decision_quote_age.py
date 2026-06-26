@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 
 from config import config as cfg
 
+
 def _check_sqlite(db_path: Path, min_non_null: int) -> bool:
     conn = sqlite3.connect(str(db_path))
     try:
@@ -21,7 +22,9 @@ def _check_sqlite(db_path: Path, min_non_null: int) -> bool:
             print("quote_age_sec column missing in sqlite")
             return False
         total = conn.execute("SELECT COUNT(*) FROM decision_events").fetchone()[0]
-        nonnull = conn.execute("SELECT COUNT(*) FROM decision_events WHERE quote_age_sec IS NOT NULL").fetchone()[0]
+        nonnull = conn.execute(
+            "SELECT COUNT(*) FROM decision_events WHERE quote_age_sec IS NOT NULL"
+        ).fetchone()[0]
         print(f"decision_events.sqlite total={total} quote_age_sec_nonnull={nonnull}")
         if total == 0:
             print("FAIL: no decision events in sqlite")
@@ -32,6 +35,7 @@ def _check_sqlite(db_path: Path, min_non_null: int) -> bool:
         return True
     finally:
         conn.close()
+
 
 def _check_jsonl(jsonl_path: Path, min_non_null: int) -> bool:
     total = 0
@@ -57,13 +61,18 @@ def _check_jsonl(jsonl_path: Path, min_non_null: int) -> bool:
         return False
     return True
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-non-null", type=int, default=1)
     args = ap.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
-    jsonl_path = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
+    db_path = Path(
+        getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite"))
+    )
+    jsonl_path = Path(
+        getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))
+    )
 
     if db_path.exists():
         ok = _check_sqlite(db_path, args.min_non_null)
@@ -76,6 +85,7 @@ def main():
     if not ok:
         sys.exit(1)
     print("OK: quote_age_sec present in DecisionEvents")
+
 
 if __name__ == "__main__":
     main()
