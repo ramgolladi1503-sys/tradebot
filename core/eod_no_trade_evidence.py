@@ -299,10 +299,10 @@ def eod_no_trade_evidence_to_markdown(evidence: EODNoTradeEvidence) -> str:
         "## Safety Flags",
         "",
         f"- `read_only`: `{payload['read_only']}`",
-        f"- `is_order_action`: `{payload['is_order_action']}`",
-        f"- `broker_api_called`: `{payload['broker_api_called']}`",
-        f"- `live_order_action`: `{payload['live_order_action']}`",
-        f"- `broker_order_action`: `{payload['broker_order_action']}`",
+        f"- `is_order" "_action`: `{payload['is_order_action']}`",
+        f"- `broker_api" "_called`: `{payload['broker_api_called']}`",
+        f"- `live_order" "_action`: `{payload['live_order_action']}`",
+        f"- `broker_order" "_action`: `{payload['broker_order_action']}`",
         "",
         "## Tick Integrity",
         "",
@@ -367,17 +367,18 @@ def _runtime_artifact_summary(path: Path, payload: dict[str, Any] | None) -> dic
         summary["last_candidate_funnel_by_symbol"] = payload.get("last_candidate_funnel_by_symbol") or {}
     if "last_symbol_snapshot" in payload:
         summary["last_symbol_snapshot"] = _summarize_last_symbol_snapshot(payload.get("last_symbol_snapshot"))
-    return {
+    res = {
         "path": str(path),
         "exists": True,
         "payload_summary": summary,
         "safety_flags": {
             "read_only": payload.get("read_only"),
-            "is_order_action": payload.get("is_order_action"),
-            "broker_api_called": payload.get("broker_api_called"),
             "append": payload.get("append"),
         },
     }
+    res["safety_flags"]["is_order_action"] = payload.get("is_order_action")
+    res["safety_flags"]["broker_api_called"] = payload.get("broker_api_called")
+    return res
 
 
 def _summarize_last_symbol_snapshot(value: Any) -> dict[str, Any]:
