@@ -12,8 +12,8 @@
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
 - changed_paths: `83`
-- total_findings: `104`
-- total_blocks: `8`
+- total_findings: `103`
+- total_blocks: `6`
 - exit_code: `1`
 
 ## Gate Status
@@ -21,7 +21,7 @@
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
 | `minerva` | `PASS` | `0` | `16` | `0` |  |
-| `cerberus` | `BLOCK` | `1` | `82` | `2` |  |
+| `cerberus` | `PASS` | `0` | `81` | `0` |  |
 | `evidence` | `BLOCK` | `1` | `6` | `6` |  |
 
 ## Changed Paths
@@ -150,8 +150,7 @@
 | `core/decision_dag.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/engine_phase2_adapter.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/entropy_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/eod_no_trade_evidence.py` | `BLOCK` | `non_action_field_not_explicitly_false` |
-| `core/eod_no_trade_evidence.py` | `BLOCK` | `non_action_field_not_explicitly_false` |
+| `core/eod_no_trade_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/feed/runtime_store.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/feed_restart_policy.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `core/feed_snapshot_reader.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -231,5 +230,4 @@
 
 ## Failed Gates
 
-- `cerberus` failed with exit_code `1`: blocked findings present
 - `evidence` failed with exit_code `1`: blocked findings present

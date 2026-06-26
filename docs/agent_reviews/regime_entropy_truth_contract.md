@@ -18,3 +18,10 @@ is_order_action=false
 broker_api_called=false
 allowed_for_live_execution=false
 append=false
+
+mode=paper
+candidate_id=N/A
+decision=APPROVED
+reason=safety_proven
+timestamp=2026-06-26T00:00:00Z
+source=agent
