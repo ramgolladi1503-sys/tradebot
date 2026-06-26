@@ -23,5 +23,5 @@ mode=paper
 candidate_id=N/A
 decision=APPROVED
 reason=safety_proven
-timestamp=2026-06-26T00:00:00Z
+timestamp: 2026-06-26
 source=agent

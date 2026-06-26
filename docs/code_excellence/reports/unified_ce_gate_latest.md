@@ -12,8 +12,8 @@
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
 - changed_paths: `83`
-- total_findings: `103`
-- total_blocks: `6`
+- total_findings: `98`
+- total_blocks: `1`
 - exit_code: `1`
 
 ## Gate Status
@@ -22,7 +22,7 @@
 |---|---:|---:|---:|---:|---|
 | `minerva` | `PASS` | `0` | `16` | `0` |  |
 | `cerberus` | `PASS` | `0` | `81` | `0` |  |
-| `evidence` | `BLOCK` | `1` | `6` | `6` |  |
+| `evidence` | `BLOCK` | `1` | `1` | `1` |  |
 
 ## Changed Paths
 
@@ -221,11 +221,6 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
-| `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
 | `docs/agent_reviews/regime_entropy_truth_contract.md` | `BLOCK` | `required_evidence_field_missing` |
 
 ## Failed Gates
