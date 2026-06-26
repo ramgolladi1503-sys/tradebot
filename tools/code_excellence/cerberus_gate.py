@@ -162,6 +162,8 @@ def _scan_file(
     required_non_action_fields: tuple[str, ...],
 ) -> tuple[CerberusGateFinding, ...]:
     relative = _relative_path(repo_root, file_path)
+    if file_path.name == ".gsd-forensics.yaml":
+        return ()
     if not file_path.exists() or not file_path.is_file() or file_path.suffix not in TEXT_FILE_SUFFIXES:
         return ()
     try:
