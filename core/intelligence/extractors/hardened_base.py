@@ -11,8 +11,15 @@ class ExtractionError(Exception):
 
 class HardenedBaseExtractor(ABC):
     """
-    Robust extraction pipeline. Guarantees versioning, hashing, and duplicate detection formatting.
-    Strictly forbids hallucinating market impact.
+    WHY IT EXISTS: Provides a robust, version-controlled HTML normalization and routing layer for regulatory document parsing.
+    WHEN TO USE IT: Base class for all source-specific extractors (e.g., RBI, SEBI).
+    LIMITATIONS: Cannot execute Javascript. Cannot parse PDFs.
+    CALIBRATION STATUS: Parsed data is strictly UNCALIBRATED.
+    EXECUTION INFLUENCE: Absolutely NONE. Structural enforcement hardcodes market_impact to None.
+    
+    ARCHITECTURAL ROLE: Transforms raw network bytes into safe, schema-compliant Document dictionaries.
+    DEPENDENCIES: Python `re`, `hashlib`. No external ML models.
+    EXTENSION POINTS: Subclasses must implement `_extract_specifics()`.
     """
     PARSER_VERSION = "1.0.0"
 

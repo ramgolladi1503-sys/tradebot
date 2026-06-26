@@ -21,7 +21,15 @@ class FetchFailureReason(ABC):
 
 class BaseFetcher(ABC):
     """
-    Hardened fetcher enforcing backoffs, timeouts, size limits, and circuit breakers.
+    WHY IT EXISTS: To safely isolate TradeBot from the public internet using exponential backoff, circuit breakers, and payload caps.
+    WHEN TO USE IT: Used to wrap all external HTTP or API requests.
+    LIMITATIONS: Currently synchronous. Blocks the thread (which is why it must run out-of-band in `run_intelligence_pipeline.py`).
+    CALIBRATION STATUS: N/A. Only fetches bytes.
+    EXECUTION INFLUENCE: NONE.
+    
+    ARCHITECTURAL ROLE: Network edge defense. Enforces backoffs, timeouts, size limits, and circuit breakers.
+    DEPENDENCIES: `urllib.request`, `RobotsGate`.
+    EXTENSION POINTS: Subclasses implement `_execute_fetch()`.
     """
     def __init__(self, source_id: str, user_agent: str = "TradeBotIntelligence/1.0"):
         self.source_id = source_id

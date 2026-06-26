@@ -23,7 +23,17 @@ ALLOWED_FACTOR_NAMES = {
 
 @dataclass(frozen=True)
 class Factor:
-    """Strictly constrained intelligence factor. No fake edge allowed."""
+    """
+    WHY IT EXISTS: To strictly bound, type-check, and trace intelligence data points preventing hallucinated heuristics.
+    WHEN TO USE IT: Used to wrap physical or parsed intelligence signals before context injection.
+    LIMITATIONS: Cannot sum 'confidence'. Only represents single-dimensional bounds.
+    CALIBRATION STATUS: Explicitly governed by `calibration_status` field.
+    EXECUTION INFLUENCE: Structurally disabled unless proven by Offline Replay. Overridden if `stale_status=True`.
+    
+    ARCHITECTURAL ROLE: The base atomic unit of Market Intelligence context.
+    DEPENDENCIES: `core.intelligence.config`
+    EXTENSION POINTS: None. Banned from extension.
+    """
     name: str
     value: Any
     unit: str
