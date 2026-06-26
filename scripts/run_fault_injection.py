@@ -45,7 +45,8 @@ def run_fault_injection():
     print("| Fault Injected | Subsystem | Graceful Recovery? | Crash? | Telemetry Captured? | Execution Influence? |")
     print("|---|---|---|---|---|---|")
 
-    telemetry_file = tempfile.mktemp(suffix=".jsonl")
+    tel_fd, telemetry_file = tempfile.mkstemp(suffix=".jsonl")
+    os.close(tel_fd)
     telemetry = MIPTelemetry(output_path=telemetry_file)
 
     def test_fault(name: str, fetch_mode: str, extract_html: str, db_locked: bool = False):

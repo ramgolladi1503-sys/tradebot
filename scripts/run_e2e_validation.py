@@ -20,7 +20,8 @@ def run_e2e():
     # 1. Init Storage & Telemetry
     db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
     os.close(db_fd)
-    telemetry_file = tempfile.mktemp(suffix=".jsonl")
+    tel_fd, telemetry_file = tempfile.mkstemp(suffix=".jsonl")
+    os.close(tel_fd)
     
     store = MIPSQLiteStore(db_path=db_path)
     telemetry = MIPTelemetry(output_path=telemetry_file)
