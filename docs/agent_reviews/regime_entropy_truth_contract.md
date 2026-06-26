@@ -12,3 +12,9 @@ Human Approval: APPROVED.
 
 ## High-Risk Path Review
 Modified config, orchestrator, risk, and strategies. Ensure NO execution is inadvertently unblocked. All modified paths use `evaluate_regime_entropy_gate` to rigidly cap `0.80` normalized limits.
+
+read_only=true
+is_order_action=false
+broker_api_called=false
+allowed_for_live_execution=false
+append=false

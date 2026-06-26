@@ -50,10 +50,12 @@ class EODNoTradeEvidence:
         payload = asdict(self)
         payload["read_only"] = True
         payload["is_order_action"] = False
+        payload["allowed_for_live_execution"] = False
         payload["broker_api_called"] = False
+        payload["read_only"] = True
+        payload["append"] = False
         payload["live_order_action"] = False
         payload["broker_order_action"] = False
-        payload["append"] = False
         return payload
 
 
