@@ -80,8 +80,7 @@ def main() -> int:
         payload["details"]["user_last4"] = u_last4
         payload["details"]["margin_keys"] = margin_keys
         _write_payload(payload)
-        m_keys_str = ','.join(margin_keys)
-        sys.stdout.write(f"[AUTH_WARMUP] ok user_last4={u_last4} margin_keys={m_keys_str}\n")
+        sys.stdout.write("[AUTH_WARMUP] ok\n")
         return 0
     except Exception as exc:
         payload["ok"] = False

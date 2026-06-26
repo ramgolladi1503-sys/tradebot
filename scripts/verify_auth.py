@@ -23,14 +23,12 @@ def main() -> int:
 
     payload = get_kite_auth_health(force=True)
     if not payload.get("ok"):
-        err_msg = str(payload.get('error') or payload.get('auth_state') or 'unknown')
-        sys.stdout.write(f"AUTH_REQUIRED {err_msg}\n")
+        auth_state = str(payload.get('auth_state') or 'unknown')
+        sys.stdout.write(f"AUTH_REQUIRED {auth_state}\n")
         return 3
 
-    ak_tail = str(creds.get('api_key') or '')[-4:]
-    at_tail = str(creds.get('access_token') or '')[-4:]
     u_id = str(payload.get('user_id') or '')
-    sys.stdout.write(f"AUTH_OK api_key_tail4={ak_tail} access_token_tail4={at_tail} user_id={u_id}\n")
+    sys.stdout.write(f"AUTH_OK user_id={u_id}\n")
     return 0
 
 
