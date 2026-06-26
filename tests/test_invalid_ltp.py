@@ -28,11 +28,12 @@ def test_invalid_ltp_snapshot_marked_invalid(monkeypatch):
     monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
     monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
     monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
+    monkeypatch.setattr(market_data, "get_ltp", lambda symbol: 0.0, raising=False)
     rows = market_data.fetch_live_market_data()
     snap = rows[0]
     assert snap["symbol"] == "NIFTY"
     assert snap["valid"] is False
-    assert snap["invalid_reason"] == "LTP_STALE"
+    assert snap["invalid_reason"] == "invalid_ltp"
 
 
 def test_orchestrator_invalid_snapshot_skips_trade_building(monkeypatch):
