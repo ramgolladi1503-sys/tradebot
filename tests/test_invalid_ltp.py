@@ -32,7 +32,7 @@ def test_invalid_ltp_snapshot_marked_invalid(monkeypatch):
     snap = rows[0]
     assert snap["symbol"] == "NIFTY"
     assert snap["valid"] is False
-    assert snap["invalid_reason"] == "CANDLE_STALE"
+    assert snap["invalid_reason"] == "LTP_STALE"
 
 
 def test_orchestrator_invalid_snapshot_skips_trade_building(monkeypatch):

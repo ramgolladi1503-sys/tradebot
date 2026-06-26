@@ -26,9 +26,10 @@ class MIPConfig:
     fetcher: FetcherConfig = FetcherConfig()
 
     # Store settings
-    EVIDENCE_DIR: str = "logs/mip_evidence"
-    RAW_DIR: str = "logs/mip_raw"
-    SQLITE_DB_PATH: str = "logs/mip_store.sqlite"
+    import os
+    EVIDENCE_DIR: str = os.path.join("logs", "mip_evidence")
+    RAW_DIR: str = os.path.join("logs", "mip_raw")
+    SQLITE_DB_PATH: str = os.path.join("logs", "mip_store.sqlite")
 
     # API Keys (loaded safely via env, missing keys degrade gracefully)
     FIRECRAWL_API_KEY: Optional[str] = None

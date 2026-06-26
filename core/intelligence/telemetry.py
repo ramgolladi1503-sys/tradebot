@@ -10,7 +10,10 @@ class MIPTelemetry:
     Structured telemetry emitter for the Market Intelligence Platform.
     Integrates logically alongside TradeBot's existing tracing.
     """
-    def __init__(self, output_path: str = "logs/mip_telemetry.jsonl"):
+    def __init__(self, output_path: str | None = None):
+        if output_path is None:
+            import os
+            output_path = os.path.join("logs", "mip_telemetry.jsonl")
         self.output_path = output_path
 
     def _emit(self, event_name: str, payload: Dict[str, Any]):

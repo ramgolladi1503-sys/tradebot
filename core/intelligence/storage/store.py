@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any, Dict
 
 class RawStore:
-    def __init__(self, base_dir: str = "logs/mip_raw"):
+    def __init__(self, base_dir: str | None = None):
+        if base_dir is None:
+            import os
+            base_dir = os.path.join("logs", "mip_raw")
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -20,7 +23,10 @@ class RawStore:
         return str(path)
 
 class EvidenceStore:
-    def __init__(self, base_dir: str = "logs/mip_evidence"):
+    def __init__(self, base_dir: str | None = None):
+        if base_dir is None:
+            import os
+            base_dir = os.path.join("logs", "mip_evidence")
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
