@@ -210,4 +210,4 @@ def test_append_gate_status_serializes_numpy_datetime_path(tmp_path, monkeypatch
     err_path = gate_status_error_path("TEST")
     if err_path.exists():
         err_rows = [line for line in err_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        assert len(err_rows) == 0
+        assert not err_rows
