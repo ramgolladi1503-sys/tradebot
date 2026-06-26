@@ -38,3 +38,15 @@ def test_entropy_diagnostics():
     assert "normalized_entropy" in diag
     assert "max_entropy" in diag
     assert diag["num_states"] == 2
+
+def test_invalid_probability_vector_produces_uncertain_true():
+    from core.regime_entropy_gate import evaluate_regime_entropy_gate
+    
+    # Probabilities sum to 1.8, not 1.0 -> Invalid
+    res = evaluate_regime_entropy_gate(probabilities={"TREND": 0.9, "RANGE": 0.9})
+    
+    assert res["probability_valid"] is False
+    assert res["uncertain"] is True
+    
+    reasons = res["diagnostics"]["reasons"]
+    assert any("invalid_probability_vector" in str(r) for r in reasons)

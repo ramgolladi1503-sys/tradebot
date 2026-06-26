@@ -23,12 +23,12 @@ def test_score_candidate_strong_inputs_is_high_and_deterministic():
     market_data = {
         "regime": "TREND",
         "market_open": True,
-        "quote_age_sec": 4.0,
+        "quote_age_sec": 1.0,
         "quote_source": "tick_store",
         "current_ltp": 101.5,
     }
     context = {
-        "mode": "LIVE",
+        "trading_mode": "LIVE",
         "market_open": True,
         "blockers": [],
         "hard_blockers": [],

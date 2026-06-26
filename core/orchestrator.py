@@ -658,10 +658,19 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         regime_prob_max = max(numeric_probs) if numeric_probs else None
 
     regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-    regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
     if execution_mode != "LIVE" and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
         regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
-        regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
+
+    from core.regime_entropy_gate import evaluate_regime_entropy_gate
+    session_bucket = str(row.get("session_bucket", "DEFAULT"))
+    entropy_gate = evaluate_regime_entropy_gate(
+        raw_entropy=_safe_float(row.get("regime_entropy")),
+        probabilities=regime_probs,
+        session_bucket=session_bucket,
+        market_data=row,
+        primary_regime=row.get("primary_regime") or row.get("regime") or "",
+        regime_prob_max=row.get("regime_prob_max") or row.get("regime_probs_max"),
+    )
 
     return {
         "symbol": symbol,
@@ -669,9 +678,11 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         "execution_mode": execution_mode,
         "primary_regime": row.get("primary_regime") or row.get("regime"),
         "regime_prob_max": regime_prob_max,
-        "regime_entropy": _safe_float(row.get("regime_entropy")),
+        "regime_entropy": entropy_gate["raw_entropy"],
+        "regime_entropy_normalized": entropy_gate["normalized_entropy"],
         "regime_prob_min": regime_prob_min,
-        "regime_entropy_max": regime_entropy_max,
+        "regime_entropy_max": entropy_gate["threshold"],
+        "regime_entropy_max_source": entropy_gate["threshold_source"],
         "unstable_reasons": [str(x) for x in list(row.get("unstable_reasons") or []) if str(x).strip()],
         "regime_unstable_streak": int(row.get("regime_unstable_streak") or 0),
         "regime_unstable_block_after": int(row.get("regime_unstable_block_after") or 0),
@@ -3471,14 +3482,12 @@ class Orchestrator:
         live_mode = str(market_ctx.mode).upper() == "LIVE"
 
         regime_prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-        regime_entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
         if (not live_mode) and bool(getattr(cfg, "PAPER_RELAX_GATES", True)):
             regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
-            regime_entropy_max = float(getattr(cfg, "PAPER_REGIME_ENTROPY_MAX", regime_entropy_max))
 
         regime_prob_max = market_data.get("regime_prob_max")
+        regime_probs = market_data.get("regime_probs") or {}
         if regime_prob_max is None:
-            regime_probs = market_data.get("regime_probs") or {}
             if isinstance(regime_probs, dict) and regime_probs:
                 try:
                     regime_prob_max = max(float(v) for v in regime_probs.values())
@@ -3488,12 +3497,18 @@ class Orchestrator:
             unstable_reasons.append("prob_too_low")
 
         regime_entropy = market_data.get("regime_entropy")
-        if regime_entropy is not None:
-            try:
-                if float(regime_entropy) > regime_entropy_max:
-                    unstable_reasons.append("entropy_too_high")
-            except Exception:
-                pass
+        from core.regime_entropy_gate import evaluate_regime_entropy_gate
+        entropy_gate = evaluate_regime_entropy_gate(
+            raw_entropy=_safe_float(regime_entropy),
+            probabilities=regime_probs if isinstance(regime_probs, dict) else None,
+            session_bucket=str(market_data.get("session_bucket", "DEFAULT")),
+            market_data=market_data,
+            primary_regime=market_data.get("primary_regime") or market_data.get("regime") or "",
+            regime_prob_max=market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),
+        )
+        if entropy_gate["uncertain"]:
+            unstable_reasons.append("entropy_too_high")
+
         return bool(unstable_reasons)
 
     def _annotate_regime_unstable_debounce(self, market_data: dict) -> dict:
@@ -4846,10 +4861,10 @@ class Orchestrator:
 
             # Defensive check: if feed is fatally dead, sleep to prevent high CPU spin.
             from core.recovery_state_machine import evaluate_feed_state, is_fatal_state
-            
+
             recovery_state = evaluate_feed_state(feed_runtime_payload)
             is_fatal = is_fatal_state(recovery_state)
-            
+
             if is_fatal:
                 logger.warning("orchestrator_live_monitoring_feed_fatal_sleep state=%s", recovery_state.name)
                 _pace_loop(max(2.0, self.poll_interval), loop_start_time)
@@ -4892,9 +4907,9 @@ class Orchestrator:
                 # immutable market snapshot. Do not recompute readiness here.
                 feature_stage_start = time.perf_counter()
                 cycle_stage = "fetch_market_data"
-                
+
                 feature_timing["GAP_top_of_loop_ms"] = (time.perf_counter() - loop_start_time) * 1000.0
-                
+
                 # Daily decay report / strategy gating
                 t0 = time.perf_counter()
                 self._refresh_decay_report()
@@ -4907,7 +4922,7 @@ class Orchestrator:
                 t0 = time.perf_counter()
                 market_data_list = self._build_cycle_market_data(live_market_data)
                 feature_timing["build_cycle_market_data_ms"] = _perf_ms(t0)
-                
+
                 t_gap = time.perf_counter()
                 try:
                     indicator_report = build_live_indicator_readiness_report(
@@ -5741,7 +5756,8 @@ class Orchestrator:
                                 "regime": starvation_regime_diag if starvation_regime_diag else {
                                     "primary_regime": market_data.get("primary_regime") or market_data.get("regime"),
                                     "regime_entropy": market_data.get("regime_entropy"),
-                                    "regime_entropy_max": market_data.get("regime_entropy_max") or float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3)),
+                                    "regime_entropy_normalized": market_data.get("regime_entropy_normalized"),
+                                    "regime_entropy_max": market_data.get("regime_entropy_threshold"),
                                     "regime_prob_max": market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),
                                     "regime_prob_min": market_data.get("regime_prob_min") or float(getattr(cfg, "REGIME_PROB_MIN", 0.45)),
                                     "regime_unstable_streak": market_data.get("regime_unstable_streak") or 0,
@@ -7338,7 +7354,7 @@ class Orchestrator:
                         ),
                     )
                     feature_timing["GAP_build_top_ms"] = _perf_ms(t_top)
-                    
+
                     t_root = time.perf_counter()
                     try:
                         root_cause_payload = build_candidate_handoff_root_cause_payload(
@@ -8115,13 +8131,13 @@ class Orchestrator:
                     decay_state = AlphaDecayState(**decay_state_dict)
                     l2_support_ratio = float(market_data.get("depth_imbalance", 0.5))
                     current_momentum_bps = float(market_data.get("momentum", 0.0))
-                    
+
                     should_force_exit = monitor_alpha_decay(
                         state=decay_state,
                         l2_support_ratio=l2_support_ratio,
                         current_momentum_bps=current_momentum_bps
                     )
-                    
+
                     if should_force_exit:
                         intent = {
                             "action": "FULL_EXIT",
@@ -8131,17 +8147,17 @@ class Orchestrator:
                             "ts_epoch": time.time(),
                         }
                         self.execution_engine.apply_exit_intent(intent)
-                    
+
                     # Update state in trade source flags
                     tr.source_flags["alpha_decay_state"] = decay_state.__dict__
-                    
+
                     if should_force_exit:
                         codes = list(meta.get("reason_codes") or [])
                         codes.append("decay_exhausted")
                         meta["reason_codes"] = sorted(set(codes))
                         meta["exit_intel_action"] = "FULL_EXIT"
                         self.trade_meta[tr.trade_id] = meta
-                        
+
                         # Apply local full exit state updates since ExecutionEngine already generated the intent
                         try:
                             from core.exit_intelligence_evaluator import ExitDecision, ExitAction
@@ -8155,7 +8171,7 @@ class Orchestrator:
                             self._record_full_exit(tr, meta, position_state, decision, market_data, ack, now_ts=time.time())
                         except Exception:
                             pass
-                            
+
                         # Drop from open_trades as it is fully exited
                         continue
                 except Exception as e:

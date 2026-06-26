@@ -1647,8 +1647,6 @@ REGIME_ENTROPY_NORMALIZED_MAX_CLOSING_VOL = float(os.getenv("REGIME_ENTROPY_NORM
 REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE = float(os.getenv("REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE", "0.92"))
 
 # Legacy values preserved for backward compat in external tests if needed
-REGIME_ENTROPY_MAX = float(os.getenv("REGIME_ENTROPY_MAX", "1.3"))
-REGIME_ENTROPY_UNSTABLE = float(os.getenv("REGIME_ENTROPY_UNSTABLE", "1.5"))
 REGIME_TRANSITION_RATE_MAX = float(os.getenv("REGIME_TRANSITION_RATE_MAX", "6.0"))
 # Confidence override for clearly stable regime distributions.
 # Used to avoid false "unstable" when max-probability is effectively 1 and entropy is near 0.
@@ -1779,11 +1777,7 @@ SOFT_REJECT_STRATEGY_FAMILY_FALLBACK = os.getenv(
     "breakout",
 ).strip().lower() or "breakout"
 PAPER_REGIME_PROB_MIN = float(os.getenv("PAPER_REGIME_PROB_MIN", "0.30"))
-PAPER_REGIME_ENTROPY_MAX = float(os.getenv("PAPER_REGIME_ENTROPY_MAX", "1.8"))
 PAPER_REGIME_ENTROPY_NORMALIZED_MAX = float(os.getenv("PAPER_REGIME_ENTROPY_NORMALIZED_MAX", "0.95"))
-REGIME_CANDIDATE_ENTROPY_SOFT_MAX = float(
-    os.getenv("REGIME_CANDIDATE_ENTROPY_SOFT_MAX", str(PAPER_REGIME_ENTROPY_MAX))
-)
 REGIME_CANDIDATE_ENTROPY_SOFT_PENALTY = float(
     os.getenv("REGIME_CANDIDATE_ENTROPY_SOFT_PENALTY", "0.08")
 )

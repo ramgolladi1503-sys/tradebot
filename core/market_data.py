@@ -1145,9 +1145,18 @@ def _derive_unstable_reasons(
     if ("indicators_never_computed" in missing or "never_computed" in missing) and ("indicators_missing" not in reasons):
         reasons.append("indicators_missing")
 
-    entropy_unstable = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
     prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
-    if entropy > entropy_unstable:
+    from core.regime_entropy_gate import evaluate_regime_entropy_gate
+    # Since we are deep in market_data, we assume DEFAULT session bucket
+    # unless passed in via kwargs. Market data handles core indicators.
+    entropy_gate = evaluate_regime_entropy_gate(
+        raw_entropy=entropy if entropy > 0 else None,
+        probabilities=probs if probs else None,
+        session_bucket="DEFAULT",
+        regime_prob_max=max_prob,
+    )
+
+    if entropy_gate["uncertain"]:
         reasons.append("entropy_too_high")
     if max_prob < prob_min:
         reasons.append("prob_too_low")
@@ -1998,7 +2007,7 @@ def get_candles(symbol: str, interval: str, start_ms: int, end_ms: int) -> pd.Da
         end_epoch_ms = _coerce_epoch_ms(end_ms)
         if not sym or start_epoch_ms is None or end_epoch_ms is None or end_epoch_ms <= start_epoch_ms:
             return empty
-            
+
         import pandas as pd
         from pathlib import Path
         offline_path = Path() / "data" / "live_intraday" / f"{sym}_intraday.csv"
