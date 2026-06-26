@@ -524,7 +524,7 @@ def _regime_weight_profile(
     return weights, reasons, _clamp01(penalty, default=0.0)
 
 
-def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
+def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], context: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
     volume = max(
         _first_float(candidate.get("volume"), market_data.get("volume")) or 0.0,
         _first_float(candidate.get("current_volume"), market_data.get("current_volume")) or 0.0,
@@ -543,10 +543,15 @@ def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], sco
     book_weight = max(0.0, _cfg_float("CANDIDATE_SCORING_LIQUIDITY_BOOK_WEIGHT", 0.40))
     reasons: list[str] = []
 
+    trading_mode = str(context.get("trading_mode", market_data.get("trading_mode", "SIM"))).upper()
     if volume <= 0.0 and oi <= 0.0:
         score_inputs_used["liquidity"] = "missing"
-        reasons.append("missing_liquidity_context")
-        return 0.5, reasons
+        if trading_mode == "LIVE":
+            reasons.append("missing_liquidity_context_live_block")
+            return 0.0, reasons
+        else:
+            reasons.append("missing_liquidity_context")
+            return 0.5, reasons
 
     volume_score = (
         min(1.0, log1p(max(volume, 0.0)) / log1p(target_volume * volume_cap_mult))
@@ -591,7 +596,7 @@ def _liquidity_score(candidate: dict[str, Any], market_data: dict[str, Any], sco
     return _clamp01(score, default=0.5), reasons
 
 
-def _spread_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
+def _spread_score(candidate: dict[str, Any], market_data: dict[str, Any], context: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
     spread_pct = _first_float(candidate.get("spread_pct"), market_data.get("spread_pct"))
     if spread_pct is None:
         bid = _first_float(candidate.get("best_bid"), candidate.get("bid"), candidate.get("opt_bid"), market_data.get("best_bid"))
@@ -600,15 +605,19 @@ def _spread_score(candidate: dict[str, Any], market_data: dict[str, Any], score_
         if bid is not None and ask is not None and reference not in (None, 0.0):
             spread_pct = max(0.0, float(ask) - float(bid)) / max(float(reference), 1e-6)
             score_inputs_used["derived_spread_from_bbo"] = True
+    trading_mode = str(context.get("trading_mode", market_data.get("trading_mode", "SIM"))).upper()
     max_spread = max(_cfg_float("CANDIDATE_SCORING_MAX_SPREAD_PCT", 0.02), 1e-6)
     if spread_pct is None:
         score_inputs_used["spread_pct"] = None
-        return 0.5, ["missing_spread_context"]
+        if trading_mode == "LIVE":
+            return 0.0, ["missing_spread_context_live_block"]
+        else:
+            return 0.5, ["missing_spread_context"]
     score_inputs_used["spread_pct"] = spread_pct
     return _clamp01(1.0 - min(float(spread_pct) / max_spread, 1.0), default=0.5), []
 
 
-def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
+def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], context: dict[str, Any], score_inputs_used: dict[str, Any]) -> tuple[float, list[str]]:
     entry_basis = _first_float(
         candidate.get("entry_price"),
         candidate.get("expected_entry"),
@@ -621,10 +630,13 @@ def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inpu
     stop_price = _first_float(candidate.get("stop_price"), candidate.get("stop"), candidate.get("stop_loss"))
     target_price = _first_float(candidate.get("target_price"), candidate.get("target"))
     fallback_reason: str | None = None
+    trading_mode = str(context.get("trading_mode", market_data.get("trading_mode", "SIM"))).upper()
+    fallback_enabled = _cfg_bool("CANDIDATE_SCORING_RR_FALLBACK_ENABLE_PAPER", True) if trading_mode in ("PAPER", "SIM") else _cfg_bool("CANDIDATE_SCORING_RR_FALLBACK_ENABLE_LIVE", False)
+    
     if (
         entry_basis is not None
         and (stop_price is None or target_price is None)
-        and _cfg_bool("CANDIDATE_SCORING_RR_FALLBACK_ENABLE", True)
+        and fallback_enabled
     ):
         direction_hint = str(candidate.get("side") or candidate.get("direction") or "").strip().upper()
         buy_side = not any(token in direction_hint for token in ("SELL", "SHORT"))
@@ -648,7 +660,10 @@ def _rr_score(candidate: dict[str, Any], market_data: dict[str, Any], score_inpu
             "stop_price": stop_price,
             "target_price": target_price,
         }
-        return 0.45, ["missing_rr_context"]
+        if trading_mode == "LIVE":
+            return 0.0, ["missing_rr_context_live_block"]
+        else:
+            return 0.45, ["missing_rr_context"]
 
     reward = abs(float(target_price) - float(entry_basis))
     risk = max(abs(float(entry_basis) - float(stop_price)), 1e-6)
@@ -689,10 +704,23 @@ def _timing_score(candidate: dict[str, Any], market_data: dict[str, Any], contex
         or ""
     ).strip().lower()
     market_open = bool(context.get("market_open", market_data.get("market_open", candidate.get("market_open", True))))
-    max_age = max(
-        _cfg_float("CANDIDATE_SCORING_TIMING_MAX_AGE_SEC", 300.0),
-        _cfg_float("OPTION_LTP_SLA_SEC", 2.0),
-    )
+    trading_mode = str(context.get("trading_mode", market_data.get("trading_mode", "SIM"))).upper()
+    
+    if trading_mode == "LIVE":
+        max_age = max(
+            _cfg_float("LIVE_OPTION_LTP_MAX_AGE_SEC", 2.0),
+            _cfg_float("OPTION_LTP_SLA_SEC", 2.0),
+        )
+    elif trading_mode in ("PAPER", "SIM"):
+        max_age = max(
+            _cfg_float("PAPER_OPTION_LTP_MAX_AGE_SEC", 5.0),
+            _cfg_float("OPTION_LTP_SLA_SEC", 2.0),
+        )
+    else:
+        max_age = max(
+            _cfg_float("OFFHOURS_DIAGNOSTIC_MAX_AGE_SEC", 300.0),
+            _cfg_float("CANDIDATE_SCORING_TIMING_MAX_AGE_SEC", 300.0),
+        )
 
     score_inputs_used["quote_source"] = quote_source or None
     score_inputs_used["quote_age_sec"] = quote_age
@@ -701,11 +729,15 @@ def _timing_score(candidate: dict[str, Any], market_data: dict[str, Any], contex
     if quote_age is None:
         if not market_open and quote_source in {"synthetic_offhours", "rest_fallback", "subscription_failed"}:
             return 0.58, ["missing_live_timing_context"]
+        if trading_mode == "LIVE":
+            return 0.0, ["missing_timing_context_live_block"]
         return 0.55, ["missing_timing_context"]
 
     score = _clamp01(1.0 - min(float(quote_age) / max_age, 1.0), default=0.55)
     if not market_open and quote_source in {"synthetic_offhours", "rest_fallback", "subscription_failed"}:
         score = max(0.5, min(score, 0.65))
+    if trading_mode == "LIVE" and score <= 0.0:
+        return 0.0, ["stale_quote_age_live_block"]
     return score, []
 
 
@@ -753,8 +785,13 @@ def _penalty_score(
         penalty += 0.08
         reasons.append("missing_instrument_token")
 
-    penalty += missing_weight * len(missing_reasons)
-    reasons.extend(missing_reasons)
+    for missing_reason in missing_reasons:
+        if missing_reason.endswith("_live_block"):
+            penalty += hard_weight
+            reasons.append(missing_reason)
+        else:
+            penalty += missing_weight
+            reasons.append(missing_reason)
 
     if regime_fit < 0.4:
         penalty += 0.06
@@ -826,9 +863,9 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
 
     setup_strength = _setup_strength(row, score_inputs_used)
     regime_fit = _regime_fit(row, market, score_inputs_used)
-    liquidity_score, liquidity_reasons = _liquidity_score(row, market, score_inputs_used)
-    spread_score, spread_reasons = _spread_score(row, market, score_inputs_used)
-    rr_score, rr_reasons = _rr_score(row, market, score_inputs_used)
+    liquidity_score, liquidity_reasons = _liquidity_score(row, market, ctx, score_inputs_used)
+    spread_score, spread_reasons = _spread_score(row, market, ctx, score_inputs_used)
+    rr_score, rr_reasons = _rr_score(row, market, ctx, score_inputs_used)
     timing_score, timing_reasons = _timing_score(row, market, ctx, score_inputs_used)
     regime_weights, regime_reasons, regime_penalty = _regime_weight_profile(row, market, score_inputs_used)
 

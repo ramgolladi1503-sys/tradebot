@@ -11,7 +11,12 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Dict
+
+@dataclass
+class FeedRiskVerdict:
+    is_risk: bool
+    reasons: list[str]
 
 from core.candidate_outcome_contract import CandidateOutcomeContract
 
@@ -71,14 +76,53 @@ FEED_RISK_TOKENS: frozenset[str] = frozenset(
         "feed_health_hold",
         "no_live_option_feed",
         "price_mismatch",
+        "recovered",
         "recovered_fallback",
         "rest_fallback",
         "stale_feed",
         "stale_option_ltp",
         "subscription_failed",
         "untrusted_quote_source",
+        "synthetic",
+        "missing_ltp",
+        "missing_depth",
+        "missing_spread",
+        "quote_age_unknown",
+        "advisory_only",
+        "planning_only"
     }
 )
+
+def is_feed_risk_candidate(candidate: dict[str, Any] | OpportunityScoreRecord) -> FeedRiskVerdict:
+    """Central helper to detect if a candidate has feed/data quality risks."""
+    reasons = []
+    
+    # Extract lists depending on input type
+    if isinstance(candidate, dict):
+        flags = tuple(candidate.get("safety_flags", []))
+        reasons_list = tuple(candidate.get("downgrade_reasons", []))
+        blockers = tuple(candidate.get("blockers", []))
+        warnings_list = tuple(candidate.get("warnings", []))
+        class_val = str(candidate.get("candidate_class", "")).strip().lower()
+        if class_val and class_val != "primary":
+            flags += (class_val,)
+    else:
+        flags = tuple(candidate.safety_flags)
+        reasons_list = tuple(candidate.downgrade_reasons)
+        blockers = tuple(candidate.blockers)
+        warnings_list = tuple(candidate.warnings)
+        
+    for value in flags + reasons_list + blockers + warnings_list:
+        normalized = str(value or "").strip().lower()
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        if not normalized:
+            continue
+        if normalized in FEED_RISK_TOKENS:
+            reasons.append(normalized)
+        elif any(token in normalized for token in FEED_RISK_TOKENS):
+            reasons.append(normalized)
+            
+    return FeedRiskVerdict(is_risk=bool(reasons), reasons=sorted(list(set(reasons))))
 
 
 @dataclass(frozen=True)
@@ -305,16 +349,7 @@ def _should_suppress_for_feed_risk(record: OpportunityScoreRecord) -> bool:
 
 
 def _has_feed_risk(record: OpportunityScoreRecord) -> bool:
-    for value in tuple(record.safety_flags) + tuple(record.downgrade_reasons) + tuple(record.blockers) + tuple(record.warnings):
-        normalized = str(value or "").strip().lower()
-        normalized = normalized.replace("-", "_").replace(" ", "_")
-        if not normalized:
-            continue
-        if normalized in FEED_RISK_TOKENS:
-            return True
-        if any(token in normalized for token in FEED_RISK_TOKENS):
-            return True
-    return False
+    return is_feed_risk_candidate(record).is_risk
 
 
 def _rank_score_eligibility(record: OpportunityScoreRecord, feed_risk_suppressed: bool) -> str:
@@ -456,5 +491,7 @@ __all__ = [
     "RANKING_SCHEMA_VERSION",
     "CandidateRankRecord",
     "CandidateRankingReport",
+    "FeedRiskVerdict",
+    "is_feed_risk_candidate",
     "rank_candidates",
 ]
