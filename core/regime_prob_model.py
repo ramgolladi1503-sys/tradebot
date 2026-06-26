@@ -99,13 +99,44 @@ class RegimeProbModel:
         else:
             probs = self._heuristic_proba(features)
         primary = max(probs, key=lambda k: probs.get(k, 0.0)) if probs else "NEUTRAL"
-        entropy = _entropy(probs)
-        unstable = bool(entropy > 1.5)
+        
+        from core.entropy_contract import entropy_diagnostics
+        diag = entropy_diagnostics(probs, labels=REGIMES)
+        entropy = diag["entropy"]
+        entropy_normalized = diag["normalized_entropy"]
+        
+        # Use session-aware threshold if passed in features, else default
+        session_bucket = str(features.get("session_bucket", "DEFAULT")).upper()
+        
+        # Import config inline to avoid circular imports if any, or rely on features
+        try:
+            from config import config as cfg
+        except Exception:
+            cfg = None
+            
+        if session_bucket == "OPEN_DISCOVERY":
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_OPEN_DISCOVERY", 0.90) if cfg else 0.90
+        elif session_bucket == "MID_SESSION":
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_MID_SESSION", 0.78) if cfg else 0.78
+        elif session_bucket == "CLOSING_VOL":
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_CLOSING_VOL", 0.88) if cfg else 0.88
+        elif session_bucket == "EXPIRY_DAY":
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EXPIRY_DAY", 0.86) if cfg else 0.86
+        elif session_bucket == "EVENT_MODE":
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_EVENT_MODE", 0.92) if cfg else 0.92
+        else:
+            threshold = getattr(cfg, "REGIME_ENTROPY_NORMALIZED_MAX_DEFAULT", 0.80) if cfg else 0.80
+            
+        unstable = bool(entropy_normalized > float(threshold))
+        
         return {
             "regime_probs": probs,
             "primary_regime": primary,
             "regime_entropy": entropy,
+            "regime_entropy_normalized": entropy_normalized,
+            "regime_entropy_threshold": float(threshold),
             "unstable_regime_flag": unstable,
+            "market_regime_uncertain": unstable,
         }
 
 
@@ -116,13 +147,3 @@ def _softmax(scores: dict) -> dict:
     exps = {k: math.exp(v - mx) for k, v in scores.items()}
     s = sum(exps.values()) or 1.0
     return {k: round(v / s, 6) for k, v in exps.items()}
-
-
-def _entropy(probs: dict) -> float:
-    if not probs:
-        return 0.0
-    ent = 0.0
-    for p in probs.values():
-        if p and p > 0:
-            ent -= p * math.log(p + 1e-12)
-    return round(ent, 6)

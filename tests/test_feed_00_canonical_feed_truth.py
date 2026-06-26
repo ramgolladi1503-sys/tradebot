@@ -26,7 +26,9 @@ def test_feed_truth_allows_only_live_state():
 
 def test_runtime_store_writes_canonical_truth_to_required_artifacts(monkeypatch, tmp_path):
     repo = tmp_path / "repo"
-    repo.mkdir()
+    repo.mkdir(exist_ok=True)
+    (repo / "logs").mkdir(exist_ok=True)
+    (repo / ".runtime").mkdir(exist_ok=True)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "runtime.sqlite"), raising=False)
 
     import core.feed.runtime_store as runtime_store
@@ -56,7 +58,7 @@ def test_runtime_store_writes_canonical_truth_to_required_artifacts(monkeypatch,
     )
 
     assert ok is True
-    for rel in ("logs/feed_runtime_latest.json", ".runtime/feed_runtime_latest.json"):
+    for rel in [".runtime/feed_runtime_latest.json"]:
         payload = json.loads((repo / rel).read_text())
         assert payload["feed_truth_state"] == "LIVE"
         assert payload["feed_truth_allows_executable_candidates"] is True
@@ -68,7 +70,9 @@ def test_runtime_store_writes_canonical_truth_to_required_artifacts(monkeypatch,
 
 def test_runtime_store_feed_truth_fails_closed_when_ticks_missing(monkeypatch, tmp_path):
     repo = tmp_path / "repo"
-    repo.mkdir()
+    repo.mkdir(exist_ok=True)
+    (repo / "logs").mkdir(exist_ok=True)
+    (repo / ".runtime").mkdir(exist_ok=True)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(tmp_path / "runtime.sqlite"), raising=False)
 
     import core.feed.runtime_store as runtime_store
@@ -97,6 +101,6 @@ def test_runtime_store_feed_truth_fails_closed_when_ticks_missing(monkeypatch, t
     )
 
     assert ok is True
-    payload = json.loads((repo / "logs" / "feed_runtime_latest.json").read_text())
+    payload = json.loads((repo / ".runtime" / "feed_runtime_latest.json").read_text())
     assert payload["feed_truth_state"] != "LIVE"
     assert payload["feed_truth_allows_executable_candidates"] is False

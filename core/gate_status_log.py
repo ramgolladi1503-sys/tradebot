@@ -94,8 +94,16 @@ def build_gate_status_record(
     except Exception:
         pass
     try:
-        entropy_max = float(getattr(cfg, "REGIME_ENTROPY_MAX", 1.3))
-        if regime_entropy is not None and float(regime_entropy) > entropy_max and "entropy_too_high" not in regime_reasons:
+        from core.regime_entropy_gate import evaluate_regime_entropy_gate
+        entropy_gate = evaluate_regime_entropy_gate(
+            raw_entropy=float(regime_entropy) if regime_entropy is not None else None,
+            probabilities=data.get("regime_probs") if isinstance(data.get("regime_probs"), dict) else None,
+            session_bucket=str(data.get("session_bucket", "DEFAULT")),
+            market_data=data,
+            primary_regime=data.get("primary_regime") or data.get("regime") or "",
+            regime_prob_max=max_prob,
+        )
+        if entropy_gate["uncertain"] and "entropy_too_high" not in regime_reasons:
             regime_reasons.append("entropy_too_high")
     except Exception:
         pass

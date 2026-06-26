@@ -209,7 +209,8 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
 def _write_canonical_runtime_artifacts(payload: dict[str, Any], *, ts_epoch: float) -> None:
     artifact = _canonical_runtime_artifact_payload(payload, ts_epoch=ts_epoch)
     root = repo_root()
-    for path in (root / "logs" / "feed_runtime_latest.json", root / ".runtime" / "feed_runtime_latest.json"):
+    from core.paths import logs_dir
+    for path in (logs_dir() / "feed_runtime_latest.json", root / ".runtime" / "feed_runtime_latest.json"):
         try:
             write_json_atomic(path, artifact)
         except Exception:

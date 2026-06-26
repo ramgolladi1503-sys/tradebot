@@ -33,9 +33,15 @@ def test_gate_status_logs_gate_reasons(tmp_path, monkeypatch):
         "ohlc_last_bar_epoch": None,
         "compute_indicators_error": "ValueError:test",
         "missing_inputs": ["ohlc_buffer_empty", "ltp_missing"],
-        "primary_regime": "NEUTRAL",
-        "regime_probs": {"NEUTRAL": 0.61, "TREND": 0.39},
-        "regime_entropy": 0.77,
+        "primary_regime": "RANGE",
+        "regime_probs": {
+            "RANGE": 0.61,
+            "TREND": 0.39,
+            "EVENT": 0.0,
+            "PANIC": 0.0,
+            "RANGE_VOLATILE": 0.0,
+        },
+        "regime_entropy": 0.67,
         "unstable_regime_flag": True,
     }
     reasons = ["indicators_missing"]
@@ -118,8 +124,14 @@ def test_gate_status_includes_indicator_fields_for_strategy_stage():
         "ohlc_seeded": True,
         "ohlc_bars_count": 40,
         "primary_regime": "TREND",
-        "regime_probs": {"TREND": 0.99},
-        "regime_entropy": 0.01,
+        "regime_probs": {
+            "TREND": 0.99,
+            "RANGE": 0.01,
+            "EVENT": 0.0,
+            "PANIC": 0.0,
+            "RANGE_VOLATILE": 0.0,
+        },
+        "regime_entropy": 0.05,
         "unstable_regime_flag": False,
     }
     row = build_gate_status_record(
@@ -148,8 +160,14 @@ def test_gate_status_includes_explicit_regime_reasons():
         "ltp_ts_epoch": 1000.0,
         "indicators_ok": True,
         "indicators_age_sec": 1.0,
-        "primary_regime": "NEUTRAL",
-        "regime_probs": {"NEUTRAL": 0.40, "TREND": 0.30, "EVENT": 0.30},
+        "primary_regime": "RANGE",
+        "regime_probs": {
+            "RANGE": 0.40,
+            "TREND": 0.30,
+            "EVENT": 0.30,
+            "PANIC": 0.0,
+            "RANGE_VOLATILE": 0.0,
+        },
         "regime_entropy": 2.0,
         "unstable_reasons": ["prob_too_low", "entropy_too_high"],
     }
@@ -192,4 +210,4 @@ def test_append_gate_status_serializes_numpy_datetime_path(tmp_path, monkeypatch
     err_path = gate_status_error_path("TEST")
     if err_path.exists():
         err_rows = [line for line in err_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        assert len(err_rows) == 0
+        assert not err_rows

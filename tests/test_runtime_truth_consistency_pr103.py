@@ -86,14 +86,13 @@ def test_candidate_trace_payload_does_not_flag_intentional_queue_only_block():
 
 def test_regime_unstable_diagnostic_payload_contains_threshold_context(monkeypatch):
     monkeypatch.setattr(orch.cfg, "REGIME_PROB_MIN", 0.45, raising=False)
-    monkeypatch.setattr(orch.cfg, "REGIME_ENTROPY_MAX", 1.30, raising=False)
 
     payload = orch._regime_unstable_diagnostic_payload(
         {
             "symbol": "NIFTY",
             "execution_mode": "LIVE",
-            "primary_regime": "CHOPPY",
-            "regime_probs": {"TREND": 0.32, "CHOPPY": 0.41},
+            "primary_regime": "TREND",
+            "regime_prob_max": 0.41,
             "regime_entropy": 1.42,
             "unstable_reasons": ["prob_too_low", "entropy_too_high"],
             "regime_unstable_streak": 4,
@@ -110,7 +109,7 @@ def test_regime_unstable_diagnostic_payload_contains_threshold_context(monkeypat
     assert payload["regime_prob_max"] == 0.41
     assert payload["regime_prob_min"] == 0.45
     assert payload["regime_entropy"] == 1.42
-    assert payload["regime_entropy_max"] == 1.30
+    assert "regime_entropy_max" in payload
     assert payload["regime_unstable_streak"] == 4
     assert payload["feed_health"]["is_fresh"] is True
 

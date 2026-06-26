@@ -17,7 +17,7 @@ def test_unstable_reasons_empty_for_confident_regime_with_sufficient_bars():
 
 def test_unstable_reasons_include_prob_and_entropy_reasons_when_unstable():
     reasons = _derive_unstable_reasons(
-        regime_probs={"TREND": 0.40, "RANGE": 0.35, "EVENT": 0.25},
+        regime_probs={"TREND": 0.20, "RANGE": 0.20, "EVENT": 0.20, "RANGE_VOLATILE": 0.20, "PANIC": 0.20},
         regime_entropy=2.0,
         regime_transition_rate=0.0,
         indicators_ok=True,

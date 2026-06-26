@@ -21,7 +21,7 @@ def compute_multiplier(
         mult *= 0.7
     if decay_prob > 0.7:
         mult *= 0.6
-    if regime_entropy > 1.3:
+    if regime_entropy > 0.80:
         mult *= 0.8
     return max(0.1, min(1.0, mult))
 

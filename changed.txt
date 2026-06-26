@@ -1,0 +1,10 @@
+core/htf_paper_telemetry.py
+core/opportunity_engine.py
+core/paper_exit_outcome.py
+docs/agent_reviews/pr_605_htf_opening_drive_paper_telemetry.md
+docs/strategy_research/htf_opening_drive_paper_validation_plan.md
+scripts/scheduler.py
+scripts/summarize_htf_opening_drive_paper.py
+scripts/tick_data_collector.py
+strategies/trade_builder.py
+tests/strategy_truth/test_htf_strategy_truth.py
