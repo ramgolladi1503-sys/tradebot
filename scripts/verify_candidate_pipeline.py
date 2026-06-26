@@ -12,7 +12,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.learning_paths import canonical_suggestions_log_path, rejected_candidates_paths
+from core.learning_paths import (
+    canonical_suggestions_log_path,
+    rejected_candidates_paths,
+)
 
 
 _SCORE_METADATA_FIELDS = ("rank_score", "opportunity_score", "score_breakdown")
@@ -102,7 +105,10 @@ def _collect_recent_rows(
     limit: int,
 ) -> list[dict[str, Any]]:
     recent_rows: list[dict[str, Any]] = []
-    for source, paths in (("suggestions", suggestions_paths), ("rejected", rejected_paths)):
+    for source, paths in (
+        ("suggestions", suggestions_paths),
+        ("rejected", rejected_paths),
+    ):
         for path in _unique_paths(paths):
             for row in _read_tail_jsonl(path, limit):
                 tagged = dict(row)
@@ -165,9 +171,7 @@ def build_candidate_pipeline_report(
             )
 
     ranked_rows = [
-        row
-        for row in rows
-        if _safe_float(row.get("rank_score")) is not None
+        row for row in rows if _safe_float(row.get("rank_score")) is not None
     ]
     ranked_rows.sort(
         key=lambda row: (
@@ -200,8 +204,12 @@ def build_candidate_pipeline_report(
         "final_action_distribution": dict(sorted(final_action_distribution.items())),
         "rank_score_present_count": rank_score_present_count,
         "rank_score_missing_count": len(rows) - rank_score_present_count,
-        "strategy_family_distribution": dict(sorted(strategy_family_distribution.items())),
-        "candidate_type_distribution": dict(sorted(candidate_type_distribution.items())),
+        "strategy_family_distribution": dict(
+            sorted(strategy_family_distribution.items())
+        ),
+        "candidate_type_distribution": dict(
+            sorted(candidate_type_distribution.items())
+        ),
         "top_ranked": top_ranked,
         "rows_missing_score_metadata": missing_score_metadata_rows,
     }
@@ -233,9 +241,24 @@ def render_candidate_pipeline_report(report: dict[str, Any]) -> str:
             continue
         for path in entries:
             lines.append(f"  - {label}: {path}")
-    lines.extend(_render_distribution("Final action distribution:", dict(report.get("final_action_distribution") or {})))
-    lines.extend(_render_distribution("Strategy family distribution:", dict(report.get("strategy_family_distribution") or {})))
-    lines.extend(_render_distribution("Candidate type distribution:", dict(report.get("candidate_type_distribution") or {})))
+    lines.extend(
+        _render_distribution(
+            "Final action distribution:",
+            dict(report.get("final_action_distribution") or {}),
+        )
+    )
+    lines.extend(
+        _render_distribution(
+            "Strategy family distribution:",
+            dict(report.get("strategy_family_distribution") or {}),
+        )
+    )
+    lines.extend(
+        _render_distribution(
+            "Candidate type distribution:",
+            dict(report.get("candidate_type_distribution") or {}),
+        )
+    )
     lines.append("Top 10 by rank_score:")
     top_ranked = list(report.get("top_ranked") or [])
     if not top_ranked:
@@ -302,8 +325,12 @@ def main() -> int:
     args = parser.parse_args()
 
     report = build_candidate_pipeline_report(
-        suggestions_paths=[Path(path) for path in args.suggestions_path] if args.suggestions_path else None,
-        rejected_paths=[Path(path) for path in args.rejected_path] if args.rejected_path else None,
+        suggestions_paths=[Path(path) for path in args.suggestions_path]
+        if args.suggestions_path
+        else None,
+        rejected_paths=[Path(path) for path in args.rejected_path]
+        if args.rejected_path
+        else None,
         limit=max(1, int(args.limit)),
         top_n=max(1, int(args.top)),
     )

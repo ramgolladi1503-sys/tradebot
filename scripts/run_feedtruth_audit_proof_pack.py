@@ -13,7 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.feed_truth_audit import build_feed_truth_audit_report, render_feed_truth_audit_markdown
+from core.feed_truth_audit import (
+    build_feed_truth_audit_report,
+    render_feed_truth_audit_markdown,
+)
 
 
 FIXTURE_ROOT = REPO_ROOT / "tests" / "fixtures" / "feedtruth_audit"
@@ -58,8 +61,12 @@ DEFAULT_CASES: tuple[ProofPackCase, ...] = (
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Fresh FeedTruth Audit Proof Pack.")
-    parser.add_argument("--out-dir", required=True, help="Directory to write proof-pack reports into.")
+    parser = argparse.ArgumentParser(
+        description="Run the Fresh FeedTruth Audit Proof Pack."
+    )
+    parser.add_argument(
+        "--out-dir", required=True, help="Directory to write proof-pack reports into."
+    )
     return parser.parse_args()
 
 
@@ -91,10 +98,15 @@ def _validate_safety_flags(report: dict[str, object]) -> list[str]:
 def _validate_case_report(case: ProofPackCase, report: dict[str, object]) -> list[str]:
     failures = _validate_safety_flags(report)
     verdict = str(report.get("verdict") or "").strip().upper()
-    contradiction_count = int((report.get("counts") or {}).get("contradiction_count") or 0)
+    contradiction_count = int(
+        (report.get("counts") or {}).get("contradiction_count") or 0
+    )
     if verdict != case.expected_verdict:
         failures.append(f"expected verdict={case.expected_verdict!r} got {verdict!r}")
-    if case.expected_contradiction_count is not None and contradiction_count != case.expected_contradiction_count:
+    if (
+        case.expected_contradiction_count is not None
+        and contradiction_count != case.expected_contradiction_count
+    ):
         failures.append(
             f"expected contradiction_count={case.expected_contradiction_count!r} got {contradiction_count!r}"
         )
@@ -105,7 +117,9 @@ def _validate_case_report(case: ProofPackCase, report: dict[str, object]) -> lis
     return failures
 
 
-def _write_report_file(out_dir: Path, case: ProofPackCase, report: dict[str, object]) -> Path:
+def _write_report_file(
+    out_dir: Path, case: ProofPackCase, report: dict[str, object]
+) -> Path:
     payload = {
         "case_name": case.name,
         "fixture_paths": {
@@ -124,7 +138,9 @@ def _write_report_file(out_dir: Path, case: ProofPackCase, report: dict[str, obj
         "live_order_action": False,
         "broker_order_action": False,
         "verdict": report.get("verdict"),
-        "contradiction_count": (report.get("counts") or {}).get("contradiction_count", 0),
+        "contradiction_count": (report.get("counts") or {}).get(
+            "contradiction_count", 0
+        ),
     }
     out_path = out_dir / f"{case.name}.report.json"
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
@@ -163,21 +179,27 @@ def _render_summary(report_rows: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
-def run_proof_pack(out_dir: str | Path, cases: Iterable[ProofPackCase] = DEFAULT_CASES) -> dict[str, object]:
+def run_proof_pack(
+    out_dir: str | Path, cases: Iterable[ProofPackCase] = DEFAULT_CASES
+) -> dict[str, object]:
     output_dir = Path(out_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     case_rows: list[dict[str, object]] = []
     failures: list[str] = []
     for case in cases:
-        report = build_feed_truth_audit_report(log_file=case.log_file, runtime_file=case.runtime_file)
+        report = build_feed_truth_audit_report(
+            log_file=case.log_file, runtime_file=case.runtime_file
+        )
         report["strict"] = True
         report["source_fixture"] = {
             "name": case.name,
             "log_file": str(case.log_file),
             "runtime_file": str(case.runtime_file),
         }
-        report["contradiction_count"] = (report.get("counts") or {}).get("contradiction_count", 0)
+        report["contradiction_count"] = (report.get("counts") or {}).get(
+            "contradiction_count", 0
+        )
         report["generated_epoch"] = report.get("generated_epoch")
         report["expected_verdict"] = case.expected_verdict
         report["expected_contradiction_count"] = case.expected_contradiction_count
@@ -203,7 +225,10 @@ def run_proof_pack(out_dir: str | Path, cases: Iterable[ProofPackCase] = DEFAULT
             }
         )
         if report["validation_failures"]:
-            failures.append(f"{case.name}: " + "; ".join(str(item) for item in report["validation_failures"]))
+            failures.append(
+                f"{case.name}: "
+                + "; ".join(str(item) for item in report["validation_failures"])
+            )
 
     summary_path = output_dir / "summary.md"
     summary_path.write_text(_render_summary(case_rows), encoding="utf-8")
@@ -227,7 +252,9 @@ def main() -> int:
         return 1
     print(f"proof pack summary written: {summary['summary_path']}")
     for row in summary["case_rows"]:
-        print(f"{row['case_name']}: {row['verdict']} contradictions={row['contradiction_count']}")
+        print(
+            f"{row['case_name']}: {row['verdict']} contradictions={row['contradiction_count']}"
+        )
     return 0
 
 

@@ -10,7 +10,9 @@ from core import model_registry
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Rollback model to previous or specified version.")
+    parser = argparse.ArgumentParser(
+        description="Rollback model to previous or specified version."
+    )
     parser.add_argument("--family", default="xgb")
     parser.add_argument("--to", default="previous", help="previous or version hash")
     args = parser.parse_args()

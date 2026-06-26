@@ -5,6 +5,7 @@ IST-based premarket scheduler (timezone-safe, idempotent).
 Runs premarket reports at 09:00 IST daily (with grace window).
 If system was asleep, runs immediately on wake and logs delay.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
-STATE_PATH = Path(os.getenv("SCHEDULER_STATE_PATH", str(LOG_DIR / "scheduler_state.json")))
+STATE_PATH = Path(
+    os.getenv("SCHEDULER_STATE_PATH", str(LOG_DIR / "scheduler_state.json"))
+)
 SCHED_LOG = LOG_DIR / "scheduler.log"
 
 TARGET_TIME = os.getenv("PREMARKET_TARGET_HHMM", "09:00")
@@ -42,6 +45,7 @@ PREMARKET_SCRIPTS = [
 BACKGROUND_SCRIPTS = [
     "scripts/tick_data_collector.py",
 ]
+
 
 @dataclass
 class Decision:
@@ -91,7 +95,9 @@ def _target_dt(now: datetime) -> datetime:
     return now.replace(hour=hh, minute=mm, second=0, microsecond=0)
 
 
-def should_run_premarket(now: Optional[datetime], last_run_date: Optional[str]) -> Decision:
+def should_run_premarket(
+    now: Optional[datetime], last_run_date: Optional[str]
+) -> Decision:
     now = now or now_ist()
     date_key = ist_date_key(now)
     if last_run_date == date_key:
@@ -111,21 +117,33 @@ def _run_scripts(date_key: str) -> None:
     run_log = LOG_DIR / f"premarket_run_{date_key}.log"
     LOG_DIR.mkdir(exist_ok=True)
     start = time.time()
-    _log_event("PREMARKET_RUN_START", {"date_key": date_key, "scripts": PREMARKET_SCRIPTS})
+    _log_event(
+        "PREMARKET_RUN_START", {"date_key": date_key, "scripts": PREMARKET_SCRIPTS}
+    )
     with run_log.open("a") as f:
         for script in PREMARKET_SCRIPTS:
             script_path = Path(script)
             if not script_path.exists():
                 msg = f"missing_script:{script}"
-                _log_event("PREMARKET_SCRIPT_MISSING", {"date_key": date_key, "script": script})
+                _log_event(
+                    "PREMARKET_SCRIPT_MISSING", {"date_key": date_key, "script": script}
+                )
                 raise RuntimeError(msg)
             f.write(f"\n=== Running {script} ===\n")
-            proc = subprocess.run([py, str(script_path)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.run(
+                [py, str(script_path)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
             output = proc.stdout or ""
             if output:
                 f.write(output)
                 for line in output.splitlines():
-                    _log_event("SCRIPT_OUTPUT", {"date_key": date_key, "script": script, "line": line[:2000]})
+                    _log_event(
+                        "SCRIPT_OUTPUT",
+                        {"date_key": date_key, "script": script, "line": line[:2000]},
+                    )
             if proc.returncode != 0:
                 _log_event(
                     "PREMARKET_SCRIPT_FAIL",
@@ -133,27 +151,35 @@ def _run_scripts(date_key: str) -> None:
                 )
                 raise RuntimeError(f"script_failed:{script}:code={proc.returncode}")
     duration = time.time() - start
-    _log_event("PREMARKET_RUN_OK", {"date_key": date_key, "duration_sec": round(duration, 2)})
+    _log_event(
+        "PREMARKET_RUN_OK", {"date_key": date_key, "duration_sec": round(duration, 2)}
+    )
 
     # Launch background scripts as detached processes
-    _log_event("BACKGROUND_RUN_START", {"date_key": date_key, "scripts": BACKGROUND_SCRIPTS})
+    _log_event(
+        "BACKGROUND_RUN_START", {"date_key": date_key, "scripts": BACKGROUND_SCRIPTS}
+    )
     for script in BACKGROUND_SCRIPTS:
         script_path = Path(script)
         if not script_path.exists():
-            _log_event("BACKGROUND_SCRIPT_MISSING", {"date_key": date_key, "script": script})
+            _log_event(
+                "BACKGROUND_SCRIPT_MISSING", {"date_key": date_key, "script": script}
+            )
             continue
         bg_log = LOG_DIR / f"{script_path.stem}_{date_key}.log"
         with bg_log.open("a") as f:
             f.write(f"=== Starting detached {script} ===\n")
-        
+
         with open(bg_log, "a") as f:
             subprocess.Popen(
                 [py, str(script_path)],
                 stdout=f,
                 stderr=subprocess.STDOUT,
-                start_new_session=True
+                start_new_session=True,
             )
-        _log_event("BACKGROUND_SCRIPT_STARTED", {"date_key": date_key, "script": script})
+        _log_event(
+            "BACKGROUND_SCRIPT_STARTED", {"date_key": date_key, "script": script}
+        )
 
 
 def _write_failure_marker(date_key: str, reason: str) -> None:
@@ -175,12 +201,18 @@ def _print_check(decision: Decision, date_key: str) -> None:
             date_key,
         )
     else:
-        logger.info("scheduler_check skip reason=%s date_key=%s", decision.reason, date_key)
+        logger.info(
+            "scheduler_check skip reason=%s date_key=%s", decision.reason, date_key
+        )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check-now", action="store_true", help="Check whether scheduler would run now.")
+    parser.add_argument(
+        "--check-now",
+        action="store_true",
+        help="Check whether scheduler would run now.",
+    )
     args = parser.parse_args()
 
     LOG_DIR.mkdir(exist_ok=True)
@@ -202,13 +234,19 @@ def main() -> int:
         decision = should_run_premarket(now_ist(), last_run if last_run else None)
 
         if not decision.should_run:
-            _log_event("SCHEDULER_SKIP", {"reason": decision.reason, "date_key": date_key})
+            _log_event(
+                "SCHEDULER_SKIP", {"reason": decision.reason, "date_key": date_key}
+            )
             time.sleep(CHECK_INTERVAL_SEC)
             continue
 
         _log_event(
             "SCHEDULER_TRIGGER",
-            {"reason": decision.reason, "delay_min": round(decision.delay_min, 2), "date_key": date_key},
+            {
+                "reason": decision.reason,
+                "delay_min": round(decision.delay_min, 2),
+                "date_key": date_key,
+            },
         )
         try:
             _run_scripts(date_key)

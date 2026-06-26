@@ -60,6 +60,7 @@ def _check_audit_files():
 
 def _check_feed():
     from core.freshness_sla import get_freshness_status
+
     data = get_freshness_status(force=False)
     max_age = float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))
     max_depth_age = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 2.0))
@@ -93,7 +94,13 @@ def _check_models():
 
 def run_checks():
     results = []
-    for fn in (_check_risk_profile, _check_whitelist, _check_audit_files, _check_feed, _check_models):
+    for fn in (
+        _check_risk_profile,
+        _check_whitelist,
+        _check_audit_files,
+        _check_feed,
+        _check_models,
+    ):
         ok, reasons = fn()
         results.append((ok, reasons))
     ok = all(r[0] for r in results)
@@ -106,7 +113,9 @@ def run_checks():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true", help="Print status without exiting non-zero.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print status without exiting non-zero."
+    )
     args = parser.parse_args()
     ok, reasons = run_checks()
     status = "PASS" if ok else "FAIL"

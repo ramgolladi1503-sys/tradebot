@@ -9,7 +9,9 @@ if str(ROOT) not in sys.path:
 
 from config import config as cfg
 
-DECISION_JSONL = Path(getattr(cfg, "DECISION_LOG_PATH", str(ROOT / "logs" / "decision_events.jsonl")))
+DECISION_JSONL = Path(
+    getattr(cfg, "DECISION_LOG_PATH", str(ROOT / "logs" / "decision_events.jsonl"))
+)
 REPORT_PATH = ROOT / "logs" / "rl_shadow_report.json"
 
 
@@ -45,13 +47,16 @@ def build_report(events):
         if ts is None or mult is None or pnl is None:
             continue
         day = ts.strftime("%Y-%m-%d")
-        rec = by_day.setdefault(day, {
-            "count": 0,
-            "baseline_pnl": 0.0,
-            "rl_pnl": 0.0,
-            "avg_multiplier": 0.0,
-            "changed_count": 0,
-        })
+        rec = by_day.setdefault(
+            day,
+            {
+                "count": 0,
+                "baseline_pnl": 0.0,
+                "rl_pnl": 0.0,
+                "avg_multiplier": 0.0,
+                "changed_count": 0,
+            },
+        )
         rec["count"] += 1
         rec["baseline_pnl"] += float(pnl)
         rec["rl_pnl"] += float(pnl) * float(mult)
@@ -71,7 +76,9 @@ def build_report(events):
     return {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "min_days_shadow": getattr(cfg, "RL_MIN_DAYS_SHADOW", 7),
-        "promotion_rules": getattr(cfg, "RL_PROMOTION_RULES", "brier_improve_and_tail_ok"),
+        "promotion_rules": getattr(
+            cfg, "RL_PROMOTION_RULES", "brier_improve_and_tail_ok"
+        ),
         "days": daily,
     }
 

@@ -24,8 +24,12 @@ def main():
     if cfg.RISK_PROFILE == "PILOT":
         assert cfg.MAX_DAILY_LOSS_PCT <= 0.02, "PILOT must not exceed 2% daily loss"
     if cfg.RISK_PROFILE == "CONSERVATIVE":
-        assert cfg.MAX_DAILY_LOSS_PCT <= 0.012, "CONSERVATIVE must not exceed 1.2% daily loss"
-        assert abs(cfg.MAX_DRAWDOWN_PCT) <= 0.03, "CONSERVATIVE must not exceed 3% drawdown"
+        assert cfg.MAX_DAILY_LOSS_PCT <= 0.012, (
+            "CONSERVATIVE must not exceed 1.2% daily loss"
+        )
+        assert abs(cfg.MAX_DRAWDOWN_PCT) <= 0.03, (
+            "CONSERVATIVE must not exceed 3% drawdown"
+        )
 
     rs = RiskState(start_capital=100000)
     portfolio = {
@@ -55,16 +59,22 @@ def main():
     portfolio["daily_profit"] = 0.0
     rs.update_portfolio(portfolio)
     _print_state("recovery_mode", rs)
-    assert rs.mode == "RECOVERY_MODE", "Expected RECOVERY_MODE on new day after hard halt"
+    assert rs.mode == "RECOVERY_MODE", (
+        "Expected RECOVERY_MODE on new day after hard halt"
+    )
 
     # Event regime scaling
-    rs.update_market("NIFTY", {"primary_regime": "EVENT", "regime_entropy": 1.0, "shock_score": 0.7})
+    rs.update_market(
+        "NIFTY", {"primary_regime": "EVENT", "regime_entropy": 1.0, "shock_score": 0.7}
+    )
     mult_event = rs.risk_budget_multiplier()
     _print_state("event_mult", rs)
     assert mult_event <= 0.6, "Expected reduced risk multiplier in EVENT regime"
 
     # High entropy scaling
-    rs.update_market("NIFTY", {"primary_regime": "RANGE", "regime_entropy": 1.6, "shock_score": 0.1})
+    rs.update_market(
+        "NIFTY", {"primary_regime": "RANGE", "regime_entropy": 1.6, "shock_score": 0.1}
+    )
     mult_entropy = rs.risk_budget_multiplier()
     _print_state("entropy_mult", rs)
     assert mult_entropy <= 0.7, "Expected reduced risk multiplier for high entropy"

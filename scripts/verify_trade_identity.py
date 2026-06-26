@@ -15,18 +15,32 @@ def main():
     if not db_path.exists():
         init_db()
     if not db_path.exists():
-        print("verify_trade_identity: FAIL missing trades DB. Generate trades via paper/live run.")
+        print(
+            "verify_trade_identity: FAIL missing trades DB. Generate trades via paper/live run."
+        )
         return 2
     con = sqlite3.connect(str(db_path))
     cur = con.cursor()
     cur.execute("PRAGMA table_info(trades)")
     cols = {row[1] for row in cur.fetchall()}
-    required = {"trade_id", "symbol", "instrument_type", "expiry", "strike", "right", "instrument_id"}
+    required = {
+        "trade_id",
+        "symbol",
+        "instrument_type",
+        "expiry",
+        "strike",
+        "right",
+        "instrument_id",
+    }
     missing_cols = sorted(required - cols)
     if missing_cols:
         con.close()
-        print(f"verify_trade_identity: FAIL missing required columns in trades table: {', '.join(missing_cols)}")
-        print("NEXT ACTION: run migrations (trade_store.init_db) and regenerate recent trades in current desk DB.")
+        print(
+            f"verify_trade_identity: FAIL missing required columns in trades table: {', '.join(missing_cols)}"
+        )
+        print(
+            "NEXT ACTION: run migrations (trade_store.init_db) and regenerate recent trades in current desk DB."
+        )
         return 2
     cur.execute(
         """
@@ -43,10 +57,14 @@ def main():
     con.close()
     if total == 0:
         print("verify_trade_identity: FAIL no trade rows.")
-        print("NEXT ACTION: run paper/live cycle to generate trade rows with contract identity.")
+        print(
+            "NEXT ACTION: run paper/live cycle to generate trade rows with contract identity."
+        )
         return 2
     if rows:
-        print(f"verify_trade_identity: FAIL missing identity fields (sample of {len(rows)} rows, total={total})")
+        print(
+            f"verify_trade_identity: FAIL missing identity fields (sample of {len(rows)} rows, total={total})"
+        )
         for row in rows:
             print(row)
         return 1

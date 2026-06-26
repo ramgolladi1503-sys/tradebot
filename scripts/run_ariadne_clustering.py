@@ -15,9 +15,15 @@ DEFAULT_OUTPUT = "docs/code_excellence/ariadne/reports/ariadne_clusters_latest.m
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Cluster normalized Code Excellence findings with Ariadne.")
-    parser.add_argument("--findings", required=True, help="Path to normalized findings JSON file.")
-    parser.add_argument("--out", default=DEFAULT_OUTPUT, help="Ariadne cluster report output path.")
+    parser = argparse.ArgumentParser(
+        description="Cluster normalized Code Excellence findings with Ariadne."
+    )
+    parser.add_argument(
+        "--findings", required=True, help="Path to normalized findings JSON file."
+    )
+    parser.add_argument(
+        "--out", default=DEFAULT_OUTPUT, help="Ariadne cluster report output path."
+    )
     return parser.parse_args()
 
 

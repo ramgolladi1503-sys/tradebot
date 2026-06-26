@@ -18,8 +18,12 @@ def _execution_mode(value: str | None = None) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate Kite token and enforce single-instance Kite lock.")
-    parser.add_argument("--mode", default=None, help="Execution mode override: LIVE|PAPER|SIM")
+    parser = argparse.ArgumentParser(
+        description="Validate Kite token and enforce single-instance Kite lock."
+    )
+    parser.add_argument(
+        "--mode", default=None, help="Execution mode override: LIVE|PAPER|SIM"
+    )
     args = parser.parse_args()
 
     mode = _execution_mode(args.mode)
@@ -50,7 +54,9 @@ def main() -> int:
             return 2
 
     try:
-        payload = validate_token(repo_root_path=Path(__file__).resolve().parents[1], force=True)
+        payload = validate_token(
+            repo_root_path=Path(__file__).resolve().parents[1], force=True
+        )
         ok = bool(payload.get("ok"))
         if ok:
             user_id = str(payload.get("user_id") or "")

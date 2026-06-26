@@ -23,7 +23,9 @@ def main() -> int:
 
     payload = get_kite_auth_health(force=True)
     if not payload.get("ok"):
-        print(f"AUTH_REQUIRED {payload.get('error') or payload.get('auth_state') or 'unknown'}")
+        print(
+            f"AUTH_REQUIRED {payload.get('error') or payload.get('auth_state') or 'unknown'}"
+        )
         return 3
 
     print(

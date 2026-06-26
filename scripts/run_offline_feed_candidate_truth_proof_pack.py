@@ -17,8 +17,13 @@ from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
 from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_truth_contract import build_feed_truth_contract
 from core.feed_truth_state import LIVE
-from core.runtime_execution_truth import build_execution_truth_context, normalize_candidate_execution_truth_payload
-from core.runtime_phase2_rejection_evidence import build_phase2_rejection_evidence_payload
+from core.runtime_execution_truth import (
+    build_execution_truth_context,
+    normalize_candidate_execution_truth_payload,
+)
+from core.runtime_phase2_rejection_evidence import (
+    build_phase2_rejection_evidence_payload,
+)
 from core.review_queue import _final_emit_truth_event
 from core.events import write_json_atomic
 
@@ -98,7 +103,9 @@ class OfflineProofScenarioResult:
             "feed_truth_allows_executable_candidates": self.feed_truth_allows_executable_candidates,
             "process_restart_required": self.process_restart_required,
             "ws_reconnect_allowed": self.ws_reconnect_allowed,
-            "mirror_fields": {key: dict(value) for key, value in self.mirror_fields.items()},
+            "mirror_fields": {
+                key: dict(value) for key, value in self.mirror_fields.items()
+            },
         }
 
 
@@ -147,8 +154,14 @@ class OfflineFeedCandidateTruthProofPack:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Offline Feed/Candidate Truth Proof Pack.")
-    parser.add_argument("--out-dir", required=True, help="Directory to write proof-pack summary files into.")
+    parser = argparse.ArgumentParser(
+        description="Run the Offline Feed/Candidate Truth Proof Pack."
+    )
+    parser.add_argument(
+        "--out-dir",
+        required=True,
+        help="Directory to write proof-pack summary files into.",
+    )
     return parser.parse_args()
 
 
@@ -253,10 +266,14 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
         latency_guard=spec.latency_guard,
     )
 
-    candidate_truth = normalize_candidate_execution_truth_payload(
-        dict(spec.candidate or {}),
-        execution_truth_context=execution_context,
-    ) if spec.candidate is not None else {}
+    candidate_truth = (
+        normalize_candidate_execution_truth_payload(
+            dict(spec.candidate or {}),
+            execution_truth_context=execution_context,
+        )
+        if spec.candidate is not None
+        else {}
+    )
 
     phase2_payload = build_phase2_rejection_evidence_payload(
         phase2_state=None,
@@ -272,10 +289,14 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
         final_emit_label, _final_emit_payload = _final_emit_truth_event(candidate_truth)
         final_emit_allowed = final_emit_label == "FINAL_EMIT_EXECUTABLE"
 
-    phase2_drop_counts = dict(phase2_payload.get("phase2_drop_reasons_by_category") or {})
+    phase2_drop_counts = dict(
+        phase2_payload.get("phase2_drop_reasons_by_category") or {}
+    )
 
     blockers: list[str] = []
-    for value in list(contract.blockers) + list(candidate_truth.get("execution_truth_blockers") or []):
+    for value in list(contract.blockers) + list(
+        candidate_truth.get("execution_truth_blockers") or []
+    ):
         text = str(value or "").strip().upper()
         if text and text not in blockers:
             blockers.append(text)
@@ -283,13 +304,19 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
         if int(count or 0) > 0 and str(reason).strip().upper() not in blockers:
             blockers.append(str(reason).strip().upper())
     if candidate_truth.get("final_emit_block_reason"):
-        reason = str(candidate_truth.get("final_emit_block_reason") or "").strip().upper()
+        reason = (
+            str(candidate_truth.get("final_emit_block_reason") or "").strip().upper()
+        )
         if reason and reason not in blockers:
             blockers.append(reason)
 
     expected = spec.expected_result
     if expected == "EXECUTABLE":
-        actual = "EXECUTABLE" if candidate_truth.get("reportable_executable") and final_emit_allowed else "BLOCKED"
+        actual = (
+            "EXECUTABLE"
+            if candidate_truth.get("reportable_executable") and final_emit_allowed
+            else "BLOCKED"
+        )
     elif expected == "NO_INPUT":
         actual = phase2_payload.get("phase2_input_state") or "UNKNOWN"
     elif expected == "INPUT_DROPPED":
@@ -297,15 +324,30 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
     elif expected == "ACCEPTED":
         actual = phase2_payload.get("phase2_input_state") or "UNKNOWN"
     elif expected == "ADVISORY_OR_QUEUE_ONLY":
-        actual = "ADVISORY_OR_QUEUE_ONLY" if not final_emit_allowed and candidate_truth.get("candidate_status") in {"advisory_only", "queue_only"} else "BLOCKED"
+        actual = (
+            "ADVISORY_OR_QUEUE_ONLY"
+            if not final_emit_allowed
+            and candidate_truth.get("candidate_status")
+            in {"advisory_only", "queue_only"}
+            else "BLOCKED"
+        )
     else:
-        actual = "BLOCKED" if not candidate_truth.get("reportable_executable", False) else "EXECUTABLE"
+        actual = (
+            "BLOCKED"
+            if not candidate_truth.get("reportable_executable", False)
+            else "EXECUTABLE"
+        )
 
     pass_fail = True
     if expected == "EXECUTABLE":
-        pass_fail = bool(candidate_truth.get("reportable_executable")) and final_emit_allowed
+        pass_fail = (
+            bool(candidate_truth.get("reportable_executable")) and final_emit_allowed
+        )
     elif expected == "BLOCKED":
-        pass_fail = not bool(candidate_truth.get("reportable_executable")) and not final_emit_allowed
+        pass_fail = (
+            not bool(candidate_truth.get("reportable_executable"))
+            and not final_emit_allowed
+        )
     elif expected == "NO_INPUT":
         pass_fail = str(phase2_payload.get("phase2_input_state")) == "NO_INPUT"
     elif expected == "INPUT_DROPPED":
@@ -313,7 +355,10 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
     elif expected == "ACCEPTED":
         pass_fail = str(phase2_payload.get("phase2_input_state")) == "ACCEPTED"
     elif expected == "ADVISORY_OR_QUEUE_ONLY":
-        pass_fail = candidate_truth.get("candidate_status") in {"advisory_only", "queue_only"} and not final_emit_allowed
+        pass_fail = (
+            candidate_truth.get("candidate_status") in {"advisory_only", "queue_only"}
+            and not final_emit_allowed
+        )
 
     mirror_fields: dict[str, dict[str, Any]] = {}
     if spec.mirror_check:
@@ -323,8 +368,12 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
             "logs": {
                 "runtime_state": canonical.get("runtime_state"),
                 "feed_truth_state": canonical.get("feed_truth_state"),
-                "feed_truth_allows_executable_candidates": canonical.get("feed_truth_allows_executable_candidates"),
-                "option_feed_block_reason_by_symbol": canonical.get("option_feed_block_reason_by_symbol"),
+                "feed_truth_allows_executable_candidates": canonical.get(
+                    "feed_truth_allows_executable_candidates"
+                ),
+                "option_feed_block_reason_by_symbol": canonical.get(
+                    "option_feed_block_reason_by_symbol"
+                ),
                 "process_restart_required": canonical.get("process_restart_required"),
                 "ws_reconnect_allowed": canonical.get("ws_reconnect_allowed"),
                 "read_only": True,
@@ -344,8 +393,12 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
             ".runtime": {
                 "runtime_state": canonical.get("runtime_state"),
                 "feed_truth_state": canonical.get("feed_truth_state"),
-                "feed_truth_allows_executable_candidates": canonical.get("feed_truth_allows_executable_candidates"),
-                "option_feed_block_reason_by_symbol": canonical.get("option_feed_block_reason_by_symbol"),
+                "feed_truth_allows_executable_candidates": canonical.get(
+                    "feed_truth_allows_executable_candidates"
+                ),
+                "option_feed_block_reason_by_symbol": canonical.get(
+                    "option_feed_block_reason_by_symbol"
+                ),
                 "process_restart_required": canonical.get("process_restart_required"),
                 "ws_reconnect_allowed": canonical.get("ws_reconnect_allowed"),
                 "read_only": True,
@@ -365,8 +418,12 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
             runtime_logs_key: {
                 "runtime_state": canonical.get("runtime_state"),
                 "feed_truth_state": canonical.get("feed_truth_state"),
-                "feed_truth_allows_executable_candidates": canonical.get("feed_truth_allows_executable_candidates"),
-                "option_feed_block_reason_by_symbol": canonical.get("option_feed_block_reason_by_symbol"),
+                "feed_truth_allows_executable_candidates": canonical.get(
+                    "feed_truth_allows_executable_candidates"
+                ),
+                "option_feed_block_reason_by_symbol": canonical.get(
+                    "option_feed_block_reason_by_symbol"
+                ),
                 "process_restart_required": canonical.get("process_restart_required"),
                 "ws_reconnect_allowed": canonical.get("ws_reconnect_allowed"),
                 "read_only": True,
@@ -398,7 +455,9 @@ def _evaluate_scenario(spec: OfflineProofScenario) -> OfflineProofScenarioResult
         blockers=tuple(blockers),
         pass_fail=bool(pass_fail),
         feed_truth_state=str(feed_snapshot.get("feed_truth_state") or ""),
-        feed_truth_allows_executable_candidates=bool(feed_snapshot.get("feed_truth_allows_executable_candidates")),
+        feed_truth_allows_executable_candidates=bool(
+            feed_snapshot.get("feed_truth_allows_executable_candidates")
+        ),
         process_restart_required=bool(feed_snapshot.get("process_restart_required")),
         ws_reconnect_allowed=bool(feed_snapshot.get("ws_reconnect_allowed", True)),
         mirror_fields=mirror_fields,
@@ -419,7 +478,11 @@ def default_scenarios() -> tuple[OfflineProofScenario, ...]:
         eligible_for_execution=True,
         reportable_executable=True,
         reason="looks_executable_but_blocked",
-        execution_truth_blockers=["RECOVERY_BLOCKED", "WS_DISCONNECTED", "WS1006_PROCESS_RESTART_REQUIRED"],
+        execution_truth_blockers=[
+            "RECOVERY_BLOCKED",
+            "WS_DISCONNECTED",
+            "WS1006_PROCESS_RESTART_REQUIRED",
+        ],
         blockers=["feed_truth_blocked"],
     )
     stale_candidate = _base_candidate(
@@ -551,54 +614,60 @@ def default_scenarios() -> tuple[OfflineProofScenario, ...]:
             candidate=missing_quote_candidate,
             phase2_raw_candidates=(
                 dict(missing_quote_candidate),
-                dict(_base_candidate(
-                    trade_id="T-QUOTE",
-                    candidate_status="blocked",
-                    execution_status="blocked",
-                    execution_entry_status="blocked",
-                    permission="BLOCK",
-                    final_action="BLOCK",
-                    readiness="BLOCKED",
-                    execution_allowed=False,
-                    eligible_for_execution=False,
-                    reportable_executable=False,
-                    reason="unknown_quote_source",
-                    quote_source="unknown",
-                    quote_age_sec=0.9,
-                    spread_pct=0.002,
-                    liquidity_score=1.0,
-                    blockers=["unknown_quote_source"],
-                )),
-                dict(_base_candidate(
-                    trade_id="T-SPREAD",
-                    candidate_status="blocked",
-                    execution_status="blocked",
-                    execution_entry_status="blocked",
-                    permission="BLOCK",
-                    final_action="BLOCK",
-                    readiness="BLOCKED",
-                    execution_allowed=False,
-                    eligible_for_execution=False,
-                    reportable_executable=False,
-                    reason="missing_spread",
-                    spread_pct=None,
-                    phase2_missing_spread_context=True,
-                )),
-                dict(_base_candidate(
-                    trade_id="T-LIQ",
-                    candidate_status="blocked",
-                    execution_status="blocked",
-                    execution_entry_status="blocked",
-                    permission="BLOCK",
-                    final_action="BLOCK",
-                    readiness="BLOCKED",
-                    execution_allowed=False,
-                    eligible_for_execution=False,
-                    reportable_executable=False,
-                    reason="missing_liquidity",
-                    liquidity_score=None,
-                    phase2_missing_liquidity_validation=True,
-                )),
+                dict(
+                    _base_candidate(
+                        trade_id="T-QUOTE",
+                        candidate_status="blocked",
+                        execution_status="blocked",
+                        execution_entry_status="blocked",
+                        permission="BLOCK",
+                        final_action="BLOCK",
+                        readiness="BLOCKED",
+                        execution_allowed=False,
+                        eligible_for_execution=False,
+                        reportable_executable=False,
+                        reason="unknown_quote_source",
+                        quote_source="unknown",
+                        quote_age_sec=0.9,
+                        spread_pct=0.002,
+                        liquidity_score=1.0,
+                        blockers=["unknown_quote_source"],
+                    )
+                ),
+                dict(
+                    _base_candidate(
+                        trade_id="T-SPREAD",
+                        candidate_status="blocked",
+                        execution_status="blocked",
+                        execution_entry_status="blocked",
+                        permission="BLOCK",
+                        final_action="BLOCK",
+                        readiness="BLOCKED",
+                        execution_allowed=False,
+                        eligible_for_execution=False,
+                        reportable_executable=False,
+                        reason="missing_spread",
+                        spread_pct=None,
+                        phase2_missing_spread_context=True,
+                    )
+                ),
+                dict(
+                    _base_candidate(
+                        trade_id="T-LIQ",
+                        candidate_status="blocked",
+                        execution_status="blocked",
+                        execution_entry_status="blocked",
+                        permission="BLOCK",
+                        final_action="BLOCK",
+                        readiness="BLOCKED",
+                        execution_allowed=False,
+                        eligible_for_execution=False,
+                        reportable_executable=False,
+                        reason="missing_liquidity",
+                        liquidity_score=None,
+                        phase2_missing_liquidity_validation=True,
+                    )
+                ),
             ),
             phase2_ranked_candidates=(),
         ),
@@ -711,7 +780,11 @@ def default_scenarios() -> tuple[OfflineProofScenario, ...]:
                 eligible_for_execution=True,
                 reportable_executable=True,
                 reason="ws1006_terminal_state",
-                execution_truth_blockers=["RECOVERY_BLOCKED", "WS_DISCONNECTED", "WS1006_PROCESS_RESTART_REQUIRED"],
+                execution_truth_blockers=[
+                    "RECOVERY_BLOCKED",
+                    "WS_DISCONNECTED",
+                    "WS1006_PROCESS_RESTART_REQUIRED",
+                ],
                 blockers=["recovery_blocked"],
             ),
             phase2_raw_candidates=(
@@ -728,7 +801,11 @@ def default_scenarios() -> tuple[OfflineProofScenario, ...]:
                         eligible_for_execution=False,
                         reportable_executable=False,
                         reason="ws1006_terminal_state",
-                        execution_truth_blockers=["RECOVERY_BLOCKED", "WS_DISCONNECTED", "WS1006_PROCESS_RESTART_REQUIRED"],
+                        execution_truth_blockers=[
+                            "RECOVERY_BLOCKED",
+                            "WS_DISCONNECTED",
+                            "WS1006_PROCESS_RESTART_REQUIRED",
+                        ],
                         blockers=["feed_truth_blocked"],
                     )
                 ),
@@ -796,7 +873,9 @@ def build_offline_feed_candidate_truth_proof_pack(
     )
 
 
-def write_proof_pack(out_dir: str | Path, *, scenarios: Iterable[OfflineProofScenario] | None = None) -> dict[str, Any]:
+def write_proof_pack(
+    out_dir: str | Path, *, scenarios: Iterable[OfflineProofScenario] | None = None
+) -> dict[str, Any]:
     output_dir = Path(out_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
     pack = build_offline_feed_candidate_truth_proof_pack(scenarios=scenarios)
@@ -838,7 +917,9 @@ def main() -> int:
     print(f"proof pack summary written: {summary['summary_path']}")
     print(f"proof pack json written: {summary['json_path']}")
     for scenario in summary["payload"]["scenarios"]:
-        print(f"{scenario['scenario_name']}: {scenario['actual_result']} pass={scenario['pass_fail']}")
+        print(
+            f"{scenario['scenario_name']}: {scenario['actual_result']} pass={scenario['pass_fail']}"
+        )
     return 0
 
 

@@ -1,5 +1,6 @@
 import sys
 from core.kite_client import kite_client
+
 instruments = kite_client.instruments() or []
 found = False
 for i in instruments:

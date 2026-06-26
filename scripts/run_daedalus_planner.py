@@ -17,17 +17,33 @@ DEFAULT_OUTPUT = "docs/code_excellence/daedalus/reports/remediation_plan_latest.
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate a read-only Daedalus remediation plan from CE findings.")
-    parser.add_argument("--input", required=True, help="Path to Ariadne clusters or normalized findings JSON.")
-    parser.add_argument("--config", default=DEFAULT_CONFIG, help="Forensics config path. Default: .gsd-forensics.yaml")
-    parser.add_argument("--out", default=DEFAULT_OUTPUT, help=f"Markdown report output path. Default: {DEFAULT_OUTPUT}")
+    parser = argparse.ArgumentParser(
+        description="Generate a read-only Daedalus remediation plan from CE findings."
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Path to Ariadne clusters or normalized findings JSON.",
+    )
+    parser.add_argument(
+        "--config",
+        default=DEFAULT_CONFIG,
+        help="Forensics config path. Default: .gsd-forensics.yaml",
+    )
+    parser.add_argument(
+        "--out",
+        default=DEFAULT_OUTPUT,
+        help=f"Markdown report output path. Default: {DEFAULT_OUTPUT}",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        report = plan_remediation(source_path=Path(args.input), config_path=Path(args.config))
+        report = plan_remediation(
+            source_path=Path(args.input), config_path=Path(args.config)
+        )
         output_path = write_remediation_report(report, Path(args.out))
     except (ConfigError, RemediationPlannerError, FileNotFoundError, ValueError) as exc:
         print(f"[daedalus-planner][ERROR] {exc}")

@@ -1,6 +1,7 @@
 import json
 import glob
 
+
 def run():
     for file in glob.glob(".runtime/logs/*.jsonl"):
         with open(file, "r") as f:
@@ -9,4 +10,6 @@ def run():
                     c = json.loads(line)
                     print(file, c.keys())
                     break
+
+
 run()

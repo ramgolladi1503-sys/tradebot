@@ -17,12 +17,14 @@ SRC = {
     "trades_db": Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db"))),
 }
 
+
 def _hash_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
 
 if __name__ == "__main__":
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -35,12 +37,14 @@ if __name__ == "__main__":
             continue
         dest = snap_dir / path.name
         shutil.copy2(path, dest)
-        manifest["files"].append({
-            "key": key,
-            "path": str(dest),
-            "sha256": _hash_file(dest),
-            "size": dest.stat().st_size,
-        })
+        manifest["files"].append(
+            {
+                "key": key,
+                "path": str(dest),
+                "sha256": _hash_file(dest),
+                "size": dest.stat().st_size,
+            }
+        )
 
     manifest_path = snap_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))

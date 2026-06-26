@@ -27,7 +27,9 @@ def _default_run_id() -> str:
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Tradebot Agent Command Center.")
+    parser = argparse.ArgumentParser(
+        description="Run the Tradebot Agent Command Center."
+    )
     parser.add_argument("--runtime-dir", default=".runtime")
     parser.add_argument("--logs-dir", default="logs")
     parser.add_argument("--session-dir", default=None)
@@ -40,7 +42,9 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--copy-latest", default="true")
     parser.add_argument("--tail-lines", type=int, default=5000)
     parser.add_argument("--agents", nargs="*", default=["all"])
-    parser.add_argument("--format", choices=("json", "markdown", "both"), default="both")
+    parser.add_argument(
+        "--format", choices=("json", "markdown", "both"), default="both"
+    )
     parser.add_argument("--fail-on-blocker", action="store_true", default=False)
     parser.add_argument("--offline-fixtures", default=None)
     parser.add_argument("--changed-paths-file", default=None)
@@ -148,7 +152,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     output_root.mkdir(parents=True, exist_ok=True)
 
     offline_fixtures = Path(args.offline_fixtures) if args.offline_fixtures else None
-    changed_paths_file = Path(args.changed_paths_file) if args.changed_paths_file else None
+    changed_paths_file = (
+        Path(args.changed_paths_file) if args.changed_paths_file else None
+    )
     copy_latest = _truthy(args.copy_latest)
     agents = tuple(args.agents)
 

@@ -118,11 +118,15 @@ def build_live_entry_report(
                 **checks,
             }
         )
-    market_mode = str(
-        suggestions_status.get("market_mode")
-        or engine_status.get("market_mode")
-        or ""
-    ).strip().upper()
+    market_mode = (
+        str(
+            suggestions_status.get("market_mode")
+            or engine_status.get("market_mode")
+            or ""
+        )
+        .strip()
+        .upper()
+    )
     market_open = bool(
         suggestions_status.get("market_open")
         if "market_open" in suggestions_status
@@ -170,9 +174,18 @@ def render_live_entry_report(report: dict) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check recent live suggestion entry correctness.")
-    parser.add_argument("--limit", type=int, default=10, help="Number of latest suggestion rows to inspect.")
-    parser.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable text.")
+    parser = argparse.ArgumentParser(
+        description="Check recent live suggestion entry correctness."
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of latest suggestion rows to inspect.",
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of human-readable text."
+    )
     parser.add_argument(
         "--fail-on-bad-live",
         action="store_true",
@@ -186,7 +199,10 @@ def main() -> int:
     else:
         print(render_live_entry_report(report))
 
-    if bool(args.fail_on_bad_live) and str(report.get("market_mode") or "").upper() == "LIVE":
+    if (
+        bool(args.fail_on_bad_live)
+        and str(report.get("market_mode") or "").upper() == "LIVE"
+    ):
         for row in list(report.get("rows") or []):
             if list(row.get("problems") or []):
                 return 1

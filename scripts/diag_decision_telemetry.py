@@ -17,11 +17,23 @@ from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_ep
 
 def _scan_jsonl(path: Path, *, event_type: str | None = None) -> dict[str, Any]:
     if not path.exists():
-        return {"path": str(path), "exists": False, "rows": 0, "last_ts_epoch": None, "last_age_sec": None}
+        return {
+            "path": str(path),
+            "exists": False,
+            "rows": 0,
+            "last_ts_epoch": None,
+            "last_age_sec": None,
+        }
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:
-        return {"path": str(path), "exists": True, "rows": 0, "last_ts_epoch": None, "last_age_sec": None}
+        return {
+            "path": str(path),
+            "exists": True,
+            "rows": 0,
+            "last_ts_epoch": None,
+            "last_age_sec": None,
+        }
     count = 0
     last_ts = None
     now_epoch = now_utc_epoch()
@@ -35,7 +47,11 @@ def _scan_jsonl(path: Path, *, event_type: str | None = None) -> dict[str, Any]:
             continue
         if not isinstance(payload, dict):
             continue
-        if event_type and str(payload.get("event_type") or "").strip().lower() != str(event_type).strip().lower():
+        if (
+            event_type
+            and str(payload.get("event_type") or "").strip().lower()
+            != str(event_type).strip().lower()
+        ):
             continue
         count += 1
         ts_val = normalize_epoch_seconds(payload.get("ts_epoch"))
@@ -46,7 +62,9 @@ def _scan_jsonl(path: Path, *, event_type: str | None = None) -> dict[str, Any]:
         "exists": True,
         "rows": count,
         "last_ts_epoch": last_ts,
-        "last_age_sec": compute_age_sec(last_ts, now_epoch) if last_ts is not None else None,
+        "last_age_sec": compute_age_sec(last_ts, now_epoch)
+        if last_ts is not None
+        else None,
     }
 
 
@@ -72,15 +90,26 @@ def _tail_errors(path: Path, *, limit: int = 3) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Diagnose decision telemetry stream health.")
+    parser = argparse.ArgumentParser(
+        description="Diagnose decision telemetry stream health."
+    )
     parser.add_argument("--desk", default="DEFAULT", help="Desk id (default: DEFAULT)")
-    parser.add_argument("--max-age-sec", type=float, default=60.0, help="Freshness window for active decision telemetry.")
+    parser.add_argument(
+        "--max-age-sec",
+        type=float,
+        default=60.0,
+        help="Freshness window for active decision telemetry.",
+    )
     args = parser.parse_args()
 
     desk = str(args.desk or "DEFAULT")
-    decision_health = check_decision_telemetry(desk_id=desk, max_age_sec=float(args.max_age_sec))
+    decision_health = check_decision_telemetry(
+        desk_id=desk, max_age_sec=float(args.max_age_sec)
+    )
     gate_stats = _scan_jsonl(gate_status_path(desk_id=desk))
-    decision_stats = _scan_jsonl(decisions_stream_path(desk_id=desk), event_type="decision_evaluated")
+    decision_stats = _scan_jsonl(
+        decisions_stream_path(desk_id=desk), event_type="decision_evaluated"
+    )
     err_path = decision_write_error_path(desk_id=desk)
     errors = _tail_errors(err_path, limit=3)
 

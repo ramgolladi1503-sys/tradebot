@@ -10,7 +10,9 @@ import sys
 from datetime import datetime
 
 if len(sys.argv) < 3:
-    print("Usage: python scripts/update_trade_outcome.py <trade_id> <exit_price> [actual(1/0)]")
+    print(
+        "Usage: python scripts/update_trade_outcome.py <trade_id> <exit_price> [actual(1/0)]"
+    )
     sys.exit(1)
 
 trade_id = sys.argv[1]
@@ -61,6 +63,7 @@ print("Trade outcome updated.")
 # Update strategy performance tracker
 try:
     from core.strategy_tracker import StrategyTracker
+
     tracker = StrategyTracker()
     tracker.load(str(logs_dir() / "strategy_perf.json"))
     outcome = 1 if actual == 1 else -1

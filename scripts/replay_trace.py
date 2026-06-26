@@ -53,9 +53,13 @@ def replay_trace(
     filters by exactly one target identifier, and returns the ordered event path.
     """
 
-    filter_type, filter_value = _select_filter(trace_id=trace_id, candidate_id=candidate_id, cycle_id=cycle_id)
+    filter_type, filter_value = _select_filter(
+        trace_id=trace_id, candidate_id=candidate_id, cycle_id=cycle_id
+    )
     normalized = _normalize_events(events)
-    matched = tuple(event for event in normalized if str(event.get(filter_type, "")) == filter_value)
+    matched = tuple(
+        event for event in normalized if str(event.get(filter_type, "")) == filter_value
+    )
     if not matched:
         raise TraceReplayError(f"no_events_found:{filter_type}:{filter_value}")
     return TraceReplayResult(
@@ -67,12 +71,20 @@ def replay_trace(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Replay Tradebot observability events by trace, candidate, or cycle.")
-    parser.add_argument("--input", default="runtime/evidence/observability_events.jsonl", help="JSONL observability event file.")
+    parser = argparse.ArgumentParser(
+        description="Replay Tradebot observability events by trace, candidate, or cycle."
+    )
+    parser.add_argument(
+        "--input",
+        default="runtime/evidence/observability_events.jsonl",
+        help="JSONL observability event file.",
+    )
     parser.add_argument("--trace-id", help="Trace identifier to replay.")
     parser.add_argument("--candidate-id", help="Candidate identifier to replay.")
     parser.add_argument("--cycle-id", help="Cycle identifier to replay.")
-    parser.add_argument("--json", action="store_true", help="Print replay as JSON instead of text.")
+    parser.add_argument(
+        "--json", action="store_true", help="Print replay as JSON instead of text."
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -93,13 +105,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _select_filter(*, trace_id: str | None, candidate_id: str | None, cycle_id: str | None) -> tuple[str, str]:
+def _select_filter(
+    *, trace_id: str | None, candidate_id: str | None, cycle_id: str | None
+) -> tuple[str, str]:
     values = {
         "trace_id": trace_id,
         "candidate_id": candidate_id,
         "cycle_id": cycle_id,
     }
-    selected = [(key, str(value).strip()) for key, value in values.items() if str(value or "").strip()]
+    selected = [
+        (key, str(value).strip())
+        for key, value in values.items()
+        if str(value or "").strip()
+    ]
     if len(selected) != 1:
         raise TraceReplayError("exactly_one_replay_filter_required")
     return selected[0]
@@ -117,7 +135,9 @@ def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
             yield payload
 
 
-def _normalize_events(events: Iterable[Mapping[str, object]]) -> tuple[dict[str, object], ...]:
+def _normalize_events(
+    events: Iterable[Mapping[str, object]],
+) -> tuple[dict[str, object], ...]:
     normalized: list[dict[str, object]] = []
     for index, event in enumerate(events):
         payload = dict(event)
@@ -149,8 +169,13 @@ def _summary(events: Sequence[Mapping[str, object]]) -> dict[str, object]:
         "decisions": _counts(events, "decision"),
         "stages": _counts(events, "stage"),
         "reasons": _counts(events, "reason"),
-        "contains_blocked_decision": any(str(event.get("decision", "")).lower() == "blocked" for event in events),
-        "contains_stale_feed": any(str(event.get("feed_state", "")).lower() in {"stale", "stale_feed"} for event in events),
+        "contains_blocked_decision": any(
+            str(event.get("decision", "")).lower() == "blocked" for event in events
+        ),
+        "contains_stale_feed": any(
+            str(event.get("feed_state", "")).lower() in {"stale", "stale_feed"}
+            for event in events
+        ),
     }
 
 
@@ -181,7 +206,13 @@ def _render_text(result: TraceReplayResult) -> str:
 
 
 def _unique(events: Sequence[Mapping[str, object]], field: str) -> list[str]:
-    return sorted({str(event.get(field, "")).strip() for event in events if str(event.get(field, "")).strip()})
+    return sorted(
+        {
+            str(event.get(field, "")).strip()
+            for event in events
+            if str(event.get(field, "")).strip()
+        }
+    )
 
 
 def _counts(events: Sequence[Mapping[str, object]], field: str) -> dict[str, int]:

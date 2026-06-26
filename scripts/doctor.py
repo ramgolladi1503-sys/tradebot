@@ -65,7 +65,9 @@ def _check_dependencies(repo_root: Path) -> CheckResult:
     req_path = repo_root / "requirements.txt"
     deps = _parse_requirements(req_path)
     if not deps:
-        return CheckResult("dependencies", False, f"requirements_missing_or_empty path={req_path}")
+        return CheckResult(
+            "dependencies", False, f"requirements_missing_or_empty path={req_path}"
+        )
     missing: list[str] = []
     for dep in deps:
         try:
@@ -83,7 +85,11 @@ def _check_token_file_perms() -> CheckResult:
         return CheckResult("kite_token_file", False, f"missing path={token_path}")
     mode = stat.S_IMODE(token_path.stat().st_mode)
     if mode != 0o600:
-        return CheckResult("kite_token_file", False, f"bad_permissions mode={oct(mode)} expected=0o600 path={token_path}")
+        return CheckResult(
+            "kite_token_file",
+            False,
+            f"bad_permissions mode={oct(mode)} expected=0o600 path={token_path}",
+        )
     return CheckResult("kite_token_file", True, f"path={token_path} mode=0o600")
 
 

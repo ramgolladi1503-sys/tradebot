@@ -4,18 +4,20 @@ import sys
 import os
 
 # Assume running from repo root
-sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath("."))
 
 from core.intelligence.fetchers.http_fetcher import HTTPFetcher
 from core.intelligence.extractors.rbi_extractor import RBIExtractor
 from core.intelligence.storage.sqlite_store import MIPSQLiteStore
 
+
 def run_audit():
     results = {}
-    
+
     # 1. Startup Latency
     start_time = time.perf_counter()
     import tempfile
+
     db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
     os.close(db_fd)
     store = MIPSQLiteStore(db_path=db_path)
@@ -49,12 +51,17 @@ def run_audit():
         extracted = extractor.safe_extract(html, "https://example.com")
         results["parser_latency_ms"] = (time.perf_counter() - parse_start) * 1000
         results["parser_status"] = extracted["status"]
-    
+
     # 4. Storage Latency
     storage_start = time.perf_counter()
     with store._get_connection() as conn:
-        conn.execute("INSERT OR IGNORE INTO intelligence_sources (source_id, url) VALUES (?, ?)", ("TEST", "https://example.com"))
-    _ = store.insert_fetch_run("TEST", "https://example.com", time.time(), "success", 0.1)
+        conn.execute(
+            "INSERT OR IGNORE INTO intelligence_sources (source_id, url) VALUES (?, ?)",
+            ("TEST", "https://example.com"),
+        )
+    _ = store.insert_fetch_run(
+        "TEST", "https://example.com", time.time(), "success", 0.1
+    )
     results["storage_latency_ms"] = (time.perf_counter() - storage_start) * 1000
 
     # 5. Circuit Breaker Behavior
@@ -73,17 +80,30 @@ def run_audit():
     print("# Phase 15: Operational Audit Report\n")
     print("## Latency Measurements")
     print(f"- **Startup Latency**: {results.get('startup_latency_ms', 0):.2f} ms")
-    print(f"- **Fetch Latency (example.com)**: {results.get('fetch_latency_ms', 0):.2f} ms")
-    print(f"- **Parser Latency (HTML Normalization & Extractor)**: {results.get('parser_latency_ms', 0):.2f} ms")
-    print(f"- **Storage Latency (SQLite Insert)**: {results.get('storage_latency_ms', 0):.2f} ms")
-    print(f"- **Circuit Breaker Trip Latency (5 network failures)**: {results.get('circuit_breaker_trip_time_ms', 0):.2f} ms")
-    
+    print(
+        f"- **Fetch Latency (example.com)**: {results.get('fetch_latency_ms', 0):.2f} ms"
+    )
+    print(
+        f"- **Parser Latency (HTML Normalization & Extractor)**: {results.get('parser_latency_ms', 0):.2f} ms"
+    )
+    print(
+        f"- **Storage Latency (SQLite Insert)**: {results.get('storage_latency_ms', 0):.2f} ms"
+    )
+    print(
+        f"- **Circuit Breaker Trip Latency (5 network failures)**: {results.get('circuit_breaker_trip_time_ms', 0):.2f} ms"
+    )
+
     print("\n## Resource Measurements")
-    print(f"- **Peak Memory Usage (During Fetch)**: {results.get('peak_memory_mb', 0):.4f} MB")
-    
+    print(
+        f"- **Peak Memory Usage (During Fetch)**: {results.get('peak_memory_mb', 0):.4f} MB"
+    )
+
     print("\n## Resilience Measurements")
-    print(f"- **Circuit Breaker Tripped After**: {results.get('circuit_breaker_tripped_after_n_failures')} failures")
+    print(
+        f"- **Circuit Breaker Tripped After**: {results.get('circuit_breaker_tripped_after_n_failures')} failures"
+    )
     print(f"- **Extraction Status**: {results.get('parser_status')}")
+
 
 if __name__ == "__main__":
     run_audit()

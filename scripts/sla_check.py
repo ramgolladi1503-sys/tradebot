@@ -40,19 +40,26 @@ if __name__ == "__main__":
             alerts.append("Depth epoch missing")
         if ltp.get("age_sec") is None or ltp.get("age_sec") > ltp_max:
             alerts.append("Tick feed lagging")
-        if depth_required and (depth.get("age_sec") is None or depth.get("age_sec") > depth_max):
+        if depth_required and (
+            depth.get("age_sec") is None or depth.get("age_sec") > depth_max
+        ):
             alerts.append("Depth feed lagging")
         slo = payload.get("slo_guard") or {}
-        if bool(slo.get("should_enforce")) and str(slo.get("status") or "").upper() in {"BREACH", "FAILOVER"}:
+        if bool(slo.get("should_enforce")) and str(slo.get("status") or "").upper() in {
+            "BREACH",
+            "FAILOVER",
+        }:
             alerts.append("SLO guard breach")
         if alerts:
             send_telegram_message("SLA alert: " + ", ".join(alerts))
             try:
-                trigger_feed_stale({
-                    "alerts": alerts,
-                    "tick_lag_sec": (payload.get("ltp") or {}).get("age_sec"),
-                    "depth_lag_sec": (payload.get("depth") or {}).get("age_sec"),
-                    "ts_ist": payload.get("ts_ist"),
-                })
+                trigger_feed_stale(
+                    {
+                        "alerts": alerts,
+                        "tick_lag_sec": (payload.get("ltp") or {}).get("age_sec"),
+                        "depth_lag_sec": (payload.get("depth") or {}).get("age_sec"),
+                        "ts_ist": payload.get("ts_ist"),
+                    }
+                )
             except Exception as exc:
                 print(f"[INCIDENT_ERROR] feed_stale trigger err={exc}")

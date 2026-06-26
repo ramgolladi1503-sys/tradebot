@@ -68,11 +68,15 @@ def main() -> int:
 
     options = RuntimeEvidenceCaptureOptions(
         today=_parse_date(args.today),
-        quote_age_mismatch_tolerance_sec=max(0.0, float(args.quote_age_mismatch_tolerance_sec)),
+        quote_age_mismatch_tolerance_sec=max(
+            0.0, float(args.quote_age_mismatch_tolerance_sec)
+        ),
         max_jsonl_lines_per_file=max(1, int(args.max_jsonl_lines_per_file)),
         score_flattening_tolerance=max(0.0, float(args.score_flattening_tolerance)),
     )
-    report = generate_runtime_evidence_capture_guard_report(args.evidence_source, options=options)
+    report = generate_runtime_evidence_capture_guard_report(
+        args.evidence_source, options=options
+    )
 
     if args.format == "json":
         rendered = json.dumps(report.to_dict(), indent=2, sort_keys=True, default=str)

@@ -46,9 +46,7 @@ def _load_fixture(path: Path) -> dict:
 
 @contextmanager
 def _temporary_cfg_overrides(overrides: dict[str, object]):
-    original = {
-        key: getattr(cfg, key, None) for key in overrides
-    }
+    original = {key: getattr(cfg, key, None) for key in overrides}
     try:
         for key, value in overrides.items():
             setattr(cfg, key, value)
@@ -71,7 +69,9 @@ def _patched_replay_scoring(rng: random.Random):
         trade_builder_module.compute_trade_score = original  # type: ignore[assignment]
 
 
-def _normalize_snapshot(snapshot: dict, *, fixture_name: str, idx: int, now_epoch: float) -> dict:
+def _normalize_snapshot(
+    snapshot: dict, *, fixture_name: str, idx: int, now_epoch: float
+) -> dict:
     symbol = str(snapshot.get("symbol") or "NIFTY").upper()
     market_open = bool(snapshot.get("market_open", False))
     replay_signal_raw = snapshot.get("replay_signal")
@@ -158,10 +158,20 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
         builder = TradeBuilder(predictor=_ReplayPredictor())
         now_epoch = now_utc_epoch()
         for idx, raw in enumerate(snapshots):
-            md = _normalize_snapshot(raw if isinstance(raw, dict) else {}, fixture_name=fixture_name, idx=idx, now_epoch=now_epoch)
-            trade = builder.build(md, quick_mode=False, debug_reasons=False, allow_fallbacks=False, allow_baseline=False)
+            md = _normalize_snapshot(
+                raw if isinstance(raw, dict) else {},
+                fixture_name=fixture_name,
+                idx=idx,
+                now_epoch=now_epoch,
+            )
+            trade = builder.build(
+                md,
+                quick_mode=False,
+                debug_reasons=False,
+                allow_fallbacks=False,
+                allow_baseline=False,
+            )
             if trade is None:
-
                 reject_ctx = dict(getattr(builder, "_reject_ctx", {}) or {})
                 reason = str(reject_ctx.get("reason") or "no_trade_generated")
                 append_reject_reasons(
@@ -192,10 +202,14 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
                     "trade_score": float(trade.trade_score or 0.0),
                     "confidence": float(trade.confidence or 0.0),
                     "planning_only": bool(getattr(trade, "planning_only", False)),
-                    "execution_allowed": bool(getattr(trade, "execution_allowed", False)),
+                    "execution_allowed": bool(
+                        getattr(trade, "execution_allowed", False)
+                    ),
                     "reason": getattr(trade, "reason", None),
                     "tradable": bool(getattr(trade, "tradable", True)),
-                    "tradable_reasons_blocking": list(getattr(trade, "tradable_reasons_blocking", []) or []),
+                    "tradable_reasons_blocking": list(
+                        getattr(trade, "tradable_reasons_blocking", []) or []
+                    ),
                     "source": "trade_builder",
                 }
             )
@@ -234,7 +248,9 @@ def run_replay(fixture_path: Path, *, seed: int = 7) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run deterministic PAPER replay from fixture.")
+    parser = argparse.ArgumentParser(
+        description="Run deterministic PAPER replay from fixture."
+    )
     parser.add_argument("--fixture", required=True, help="Path to fixture JSON")
     parser.add_argument("--seed", type=int, default=7, help="Deterministic replay seed")
     args = parser.parse_args()

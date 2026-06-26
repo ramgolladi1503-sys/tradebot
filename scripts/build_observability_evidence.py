@@ -9,9 +9,19 @@ from core.observability.evidence_bundle import write_observability_evidence_bund
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build Tradebot observability evidence bundle from JSONL events.")
-    parser.add_argument("--input", required=True, help="Path to a JSONL file containing serialized observability events.")
-    parser.add_argument("--output-dir", default="runtime/evidence", help="Directory where evidence JSON files are written.")
+    parser = argparse.ArgumentParser(
+        description="Build Tradebot observability evidence bundle from JSONL events."
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Path to a JSONL file containing serialized observability events.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="runtime/evidence",
+        help="Directory where evidence JSON files are written.",
+    )
     args = parser.parse_args()
 
     events = list(_read_jsonl(Path(args.input)))

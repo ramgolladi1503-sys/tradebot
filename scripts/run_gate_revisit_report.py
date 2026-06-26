@@ -14,7 +14,9 @@ from core.gate_revisit_report import write_gate_revisit_report
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the blocked-gate revisit analytics report.")
+    parser = argparse.ArgumentParser(
+        description="Run the blocked-gate revisit analytics report."
+    )
     parser.add_argument("--desk", default=None)
     parser.add_argument("--trade-date", default=None)
     parser.add_argument("--db-path", default=None)

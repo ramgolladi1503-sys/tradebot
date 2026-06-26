@@ -11,14 +11,42 @@ from core.analytics.extreme_movers import build_extreme_movers_table, write_outp
 
 
 def _build_cli() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run offline Extreme Movers reverse-engineering analytics.")
+    parser = argparse.ArgumentParser(
+        description="Run offline Extreme Movers reverse-engineering analytics."
+    )
     parser.add_argument("--day", required=True, help="Target day in YYYY-MM-DD.")
-    parser.add_argument("--base", default="runtime/analytics", help="Analytics base directory (default: runtime/analytics).")
-    parser.add_argument("--top-k", type=int, default=10, help="Top movers per side (default: 10).")
-    parser.add_argument("--window-days", type=int, default=1, help="Trailing day window used for input loading (default: 1).")
-    parser.add_argument("--trigger-pct", type=float, default=0.30, help="Trigger percent for T0 detection (default: 0.30).")
-    parser.add_argument("--lookback-min", type=int, default=30, help="Pre-move lookback window in minutes (default: 30).")
-    parser.add_argument("--horizon-min", type=int, default=45, help="Replay horizon in minutes (default: 45).")
+    parser.add_argument(
+        "--base",
+        default="runtime/analytics",
+        help="Analytics base directory (default: runtime/analytics).",
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=10, help="Top movers per side (default: 10)."
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=1,
+        help="Trailing day window used for input loading (default: 1).",
+    )
+    parser.add_argument(
+        "--trigger-pct",
+        type=float,
+        default=0.30,
+        help="Trigger percent for T0 detection (default: 0.30).",
+    )
+    parser.add_argument(
+        "--lookback-min",
+        type=int,
+        default=30,
+        help="Pre-move lookback window in minutes (default: 30).",
+    )
+    parser.add_argument(
+        "--horizon-min",
+        type=int,
+        default=45,
+        help="Replay horizon in minutes (default: 45).",
+    )
     return parser
 
 

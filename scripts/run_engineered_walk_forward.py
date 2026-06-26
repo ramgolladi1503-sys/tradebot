@@ -31,9 +31,7 @@ def run_engineered_walk_forward(
     if "timestamp" not in frame.columns:
         raise ValueError("missing_required_columns:timestamp")
     engineered = add_indicators(frame)
-    engineered["timestamp"] = pd.to_datetime(
-        engineered["timestamp"], errors="coerce"
-    )
+    engineered["timestamp"] = pd.to_datetime(engineered["timestamp"], errors="coerce")
     engineered = engineered.dropna(subset=["timestamp"]).reset_index(drop=True)
     return run_walk_forward(
         historical_data=engineered,
@@ -51,9 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Run walk-forward on engineered historical candles."
     )
     parser.add_argument("--input-csv", required=True)
-    parser.add_argument(
-        "--output-dir", default="reports/walk_forward_engineered"
-    )
+    parser.add_argument("--output-dir", default="reports/walk_forward_engineered")
     parser.add_argument("--train-window-days", type=int, default=60)
     parser.add_argument("--test-window-days", type=int, default=10)
     parser.add_argument("--step-days", type=int, default=10)

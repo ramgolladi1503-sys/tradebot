@@ -40,6 +40,8 @@ if __name__ == "__main__":
 
         # simulate result (placeholder)
         pl = 0.0
-        safety.record_trade_result(signal.get("symbol", "UNKNOWN"), market["timestamp"], pl)
+        safety.record_trade_result(
+            signal.get("symbol", "UNKNOWN"), market["timestamp"], pl
+        )
 
         print(f"EXECUTED: {signal.get('symbol')} | reason={reason}")

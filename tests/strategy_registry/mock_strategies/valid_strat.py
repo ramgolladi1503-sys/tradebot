@@ -1,0 +1,30 @@
+from datetime import date
+from core.strategy_registry.strategy_contract import StrategyContract
+
+valid_contract = StrategyContract(
+    strategy_id="mock_001",
+    strategy_name="Mock Strategy 1",
+    version="1.0.0",
+    owner="mock_owner",
+    created_date=date.today(),
+    description="Mock",
+    market_hypothesis="Hypothesis",
+    primary_market="NSE",
+    supported_indices=["NIFTY"],
+    supported_option_types=["CE"],
+    entry_rules_summary="Enter",
+    exit_rules_summary="Exit",
+    stop_logic_summary="Stop",
+    target_logic_summary="Target",
+    time_stop="15:15",
+    required_indicators=["RSI"],
+    required_market_data=["NIFTY50"],
+    required_option_data=[],
+    required_sessions=["INTRADAY"],
+    required_liquidity="HIGH",
+    allowed_regimes=[],
+    forbidden_regimes=[],
+    required_confirmations=[],
+    known_limitations=[],
+    known_assumptions=[],
+)

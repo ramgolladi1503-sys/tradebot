@@ -29,17 +29,21 @@ def main():
             data = fetch_live_market_data()
             for md in data:
                 gate = gatekeeper.evaluate(md, mode="MAIN")
-                events.append({
-                    "ts_epoch": time.time(),
-                    "symbol": md.get("symbol"),
-                    "gate_allowed": gate.allowed,
-                    "reasons": gate.reasons,
-                })
+                events.append(
+                    {
+                        "ts_epoch": time.time(),
+                        "symbol": md.get("symbol"),
+                        "gate_allowed": gate.allowed,
+                        "reasons": gate.reasons,
+                    }
+                )
         except Exception as e:
-            events.append({
-                "ts_epoch": time.time(),
-                "error": f"DRILL_FETCH_FAIL:{e}",
-            })
+            events.append(
+                {
+                    "ts_epoch": time.time(),
+                    "error": f"DRILL_FETCH_FAIL:{e}",
+                }
+            )
         time.sleep(1)
 
     out = logs_dir() / "dr_failover_drill.json"

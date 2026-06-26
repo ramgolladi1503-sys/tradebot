@@ -20,6 +20,7 @@ FILES = [
 
 OUT = logs_dir() / "data_manifest.json"
 
+
 def _hash_file(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -27,17 +28,20 @@ def _hash_file(path):
             h.update(chunk)
     return h.hexdigest()
 
+
 if __name__ == "__main__":
     items = []
     for p in FILES:
         path = Path(p)
         if not path.exists():
             continue
-        items.append({
-            "path": p,
-            "sha256": _hash_file(path),
-            "size": path.stat().st_size,
-        })
+        items.append(
+            {
+                "path": p,
+                "sha256": _hash_file(path),
+                "size": path.stat().st_size,
+            }
+        )
     payload = {
         "timestamp": datetime.now().isoformat(),
         "items": items,

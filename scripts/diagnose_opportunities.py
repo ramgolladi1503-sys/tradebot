@@ -19,16 +19,33 @@ from core.opportunity_diagnostics import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Diagnose emitted rows vs ranked opportunity view")
-    parser.add_argument("--input", default=None, help="Optional JSONL/JSON/CSV candidate export path")
-    parser.add_argument("--logs-dir", default=None, help="Runtime logs directory; defaults to core.paths.logs_dir()")
+    parser = argparse.ArgumentParser(
+        description="Diagnose emitted rows vs ranked opportunity view"
+    )
+    parser.add_argument(
+        "--input", default=None, help="Optional JSONL/JSON/CSV candidate export path"
+    )
+    parser.add_argument(
+        "--logs-dir",
+        default=None,
+        help="Runtime logs directory; defaults to core.paths.logs_dir()",
+    )
     parser.add_argument("--output", default=None, help="Output JSON path")
-    parser.add_argument("--tail", type=int, default=500, help="Number of JSONL rows to inspect when using logs")
-    parser.add_argument("--print", action="store_true", help="Print report to stdout instead of writing")
+    parser.add_argument(
+        "--tail",
+        type=int,
+        default=500,
+        help="Number of JSONL rows to inspect when using logs",
+    )
+    parser.add_argument(
+        "--print", action="store_true", help="Print report to stdout instead of writing"
+    )
     args = parser.parse_args()
 
     if args.print:
-        rows, source = load_candidate_rows(input_path=args.input, logs_dir=args.logs_dir, tail=args.tail)
+        rows, source = load_candidate_rows(
+            input_path=args.input, logs_dir=args.logs_dir, tail=args.tail
+        )
         report = build_opportunity_diagnostics(rows, source_path=source)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0

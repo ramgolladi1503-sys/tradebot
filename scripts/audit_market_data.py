@@ -13,6 +13,7 @@ from config import config as cfg
 
 OUT = logs_dir() / "data_audit.json"
 
+
 def audit():
     db = Path(cfg.TRADE_DB_PATH)
     if not db.exists():
@@ -21,15 +22,26 @@ def audit():
     res = {}
     try:
         res["ticks"] = conn.execute("SELECT COUNT(*) FROM ticks").fetchone()[0]
-        res["depth"] = conn.execute("SELECT COUNT(*) FROM depth_snapshots").fetchone()[0]
-        res["tick_min_ts"] = conn.execute("SELECT MIN(timestamp) FROM ticks").fetchone()[0]
-        res["tick_max_ts"] = conn.execute("SELECT MAX(timestamp) FROM ticks").fetchone()[0]
-        res["depth_min_ts"] = conn.execute("SELECT MIN(timestamp) FROM depth_snapshots").fetchone()[0]
-        res["depth_max_ts"] = conn.execute("SELECT MAX(timestamp) FROM depth_snapshots").fetchone()[0]
+        res["depth"] = conn.execute("SELECT COUNT(*) FROM depth_snapshots").fetchone()[
+            0
+        ]
+        res["tick_min_ts"] = conn.execute(
+            "SELECT MIN(timestamp) FROM ticks"
+        ).fetchone()[0]
+        res["tick_max_ts"] = conn.execute(
+            "SELECT MAX(timestamp) FROM ticks"
+        ).fetchone()[0]
+        res["depth_min_ts"] = conn.execute(
+            "SELECT MIN(timestamp) FROM depth_snapshots"
+        ).fetchone()[0]
+        res["depth_max_ts"] = conn.execute(
+            "SELECT MAX(timestamp) FROM depth_snapshots"
+        ).fetchone()[0]
     except Exception as e:
         res["error"] = str(e)
     conn.close()
     return res
+
 
 if __name__ == "__main__":
     payload = audit()

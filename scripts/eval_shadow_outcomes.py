@@ -27,7 +27,12 @@ from core.shadow_outcomes import (
 
 def _blocked_candidates_path(desk: str) -> Path:
     desk_name = str(desk or getattr(cfg, "DESK_ID", "DEFAULT"))
-    return Path(getattr(cfg, "LOGS_ROOT", "logs")) / "desks" / desk_name / "blocked_candidates.jsonl"
+    return (
+        Path(getattr(cfg, "LOGS_ROOT", "logs"))
+        / "desks"
+        / desk_name
+        / "blocked_candidates.jsonl"
+    )
 
 
 def _db_path_for_desk(desk: str, explicit_path: str | None = None) -> Path:
@@ -83,7 +88,13 @@ def _mark_no_data(candidate) -> dict:
 
 
 def _write_status(payload: dict) -> None:
-    path = Path(getattr(cfg, "SHADOW_EVAL_STATUS_PATH", str(logs_dir() / "shadow_eval_status_latest.json")))
+    path = Path(
+        getattr(
+            cfg,
+            "SHADOW_EVAL_STATUS_PATH",
+            str(logs_dir() / "shadow_eval_status_latest.json"),
+        )
+    )
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, sort_keys=True))
@@ -121,7 +132,10 @@ def run_eval(*, desk: str, limit: int, db_path: str | None = None) -> dict:
                 except Exception:
                     pass
             conn = None
-            if "readonly" not in str(exc).lower() and "unable to open database file" not in str(exc).lower():
+            if (
+                "readonly" not in str(exc).lower()
+                and "unable to open database file" not in str(exc).lower()
+            ):
                 raise
             continue
     if conn is None:
@@ -142,10 +156,14 @@ def run_eval(*, desk: str, limit: int, db_path: str | None = None) -> dict:
     priced = 0
     with conn:
         for candidate in candidates:
-            max_horizon = max(candidate.horizons_sec) if candidate.horizons_sec else 1800
+            max_horizon = (
+                max(candidate.horizons_sec) if candidate.horizons_sec else 1800
+            )
             start_ts = float(candidate.timestamp_epoch)
             end_ts = float(candidate.timestamp_epoch + max_horizon)
-            token = candidate.instrument_token or _fallback_token_for_symbol(candidate.symbol)
+            token = candidate.instrument_token or _fallback_token_for_symbol(
+                candidate.symbol
+            )
             points = []
             if token is not None:
                 points = load_ticks_price_points(
@@ -193,7 +211,9 @@ def run_eval(*, desk: str, limit: int, db_path: str | None = None) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Evaluate blocked candidates into shadow outcomes.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate blocked candidates into shadow outcomes."
+    )
     parser.add_argument("--desk", default=getattr(cfg, "DESK_ID", "DEFAULT"))
     parser.add_argument("--limit", type=int, default=500)
     parser.add_argument("--db-path", default=None)

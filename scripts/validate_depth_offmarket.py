@@ -42,9 +42,17 @@ def check_import() -> list[CheckResult]:
     try:
         importlib.import_module("core.kite_depth_ws")
         importlib.import_module("core.depth_subscription_engine")
-        return [_result("imports", True, "core.kite_depth_ws and core.depth_subscription_engine imported")]
+        return [
+            _result(
+                "imports",
+                True,
+                "core.kite_depth_ws and core.depth_subscription_engine imported",
+            )
+        ]
     except Exception as exc:  # pragma: no cover - diagnostic path
-        return [_result("imports", False, f"import failed: {type(exc).__name__}: {exc}")]
+        return [
+            _result("imports", False, f"import failed: {type(exc).__name__}: {exc}")
+        ]
 
 
 def check_function_ownership() -> list[CheckResult]:

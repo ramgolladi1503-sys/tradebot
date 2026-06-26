@@ -14,6 +14,7 @@ from core.trade_log_paths import ensure_trade_log_exists
 
 UPD_PATH = data_root() / "trade_updates.json"
 
+
 def load_updates():
     updates = {}
     if not UPD_PATH.exists():
@@ -30,6 +31,7 @@ def load_updates():
             if tid:
                 updates[tid] = u
     return updates
+
 
 def main() -> dict:
     log_path = ensure_trade_log_exists()

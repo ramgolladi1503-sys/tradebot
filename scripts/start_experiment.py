@@ -13,7 +13,9 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    db_path = Path(getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite")))
+    db_path = Path(
+        getattr(cfg, "DECISION_SQLITE_PATH", str(logs_dir() / "decision_events.sqlite"))
+    )
     now = time.time()
     if args.dry_run:
         print(f"Dry-run: would start experiment {args.id}")

@@ -22,16 +22,26 @@ from core.time_utils import now_ist, now_utc_epoch
 
 
 def _audit_paths(day: str) -> tuple[Path, Path]:
-    root = Path(getattr(cfg, "LIVE_ENABLEMENT_AUDIT_PATH", str(logs_dir() / "live_enablement_audit_latest.json")))
+    root = Path(
+        getattr(
+            cfg,
+            "LIVE_ENABLEMENT_AUDIT_PATH",
+            str(logs_dir() / "live_enablement_audit_latest.json"),
+        )
+    )
     if root.name.endswith(".json") and "latest" in root.name:
         day_path = root.with_name(f"live_enablement_audit_{day}.json")
         return day_path, root
-    latest = root if root.suffix == ".json" else (root / "live_enablement_audit_latest.json")
+    latest = (
+        root if root.suffix == ".json" else (root / "live_enablement_audit_latest.json")
+    )
     day_path = latest.with_name(f"live_enablement_audit_{day}.json")
     return day_path, latest
 
 
-def run_gate(*, strict: bool = False, strict_if_live: bool = True, enforce_failover: bool = False) -> dict:
+def run_gate(
+    *, strict: bool = False, strict_if_live: bool = True, enforce_failover: bool = False
+) -> dict:
     ctx = derive_market_context(
         {
             "execution_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
@@ -46,7 +56,9 @@ def run_gate(*, strict: bool = False, strict_if_live: bool = True, enforce_failo
     schema_ok, schema_reason = check_trade_identity_schema()
     slo = evaluate_slo_status(enforce_failover=bool(enforce_failover and strict_mode))
     acceptance = evaluate_acceptance_gate(strict=strict_mode)
-    statistical_gate_enabled = bool(getattr(cfg, "LIVE_ENABLEMENT_REQUIRE_STATISTICAL_PASS", True))
+    statistical_gate_enabled = bool(
+        getattr(cfg, "LIVE_ENABLEMENT_REQUIRE_STATISTICAL_PASS", True)
+    )
 
     blockers: list[str] = []
     warnings: list[str] = []
@@ -65,9 +77,17 @@ def run_gate(*, strict: bool = False, strict_if_live: bool = True, enforce_failo
 
     acc_status = str(acceptance.get("status") or "DEGRADED").upper()
     if acc_status == "FAIL":
-        blockers.extend([f"acceptance:{reason}" for reason in list(acceptance.get("blockers") or ["failed"])])
+        blockers.extend(
+            [
+                f"acceptance:{reason}"
+                for reason in list(acceptance.get("blockers") or ["failed"])
+            ]
+        )
     elif acc_status == "DEGRADED":
-        rows = [f"acceptance:{reason}" for reason in list(acceptance.get("blockers") or ["degraded"])]
+        rows = [
+            f"acceptance:{reason}"
+            for reason in list(acceptance.get("blockers") or ["degraded"])
+        ]
         if strict_mode:
             blockers.extend(rows)
         else:
@@ -120,15 +140,21 @@ def run_gate(*, strict: bool = False, strict_if_live: bool = True, enforce_failo
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run LIVE enablement hard-gate checks.")
-    parser.add_argument("--strict", action="store_true", help="Always fail non-PASS status.")
+    parser = argparse.ArgumentParser(
+        description="Run LIVE enablement hard-gate checks."
+    )
+    parser.add_argument(
+        "--strict", action="store_true", help="Always fail non-PASS status."
+    )
     parser.add_argument(
         "--strict-if-live",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Treat DEGRADED as FAIL when EXECUTION_MODE resolves to LIVE.",
     )
-    parser.add_argument("--audit-only", action="store_true", help="Always return exit code 0.")
+    parser.add_argument(
+        "--audit-only", action="store_true", help="Always return exit code 0."
+    )
     parser.add_argument(
         "--enforce-failover",
         action="store_true",

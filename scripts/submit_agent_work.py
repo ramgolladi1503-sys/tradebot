@@ -19,7 +19,10 @@ from typing import Any, Mapping, Sequence
 from core.agent_approval import approve_agent_scope
 from core.agent_evidence import write_agent_evidence
 from core.agent_scope_guard import assess_agent_scope
-from core.agent_work_contract import normalize_agent_work_request, validate_agent_work_contract
+from core.agent_work_contract import (
+    normalize_agent_work_request,
+    validate_agent_work_contract,
+)
 
 
 CLI_OK = 0
@@ -71,7 +74,9 @@ def submit_agent_work_payload(
         "contract_decision": contract_decision.to_dict(),
         "scope_decision": scope_decision.to_dict(),
         "approval_decision": approval_decision.to_dict(),
-        "evidence_result": evidence_result.to_dict() if evidence_result is not None else None,
+        "evidence_result": evidence_result.to_dict()
+        if evidence_result is not None
+        else None,
         "safety": {
             "read_only": True,
             "is_order_action": False,
@@ -93,12 +98,32 @@ def submit_agent_work_payload(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Submit a local Tradebot agent work JSON payload safely.")
-    parser.add_argument("--payload", required=True, help="Path to the agent work JSON payload.")
-    parser.add_argument("--approve", action="store_true", help="Mark the request as human-approved for patch work.")
-    parser.add_argument("--approved-by", default=None, help="Approver id required when --approve is used.")
-    parser.add_argument("--evidence-root", default=None, help="Optional evidence output directory for tests or local review.")
-    parser.add_argument("--no-evidence", action="store_true", help="Skip evidence writing and only print the decision JSON.")
+    parser = argparse.ArgumentParser(
+        description="Submit a local Tradebot agent work JSON payload safely."
+    )
+    parser.add_argument(
+        "--payload", required=True, help="Path to the agent work JSON payload."
+    )
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="Mark the request as human-approved for patch work.",
+    )
+    parser.add_argument(
+        "--approved-by",
+        default=None,
+        help="Approver id required when --approve is used.",
+    )
+    parser.add_argument(
+        "--evidence-root",
+        default=None,
+        help="Optional evidence output directory for tests or local review.",
+    )
+    parser.add_argument(
+        "--no-evidence",
+        action="store_true",
+        help="Skip evidence writing and only print the decision JSON.",
+    )
     return parser
 
 

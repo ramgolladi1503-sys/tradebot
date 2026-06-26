@@ -43,8 +43,13 @@ def _check_db_writable() -> tuple[bool, str]:
         db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(str(db_path)) as conn:
-            conn.execute("CREATE TABLE IF NOT EXISTS __healthcheck_probe__ (id INTEGER PRIMARY KEY, ts REAL)")
-            conn.execute("INSERT INTO __healthcheck_probe__ (ts) VALUES (?)", (float(now_utc_epoch()),))
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS __healthcheck_probe__ (id INTEGER PRIMARY KEY, ts REAL)"
+            )
+            conn.execute(
+                "INSERT INTO __healthcheck_probe__ (ts) VALUES (?)",
+                (float(now_utc_epoch()),),
+            )
             conn.execute("DELETE FROM __healthcheck_probe__")
             conn.commit()
         return True, "ok"
@@ -60,7 +65,9 @@ def _check_clock_sanity() -> tuple[bool, str]:
     return True, "ok"
 
 
-def _downgrade_non_live_blockers(blockers: list[str], mode: str) -> tuple[list[str], list[str]]:
+def _downgrade_non_live_blockers(
+    blockers: list[str], mode: str
+) -> tuple[list[str], list[str]]:
     if mode == "LIVE":
         return blockers, []
     downgraded = []
@@ -84,9 +91,15 @@ def _downgrade_non_live_blockers(blockers: list[str], mode: str) -> tuple[list[s
 def run_healthcheck() -> dict:
     ensure_trade_log_exists()
     for raw_path in (
-        getattr(cfg, "EXECUTION_INTENTS_LOG_PATH", str(logs_dir() / "execution_intents.jsonl")),
+        getattr(
+            cfg,
+            "EXECUTION_INTENTS_LOG_PATH",
+            str(logs_dir() / "execution_intents.jsonl"),
+        ),
         getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")),
-        getattr(cfg, "REJECT_REASONS_LOG_PATH", str(logs_dir() / "reject_reasons.jsonl")),
+        getattr(
+            cfg, "REJECT_REASONS_LOG_PATH", str(logs_dir() / "reject_reasons.jsonl")
+        ),
     ):
         try:
             p = Path(str(raw_path))
@@ -147,7 +160,9 @@ def run_healthcheck() -> dict:
 
     data_truth = assess_outcome_truth(strict=False)
     checks["data_truth"] = data_truth
-    data_truth_blockers = [str(x) for x in list(data_truth.get("blockers") or []) if str(x).strip()]
+    data_truth_blockers = [
+        str(x) for x in list(data_truth.get("blockers") or []) if str(x).strip()
+    ]
     if data_truth_blockers:
         reason_text = ",".join(data_truth_blockers)
         enforce_live = bool(getattr(cfg, "HEALTHCHECK_ENFORCE_DATA_TRUTH_LIVE", True))

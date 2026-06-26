@@ -44,7 +44,11 @@ def train_segmented_offline_models(
         raise ValueError("missing_required_columns:timestamp")
 
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce")
-    frame = frame.dropna(subset=["timestamp", label_column]).sort_values("timestamp").reset_index(drop=True)
+    frame = (
+        frame.dropna(subset=["timestamp", label_column])
+        .sort_values("timestamp")
+        .reset_index(drop=True)
+    )
     frame["session_bucket"] = frame["timestamp"].apply(_session_bucket)
 
     out_dir = Path(model_dir).expanduser()
@@ -85,12 +89,18 @@ def train_segmented_offline_models(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Train separate offline models by session bucket.")
+    parser = argparse.ArgumentParser(
+        description="Train separate offline models by session bucket."
+    )
     parser.add_argument("--input-csv", required=True)
     parser.add_argument("--model-dir", required=True)
-    parser.add_argument("--metrics-output", default="", help="Optional summary JSON path")
+    parser.add_argument(
+        "--metrics-output", default="", help="Optional summary JSON path"
+    )
     parser.add_argument("--label-column", default="label_up")
-    parser.add_argument("--model-family", default="logistic", choices=["logistic", "random_forest"])
+    parser.add_argument(
+        "--model-family", default="logistic", choices=["logistic", "random_forest"]
+    )
     args = parser.parse_args(argv)
 
     report = train_segmented_offline_models(
@@ -100,7 +110,9 @@ def main(argv: list[str] | None = None) -> int:
         label_column=args.label_column,
         model_family=args.model_family,
     )
-    print(f"segmented_models={','.join(report['segments']) or 'NONE'} model_dir={report['model_dir']}")
+    print(
+        f"segmented_models={','.join(report['segments']) or 'NONE'} model_dir={report['model_dir']}"
+    )
     return 0
 
 

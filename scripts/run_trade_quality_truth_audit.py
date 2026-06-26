@@ -22,8 +22,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-root", default=str(REPO_ROOT))
     parser.add_argument("--runtime-dir", default=".runtime")
     parser.add_argument("--logs-dir", default="logs")
-    parser.add_argument("--out-dir", default=str(Path(".runtime") / "trade_quality_audit"))
-    parser.add_argument("--format", choices=("json", "markdown", "both"), default="both")
+    parser.add_argument(
+        "--out-dir", default=str(Path(".runtime") / "trade_quality_audit")
+    )
+    parser.add_argument(
+        "--format", choices=("json", "markdown", "both"), default="both"
+    )
     parser.add_argument("--copy-latest", default="false")
     return parser.parse_args(argv)
 

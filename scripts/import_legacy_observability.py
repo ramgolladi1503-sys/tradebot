@@ -16,7 +16,9 @@ from core.observability.events import validate_event_payload
 _ACTION_FIELD = "is_" + "order" + "_action"
 _BROKER_FIELD = "broker_" + "api" + "_called"
 _SOURCE = "tradebot.observability.legacy_import"
-_KEY_VALUE_PATTERN = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>[^,|\s]+)")
+_KEY_VALUE_PATTERN = re.compile(
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>[^,|\s]+)"
+)
 
 
 class LegacyObservabilityImportError(ValueError):
@@ -38,7 +40,9 @@ class LegacyImportResult:
         }
 
 
-def import_legacy_rows(rows: Iterable[Mapping[str, object]], *, batch_id: str = "legacy") -> LegacyImportResult:
+def import_legacy_rows(
+    rows: Iterable[Mapping[str, object]], *, batch_id: str = "legacy"
+) -> LegacyImportResult:
     batch = _safe_token(batch_id, default="legacy")
     events: list[dict[str, object]] = []
     for index, row in enumerate(rows, start=1):
@@ -54,10 +58,14 @@ def import_legacy_rows(rows: Iterable[Mapping[str, object]], *, batch_id: str = 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Convert legacy Tradebot evidence into observability JSONL.")
+    parser = argparse.ArgumentParser(
+        description="Convert legacy Tradebot evidence into observability JSONL."
+    )
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--format", choices=("auto", "csv", "jsonl", "text"), default="auto")
+    parser.add_argument(
+        "--format", choices=("auto", "csv", "jsonl", "text"), default="auto"
+    )
     parser.add_argument("--batch-id", default="legacy")
     args = parser.parse_args(argv)
 
@@ -65,7 +73,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         rows = list(read_legacy_rows(Path(args.input), input_format=args.format))
         result = import_legacy_rows(rows, batch_id=args.batch_id)
         write_jsonl(result.events, Path(args.output))
-    except (OSError, json.JSONDecodeError, LegacyObservabilityImportError, ValueError) as exc:
+    except (
+        OSError,
+        json.JSONDecodeError,
+        LegacyObservabilityImportError,
+        ValueError,
+    ) as exc:
         print(f"legacy import failed: {exc}", file=sys.stderr)
         return 2
 
@@ -73,7 +86,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def read_legacy_rows(path: Path, *, input_format: str = "auto") -> Iterable[Mapping[str, object]]:
+def read_legacy_rows(
+    path: Path, *, input_format: str = "auto"
+) -> Iterable[Mapping[str, object]]:
     resolved = _resolve_format(path, input_format)
     if resolved == "csv":
         yield from _read_csv(path)
@@ -114,7 +129,9 @@ def _read_jsonl(path: Path) -> Iterable[Mapping[str, object]]:
                 continue
             payload = json.loads(text)
             if not isinstance(payload, dict):
-                raise LegacyObservabilityImportError(f"line_not_json_object:{line_number}")
+                raise LegacyObservabilityImportError(
+                    f"line_not_json_object:{line_number}"
+                )
             yield payload
 
 
@@ -123,11 +140,18 @@ def _read_text(path: Path) -> Iterable[Mapping[str, object]]:
         for line_number, line in enumerate(handle, start=1):
             text = line.strip()
             if text:
-                yield {"raw_text": text, "line_number": line_number, **_parse_key_values(text)}
+                yield {
+                    "raw_text": text,
+                    "line_number": line_number,
+                    **_parse_key_values(text),
+                }
 
 
 def _parse_key_values(text: str) -> dict[str, str]:
-    return {match.group("key"): match.group("value") for match in _KEY_VALUE_PATTERN.finditer(text)}
+    return {
+        match.group("key"): match.group("value")
+        for match in _KEY_VALUE_PATTERN.finditer(text)
+    }
 
 
 def _normalize_row(row: Mapping[str, object]) -> dict[str, object]:
@@ -139,13 +163,21 @@ def _normalize_row(row: Mapping[str, object]) -> dict[str, object]:
     return normalized
 
 
-def _row_to_event(row: Mapping[str, object], *, batch_id: str, index: int) -> dict[str, object]:
+def _row_to_event(
+    row: Mapping[str, object], *, batch_id: str, index: int
+) -> dict[str, object]:
     decision = _decision(row)
     event: dict[str, object] = {
         "event": "candidate.legacy_observed",
-        "run_id": _identity(row, "run_id", prefix="legacy_run", batch_id=batch_id, index=0),
-        "cycle_id": _identity(row, "cycle_id", prefix="legacy_cycle", batch_id=batch_id, index=index),
-        "trace_id": _identity(row, "trace_id", prefix="legacy_trace", batch_id=batch_id, index=index),
+        "run_id": _identity(
+            row, "run_id", prefix="legacy_run", batch_id=batch_id, index=0
+        ),
+        "cycle_id": _identity(
+            row, "cycle_id", prefix="legacy_cycle", batch_id=batch_id, index=index
+        ),
+        "trace_id": _identity(
+            row, "trace_id", prefix="legacy_trace", batch_id=batch_id, index=index
+        ),
         "candidate_id": _candidate_id(row, batch_id=batch_id, index=index),
         "stage": "legacy.imported_observation",
         "decision": decision,
@@ -184,7 +216,12 @@ def _row_to_event(row: Mapping[str, object], *, batch_id: str, index: int) -> di
 def _timestamp(row: Mapping[str, object], *, index: int) -> str:
     raw = _value(row, "timestamp", "time", "datetime", "created_at")
     if not raw:
-        return datetime(1970, 1, 1, tzinfo=timezone.utc).replace(second=min(index, 59)).isoformat().replace("+00:00", "Z")
+        return (
+            datetime(1970, 1, 1, tzinfo=timezone.utc)
+            .replace(second=min(index, 59))
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
     if raw.endswith("Z"):
         return raw
     try:
@@ -202,14 +239,21 @@ def _candidate_id(row: Mapping[str, object], *, batch_id: str, index: int) -> st
         return _safe_token(existing, default=f"legacy_candidate_{index}")
     symbol = _value(row, "symbol", "instrument", "tradingsymbol", "name")
     side = _value(row, "side", "action", "direction")
-    return _safe_token(f"legacy_{batch_id}_{symbol or 'candidate'}_{side or 'observed'}_{index}", default=f"legacy_candidate_{index}")
+    return _safe_token(
+        f"legacy_{batch_id}_{symbol or 'candidate'}_{side or 'observed'}_{index}",
+        default=f"legacy_candidate_{index}",
+    )
 
 
-def _identity(row: Mapping[str, object], field: str, *, prefix: str, batch_id: str, index: int) -> str:
+def _identity(
+    row: Mapping[str, object], field: str, *, prefix: str, batch_id: str, index: int
+) -> str:
     existing = _value(row, field)
     if existing:
         return _safe_token(existing, default=f"{prefix}_{batch_id}_{index}")
-    digest = hashlib.sha1(json.dumps(dict(row), sort_keys=True).encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(
+        json.dumps(dict(row), sort_keys=True).encode("utf-8")
+    ).hexdigest()[:10]
     suffix = f"{batch_id}_{digest}" if index == 0 else f"{batch_id}_{index}_{digest}"
     return _safe_token(f"{prefix}_{suffix}", default=f"{prefix}_{batch_id}_{index}")
 
@@ -229,7 +273,14 @@ def _decision(row: Mapping[str, object]) -> str:
 
 
 def _reason(row: Mapping[str, object], *, decision: str) -> str:
-    raw = _value(row, "reason", "block_reason", "downgrade_reason", "fallback_state", "data_state")
+    raw = _value(
+        row,
+        "reason",
+        "block_reason",
+        "downgrade_reason",
+        "fallback_state",
+        "data_state",
+    )
     if raw:
         return _safe_token(raw, default="legacy_observation")
     if decision in {"blocked", "rejected", "suppressed", "ignored", "downgraded"}:
@@ -245,7 +296,12 @@ def _value(row: Mapping[str, object], *fields: str) -> str:
     return ""
 
 
-def _copy_optional(event: dict[str, object], row: Mapping[str, object], *fields: str, cast: object | None = None) -> None:
+def _copy_optional(
+    event: dict[str, object],
+    row: Mapping[str, object],
+    *fields: str,
+    cast: object | None = None,
+) -> None:
     for field in fields:
         value = _value(row, field)
         if value:
@@ -268,7 +324,14 @@ def _integer(value: str) -> int | str:
 
 
 def _truthy(value: str) -> bool:
-    return value.strip().lower() in {"1", "true", "yes", "y", "displayable", "exec" + "utable"}
+    return value.strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "displayable",
+        "exec" + "utable",
+    }
 
 
 def _safe_token(value: str, *, default: str) -> str:

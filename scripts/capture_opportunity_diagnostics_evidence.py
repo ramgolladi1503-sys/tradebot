@@ -14,13 +14,18 @@ import time
 from pathlib import Path
 from typing import Any
 
-from core.opportunity_diagnostics import build_opportunity_diagnostics, load_candidate_rows
+from core.opportunity_diagnostics import (
+    build_opportunity_diagnostics,
+    load_candidate_rows,
+)
 from core.paths import logs_dir as default_logs_dir
 
 EVIDENCE_SCHEMA_VERSION = 1
 
 
-def _resolve_output_dir(output_dir: str | Path | None, logs_dir: str | Path | None) -> Path:
+def _resolve_output_dir(
+    output_dir: str | Path | None, logs_dir: str | Path | None
+) -> Path:
     if output_dir is not None:
         return Path(output_dir).expanduser()
     if logs_dir is not None:
@@ -34,7 +39,9 @@ def _source_exists(source_path: str | None) -> bool:
     return Path(source_path).expanduser().exists()
 
 
-def build_evidence_bundle(report: dict[str, Any], *, source_path: str | None) -> dict[str, Any]:
+def build_evidence_bundle(
+    report: dict[str, Any], *, source_path: str | None
+) -> dict[str, Any]:
     """Wrap an opportunity diagnostics report with evidence metadata."""
 
     warnings = list(report.get("warnings") or [])
@@ -126,7 +133,9 @@ def write_evidence_bundle(
     output_dir: str | Path | None = None,
     tail: int | None = 500,
 ) -> dict[str, Path]:
-    rows, source = load_candidate_rows(input_path=input_path, logs_dir=logs_dir, tail=tail)
+    rows, source = load_candidate_rows(
+        input_path=input_path, logs_dir=logs_dir, tail=tail
+    )
     report = build_opportunity_diagnostics(rows, source_path=source)
     bundle = build_evidence_bundle(report, source_path=source)
 
@@ -145,12 +154,24 @@ def write_evidence_bundle(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Capture read-only opportunity diagnostics evidence")
-    parser.add_argument("--input", default=None, help="Optional JSONL/JSON/CSV candidate export path")
-    parser.add_argument("--logs-dir", default=None, help="Runtime logs directory; defaults to core.paths.logs_dir()")
+    parser = argparse.ArgumentParser(
+        description="Capture read-only opportunity diagnostics evidence"
+    )
+    parser.add_argument(
+        "--input", default=None, help="Optional JSONL/JSON/CSV candidate export path"
+    )
+    parser.add_argument(
+        "--logs-dir",
+        default=None,
+        help="Runtime logs directory; defaults to core.paths.logs_dir()",
+    )
     parser.add_argument("--output-dir", default=None, help="Evidence output directory")
-    parser.add_argument("--tail", type=int, default=500, help="Number of JSONL rows to inspect")
-    parser.add_argument("--print", action="store_true", help="Print written file paths as JSON")
+    parser.add_argument(
+        "--tail", type=int, default=500, help="Number of JSONL rows to inspect"
+    )
+    parser.add_argument(
+        "--print", action="store_true", help="Print written file paths as JSON"
+    )
     args = parser.parse_args()
 
     written = write_evidence_bundle(
@@ -163,7 +184,9 @@ def main() -> int:
     if args.print:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
-        print(f"Wrote opportunity diagnostics evidence: {written['json']} and {written['markdown']}")
+        print(
+            f"Wrote opportunity diagnostics evidence: {written['json']} and {written['markdown']}"
+        )
     return 0
 
 

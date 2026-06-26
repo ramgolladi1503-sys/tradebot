@@ -35,8 +35,16 @@ def main():
     }
 
     logs = Path(getattr(cfg, "DESK_LOG_DIR", "logs"))
-    _copy_if_exists(Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))), out_dir)
-    _copy_if_exists(Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl"))), out_dir)
+    _copy_if_exists(
+        Path(
+            getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))
+        ),
+        out_dir,
+    )
+    _copy_if_exists(
+        Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl"))),
+        out_dir,
+    )
     _copy_if_exists(logs / "model_registry.json", out_dir)
     for file in logs.glob("daily_audit_*.json"):
         _copy_if_exists(file, out_dir)

@@ -21,7 +21,10 @@ def _check_db(path: Path):
         tables = {row[0] for row in cur.fetchall()}
         missing = REQUIRED_TABLES - tables
         if missing:
-            print(f"ERROR:DR_DB_TABLES_MISSING {path} missing={sorted(missing)}", file=sys.stderr)
+            print(
+                f"ERROR:DR_DB_TABLES_MISSING {path} missing={sorted(missing)}",
+                file=sys.stderr,
+            )
             return False
         conn.execute("SELECT COUNT(*) FROM decision_events")
         conn.close()

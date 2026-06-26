@@ -16,7 +16,11 @@ from config import config as cfg
 
 
 def _utc_iso(epoch: float) -> str:
-    return datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(epoch, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _load_outcomes(db_path: Path, start_epoch: float) -> list[dict]:
@@ -32,7 +36,13 @@ def _load_outcomes(db_path: Path, start_epoch: float) -> list[dict]:
         for trade_id, r_multiple, ts in cur.fetchall():
             if r_multiple is None or ts is None:
                 continue
-            rows.append({"trade_id": trade_id, "r_multiple": float(r_multiple), "timestamp_epoch": float(ts)})
+            rows.append(
+                {
+                    "trade_id": trade_id,
+                    "r_multiple": float(r_multiple),
+                    "timestamp_epoch": float(ts),
+                }
+            )
     return rows
 
 
@@ -53,7 +63,13 @@ def _load_trades(db_path: Path, trade_ids: set[str]) -> list[dict]:
 
 def _compute_stats(r_vals: list[float]) -> dict:
     if not r_vals:
-        return {"trades": 0, "expectancy": 0.0, "win_rate": 0.0, "drawdown": 0.0, "stability": 0.0}
+        return {
+            "trades": 0,
+            "expectancy": 0.0,
+            "win_rate": 0.0,
+            "drawdown": 0.0,
+            "stability": 0.0,
+        }
     mean_r = sum(r_vals) / len(r_vals)
     win_rate = sum(1 for r in r_vals if r > 0) / len(r_vals)
     cum = 0.0
@@ -111,7 +127,10 @@ def main():
             status = "HOLD"
             if stats["trades"] < cfg.TOURNAMENT_MIN_TRADES:
                 status = "INSUFFICIENT_DATA"
-            elif stats["expectancy"] >= cfg.TOURNAMENT_PROMOTE_SCORE and stats["win_rate"] >= cfg.TOURNAMENT_MIN_WINRATE:
+            elif (
+                stats["expectancy"] >= cfg.TOURNAMENT_PROMOTE_SCORE
+                and stats["win_rate"] >= cfg.TOURNAMENT_MIN_WINRATE
+            ):
                 status = "PROMOTE_CANDIDATE"
             elif stats["drawdown"] <= cfg.TOURNAMENT_QUARANTINE_DD:
                 status = "QUARANTINE_CANDIDATE"

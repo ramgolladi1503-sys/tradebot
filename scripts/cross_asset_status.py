@@ -40,7 +40,15 @@ def main() -> int:
     print("Cross-asset status:")
     exit_code = 0
     feed_status = dq.get("feed_status") or payload.get("feed_status") or {}
-    for feed in sorted(set(required + optional + list(last_ts.keys()) + list(age_sec.keys()) + list(prices.keys()))):
+    for feed in sorted(
+        set(
+            required
+            + optional
+            + list(last_ts.keys())
+            + list(age_sec.keys())
+            + list(prices.keys())
+        )
+    ):
         lt = last_ts.get(feed)
         age = age_sec.get(feed)
         if lt is not None and age is None:

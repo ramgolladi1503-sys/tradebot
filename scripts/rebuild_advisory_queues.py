@@ -87,7 +87,11 @@ def _rebuild_rows(
         lifecycle = _normalize_status(record.get("status"))
         entry_status = _normalize_status(record.get("entry_status"))
 
-        if clear_stale_entry and entry_status in _STALE_ENTRY_STATUSES and lifecycle not in _TERMINAL_STATUSES:
+        if (
+            clear_stale_entry
+            and entry_status in _STALE_ENTRY_STATUSES
+            and lifecycle not in _TERMINAL_STATUSES
+        ):
             if record.get("entry") not in (None, "", "None"):
                 record["entry"] = None
                 stats["stale_entries_cleared"] += 1
@@ -116,7 +120,9 @@ def _run_for_path(
     prune_age_min: int | None,
 ) -> dict[str, object]:
     rows = load_queue_rows(path)
-    rebuilt, stats = _rebuild_rows(rows, clear_stale_entry=clear_stale_entry, prune_age_min=prune_age_min)
+    rebuilt, stats = _rebuild_rows(
+        rows, clear_stale_entry=clear_stale_entry, prune_age_min=prune_age_min
+    )
     if not dry_run:
         write_queue_rows(path, rebuilt)
     return {
@@ -127,8 +133,12 @@ def _run_for_path(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Rebuild advisory queues and clear stale planned entries.")
-    parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing.")
+    parser = argparse.ArgumentParser(
+        description="Rebuild advisory queues and clear stale planned entries."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Preview changes without writing."
+    )
     parser.add_argument(
         "--keep-stale-entry",
         action="store_true",
@@ -137,13 +147,23 @@ def main() -> int:
     parser.add_argument(
         "--prune-age-min",
         type=int,
-        default=int(getattr(__import__("config.config", fromlist=["config"]).config, "QUEUE_ROW_MAX_AGE_MIN", 120)),
+        default=int(
+            getattr(
+                __import__("config.config", fromlist=["config"]).config,
+                "QUEUE_ROW_MAX_AGE_MIN",
+                120,
+            )
+        ),
         help="Drop non-terminal rows older than this many minutes (default: cfg.QUEUE_ROW_MAX_AGE_MIN).",
     )
     args = parser.parse_args()
 
     clear_stale_entry = not bool(args.keep_stale_entry)
-    prune_age_min = int(args.prune_age_min) if args.prune_age_min and int(args.prune_age_min) > 0 else None
+    prune_age_min = (
+        int(args.prune_age_min)
+        if args.prune_age_min and int(args.prune_age_min) > 0
+        else None
+    )
     reports = [
         _run_for_path(
             TARGET_POINTS_QUEUE_PATH,

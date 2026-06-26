@@ -34,11 +34,15 @@ def _append_history(summary: dict) -> None:
         }
     )
     OUT_HIST.parent.mkdir(parents=True, exist_ok=True)
-    OUT_HIST.write_text(json.dumps(history[-1000:], indent=2, sort_keys=True), encoding="utf-8")
+    OUT_HIST.write_text(
+        json.dumps(history[-1000:], indent=2, sort_keys=True), encoding="utf-8"
+    )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Reconcile executed trades from canonical EXECUTION_FILL events.")
+    parser = argparse.ArgumentParser(
+        description="Reconcile executed trades from canonical EXECUTION_FILL events."
+    )
     parser.add_argument(
         "--date",
         default=None,

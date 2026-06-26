@@ -53,16 +53,20 @@ def main() -> int:
     cfg.EXPIRY_LOTTO_TARGET_CANDIDATES = 4
     cfg.EXPIRY_LOTTO_MIN_OPTION_TOKENS = 4
     builder = TradeBuilder(predictor=object(), execution=_ExecStub())
-    builder._resolve_option_contract = lambda symbol, strike, opt_type, expiry, market_data: {
-        "expiry": "2026-03-02",
-        "tradingsymbol": f"{symbol}-2026-03-02-{int(float(strike))}-{opt_type}",
-        "instrument_token": int(float(strike) * 10),
-    }
-    builder._identity_fields = lambda symbol, instrument, expiry, strike, right, qty_lots: (
-        "OPT",
-        f"{symbol}|{expiry}|{strike}|{right}",
-        50,
-        None,
+    builder._resolve_option_contract = (
+        lambda symbol, strike, opt_type, expiry, market_data: {
+            "expiry": "2026-03-02",
+            "tradingsymbol": f"{symbol}-2026-03-02-{int(float(strike))}-{opt_type}",
+            "instrument_token": int(float(strike) * 10),
+        }
+    )
+    builder._identity_fields = (
+        lambda symbol, instrument, expiry, strike, right, qty_lots: (
+            "OPT",
+            f"{symbol}|{expiry}|{strike}|{right}",
+            50,
+            None,
+        )
     )
     builder.trade_intent_flags = lambda *args, **kwargs: {
         "tradable": True,
@@ -73,7 +77,13 @@ def main() -> int:
         "source_flags": {},
     }
     chain = []
-    for strike, ltp in [(24600, 95.0), (24650, 90.0), (24700, 88.0), (24750, 84.0), (24800, 79.0)]:
+    for strike, ltp in [
+        (24600, 95.0),
+        (24650, 90.0),
+        (24700, 88.0),
+        (24750, 84.0),
+        (24800, 79.0),
+    ]:
         chain.append(
             {
                 "type": "CE",

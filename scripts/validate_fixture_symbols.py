@@ -19,7 +19,9 @@ def _iter_fixture_paths(root: Path) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate replay fixture tradingsymbols.")
+    parser = argparse.ArgumentParser(
+        description="Validate replay fixture tradingsymbols."
+    )
     parser.add_argument(
         "--root",
         default="fixtures/snapshots",
@@ -58,4 +60,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

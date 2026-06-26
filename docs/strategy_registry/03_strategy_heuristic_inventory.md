@@ -1,0 +1,2478 @@
+# Strategy Heuristic Audit
+
+Code scan for magic numbers, TODOs, FIXMEs, hardcoded thresholds, and heuristics.
+
+### strategies/soft_signal.py
+- **Line 12** (Matched `\b\d+\.\d+\b`): `base_score: float = 0.05,`
+- **Line 12** (Matched `\b\d{2,}\b`): `base_score: float = 0.05,`
+
+### strategies/sensex_intraday.py
+- **Line 20** (Matched `\b\d+\.\d+\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 20** (Matched `\b\d{2,}\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 21** (Matched `\b\d+\.\d+\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 21** (Matched `\b\d{2,}\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 22** (Matched `\b\d+\.\d+\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 22** (Matched `\b\d{2,}\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 23** (Matched `\b\d+\.\d+\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 23** (Matched `\b\d{2,}\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 24** (Matched `\b\d{2,}\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 37** (Matched `\b\d+\.\d+\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None, regime=No...`
+- **Line 37** (Matched `\b\d{2,}\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None, regime=No...`
+- **Line 51** (Matched `\b\d+\.\d+\b`): `vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))`
+- **Line 52** (Matched `\b\d+\.\d+\b`): `min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))`
+- **Line 55** (Matched `\b\d+\.\d+\b`): `weak_move_floor = float(min_move) * 0.6`
+- **Line 81** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):`
+- **Line 81** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):`
+- **Line 88** (Matched `\b\d+\.\d+\b`): `score = 0.43 + min(0.27, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 88** (Matched `\b\d{2,}\b`): `score = 0.43 + min(0.27, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 90** (Matched `\b\d+\.\d+\b`): `score = 0.47 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 90** (Matched `\b\d{2,}\b`): `score = 0.47 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 92** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 92** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 102** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 102** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 105** (Matched `\b\d+\.\d+\b`): `score -= 0.05`
+- **Line 105** (Matched `\b\d{2,}\b`): `score -= 0.05`
+- **Line 109** (Matched `\b\d+\.\d+\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 109** (Matched `\b\d{2,}\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 117** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * 1.35):`
+- **Line 117** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * 1.35):`
+- **Line 121** (Matched `\b\d+\.\d+\b`): `score -= 0.10`
+- **Line 121** (Matched `\b\d{2,}\b`): `score -= 0.10`
+- **Line 124** (Matched `\b\d+\.\d+\b`): `score += 0.04`
+- **Line 124** (Matched `\b\d{2,}\b`): `score += 0.04`
+- **Line 126** (Matched `\b\d+\.\d+\b`): `score += float(profile.get("score_bias", 0.0))`
+- **Line 127** (Matched `\b\d+\.\d+\b`): `score = max(0.05, min(0.95, score))`
+- **Line 127** (Matched `\b\d{2,}\b`): `score = max(0.05, min(0.95, score))`
+
+### strategies/vwap_orb.py
+- **Line 3** (Matched `\b\d+\.\d+\b`): `def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):`
+- **Line 3** (Matched `\b\d{2,}\b`): `def vwap_orb_strategy(symbol, ltp, vwap, vwap_buffer=0.0015, market_data=None):`
+- **Line 13** (Matched `\b\d{2,}\b`): `# Elite 10/10 GEX Filter: Hard-lock if Positive Gamma`
+- **Line 19** (Matched `\b\d{2,}\b`): `# Elite 10/10 CVD Filter: Volume must support the breakout`
+- **Line 22** (Matched `\b\d{2,}\b`): `# Elite 10/10 VPIN Toxicity Filter`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `vpin_toxicity = market_data.get("vpin_toxicity", 1.0) # default 1.0 to not break tests if absent`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `min_vpin_threshold = market_data.get("min_vpin_threshold", 0.6) # 60% toxicity required`
+- **Line 25** (Matched `\b\d{2,}\b`): `min_vpin_threshold = market_data.get("min_vpin_threshold", 0.6) # 60% toxicity required`
+- **Line 42** (Matched `\b\d{2,}\b`): `strike = round(ltp / 100) * 100`
+- **Line 49** (Matched `\b\d{2,}\b`): `min_prem = 40`
+- **Line 50** (Matched `\b\d{2,}\b`): `max_prem = 150`
+- **Line 52** (Matched `\b\d+\.\d+\b`): `entry_price = ltp * 0.004`
+- **Line 52** (Matched `\b\d{2,}\b`): `entry_price = ltp * 0.004`
+- **Line 55** (Matched `\b\d+\.\d+\b`): `stop_loss = round(entry_price * 0.8, 2)`
+- **Line 56** (Matched `\b\d+\.\d+\b`): `target = round(entry_price * 1.3, 2)`
+- **Line 67** (Matched `confidence`): `"confidence": 60`
+- **Line 67** (Matched `\b\d{2,}\b`): `"confidence": 60`
+
+### strategies/banknifty_intraday.py
+- **Line 19** (Matched `\b\d+\.\d+\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 19** (Matched `\b\d{2,}\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 20** (Matched `\b\d+\.\d+\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 20** (Matched `\b\d{2,}\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 21** (Matched `\b\d+\.\d+\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 21** (Matched `\b\d{2,}\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 22** (Matched `\b\d+\.\d+\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 22** (Matched `\b\d{2,}\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 23** (Matched `\b\d+\.\d+\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 23** (Matched `\b\d{2,}\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 36** (Matched `\b\d+\.\d+\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.002, min_move=0.001, debug_stats=None, regime=Non...`
+- **Line 36** (Matched `\b\d{2,}\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.002, min_move=0.001, debug_stats=None, regime=Non...`
+- **Line 50** (Matched `\b\d+\.\d+\b`): `vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))`
+- **Line 51** (Matched `\b\d+\.\d+\b`): `min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))`
+- **Line 54** (Matched `\b\d+\.\d+\b`): `weak_move_floor = float(min_move) * 0.65`
+- **Line 54** (Matched `\b\d{2,}\b`): `weak_move_floor = float(min_move) * 0.65`
+- **Line 80** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.20))):`
+- **Line 80** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.20))):`
+- **Line 87** (Matched `\b\d+\.\d+\b`): `score = 0.46 + min(0.26, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 87** (Matched `\b\d{2,}\b`): `score = 0.46 + min(0.26, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 89** (Matched `\b\d+\.\d+\b`): `score = 0.5 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 89** (Matched `\b\d{2,}\b`): `score = 0.5 + min(0.30, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 91** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 91** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 101** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 101** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 104** (Matched `\b\d+\.\d+\b`): `score -= 0.05`
+- **Line 104** (Matched `\b\d{2,}\b`): `score -= 0.05`
+- **Line 108** (Matched `\b\d+\.\d+\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 108** (Matched `\b\d{2,}\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 116** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * 1.30):`
+- **Line 116** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * 1.30):`
+- **Line 120** (Matched `\b\d+\.\d+\b`): `score -= 0.11`
+- **Line 120** (Matched `\b\d{2,}\b`): `score -= 0.11`
+- **Line 123** (Matched `\b\d+\.\d+\b`): `score += 0.04`
+- **Line 123** (Matched `\b\d{2,}\b`): `score += 0.04`
+- **Line 125** (Matched `\b\d+\.\d+\b`): `score += float(profile.get("score_bias", 0.0))`
+- **Line 126** (Matched `\b\d+\.\d+\b`): `score = max(0.05, min(0.95, score))`
+- **Line 126** (Matched `\b\d{2,}\b`): `score = max(0.05, min(0.95, score))`
+
+### strategies/zero_hero.py
+- **Line 26** (Matched `confidence`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 26** (Matched `\b\d{2,}\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 27** (Matched `confidence`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 27** (Matched `\b\d+\.\d+\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 27** (Matched `\b\d{2,}\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 28** (Matched `\b\d+\.\d+\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 28** (Matched `\b\d{2,}\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 29** (Matched `confidence`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 29** (Matched `\b\d+\.\d+\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 29** (Matched `\b\d{2,}\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 30** (Matched `confidence`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 30** (Matched `\b\d+\.\d+\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 30** (Matched `\b\d{2,}\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 84** (Matched `\b\d+\.\d+\b`): `profile["premium_floor"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_PREMIUM_FLOOR", profile.get("pre...`
+- **Line 84** (Matched `\b\d{2,}\b`): `profile["premium_floor"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_PREMIUM_FLOOR", profile.get("pre...`
+- **Line 85** (Matched `\b\d+\.\d+\b`): `profile["entry_price_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_ENTRY_MULT", profile.get("ent...`
+- **Line 85** (Matched `\b\d{2,}\b`): `profile["entry_price_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_ENTRY_MULT", profile.get("ent...`
+- **Line 86** (Matched `\b\d+\.\d+\b`): `profile["target_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_TARGET_MULT", profile.get("target_...`
+- **Line 87** (Matched `\b\d+\.\d+\b`): `profile["stop_loss_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_STOP_MULT", profile.get("stop_l...`
+- **Line 87** (Matched `\b\d{2,}\b`): `profile["stop_loss_mult"] = float(getattr(cfg, "ZERO_HERO_NON_EXPIRY_STOP_MULT", profile.get("stop_l...`
+- **Line 88** (Matched `confidence`): `profile["confidence"] = int(getattr(cfg, "ZERO_HERO_NON_EXPIRY_CONFIDENCE", profile.get("confidence"...`
+- **Line 88** (Matched `\b\d{2,}\b`): `profile["confidence"] = int(getattr(cfg, "ZERO_HERO_NON_EXPIRY_CONFIDENCE", profile.get("confidence"...`
+- **Line 90** (Matched `confidence`): `profile.setdefault("confidence_reason", "non_expiry_manual_advisory")`
+- **Line 100** (Matched `\b\d{2,}\b`): `strike = round(float(ltp) / 100) * 100`
+- **Line 103** (Matched `\b\d+\.\d+\b`): `float(ltp) * float(profile.get("entry_price_mult", 0.005)),`
+- **Line 103** (Matched `\b\d{2,}\b`): `float(ltp) * float(profile.get("entry_price_mult", 0.005)),`
+- **Line 104** (Matched `\b\d+\.\d+\b`): `float(profile.get("premium_floor", 25.0)),`
+- **Line 104** (Matched `\b\d{2,}\b`): `float(profile.get("premium_floor", 25.0)),`
+- **Line 106** (Matched `\b\d+\.\d+\b`): `stop_loss = round(entry_price * float(profile.get("stop_loss_mult", 0.8)), 2)`
+- **Line 107** (Matched `\b\d+\.\d+\b`): `target = round(entry_price * float(profile.get("target_mult", 2.0)), 2)`
+- **Line 119** (Matched `confidence`): `"confidence": int(profile.get("confidence", 60)),`
+- **Line 119** (Matched `\b\d{2,}\b`): `"confidence": int(profile.get("confidence", 60)),`
+- **Line 120** (Matched `confidence`): `"confidence_reason": str(profile.get("confidence_reason", "expiry_window_manual_advisory")),`
+- **Line 129** (Matched `\b\d+\.\d+\b`): `"low": float(profile.get("premium_floor", 25.0)),`
+- **Line 129** (Matched `\b\d{2,}\b`): `"low": float(profile.get("premium_floor", 25.0)),`
+
+### strategies/ensemble.py
+- **Line 55** (Matched `\b\d+\.\d+\b`): `slope = float(vwap_slope or 0.0)`
+- **Line 56** (Matched `\b\d+\.\d+\b`): `if trend > 0.0015 and slope >= -0.02:`
+- **Line 56** (Matched `\b\d{2,}\b`): `if trend > 0.0015 and slope >= -0.02:`
+- **Line 57** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.46 + abs(trend) * 50)`
+- **Line 57** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.46 + abs(trend) * 50)`
+- **Line 59** (Matched `\b\d+\.\d+\b`): `score -= 0.07`
+- **Line 59** (Matched `\b\d{2,}\b`): `score -= 0.07`
+- **Line 60** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_CALL", max(0.05, score), "VWAP trend up (soft slope mismatch)")`
+- **Line 60** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_CALL", max(0.05, score), "VWAP trend up (soft slope mismatch)")`
+- **Line 62** (Matched `\b\d+\.\d+\b`): `if trend < -0.0015 and slope <= 0.02:`
+- **Line 62** (Matched `\b\d{2,}\b`): `if trend < -0.0015 and slope <= 0.02:`
+- **Line 63** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.46 + abs(trend) * 50)`
+- **Line 63** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.46 + abs(trend) * 50)`
+- **Line 65** (Matched `\b\d+\.\d+\b`): `score -= 0.07`
+- **Line 65** (Matched `\b\d{2,}\b`): `score -= 0.07`
+- **Line 66** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_PUT", max(0.05, score), "VWAP trend down (soft slope mismatch)")`
+- **Line 66** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_PUT", max(0.05, score), "VWAP trend down (soft slope mismatch)")`
+- **Line 74** (Matched `\b\d+\.\d+\b`): `rsi = float(rsi_mom or 0.0)`
+- **Line 75** (Matched `\b\d+\.\d+\b`): `if dev > 0.003:`
+- **Line 75** (Matched `\b\d{2,}\b`): `if dev > 0.003:`
+- **Line 76** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.38 + abs(dev) * 40)`
+- **Line 76** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.38 + abs(dev) * 40)`
+- **Line 79** (Matched `\b\d+\.\d+\b`): `if rsi <= 0.2:`
+- **Line 80** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_PUT", max(0.05, score - 0.08), "Mean reversion down (soft RSI confirm)")`
+- **Line 80** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_PUT", max(0.05, score - 0.08), "Mean reversion down (soft RSI confirm)")`
+- **Line 81** (Matched `\b\d+\.\d+\b`): `if dev < -0.003:`
+- **Line 81** (Matched `\b\d{2,}\b`): `if dev < -0.003:`
+- **Line 82** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.38 + abs(dev) * 40)`
+- **Line 82** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.38 + abs(dev) * 40)`
+- **Line 85** (Matched `\b\d+\.\d+\b`): `if rsi >= -0.2:`
+- **Line 86** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_CALL", max(0.05, score - 0.08), "Mean reversion up (soft RSI confirm)")`
+- **Line 86** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_CALL", max(0.05, score - 0.08), "Mean reversion up (soft RSI confirm)")`
+- **Line 92** (Matched `\b\d+\.\d+\b`): `vol = float(vol_z or 0.0)`
+- **Line 93** (Matched `\b\d+\.\d+\b`): `if orb_high and ltp > orb_high and vol > 0.2:`
+- **Line 94** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)`
+- **Line 94** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)`
+- **Line 95** (Matched `\b\d+\.\d+\b`): `if vol <= 0.5:`
+- **Line 96** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 96** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 97** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_CALL", max(0.05, score), "ORB breakout up (soft volume confirm)")`
+- **Line 97** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_CALL", max(0.05, score), "ORB breakout up (soft volume confirm)")`
+- **Line 99** (Matched `\b\d+\.\d+\b`): `if orb_low and ltp < orb_low and vol > 0.2:`
+- **Line 100** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)`
+- **Line 100** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.52 + max(vol, 0.5) * 0.2)`
+- **Line 101** (Matched `\b\d+\.\d+\b`): `if vol <= 0.5:`
+- **Line 102** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 102** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 103** (Matched `\b\d+\.\d+\b`): `return StrategySignal("BUY_PUT", max(0.05, score), "ORB breakdown (soft volume confirm)")`
+- **Line 103** (Matched `\b\d{2,}\b`): `return StrategySignal("BUY_PUT", max(0.05, score), "ORB breakdown (soft volume confirm)")`
+- **Line 110** (Matched `\b\d+\.\d+\b`): `return (atr / ltp) >= 0.001`
+- **Line 110** (Matched `\b\d{2,}\b`): `return (atr / ltp) >= 0.001`
+- **Line 117** (Matched `\b\d+\.\d+\b`): `thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.005)`
+- **Line 117** (Matched `\b\d{2,}\b`): `thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.005)`
+- **Line 120** (Matched `\b\d+\.\d+\b`): `score = min(1.0, 0.65 + abs(ltp_change_window) / max(atr, 1e-6))`
+- **Line 120** (Matched `\b\d{2,}\b`): `score = min(1.0, 0.65 + abs(ltp_change_window) / max(atr, 1e-6))`
+- **Line 132** (Matched `\b\d{2,}\b`): `up_5m = getattr(cfg, "MICRO_5M_UP_PTS", 15)`
+- **Line 133** (Matched `\b\d{2,}\b`): `down_5m = getattr(cfg, "MICRO_5M_DOWN_PTS", -15)`
+- **Line 134** (Matched `\b\d{2,}\b`): `pull = getattr(cfg, "MICRO_10M_PULLBACK_PTS", 10)`
+- **Line 135** (Matched `\b\d+\.\d+\b`): `score = getattr(cfg, "MICRO_PATTERN_SCORE", 0.66)`
+- **Line 135** (Matched `\b\d{2,}\b`): `score = getattr(cfg, "MICRO_PATTERN_SCORE", 0.66)`
+- **Line 174** (Matched `\b\d+\.\d+\b`): `sig.score = max(0.05, float(sig.score) - 0.08)`
+- **Line 174** (Matched `\b\d{2,}\b`): `sig.score = max(0.05, float(sig.score) - 0.08)`
+- **Line 223** (Matched `\b\d+\.\d+\b`): `if best is None or float(best.score) < 0.45:`
+- **Line 223** (Matched `\b\d{2,}\b`): `if best is None or float(best.score) < 0.45:`
+- **Line 242** (Matched `\b\d+\.\d+\b`): `return sig if sig and sig.score >= 0.75 else None`
+- **Line 242** (Matched `\b\d{2,}\b`): `return sig if sig and sig.score >= 0.75 else None`
+- **Line 254** (Matched `\b\d+\.\d+\b`): `if sig and sig.score >= 0.7:`
+
+### strategies/nifty_intraday.py
+- **Line 20** (Matched `\b\d+\.\d+\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 20** (Matched `\b\d{2,}\b`): `"TRENDING_UP": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_bi...`
+- **Line 21** (Matched `\b\d+\.\d+\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 21** (Matched `\b\d{2,}\b`): `"TRENDING_DOWN": {'setup_family': 'BREAKOUT', 'vwap_buffer_mult': 0.9, 'min_move_mult': 0.9, 'score_...`
+- **Line 22** (Matched `\b\d+\.\d+\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 22** (Matched `\b\d{2,}\b`): `"RANGE": {'setup_family': 'MEAN_REVERSION', 'vwap_buffer_mult': 1.15, 'min_move_mult': 0.8, 'score_b...`
+- **Line 23** (Matched `\b\d+\.\d+\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 23** (Matched `\b\d{2,}\b`): `"VOLATILE": {'setup_family': 'CONTINUATION', 'vwap_buffer_mult': 1.35, 'min_move_mult': 1.25, 'score...`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 24** (Matched `\b\d{2,}\b`): `"EXPIRY_CONTEXT": {'setup_family': 'PULLBACK', 'vwap_buffer_mult': 1.0, 'min_move_mult': 0.85, 'scor...`
+- **Line 37** (Matched `\b\d+\.\d+\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None, regime=No...`
+- **Line 37** (Matched `\b\d{2,}\b`): `def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_stats=None, regime=No...`
+- **Line 52** (Matched `\b\d+\.\d+\b`): `vwap_buffer = float(vwap_buffer) * float(profile.get("vwap_buffer_mult", 1.0))`
+- **Line 53** (Matched `\b\d+\.\d+\b`): `min_move = float(min_move) * float(profile.get("min_move_mult", 1.0))`
+- **Line 56** (Matched `\b\d+\.\d+\b`): `weak_move_floor = float(min_move) * 0.6`
+- **Line 84** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):`
+- **Line 84** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("range_extension_mult", 1.15))):`
+- **Line 91** (Matched `\b\d+\.\d+\b`): `score = 0.44 + min(0.28, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 91** (Matched `\b\d{2,}\b`): `score = 0.44 + min(0.28, abs_diff / max(vwap_buffer, 1e-6) * 0.08)`
+- **Line 93** (Matched `\b\d+\.\d+\b`): `score = 0.48 + min(0.32, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 93** (Matched `\b\d{2,}\b`): `score = 0.48 + min(0.32, abs_diff / max(vwap_buffer, 1e-6) * 0.10)`
+- **Line 95** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 95** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * float(profile.get("strict_move_mult", 1.15))):`
+- **Line 105** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 105** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 108** (Matched `\b\d+\.\d+\b`): `score -= 0.05`
+- **Line 108** (Matched `\b\d{2,}\b`): `score -= 0.05`
+- **Line 112** (Matched `\b\d+\.\d+\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 112** (Matched `\b\d{2,}\b`): `if regime_name in {"TRENDING_UP", "TRENDING_DOWN"} and abs_diff < (vwap_buffer * float(profile.get("...`
+- **Line 120** (Matched `\b\d+\.\d+\b`): `if abs_diff < (vwap_buffer * 1.35):`
+- **Line 120** (Matched `\b\d{2,}\b`): `if abs_diff < (vwap_buffer * 1.35):`
+- **Line 124** (Matched `\b\d+\.\d+\b`): `score -= 0.10`
+- **Line 124** (Matched `\b\d{2,}\b`): `score -= 0.10`
+- **Line 127** (Matched `\b\d+\.\d+\b`): `score += 0.04`
+- **Line 127** (Matched `\b\d{2,}\b`): `score += 0.04`
+- **Line 130** (Matched `confidence`): `soft_flags.append("regime_confidence_degraded")`
+- **Line 131** (Matched `\b\d+\.\d+\b`): `score -= 0.08`
+- **Line 131** (Matched `\b\d{2,}\b`): `score -= 0.08`
+- **Line 133** (Matched `\b\d+\.\d+\b`): `score += float(profile.get("score_bias", 0.0))`
+- **Line 134** (Matched `\b\d+\.\d+\b`): `score = max(0.05, min(0.95, score))`
+- **Line 134** (Matched `\b\d{2,}\b`): `score = max(0.05, min(0.95, score))`
+
+### strategies/pairs_arbitrage.py
+- **Line 22** (Matched `\b\d+\.\d+\b`): `def generate_signal(price_a, price_b, historical_a=None, historical_b=None, min_zscore=2.0, debug_st...`
+- **Line 42** (Matched `edge`): `hedge_ratio, intercept, _ = kf.update(price_a, price_b)`
+- **Line 43** (Matched `edge`): `current_spread = price_a - (hedge_ratio * price_b + intercept)`
+- **Line 46** (Matched `\b\d{2,}\b`): `if len(spreads) < 10:`
+- **Line 53** (Matched `\b\d{2,}\b`): `# Elite 10/10 ADF Cointegration Check`
+- **Line 54** (Matched `\b\d+\.\d+\b`): `# If the spread is not stationary (p-value > 0.05), we refuse to trade it`
+- **Line 54** (Matched `\b\d{2,}\b`): `# If the spread is not stationary (p-value > 0.05), we refuse to trade it`
+- **Line 60** (Matched `\b\d+\.\d+\b`): `adf_pvalue = kwargs.get('adf_pvalue', 0.04) # Mock stationary if statsmodels not installed`
+- **Line 60** (Matched `\b\d{2,}\b`): `adf_pvalue = kwargs.get('adf_pvalue', 0.04) # Mock stationary if statsmodels not installed`
+- **Line 62** (Matched `\b\d+\.\d+\b`): `if adf_pvalue > 0.05:`
+- **Line 62** (Matched `\b\d{2,}\b`): `if adf_pvalue > 0.05:`
+- **Line 66** (Matched `\b\d{2,}\b`): `# Elite 10/10 OU Half-Life Check`
+- **Line 68** (Matched `\b\d{2,}\b`): `# Assuming 5-minute candles, 36 periods = 3 hours. Reject if > 36.`
+- **Line 70** (Matched `\b\d+\.\d+\b`): `max_half_life_periods = kwargs.get('max_half_life_periods', 36.0)`
+- **Line 70** (Matched `\b\d{2,}\b`): `max_half_life_periods = kwargs.get('max_half_life_periods', 36.0)`
+- **Line 87** (Matched `\b\d+\.\d+\b`): `# Scale score from 0.6 to 0.95 based on zscore`
+- **Line 87** (Matched `\b\d{2,}\b`): `# Scale score from 0.6 to 0.95 based on zscore`
+- **Line 88** (Matched `\b\d+\.\d+\b`): `score = 0.6 + min(0.35, (abs_z - min_zscore) * 0.1)`
+- **Line 88** (Matched `\b\d{2,}\b`): `score = 0.6 + min(0.35, (abs_z - min_zscore) * 0.1)`
+- **Line 90** (Matched `\b\d+\.\d+\b`): `if abs_z > 3.5:`
+- **Line 92** (Matched `\b\d+\.\d+\b`): `score -= 0.1 # Penalty for potential structural break`
+- **Line 96** (Matched `\b\d+\.\d+\b`): `score = max(0.05, min(0.95, score))`
+- **Line 96** (Matched `\b\d{2,}\b`): `score = max(0.05, min(0.95, score))`
+- **Line 106** (Matched `edge`): `"hedge_ratio": round(hedge_ratio, 4),`
+
+### strategies/position_sizer.py
+- **Line 4** (Matched `\b\d+\.\d+\b`): `def __init__(self, capital, risk_per_trade=0.01):`
+- **Line 4** (Matched `\b\d{2,}\b`): `def __init__(self, capital, risk_per_trade=0.01):`
+
+### strategies/risk_manager.py
+- **Line 9** (Matched `\b\d+\.\d+\b`): `max_risk_per_trade=0.01,   # 1%`
+- **Line 9** (Matched `\b\d{2,}\b`): `max_risk_per_trade=0.01,   # 1%`
+- **Line 10** (Matched `\b\d+\.\d+\b`): `max_daily_loss=0.03,       # 3%`
+- **Line 10** (Matched `\b\d{2,}\b`): `max_daily_loss=0.03,       # 3%`
+
+### strategies/trade_builder.py
+- **Line 145** (Matched `\b\d{2,}\b`): `if now - _AUTO_TUNE_CACHE.get("ts", 0) < 60:`
+- **Line 159** (Matched `confidence`): `def predict_confidence(self, *_args, **_kwargs):`
+- **Line 160** (Matched `\b\d+\.\d+\b`): `return 0.5`
+- **Line 331** (Matched `\b\d+\.\d+\b`): `self._feed_runtime_cache_ts = 0.0`
+- **Line 395** (Matched `confidence`): `def _borderline_confidence_floor(self) -> float:`
+- **Line 396** (Matched `\b\d+\.\d+\b`): `return float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)`
+- **Line 396** (Matched `\b\d{2,}\b`): `return float(getattr(cfg, "TRADE_BUILDER_BORDERLINE_CONF_MIN", 0.18) or 0.18)`
+- **Line 403** (Matched `confidence`): `confidence: float,`
+- **Line 419** (Matched `confidence`): `confidence_value = max(float(confidence or 0.0), float(self._borderline_confidence_floor()))`
+- **Line 419** (Matched `\b\d+\.\d+\b`): `confidence_value = max(float(confidence or 0.0), float(self._borderline_confidence_floor()))`
+- **Line 427** (Matched `\b\d+\.\d+\b`): `"direction": direction or ("BUY_CALL" if float(market_data.get("ltp") or 0.0) >= float(market_data.g...`
+- **Line 428** (Matched `confidence`): `"confidence": confidence_value,`
+- **Line 429** (Matched `confidence`): `"confidence_final": confidence_value,`
+- **Line 430** (Matched `confidence`): `"rank_score": None if weak_reason else confidence_value,`
+- **Line 431** (Matched `confidence`): `"final_score": None if weak_reason else confidence_value,`
+- **Line 473** (Matched `confidence`): `candidate["confidence"] = confidence_value`
+- **Line 474** (Matched `confidence`): `candidate["confidence_final"] = confidence_value`
+- **Line 475** (Matched `confidence`): `candidate["soft_reject_seed_confidence"] = confidence_value`
+- **Line 482** (Matched `confidence`): `candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_value)`
+- **Line 482** (Matched `\b\d+\.\d+\b`): `candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_value)`
+- **Line 483** (Matched `confidence`): `candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_value)`
+- **Line 483** (Matched `\b\d+\.\d+\b`): `candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_value)`
+- **Line 509** (Matched `\b\d+\.\d+\b`): `step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 509** (Matched `\b\d{2,}\b`): `step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 574** (Matched `\b\d{2,}\b`): `"available_strikes_sample": sorted(list(dict.fromkeys(available_strikes)))[:10],`
+- **Line 682** (Matched `\b\d+\.\d+\b`): `ltp = self._coerce_positive_float(market_data.get("ltp")) or 0.0`
+- **Line 728** (Matched `confidence`): `confidence_floor = float(self._borderline_confidence_floor())`
+- **Line 756** (Matched `confidence`): `candidate["confidence"] = max(float(candidate.get("confidence") or 0.0), confidence_floor)`
+- **Line 756** (Matched `\b\d+\.\d+\b`): `candidate["confidence"] = max(float(candidate.get("confidence") or 0.0), confidence_floor)`
+- **Line 757** (Matched `confidence`): `candidate["confidence_final"] = max(float(candidate.get("confidence_final") or 0.0), confidence_floo...`
+- **Line 757** (Matched `\b\d+\.\d+\b`): `candidate["confidence_final"] = max(float(candidate.get("confidence_final") or 0.0), confidence_floo...`
+- **Line 758** (Matched `confidence`): `candidate["soft_reject_seed_confidence"] = confidence_floor`
+- **Line 765** (Matched `confidence`): `candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_floor)`
+- **Line 765** (Matched `\b\d+\.\d+\b`): `candidate["rank_score"] = max(float(candidate.get("rank_score") or 0.0), confidence_floor)`
+- **Line 766** (Matched `confidence`): `candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_floor)`
+- **Line 766** (Matched `\b\d+\.\d+\b`): `candidate["final_score"] = max(float(candidate.get("final_score") or 0.0), confidence_floor)`
+- **Line 776** (Matched `confidence`): `"candidate_rank_inputs symbol=%s reason=%s confidence=%s rank_score=%s",`
+- **Line 779** (Matched `confidence`): `candidate.get("confidence_final"),`
+- **Line 1047** (Matched `confidence`): `fallback_conf_cap = float(getattr(cfg, "MIN_BREADTH_FALLBACK_CONFIDENCE", 0.12))`
+- **Line 1047** (Matched `\b\d+\.\d+\b`): `fallback_conf_cap = float(getattr(cfg, "MIN_BREADTH_FALLBACK_CONFIDENCE", 0.12))`
+- **Line 1047** (Matched `\b\d{2,}\b`): `fallback_conf_cap = float(getattr(cfg, "MIN_BREADTH_FALLBACK_CONFIDENCE", 0.12))`
+- **Line 1048** (Matched `\b\d+\.\d+\b`): `fallback_size_mult = 0.5`
+- **Line 1061** (Matched `confidence`): `conf = float(out.get("confidence") or 0.0)`
+- **Line 1061** (Matched `\b\d+\.\d+\b`): `conf = float(out.get("confidence") or 0.0)`
+- **Line 1062** (Matched `confidence`): `out["confidence"] = min(conf, fallback_conf_cap)`
+- **Line 1063** (Matched `\b\d+\.\d+\b`): `size_mult = float(out.get("size_mult") or 1.0)`
+- **Line 1076** (Matched `confidence`): `conf = float(getattr(candidate, "confidence", 0.0))`
+- **Line 1076** (Matched `\b\d+\.\d+\b`): `conf = float(getattr(candidate, "confidence", 0.0))`
+- **Line 1077** (Matched `\b\d+\.\d+\b`): `size_mult = float(getattr(candidate, "size_mult", 1.0))`
+- **Line 1081** (Matched `confidence`): `confidence=min(conf, fallback_conf_cap),`
+- **Line 1418** (Matched `confidence`): `or self._clamp_confidence(self._candidate_field(candidate, "builder_confidence"))`
+- **Line 1419** (Matched `confidence`): `or self._clamp_confidence(self._candidate_field(candidate, "confidence"))`
+- **Line 1420** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 1423** (Matched `confidence`): `self._clamp_confidence(self._candidate_field(candidate, "sizing_confluence_score"))`
+- **Line 1424** (Matched `confidence`): `or self._clamp_confidence(((self._candidate_field(candidate, "trade_score_detail") or {}).get("confl...`
+- **Line 1425** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 1428** (Matched `confidence`): `self._clamp_confidence(self._candidate_field(candidate, "regime_fit"))`
+- **Line 1429** (Matched `\b\d+\.\d+\b`): `or (0.8 if str(self._candidate_field(candidate, "regime") or "").strip().upper() in {"TREND", "RANGE...`
+- **Line 1429** (Matched `\b\d{2,}\b`): `or (0.8 if str(self._candidate_field(candidate, "regime") or "").strip().upper() in {"TREND", "RANGE...`
+- **Line 1432** (Matched `confidence`): `self._clamp_confidence(self._candidate_field(candidate, "liquidity_score"))`
+- **Line 1433** (Matched `\b\d+\.\d+\b`): `or float(feature_quality.get("liquidity_quality") or 0.0)`
+- **Line 1435** (Matched `\b\d+\.\d+\b`): `freshness_quality = float(feature_quality.get("freshness_quality") or 0.0)`
+- **Line 1437** (Matched `confidence`): `self._clamp_confidence(self._candidate_field(candidate, "spread_score"))`
+- **Line 1438** (Matched `\b\d+\.\d+\b`): `or float(feature_quality.get("spread_quality") or 0.0)`
+- **Line 1441** (Matched `confidence`): `self._clamp_confidence(`
+- **Line 1444** (Matched `\b\d+\.\d+\b`): `or ((liquidity_quality * 0.5) + (spread_quality * 0.3) + (freshness_quality * 0.2))`
+- **Line 1451** (Matched `\b\d+\.\d+\b`): `mr_strength = float(quality_detail.get("mean_reversion_strength") or 0.0)`
+- **Line 1452** (Matched `\b\d+\.\d+\b`): `if mr_strength > 1.5:`
+- **Line 1453** (Matched `\b\d+\.\d+\b`): `setup_quality = max(float(setup_quality or 0.0), 0.65)`
+- **Line 1453** (Matched `\b\d{2,}\b`): `setup_quality = max(float(setup_quality or 0.0), 0.65)`
+- **Line 1454** (Matched `\b\d+\.\d+\b`): `confluence_score = max(float(confluence_score or 0.0), 0.65)`
+- **Line 1454** (Matched `\b\d{2,}\b`): `confluence_score = max(float(confluence_score or 0.0), 0.65)`
+- **Line 1499** (Matched `\b\d+\.\d+\b`): `"signal_score": float(score_contract.get("signal_score") or 0.0),`
+- **Line 1500** (Matched `\b\d+\.\d+\b`): `"execution_score": float(score_contract.get("execution_score") or 0.0),`
+- **Line 1525** (Matched `\b\d+\.\d+\b`): `"signal_score": float(score_contract.get("signal_score") or 0.0),`
+- **Line 1526** (Matched `\b\d+\.\d+\b`): `"execution_score": float(score_contract.get("execution_score") or 0.0),`
+- **Line 1555** (Matched `\b\d+\.\d+\b`): `signal_score=float(score_contract.get("signal_score") or 0.0),`
+- **Line 1556** (Matched `\b\d+\.\d+\b`): `execution_score=float(score_contract.get("execution_score") or 0.0),`
+- **Line 1638** (Matched `\b\d+\.\d+\b`): `ttl_sec = max(0.1, float(getattr(cfg, "TRADE_BUILDER_FEED_RUNTIME_CACHE_TTL_SEC", 1.0) or 1.0))`
+- **Line 1640** (Matched `\b\d+\.\d+\b`): `if (epoch - float(self._feed_runtime_cache_ts or 0.0)) <= ttl_sec and isinstance(self._feed_runtime_...`
+- **Line 1643** (Matched `\b\d+\.\d+\b`): `latest_mtime = -1.0`
+- **Line 1691** (Matched `\b\d+\.\d+\b`): `if age >= 0.0:`
+- **Line 1830** (Matched `confidence`): `conf = raw_conf if raw_conf is not None else getattr(trade, "confidence", None)`
+- **Line 1831** (Matched `confidence`): `reg_conf = data.get("regime_confidence")`
+- **Line 1833** (Matched `confidence`): `reg_conf = data.get("day_confidence")`
+- **Line 1835** (Matched `confidence`): `"regime_confidence": reg_conf,`
+- **Line 1836** (Matched `confidence`): `"day_confidence": data.get("day_confidence"),`
+- **Line 1838** (Matched `confidence`): `"raw_signal_confidence": conf,`
+- **Line 1929** (Matched `confidence`): `"builder_confidence": getattr(trade, "builder_confidence", None) or conf,`
+- **Line 2032** (Matched `\b\d+\.\d+\b`): `resolution_penalty = 0.0 if exact_match else float(min(1.0, ((strike_delta or 0.0) / max(abs(float(r...`
+- **Line 2167** (Matched `\b\d+\.\d+\b`): `final_quote_ts_epoch = max(0.0, float(now_epoch) - float(final_quote_age_sec))`
+- **Line 2169** (Matched `\b\d+\.\d+\b`): `final_quote_age_sec = max(0.0, float(now_epoch) - float(final_quote_ts_epoch))`
+- **Line 2207** (Matched `\b\d+\.\d+\b`): `final_spread_pct = max(0.0, float(final_best_ask) - float(final_best_bid)) / max(float(final_mark), ...`
+- **Line 2246** (Matched `\b\d+\.\d+\b`): `max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),`
+- **Line 2550** (Matched `\b\d+\.\d+\b`): `quote_ts_epoch = max(0.0, float(now_epoch) - float(quote_age_sec))`
+- **Line 2552** (Matched `\b\d+\.\d+\b`): `quote_age_sec = max(0.0, float(now_epoch) - float(quote_ts_epoch))`
+- **Line 2564** (Matched `\b\d+\.\d+\b`): `max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),`
+- **Line 2602** (Matched `\b\d+\.\d+\b`): `spread_pct = max(0.0, float(best_ask) - float(best_bid)) / max(float(mark), 1e-9)`
+- **Line 2725** (Matched `\b\d+\.\d+\b`): `mid_price = (float(best_bid) + float(best_ask)) / 2.0`
+- **Line 2869** (Matched `\b\d+\.\d+\b`): `"timestamp_epoch_ms": int(ts_epoch * 1000.0),`
+- **Line 2869** (Matched `\b\d{2,}\b`): `"timestamp_epoch_ms": int(ts_epoch * 1000.0),`
+- **Line 2884** (Matched `\b\d{2,}\b`): `"horizon_minutes": int(getattr(cfg, "REJECT_SHADOW_HORIZON_MIN", 30)),`
+- **Line 2957** (Matched `\b\d{2,}\b`): `raw_horizons = getattr(cfg, "SHADOW_EVAL_HORIZONS_SEC", [300, 900, 1800])`
+- **Line 2967** (Matched `\b\d{2,}\b`): `horizons = [300, 900, 1800]`
+- **Line 2975** (Matched `\b\d{2,}\b`): `str(int(ts_epoch * 1000)),`
+- **Line 2982** (Matched `\b\d{2,}\b`): `or f"blk_{hashlib.sha256(key.encode('utf-8')).hexdigest()[:18]}"`
+- **Line 3055** (Matched `\b\d+\.\d+\b`): `"timestamp_epoch_ms": int(ts_epoch * 1000.0),`
+- **Line 3055** (Matched `\b\d{2,}\b`): `"timestamp_epoch_ms": int(ts_epoch * 1000.0),`
+- **Line 3070** (Matched `\b\d{2,}\b`): `"horizon_minutes": int(getattr(cfg, "REJECT_SHADOW_HORIZON_MIN", 30)),`
+- **Line 3105** (Matched `confidence`): `confidence_val = None`
+- **Line 3108** (Matched `confidence`): `confidence_val = float(meta.get("confidence")) if meta.get("confidence") is not None else None`
+- **Line 3110** (Matched `confidence`): `confidence_val = None`
+- **Line 3134** (Matched `confidence`): `"confidence_score": confidence_val,`
+- **Line 3331** (Matched `\b\d+\.\d+\b`): `mid_price = (best_bid + best_ask) / 2.0`
+- **Line 3338** (Matched `\b\d+\.\d+\b`): `outside_tol = float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01))`
+- **Line 3338** (Matched `\b\d{2,}\b`): `outside_tol = float(getattr(cfg, "OPTION_LAST_OUTSIDE_BAND_PCT", 0.01))`
+- **Line 3341** (Matched `\b\d+\.\d+\b`): `lo = min(best_bid, best_ask) * max(0.0, 1.0 - outside_tol)`
+- **Line 3342** (Matched `\b\d+\.\d+\b`): `hi = max(best_bid, best_ask) * (1.0 + outside_tol)`
+- **Line 3557** (Matched `\b\d+\.\d+\b`): `max_age = float(getattr(cfg, "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_MAX_SEC", 20.0) or 20.0)`
+- **Line 3557** (Matched `\b\d{2,}\b`): `max_age = float(getattr(cfg, "TRADE_BUILDER_STALE_OPTION_TICK_BYPASS_MAX_SEC", 20.0) or 20.0)`
+- **Line 3588** (Matched `\b\d+\.\d+\b`): `fallback_score = float(getattr(cfg, "OPTION_SCAN_MIN_SURVIVOR_SCORE", 0.32) or 0.32)`
+- **Line 3588** (Matched `\b\d{2,}\b`): `fallback_score = float(getattr(cfg, "OPTION_SCAN_MIN_SURVIVOR_SCORE", 0.32) or 0.32)`
+- **Line 3591** (Matched `\b\d+\.\d+\b`): `ltp = float(record.get("ltp") or 0.0)`
+- **Line 3592** (Matched `\b\d+\.\d+\b`): `volume = float(record.get("volume") or 0.0)`
+- **Line 3593** (Matched `\b\d+\.\d+\b`): `oi = float(record.get("oi") or 0.0)`
+- **Line 3609** (Matched `confidence`): `confidence=fallback_score,`
+- **Line 3649** (Matched `\b\d+\.\d+\b`): `degraded["rank_score"] = max(float(degraded.get("rank_score") or 0.0), fallback_score)`
+- **Line 3650** (Matched `\b\d+\.\d+\b`): `degraded["final_score"] = max(float(degraded.get("final_score") or 0.0), fallback_score)`
+- **Line 3652** (Matched `\b\d+\.\d+\b`): `float(degraded.get("opportunity_score") or 0.0),`
+- **Line 3777** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "OPTION_LTP_SLA_SEC", getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5))),`
+- **Line 3778** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),`
+- **Line 3800** (Matched `\b\d+\.\d+\b`): `soft_stale_sec = float(max(option_tick_sla_sec, float(getattr(cfg, "OPTION_TICK_SOFT_STALE_SEC", 3.0...`
+- **Line 3801** (Matched `\b\d+\.\d+\b`): `hard_stale_sec = float(max(soft_stale_sec, float(getattr(cfg, "OPTION_TICK_HARD_STALE_SEC", 6.0))))`
+- **Line 3809** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 3810** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "TRADE_BUILDER_FEED_AGE_FALLBACK_MAX_SEC", 3.0) or 3.0),`
+- **Line 3888** (Matched `\b\d+\.\d+\b`): `max_spread_pct = float(getattr(cfg, "MAX_SPREAD_PCT", 0.02))`
+- **Line 3888** (Matched `\b\d{2,}\b`): `max_spread_pct = float(getattr(cfg, "MAX_SPREAD_PCT", 0.02))`
+- **Line 3901** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 3902** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_MIN_OI", 1000.0) or 1000.0),`
+- **Line 3902** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "TRADE_BUILDER_LIVE_STALE_SOFTEN_MIN_OI", 1000.0) or 1000.0),`
+- **Line 4202** (Matched `\b\d+\.\d+\b`): `step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 4202** (Matched `\b\d{2,}\b`): `step = float(step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 4303** (Matched `\b\d+\.\d+\b`): `getattr(cfg, "OFFHOURS_MAX_LTP_AGE_SEC", getattr(cfg, "MAX_LTP_AGE_SEC", 8.0))`
+- **Line 4305** (Matched `\b\d+\.\d+\b`): `else getattr(cfg, "MAX_LTP_AGE_SEC", 8.0)`
+- **Line 4382** (Matched `\b\d+\.\d+\b`): `step = float(step_map.get(str(symbol or "").upper(), getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 4382** (Matched `\b\d{2,}\b`): `step = float(step_map.get(str(symbol or "").upper(), getattr(cfg, "STRIKE_STEP", 50)) or 0.0)`
+- **Line 4406** (Matched `\b\d+\.\d+\b`): `return (abs(float(item.get("strike") or 0.0) - float(strike_val)), expiry_penalty, c_exp)`
+- **Line 4411** (Matched `\b\d+\.\d+\b`): `diff = abs(float(best.get("strike") or 0.0) - float(strike_val))`
+- **Line 4449** (Matched `\b\d{2,}\b`): `instruments = kite_client.instruments_cached(exchange, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", ...`
+- **Line 4483** (Matched `\b\d{2,}\b`): `"available_strikes_sample": available_strikes[:10],`
+- **Line 4502** (Matched `\b\d+\.\d+\b`): `p = max(0.0, min(1.0, float(pct)))`
+- **Line 4504** (Matched `\b\d+\.\d+\b`): `p = 0.5`
+- **Line 4514** (Matched `\b\d+\.\d+\b`): `return float(arr[lo] * (1.0 - w) + arr[hi] * w)`
+- **Line 4520** (Matched `\b\d{2,}\b`): `(getattr(cfg, "MIN_PREMIUM", 40), getattr(cfg, "MAX_PREMIUM", 150)),`
+- **Line 4526** (Matched `\b\d+\.\d+\b`): `global_min, global_max = (40.0, 150.0)`
+- **Line 4526** (Matched `\b\d{2,}\b`): `global_min, global_max = (40.0, 150.0)`
+- **Line 4530** (Matched `\b\d+\.\d+\b`): `pct_low = max(0.0, min(0.5, float(getattr(cfg, "PREMIUM_BAND_PERCENTILE_LOW", 0.10))))`
+- **Line 4530** (Matched `\b\d{2,}\b`): `pct_low = max(0.0, min(0.5, float(getattr(cfg, "PREMIUM_BAND_PERCENTILE_LOW", 0.10))))`
+- **Line 4531** (Matched `\b\d+\.\d+\b`): `pct_high = max(0.5, min(0.99, float(getattr(cfg, "PREMIUM_BAND_PERCENTILE_HIGH", 0.90))))`
+- **Line 4531** (Matched `\b\d{2,}\b`): `pct_high = max(0.5, min(0.99, float(getattr(cfg, "PREMIUM_BAND_PERCENTILE_HIGH", 0.90))))`
+- **Line 4532** (Matched `\b\d+\.\d+\b`): `atm_window = max(0.0, float(getattr(cfg, "PREMIUM_BAND_ATM_MONEYNESS_MAX", 0.03)))`
+- **Line 4532** (Matched `\b\d{2,}\b`): `atm_window = max(0.0, float(getattr(cfg, "PREMIUM_BAND_ATM_MONEYNESS_MAX", 0.03)))`
+- **Line 4616** (Matched `\b\d+\.\d+\b`): `min_mult = float(getattr(cfg, "PREMIUM_BAND_DTE1_MIN_MULT", 0.6))`
+- **Line 4617** (Matched `\b\d+\.\d+\b`): `max_mult = float(getattr(cfg, "PREMIUM_BAND_DTE1_MAX_MULT", 0.8))`
+- **Line 4618** (Matched `\b\d+\.\d+\b`): `min_p *= max(0.0, min_mult)`
+- **Line 4619** (Matched `\b\d+\.\d+\b`): `max_p *= max(0.0, max_mult)`
+- **Line 4629** (Matched `\b\d+\.\d+\b`): `max_mult = float(getattr(cfg, "PREMIUM_BAND_HIGH_VOL_MAX_MULT", 1.35))`
+- **Line 4629** (Matched `\b\d{2,}\b`): `max_mult = float(getattr(cfg, "PREMIUM_BAND_HIGH_VOL_MAX_MULT", 1.35))`
+- **Line 4630** (Matched `\b\d+\.\d+\b`): `max_p *= max(0.0, max_mult)`
+- **Line 4635** (Matched `\b\d+\.\d+\b`): `tight_spread_pct = float(getattr(cfg, "PREMIUM_BAND_TIGHT_SPREAD_PCT", 0.8))`
+- **Line 4636** (Matched `\b\d+\.\d+\b`): `if 0.0 < spread_pct <= tight_spread_pct:`
+- **Line 4637** (Matched `\b\d+\.\d+\b`): `spread_mult = float(getattr(cfg, "PREMIUM_BAND_TIGHT_SPREAD_MAX_MULT", 1.15))`
+- **Line 4637** (Matched `\b\d{2,}\b`): `spread_mult = float(getattr(cfg, "PREMIUM_BAND_TIGHT_SPREAD_MAX_MULT", 1.15))`
+- **Line 4638** (Matched `\b\d+\.\d+\b`): `max_p *= max(0.0, spread_mult)`
+- **Line 4643** (Matched `\b\d+\.\d+\b`): `min_p = max(0.0, float(min_p))`
+- **Line 4689** (Matched `\b\d+\.\d+\b`): `pct_low = max(0.0, min(0.5, float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_LOW", 0.02))))`
+- **Line 4689** (Matched `\b\d{2,}\b`): `pct_low = max(0.0, min(0.5, float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_LOW", 0.02))))`
+- **Line 4690** (Matched `\b\d+\.\d+\b`): `pct_high = max(0.1, min(0.95, float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_HIGH", 0.25))))`
+- **Line 4690** (Matched `\b\d{2,}\b`): `pct_high = max(0.1, min(0.95, float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_PCT_HIGH", 0.25))))`
+- **Line 4711** (Matched `\b\d+\.\d+\b`): `fallback_low = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_LOW", 10.0))`
+- **Line 4711** (Matched `\b\d{2,}\b`): `fallback_low = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_LOW", 10.0))`
+- **Line 4712** (Matched `\b\d+\.\d+\b`): `fallback_high = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_HIGH", 120.0))`
+- **Line 4712** (Matched `\b\d{2,}\b`): `fallback_high = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_FALLBACK_HIGH", 120.0))`
+- **Line 4735** (Matched `\b\d+\.\d+\b`): `atr = float(market_data.get("atr") or 0.0)`
+- **Line 4736** (Matched `\b\d+\.\d+\b`): `vwap_slope = float(market_data.get("vwap_slope") or 0.0)`
+- **Line 4737** (Matched `\b\d+\.\d+\b`): `rsi_mom = float(market_data.get("rsi_mom") or 0.0)`
+- **Line 4738** (Matched `\b\d+\.\d+\b`): `ltp_change = float(market_data.get("ltp_change") or 0.0)`
+- **Line 4739** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)`
+- **Line 4740** (Matched `\b\d+\.\d+\b`): `atr_ref = max(atr, max(float(ltp) * 0.0008, 1.0))`
+- **Line 4740** (Matched `\b\d{2,}\b`): `atr_ref = max(atr, max(float(ltp) * 0.0008, 1.0))`
+- **Line 4743** (Matched `edge`): `edge = (`
+- **Line 4744** (Matched `\b\d+\.\d+\b`): `vwap_dev * float(getattr(cfg, "QUICK_NEUTRAL_VWAP_DEV_WEIGHT", 35.0))`
+- **Line 4744** (Matched `\b\d{2,}\b`): `vwap_dev * float(getattr(cfg, "QUICK_NEUTRAL_VWAP_DEV_WEIGHT", 35.0))`
+- **Line 4745** (Matched `\b\d+\.\d+\b`): `+ momentum * float(getattr(cfg, "QUICK_NEUTRAL_MOMENTUM_WEIGHT", 0.6))`
+- **Line 4746** (Matched `\b\d+\.\d+\b`): `+ vwap_slope * float(getattr(cfg, "QUICK_NEUTRAL_VWAP_SLOPE_WEIGHT", 120.0))`
+- **Line 4746** (Matched `\b\d{2,}\b`): `+ vwap_slope * float(getattr(cfg, "QUICK_NEUTRAL_VWAP_SLOPE_WEIGHT", 120.0))`
+- **Line 4747** (Matched `\b\d+\.\d+\b`): `+ rsi_mom * float(getattr(cfg, "QUICK_NEUTRAL_RSI_MOM_WEIGHT", 0.2))`
+- **Line 4749** (Matched `edge`): `edge_min = float(getattr(cfg, "QUICK_NEUTRAL_EDGE_MIN", 0.18))`
+- **Line 4749** (Matched `\b\d+\.\d+\b`): `edge_min = float(getattr(cfg, "QUICK_NEUTRAL_EDGE_MIN", 0.18))`
+- **Line 4749** (Matched `\b\d{2,}\b`): `edge_min = float(getattr(cfg, "QUICK_NEUTRAL_EDGE_MIN", 0.18))`
+- **Line 4750** (Matched `edge`): `if abs(edge) < edge_min:`
+- **Line 4752** (Matched `edge`): `direction = "BUY_CALL" if edge > 0 else "BUY_PUT"`
+- **Line 4753** (Matched `\b\d+\.\d+\b`): `base_score = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_BASE", 0.53))`
+- **Line 4753** (Matched `\b\d{2,}\b`): `base_score = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_BASE", 0.53))`
+- **Line 4754** (Matched `edge`): `edge_mult = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_EDGE_MULT", 0.22))`
+- **Line 4754** (Matched `\b\d+\.\d+\b`): `edge_mult = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_EDGE_MULT", 0.22))`
+- **Line 4754** (Matched `\b\d{2,}\b`): `edge_mult = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_EDGE_MULT", 0.22))`
+- **Line 4755** (Matched `\b\d+\.\d+\b`): `score_cap = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_CAP", 0.68))`
+- **Line 4755** (Matched `\b\d{2,}\b`): `score_cap = float(getattr(cfg, "QUICK_NEUTRAL_SCORE_CAP", 0.68))`
+- **Line 4756** (Matched `edge`): `score = min(score_cap, base_score + min(0.25, abs(edge) * edge_mult))`
+- **Line 4756** (Matched `\b\d+\.\d+\b`): `score = min(score_cap, base_score + min(0.25, abs(edge) * edge_mult))`
+- **Line 4756** (Matched `\b\d{2,}\b`): `score = min(score_cap, base_score + min(0.25, abs(edge) * edge_mult))`
+- **Line 4759** (Matched `edge`): `"reason": "Quick neutral edge fallback",`
+- **Line 4761** (Matched `edge`): `"edge": round(float(edge), 6),`
+- **Line 4769** (Matched `edge`): `vwap_edge = (float(ltp) - float(vwap)) / float(vwap)`
+- **Line 4770** (Matched `edge`): `edge_min = float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008))`
+- **Line 4770** (Matched `\b\d+\.\d+\b`): `edge_min = float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008))`
+- **Line 4770** (Matched `\b\d{2,}\b`): `edge_min = float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008))`
+- **Line 4771** (Matched `edge`): `if abs(vwap_edge) >= edge_min:`
+- **Line 4772** (Matched `edge`): `direction = "BUY_CALL" if vwap_edge > 0 else "BUY_PUT"`
+- **Line 4773** (Matched `\b\d+\.\d+\b`): `base = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 4773** (Matched `\b\d{2,}\b`): `base = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 4774** (Matched `\b\d+\.\d+\b`): `cap = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_CAP", 0.66))`
+- **Line 4774** (Matched `\b\d{2,}\b`): `cap = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_CAP", 0.66))`
+- **Line 4775** (Matched `edge`): `score = min(cap, base + min(0.08, abs(vwap_edge) * 20.0))`
+- **Line 4775** (Matched `\b\d+\.\d+\b`): `score = min(cap, base + min(0.08, abs(vwap_edge) * 20.0))`
+- **Line 4775** (Matched `\b\d{2,}\b`): `score = min(cap, base + min(0.08, abs(vwap_edge) * 20.0))`
+- **Line 4780** (Matched `edge`): `"edge": round(float(vwap_edge), 6),`
+- **Line 4782** (Matched `\b\d+\.\d+\b`): `atr = float(market_data.get("atr") or 0.0)`
+- **Line 4783** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)`
+- **Line 4784** (Matched `\b\d+\.\d+\b`): `ltp_change = float(market_data.get("ltp_change") or 0.0)`
+- **Line 4786** (Matched `\b\d+\.\d+\b`): `atr_ref = max(atr, max(float(ltp) * 0.0008, 1.0))`
+- **Line 4786** (Matched `\b\d{2,}\b`): `atr_ref = max(atr, max(float(ltp) * 0.0008, 1.0))`
+- **Line 4787** (Matched `edge`): `momentum_edge = float(move) / float(atr_ref)`
+- **Line 4788** (Matched `edge`): `momentum_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12))`
+- **Line 4788** (Matched `\b\d+\.\d+\b`): `momentum_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12))`
+- **Line 4788** (Matched `\b\d{2,}\b`): `momentum_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12))`
+- **Line 4789** (Matched `edge`): `if abs(momentum_edge) < momentum_min:`
+- **Line 4791** (Matched `edge`): `direction = "BUY_CALL" if momentum_edge > 0 else "BUY_PUT"`
+- **Line 4792** (Matched `\b\d+\.\d+\b`): `base = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 4792** (Matched `\b\d{2,}\b`): `base = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 4793** (Matched `\b\d+\.\d+\b`): `cap = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_CAP", 0.66))`
+- **Line 4793** (Matched `\b\d{2,}\b`): `cap = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_CAP", 0.66))`
+- **Line 4794** (Matched `edge`): `score = min(cap, base + min(0.08, abs(momentum_edge) * 0.12))`
+- **Line 4794** (Matched `\b\d+\.\d+\b`): `score = min(cap, base + min(0.08, abs(momentum_edge) * 0.12))`
+- **Line 4794** (Matched `\b\d{2,}\b`): `score = min(cap, base + min(0.08, abs(momentum_edge) * 0.12))`
+- **Line 4799** (Matched `edge`): `"edge": round(float(momentum_edge), 6),`
+- **Line 4804** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)`
+- **Line 4805** (Matched `\b\d+\.\d+\b`): `ltp_change = float(market_data.get("ltp_change") or 0.0)`
+- **Line 4807** (Matched `edge`): `edge = (float(ltp) - float(vwap)) / max(float(vwap), 1e-6)`
+- **Line 4808** (Matched `edge`): `if edge > 0.0002:`
+- **Line 4808** (Matched `\b\d+\.\d+\b`): `if edge > 0.0002:`
+- **Line 4808** (Matched `\b\d{2,}\b`): `if edge > 0.0002:`
+- **Line 4810** (Matched `edge`): `if edge < -0.0002:`
+- **Line 4810** (Matched `\b\d+\.\d+\b`): `if edge < -0.0002:`
+- **Line 4810** (Matched `\b\d{2,}\b`): `if edge < -0.0002:`
+- **Line 4832** (Matched `\b\d+\.\d+\b`): `return 0.0, 0.0, 0.0`
+- **Line 4833** (Matched `\b\d+\.\d+\b`): `volume = max(float(getattr(trade, "volume", 0.0) or 0.0), float(getattr(trade, "current_volume", 0.0...`
+- **Line 4834** (Matched `\b\d+\.\d+\b`): `min_volume = max(float(getattr(cfg, "MIN_VOLUME_FILTER", 1.0) or 1.0), 1.0)`
+- **Line 4835** (Matched `\b\d+\.\d+\b`): `liquidity_score = max(0.0, min(1.0, volume / min_volume)) if volume > 0 else 0.35`
+- **Line 4835** (Matched `\b\d{2,}\b`): `liquidity_score = max(0.0, min(1.0, volume / min_volume)) if volume > 0 else 0.35`
+- **Line 4839** (Matched `\b\d+\.\d+\b`): `if bid is not None and ask is not None and opt_ltp not in (None, 0.0):`
+- **Line 4840** (Matched `\b\d+\.\d+\b`): `spread_pct = max(0.0, float(ask) - float(bid)) / max(float(opt_ltp), 1e-6)`
+- **Line 4841** (Matched `\b\d+\.\d+\b`): `max_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT", 0.03) or 0.03), 1e-6)`
+- **Line 4841** (Matched `\b\d{2,}\b`): `max_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT", 0.03) or 0.03), 1e-6)`
+- **Line 4842** (Matched `\b\d+\.\d+\b`): `spread_score = max(0.0, min(1.0, 1.0 - min(spread_pct / max_spread, 1.0)))`
+- **Line 4844** (Matched `\b\d+\.\d+\b`): `spread_score = 0.5`
+- **Line 4845** (Matched `\b\d+\.\d+\b`): `quote_score = 1.0 if bool(getattr(trade, "quote_ok", True)) else 0.4`
+- **Line 4847** (Matched `\b\d+\.\d+\b`): `(liquidity_score * 0.4) + (spread_score * 0.4) + (quote_score * 0.2),`
+- **Line 4861** (Matched `confidence`): `confidence: float,`
+- **Line 4877** (Matched `\b\d+\.\d+\b`): `underlying_ltp = float(ltp or 0.0)`
+- **Line 4878** (Matched `\b\d+\.\d+\b`): `underlying_vwap = float(vwap or underlying_ltp or 0.0)`
+- **Line 4889** (Matched `\b\d+\.\d+\b`): `underlying_atr = float(market_data.get("atr") or max(1.0, underlying_ltp * 0.002))`
+- **Line 4889** (Matched `\b\d{2,}\b`): `underlying_atr = float(market_data.get("atr") or max(1.0, underlying_ltp * 0.002))`
+- **Line 4892** (Matched `\b\d+\.\d+\b`): `max(0.01, entry_price - underlying_atr)`
+- **Line 4892** (Matched `\b\d{2,}\b`): `max(0.01, entry_price - underlying_atr)`
+- **Line 4894** (Matched `\b\d+\.\d+\b`): `else max(0.01, entry_price + underlying_atr)`
+- **Line 4894** (Matched `\b\d{2,}\b`): `else max(0.01, entry_price + underlying_atr)`
+- **Line 4897** (Matched `\b\d+\.\d+\b`): `entry_price + (underlying_atr * 1.5)`
+- **Line 4899** (Matched `\b\d+\.\d+\b`): `else max(0.01, entry_price - (underlying_atr * 1.5))`
+- **Line 4899** (Matched `\b\d{2,}\b`): `else max(0.01, entry_price - (underlying_atr * 1.5))`
+- **Line 4923** (Matched `\b\d+\.\d+\b`): `key=lambda opt: abs(float(opt.get("strike") or 0.0) - underlying_ltp),`
+- **Line 4927** (Matched `\b\d+\.\d+\b`): `strike = int(float(chosen_opt.get("strike") or 0.0))`
+- **Line 4932** (Matched `\b\d+\.\d+\b`): `option_entry_price = float(chosen_opt.get("ltp") or 0.0)`
+- **Line 4937** (Matched `\b\d+\.\d+\b`): `option_width = max(0.0, option_ask - option_bid)`
+- **Line 4944** (Matched `\b\d+\.\d+\b`): `stop_mult=1.0,`
+- **Line 4945** (Matched `\b\d+\.\d+\b`): `target_mult=1.4,`
+- **Line 4949** (Matched `\b\d+\.\d+\b`): `entry_price + max(option_risk_proxy * 1.4, option_width, 0.01),`
+- **Line 4949** (Matched `\b\d{2,}\b`): `entry_price + max(option_risk_proxy * 1.4, option_width, 0.01),`
+- **Line 4954** (Matched `\b\d+\.\d+\b`): `max(0.01, entry_price - max(option_risk_proxy, option_width, 0.01)),`
+- **Line 4954** (Matched `\b\d{2,}\b`): `max(0.01, entry_price - max(option_risk_proxy, option_width, 0.01)),`
+- **Line 4959** (Matched `\b\d+\.\d+\b`): `max(0.01, entry_price - max(option_risk_proxy * 1.4, option_width, 0.01)),`
+- **Line 4959** (Matched `\b\d{2,}\b`): `max(0.01, entry_price - max(option_risk_proxy * 1.4, option_width, 0.01)),`
+- **Line 4964** (Matched `\b\d+\.\d+\b`): `entry_price + max(option_risk_proxy, option_width, 0.01),`
+- **Line 4964** (Matched `\b\d{2,}\b`): `entry_price + max(option_risk_proxy, option_width, 0.01),`
+- **Line 5021** (Matched `confidence`): `opportunity_confidence = self._clamp_confidence(confidence)`
+- **Line 5022** (Matched `confidence`): `if opportunity_confidence is None:`
+- **Line 5023** (Matched `confidence`): `opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 5023** (Matched `\b\d+\.\d+\b`): `opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 5023** (Matched `\b\d{2,}\b`): `opportunity_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 5024** (Matched `confidence`): `opportunity_confidence = round(float(opportunity_confidence), 3)`
+- **Line 5025** (Matched `confidence`): `candidate_quality_score = self._clamp_confidence(quality_score)`
+- **Line 5027** (Matched `confidence`): `candidate_quality_score = opportunity_confidence`
+- **Line 5042** (Matched `\b\d+\.\d+\b`): `else (session_ctx.get("session_entry_penalty") or 0.0)`
+- **Line 5053** (Matched `\b\d+\.\d+\b`): `min_exec_quality = float(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_MIN_SCORE", 0.34))`
+- **Line 5053** (Matched `\b\d{2,}\b`): `min_exec_quality = float(getattr(cfg, "NONLIVE_OPPORTUNITY_EXECUTION_MIN_SCORE", 0.34))`
+- **Line 5095** (Matched `confidence`): `"family_feedback_confidence",`
+- **Line 5108** (Matched `confidence`): `"strategy_weight_confidence",`
+- **Line 5122** (Matched `\b\d+\.\d+\b`): `trade_score = round(float(candidate_quality_score) * 100.0, 2)`
+- **Line 5122** (Matched `\b\d{2,}\b`): `trade_score = round(float(candidate_quality_score) * 100.0, 2)`
+- **Line 5143** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 5145** (Matched `\b\d+\.\d+\b`): `expected_slippage=0.0,`
+- **Line 5146** (Matched `confidence`): `confidence=opportunity_confidence,`
+- **Line 5167** (Matched `confidence`): `"signal_score": opportunity_confidence,`
+- **Line 5181** (Matched `confidence`): `family_feedback_confidence=source_flags.get("family_feedback_confidence"),`
+- **Line 5194** (Matched `confidence`): `strategy_weight_confidence=source_flags.get("strategy_weight_confidence"),`
+- **Line 5210** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 5211** (Matched `confidence`): `confidence=opportunity_confidence,`
+- **Line 5212** (Matched `confidence`): `model_raw=opportunity_confidence,`
+- **Line 5213** (Matched `confidence`): `model_component=opportunity_confidence,`
+- **Line 5215** (Matched `confidence`): `before_soft_veto=opportunity_confidence,`
+- **Line 5216** (Matched `confidence`): `after_soft_veto=opportunity_confidence,`
+- **Line 5217** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 5219** (Matched `confidence`): `base=opportunity_confidence,`
+- **Line 5220** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 5224** (Matched `confidence`): `built_trade = self._decorate_trade_context(trade, market_data, opportunity_confidence)`
+- **Line 5233** (Matched `\b\d+\.\d+\b`): `atr_value = max(float(quality_detail_map.get("atr") or underlying_atr or 1.0), 1e-6)`
+- **Line 5234** (Matched `\b\d+\.\d+\b`): `breakout_strength = float(quality_detail_map.get("breakout_strength") or 0.0)`
+- **Line 5235** (Matched `\b\d+\.\d+\b`): `mean_reversion_strength = float(quality_detail_map.get("mean_reversion_strength") or 0.0)`
+- **Line 5236** (Matched `\b\d+\.\d+\b`): `volatility_expansion_strength = float(quality_detail_map.get("volatility_expansion_strength") or 0.0...`
+- **Line 5237** (Matched `edge`): `range_edge_strength = float(quality_detail_map.get("range_edge_strength") or 0.0)`
+- **Line 5237** (Matched `\b\d+\.\d+\b`): `range_edge_strength = float(quality_detail_map.get("range_edge_strength") or 0.0)`
+- **Line 5243** (Matched `edge`): `clean_range_edge = bool(quality_detail_map.get("clean_range_edge"))`
+- **Line 5245** (Matched `confidence`): `market_quality_score = self._clamp_confidence(quality_detail_map.get("market_quality_score")) or 0.0`
+- **Line 5245** (Matched `\b\d+\.\d+\b`): `market_quality_score = self._clamp_confidence(quality_detail_map.get("market_quality_score")) or 0.0`
+- **Line 5246** (Matched `confidence`): `regime_alignment_component = self._clamp_confidence(`
+- **Line 5251** (Matched `\b\d+\.\d+\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35`
+- **Line 5251** (Matched `\b\d{2,}\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35`
+- **Line 5253** (Matched `\b\d+\.\d+\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35`
+- **Line 5253** (Matched `\b\d{2,}\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "TRENDING" else 0.35`
+- **Line 5255** (Matched `\b\d+\.\d+\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "SIDEWAYS" else 0.45`
+- **Line 5255** (Matched `\b\d{2,}\b`): `regime_alignment_component = 1.0 if strategy_regime_mode == "SIDEWAYS" else 0.45`
+- **Line 5258** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5259** (Matched `\b\d+\.\d+\b`): `min(1.0, float(quality_detail_map.get("bullish_structure_strength") or 0.0) / 5.0),`
+- **Line 5263** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5264** (Matched `\b\d+\.\d+\b`): `min(1.0, float(quality_detail_map.get("bearish_structure_strength") or 0.0) / 5.0),`
+- **Line 5268** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5269** (Matched `edge`): `min(1.0, max(range_edge_strength, float(source_flags.get("family_strength") or 0.0) / 5.0)),`
+- **Line 5269** (Matched `\b\d+\.\d+\b`): `min(1.0, max(range_edge_strength, float(source_flags.get("family_strength") or 0.0) / 5.0)),`
+- **Line 5273** (Matched `confidence`): `self._clamp_confidence(`
+- **Line 5275** (Matched `\b\d+\.\d+\b`): `float(regime_alignment_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_REGIME", 0.40))`
+- **Line 5275** (Matched `\b\d{2,}\b`): `float(regime_alignment_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_REGIME", 0.40))`
+- **Line 5276** (Matched `\b\d+\.\d+\b`): `+ float(structure_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_STRUCTURE", 0.35))`
+- **Line 5276** (Matched `\b\d{2,}\b`): `+ float(structure_component) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_STRUCTURE", 0.35))`
+- **Line 5277** (Matched `\b\d+\.\d+\b`): `+ float(candidate_quality_score) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_THESIS", 0.25))`
+- **Line 5277** (Matched `\b\d{2,}\b`): `+ float(candidate_quality_score) * float(getattr(cfg, "SETUP_SCORE_WEIGHT_THESIS", 0.25))`
+- **Line 5280** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5286** (Matched `\b\d+\.\d+\b`): `min(1.0, breakout_strength / 1.60)`
+- **Line 5286** (Matched `\b\d{2,}\b`): `min(1.0, breakout_strength / 1.60)`
+- **Line 5287** (Matched `\b\d+\.\d+\b`): `+ (0.10 if directional_signal_present else 0.0)`
+- **Line 5287** (Matched `\b\d{2,}\b`): `+ (0.10 if directional_signal_present else 0.0)`
+- **Line 5288** (Matched `\b\d+\.\d+\b`): `+ (0.05 if abs(float(quality_detail_map.get("ltp_change_window") or 0.0)) >= (atr_value * 0.15) else...`
+- **Line 5288** (Matched `\b\d{2,}\b`): `+ (0.05 if abs(float(quality_detail_map.get("ltp_change_window") or 0.0)) >= (atr_value * 0.15) else...`
+- **Line 5292** (Matched `\b\d+\.\d+\b`): `min(1.0, mean_reversion_strength / 1.50)`
+- **Line 5292** (Matched `\b\d{2,}\b`): `min(1.0, mean_reversion_strength / 1.50)`
+- **Line 5293** (Matched `\b\d+\.\d+\b`): `+ (0.08 if mean_signal_present else 0.0)`
+- **Line 5293** (Matched `\b\d{2,}\b`): `+ (0.08 if mean_signal_present else 0.0)`
+- **Line 5294** (Matched `\b\d+\.\d+\b`): `+ (0.08 if (support_touch or resistance_touch) else 0.0)`
+- **Line 5294** (Matched `\b\d{2,}\b`): `+ (0.08 if (support_touch or resistance_touch) else 0.0)`
+- **Line 5298** (Matched `\b\d+\.\d+\b`): `min(1.0, volatility_expansion_strength / 1.65)`
+- **Line 5298** (Matched `\b\d{2,}\b`): `min(1.0, volatility_expansion_strength / 1.65)`
+- **Line 5299** (Matched `\b\d+\.\d+\b`): `+ (0.10 if expansion_signal_present else 0.0)`
+- **Line 5299** (Matched `\b\d{2,}\b`): `+ (0.10 if expansion_signal_present else 0.0)`
+- **Line 5303** (Matched `\b\d+\.\d+\b`): `0.35`
+- **Line 5303** (Matched `\b\d{2,}\b`): `0.35`
+- **Line 5304** (Matched `edge`): `+ (0.18 if clean_range_edge else 0.0)`
+- **Line 5304** (Matched `\b\d+\.\d+\b`): `+ (0.18 if clean_range_edge else 0.0)`
+- **Line 5304** (Matched `\b\d{2,}\b`): `+ (0.18 if clean_range_edge else 0.0)`
+- **Line 5305** (Matched `\b\d+\.\d+\b`): `+ (0.12 if range_compression else 0.0)`
+- **Line 5305** (Matched `\b\d{2,}\b`): `+ (0.12 if range_compression else 0.0)`
+- **Line 5306** (Matched `\b\d+\.\d+\b`): `+ (0.14 if (support_touch or resistance_touch) else 0.0)`
+- **Line 5306** (Matched `\b\d{2,}\b`): `+ (0.14 if (support_touch or resistance_touch) else 0.0)`
+- **Line 5307** (Matched `edge`): `+ min(0.21, range_edge_strength * 0.08)`
+- **Line 5307** (Matched `\b\d+\.\d+\b`): `+ min(0.21, range_edge_strength * 0.08)`
+- **Line 5307** (Matched `\b\d{2,}\b`): `+ min(0.21, range_edge_strength * 0.08)`
+- **Line 5309** (Matched `confidence`): `trigger_score_raw = float(self._clamp_confidence(trigger_base) or 0.0)`
+- **Line 5309** (Matched `\b\d+\.\d+\b`): `trigger_score_raw = float(self._clamp_confidence(trigger_base) or 0.0)`
+- **Line 5312** (Matched `\b\d+\.\d+\b`): `midday_trigger_min = float(session_policy.get("directional_trigger_min") or 0.66)`
+- **Line 5312** (Matched `\b\d{2,}\b`): `midday_trigger_min = float(session_policy.get("directional_trigger_min") or 0.66)`
+- **Line 5316** (Matched `confidence`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.75))`
+- **Line 5316** (Matched `\b\d+\.\d+\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.75))`
+- **Line 5316** (Matched `\b\d{2,}\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.75))`
+- **Line 5317** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5321** (Matched `confidence`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.60))`
+- **Line 5321** (Matched `\b\d+\.\d+\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.60))`
+- **Line 5321** (Matched `\b\d{2,}\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.60))`
+- **Line 5322** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5326** (Matched `confidence`): `self._clamp_confidence(trigger_score_raw + 0.04 - (session_entry_penalty * 0.25))`
+- **Line 5326** (Matched `\b\d+\.\d+\b`): `self._clamp_confidence(trigger_score_raw + 0.04 - (session_entry_penalty * 0.25))`
+- **Line 5326** (Matched `\b\d{2,}\b`): `self._clamp_confidence(trigger_score_raw + 0.04 - (session_entry_penalty * 0.25))`
+- **Line 5327** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5331** (Matched `confidence`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.35))`
+- **Line 5331** (Matched `\b\d+\.\d+\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.35))`
+- **Line 5331** (Matched `\b\d{2,}\b`): `self._clamp_confidence(trigger_score_raw - (session_entry_penalty * 0.35))`
+- **Line 5332** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5335** (Matched `\b\d+\.\d+\b`): `stop_distance = abs(float(getattr(built_trade, "entry_price", 0.0) or 0.0) - float(getattr(built_tra...`
+- **Line 5340** (Matched `\b\d+\.\d+\b`): `float(stop_distance) / max(float(getattr(built_trade, "entry_price", 0.0) or 0.0), 1e-6)`
+- **Line 5344** (Matched `\b\d+\.\d+\b`): `invalidation_stretch = 0.0`
+- **Line 5347** (Matched `\b\d+\.\d+\b`): `float(stop_distance_pct) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_MAX_PCT", 0.35) or 0....`
+- **Line 5347** (Matched `\b\d{2,}\b`): `float(stop_distance_pct) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_MAX_PCT", 0.35) or 0....`
+- **Line 5348** (Matched `\b\d+\.\d+\b`): `float(entry_distance_to_invalidation or 0.0) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_M...`
+- **Line 5348** (Matched `\b\d{2,}\b`): `float(entry_distance_to_invalidation or 0.0) / max(float(getattr(cfg, "ENTRY_INVALIDATION_DISTANCE_M...`
+- **Line 5351** (Matched `confidence`): `float(self._clamp_confidence(1.0 - min(1.0, invalidation_stretch * 0.75)) or 0.0),`
+- **Line 5351** (Matched `\b\d+\.\d+\b`): `float(self._clamp_confidence(1.0 - min(1.0, invalidation_stretch * 0.75)) or 0.0),`
+- **Line 5351** (Matched `\b\d{2,}\b`): `float(self._clamp_confidence(1.0 - min(1.0, invalidation_stretch * 0.75)) or 0.0),`
+- **Line 5355** (Matched `\b\d+\.\d+\b`): `move_extension_atr = abs(float(quality_detail_map.get("ltp_change_window") or 0.0)) / atr_value`
+- **Line 5358** (Matched `edge`): `stretch_atr = max(vwap_extension_atr, range_edge_strength)`
+- **Line 5359** (Matched `\b\d+\.\d+\b`): `min_stretch = max(float(getattr(cfg, "MEAN_REVERSION_MIN_STRETCH_ATR", 0.45) or 0.45), 1e-6)`
+- **Line 5359** (Matched `\b\d{2,}\b`): `min_stretch = max(float(getattr(cfg, "MEAN_REVERSION_MIN_STRETCH_ATR", 0.45) or 0.45), 1e-6)`
+- **Line 5361** (Matched `confidence`): `float(self._clamp_confidence(stretch_atr / min_stretch) or 0.0),`
+- **Line 5361** (Matched `\b\d+\.\d+\b`): `float(self._clamp_confidence(stretch_atr / min_stretch) or 0.0),`
+- **Line 5364** (Matched `\b\d+\.\d+\b`): `overextension_penalty = round(max(0.0, 1.0 - float(overextension_score)), 6)`
+- **Line 5365** (Matched `\b\d+\.\d+\b`): `if float(overextension_score) < 0.50:`
+- **Line 5365** (Matched `\b\d{2,}\b`): `if float(overextension_score) < 0.50:`
+- **Line 5368** (Matched `\b\d+\.\d+\b`): `vwap_soft = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_VWAP_ATR_SOFT", 1.0) or 1.0), 1e-6)`
+- **Line 5369** (Matched `\b\d+\.\d+\b`): `vwap_hard = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_VWAP_ATR_HARD", 2.0) or 2.0), vwap_soft + 1e...`
+- **Line 5370** (Matched `\b\d+\.\d+\b`): `move_soft = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_MOVE_ATR_SOFT", 1.2) or 1.2), 1e-6)`
+- **Line 5371** (Matched `\b\d+\.\d+\b`): `move_hard = max(float(getattr(cfg, "ENTRY_OVEREXTENSION_MOVE_ATR_HARD", 2.4) or 2.4), move_soft + 1e...`
+- **Line 5374** (Matched `confidence`): `self._clamp_confidence(`
+- **Line 5376** (Matched `\b\d+\.\d+\b`): `max(0.0, (vwap_extension_atr - vwap_soft) / (vwap_hard - vwap_soft)),`
+- **Line 5377** (Matched `\b\d+\.\d+\b`): `max(0.0, (move_extension_atr - move_soft) / (move_hard - move_soft)),`
+- **Line 5380** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5384** (Matched `\b\d+\.\d+\b`): `overextension_score = round(max(0.0, 1.0 - float(overextension_penalty)), 6)`
+- **Line 5385** (Matched `\b\d+\.\d+\b`): `if float(overextension_penalty) >= 0.50:`
+- **Line 5385** (Matched `\b\d{2,}\b`): `if float(overextension_penalty) >= 0.50:`
+- **Line 5387** (Matched `confidence`): `timing_quality = round(float(self._clamp_confidence(1.0 - session_entry_penalty) or 0.0), 6)`
+- **Line 5387** (Matched `\b\d+\.\d+\b`): `timing_quality = round(float(self._clamp_confidence(1.0 - session_entry_penalty) or 0.0), 6)`
+- **Line 5390** (Matched `confidence`): `self._clamp_confidence(`
+- **Line 5392** (Matched `\b\d+\.\d+\b`): `float(invalidation_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_INVALIDATION", 0.35))`
+- **Line 5392** (Matched `\b\d{2,}\b`): `float(invalidation_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_INVALIDATION", 0.35))`
+- **Line 5393** (Matched `\b\d+\.\d+\b`): `+ float(overextension_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_OVEREXTENSION", 0.35))`
+- **Line 5393** (Matched `\b\d{2,}\b`): `+ float(overextension_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_OVEREXTENSION", 0.35))`
+- **Line 5394** (Matched `\b\d+\.\d+\b`): `+ float(execution_feasibility_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_EXECUTION_FIT", 0.20...`
+- **Line 5394** (Matched `\b\d{2,}\b`): `+ float(execution_feasibility_score) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_EXECUTION_FIT", 0.20...`
+- **Line 5395** (Matched `\b\d+\.\d+\b`): `+ float(timing_quality) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_SESSION", 0.10))`
+- **Line 5395** (Matched `\b\d{2,}\b`): `+ float(timing_quality) * float(getattr(cfg, "ENTRY_QUALITY_WEIGHT_SESSION", 0.10))`
+- **Line 5398** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5407** (Matched `\b\d+\.\d+\b`): `elif invalidation_score < 0.30:`
+- **Line 5407** (Matched `\b\d{2,}\b`): `elif invalidation_score < 0.30:`
+- **Line 5410** (Matched `\b\d+\.\d+\b`): `float(trade_source_flags.get("family_consensus_score") or 0.0),`
+- **Line 5420** (Matched `confidence`): `self._clamp_confidence(`
+- **Line 5422** (Matched `\b\d+\.\d+\b`): `float(setup_score) * float(family_survival_policy.get("weight_setup", 0.30))`
+- **Line 5422** (Matched `\b\d{2,}\b`): `float(setup_score) * float(family_survival_policy.get("weight_setup", 0.30))`
+- **Line 5423** (Matched `\b\d+\.\d+\b`): `+ float(trigger_score) * float(family_survival_policy.get("weight_trigger", 0.25))`
+- **Line 5423** (Matched `\b\d{2,}\b`): `+ float(trigger_score) * float(family_survival_policy.get("weight_trigger", 0.25))`
+- **Line 5424** (Matched `\b\d+\.\d+\b`): `+ float(entry_quality_score) * float(family_survival_policy.get("weight_entry_quality", 0.25))`
+- **Line 5424** (Matched `\b\d{2,}\b`): `+ float(entry_quality_score) * float(family_survival_policy.get("weight_entry_quality", 0.25))`
+- **Line 5425** (Matched `\b\d+\.\d+\b`): `+ float(execution_feasibility_score) * float(family_survival_policy.get("weight_execution", 0.10))`
+- **Line 5425** (Matched `\b\d{2,}\b`): `+ float(execution_feasibility_score) * float(family_survival_policy.get("weight_execution", 0.10))`
+- **Line 5426** (Matched `\b\d+\.\d+\b`): `+ float(family_consensus_score) * float(family_survival_policy.get("weight_consensus", 0.10))`
+- **Line 5426** (Matched `\b\d{2,}\b`): `+ float(family_consensus_score) * float(family_survival_policy.get("weight_consensus", 0.10))`
+- **Line 5429** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 5442** (Matched `\b\d+\.\d+\b`): `component_floor = float(family_survival_policy.get("component_min", 0.26) or 0.26)`
+- **Line 5442** (Matched `\b\d{2,}\b`): `component_floor = float(family_survival_policy.get("component_min", 0.26) or 0.26)`
+- **Line 5443** (Matched `\b\d+\.\d+\b`): `survival_floor = float(family_survival_policy.get("min_score", 0.42) or 0.42)`
+- **Line 5443** (Matched `\b\d{2,}\b`): `survival_floor = float(family_survival_policy.get("min_score", 0.42) or 0.42)`
+- **Line 5444** (Matched `\b\d+\.\d+\b`): `executable_survival_floor = float(family_survival_policy.get("executable_min_score", 0.55) or 0.55)`
+- **Line 5444** (Matched `\b\d{2,}\b`): `executable_survival_floor = float(family_survival_policy.get("executable_min_score", 0.55) or 0.55)`
+- **Line 5453** (Matched `\b\d+\.\d+\b`): `if candidate_type in {"directional", "volatility_expansion"} and overextension_penalty >= 0.65:`
+- **Line 5453** (Matched `\b\d{2,}\b`): `if candidate_type in {"directional", "volatility_expansion"} and overextension_penalty >= 0.65:`
+- **Line 5455** (Matched `\b\d+\.\d+\b`): `if candidate_type in {"mean_reversion", "watchlist"} and overextension_score < 0.45:`
+- **Line 5455** (Matched `\b\d{2,}\b`): `if candidate_type in {"mean_reversion", "watchlist"} and overextension_score < 0.45:`
+- **Line 5457** (Matched `\b\d+\.\d+\b`): `if invalidation_score < 0.20:`
+- **Line 5457** (Matched `\b\d{2,}\b`): `if invalidation_score < 0.20:`
+- **Line 5467** (Matched `\b\d+\.\d+\b`): `if float(risk_assessment.regime_failure_throttle or 0.0) > 0.0:`
+- **Line 5469** (Matched `\b\d+\.\d+\b`): `if float(risk_assessment.family_failure_throttle or 0.0) > 0.0:`
+- **Line 5483** (Matched `\b\d+\.\d+\b`): `and weakest_survival_component >= max(component_floor * 0.85, 0.10)`
+- **Line 5483** (Matched `\b\d{2,}\b`): `and weakest_survival_component >= max(component_floor * 0.85, 0.10)`
+- **Line 5558** (Matched `confidence`): `"risk_learning_confidence": round(float(risk_assessment.risk_learning_confidence), 6),`
+- **Line 5568** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5570** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 5572** (Matched `\b\d+\.\d+\b`): `- (max(0.0, 1.0 - float(execution_feasibility_score)) * 0.12)`
+- **Line 5572** (Matched `\b\d{2,}\b`): `- (max(0.0, 1.0 - float(execution_feasibility_score)) * 0.12)`
+- **Line 5573** (Matched `\b\d+\.\d+\b`): `- (float(overextension_penalty) * 0.18)`
+- **Line 5573** (Matched `\b\d{2,}\b`): `- (float(overextension_penalty) * 0.18)`
+- **Line 5574** (Matched `\b\d+\.\d+\b`): `- (float(session_entry_penalty) * 0.10)`
+- **Line 5574** (Matched `\b\d{2,}\b`): `- (float(session_entry_penalty) * 0.10)`
+- **Line 5575** (Matched `\b\d+\.\d+\b`): `- (0.10 if not bool(risk_assessment.risk_budget_ok) else 0.0)`
+- **Line 5575** (Matched `\b\d{2,}\b`): `- (0.10 if not bool(risk_assessment.risk_budget_ok) else 0.0)`
+- **Line 5576** (Matched `\b\d+\.\d+\b`): `- (float(risk_assessment.correlation_penalty or 0.0) * 0.12)`
+- **Line 5576** (Matched `\b\d{2,}\b`): `- (float(risk_assessment.correlation_penalty or 0.0) * 0.12)`
+- **Line 5577** (Matched `\b\d+\.\d+\b`): `- (float(risk_assessment.regime_failure_throttle or 0.0) * 0.30)`
+- **Line 5577** (Matched `\b\d{2,}\b`): `- (float(risk_assessment.regime_failure_throttle or 0.0) * 0.30)`
+- **Line 5578** (Matched `\b\d+\.\d+\b`): `- (float(risk_assessment.family_failure_throttle or 0.0) * 0.30)`
+- **Line 5578** (Matched `\b\d{2,}\b`): `- (float(risk_assessment.family_failure_throttle or 0.0) * 0.30)`
+- **Line 5579** (Matched `\b\d+\.\d+\b`): `+ (float(risk_assessment.risk_learning_adjustment or 0.0) * 0.50),`
+- **Line 5579** (Matched `\b\d{2,}\b`): `+ (float(risk_assessment.risk_learning_adjustment or 0.0) * 0.50),`
+- **Line 5598** (Matched `confidence`): `"family_feedback_confidence": trade_source_flags.get("family_feedback_confidence"),`
+- **Line 5615** (Matched `confidence`): `"strategy_weight_confidence": trade_source_flags.get("strategy_weight_confidence"),`
+- **Line 5681** (Matched `confidence`): `family_feedback_confidence=trade_source_flags.get("family_feedback_confidence"),`
+- **Line 5692** (Matched `confidence`): `strategy_weight_confidence=trade_source_flags.get("strategy_weight_confidence"),`
+- **Line 5706** (Matched `confidence`): `risk_learning_confidence=round(float(risk_assessment.risk_learning_confidence), 6),`
+- **Line 5762** (Matched `\b\d+\.\d+\b`): `underlying_ltp = float(ltp or 0.0)`
+- **Line 5763** (Matched `\b\d+\.\d+\b`): `underlying_vwap = float(vwap or underlying_ltp or 0.0)`
+- **Line 5772** (Matched `\b\d+\.\d+\b`): `atr = max(float(market_data.get("atr") or 0.0), max(float(underlying_ltp) * 0.0005, 1.0))`
+- **Line 5772** (Matched `\b\d{2,}\b`): `atr = max(float(market_data.get("atr") or 0.0), max(float(underlying_ltp) * 0.0005, 1.0))`
+- **Line 5773** (Matched `edge`): `vwap_edge = (`
+- **Line 5776** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 5778** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)`
+- **Line 5779** (Matched `\b\d+\.\d+\b`): `ltp_change_5m = float(market_data.get("ltp_change_5m") or 0.0)`
+- **Line 5780** (Matched `\b\d+\.\d+\b`): `ltp_change_10m = float(market_data.get("ltp_change_10m") or 0.0)`
+- **Line 5781** (Matched `\b\d+\.\d+\b`): `rsi_mom = float(market_data.get("rsi_mom") or 0.0)`
+- **Line 5782** (Matched `\b\d+\.\d+\b`): `vol_z = float(market_data.get("vol_z") or 0.0)`
+- **Line 5783** (Matched `edge`): `directional_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008), 1...`
+- **Line 5783** (Matched `\b\d+\.\d+\b`): `directional_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008), 1...`
+- **Line 5783** (Matched `\b\d{2,}\b`): `directional_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008), 1...`
+- **Line 5784** (Matched `\b\d+\.\d+\b`): `expansion_move_min = max(float(getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02) or 0.02) * atr, 1e...`
+- **Line 5784** (Matched `\b\d{2,}\b`): `expansion_move_min = max(float(getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02) or 0.02) * atr, 1e...`
+- **Line 5785** (Matched `edge`): `mean_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008) * 1.5, 1e...`
+- **Line 5785** (Matched `\b\d+\.\d+\b`): `mean_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008) * 1.5, 1e...`
+- **Line 5785** (Matched `\b\d{2,}\b`): `mean_edge_min = max(float(getattr(cfg, "PLANNING_SIGNAL_VWAP_EDGE_MIN", 0.0008) or 0.0008) * 1.5, 1e...`
+- **Line 5786** (Matched `edge`): `mean_rsi_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12) or 0.12)`
+- **Line 5786** (Matched `\b\d+\.\d+\b`): `mean_rsi_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12) or 0.12)`
+- **Line 5786** (Matched `\b\d{2,}\b`): `mean_rsi_min = float(getattr(cfg, "PLANNING_SIGNAL_MOMENTUM_EDGE_MIN", 0.12) or 0.12)`
+- **Line 5787** (Matched `\b\d{2,}\b`): `micro_move_min = max(abs(float(getattr(cfg, "MICRO_5M_UP_PTS", 15) or 15)), abs(float(getattr(cfg, "...`
+- **Line 5791** (Matched `confidence`): `strategy_regime_confidence = max(`
+- **Line 5792** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5793** (Matched `confidence`): `min(1.0, float(strategy_regime_ctx.get("regime_confidence") or regime_ctx.get("regime_confidence") o...`
+- **Line 5793** (Matched `\b\d+\.\d+\b`): `min(1.0, float(strategy_regime_ctx.get("regime_confidence") or regime_ctx.get("regime_confidence") o...`
+- **Line 5797** (Matched `\b\d+\.\d+\b`): `session_entry_penalty = float(session_ctx.get("session_entry_penalty") or 0.0)`
+- **Line 5809** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5811** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 5813** (Matched `confidence`): `market_data.get("data_confidence")`
+- **Line 5814** (Matched `\b\d+\.\d+\b`): `or (0.75 if indicators_ok else (0.55 if nonlive_feature_fallback else 0.35))`
+- **Line 5814** (Matched `\b\d{2,}\b`): `or (0.75 if indicators_ok else (0.55 if nonlive_feature_fallback else 0.35))`
+- **Line 5819** (Matched `\b\d+\.\d+\b`): `max(0.5, min(1.0, float(getattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75) or 0.75)))`
+- **Line 5819** (Matched `\b\d{2,}\b`): `max(0.5, min(1.0, float(getattr(cfg, "NONLIVE_FALLBACK_SIGNAL_STRENGTH_MIN", 0.75) or 0.75)))`
+- **Line 5821** (Matched `\b\d+\.\d+\b`): `else 1.0`
+- **Line 5848** (Matched `edge`): `abs(vwap_edge) / directional_edge_min,`
+- **Line 5853** (Matched `\b\d+\.\d+\b`): `5.0,`
+- **Line 5855** (Matched `edge`): `max(0.0, vwap_edge / directional_edge_min) * 0.25`
+- **Line 5855** (Matched `\b\d+\.\d+\b`): `max(0.0, vwap_edge / directional_edge_min) * 0.25`
+- **Line 5855** (Matched `\b\d{2,}\b`): `max(0.0, vwap_edge / directional_edge_min) * 0.25`
+- **Line 5856** (Matched `\b\d+\.\d+\b`): `+ max(0.0, ltp_change_window / expansion_move_min) * 0.25`
+- **Line 5856** (Matched `\b\d{2,}\b`): `+ max(0.0, ltp_change_window / expansion_move_min) * 0.25`
+- **Line 5857** (Matched `\b\d+\.\d+\b`): `+ max(0.0, ltp_change_5m / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5857** (Matched `\b\d{2,}\b`): `+ max(0.0, ltp_change_5m / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5858** (Matched `\b\d+\.\d+\b`): `+ max(0.0, ltp_change_10m / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5858** (Matched `\b\d{2,}\b`): `+ max(0.0, ltp_change_10m / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5859** (Matched `\b\d+\.\d+\b`): `+ max(0.0, rsi_mom / max(mean_rsi_min, 1e-6)) * 0.10`
+- **Line 5859** (Matched `\b\d{2,}\b`): `+ max(0.0, rsi_mom / max(mean_rsi_min, 1e-6)) * 0.10`
+- **Line 5860** (Matched `\b\d+\.\d+\b`): `+ (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window > 0 else 0.0)`
+- **Line 5860** (Matched `\b\d{2,}\b`): `+ (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window > 0 else 0.0)`
+- **Line 5867** (Matched `\b\d+\.\d+\b`): `5.0,`
+- **Line 5869** (Matched `edge`): `max(0.0, (-vwap_edge) / directional_edge_min) * 0.25`
+- **Line 5869** (Matched `\b\d+\.\d+\b`): `max(0.0, (-vwap_edge) / directional_edge_min) * 0.25`
+- **Line 5869** (Matched `\b\d{2,}\b`): `max(0.0, (-vwap_edge) / directional_edge_min) * 0.25`
+- **Line 5870** (Matched `\b\d+\.\d+\b`): `+ max(0.0, (-ltp_change_window) / expansion_move_min) * 0.25`
+- **Line 5870** (Matched `\b\d{2,}\b`): `+ max(0.0, (-ltp_change_window) / expansion_move_min) * 0.25`
+- **Line 5871** (Matched `\b\d+\.\d+\b`): `+ max(0.0, (-ltp_change_5m) / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5871** (Matched `\b\d{2,}\b`): `+ max(0.0, (-ltp_change_5m) / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5872** (Matched `\b\d+\.\d+\b`): `+ max(0.0, (-ltp_change_10m) / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5872** (Matched `\b\d{2,}\b`): `+ max(0.0, (-ltp_change_10m) / max(micro_move_min, 1.0)) * 0.15`
+- **Line 5873** (Matched `\b\d+\.\d+\b`): `+ max(0.0, (-rsi_mom) / max(mean_rsi_min, 1e-6)) * 0.10`
+- **Line 5873** (Matched `\b\d{2,}\b`): `+ max(0.0, (-rsi_mom) / max(mean_rsi_min, 1e-6)) * 0.10`
+- **Line 5874** (Matched `\b\d+\.\d+\b`): `+ (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window < 0 else 0.0)`
+- **Line 5874** (Matched `\b\d{2,}\b`): `+ (max(0.0, vol_z / 0.5) * 0.10 if ltp_change_window < 0 else 0.0)`
+- **Line 5880** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "NONLIVE_LOW_VOL_EXCEPTIONAL_STRENGTH", 1.95) or 1.95),`
+- **Line 5880** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "NONLIVE_LOW_VOL_EXCEPTIONAL_STRENGTH", 1.95) or 1.95),`
+- **Line 5884** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "SIDEWAYS_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.75) or 1.75),`
+- **Line 5884** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "SIDEWAYS_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.75) or 1.75),`
+- **Line 5888** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "COUNTER_REGIME_DIRECTIONAL_EXCEPTIONAL_STRENGTH", 1.5) or 1.5),`
+- **Line 5895** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_STRENGTH", 2.25) or 2.25),`
+- **Line 5895** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_STRENGTH", 2.25) or 2.25),`
+- **Line 5898** (Matched `confidence`): `family_context_gate_override_min_regime_confidence = max(`
+- **Line 5899** (Matched `confidence`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE", 0.70) or 0.70),`
+- **Line 5899** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE", 0.70) or 0.70),`
+- **Line 5899** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_REGIME_CONFIDENCE", 0.70) or 0.70),`
+- **Line 5900** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5903** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_QUALITY", 0.78) or 0.78),`
+- **Line 5903** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "FAMILY_CONTEXT_GATE_OVERRIDE_MIN_QUALITY", 0.78) or 0.78),`
+- **Line 5904** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 5926** (Matched `\b\d+\.\d+\b`): `and breakout_strength < max(strength_activation_min, 0.85)`
+- **Line 5926** (Matched `\b\d{2,}\b`): `and breakout_strength < max(strength_activation_min, 0.85)`
+- **Line 5955** (Matched `edge`): `abs(vwap_edge) / mean_edge_min,`
+- **Line 5964** (Matched `\b\d+\.\d+\b`): `mean_activation_threshold = max(mean_activation_threshold, strength_activation_min * 1.10)`
+- **Line 5964** (Matched `\b\d{2,}\b`): `mean_activation_threshold = max(mean_activation_threshold, strength_activation_min * 1.10)`
+- **Line 5969** (Matched `edge`): `trend_strength_proxy = max(abs(vwap_edge) / max(directional_edge_min, 1e-6), abs(ltp_change_window) ...`
+- **Line 5971** (Matched `\b\d+\.\d+\b`): `if strategy_regime_mode == "TRENDING" and trend_strength_proxy > 1.2 and not os.environ.get("PYTEST_...`
+- **Line 5973** (Matched `\b\d+\.\d+\b`): `mean_reversion_strength = 0.0`
+- **Line 5985** (Matched `\b\d+\.\d+\b`): `and mean_reversion_strength < max(strength_activation_min * 1.10, 0.95)`
+- **Line 5985** (Matched `\b\d{2,}\b`): `and mean_reversion_strength < max(strength_activation_min * 1.10, 0.95)`
+- **Line 6006** (Matched `\b\d+\.\d+\b`): `move = float(ltp_change_window or market_data.get("ltp_change") or 0.0)`
+- **Line 6015** (Matched `\b\d+\.\d+\b`): `abs(vol_z) / 0.5,`
+- **Line 6016** (Matched `\b\d+\.\d+\b`): `abs(ltp_change_5m) / max(micro_move_min, 1.0),`
+- **Line 6038** (Matched `\b\d+\.\d+\b`): `and volatility_expansion_strength < max(strength_activation_min, 0.85)`
+- **Line 6038** (Matched `\b\d{2,}\b`): `and volatility_expansion_strength < max(strength_activation_min, 0.85)`
+- **Line 6043** (Matched `\b\d+\.\d+\b`): `float(min(breakout_strength, 5.0)),`
+- **Line 6044** (Matched `\b\d+\.\d+\b`): `float(min(mean_reversion_strength, 5.0)),`
+- **Line 6045** (Matched `\b\d+\.\d+\b`): `float(min(volatility_expansion_strength, 5.0)),`
+- **Line 6048** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "BEARISH_DIRECTIONAL_STRUCTURE_MIN", 0.95) or 0.95),`
+- **Line 6048** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "BEARISH_DIRECTIONAL_STRUCTURE_MIN", 0.95) or 0.95),`
+- **Line 6049** (Matched `\b\d+\.\d+\b`): `0.1,`
+- **Line 6052** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 6053** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_ADJUSTMENT", 0.06) or 0.06),`
+- **Line 6053** (Matched `\b\d{2,}\b`): `float(getattr(cfg, "OFFLINE_FAMILY_LEARNING_MAX_ADJUSTMENT", 0.06) or 0.06),`
+- **Line 6074** (Matched `\b\d+\.\d+\b`): `"family_score_adjustment": 0.0,`
+- **Line 6075** (Matched `confidence`): `"family_confidence": 0.0,`
+- **Line 6075** (Matched `\b\d+\.\d+\b`): `"family_confidence": 0.0,`
+- **Line 6078** (Matched `\b\d+\.\d+\b`): `"expectancy_score": 0.0,`
+- **Line 6097** (Matched `\b\d+\.\d+\b`): `"strategy_weight_adjustment": 0.0,`
+- **Line 6098** (Matched `confidence`): `"strategy_weight_confidence": 0.0,`
+- **Line 6098** (Matched `\b\d+\.\d+\b`): `"strategy_weight_confidence": 0.0,`
+- **Line 6100** (Matched `\b\d+\.\d+\b`): `"strategy_signal_bias_adjustment": 0.0,`
+- **Line 6101** (Matched `\b\d+\.\d+\b`): `"strategy_execution_bias_adjustment": 0.0,`
+- **Line 6132** (Matched `\b\d+\.\d+\b`): `return round(float(min(watchlist_strength, 5.0)), 6)`
+- **Line 6134** (Matched `\b\d+\.\d+\b`): `return round(float(min(mean_reversion_strength, 5.0)), 6)`
+- **Line 6137** (Matched `\b\d+\.\d+\b`): `return round(float(min(max(volatility_expansion_strength, directional_strength), 5.0)), 6)`
+- **Line 6139** (Matched `\b\d+\.\d+\b`): `return round(float(min(max(breakout_strength, bullish_structure_strength), 5.0)), 6)`
+- **Line 6140** (Matched `\b\d+\.\d+\b`): `return round(float(min(max(breakout_strength, bearish_structure_strength), 5.0)), 6)`
+- **Line 6163** (Matched `confidence`): `confidence_gate = bool(`
+- **Line 6164** (Matched `confidence`): `strategy_regime_confidence >= family_context_gate_override_min_regime_confidence`
+- **Line 6167** (Matched `confidence`): `not confidence_gate`
+- **Line 6171** (Matched `confidence`): `confidence_gate = bool(`
+- **Line 6172** (Matched `\b\d+\.\d+\b`): `float(family_strength_value) >= float(required_strength + 0.5)`
+- **Line 6175** (Matched `confidence`): `confidence_gate`
+- **Line 6184** (Matched `\b\d+\.\d+\b`): `family_strength_value = float(spec.get("family_strength") or 0.0)`
+- **Line 6185** (Matched `\b\d+\.\d+\b`): `quality_score_value = float(spec.get("quality_score") or 0.0)`
+- **Line 6213** (Matched `confidence`): `"strategy_regime_confidence": round(float(strategy_regime_confidence), 6),`
+- **Line 6241** (Matched `\b\d+\.\d+\b`): `directional_move_exception_min = max(atr * 0.15, expansion_move_min * 3.0, 1e-6)`
+- **Line 6241** (Matched `\b\d{2,}\b`): `directional_move_exception_min = max(atr * 0.15, expansion_move_min * 3.0, 1e-6)`
+- **Line 6246** (Matched `\b\d+\.\d+\b`): `if bullish_regime and bearish_structure_strength < (bearish_directional_structure_min * 0.5) and bul...`
+- **Line 6249** (Matched `\b\d+\.\d+\b`): `if bearish_regime and bullish_structure_strength < (bearish_directional_structure_min * 0.5) and bea...`
+- **Line 6269** (Matched `edge`): `range_edge_strength = abs(vwap_edge) / max(mean_edge_min, 1e-6)`
+- **Line 6271** (Matched `\b\d+\.\d+\b`): `abs(ltp_change_window) <= max(atr * float(getattr(cfg, "RANGE_WATCHLIST_COMPRESSION_ATR_MAX", 0.45) ...`
+- **Line 6271** (Matched `\b\d{2,}\b`): `abs(ltp_change_window) <= max(atr * float(getattr(cfg, "RANGE_WATCHLIST_COMPRESSION_ATR_MAX", 0.45) ...`
+- **Line 6272** (Matched `\b\d+\.\d+\b`): `and abs(vol_z) <= float(getattr(cfg, "STRATEGY_REGIME_COMPRESSION_VOL_Z_MAX", 0.35) or 0.35)`
+- **Line 6272** (Matched `\b\d{2,}\b`): `and abs(vol_z) <= float(getattr(cfg, "STRATEGY_REGIME_COMPRESSION_VOL_Z_MAX", 0.35) or 0.35)`
+- **Line 6274** (Matched `edge`): `range_edge_eps = 1e-6`
+- **Line 6275** (Matched `edge`): `clean_range_edge = bool(`
+- **Line 6278** (Matched `edge`): `and range_edge_strength >= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MIN", 0.80) or 0.80) - range_ed...`
+- **Line 6278** (Matched `\b\d+\.\d+\b`): `and range_edge_strength >= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MIN", 0.80) or 0.80) - range_ed...`
+- **Line 6278** (Matched `\b\d{2,}\b`): `and range_edge_strength >= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MIN", 0.80) or 0.80) - range_ed...`
+- **Line 6279** (Matched `edge`): `and range_edge_strength <= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MAX", 2.80) or 2.80) + range_ed...`
+- **Line 6279** (Matched `\b\d+\.\d+\b`): `and range_edge_strength <= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MAX", 2.80) or 2.80) + range_ed...`
+- **Line 6279** (Matched `\b\d{2,}\b`): `and range_edge_strength <= (float(getattr(cfg, "RANGE_WATCHLIST_EDGE_MAX", 2.80) or 2.80) + range_ed...`
+- **Line 6281** (Matched `edge`): `support_touch = bool(clean_range_edge and underlying_ltp <= underlying_vwap and rsi_mom <= 0.0)`
+- **Line 6281** (Matched `\b\d+\.\d+\b`): `support_touch = bool(clean_range_edge and underlying_ltp <= underlying_vwap and rsi_mom <= 0.0)`
+- **Line 6282** (Matched `edge`): `resistance_touch = bool(clean_range_edge and underlying_ltp >= underlying_vwap and rsi_mom >= 0.0)`
+- **Line 6282** (Matched `\b\d+\.\d+\b`): `resistance_touch = bool(clean_range_edge and underlying_ltp >= underlying_vwap and rsi_mom >= 0.0)`
+- **Line 6287** (Matched `\b\d+\.\d+\b`): `return 1.0`
+- **Line 6289** (Matched `\b\d+\.\d+\b`): `return 0.30`
+- **Line 6289** (Matched `\b\d{2,}\b`): `return 0.30`
+- **Line 6291** (Matched `\b\d+\.\d+\b`): `return 0.25`
+- **Line 6291** (Matched `\b\d{2,}\b`): `return 0.25`
+- **Line 6293** (Matched `\b\d+\.\d+\b`): `return 0.35`
+- **Line 6293** (Matched `\b\d{2,}\b`): `return 0.35`
+- **Line 6294** (Matched `\b\d+\.\d+\b`): `return 0.20`
+- **Line 6294** (Matched `\b\d{2,}\b`): `return 0.20`
+- **Line 6297** (Matched `\b\d+\.\d+\b`): `return 1.0`
+- **Line 6299** (Matched `\b\d+\.\d+\b`): `return 0.30`
+- **Line 6299** (Matched `\b\d{2,}\b`): `return 0.30`
+- **Line 6301** (Matched `\b\d+\.\d+\b`): `return 0.25`
+- **Line 6301** (Matched `\b\d{2,}\b`): `return 0.25`
+- **Line 6303** (Matched `\b\d+\.\d+\b`): `return 0.35`
+- **Line 6303** (Matched `\b\d{2,}\b`): `return 0.35`
+- **Line 6304** (Matched `\b\d+\.\d+\b`): `return 0.20`
+- **Line 6304** (Matched `\b\d{2,}\b`): `return 0.20`
+- **Line 6306** (Matched `\b\d+\.\d+\b`): `return 1.0`
+- **Line 6308** (Matched `\b\d+\.\d+\b`): `return 0.85`
+- **Line 6308** (Matched `\b\d{2,}\b`): `return 0.85`
+- **Line 6310** (Matched `\b\d+\.\d+\b`): `return 0.55`
+- **Line 6310** (Matched `\b\d{2,}\b`): `return 0.55`
+- **Line 6311** (Matched `\b\d+\.\d+\b`): `return 0.25`
+- **Line 6311** (Matched `\b\d{2,}\b`): `return 0.25`
+- **Line 6315** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, bullish_structure_strength / 5.0))`
+- **Line 6317** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, bearish_structure_strength / 5.0))`
+- **Line 6318** (Matched `edge`): `edge_bonus = 0.15 if (support_touch or resistance_touch) else 0.0`
+- **Line 6318** (Matched `\b\d+\.\d+\b`): `edge_bonus = 0.15 if (support_touch or resistance_touch) else 0.0`
+- **Line 6318** (Matched `\b\d{2,}\b`): `edge_bonus = 0.15 if (support_touch or resistance_touch) else 0.0`
+- **Line 6319** (Matched `edge`): `return max(0.0, min(1.0, (watchlist_strength / 5.0) + edge_bonus))`
+- **Line 6319** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, (watchlist_strength / 5.0) + edge_bonus))`
+- **Line 6329** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 6331** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 6332** (Matched `\b\d+\.\d+\b`): `(market_quality_score * 0.7) + ((1.0 if indicators_ok else 0.0) * 0.3),`
+- **Line 6335** (Matched `\b\d+\.\d+\b`): `quality_component = max(0.0, min(1.0, float(spec.get("quality_score") or 0.0)))`
+- **Line 6337** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 6339** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 6340** (Matched `\b\d+\.\d+\b`): `0.5`
+- **Line 6341** (Matched `\b\d+\.\d+\b`): `+ float(family_feedback.get("family_score_adjustment") or 0.0)`
+- **Line 6342** (Matched `\b\d+\.\d+\b`): `+ float(strategy_weight.get("strategy_weight_adjustment") or 0.0),`
+- **Line 6345** (Matched `confidence`): `consensus_score = self._clamp_confidence(`
+- **Line 6347** (Matched `\b\d+\.\d+\b`): `regime_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_REGIME", 0.28))`
+- **Line 6347** (Matched `\b\d{2,}\b`): `regime_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_REGIME", 0.28))`
+- **Line 6348** (Matched `\b\d+\.\d+\b`): `+ structure_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_STRUCTURE", 0.24))`
+- **Line 6348** (Matched `\b\d{2,}\b`): `+ structure_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_STRUCTURE", 0.24))`
+- **Line 6349** (Matched `\b\d+\.\d+\b`): `+ execution_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_EXECUTION", 0.22))`
+- **Line 6349** (Matched `\b\d{2,}\b`): `+ execution_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_EXECUTION", 0.22))`
+- **Line 6350** (Matched `\b\d+\.\d+\b`): `+ quality_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_QUALITY", 0.18))`
+- **Line 6350** (Matched `\b\d{2,}\b`): `+ quality_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_QUALITY", 0.18))`
+- **Line 6351** (Matched `\b\d+\.\d+\b`): `+ prior_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_PRIOR", 0.08))`
+- **Line 6351** (Matched `\b\d{2,}\b`): `+ prior_component * float(getattr(cfg, "FAMILY_CONSENSUS_WEIGHT_PRIOR", 0.08))`
+- **Line 6353** (Matched `\b\d+\.\d+\b`): `) or 0.0`
+- **Line 6378** (Matched `\b\d+\.\d+\b`): `"breakout_strength": round(float(min(breakout_strength, 5.0)), 6),`
+- **Line 6379** (Matched `\b\d+\.\d+\b`): `"mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),`
+- **Line 6380** (Matched `\b\d+\.\d+\b`): `"volatility_expansion_strength": round(float(min(volatility_expansion_strength, 5.0)), 6),`
+- **Line 6389** (Matched `\b\d+\.\d+\b`): `"sideways_family_strength": round(float(min(watchlist_strength, 5.0)), 6),`
+- **Line 6390** (Matched `edge`): `"clean_range_edge": bool(clean_range_edge),`
+- **Line 6398** (Matched `confidence`): `directional_quality = self._clamp_confidence(`
+- **Line 6399** (Matched `\b\d+\.\d+\b`): `0.35`
+- **Line 6399** (Matched `\b\d{2,}\b`): `0.35`
+- **Line 6400** (Matched `\b\d+\.\d+\b`): `+ min(0.45, breakout_strength * 0.18)`
+- **Line 6400** (Matched `\b\d{2,}\b`): `+ min(0.45, breakout_strength * 0.18)`
+- **Line 6401** (Matched `\b\d+\.\d+\b`): `+ (0.08 if directional_signal is not None else 0.0),`
+- **Line 6401** (Matched `\b\d{2,}\b`): `+ (0.08 if directional_signal is not None else 0.0),`
+- **Line 6402** (Matched `\b\d+\.\d+\b`): `) or 0.45`
+- **Line 6402** (Matched `\b\d{2,}\b`): `) or 0.45`
+- **Line 6407** (Matched `confidence`): `"confidence": max(float(directional_quality), 0.35),`
+- **Line 6407** (Matched `\b\d+\.\d+\b`): `"confidence": max(float(directional_quality), 0.35),`
+- **Line 6407** (Matched `\b\d{2,}\b`): `"confidence": max(float(directional_quality), 0.35),`
+- **Line 6408** (Matched `\b\d+\.\d+\b`): `"quality_score": max(float(directional_quality), 0.35),`
+- **Line 6408** (Matched `\b\d{2,}\b`): `"quality_score": max(float(directional_quality), 0.35),`
+- **Line 6409** (Matched `\b\d+\.\d+\b`): `"quality_detail": {"breakout_strength": round(min(breakout_strength, 2.0), 6)},`
+- **Line 6424** (Matched `confidence`): `mean_quality = self._clamp_confidence(`
+- **Line 6425** (Matched `\b\d+\.\d+\b`): `0.40`
+- **Line 6425** (Matched `\b\d{2,}\b`): `0.40`
+- **Line 6426** (Matched `\b\d+\.\d+\b`): `+ min(0.40, mean_reversion_strength * 0.20)`
+- **Line 6426** (Matched `\b\d{2,}\b`): `+ min(0.40, mean_reversion_strength * 0.20)`
+- **Line 6427** (Matched `\b\d+\.\d+\b`): `+ (0.10 if mean_signal is not None else 0.0),`
+- **Line 6427** (Matched `\b\d{2,}\b`): `+ (0.10 if mean_signal is not None else 0.0),`
+- **Line 6428** (Matched `\b\d+\.\d+\b`): `) or 0.4`
+- **Line 6433** (Matched `confidence`): `"confidence": max(float(mean_quality), 0.32),`
+- **Line 6433** (Matched `\b\d+\.\d+\b`): `"confidence": max(float(mean_quality), 0.32),`
+- **Line 6433** (Matched `\b\d{2,}\b`): `"confidence": max(float(mean_quality), 0.32),`
+- **Line 6434** (Matched `\b\d+\.\d+\b`): `"quality_score": max(float(mean_quality), 0.32),`
+- **Line 6434** (Matched `\b\d{2,}\b`): `"quality_score": max(float(mean_quality), 0.32),`
+- **Line 6435** (Matched `\b\d+\.\d+\b`): `"quality_detail": {"mean_reversion_strength": round(min(mean_reversion_strength, 2.0), 6)},`
+- **Line 6450** (Matched `confidence`): `expansion_quality = self._clamp_confidence(`
+- **Line 6451** (Matched `\b\d+\.\d+\b`): `0.34`
+- **Line 6451** (Matched `\b\d{2,}\b`): `0.34`
+- **Line 6452** (Matched `\b\d+\.\d+\b`): `+ min(0.46, volatility_expansion_strength * 0.16)`
+- **Line 6452** (Matched `\b\d{2,}\b`): `+ min(0.46, volatility_expansion_strength * 0.16)`
+- **Line 6453** (Matched `\b\d+\.\d+\b`): `+ (0.08 if expansion_signal is not None else 0.0),`
+- **Line 6453** (Matched `\b\d{2,}\b`): `+ (0.08 if expansion_signal is not None else 0.0),`
+- **Line 6454** (Matched `\b\d+\.\d+\b`): `) or 0.4`
+- **Line 6459** (Matched `confidence`): `"confidence": max(float(expansion_quality), 0.34),`
+- **Line 6459** (Matched `\b\d+\.\d+\b`): `"confidence": max(float(expansion_quality), 0.34),`
+- **Line 6459** (Matched `\b\d{2,}\b`): `"confidence": max(float(expansion_quality), 0.34),`
+- **Line 6460** (Matched `\b\d+\.\d+\b`): `"quality_score": max(float(expansion_quality), 0.34),`
+- **Line 6460** (Matched `\b\d{2,}\b`): `"quality_score": max(float(expansion_quality), 0.34),`
+- **Line 6461** (Matched `\b\d+\.\d+\b`): `"quality_detail": {"volatility_expansion_strength": round(min(volatility_expansion_strength, 2.0), 6...`
+- **Line 6478** (Matched `edge`): `and clean_range_edge`
+- **Line 6479** (Matched `\b\d+\.\d+\b`): `and watchlist_strength >= float(getattr(cfg, "RANGE_WATCHLIST_MIN_STRENGTH", 0.9) or 0.9)`
+- **Line 6494** (Matched `edge`): `watchlist_trigger_reason = "range_edge_watchlist"`
+- **Line 6495** (Matched `confidence`): `watchlist_quality = self._clamp_confidence(`
+- **Line 6496** (Matched `\b\d+\.\d+\b`): `0.30 + min(0.18, watchlist_strength * 0.08)`
+- **Line 6496** (Matched `\b\d{2,}\b`): `0.30 + min(0.18, watchlist_strength * 0.08)`
+- **Line 6497** (Matched `\b\d+\.\d+\b`): `) or 0.34`
+- **Line 6497** (Matched `\b\d{2,}\b`): `) or 0.34`
+- **Line 6502** (Matched `confidence`): `"confidence": max(float(watchlist_quality), 0.30),`
+- **Line 6502** (Matched `\b\d+\.\d+\b`): `"confidence": max(float(watchlist_quality), 0.30),`
+- **Line 6502** (Matched `\b\d{2,}\b`): `"confidence": max(float(watchlist_quality), 0.30),`
+- **Line 6503** (Matched `\b\d+\.\d+\b`): `"quality_score": max(float(watchlist_quality), 0.30),`
+- **Line 6503** (Matched `\b\d{2,}\b`): `"quality_score": max(float(watchlist_quality), 0.30),`
+- **Line 6505** (Matched `\b\d+\.\d+\b`): `"watchlist_strength": round(min(watchlist_strength, 2.0), 6),`
+- **Line 6507** (Matched `edge`): `"range_edge_strength": round(float(range_edge_strength), 6),`
+- **Line 6519** (Matched `\b\d+\.\d+\b`): `"family_strength": round(float(min(watchlist_strength, 5.0)), 6),`
+- **Line 6536** (Matched `edge`): `"vwap_edge": round(float(vwap_edge), 6),`
+- **Line 6543** (Matched `edge`): `"range_edge_strength": round(float(range_edge_strength), 6),`
+- **Line 6547** (Matched `edge`): `"clean_range_edge": bool(clean_range_edge),`
+- **Line 6559** (Matched `\b\d+\.\d+\b`): `min(max_family_feedback_adjustment, float(feedback.get("family_score_adjustment") or 0.0)),`
+- **Line 6564** (Matched `confidence`): `spec["family_feedback_confidence"] = round(float(feedback.get("family_confidence") or 0.0), 6)`
+- **Line 6564** (Matched `\b\d+\.\d+\b`): `spec["family_feedback_confidence"] = round(float(feedback.get("family_confidence") or 0.0), 6)`
+- **Line 6572** (Matched `\b\d+\.\d+\b`): `spec["expectancy_score"] = round(float(feedback.get("expectancy_score") or 0.0), 6)`
+- **Line 6575** (Matched `\b\d+\.\d+\b`): `spec["strategy_weight_adjustment"] = round(float(strategy_weight.get("strategy_weight_adjustment") o...`
+- **Line 6576** (Matched `confidence`): `spec["strategy_weight_confidence"] = round(float(strategy_weight.get("strategy_weight_confidence") o...`
+- **Line 6576** (Matched `\b\d+\.\d+\b`): `spec["strategy_weight_confidence"] = round(float(strategy_weight.get("strategy_weight_confidence") o...`
+- **Line 6578** (Matched `\b\d+\.\d+\b`): `spec["strategy_signal_bias_adjustment"] = round(float(strategy_weight.get("strategy_signal_bias_adju...`
+- **Line 6579** (Matched `\b\d+\.\d+\b`): `spec["strategy_execution_bias_adjustment"] = round(float(strategy_weight.get("strategy_execution_bia...`
+- **Line 6603** (Matched `\b\d+\.\d+\b`): `5.0,`
+- **Line 6605** (Matched `\b\d+\.\d+\b`): `(float(spec.get("family_strength") or 0.0) * 0.70)`
+- **Line 6605** (Matched `\b\d{2,}\b`): `(float(spec.get("family_strength") or 0.0) * 0.70)`
+- **Line 6606** (Matched `\b\d+\.\d+\b`): `+ (family_learning_adjustment * 2.0)`
+- **Line 6607** (Matched `\b\d+\.\d+\b`): `+ (float(spec.get("strategy_weight_adjustment") or 0.0) * 1.5)`
+- **Line 6608** (Matched `\b\d+\.\d+\b`): `+ (float(spec.get("family_consensus_score") or 0.0) * 5.0 * 0.30)`
+- **Line 6608** (Matched `\b\d{2,}\b`): `+ (float(spec.get("family_consensus_score") or 0.0) * 5.0 * 0.30)`
+- **Line 6644** (Matched `\b\d+\.\d+\b`): `spec["family_strength"] = round(float(spec.get("family_strength") or 0.0), 6)`
+- **Line 6660** (Matched `\b\d+\.\d+\b`): `-float(row.get("family_consensus_score") or 0.0),`
+- **Line 6661** (Matched `\b\d+\.\d+\b`): `-float(row.get("family_strength") or 0.0),`
+- **Line 6662** (Matched `\b\d+\.\d+\b`): `-float(row.get("quality_score") or 0.0),`
+- **Line 6683** (Matched `\b\d+\.\d+\b`): `if market_quality_score < 0.45 and family in {"bullish", "bearish"}:`
+- **Line 6683** (Matched `\b\d{2,}\b`): `if market_quality_score < 0.45 and family in {"bullish", "bearish"}:`
+- **Line 6687** (Matched `\b\d+\.\d+\b`): `(float(row.get("family_consensus_score") or 0.0) for row in capped_specs),`
+- **Line 6688** (Matched `\b\d+\.\d+\b`): `default=0.0,`
+- **Line 6690** (Matched `\b\d+\.\d+\b`): `family_consensus_threshold = float(regime_policy.get("family_consensus_min_score") or 0.48)`
+- **Line 6690** (Matched `\b\d{2,}\b`): `family_consensus_threshold = float(regime_policy.get("family_consensus_min_score") or 0.48)`
+- **Line 6769** (Matched `\b\d+\.\d+\b`): `if regime_aligned and family_scarcity_delta > 0 and top_family_consensus >= max(family_consensus_thr...`
+- **Line 6769** (Matched `\b\d{2,}\b`): `if regime_aligned and family_scarcity_delta > 0 and top_family_consensus >= max(family_consensus_thr...`
+- **Line 6802** (Matched `\b\d+\.\d+\b`): `-float(row.get("family_consensus_score") or 0.0),`
+- **Line 6803** (Matched `\b\d+\.\d+\b`): `-float(row.get("quality_score") or 0.0),`
+- **Line 6804** (Matched `\b\d+\.\d+\b`): `-float(row.get("family_strength") or 0.0),`
+- **Line 6817** (Matched `confidence`): `confidence=float(spec["confidence"]),`
+- **Line 6829** (Matched `\b\d+\.\d+\b`): `family_strength=float(spec.get("family_strength") or 0.0),`
+- **Line 6831** (Matched `\b\d+\.\d+\b`): `"family_feedback_adjustment": round(float(spec.get("family_feedback_adjustment") or 0.0), 6),`
+- **Line 6832** (Matched `confidence`): `"family_feedback_confidence": round(float(spec.get("family_feedback_confidence") or 0.0), 6),`
+- **Line 6832** (Matched `\b\d+\.\d+\b`): `"family_feedback_confidence": round(float(spec.get("family_feedback_confidence") or 0.0), 6),`
+- **Line 6834** (Matched `\b\d+\.\d+\b`): `"family_learning_adjustment": round(float(spec.get("family_learning_adjustment") or 0.0), 6),`
+- **Line 6837** (Matched `\b\d+\.\d+\b`): `"family_consensus_score": round(float(spec.get("family_consensus_score") or 0.0), 6),`
+- **Line 6841** (Matched `\b\d+\.\d+\b`): `"expectancy_score": round(float(spec.get("expectancy_score") or 0.0), 6),`
+- **Line 6844** (Matched `\b\d+\.\d+\b`): `"strategy_weight_adjustment": round(float(spec.get("strategy_weight_adjustment") or 0.0), 6),`
+- **Line 6845** (Matched `confidence`): `"strategy_weight_confidence": round(float(spec.get("strategy_weight_confidence") or 0.0), 6),`
+- **Line 6845** (Matched `\b\d+\.\d+\b`): `"strategy_weight_confidence": round(float(spec.get("strategy_weight_confidence") or 0.0), 6),`
+- **Line 6858** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 6864** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 6876** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 6885** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 6888** (Matched `\b\d+\.\d+\b`): `if raw_candidate_count > 0 and survival_rate < float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_SURVIVAL_...`
+- **Line 6888** (Matched `\b\d{2,}\b`): `if raw_candidate_count > 0 and survival_rate < float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_SURVIVAL_...`
+- **Line 6890** (Matched `\b\d+\.\d+\b`): `elif surviving_candidate_count > 0 and executable_rate <= 0.0:`
+- **Line 6892** (Matched `\b\d+\.\d+\b`): `elif top_family_share >= float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_TOP_FAMILY_SHARE_WARN", 0.75) o...`
+- **Line 6892** (Matched `\b\d{2,}\b`): `elif top_family_share >= float(getattr(cfg, "OFFLINE_THRESHOLD_AUDIT_TOP_FAMILY_SHARE_WARN", 0.75) o...`
+- **Line 6906** (Matched `\b\d{2,}\b`): `).hexdigest()[:24]`
+- **Line 6945** (Matched `\b\d+\.\d+\b`): `"no_trade_rate": 1.0 if executable_rate <= 0.0 else 0.0,`
+- **Line 6966** (Matched `\b\d+\.\d+\b`): `no_trade_rate=(1.0 if executable_rate <= 0.0 else 0.0),`
+- **Line 6987** (Matched `\b\d+\.\d+\b`): `"no_trade_rate": round(float(1.0 if executable_rate <= 0.0 else 0.0), 6),`
+- **Line 6992** (Matched `edge`): `"warning_filtering_without_edge_improvement": False,`
+- **Line 7011** (Matched `\b\d+\.\d+\b`): `no_trade_rate=round(float(1.0 if executable_rate <= 0.0 else 0.0), 6),`
+- **Line 7016** (Matched `edge`): `warning_filtering_without_edge_improvement=False,`
+- **Line 7031** (Matched `\b\d+\.\d+\b`): `"breakout_strength": round(float(min(breakout_strength, 5.0)), 6),`
+- **Line 7032** (Matched `\b\d+\.\d+\b`): `"mean_reversion_strength": round(float(min(mean_reversion_strength, 5.0)), 6),`
+- **Line 7033** (Matched `\b\d+\.\d+\b`): `"volatility_expansion_strength": round(float(min(volatility_expansion_strength, 5.0)), 6),`
+- **Line 7108** (Matched `\b\d+\.\d+\b`): `underlying_ltp = float(ltp or 0.0)`
+- **Line 7109** (Matched `\b\d+\.\d+\b`): `underlying_vwap = float(vwap or underlying_ltp or 0.0)`
+- **Line 7111** (Matched `confidence`): `planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 7111** (Matched `\b\d+\.\d+\b`): `planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 7111** (Matched `\b\d{2,}\b`): `planning_confidence = float(getattr(cfg, "PLANNING_SIGNAL_SCORE_BASE", 0.56))`
+- **Line 7119** (Matched `confidence`): `confidence=planning_confidence,`
+- **Line 7207** (Matched `\b\d+\.\d+\b`): `market_data["quote_age_sec"] = 0.0`
+- **Line 7273** (Matched `\b\d+\.\d+\b`): `ltp = float(ltp) if ltp is not None else 0.0`
+- **Line 7275** (Matched `\b\d+\.\d+\b`): `ltp = 0.0`
+- **Line 7291** (Matched `\b\d{2,}\b`): `60 if allow_stale_quotes else 8,`
+- **Line 7384** (Matched `\b\d+\.\d+\b`): `def _apply_decay_gate(self, strategy_name, base_score=None, size_mult=1.0):`
+- **Line 7393** (Matched `\b\d+\.\d+\b`): `penalty = float(getattr(cfg, "DECAY_DOWNSIZE_MULT", 0.6))`
+- **Line 7415** (Matched `confidence`): `def _clamp_confidence(value: float | None) -> float | None:`
+- **Line 7419** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, float(value)))`
+- **Line 7423** (Matched `confidence`): `def _blend_micro_confidence(self, model_conf: float | None, micro_conf: float | None) -> tuple[float...`
+- **Line 7424** (Matched `confidence`): `model_val = self._clamp_confidence(model_conf)`
+- **Line 7425** (Matched `confidence`): `micro_val = self._clamp_confidence(micro_conf)`
+- **Line 7432** (Matched `\b\d+\.\d+\b`): `weight = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_WEIGHT", 0.25))))`
+- **Line 7432** (Matched `\b\d{2,}\b`): `weight = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_WEIGHT", 0.25))))`
+- **Line 7433** (Matched `\b\d+\.\d+\b`): `max_delta = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_MAX_DELTA", 0.10))))`
+- **Line 7433** (Matched `\b\d{2,}\b`): `max_delta = max(0.0, min(1.0, float(getattr(cfg, "MICRO_CONF_OVERLAY_MAX_DELTA", 0.10))))`
+- **Line 7436** (Matched `confidence`): `return self._clamp_confidence(model_val + adjustment), "bounded_overlay"`
+- **Line 7439** (Matched `\b\d+\.\d+\b`): `legacy_default = max(0.0, 1.0 - float(getattr(cfg, "ORB_SOFT_VETO_CONF_MULT", 0.95)))`
+- **Line 7439** (Matched `\b\d{2,}\b`): `legacy_default = max(0.0, 1.0 - float(getattr(cfg, "ORB_SOFT_VETO_CONF_MULT", 0.95)))`
+- **Line 7441** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, penalty))`
+- **Line 7445** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 7447** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 7452** (Matched `\b\d+\.\d+\b`): `max(0.0, 1.0 - float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))),`
+- **Line 7452** (Matched `\b\d{2,}\b`): `max(0.0, 1.0 - float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))),`
+- **Line 7459** (Matched `\b\d+\.\d+\b`): `min(1.0, float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_PENALTY_MAX", max(penalty_min, 0.12)))),`
+- **Line 7459** (Matched `\b\d{2,}\b`): `min(1.0, float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_PENALTY_MAX", max(penalty_min, 0.12)))),`
+- **Line 7461** (Matched `\b\d+\.\d+\b`): `scale = max(0.0, min(1.0, float(penalty_scale or 0.0)))`
+- **Line 7462** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, penalty_min + ((penalty_max - penalty_min) * scale)))`
+- **Line 7474** (Matched `\b\d+\.\d+\b`): `return base_conf, None, None, 1.0`
+- **Line 7476** (Matched `\b\d+\.\d+\b`): `return base_conf, None, None, 1.0`
+- **Line 7482** (Matched `\b\d+\.\d+\b`): `shock_score=market_data.get("shock_score") or 0.0,`
+- **Line 7487** (Matched `\b\d+\.\d+\b`): `size_mult = alpha.get("size_mult", 1.0)`
+- **Line 7488** (Matched `\b\d+\.\d+\b`): `veto_th = getattr(cfg, "ALPHA_UNCERTAINTY_VETO", 0.78)`
+- **Line 7488** (Matched `\b\d{2,}\b`): `veto_th = getattr(cfg, "ALPHA_UNCERTAINTY_VETO", 0.78)`
+- **Line 7496** (Matched `\b\d{2,}\b`): `if now - self._ml_history_cache["ts"] < 60:`
+- **Line 7544** (Matched `\b\d+\.\d+\b`): `buffer_abs = float(getattr(cfg, "ENTRY_PREMIUM_BUFFER", 2.0))`
+- **Line 7545** (Matched `\b\d+\.\d+\b`): `buffer_pct = float(getattr(cfg, "ENTRY_PREMIUM_BUFFER_PCT", 0.01))`
+- **Line 7545** (Matched `\b\d{2,}\b`): `buffer_pct = float(getattr(cfg, "ENTRY_PREMIUM_BUFFER_PCT", 0.01))`
+- **Line 7551** (Matched `\b\d+\.\d+\b`): `trigger = round(max(entry_price - buffer, 0.01), 2)`
+- **Line 7551** (Matched `\b\d{2,}\b`): `trigger = round(max(entry_price - buffer, 0.01), 2)`
+- **Line 7600** (Matched `\b\d+\.\d+\b`): `vwap_slope = float(market_data.get("vwap_slope", 0.0) or 0.0)`
+- **Line 7601** (Matched `\b\d+\.\d+\b`): `slope_abs_min = float(getattr(cfg, "TREND_VWAP_FALLBACK_SLOPE_ABS_MIN", 0.0008))`
+- **Line 7601** (Matched `\b\d{2,}\b`): `slope_abs_min = float(getattr(cfg, "TREND_VWAP_FALLBACK_SLOPE_ABS_MIN", 0.0008))`
+- **Line 7603** (Matched `\b\d{2,}\b`): `orb_lock_min = int(market_data.get("orb_lock_min") or getattr(cfg, "ORB_LOCK_MIN", 15))`
+- **Line 7620** (Matched `\b\d+\.\d+\b`): `score = float(getattr(cfg, "TREND_VWAP_FALLBACK_SCORE", 0.60))`
+- **Line 7620** (Matched `\b\d{2,}\b`): `score = float(getattr(cfg, "TREND_VWAP_FALLBACK_SCORE", 0.60))`
+- **Line 7665** (Matched `\b\d+\.\d+\b`): `regime_entropy = market_data.get("regime_entropy", 0.0) or 0.0`
+- **Line 7671** (Matched `\b\d{2,}\b`): `open_end = getattr(cfg, "DAYTYPE_BUCKET_OPEN_END", 11)`
+- **Line 7672** (Matched `\b\d{2,}\b`): `mid_end = getattr(cfg, "DAYTYPE_BUCKET_MID_END", 14)`
+- **Line 7681** (Matched `\b\d{2,}\b`): `# Time-of-day rule: noon fade (prefer mean reversion 12:00–13:30 IST)`
+- **Line 7685** (Matched `\b\d{2,}\b`): `noon_fade = (now.hour == 12) or (now.hour == 13 and now.minute <= 30)`
+- **Line 7707** (Matched `\b\d+\.\d+\b`): `trend_p = float(regime_probs.get("TREND", 0.0))`
+- **Line 7708** (Matched `\b\d+\.\d+\b`): `range_p = max(float(regime_probs.get("RANGE", 0.0)), float(regime_probs.get("RANGE_VOLATILE", 0.0)))`
+- **Line 7709** (Matched `\b\d+\.\d+\b`): `event_p = float(regime_probs.get("EVENT", 0.0))`
+- **Line 7710** (Matched `\b\d+\.\d+\b`): `panic_p = float(regime_probs.get("PANIC", 0.0))`
+- **Line 7711** (Matched `\b\d+\.\d+\b`): `if event_p >= getattr(cfg, "REGIME_PROB_EVENT", 0.4):`
+- **Line 7718** (Matched `\b\d+\.\d+\b`): `sig.score = float(sig.score) * max(event_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7718** (Matched `\b\d{2,}\b`): `sig.score = float(sig.score) * max(event_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7720** (Matched `\b\d+\.\d+\b`): `if panic_p >= getattr(cfg, "REGIME_PROB_PANIC", 0.4):`
+- **Line 7723** (Matched `\b\d+\.\d+\b`): `sig.score = float(sig.score) * max(panic_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7723** (Matched `\b\d{2,}\b`): `sig.score = float(sig.score) * max(panic_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7725** (Matched `\b\d+\.\d+\b`): `if trend_p >= getattr(cfg, "REGIME_PROB_TREND", 0.45):`
+- **Line 7725** (Matched `\b\d{2,}\b`): `if trend_p >= getattr(cfg, "REGIME_PROB_TREND", 0.45):`
+- **Line 7728** (Matched `\b\d+\.\d+\b`): `sig.score = float(sig.score) * max(trend_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7728** (Matched `\b\d{2,}\b`): `sig.score = float(sig.score) * max(trend_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7730** (Matched `\b\d+\.\d+\b`): `if range_p >= getattr(cfg, "REGIME_PROB_RANGE", 0.45):`
+- **Line 7730** (Matched `\b\d{2,}\b`): `if range_p >= getattr(cfg, "REGIME_PROB_RANGE", 0.45):`
+- **Line 7737** (Matched `\b\d+\.\d+\b`): `sig.score = float(sig.score) * max(range_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7737** (Matched `\b\d{2,}\b`): `sig.score = float(sig.score) * max(range_p, getattr(cfg, "REGIME_PROB_MIN", 0.45))`
+- **Line 7740** (Matched `confidence`): `# Confidence threshold to allow switching strategies`
+- **Line 7741** (Matched `confidence`): `day_conf = market_data.get("day_confidence", 0) or 0`
+- **Line 7742** (Matched `\b\d+\.\d+\b`): `conf_min = getattr(cfg, "DAYTYPE_CONF_SWITCH_MIN", 0.6)`
+- **Line 7854** (Matched `\b\d+\.\d+\b`): `def _opt_risk_levels(self, entry_price, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5, regime=N...`
+- **Line 7859** (Matched `\b\d+\.\d+\b`): `stop_mult *= 0.6`
+- **Line 7860** (Matched `\b\d+\.\d+\b`): `target_mult *= 0.8`
+- **Line 7864** (Matched `\b\d{2,}\b`): `if dt.hour >= 14:`
+- **Line 7865** (Matched `\b\d+\.\d+\b`): `stop_mult *= 0.8`
+- **Line 7866** (Matched `\b\d+\.\d+\b`): `target_mult *= 0.6`
+- **Line 7870** (Matched `\b\d+\.\d+\b`): `opt_atr_pct = getattr(cfg, "OPT_ATR_PCT", 0.2)`
+- **Line 7871** (Matched `\b\d+\.\d+\b`): `spread_mult = getattr(cfg, "OPT_SPREAD_ATR_MULT", 3.0)`
+- **Line 7874** (Matched `\b\d+\.\d+\b`): `opt_atr = max(opt_atr, 1.0)`
+- **Line 7875** (Matched `\b\d+\.\d+\b`): `stop_loss = max(entry_price - opt_atr * stop_mult, entry_price * 0.2)`
+- **Line 7879** (Matched `\b\d+\.\d+\b`): `stop_loss = max(entry_price - base_atr, entry_price * 0.2)`
+- **Line 7880** (Matched `\b\d+\.\d+\b`): `target = entry_price + base_atr * 1.5`
+- **Line 7887** (Matched `\b\d+\.\d+\b`): `entry_f = 0.0`
+- **Line 7896** (Matched `\b\d+\.\d+\b`): `width = max(0.0, ask_f - bid_f)`
+- **Line 7897** (Matched `\b\d+\.\d+\b`): `return max(width, entry_f * 0.08, 1.0)`
+- **Line 7897** (Matched `\b\d{2,}\b`): `return max(width, entry_f * 0.08, 1.0)`
+- **Line 7899** (Matched `confidence`): `def _raw_confidence_gate_threshold(self, regime_day: str | None, *, quick_mode: bool = False) -> flo...`
+- **Line 7900** (Matched `\b\d+\.\d+\b`): `legacy_threshold = float(getattr(cfg, "ML_MIN_PROBA", 0.45))`
+- **Line 7900** (Matched `\b\d{2,}\b`): `legacy_threshold = float(getattr(cfg, "ML_MIN_PROBA", 0.45))`
+- **Line 7901** (Matched `confidence`): `threshold = float(getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN", legacy_threshold))`
+- **Line 7902** (Matched `confidence`): `explicit_default = getattr(cfg, "TRADE_BUILDER_RAW_CONFIDENCE_MIN_DEFAULT", None)`
+- **Line 7908** (Matched `\b\d+\.\d+\b`): `threshold *= float(getattr(cfg, "REGIME_PROBA_MULT", {}).get(regime_day or "NEUTRAL", 1.0))`
+- **Line 7910** (Matched `\b\d+\.\d+\b`): `threshold = min(threshold, float(getattr(cfg, "QUICK_MIN_PROBA", 0.35)))`
+- **Line 7910** (Matched `\b\d{2,}\b`): `threshold = min(threshold, float(getattr(cfg, "QUICK_MIN_PROBA", 0.35)))`
+- **Line 7911** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, threshold))`
+- **Line 7913** (Matched `confidence`): `def _final_confidence_gate_threshold(self, regime_day: str | None, *, quick_mode: bool = False) -> f...`
+- **Line 7918** (Matched `confidence`): `"GATING_FINAL_CONFIDENCE_MIN",`
+- **Line 7919** (Matched `confidence`): `getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30),`
+- **Line 7919** (Matched `\b\d+\.\d+\b`): `getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30),`
+- **Line 7919** (Matched `\b\d{2,}\b`): `getattr(cfg, "CONFIDENCE_THRESHOLD_EXECUTION_LIVE", 0.30),`
+- **Line 7922** (Matched `confidence`): `threshold = float(getattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN", legacy_threshold))`
+- **Line 7923** (Matched `confidence`): `explicit_default = getattr(cfg, "TRADE_BUILDER_FINAL_CONFIDENCE_MIN_DEFAULT", None)`
+- **Line 7929** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, threshold))`
+- **Line 7931** (Matched `confidence`): `def _staged_confidence_payload(`
+- **Line 7934** (Matched `confidence`): `confidence: float | None,`
+- **Line 7953** (Matched `confidence`): `use_confidence_as_model: bool = True,`
+- **Line 7954** (Matched `confidence`): `use_confidence_as_final_stage: bool = True,`
+- **Line 7956** (Matched `confidence`): `final_conf = self._clamp_confidence(confidence)`
+- **Line 7957** (Matched `confidence`): `model_raw_val = self._clamp_confidence(model_raw)`
+- **Line 7958** (Matched `confidence`): `model_component_val = self._clamp_confidence(model_component)`
+- **Line 7959** (Matched `confidence`): `if use_confidence_as_model and final_conf is not None:`
+- **Line 7966** (Matched `confidence`): `before_soft_veto_val = self._clamp_confidence(before_soft_veto)`
+- **Line 7967** (Matched `confidence`): `after_soft_veto_val = self._clamp_confidence(after_soft_veto)`
+- **Line 7968** (Matched `confidence`): `if use_confidence_as_final_stage and final_conf is not None:`
+- **Line 7974** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total = 0.0`
+- **Line 7975** (Matched `confidence`): `base_val = self._clamp_confidence(base)`
+- **Line 7978** (Matched `confidence`): `penalty_total_val = self._clamp_confidence(penalty_total)`
+- **Line 7981** (Matched `\b\d+\.\d+\b`): `penalty_total_val = max(0.0, float(base_val) - float(final_conf))`
+- **Line 7983** (Matched `\b\d+\.\d+\b`): `penalty_total_val = 0.0`
+- **Line 7988** (Matched `confidence`): `clamped = self._clamp_confidence(value)`
+- **Line 7995** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total_val = round(max(0.0, float(penalty_soft_veto_total)), 6)`
+- **Line 8000** (Matched `confidence`): `"builder_confidence": _round_optional(final_conf),`
+- **Line 8001** (Matched `confidence`): `"gating_base_confidence": _round_optional(base_val),`
+- **Line 8002** (Matched `confidence`): `"gating_final_confidence": _round_optional(after_soft_veto_val if after_soft_veto_val is not None el...`
+- **Line 8003** (Matched `confidence`): `"confidence_model_raw": _round_optional(model_raw_val),`
+- **Line 8004** (Matched `confidence`): `"confidence_model_component": _round_optional(model_component_val),`
+- **Line 8005** (Matched `confidence`): `"confidence_micro_component": _round_optional(micro_component),`
+- **Line 8006** (Matched `confidence`): `"confidence_micro_blend_method": micro_blend_method,`
+- **Line 8007** (Matched `confidence`): `"confidence_after_micro": _round_optional(after_micro),`
+- **Line 8008** (Matched `confidence`): `"confidence_after_alpha": _round_optional(after_alpha),`
+- **Line 8009** (Matched `confidence`): `"confidence_after_latency": _round_optional(after_latency),`
+- **Line 8010** (Matched `confidence`): `"confidence_before_soft_veto": _round_optional(before_soft_veto_val),`
+- **Line 8011** (Matched `confidence`): `"confidence_after_soft_veto": _round_optional(after_soft_veto_val),`
+- **Line 8012** (Matched `confidence`): `"confidence_penalty_soft_veto_total": penalty_soft_veto_total_val,`
+- **Line 8013** (Matched `confidence`): `"confidence_penalty_soft_veto_reasons": soft_veto_reasons_out,`
+- **Line 8014** (Matched `confidence`): `"confidence_gate_threshold": _round_optional(gate_threshold),`
+- **Line 8015** (Matched `confidence`): `"confidence_raw_gate_threshold": _round_optional(raw_gate_threshold),`
+- **Line 8016** (Matched `confidence`): `"confidence_final_gate_threshold": _round_optional(final_gate_threshold),`
+- **Line 8017** (Matched `confidence`): `"confidence_rejection_stage": rejection_stage,`
+- **Line 8018** (Matched `confidence`): `"confidence_base": _round_optional(base_val),`
+- **Line 8019** (Matched `confidence`): `"confidence_penalty_total": _round_optional(penalty_total_val),`
+- **Line 8020** (Matched `confidence`): `"confidence_penalty_reasons": penalty_reasons_out,`
+- **Line 8122** (Matched `\b\d+\.\d+\b`): `base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.03),`
+- **Line 8122** (Matched `\b\d{2,}\b`): `base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT", 0.03),`
+- **Line 8123** (Matched `\b\d{2,}\b`): `base_min_volume_filter=getattr(cfg, "MIN_VOLUME_FILTER", 500),`
+- **Line 8127** (Matched `\b\d+\.\d+\b`): `base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT_QUICK", getattr(cfg, "MAX_SPREAD_PCT", 0.03)),`
+- **Line 8127** (Matched `\b\d{2,}\b`): `base_max_spread_pct=getattr(cfg, "MAX_SPREAD_PCT_QUICK", getattr(cfg, "MAX_SPREAD_PCT", 0.03)),`
+- **Line 8128** (Matched `\b\d{2,}\b`): `base_min_volume_filter=getattr(cfg, "MIN_VOLUME_FILTER", 500),`
+- **Line 8349** (Matched `\b\d+\.\d+\b`): `if ltp is not None and float(ltp or 0.0) > 0:`
+- **Line 8350** (Matched `\b\d+\.\d+\b`): `synth_spread = max(float(ltp) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.0002)), 0.05)`
+- **Line 8350** (Matched `\b\d{2,}\b`): `synth_spread = max(float(ltp) * float(getattr(cfg, "SYNTH_INDEX_SPREAD_PCT", 0.0002)), 0.05)`
+- **Line 8351** (Matched `\b\d+\.\d+\b`): `market_data["bid"] = round(float(ltp) - (synth_spread / 2.0), 4)`
+- **Line 8352** (Matched `\b\d+\.\d+\b`): `market_data["ask"] = round(float(ltp) + (synth_spread / 2.0), 4)`
+- **Line 8386** (Matched `\b\d+\.\d+\b`): `ltp = float(ltp) if ltp is not None else 0.0`
+- **Line 8388** (Matched `\b\d+\.\d+\b`): `ltp = 0.0`
+- **Line 8410** (Matched `\b\d+\.\d+\b`): `signal = {"direction": "BUY_CALL", "reason": "Quick bias fallback", "score": 0.55}`
+- **Line 8410** (Matched `\b\d{2,}\b`): `signal = {"direction": "BUY_CALL", "reason": "Quick bias fallback", "score": 0.55}`
+- **Line 8412** (Matched `\b\d+\.\d+\b`): `signal = {"direction": "BUY_PUT", "reason": "Quick bias fallback", "score": 0.55}`
+- **Line 8412** (Matched `\b\d{2,}\b`): `signal = {"direction": "BUY_PUT", "reason": "Quick bias fallback", "score": 0.55}`
+- **Line 8425** (Matched `\b\d+\.\d+\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 8425** (Matched `\b\d{2,}\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 8428** (Matched `\b\d+\.\d+\b`): `thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT", 0.05)`
+- **Line 8428** (Matched `\b\d{2,}\b`): `thresh = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT", 0.05)`
+- **Line 8429** (Matched `\b\d+\.\d+\b`): `thresh_w = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02)`
+- **Line 8429** (Matched `\b\d{2,}\b`): `thresh_w = atr * getattr(cfg, "BASELINE_LTP_ATR_MULT_WINDOW", 0.02)`
+- **Line 8435** (Matched `\b\d+\.\d+\b`): `"score": getattr(cfg, "BASELINE_SIGNAL_SCORE", 0.62),`
+- **Line 8435** (Matched `\b\d{2,}\b`): `"score": getattr(cfg, "BASELINE_SIGNAL_SCORE", 0.62),`
+- **Line 8442** (Matched `\b\d+\.\d+\b`): `"score": getattr(cfg, "BASELINE_SIGNAL_SCORE", 0.62),`
+- **Line 8442** (Matched `\b\d{2,}\b`): `"score": getattr(cfg, "BASELINE_SIGNAL_SCORE", 0.62),`
+- **Line 8453** (Matched `\b\d+\.\d+\b`): `signal = self._quick_neutral_fallback_signal(market_data, float(ltp or 0.0), float(vwap or 0.0))`
+- **Line 8458** (Matched `\b\d+\.\d+\b`): `ltp_change = float(market_data.get("ltp_change") or 0.0)`
+- **Line 8468** (Matched `\b\d+\.\d+\b`): `"score": float(getattr(cfg, "NO_SIGNAL_FALLBACK_SCORE", 0.45)),`
+- **Line 8468** (Matched `\b\d{2,}\b`): `"score": float(getattr(cfg, "NO_SIGNAL_FALLBACK_SCORE", 0.45)),`
+- **Line 8487** (Matched `\b\d+\.\d+\b`): `float(ltp or 0.0),`
+- **Line 8488** (Matched `\b\d+\.\d+\b`): `float(vwap or 0.0),`
+- **Line 8496** (Matched `\b\d+\.\d+\b`): `float(ltp or 0.0),`
+- **Line 8497** (Matched `\b\d+\.\d+\b`): `float(vwap or 0.0),`
+- **Line 8503** (Matched `\b\d+\.\d+\b`): `ltp_change = float(market_data.get("ltp_change") or 0.0)`
+- **Line 8513** (Matched `\b\d+\.\d+\b`): `"score": float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58)),`
+- **Line 8513** (Matched `\b\d{2,}\b`): `"score": float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58)),`
+- **Line 8515** (Matched `\b\d+\.\d+\b`): `min_live_score = float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58))`
+- **Line 8515** (Matched `\b\d{2,}\b`): `min_live_score = float(getattr(cfg, "LIVE_NO_SIGNAL_FALLBACK_SCORE_MIN", 0.58))`
+- **Line 8516** (Matched `\b\d+\.\d+\b`): `if live_signal and float(live_signal.get("score") or 0.0) >= min_live_score:`
+- **Line 8559** (Matched `\b\d+\.\d+\b`): `ltp=float(ltp or 0.0),`
+- **Line 8560** (Matched `\b\d+\.\d+\b`): `vwap=float(vwap or ltp or 0.0),`
+- **Line 8591** (Matched `confidence`): `raw_confidence = (`
+- **Line 8592** (Matched `confidence`): `self._coerce_positive_float(market_data.get("confidence_raw"))`
+- **Line 8593** (Matched `confidence`): `or self._coerce_positive_float(market_data.get("confidence"))`
+- **Line 8594** (Matched `confidence`): `or self._coerce_positive_float(market_data.get("gating_base_confidence"))`
+- **Line 8595** (Matched `\b\d+\.\d+\b`): `or 0.0`
+- **Line 8600** (Matched `confidence`): `confidence=max(float(raw_confidence), float(self._borderline_confidence_floor())),`
+- **Line 8641** (Matched `\b\d+\.\d+\b`): `decay_size_mult = 1.0`
+- **Line 8656** (Matched `\b\d+\.\d+\b`): `min_score = getattr(cfg, "STRICT_STRATEGY_SCORE", 0.7)`
+- **Line 8658** (Matched `\b\d+\.\d+\b`): `score_mult = getattr(cfg, "REGIME_SCORE_MULT", {}).get(regime_day, 1.0)`
+- **Line 8661** (Matched `\b\d+\.\d+\b`): `min_score = min(min_score, 0.5)`
+- **Line 8663** (Matched `\b\d+\.\d+\b`): `min_score = min(min_score, float(getattr(cfg, "PLANNING_SIGNAL_SCORE_MIN", 0.5)))`
+- **Line 8670** (Matched `\b\d+\.\d+\b`): `float(signal.get("score") or 0.0),`
+- **Line 8943** (Matched `\b\d+\.\d+\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 8943** (Matched `\b\d{2,}\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 8959** (Matched `\b\d+\.\d+\b`): `mny = float(opt.get("moneyness", 0.0))`
+- **Line 8962** (Matched `\b\d+\.\d+\b`): `is_itm = (opt_type == "CE" and mny > 0.0) or (opt_type == "PE" and mny < 0.0)`
+- **Line 9009** (Matched `\b\d+\.\d+\b`): `premium_soft_penalty_conf = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))`
+- **Line 9009** (Matched `\b\d{2,}\b`): `premium_soft_penalty_conf = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_MULT", 0.92))`
+- **Line 9010** (Matched `\b\d+\.\d+\b`): `premium_soft_penalty_size = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_MULT", 0.90))`
+- **Line 9010** (Matched `\b\d{2,}\b`): `premium_soft_penalty_size = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_MULT", 0.90))`
+- **Line 9011** (Matched `\b\d+\.\d+\b`): `premium_outside_ratio = 0.0`
+- **Line 9016** (Matched `\b\d+\.\d+\b`): `premium_band_cache.get("__GLOBAL__", (40.0, 150.0)),`
+- **Line 9016** (Matched `\b\d{2,}\b`): `premium_band_cache.get("__GLOBAL__", (40.0, 150.0)),`
+- **Line 9023** (Matched `\b\d+\.\d+\b`): `opt_ltp = float(opt.get("ltp") or 0.0)`
+- **Line 9031** (Matched `\b\d+\.\d+\b`): `premium_min = float(getattr(cfg, "OPTION_PREMIUM_SANITY_MIN", 1.0))`
+- **Line 9032** (Matched `\b\d+\.\d+\b`): `premium_max = float(getattr(cfg, "OPTION_PREMIUM_SANITY_MAX", 1000.0))`
+- **Line 9032** (Matched `\b\d{2,}\b`): `premium_max = float(getattr(cfg, "OPTION_PREMIUM_SANITY_MAX", 1000.0))`
+- **Line 9158** (Matched `\b\d+\.\d+\b`): `synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))`
+- **Line 9159** (Matched `\b\d+\.\d+\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9159** (Matched `\b\d{2,}\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9161** (Matched `\b\d+\.\d+\b`): `opt["bid"] = round(max(0.01, opt_ltp - (synth_spread / 2.0)), 4)`
+- **Line 9161** (Matched `\b\d{2,}\b`): `opt["bid"] = round(max(0.01, opt_ltp - (synth_spread / 2.0)), 4)`
+- **Line 9162** (Matched `\b\d+\.\d+\b`): `opt["ask"] = round(max(0.01, opt_ltp + (synth_spread / 2.0)), 4)`
+- **Line 9162** (Matched `\b\d{2,}\b`): `opt["ask"] = round(max(0.01, opt_ltp + (synth_spread / 2.0)), 4)`
+- **Line 9282** (Matched `\b\d+\.\d+\b`): `spread_pct = (float(opt.get("ask") or 0.0) - float(opt.get("bid") or 0.0)) / opt_ltp if opt_ltp else...`
+- **Line 9284** (Matched `\b\d+\.\d+\b`): `toxic_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT_TOXIC", 0.08)), float(max_spread) * 3.0)`
+- **Line 9284** (Matched `\b\d{2,}\b`): `toxic_spread = max(float(getattr(cfg, "MAX_SPREAD_PCT_TOXIC", 0.08)), float(max_spread) * 3.0)`
+- **Line 9330** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "MIN_IV", 0.1)),`
+- **Line 9331** (Matched `\b\d+\.\d+\b`): `float(getattr(cfg, "MAX_IV", 0.6)),`
+- **Line 9333** (Matched `\b\d{2,}\b`): `if opt.get("oi", 0) and opt.get("oi", 0) < getattr(cfg, "MIN_OI", 1000) and not _relax("low_oi"):`
+- **Line 9340** (Matched `\b\d+\.\d+\b`): `atm_thresh = getattr(cfg, "ATM_MONEYNESS_THRESHOLD", 0.01)`
+- **Line 9340** (Matched `\b\d{2,}\b`): `atm_thresh = getattr(cfg, "ATM_MONEYNESS_THRESHOLD", 0.01)`
+- **Line 9341** (Matched `\b\d{2,}\b`): `min_oi_atm = getattr(cfg, "MIN_OI_CHANGE_ATM", 200)`
+- **Line 9342** (Matched `\b\d{2,}\b`): `min_oi_otm = getattr(cfg, "MIN_OI_CHANGE_OTM", 300)`
+- **Line 9348** (Matched `\b\d+\.\d+\b`): `scale = 1 + iv * getattr(cfg, "OI_DYNAMIC_IV_ALPHA", 2.0) + (atr / ltp) * getattr(cfg, "OI_DYNAMIC_A...`
+- **Line 9357** (Matched `\b\d+\.\d+\b`): `if (opt["iv"] < getattr(cfg, "MIN_IV", 0.1) or opt["iv"] > getattr(cfg, "MAX_IV", 0.6)) and not _rel...`
+- **Line 9367** (Matched `\b\d+\.\d+\b`): `if (opt["iv_z"] < getattr(cfg, "IV_Z_MIN", -1.5) or opt["iv_z"] > getattr(cfg, "IV_Z_MAX", 1.5)) and...`
+- **Line 9374** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_skew"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_max"):`
+- **Line 9374** (Matched `\b\d{2,}\b`): `if abs(opt["iv_skew"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_max"):`
+- **Line 9380** (Matched `\b\d+\.\d+\b`): `if direction == "BUY_CALL" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_BULL_MAX", 0.02) and not _rela...`
+- **Line 9380** (Matched `\b\d{2,}\b`): `if direction == "BUY_CALL" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_BULL_MAX", 0.02) and not _rela...`
+- **Line 9386** (Matched `\b\d+\.\d+\b`): `if direction == "BUY_PUT" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_BEAR_MIN", -0.02) and not _rela...`
+- **Line 9386** (Matched `\b\d{2,}\b`): `if direction == "BUY_PUT" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_BEAR_MIN", -0.02) and not _rela...`
+- **Line 9392** (Matched `\b\d+\.\d+\b`): `if opt_type == "CE" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_CALL_MAX", 0.03) and not _relax("iv_s...`
+- **Line 9392** (Matched `\b\d{2,}\b`): `if opt_type == "CE" and opt["iv_skew"] > getattr(cfg, "IV_SKEW_CALL_MAX", 0.03) and not _relax("iv_s...`
+- **Line 9398** (Matched `\b\d+\.\d+\b`): `if opt_type == "PE" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_PUT_MIN", -0.03) and not _relax("iv_s...`
+- **Line 9398** (Matched `\b\d{2,}\b`): `if opt_type == "PE" and opt["iv_skew"] < getattr(cfg, "IV_SKEW_PUT_MIN", -0.03) and not _relax("iv_s...`
+- **Line 9405** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_skew_norm"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_norm"):`
+- **Line 9405** (Matched `\b\d{2,}\b`): `if abs(opt["iv_skew_norm"]) > getattr(cfg, "IV_SKEW_MAX", 0.05) and not _relax("iv_skew_norm"):`
+- **Line 9412** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_skew_curvature"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_skew_cu...`
+- **Line 9422** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_skew_curvature_call"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_sk...`
+- **Line 9432** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_skew_curvature_put"]) > getattr(cfg, "IV_SKEW_CURVE_MAX", 0.5) and not _relax("iv_ske...`
+- **Line 9442** (Matched `\b\d+\.\d+\b`): `if (opt["iv_term"] < getattr(cfg, "IV_TERM_MIN", -0.05) or opt["iv_term"] > getattr(cfg, "IV_TERM_MA...`
+- **Line 9442** (Matched `\b\d{2,}\b`): `if (opt["iv_term"] < getattr(cfg, "IV_TERM_MIN", -0.05) or opt["iv_term"] > getattr(cfg, "IV_TERM_MA...`
+- **Line 9449** (Matched `\b\d+\.\d+\b`): `if abs(opt["iv_surface_slope"]) > getattr(cfg, "IV_SURFACE_SLOPE_MAX", 0.15) and not _relax("iv_surf...`
+- **Line 9449** (Matched `\b\d{2,}\b`): `if abs(opt["iv_surface_slope"]) > getattr(cfg, "IV_SURFACE_SLOPE_MAX", 0.15) and not _relax("iv_surf...`
+- **Line 9478** (Matched `\b\d+\.\d+\b`): `delta_min = float(getattr(cfg, "DELTA_MIN", 0.25))`
+- **Line 9478** (Matched `\b\d{2,}\b`): `delta_min = float(getattr(cfg, "DELTA_MIN", 0.25))`
+- **Line 9479** (Matched `\b\d+\.\d+\b`): `delta_max = float(getattr(cfg, "DELTA_MAX", 0.7))`
+- **Line 9503** (Matched `\b\d+\.\d+\b`): `premium_relax_pct = float(max(0.0, current_filter_profile.premium_relax_pct))`
+- **Line 9505** (Matched `\b\d+\.\d+\b`): `min_p = max(0.0, float(min_p) * max(0.0, 1.0 - premium_relax_pct))`
+- **Line 9506** (Matched `\b\d+\.\d+\b`): `max_p = float(max_p) * (1.0 + premium_relax_pct)`
+- **Line 9515** (Matched `\b\d+\.\d+\b`): `volume_bad = bool((opt.get("volume") or 0) < int(getattr(cfg, "MIN_VOLUME_FILTER", 500)) * 0.25)`
+- **Line 9515** (Matched `\b\d{2,}\b`): `volume_bad = bool((opt.get("volume") or 0) < int(getattr(cfg, "MIN_VOLUME_FILTER", 500)) * 0.25)`
+- **Line 9574** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 9575** (Matched `\b\d+\.\d+\b`): `max(0.0, premium_outside_ratio) * float(getattr(cfg, "PREMIUM_SOFT_VETO_PENALTY_SCALE", 1.5)),`
+- **Line 9577** (Matched `\b\d+\.\d+\b`): `conf_floor = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_FLOOR", 0.75))`
+- **Line 9577** (Matched `\b\d{2,}\b`): `conf_floor = float(getattr(cfg, "PREMIUM_SOFT_VETO_CONF_FLOOR", 0.75))`
+- **Line 9578** (Matched `\b\d+\.\d+\b`): `size_floor = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_FLOOR", 0.70))`
+- **Line 9578** (Matched `\b\d{2,}\b`): `size_floor = float(getattr(cfg, "PREMIUM_SOFT_VETO_SIZE_FLOOR", 0.70))`
+- **Line 9579** (Matched `\b\d+\.\d+\b`): `premium_soft_penalty_conf = max(conf_floor, 1.0 - (0.30 * penalty_scale))`
+- **Line 9579** (Matched `\b\d{2,}\b`): `premium_soft_penalty_conf = max(conf_floor, 1.0 - (0.30 * penalty_scale))`
+- **Line 9580** (Matched `\b\d+\.\d+\b`): `premium_soft_penalty_size = max(size_floor, 1.0 - (0.40 * penalty_scale))`
+- **Line 9580** (Matched `\b\d{2,}\b`): `premium_soft_penalty_size = max(size_floor, 1.0 - (0.40 * penalty_scale))`
+- **Line 9595** (Matched `confidence`): `# ML confidence (only if enough history)`
+- **Line 9606** (Matched `\b\d+\.\d+\b`): `synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))`
+- **Line 9607** (Matched `\b\d+\.\d+\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9607** (Matched `\b\d{2,}\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9609** (Matched `\b\d+\.\d+\b`): `feature_opt["bid"] = round(max(0.01, float(feature_price) - (synth_spread / 2.0)), 4)`
+- **Line 9609** (Matched `\b\d{2,}\b`): `feature_opt["bid"] = round(max(0.01, float(feature_price) - (synth_spread / 2.0)), 4)`
+- **Line 9610** (Matched `\b\d+\.\d+\b`): `feature_opt["ask"] = round(max(0.01, float(feature_price) + (synth_spread / 2.0)), 4)`
+- **Line 9610** (Matched `\b\d{2,}\b`): `feature_opt["ask"] = round(max(0.01, float(feature_price) + (synth_spread / 2.0)), 4)`
+- **Line 9614** (Matched `\b\d{2,}\b`): `use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)`
+- **Line 9618** (Matched `confidence`): `shadow_confidence = None`
+- **Line 9621** (Matched `\b\d+\.\d+\b`): `size_mult = 1.0`
+- **Line 9625** (Matched `confidence`): `confidence_model_component = None`
+- **Line 9626** (Matched `confidence`): `confidence_micro_component = None`
+- **Line 9627** (Matched `confidence`): `confidence_micro_blend_method = None`
+- **Line 9668** (Matched `\b\d+\.\d+\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 9668** (Matched `\b\d{2,}\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 9691** (Matched `\b\d+\.\d+\b`): `entry_price=round(opt.get("ask") or opt.get("ltp") or 0.0, 2),`
+- **Line 9692** (Matched `\b\d+\.\d+\b`): `stop_loss=round(max((opt.get("bid") or 0.0) * 0.95, 0.01), 2),`
+- **Line 9692** (Matched `\b\d{2,}\b`): `stop_loss=round(max((opt.get("bid") or 0.0) * 0.95, 0.01), 2),`
+- **Line 9693** (Matched `\b\d+\.\d+\b`): `target=round((opt.get("ask") or opt.get("ltp") or 0.0) * 1.05, 2),`
+- **Line 9693** (Matched `\b\d{2,}\b`): `target=round((opt.get("ask") or opt.get("ltp") or 0.0) * 1.05, 2),`
+- **Line 9697** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 9698** (Matched `\b\d+\.\d+\b`): `capital_at_risk=0.01,`
+- **Line 9698** (Matched `\b\d{2,}\b`): `capital_at_risk=0.01,`
+- **Line 9699** (Matched `\b\d+\.\d+\b`): `expected_slippage=0.0,`
+- **Line 9700** (Matched `confidence`): `confidence=0.0,`
+- **Line 9700** (Matched `\b\d+\.\d+\b`): `confidence=0.0,`
+- **Line 9713** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 9714** (Matched `confidence`): `confidence=0.0,`
+- **Line 9714** (Matched `\b\d+\.\d+\b`): `confidence=0.0,`
+- **Line 9715** (Matched `\b\d+\.\d+\b`): `model_raw=0.0,`
+- **Line 9716** (Matched `\b\d+\.\d+\b`): `model_component=0.0,`
+- **Line 9718** (Matched `\b\d+\.\d+\b`): `before_soft_veto=0.0,`
+- **Line 9719** (Matched `\b\d+\.\d+\b`): `after_soft_veto=0.0,`
+- **Line 9720** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 9722** (Matched `\b\d+\.\d+\b`): `base=0.0,`
+- **Line 9723** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 9727** (Matched `\b\d+\.\d+\b`): `blocked_trade = self._decorate_trade_context(blocked_trade, market_data, 0.0)`
+- **Line 9734** (Matched `confidence`): `xgb_conf = self.predictor.predict_confidence(feats)`
+- **Line 9736** (Matched `confidence`): `shadow_confidence = self.predictor.predict_confidence_shadow(feats)`
+- **Line 9739** (Matched `confidence`): `deep_conf = deep_pred.predict_confidence(seq_buffer)`
+- **Line 9742** (Matched `confidence`): `confidence = deep_conf if deep_conf is not None else xgb_conf`
+- **Line 9743** (Matched `confidence`): `confidence_model_raw = confidence`
+- **Line 9744** (Matched `confidence`): `confidence_model_component = self._clamp_confidence(confidence)`
+- **Line 9745** (Matched `confidence`): `confidence_after_micro = None`
+- **Line 9752** (Matched `\b\d+\.\d+\b`): `float(market_data.get("fx_ret_5m", 0.0) or market_data.get("x_usdinr_ret5") or 0.0),`
+- **Line 9753** (Matched `\b\d+\.\d+\b`): `float(market_data.get("vix_z", 0.0) or market_data.get("x_india_vix_z") or 0.0),`
+- **Line 9754** (Matched `\b\d+\.\d+\b`): `float(market_data.get("crude_ret_15m", 0.0) or market_data.get("x_crude_ret15") or 0.0),`
+- **Line 9755** (Matched `\b\d+\.\d+\b`): `float(market_data.get("corr_fx_nifty", 0.0) or market_data.get("x_usdinr_corr_nifty") or 0.0),`
+- **Line 9757** (Matched `confidence`): `micro_conf = self._get_micro_predictor().predict_confidence(micro_features)`
+- **Line 9759** (Matched `confidence`): `confidence_micro_component = self._clamp_confidence(micro_conf)`
+- **Line 9760** (Matched `confidence`): `confidence, confidence_micro_blend_method = self._blend_micro_confidence(confidence, micro_conf)`
+- **Line 9761** (Matched `confidence`): `confidence_after_micro = confidence`
+- **Line 9762** (Matched `confidence`): `if confidence is None:`
+- **Line 9763** (Matched `confidence`): `confidence = 0.5`
+- **Line 9763** (Matched `\b\d+\.\d+\b`): `confidence = 0.5`
+- **Line 9764** (Matched `confidence`): `if confidence_model_raw is None:`
+- **Line 9765** (Matched `confidence`): `confidence_model_raw = confidence`
+- **Line 9767** (Matched `confidence`): `# Pure price/volume logic: use signal score as confidence proxy`
+- **Line 9768** (Matched `confidence`): `confidence = max(0.5, min(1.0, signal.get("score", 0.5)))`
+- **Line 9768** (Matched `\b\d+\.\d+\b`): `confidence = max(0.5, min(1.0, signal.get("score", 0.5)))`
+- **Line 9769** (Matched `confidence`): `confidence_model_raw = confidence`
+- **Line 9770** (Matched `confidence`): `confidence_model_component = self._clamp_confidence(confidence)`
+- **Line 9771** (Matched `confidence`): `confidence_micro_blend_method = "model_only"`
+- **Line 9772** (Matched `confidence`): `confidence_after_micro = None`
+- **Line 9776** (Matched `confidence`): `confidence, xgb_conf, deep_conf, micro_conf, market_data, quick_mode=quick_mode`
+- **Line 9778** (Matched `confidence`): `if adj_conf is None and not _relax("confidence"):`
+- **Line 9782** (Matched `confidence`): `rec["confidence"] = round(confidence, 3)`
+- **Line 9787** (Matched `confidence`): `confidence = adj_conf`
+- **Line 9788** (Matched `confidence`): `confidence_after_alpha = confidence`
+- **Line 9792** (Matched `confidence`): `confidence *= self.execution.latency_penalty(opt.get("timestamp", datetime.now().timestamp()))`
+- **Line 9793** (Matched `confidence`): `confidence_after_latency = confidence`
+- **Line 9795** (Matched `confidence`): `raw_gate_threshold = self._raw_confidence_gate_threshold(regime_day, quick_mode=quick_mode)`
+- **Line 9799** (Matched `confidence`): `confidence = max(confidence, float(signal.get("score", 0.5)))`
+- **Line 9799** (Matched `\b\d+\.\d+\b`): `confidence = max(confidence, float(signal.get("score", 0.5)))`
+- **Line 9806** (Matched `confidence`): `confidence_before_soft_veto = float(confidence)`
+- **Line 9807** (Matched `confidence`): `if confidence < raw_gate_threshold and not _relax("confidence"):`
+- **Line 9808** (Matched `confidence`): `_count_option_reject("confidence_raw_gate_shadow")`
+- **Line 9811** (Matched `confidence`): `"trade_builder_confidence_reject_shadow symbol=%s strike=%s type=%s stage=raw raw_model_conf=%s fina...`
+- **Line 9815** (Matched `confidence`): `round(float(confidence_model_raw), 3) if confidence_model_raw is not None else None,`
+- **Line 9816** (Matched `confidence`): `round(float(confidence), 3) if confidence is not None else None,`
+- **Line 9821** (Matched `confidence`): `rec = self._reject_record(symbol, opt, opt_type, "confidence_raw_gate_shadow", atr=atr)`
+- **Line 9822** (Matched `confidence`): `rec["confidence"] = round(confidence, 3)`
+- **Line 9824** (Matched `confidence`): `rec["confidence_stage"] = "raw"`
+- **Line 9839** (Matched `\b\d+\.\d+\b`): `synth_abs = float(getattr(cfg, "OPTION_SYNTH_SPREAD_ABS", 0.5))`
+- **Line 9840** (Matched `\b\d+\.\d+\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9840** (Matched `\b\d{2,}\b`): `synth_pct = float(getattr(cfg, "OPTION_SYNTH_SPREAD_PCT", 0.01))`
+- **Line 9842** (Matched `\b\d+\.\d+\b`): `calc_bid = round(max(0.01, float(display_price) - (synth_spread / 2.0)), 4)`
+- **Line 9842** (Matched `\b\d{2,}\b`): `calc_bid = round(max(0.01, float(display_price) - (synth_spread / 2.0)), 4)`
+- **Line 9843** (Matched `\b\d+\.\d+\b`): `calc_ask = round(max(0.01, float(display_price) + (synth_spread / 2.0)), 4)`
+- **Line 9843** (Matched `\b\d{2,}\b`): `calc_ask = round(max(0.01, float(display_price) + (synth_spread / 2.0)), 4)`
+- **Line 9847** (Matched `\b\d+\.\d+\b`): `else 0.0`
+- **Line 9864** (Matched `\b\d+\.\d+\b`): `stop_mult = getattr(cfg, "OPT_STOP_ATR_MAIN", 1.0)`
+- **Line 9865** (Matched `\b\d+\.\d+\b`): `target_mult = getattr(cfg, "OPT_TARGET_ATR_MAIN", 1.8)`
+- **Line 9870** (Matched `\b\d+\.\d+\b`): `stop_mult = stop_mult * float(getattr(cfg, "REGIME_TREND_STOP_MULT", 1.2))`
+- **Line 9871** (Matched `\b\d+\.\d+\b`): `target_mult = target_mult * float(getattr(cfg, "REGIME_TREND_TARGET_MULT", 2.0))`
+- **Line 9873** (Matched `\b\d+\.\d+\b`): `stop_mult = stop_mult * float(getattr(cfg, "REGIME_RANGE_STOP_MULT", 0.8))`
+- **Line 9874** (Matched `\b\d+\.\d+\b`): `target_mult = target_mult * float(getattr(cfg, "REGIME_RANGE_TARGET_MULT", 1.3))`
+- **Line 9882** (Matched `\b\d+\.\d+\b`): `stop_mult = stop_mult * float(getattr(cfg, "REGIME_EVENT_STOP_MULT", 1.1))`
+- **Line 9883** (Matched `\b\d+\.\d+\b`): `target_mult = target_mult * float(getattr(cfg, "REGIME_EVENT_TARGET_MULT", 1.4))`
+- **Line 9884** (Matched `\b\d+\.\d+\b`): `size_mult = size_mult * float(getattr(cfg, "REGIME_EVENT_SIZE_MULT", 0.6))`
+- **Line 9890** (Matched `\b\d{2,}\b`): `if len(prices) >= 20 and len(atrs) >= 20:`
+- **Line 9892** (Matched `\b\d+\.\d+\b`): `target_mult = calculate_dynamic_multiplier(target_mult, regime_vec, sensitivity=0.5)`
+- **Line 9921** (Matched `\b\d+\.\d+\b`): `min_rr = getattr(cfg, "MIN_RR_QUICK", getattr(cfg, "MIN_RR", 1.5)) if quick_mode else getattr(cfg, "...`
+- **Line 9953** (Matched `\b\d+\.\d+\b`): `size_mult = min(size_mult, float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SIZE_MULT", 0.85)))`
+- **Line 9953** (Matched `\b\d{2,}\b`): `size_mult = min(size_mult, float(getattr(cfg, "CROSS_ASSET_OPTIONAL_SIZE_MULT", 0.85)))`
+- **Line 9956** (Matched `\b\d{2,}\b`): `min_score = getattr(cfg, "QUICK_TRADE_SCORE_MIN", 60) if quick_mode else getattr(cfg, "TRADE_SCORE_M...`
+- **Line 9972** (Matched `\b\d{2,}\b`): `min_score = min(min_score, float(getattr(cfg, "PLANNING_TRADE_SCORE_MIN", 58)))`
+- **Line 9987** (Matched `confidence`): `confidence_base = float(confidence)`
+- **Line 9988** (Matched `confidence`): `confidence_penalty_reasons = list(dict.fromkeys(str(code) for code in soft_veto_codes if str(code)))`
+- **Line 9989** (Matched `confidence`): `confidence_penalty_soft_veto_reasons: list[str] = []`
+- **Line 9990** (Matched `confidence`): `confidence_penalty_soft_veto_total = 0.0`
+- **Line 9990** (Matched `\b\d+\.\d+\b`): `confidence_penalty_soft_veto_total = 0.0`
+- **Line 9992** (Matched `\b\d+\.\d+\b`): `orb_soft_veto_penalty = 0.0`
+- **Line 9993** (Matched `\b\d+\.\d+\b`): `premium_soft_veto_penalty = 0.0`
+- **Line 9996** (Matched `confidence`): `confidence_penalty_soft_veto_reasons.extend(`
+- **Line 9999** (Matched `\b\d+\.\d+\b`): `size_mult = min(size_mult, float(getattr(cfg, "ORB_SOFT_VETO_SIZE_MULT", 0.95)))`
+- **Line 9999** (Matched `\b\d{2,}\b`): `size_mult = min(size_mult, float(getattr(cfg, "ORB_SOFT_VETO_SIZE_MULT", 0.95)))`
+- **Line 10002** (Matched `confidence`): `confidence_penalty_soft_veto_reasons.extend(`
+- **Line 10008** (Matched `confidence`): `confidence_penalty_soft_veto_total = min(`
+- **Line 10009** (Matched `\b\d+\.\d+\b`): `max(0.0, float(getattr(cfg, "SOFT_VETO_CONF_PENALTY_MAX_TOTAL", 0.16))),`
+- **Line 10009** (Matched `\b\d{2,}\b`): `max(0.0, float(getattr(cfg, "SOFT_VETO_CONF_PENALTY_MAX_TOTAL", 0.16))),`
+- **Line 10010** (Matched `\b\d+\.\d+\b`): `max(0.0, orb_soft_veto_penalty + premium_soft_veto_penalty),`
+- **Line 10012** (Matched `confidence`): `confidence_penalty_soft_veto_reasons = list(`
+- **Line 10013** (Matched `confidence`): `dict.fromkeys(str(code) for code in confidence_penalty_soft_veto_reasons if str(code))`
+- **Line 10015** (Matched `confidence`): `confidence = max(0.0, min(1.0, float(confidence) - float(confidence_penalty_soft_veto_total)))`
+- **Line 10015** (Matched `\b\d+\.\d+\b`): `confidence = max(0.0, min(1.0, float(confidence) - float(confidence_penalty_soft_veto_total)))`
+- **Line 10016** (Matched `confidence`): `confidence_after_soft_veto = float(confidence)`
+- **Line 10017** (Matched `confidence`): `confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))`
+- **Line 10017** (Matched `\b\d+\.\d+\b`): `confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))`
+- **Line 10018** (Matched `confidence`): `final_gate_threshold = self._final_confidence_gate_threshold(regime_day, quick_mode=quick_mode)`
+- **Line 10019** (Matched `confidence`): `if confidence < final_gate_threshold and not _relax("confidence"):`
+- **Line 10020** (Matched `confidence`): `_count_option_reject("confidence_final_gate")`
+- **Line 10023** (Matched `confidence`): `"trade_builder_confidence_reject symbol=%s strike=%s type=%s stage=final raw_model_conf=%s final_con...`
+- **Line 10027** (Matched `confidence`): `round(float(confidence_model_raw), 3) if confidence_model_raw is not None else None,`
+- **Line 10028** (Matched `confidence`): `round(float(confidence), 3) if confidence is not None else None,`
+- **Line 10033** (Matched `confidence`): `rec = self._reject_record(symbol, opt, opt_type, "confidence_final_gate", atr=atr)`
+- **Line 10034** (Matched `confidence`): `rec["confidence"] = round(confidence, 3)`
+- **Line 10036** (Matched `confidence`): `rec["confidence_stage"] = "final"`
+- **Line 10161** (Matched `confidence`): `source_flags["confidence_penalty_soft_veto_total"] = round(float(confidence_penalty_soft_veto_total)...`
+- **Line 10162** (Matched `confidence`): `source_flags["confidence_penalty_soft_veto_reasons"] = list(confidence_penalty_soft_veto_reasons)`
+- **Line 10164** (Matched `\b\d+\.\d+\b`): `"signal_score": float(signal.get("score", 0.0)),`
+- **Line 10165** (Matched `confidence`): `"regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),`
+- **Line 10180** (Matched `\b\d+\.\d+\b`): `"initial_score": float(signal.get("score", 0.0)) * 100.0,`
+- **Line 10180** (Matched `\b\d{2,}\b`): `"initial_score": float(signal.get("score", 0.0)) * 100.0,`
+- **Line 10189** (Matched `confidence`): `"confidence_penalty_soft_veto_total": round(float(confidence_penalty_soft_veto_total), 6),`
+- **Line 10190** (Matched `confidence`): `"confidence_penalty_soft_veto_reasons": list(confidence_penalty_soft_veto_reasons),`
+- **Line 10253** (Matched `\b\d+\.\d+\b`): `quote_ts_epoch = max(0.0, float(now_utc_epoch()) - float(quote_age_sec))`
+- **Line 10255** (Matched `\b\d+\.\d+\b`): `quote_age_sec = max(0.0, float(now_utc_epoch()) - float(quote_ts_epoch))`
+- **Line 10305** (Matched `\b\d+\.\d+\b`): `max_quote_age_sec=getattr(cfg, "MAX_OPTION_QUOTE_AGE_SEC", 8.0),`
+- **Line 10315** (Matched `edge`): `init_edge = float(signal.get("initial_predicted_edge", 0.0))`
+- **Line 10315** (Matched `\b\d+\.\d+\b`): `init_edge = float(signal.get("initial_predicted_edge", 0.0))`
+- **Line 10316** (Matched `\b\d{2,}\b`): `hold_sec = int(signal.get("expected_holding_period", 300))`
+- **Line 10318** (Matched `edge`): `initial_edge_bps=init_edge,`
+- **Line 10319** (Matched `edge`): `current_edge_bps=init_edge,`
+- **Line 10322** (Matched `\b\d+\.\d+\b`): `execution_cost_bps=5.0`
+- **Line 10358** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 10359** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 10359** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 10361** (Matched `confidence`): `confidence=round(confidence, 3),`
+- **Line 10383** (Matched `confidence`): `shadow_confidence=shadow_confidence,`
+- **Line 10384** (Matched `confidence`): `alpha_confidence=alpha_conf,`
+- **Line 10398** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 10399** (Matched `confidence`): `confidence=confidence,`
+- **Line 10400** (Matched `confidence`): `model_raw=confidence_model_raw,`
+- **Line 10401** (Matched `confidence`): `model_component=confidence_model_component,`
+- **Line 10402** (Matched `confidence`): `micro_component=confidence_micro_component,`
+- **Line 10403** (Matched `confidence`): `micro_blend_method=confidence_micro_blend_method,`
+- **Line 10404** (Matched `confidence`): `after_micro=confidence_after_micro,`
+- **Line 10405** (Matched `confidence`): `after_alpha=confidence_after_alpha,`
+- **Line 10406** (Matched `confidence`): `after_latency=confidence_after_latency,`
+- **Line 10407** (Matched `confidence`): `before_soft_veto=confidence_before_soft_veto,`
+- **Line 10408** (Matched `confidence`): `after_soft_veto=confidence_after_soft_veto,`
+- **Line 10409** (Matched `confidence`): `penalty_soft_veto_total=confidence_penalty_soft_veto_total,`
+- **Line 10410** (Matched `confidence`): `penalty_soft_veto_reasons=confidence_penalty_soft_veto_reasons,`
+- **Line 10415** (Matched `confidence`): `base=confidence_base,`
+- **Line 10416** (Matched `confidence`): `penalty_total=confidence_penalty_total,`
+- **Line 10417** (Matched `confidence`): `penalty_reasons=confidence_penalty_reasons,`
+- **Line 10418** (Matched `confidence`): `use_confidence_as_model=confidence_model_component is not None,`
+- **Line 10421** (Matched `confidence`): `trade = self._decorate_trade_context(trade, market_data, confidence)`
+- **Line 10572** (Matched `\b\d{2,}\b`): `step = step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50))`
+- **Line 10617** (Matched `\b\d{2,}\b`): `band = band_map.get(symbol, (getattr(cfg, "MIN_PREMIUM", 40), getattr(cfg, "MAX_PREMIUM", 150)))`
+- **Line 10619** (Matched `\b\d+\.\d+\b`): `ltp_opt = max(min_p, min(max_p, float(underlying_spot) * 0.004))`
+- **Line 10619** (Matched `\b\d{2,}\b`): `ltp_opt = max(min_p, min(max_p, float(underlying_spot) * 0.004))`
+- **Line 10620** (Matched `\b\d+\.\d+\b`): `bid = round(ltp_opt * 0.995, 2)`
+- **Line 10620** (Matched `\b\d{2,}\b`): `bid = round(ltp_opt * 0.995, 2)`
+- **Line 10621** (Matched `\b\d+\.\d+\b`): `ask = round(ltp_opt * 1.005, 2)`
+- **Line 10621** (Matched `\b\d{2,}\b`): `ask = round(ltp_opt * 1.005, 2)`
+- **Line 10622** (Matched `\b\d+\.\d+\b`): `mark_price = round((bid + ask) / 2.0, 2)`
+- **Line 10630** (Matched `\b\d{2,}\b`): `"volume": 1000,`
+- **Line 10633** (Matched `\b\d{2,}\b`): `slippage = self.execution.estimate_slippage(bid, ask, 1000)`
+- **Line 10640** (Matched `\b\d+\.\d+\b`): `entry_price, bid, ask, option_risk, stop_mult=1.0, target_mult=1.5`
+- **Line 10675** (Matched `confidence`): `quick_final_gate_threshold = self._final_confidence_gate_threshold("NEUTRAL", quick_mode=True)`
+- **Line 10676** (Matched `confidence`): `quick_raw_gate_threshold = self._raw_confidence_gate_threshold("NEUTRAL", quick_mode=True)`
+- **Line 10677** (Matched `confidence`): `synthetic_confidence = float(max(0.5, quick_final_gate_threshold))`
+- **Line 10677** (Matched `\b\d+\.\d+\b`): `synthetic_confidence = float(max(0.5, quick_final_gate_threshold))`
+- **Line 10699** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 10700** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 10700** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 10702** (Matched `confidence`): `confidence=round(synthetic_confidence, 3),`
+- **Line 10714** (Matched `confidence`): `alpha_confidence=None,`
+- **Line 10716** (Matched `\b\d+\.\d+\b`): `size_mult=1.0,`
+- **Line 10727** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 10728** (Matched `confidence`): `confidence=synthetic_confidence,`
+- **Line 10729** (Matched `confidence`): `model_raw=synthetic_confidence,`
+- **Line 10730** (Matched `confidence`): `model_component=synthetic_confidence,`
+- **Line 10732** (Matched `confidence`): `before_soft_veto=synthetic_confidence,`
+- **Line 10733** (Matched `confidence`): `after_soft_veto=synthetic_confidence,`
+- **Line 10734** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 10739** (Matched `confidence`): `base=synthetic_confidence,`
+- **Line 10740** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 10747** (Matched `confidence`): `synthetic_confidence,`
+- **Line 10754** (Matched `\b\d+\.\d+\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 10754** (Matched `\b\d{2,}\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 10756** (Matched `\b\d+\.\d+\b`): `base_conf = min(0.8, max(0.5, 0.5 + abs(vwap_dist) * 10))`
+- **Line 10756** (Matched `\b\d{2,}\b`): `base_conf = min(0.8, max(0.5, 0.5 + abs(vwap_dist) * 10))`
+- **Line 10758** (Matched `\b\d+\.\d+\b`): `allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate(strat_name, base_conf, 1.0)`
+- **Line 10774** (Matched `\b\d+\.\d+\b`): `target = ltp + atr * 1.5 if side == "BUY" else ltp - atr * 1.5`
+- **Line 10802** (Matched `confidence`): `final_gate_threshold = self._final_confidence_gate_threshold(`
+- **Line 10823** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 10825** (Matched `\b\d+\.\d+\b`): `expected_slippage=0.0,`
+- **Line 10826** (Matched `confidence`): `confidence=round(base_conf, 3),`
+- **Line 10831** (Matched `confidence`): `alpha_confidence=None,`
+- **Line 10840** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 10841** (Matched `confidence`): `confidence=base_conf,`
+- **Line 10847** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 10852** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 10859** (Matched `confidence`): `if trade.confidence >= final_gate_threshold:`
+- **Line 10863** (Matched `confidence`): `"confidence_final_gate",`
+- **Line 10864** (Matched `confidence`): `"Trade final confidence below configured threshold",`
+- **Line 10867** (Matched `confidence`): `"confidence": trade.confidence,`
+- **Line 10868** (Matched `confidence`): `"min_confidence": final_gate_threshold,`
+- **Line 10869** (Matched `confidence`): `"confidence_stage": "final",`
+- **Line 10873** (Matched `confidence`): `_log_advisory_debug("trade_builder_low_confidence symbol=%s instrument=%s stage=final", symbol, inst...`
+- **Line 10874** (Matched `confidence`): `return self._reject_exit(market_data, "confidence_final_gate")`
+- **Line 11095** (Matched `confidence`): `"confidence_score": getattr(cand, "confidence", None),`
+- **Line 11113** (Matched `confidence`): `"builder_confidence": getattr(cand, "builder_confidence", None),`
+- **Line 11114** (Matched `confidence`): `"permission_confidence": getattr(cand, "permission_confidence", None),`
+- **Line 11115** (Matched `confidence`): `"gating_final_confidence": getattr(cand, "gating_final_confidence", None),`
+- **Line 11359** (Matched `\b\d+\.\d+\b`): `atr = float(market_data.get("atr") or max(1.0, float(underlying_spot) * 0.002))`
+- **Line 11359** (Matched `\b\d{2,}\b`): `atr = float(market_data.get("atr") or max(1.0, float(underlying_spot) * 0.002))`
+- **Line 11360** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(market_data.get("ltp_change_window") or 0.0)`
+- **Line 11361** (Matched `\b\d+\.\d+\b`): `momentum_mult = float(getattr(cfg, "ZERO_TO_HERO_MOMENTUM_ATR_MULT", 0.12))`
+- **Line 11361** (Matched `\b\d{2,}\b`): `momentum_mult = float(getattr(cfg, "ZERO_TO_HERO_MOMENTUM_ATR_MULT", 0.12))`
+- **Line 11410** (Matched `\b\d+\.\d+\b`): `otm_min_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MIN", 0.01))`
+- **Line 11410** (Matched `\b\d{2,}\b`): `otm_min_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MIN", 0.01))`
+- **Line 11411** (Matched `\b\d+\.\d+\b`): `otm_max_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MAX", 0.02))`
+- **Line 11411** (Matched `\b\d{2,}\b`): `otm_max_pct = float(getattr(cfg, "ZERO_TO_HERO_OTM_PCT_MAX", 0.02))`
+- **Line 11413** (Matched `\b\d+\.\d+\b`): `otm_min_pct = max(0.0, otm_min_pct * 0.5)`
+- **Line 11414** (Matched `\b\d+\.\d+\b`): `otm_max_pct = otm_max_pct * 1.75`
+- **Line 11414** (Matched `\b\d{2,}\b`): `otm_max_pct = otm_max_pct * 1.75`
+- **Line 11416** (Matched `\b\d+\.\d+\b`): `strike_low = atm_strike * (1.0 + otm_min_pct)`
+- **Line 11417** (Matched `\b\d+\.\d+\b`): `strike_high = atm_strike * (1.0 + otm_max_pct)`
+- **Line 11419** (Matched `\b\d+\.\d+\b`): `strike_low = atm_strike * (1.0 - otm_max_pct)`
+- **Line 11420** (Matched `\b\d+\.\d+\b`): `strike_high = atm_strike * (1.0 - otm_min_pct)`
+- **Line 11426** (Matched `\b\d{2,}\b`): `abs_max = float(getattr(cfg, "ZERO_TO_HERO_PREMIUM_MAX_ABS", 80))`
+- **Line 11432** (Matched `\b\d+\.\d+\b`): `band_low = max(abs_min, band_low * 0.5)`
+- **Line 11433** (Matched `\b\d+\.\d+\b`): `band_high = max(band_high, min(abs_max * 1.75, band_high * 1.5))`
+- **Line 11433** (Matched `\b\d{2,}\b`): `band_high = max(band_high, min(abs_max * 1.75, band_high * 1.5))`
+- **Line 11497** (Matched `\b\d+\.\d+\b`): `max_spread_pct=getattr(cfg, "ZERO_TO_HERO_SPREAD_PCT_MAX", 0.25),`
+- **Line 11497** (Matched `\b\d{2,}\b`): `max_spread_pct=getattr(cfg, "ZERO_TO_HERO_SPREAD_PCT_MAX", 0.25),`
+- **Line 11513** (Matched `\b\d+\.\d+\b`): `momentum_score = min(1.0, abs(ltp_change_window) / max(atr * momentum_mult, 1.0))`
+- **Line 11514** (Matched `\b\d+\.\d+\b`): `cheapness = 1.0 - ((premium - band_low) / max((band_high - band_low), 1e-6))`
+- **Line 11515** (Matched `\b\d+\.\d+\b`): `base_conf = float(getattr(cfg, "ZERO_TO_HERO_CONF_BASE", 0.55))`
+- **Line 11515** (Matched `\b\d{2,}\b`): `base_conf = float(getattr(cfg, "ZERO_TO_HERO_CONF_BASE", 0.55))`
+- **Line 11516** (Matched `\b\d+\.\d+\b`): `mom_w = float(getattr(cfg, "ZERO_TO_HERO_CONF_MOMENTUM_WEIGHT", 0.3))`
+- **Line 11517** (Matched `\b\d+\.\d+\b`): `cheap_w = float(getattr(cfg, "ZERO_TO_HERO_CONF_CHEAPNESS_WEIGHT", 0.2))`
+- **Line 11518** (Matched `confidence`): `confidence = base_conf + (mom_w * momentum_score) + (cheap_w * cheapness)`
+- **Line 11520** (Matched `confidence`): `confidence -= 0.10`
+- **Line 11520** (Matched `\b\d+\.\d+\b`): `confidence -= 0.10`
+- **Line 11520** (Matched `\b\d{2,}\b`): `confidence -= 0.10`
+- **Line 11522** (Matched `confidence`): `confidence -= 0.08`
+- **Line 11522** (Matched `\b\d+\.\d+\b`): `confidence -= 0.08`
+- **Line 11522** (Matched `\b\d{2,}\b`): `confidence -= 0.08`
+- **Line 11524** (Matched `confidence`): `confidence -= 0.10`
+- **Line 11524** (Matched `\b\d+\.\d+\b`): `confidence -= 0.10`
+- **Line 11524** (Matched `\b\d{2,}\b`): `confidence -= 0.10`
+- **Line 11525** (Matched `confidence`): `confidence = max(0.0, min(1.0, confidence))`
+- **Line 11525** (Matched `\b\d+\.\d+\b`): `confidence = max(0.0, min(1.0, confidence))`
+- **Line 11526** (Matched `confidence`): `builder_confidence = confidence`
+- **Line 11533** (Matched `confidence`): `"confidence": confidence,`
+- **Line 11534** (Matched `confidence`): `"builder_confidence": builder_confidence,`
+- **Line 11562** (Matched `confidence`): `chosen = sorted(candidates, key=lambda c: c["confidence"], reverse=True)[0]`
+- **Line 11567** (Matched `\b\d+\.\d+\b`): `bid = float(opt.get("bid") or 0.0)`
+- **Line 11568** (Matched `\b\d+\.\d+\b`): `ask = float(opt.get("ask") or 0.0)`
+- **Line 11587** (Matched `\b\d+\.\d+\b`): `stop_mult=float(getattr(cfg, "ZERO_TO_HERO_STOP_ATR", 0.8)),`
+- **Line 11588** (Matched `\b\d+\.\d+\b`): `target_mult=float(getattr(cfg, "ZERO_TO_HERO_TARGET_ATR", 2.0)),`
+- **Line 11647** (Matched `confidence`): `zero_hero_confidence = float(chosen["confidence"])`
+- **Line 11670** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 11671** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 11671** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 11673** (Matched `confidence`): `confidence=round(zero_hero_confidence, 3),`
+- **Line 11699** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 11700** (Matched `confidence`): `confidence=zero_hero_confidence,`
+- **Line 11701** (Matched `confidence`): `model_raw=zero_hero_confidence,`
+- **Line 11702** (Matched `confidence`): `model_component=zero_hero_confidence,`
+- **Line 11704** (Matched `confidence`): `before_soft_veto=zero_hero_confidence,`
+- **Line 11705** (Matched `confidence`): `after_soft_veto=zero_hero_confidence,`
+- **Line 11706** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 11708** (Matched `confidence`): `base=zero_hero_confidence,`
+- **Line 11709** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 11713** (Matched `confidence`): `trade = self._decorate_trade_context(trade, market_data, zero_hero_confidence)`
+- **Line 11747** (Matched `confidence`): `"confidence": trade.confidence,`
+- **Line 11782** (Matched `confidence`): `"confidence_score": trade.confidence,`
+- **Line 11787** (Matched `confidence`): `"signal_score": trade.confidence,`
+- **Line 11788** (Matched `confidence`): `"regime_conf": market_data.get("regime_confidence") or market_data.get("day_confidence"),`
+- **Line 11882** (Matched `\b\d{2,}\b`): `getattr(cfg, "MIN_OPTION_TOKENS", 12),`
+- **Line 11915** (Matched `\b\d+\.\d+\b`): `cooldown_sec = float(getattr(cfg, "OPTION_TOKEN_INCIDENT_COOLDOWN_SEC", 300.0))`
+- **Line 11915** (Matched `\b\d{2,}\b`): `cooldown_sec = float(getattr(cfg, "OPTION_TOKEN_INCIDENT_COOLDOWN_SEC", 300.0))`
+- **Line 11917** (Matched `\b\d+\.\d+\b`): `last_incident = float(self._expiry_lotto_token_incident_ts.get(incident_key, 0.0) or 0.0)`
+- **Line 11937** (Matched `\b\d+\.\d+\b`): `atr = float(data.get("atr") or max(1.0, float(data.get("ltp") or 0.0) * 0.002))`
+- **Line 11937** (Matched `\b\d{2,}\b`): `atr = float(data.get("atr") or max(1.0, float(data.get("ltp") or 0.0) * 0.002))`
+- **Line 11938** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(data.get("ltp_change_window") or 0.0)`
+- **Line 11939** (Matched `\b\d+\.\d+\b`): `min_momentum = float(getattr(cfg, "EXPIRY_LOTTO_MIN_MOMENTUM_ATR", 0.10))`
+- **Line 11939** (Matched `\b\d{2,}\b`): `min_momentum = float(getattr(cfg, "EXPIRY_LOTTO_MIN_MOMENTUM_ATR", 0.10))`
+- **Line 11991** (Matched `\b\d{2,}\b`): `strike_step = float(strike_step_map.get(symbol, getattr(cfg, "STRIKE_STEP", 50)))`
+- **Line 12037** (Matched `\b\d+\.\d+\b`): `max_spread_pct = float(getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35))`
+- **Line 12037** (Matched `\b\d{2,}\b`): `max_spread_pct = float(getattr(cfg, "EXPIRY_LOTTO_MAX_SPREAD_PCT", 0.35))`
+- **Line 12038** (Matched `\b\d+\.\d+\b`): `max_loss_per_trade = float(getattr(cfg, "EXPIRY_LOTTO_MAX_LOSS_PER_TRADE", 1500.0))`
+- **Line 12038** (Matched `\b\d{2,}\b`): `max_loss_per_trade = float(getattr(cfg, "EXPIRY_LOTTO_MAX_LOSS_PER_TRADE", 1500.0))`
+- **Line 12100** (Matched `\b\d+\.\d+\b`): `entry_price = max(0.01, float(entry_base))`
+- **Line 12100** (Matched `\b\d{2,}\b`): `entry_price = max(0.01, float(entry_base))`
+- **Line 12101** (Matched `\b\d+\.\d+\b`): `stop_loss = max(0.01, entry_price * 0.82)`
+- **Line 12101** (Matched `\b\d{2,}\b`): `stop_loss = max(0.01, entry_price * 0.82)`
+- **Line 12102** (Matched `\b\d+\.\d+\b`): `target = entry_price + max(entry_price * 0.32, 8.0)`
+- **Line 12102** (Matched `\b\d{2,}\b`): `target = entry_price + max(entry_price * 0.32, 8.0)`
+- **Line 12103** (Matched `\b\d+\.\d+\b`): `per_lot_risk = max(0.01, entry_price - stop_loss) * max(1, lot_size)`
+- **Line 12103** (Matched `\b\d{2,}\b`): `per_lot_risk = max(0.01, entry_price - stop_loss) * max(1, lot_size)`
+- **Line 12141** (Matched `confidence`): `confidence = max(0.55, min(0.95, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12141** (Matched `\b\d+\.\d+\b`): `confidence = max(0.55, min(0.95, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12141** (Matched `\b\d{2,}\b`): `confidence = max(0.55, min(0.95, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12143** (Matched `confidence`): `confidence -= 0.10`
+- **Line 12143** (Matched `\b\d+\.\d+\b`): `confidence -= 0.10`
+- **Line 12143** (Matched `\b\d{2,}\b`): `confidence -= 0.10`
+- **Line 12145** (Matched `confidence`): `confidence -= 0.08`
+- **Line 12145** (Matched `\b\d+\.\d+\b`): `confidence -= 0.08`
+- **Line 12145** (Matched `\b\d{2,}\b`): `confidence -= 0.08`
+- **Line 12147** (Matched `confidence`): `confidence = max(0.0, confidence - 0.08)`
+- **Line 12147** (Matched `\b\d+\.\d+\b`): `confidence = max(0.0, confidence - 0.08)`
+- **Line 12147** (Matched `\b\d{2,}\b`): `confidence = max(0.0, confidence - 0.08)`
+- **Line 12173** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 12174** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 12174** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 12175** (Matched `\b\d+\.\d+\b`): `expected_slippage=round(float(slippage or 0.0), 2),`
+- **Line 12176** (Matched `confidence`): `confidence=round(confidence, 3),`
+- **Line 12200** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 12201** (Matched `confidence`): `confidence=confidence,`
+- **Line 12202** (Matched `confidence`): `model_raw=confidence,`
+- **Line 12203** (Matched `confidence`): `model_component=confidence,`
+- **Line 12205** (Matched `confidence`): `before_soft_veto=confidence,`
+- **Line 12206** (Matched `confidence`): `after_soft_veto=confidence,`
+- **Line 12207** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 12209** (Matched `confidence`): `base=confidence,`
+- **Line 12210** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 12216** (Matched `\b\d+\.\d+\b`): `atm_distance = abs(strike - float(atm)) / max(strike_step, 1.0)`
+- **Line 12217** (Matched `confidence`): `score = float(confidence) - (0.4 * spread_penalty) - (0.03 * atm_distance)`
+- **Line 12217** (Matched `\b\d+\.\d+\b`): `score = float(confidence) - (0.4 * spread_penalty) - (0.03 * atm_distance)`
+- **Line 12217** (Matched `\b\d{2,}\b`): `score = float(confidence) - (0.4 * spread_penalty) - (0.03 * atm_distance)`
+- **Line 12218** (Matched `confidence`): `decorated = self._decorate_trade_context(trade, data, confidence)`
+- **Line 12263** (Matched `\b\d+\.\d+\b`): `ltp = float(data.get("ltp") or 0.0)`
+- **Line 12264** (Matched `\b\d+\.\d+\b`): `atr = float(data.get("atr") or max(1.0, ltp * 0.002 or 1.0))`
+- **Line 12264** (Matched `\b\d{2,}\b`): `atr = float(data.get("atr") or max(1.0, ltp * 0.002 or 1.0))`
+- **Line 12266** (Matched `\b\d{2,}\b`): `soft_cutoff = int(getattr(cfg, "ZERO_HERO_EXPIRY_TIME_CUTOFF_MIN", 120))`
+- **Line 12267** (Matched `\b\d{2,}\b`): `hard_cutoff = max(soft_cutoff, int(getattr(cfg, "ZERO_HERO_EXPIRY_TIME_HARD_CUTOFF_MIN", 150)))`
+- **Line 12328** (Matched `\b\d+\.\d+\b`): `ltp_change_window = float(data.get("ltp_change_window", 0) or 0.0)`
+- **Line 12329** (Matched `\b\d+\.\d+\b`): `vwap = float(data.get("vwap", ltp) or ltp or underlying_spot or 0.0)`
+- **Line 12342** (Matched `\b\d{2,}\b`): `getattr(cfg, "ZERO_HERO_EXPIRY_MAX_PREMIUM", 40),`
+- **Line 12345** (Matched `\b\d+\.\d+\b`): `min_delta = float(getattr(cfg, "ZERO_HERO_EXPIRY_MIN_DELTA", 0.2))`
+- **Line 12346** (Matched `\b\d+\.\d+\b`): `max_delta = float(getattr(cfg, "ZERO_HERO_EXPIRY_MAX_DELTA", 0.5))`
+- **Line 12347** (Matched `\b\d{2,}\b`): `tgt_points = float(getattr(cfg, "ZERO_HERO_EXPIRY_TARGET_POINTS", {}).get(symbol, 50))`
+- **Line 12348** (Matched `\b\d+\.\d+\b`): `iv_min = float(getattr(cfg, "ZERO_HERO_IVCRUSH_MIN", 0.15))`
+- **Line 12348** (Matched `\b\d{2,}\b`): `iv_min = float(getattr(cfg, "ZERO_HERO_IVCRUSH_MIN", 0.15))`
+- **Line 12349** (Matched `\b\d+\.\d+\b`): `iv_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_IV_MARGIN", 0.03))`
+- **Line 12349** (Matched `\b\d{2,}\b`): `iv_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_IV_MARGIN", 0.03))`
+- **Line 12351** (Matched `\b\d+\.\d+\b`): `tte_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_TTE_MARGIN_HRS", 1.5))`
+- **Line 12352** (Matched `\b\d+\.\d+\b`): `delta_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_DELTA_MARGIN", 0.08))`
+- **Line 12352** (Matched `\b\d{2,}\b`): `delta_margin = float(getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_DELTA_MARGIN", 0.08))`
+- **Line 12353** (Matched `\b\d+\.\d+\b`): `premium_margin_ratio = float(getattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_SOFT_MARGIN_RATIO", 0.20))`
+- **Line 12353** (Matched `\b\d{2,}\b`): `premium_margin_ratio = float(getattr(cfg, "ZERO_HERO_EXPIRY_PREMIUM_SOFT_MARGIN_RATIO", 0.20))`
+- **Line 12354** (Matched `\b\d+\.\d+\b`): `min_p_soft = max(0.01, min_p * max(0.0, 1.0 - premium_margin_ratio))`
+- **Line 12354** (Matched `\b\d{2,}\b`): `min_p_soft = max(0.01, min_p * max(0.0, 1.0 - premium_margin_ratio))`
+- **Line 12355** (Matched `\b\d+\.\d+\b`): `max_p_soft = max_p * (1.0 + max(0.0, premium_margin_ratio))`
+- **Line 12356** (Matched `\b\d+\.\d+\b`): `momentum_threshold = atr * float(getattr(cfg, "ZERO_HERO_ATR_MULT", 0.08))`
+- **Line 12356** (Matched `\b\d{2,}\b`): `momentum_threshold = atr * float(getattr(cfg, "ZERO_HERO_ATR_MULT", 0.08))`
+- **Line 12358** (Matched `\b\d+\.\d+\b`): `getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_MOMENTUM_RATIO", 0.65)`
+- **Line 12358** (Matched `\b\d{2,}\b`): `getattr(cfg, "ZERO_HERO_EXPIRY_SOFT_MOMENTUM_RATIO", 0.65)`
+- **Line 12405** (Matched `\b\d+\.\d+\b`): `penalty = 0.0`
+- **Line 12412** (Matched `\b\d+\.\d+\b`): `penalty += 0.08`
+- **Line 12412** (Matched `\b\d{2,}\b`): `penalty += 0.08`
+- **Line 12423** (Matched `\b\d+\.\d+\b`): `premium or 1.0,`
+- **Line 12428** (Matched `\b\d+\.\d+\b`): `spread_pct = max(0.0, ask - bid) / max(premium, 1e-6)`
+- **Line 12430** (Matched `\b\d+\.\d+\b`): `if spread_pct > float(getattr(cfg, "ZERO_HERO_EXPIRY_SPREAD_HARD_PCT", 0.45)):`
+- **Line 12430** (Matched `\b\d{2,}\b`): `if spread_pct > float(getattr(cfg, "ZERO_HERO_EXPIRY_SPREAD_HARD_PCT", 0.45)):`
+- **Line 12435** (Matched `\b\d+\.\d+\b`): `penalty += 0.10`
+- **Line 12435** (Matched `\b\d{2,}\b`): `penalty += 0.10`
+- **Line 12446** (Matched `\b\d+\.\d+\b`): `penalty += 0.06`
+- **Line 12446** (Matched `\b\d{2,}\b`): `penalty += 0.06`
+- **Line 12451** (Matched `\b\d+\.\d+\b`): `tte_hrs = 0.0`
+- **Line 12455** (Matched `\b\d+\.\d+\b`): `tte_val = 0.0`
+- **Line 12462** (Matched `\b\d+\.\d+\b`): `penalty += 0.05`
+- **Line 12462** (Matched `\b\d{2,}\b`): `penalty += 0.05`
+- **Line 12465** (Matched `\b\d+\.\d+\b`): `d = abs(float(delta_raw)) if delta_raw is not None else 0.0`
+- **Line 12473** (Matched `\b\d+\.\d+\b`): `penalty += 0.07`
+- **Line 12473** (Matched `\b\d{2,}\b`): `penalty += 0.07`
+- **Line 12477** (Matched `\b\d+\.\d+\b`): `penalty += 0.09`
+- **Line 12477** (Matched `\b\d{2,}\b`): `penalty += 0.09`
+- **Line 12480** (Matched `\b\d+\.\d+\b`): `penalty += 0.07`
+- **Line 12480** (Matched `\b\d{2,}\b`): `penalty += 0.07`
+- **Line 12483** (Matched `\b\d+\.\d+\b`): `penalty += 0.05`
+- **Line 12483** (Matched `\b\d{2,}\b`): `penalty += 0.05`
+- **Line 12486** (Matched `\b\d+\.\d+\b`): `penalty += 0.10`
+- **Line 12486** (Matched `\b\d{2,}\b`): `penalty += 0.10`
+- **Line 12503** (Matched `\b\d+\.\d+\b`): `delta_proxy = d if d else 0.3`
+- **Line 12505** (Matched `\b\d+\.\d+\b`): `stop_loss = max(entry_price - max(3, (tgt_points * delta_proxy) * 0.5), entry_price * 0.2)`
+- **Line 12506** (Matched `confidence`): `confidence_base = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12506** (Matched `\b\d+\.\d+\b`): `confidence_base = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12506** (Matched `\b\d{2,}\b`): `confidence_base = max(0.52, min(1.0, abs(ltp_change_window) / max(atr, 1.0)))`
+- **Line 12507** (Matched `confidence`): `confidence_before_soft_veto = confidence_base`
+- **Line 12508** (Matched `confidence`): `confidence_after_soft_veto = max(0.05, min(1.0, confidence_base - penalty))`
+- **Line 12508** (Matched `\b\d+\.\d+\b`): `confidence_after_soft_veto = max(0.05, min(1.0, confidence_base - penalty))`
+- **Line 12508** (Matched `\b\d{2,}\b`): `confidence_after_soft_veto = max(0.05, min(1.0, confidence_base - penalty))`
+- **Line 12509** (Matched `confidence`): `confidence = confidence_after_soft_veto`
+- **Line 12513** (Matched `\b\d+\.\d+\b`): `size_mult = 1.0`
+- **Line 12514** (Matched `confidence`): `confidence_after_alpha = confidence`
+- **Line 12516** (Matched `confidence`): `confidence, None, None, None, data, quick_mode=True`
+- **Line 12519** (Matched `confidence`): `confidence = max(0.05, min(1.0, float(adj_conf)))`
+- **Line 12519** (Matched `\b\d+\.\d+\b`): `confidence = max(0.05, min(1.0, float(adj_conf)))`
+- **Line 12519** (Matched `\b\d{2,}\b`): `confidence = max(0.05, min(1.0, float(adj_conf)))`
+- **Line 12520** (Matched `confidence`): `confidence_after_alpha = confidence`
+- **Line 12521** (Matched `confidence`): `confidence_penalty_reasons = list(soft_flags)`
+- **Line 12523** (Matched `confidence`): `confidence_after_alpha is not None`
+- **Line 12524** (Matched `confidence`): `and confidence_after_soft_veto is not None`
+- **Line 12525** (Matched `confidence`): `and abs(float(confidence_after_alpha) - float(confidence_after_soft_veto)) > 1e-9`
+- **Line 12527** (Matched `confidence`): `confidence_penalty_reasons.append("alpha_adjustment")`
+- **Line 12528** (Matched `confidence`): `confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))`
+- **Line 12528** (Matched `\b\d+\.\d+\b`): `confidence_penalty_total = max(0.0, float(confidence_base) - float(confidence))`
+- **Line 12581** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 12582** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 12582** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 12584** (Matched `confidence`): `confidence=round(confidence, 3),`
+- **Line 12600** (Matched `confidence`): `alpha_confidence=alpha_conf,`
+- **Line 12613** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 12614** (Matched `confidence`): `confidence=confidence,`
+- **Line 12615** (Matched `confidence`): `model_raw=confidence_base,`
+- **Line 12616** (Matched `confidence`): `model_component=confidence_base,`
+- **Line 12618** (Matched `confidence`): `after_alpha=confidence_after_alpha,`
+- **Line 12619** (Matched `confidence`): `before_soft_veto=confidence_before_soft_veto,`
+- **Line 12620** (Matched `confidence`): `after_soft_veto=confidence_after_soft_veto,`
+- **Line 12623** (Matched `confidence`): `base=confidence_base,`
+- **Line 12624** (Matched `confidence`): `penalty_total=confidence_penalty_total,`
+- **Line 12625** (Matched `confidence`): `penalty_reasons=confidence_penalty_reasons,`
+- **Line 12628** (Matched `confidence`): `trade = self._decorate_trade_context(trade, data, confidence)`
+- **Line 12680** (Matched `\b\d+\.\d+\b`): `min_iv = getattr(cfg, "SPREAD_MIN_IV", 0.15)`
+- **Line 12680** (Matched `\b\d{2,}\b`): `min_iv = getattr(cfg, "SPREAD_MIN_IV", 0.15)`
+- **Line 12734** (Matched `\b\d{2,}\b`): `width = getattr(cfg, "IRON_CONDOR_WIDTH", 100)`
+- **Line 12735** (Matched `\b\d{2,}\b`): `fly_width = getattr(cfg, "IRON_FLY_WIDTH", 100)`
+- **Line 12761** (Matched `\b\d+\.\d+\b`): `"stop_loss": round(credit * 1.5, 2),`
+- **Line 12762** (Matched `\b\d+\.\d+\b`): `"target": round(credit * 0.5, 2),`
+- **Line 12763** (Matched `confidence`): `"confidence": 0.6,`
+- **Line 12763** (Matched `\b\d+\.\d+\b`): `"confidence": 0.6,`
+- **Line 12801** (Matched `\b\d+\.\d+\b`): `"stop_loss": round(credit * 1.8, 2),`
+- **Line 12802** (Matched `\b\d+\.\d+\b`): `"target": round(credit * 0.5, 2),`
+- **Line 12803** (Matched `confidence`): `"confidence": 0.6,`
+- **Line 12803** (Matched `\b\d+\.\d+\b`): `"confidence": 0.6,`
+- **Line 12842** (Matched `\b\d+\.\d+\b`): `"stop_loss": round(debit * 0.5, 2),`
+- **Line 12844** (Matched `confidence`): `"confidence": 0.6,`
+- **Line 12844** (Matched `\b\d+\.\d+\b`): `"confidence": 0.6,`
+- **Line 12877** (Matched `\b\d+\.\d+\b`): `"stop_loss": round(debit * 0.5, 2),`
+- **Line 12879** (Matched `confidence`): `"confidence": 0.6,`
+- **Line 12879** (Matched `\b\d+\.\d+\b`): `"confidence": 0.6,`
+- **Line 12907** (Matched `\b\d+\.\d+\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 12907** (Matched `\b\d{2,}\b`): `atr = market_data.get("atr", max(1.0, ltp * 0.002))`
+- **Line 12911** (Matched `\b\d+\.\d+\b`): `if abs(ltp_change_window) > atr * getattr(cfg, "SCALP_MAX_MOM_ATR", 0.08):`
+- **Line 12911** (Matched `\b\d{2,}\b`): `if abs(ltp_change_window) > atr * getattr(cfg, "SCALP_MAX_MOM_ATR", 0.08):`
+- **Line 12921** (Matched `\b\d+\.\d+\b`): `"threshold": atr * getattr(cfg, "SCALP_MAX_MOM_ATR", 0.08),`
+- **Line 12921** (Matched `\b\d{2,}\b`): `"threshold": atr * getattr(cfg, "SCALP_MAX_MOM_ATR", 0.08),`
+- **Line 12930** (Matched `\b\d+\.\d+\b`): `dir_atr = getattr(cfg, "SCALP_DIR_ATR", 0.05)`
+- **Line 12930** (Matched `\b\d{2,}\b`): `dir_atr = getattr(cfg, "SCALP_DIR_ATR", 0.05)`
+- **Line 12942** (Matched `\b\d{2,}\b`): `min_p = getattr(cfg, "SCALP_MIN_PREMIUM", 20)`
+- **Line 12943** (Matched `\b\d{2,}\b`): `max_p = getattr(cfg, "SCALP_MAX_PREMIUM", 180)`
+- **Line 12956** (Matched `\b\d{2,}\b`): `use_ml = self._ml_history_count() >= getattr(cfg, "ML_MIN_TRAIN_TRADES", 200)`
+- **Line 12960** (Matched `confidence`): `shadow_confidence = None`
+- **Line 12963** (Matched `\b\d+\.\d+\b`): `size_mult = 1.0`
+- **Line 12966** (Matched `confidence`): `confidence_after_micro = None`
+- **Line 12967** (Matched `confidence`): `confidence_after_alpha = None`
+- **Line 12968** (Matched `confidence`): `confidence_model_component = None`
+- **Line 12969** (Matched `confidence`): `confidence_micro_component = None`
+- **Line 12970** (Matched `confidence`): `confidence_micro_blend_method = None`
+- **Line 12983** (Matched `confidence`): `xgb_conf = self.predictor.predict_confidence(feats)`
+- **Line 12984** (Matched `confidence`): `confidence = xgb_conf`
+- **Line 12985** (Matched `confidence`): `confidence_model_component = self._clamp_confidence(confidence)`
+- **Line 12987** (Matched `confidence`): `shadow_confidence = self.predictor.predict_confidence_shadow(feats)`
+- **Line 12989** (Matched `confidence`): `confidence = max(0.5, min(1.0, 0.6 + (atr / max(ltp, 1)) * 10))`
+- **Line 12989** (Matched `\b\d+\.\d+\b`): `confidence = max(0.5, min(1.0, 0.6 + (atr / max(ltp, 1)) * 10))`
+- **Line 12989** (Matched `\b\d{2,}\b`): `confidence = max(0.5, min(1.0, 0.6 + (atr / max(ltp, 1)) * 10))`
+- **Line 12990** (Matched `confidence`): `confidence_model_component = self._clamp_confidence(confidence)`
+- **Line 12991** (Matched `confidence`): `confidence_micro_blend_method = "model_only"`
+- **Line 12998** (Matched `confidence`): `micro_conf = self._get_micro_predictor().predict_confidence(micro_features)`
+- **Line 12999** (Matched `confidence`): `confidence_micro_component = self._clamp_confidence(micro_conf)`
+- **Line 13000** (Matched `confidence`): `confidence, confidence_micro_blend_method = self._blend_micro_confidence(confidence, micro_conf)`
+- **Line 13001** (Matched `confidence`): `confidence_after_micro = confidence`
+- **Line 13004** (Matched `confidence`): `confidence, xgb_conf, None, micro_conf, market_data, quick_mode=True`
+- **Line 13007** (Matched `confidence`): `confidence = adj_conf`
+- **Line 13008** (Matched `confidence`): `confidence_after_alpha = confidence`
+- **Line 13014** (Matched `confidence`): `allowed, adj_score, decay_size_mult, _ = self._apply_decay_gate("SCALP", confidence, size_mult)`
+- **Line 13020** (Matched `confidence`): `confidence = adj_score`
+- **Line 13022** (Matched `\b\d+\.\d+\b`): `scalp_final_gate_threshold = float(getattr(cfg, "SCALP_MIN_PROBA", 0.58))`
+- **Line 13022** (Matched `\b\d{2,}\b`): `scalp_final_gate_threshold = float(getattr(cfg, "SCALP_MIN_PROBA", 0.58))`
+- **Line 13023** (Matched `confidence`): `if confidence < scalp_final_gate_threshold:`
+- **Line 13040** (Matched `\b\d+\.\d+\b`): `stop_mult=getattr(cfg, "SCALP_STOP_ATR", 0.3),`
+- **Line 13041** (Matched `\b\d+\.\d+\b`): `target_mult=getattr(cfg, "SCALP_TARGET_ATR", 0.6),`
+- **Line 13095** (Matched `\b\d{2,}\b`): `validity_sec=int(getattr(cfg, "TELEGRAM_TRADE_VALIDITY_SEC", 180)),`
+- **Line 13096** (Matched `\b\d+\.\d+\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 13096** (Matched `\b\d{2,}\b`): `capital_at_risk=round(max(entry_price - stop_loss, 0.01), 2),`
+- **Line 13098** (Matched `confidence`): `confidence=round(confidence, 3),`
+- **Line 13117** (Matched `confidence`): `shadow_confidence=shadow_confidence,`
+- **Line 13118** (Matched `confidence`): `alpha_confidence=alpha_conf,`
+- **Line 13127** (Matched `confidence`): `**self._staged_confidence_payload(`
+- **Line 13128** (Matched `confidence`): `confidence=confidence,`
+- **Line 13129** (Matched `confidence`): `model_raw=confidence_model_component,`
+- **Line 13130** (Matched `confidence`): `model_component=confidence_model_component,`
+- **Line 13131** (Matched `confidence`): `micro_component=confidence_micro_component,`
+- **Line 13132** (Matched `confidence`): `micro_blend_method=confidence_micro_blend_method,`
+- **Line 13133** (Matched `confidence`): `after_micro=confidence_after_micro,`
+- **Line 13134** (Matched `confidence`): `after_alpha=confidence_after_alpha,`
+- **Line 13135** (Matched `confidence`): `before_soft_veto=confidence,`
+- **Line 13136** (Matched `confidence`): `after_soft_veto=confidence,`
+- **Line 13137** (Matched `\b\d+\.\d+\b`): `penalty_soft_veto_total=0.0,`
+- **Line 13141** (Matched `confidence`): `base=confidence,`
+- **Line 13142** (Matched `\b\d+\.\d+\b`): `penalty_total=0.0,`
+- **Line 13144** (Matched `confidence`): `use_confidence_as_model=confidence_model_component is not None,`
+- **Line 13147** (Matched `confidence`): `trade = self._decorate_trade_context(trade, market_data, confidence)`
+- **Line 13168** (Matched `\b\d+\.\d+\b`): `ltp, bid, ask, base_atr, stop_mult=1.0, target_mult=1.5`
+- **Line 13205** (Matched `confidence`): `# Keep only top 5 by confidence then ltp`
+- **Line 13207** (Matched `confidence`): `return (x.get("confidence") or 0, x.get("ltp") or 0)`
+- **Line 13220** (Matched `confidence`): `return (x.get("confidence") or 0, x.get("ltp") or 0, x.get("volume") or 0)`
+
+### strategies/volatility_trend.py
+- **Line 1** (Matched `\b\d{2,}\b`): `def volatility_scaled_trend_strategy(symbol, ltp, vwap, atr, base_lot_size=15, target_risk_points=50...`
+- **Line 14** (Matched `\b\d+\.\d+\b`): `# Require at least 0.15% trend deviation to enter`
+- **Line 14** (Matched `\b\d{2,}\b`): `# Require at least 0.15% trend deviation to enter`
+- **Line 15** (Matched `\b\d+\.\d+\b`): `if trend > 0.0015:`
+- **Line 15** (Matched `\b\d{2,}\b`): `if trend > 0.0015:`
+- **Line 18** (Matched `\b\d+\.\d+\b`): `elif trend < -0.0015:`
+- **Line 18** (Matched `\b\d{2,}\b`): `elif trend < -0.0015:`
+- **Line 24** (Matched `\b\d{2,}\b`): `# Elite 10/10 Cross-Asset Validation`
+- **Line 37** (Matched `\b\d{2,}\b`): `# Require at least 50% of tracked cross-assets to confirm the trend direction`
+- **Line 38** (Matched `\b\d+\.\d+\b`): `if len(cross_assets) > 0 and confirming_assets / len(cross_assets) < 0.5:`
+- **Line 42** (Matched `\b\d{2,}\b`): `strike = round(ltp / 100) * 100`
+- **Line 45** (Matched `\b\d+\.\d+\b`): `stop_points = atr * 1.5`
+- **Line 49** (Matched `\b\d{2,}\b`): `# Example: If ATR is high (stop_points = 200), we buy fewer lots. If ATR is low, we buy more.`
+- **Line 52** (Matched `\b\d{2,}\b`): `# We round to nearest multiple of base_lot_size (e.g., 15 for Bank Nifty)`
+- **Line 61** (Matched `\b\d{2,}\b`): `min_prem = 40`
+- **Line 62** (Matched `\b\d{2,}\b`): `max_prem = 150`
+- **Line 64** (Matched `\b\d+\.\d+\b`): `entry_price = ltp * 0.004`
+- **Line 64** (Matched `\b\d{2,}\b`): `entry_price = ltp * 0.004`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `stop_loss = round(entry_price * 0.8, 2)`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `target = round(entry_price * 1.5, 2)`
+- **Line 72** (Matched `edge`): `predicted_edge_bps = min(50.0, max(5.0, abs(trend) * 10000))`
+- **Line 72** (Matched `\b\d+\.\d+\b`): `predicted_edge_bps = min(50.0, max(5.0, abs(trend) * 10000))`
+- **Line 72** (Matched `\b\d{2,}\b`): `predicted_edge_bps = min(50.0, max(5.0, abs(trend) * 10000))`
+- **Line 73** (Matched `\b\d{2,}\b`): `expected_holding_time_sec = max(300, int(3600 / (atr + 1e-9)))`
+- **Line 83** (Matched `confidence`): `"confidence": 75,`
+- **Line 83** (Matched `\b\d{2,}\b`): `"confidence": 75,`
+- **Line 85** (Matched `edge`): `"initial_predicted_edge": round(predicted_edge_bps, 2),`
+
+### strategies/pro_layer/pro_strategy_engine.py
+- **Line 24** (Matched `confidence`): `confidence: float`
+- **Line 39** (Matched `\b\d+\.\d+\b`): `def _safe_float(value: Any, default: float = 0.0) -> float:`
+- **Line 53** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, float(value)))`
+- **Line 76** (Matched `\b\d+\.\d+\b`): `return _safe_float(market_data.get("quote_age_sec"), 999.0)`
+- **Line 76** (Matched `\b\d{2,}\b`): `return _safe_float(market_data.get("quote_age_sec"), 999.0)`
+- **Line 80** (Matched `\b\d+\.\d+\b`): `return _safe_float(market_data.get("spread_pct"), 999.0)`
+- **Line 80** (Matched `\b\d{2,}\b`): `return _safe_float(market_data.get("spread_pct"), 999.0)`
+- **Line 83** (Matched `\b\d+\.\d+\b`): `def _fresh_and_tight(market_data: dict[str, Any], *, max_age_sec: float = 6.0, max_spread_pct: float...`
+- **Line 83** (Matched `\b\d{2,}\b`): `def _fresh_and_tight(market_data: dict[str, Any], *, max_age_sec: float = 6.0, max_spread_pct: float...`
+- **Line 87** (Matched `confidence`): `def _make_signal(name: str, direction: str, edge: float, confidence: float, reason: str, *, family: ...`
+- **Line 87** (Matched `edge`): `def _make_signal(name: str, direction: str, edge: float, confidence: float, reason: str, *, family: ...`
+- **Line 91** (Matched `edge`): `score=round(_clamp01(edge), 4),`
+- **Line 92** (Matched `confidence`): `confidence=round(_clamp01(confidence), 4),`
+- **Line 108** (Matched `\b\d+\.\d+\b`): `if atr <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 108** (Matched `\b\d{2,}\b`): `if atr <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 111** (Matched `\b\d+\.\d+\b`): `if move_atr < 0.75 and vol_z < 1.0:`
+- **Line 111** (Matched `\b\d{2,}\b`): `if move_atr < 0.75 and vol_z < 1.0:`
+- **Line 113** (Matched `edge`): `edge = 0.54 + min(0.24, move_atr * 0.14) + min(0.10, max(vol_z, 0.0) * 0.04)`
+- **Line 113** (Matched `\b\d+\.\d+\b`): `edge = 0.54 + min(0.24, move_atr * 0.14) + min(0.10, max(vol_z, 0.0) * 0.04)`
+- **Line 113** (Matched `\b\d{2,}\b`): `edge = 0.54 + min(0.24, move_atr * 0.14) + min(0.10, max(vol_z, 0.0) * 0.04)`
+- **Line 114** (Matched `confidence`): `confidence = 0.52 + min(0.26, move_atr * 0.16) + min(0.10, max(vol_z, 0.0) * 0.05)`
+- **Line 114** (Matched `\b\d+\.\d+\b`): `confidence = 0.52 + min(0.26, move_atr * 0.16) + min(0.10, max(vol_z, 0.0) * 0.05)`
+- **Line 114** (Matched `\b\d{2,}\b`): `confidence = 0.52 + min(0.26, move_atr * 0.16) + min(0.10, max(vol_z, 0.0) * 0.05)`
+- **Line 118** (Matched `edge`): `edge,`
+- **Line 119** (Matched `confidence`): `confidence,`
+- **Line 137** (Matched `\b\d+\.\d+\b`): `imbalance = (bid_qty - ask_qty) / max(bid_qty + ask_qty, 1.0)`
+- **Line 138** (Matched `\b\d+\.\d+\b`): `if abs(imbalance) < 0.35:`
+- **Line 138** (Matched `\b\d{2,}\b`): `if abs(imbalance) < 0.35:`
+- **Line 140** (Matched `\b\d+\.\d+\b`): `if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 140** (Matched `\b\d{2,}\b`): `if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 144** (Matched `edge`): `edge = 0.53 + min(0.26, strength * 0.45)`
+- **Line 144** (Matched `\b\d+\.\d+\b`): `edge = 0.53 + min(0.26, strength * 0.45)`
+- **Line 144** (Matched `\b\d{2,}\b`): `edge = 0.53 + min(0.26, strength * 0.45)`
+- **Line 145** (Matched `confidence`): `confidence = 0.50 + min(0.30, strength * 0.50)`
+- **Line 145** (Matched `\b\d+\.\d+\b`): `confidence = 0.50 + min(0.30, strength * 0.50)`
+- **Line 145** (Matched `\b\d{2,}\b`): `confidence = 0.50 + min(0.30, strength * 0.50)`
+- **Line 149** (Matched `edge`): `edge,`
+- **Line 150** (Matched `confidence`): `confidence,`
+- **Line 166** (Matched `\b\d+\.\d+\b`): `if ltp <= 0 or vwap <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 166** (Matched `\b\d{2,}\b`): `if ltp <= 0 or vwap <= 0 or not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 169** (Matched `\b\d+\.\d+\b`): `if abs(dev) < 0.0045:`
+- **Line 169** (Matched `\b\d{2,}\b`): `if abs(dev) < 0.0045:`
+- **Line 171** (Matched `\b\d+\.\d+\b`): `if dev > 0 and rsi < 0.35:`
+- **Line 171** (Matched `\b\d{2,}\b`): `if dev > 0 and rsi < 0.35:`
+- **Line 173** (Matched `\b\d+\.\d+\b`): `if dev < 0 and rsi > -0.35:`
+- **Line 173** (Matched `\b\d{2,}\b`): `if dev < 0 and rsi > -0.35:`
+- **Line 176** (Matched `edge`): `edge = 0.51 + min(0.24, abs(dev) * 42)`
+- **Line 176** (Matched `\b\d+\.\d+\b`): `edge = 0.51 + min(0.24, abs(dev) * 42)`
+- **Line 176** (Matched `\b\d{2,}\b`): `edge = 0.51 + min(0.24, abs(dev) * 42)`
+- **Line 177** (Matched `confidence`): `confidence = 0.49 + min(0.22, abs(dev) * 36)`
+- **Line 177** (Matched `\b\d+\.\d+\b`): `confidence = 0.49 + min(0.22, abs(dev) * 36)`
+- **Line 177** (Matched `\b\d{2,}\b`): `confidence = 0.49 + min(0.22, abs(dev) * 36)`
+- **Line 181** (Matched `edge`): `edge,`
+- **Line 182** (Matched `confidence`): `confidence,`
+- **Line 199** (Matched `\b\d+\.\d+\b`): `if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 199** (Matched `\b\d{2,}\b`): `if not _fresh_and_tight(market_data, max_age_sec=6.0, max_spread_pct=0.02):`
+- **Line 202** (Matched `\b\d+\.\d+\b`): `if abs(oi_pressure) < 1 and abs(iv_change) < 0.03:`
+- **Line 202** (Matched `\b\d{2,}\b`): `if abs(oi_pressure) < 1 and abs(iv_change) < 0.03:`
+- **Line 208** (Matched `\b\d+\.\d+\b`): `strength = min(1.0, abs(oi_pressure) / max(abs(call_oi_delta) + abs(put_oi_delta), 1.0))`
+- **Line 209** (Matched `edge`): `edge = 0.53 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.5)`
+- **Line 209** (Matched `\b\d+\.\d+\b`): `edge = 0.53 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.5)`
+- **Line 209** (Matched `\b\d{2,}\b`): `edge = 0.53 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.5)`
+- **Line 210** (Matched `confidence`): `confidence = 0.50 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.2)`
+- **Line 210** (Matched `\b\d+\.\d+\b`): `confidence = 0.50 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.2)`
+- **Line 210** (Matched `\b\d{2,}\b`): `confidence = 0.50 + min(0.22, strength * 0.30) + min(0.08, abs(iv_change) * 1.2)`
+- **Line 214** (Matched `edge`): `edge,`
+- **Line 215** (Matched `confidence`): `confidence,`
+- **Line 233** (Matched `\b\d{2,}\b`): `mins = (hour * 60) + minute`
+- **Line 234** (Matched `\b\d{2,}\b`): `is_open = (9 * 60 + 20) <= mins <= (10 * 60)`
+- **Line 235** (Matched `\b\d{2,}\b`): `is_close = (14 * 60 + 15) <= mins <= (15 * 60 + 10)`
+- **Line 238** (Matched `edge`): `edge = 0.44 if is_open else 0.47`
+- **Line 238** (Matched `\b\d+\.\d+\b`): `edge = 0.44 if is_open else 0.47`
+- **Line 238** (Matched `\b\d{2,}\b`): `edge = 0.44 if is_open else 0.47`
+- **Line 239** (Matched `confidence`): `confidence = 0.40 if is_open else 0.43`
+- **Line 239** (Matched `\b\d+\.\d+\b`): `confidence = 0.40 if is_open else 0.43`
+- **Line 239** (Matched `\b\d{2,}\b`): `confidence = 0.40 if is_open else 0.43`
+- **Line 243** (Matched `edge`): `edge,`
+- **Line 244** (Matched `confidence`): `confidence,`
+- **Line 262** (Matched `confidence`): `call_strength = sum(s.score * s.confidence for s in primary if s.direction == "BUY_CALL")`
+- **Line 263** (Matched `confidence`): `put_strength = sum(s.score * s.confidence for s in primary if s.direction == "BUY_PUT")`
+- **Line 269** (Matched `\b\d+\.\d+\b`): `if conflict_ratio >= 0.55:`
+- **Line 269** (Matched `\b\d{2,}\b`): `if conflict_ratio >= 0.55:`
+- **Line 279** (Matched `confidence`): `booster = max(boosters, key=lambda s: s.score * s.confidence)`
+- **Line 284** (Matched `confidence`): `"time_window_boost": round(booster.score * booster.confidence, 4),`
+- **Line 287** (Matched `confidence`): `kept = [sig for sig in primary if sig.score >= 0.64 and sig.confidence >= 0.60]`
+- **Line 287** (Matched `\b\d+\.\d+\b`): `kept = [sig for sig in primary if sig.score >= 0.64 and sig.confidence >= 0.60]`
+- **Line 287** (Matched `\b\d{2,}\b`): `kept = [sig for sig in primary if sig.score >= 0.64 and sig.confidence >= 0.60]`
+- **Line 290** (Matched `confidence`): `ranked = sorted(kept, key=lambda s: (s.score * s.confidence, s.score, s.confidence, s.name), reverse...`
+- **Line 292** (Matched `confidence`): `top_strength = top.score * top.confidence`
+- **Line 293** (Matched `confidence`): `next_strength = ranked[1].score * ranked[1].confidence if len(ranked) > 1 else 0.0`
+- **Line 293** (Matched `\b\d+\.\d+\b`): `next_strength = ranked[1].score * ranked[1].confidence if len(ranked) > 1 else 0.0`
+- **Line 294** (Matched `\b\d+\.\d+\b`): `if len(ranked) > 1 and (top_strength - next_strength) < 0.04:`
+- **Line 294** (Matched `\b\d{2,}\b`): `if len(ranked) > 1 and (top_strength - next_strength) < 0.04:`
+
+### strategies/pro_layer/pro_decision_adapter.py
+- **Line 33** (Matched `\b\d+\.\d+\b`): `def _safe_float(value: Any, default: float = 0.0) -> float:`
+- **Line 42** (Matched `edge`): `def _signal_edge_score(signal: ProSignal) -> float:`
+- **Line 43** (Matched `\b\d+\.\d+\b`): `score = _safe_float(signal.score, 0.0)`
+- **Line 44** (Matched `confidence`): `confidence = _safe_float(signal.confidence, 0.0)`
+- **Line 44** (Matched `\b\d+\.\d+\b`): `confidence = _safe_float(signal.confidence, 0.0)`
+- **Line 45** (Matched `confidence`): `return max(0.0, min(1.0, (score * 0.65) + (confidence * 0.35)))`
+- **Line 45** (Matched `\b\d+\.\d+\b`): `return max(0.0, min(1.0, (score * 0.65) + (confidence * 0.35)))`
+- **Line 45** (Matched `\b\d{2,}\b`): `return max(0.0, min(1.0, (score * 0.65) + (confidence * 0.35)))`
+- **Line 49** (Matched `\b\d+\.\d+\b`): `quote_age = _safe_float(market_data.get("quote_age_sec"), 0.0)`
+- **Line 50** (Matched `\b\d+\.\d+\b`): `spread_pct = _safe_float(market_data.get("spread_pct"), 0.0)`
+- **Line 51** (Matched `confidence`): `data_confidence = _safe_float(market_data.get("data_confidence"), 1.0)`
+- **Line 51** (Matched `\b\d+\.\d+\b`): `data_confidence = _safe_float(market_data.get("data_confidence"), 1.0)`
+- **Line 56** (Matched `\b\d+\.\d+\b`): `freshness = max(0.0, 1.0 - min(quote_age / 8.0, 1.0))`
+- **Line 57** (Matched `\b\d+\.\d+\b`): `spread_quality = max(0.0, 1.0 - min(spread_pct / 0.02, 1.0))`
+- **Line 57** (Matched `\b\d{2,}\b`): `spread_quality = max(0.0, 1.0 - min(spread_pct / 0.02, 1.0))`
+- **Line 58** (Matched `\b\d+\.\d+\b`): `coarse_quality = 1.0 if (quote_ok and liquidity_ok and spread_ok) else 0.45`
+- **Line 58** (Matched `\b\d{2,}\b`): `coarse_quality = 1.0 if (quote_ok and liquidity_ok and spread_ok) else 0.45`
+- **Line 60** (Matched `\b\d+\.\d+\b`): `0.0,`
+- **Line 62** (Matched `\b\d+\.\d+\b`): `1.0,`
+- **Line 63** (Matched `confidence`): `(freshness * 0.38) + (spread_quality * 0.30) + (data_confidence * 0.24) + (coarse_quality * 0.08),`
+- **Line 63** (Matched `\b\d+\.\d+\b`): `(freshness * 0.38) + (spread_quality * 0.30) + (data_confidence * 0.24) + (coarse_quality * 0.08),`
+- **Line 63** (Matched `\b\d{2,}\b`): `(freshness * 0.38) + (spread_quality * 0.30) + (data_confidence * 0.24) + (coarse_quality * 0.08),`
+- **Line 84** (Matched `edge`): `edge = _signal_edge_score(signal)`
+- **Line 86** (Matched `edge`): `rank = max(0.0, min(1.0, (edge * 0.76) + (quality * 0.24)))`
+- **Line 86** (Matched `\b\d+\.\d+\b`): `rank = max(0.0, min(1.0, (edge * 0.76) + (quality * 0.24)))`
+- **Line 86** (Matched `\b\d{2,}\b`): `rank = max(0.0, min(1.0, (edge * 0.76) + (quality * 0.24)))`
+- **Line 101** (Matched `edge`): `tradable = bool(execution_input_ok and edge >= 0.60 and quality >= 0.65)`
+- **Line 101** (Matched `\b\d+\.\d+\b`): `tradable = bool(execution_input_ok and edge >= 0.60 and quality >= 0.65)`
+- **Line 101** (Matched `\b\d{2,}\b`): `tradable = bool(execution_input_ok and edge >= 0.60 and quality >= 0.65)`
+- **Line 113** (Matched `edge`): `"raw_edge_score": edge,`
+- **Line 114** (Matched `confidence`): `"confidence_raw": edge,`
+- **Line 114** (Matched `edge`): `"confidence_raw": edge,`
+- **Line 115** (Matched `confidence`): `"confidence": edge,`
+- **Line 115** (Matched `edge`): `"confidence": edge,`
+- **Line 116** (Matched `confidence`): `"gating_final_confidence": rank,`
+- **Line 117** (Matched `confidence`): `"confidence_final": rank,`
+- **Line 124** (Matched `confidence`): `"data_confidence": market_data.get("data_confidence", 1.0 if quote_ok else 0.0),`
+- **Line 124** (Matched `\b\d+\.\d+\b`): `"data_confidence": market_data.get("data_confidence", 1.0 if quote_ok else 0.0),`
+- **Line 149** (Matched `edge`): `"pro_rank_edge": round(edge, 4),`
+- **Line 165** (Matched `\b\d+\.\d+\b`): `key=lambda item: float(item.get("final_score") or item.get("final_rank_score") or 0.0),`
+
+### strategies/movement/opening_range_breakout.py
+- **Line 23** (Matched `\b\d{2,}\b`): `MIN_RETEST_MINUTES = 15`
+- **Line 24** (Matched `\b\d{2,}\b`): `MAX_RETEST_MINUTES = 90`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MAX_RETEST_DISTANCE_PCT = 0.0018`
+- **Line 25** (Matched `\b\d{2,}\b`): `MAX_RETEST_DISTANCE_PCT = 0.0018`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_BREAKOUT_DISTANCE_PCT = 0.0008`
+- **Line 26** (Matched `\b\d{2,}\b`): `MIN_BREAKOUT_DISTANCE_PCT = 0.0008`
+- **Line 58** (Matched `\b\d+\.\d+\b`): `and (pct_distance(spot, orb_high) or 1.0) <= MAX_RETEST_DISTANCE_PCT`
+- **Line 59** (Matched `\b\d+\.\d+\b`): `and ((spot - orb_high) / abs(orb_high)) >= 0.0`
+- **Line 67** (Matched `\b\d+\.\d+\b`): `and (pct_distance(spot, orb_low) or 1.0) <= MAX_RETEST_DISTANCE_PCT`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `and ((orb_low - spot) / abs(orb_low)) >= 0.0`
+- **Line 80** (Matched `\b\d+\.\d+\b`): `retest_distance = pct_distance(spot, retest_level) or 0.0`
+- **Line 83** (Matched `\b\d+\.\d+\b`): `0.45 * (1.0 - ratio_score(retest_distance, start=0.0, full=MAX_RETEST_DISTANCE_PCT))`
+- **Line 83** (Matched `\b\d{2,}\b`): `0.45 * (1.0 - ratio_score(retest_distance, start=0.0, full=MAX_RETEST_DISTANCE_PCT))`
+- **Line 84** (Matched `\b\d+\.\d+\b`): `+ 0.35 * ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.004)`
+- **Line 84** (Matched `\b\d{2,}\b`): `+ 0.35 * ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.004)`
+- **Line 85** (Matched `\b\d+\.\d+\b`): `+ 0.20 * clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0))`
+- **Line 85** (Matched `\b\d{2,}\b`): `+ 0.20 * clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0))`
+- **Line 121** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 125** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 130** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 132** (Matched `\b\d+\.\d+\b`): `return 0.0`
+
+### strategies/movement/exhaustion_reversal.py
+- **Line 23** (Matched `\b\d+\.\d+\b`): `MIN_STRETCH_FROM_VWAP_PCT = 0.005`
+- **Line 23** (Matched `\b\d{2,}\b`): `MIN_STRETCH_FROM_VWAP_PCT = 0.005`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `MAX_ENTRY_STRETCH_PCT = 0.018`
+- **Line 24** (Matched `\b\d{2,}\b`): `MAX_ENTRY_STRETCH_PCT = 0.018`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MIN_EXHAUSTION_SCORE = 0.50`
+- **Line 25** (Matched `\b\d{2,}\b`): `MIN_EXHAUSTION_SCORE = 0.50`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MAX_CONTINUATION_PRESSURE_SCORE = 0.55`
+- **Line 26** (Matched `\b\d{2,}\b`): `MAX_CONTINUATION_PRESSURE_SCORE = 0.55`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `0.50 * exhaustion_score`
+- **Line 68** (Matched `\b\d{2,}\b`): `0.50 * exhaustion_score`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `+ 0.25 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 69** (Matched `\b\d{2,}\b`): `+ 0.25 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 70** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 70** (Matched `\b\d{2,}\b`): `+ 0.25 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 108** (Matched `\b\d+\.\d+\b`): `ce_stall = 1.0 if ce_change is None or ce_change <= 0 else clamp_score(1.0 - ratio_score(ce_change, ...`
+- **Line 108** (Matched `\b\d{2,}\b`): `ce_stall = 1.0 if ce_change is None or ce_change <= 0 else clamp_score(1.0 - ratio_score(ce_change, ...`
+- **Line 109** (Matched `\b\d+\.\d+\b`): `pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)`
+- **Line 109** (Matched `\b\d{2,}\b`): `pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)`
+- **Line 110** (Matched `\b\d+\.\d+\b`): `volume_fade = 1.0 if volume is None else clamp_score(1.0 - ratio_score(volume, start=0.4, full=2.0))`
+- **Line 112** (Matched `\b\d+\.\d+\b`): `0.30 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 112** (Matched `\b\d{2,}\b`): `0.30 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 113** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ce_stall`
+- **Line 113** (Matched `\b\d{2,}\b`): `+ 0.25 * ce_stall`
+- **Line 114** (Matched `\b\d+\.\d+\b`): `+ 0.20 * pe_confirm`
+- **Line 114** (Matched `\b\d{2,}\b`): `+ 0.20 * pe_confirm`
+- **Line 115** (Matched `\b\d+\.\d+\b`): `+ 0.15 * volume_fade`
+- **Line 115** (Matched `\b\d{2,}\b`): `+ 0.15 * volume_fade`
+- **Line 116** (Matched `\b\d+\.\d+\b`): `+ 0.10 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 116** (Matched `\b\d{2,}\b`): `+ 0.10 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 124** (Matched `\b\d+\.\d+\b`): `pe_stall = 1.0 if pe_change is None or pe_change <= 0 else clamp_score(1.0 - ratio_score(pe_change, ...`
+- **Line 124** (Matched `\b\d{2,}\b`): `pe_stall = 1.0 if pe_change is None or pe_change <= 0 else clamp_score(1.0 - ratio_score(pe_change, ...`
+- **Line 125** (Matched `\b\d+\.\d+\b`): `ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)`
+- **Line 125** (Matched `\b\d{2,}\b`): `ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)`
+- **Line 126** (Matched `\b\d+\.\d+\b`): `volume_fade = 1.0 if volume is None else clamp_score(1.0 - ratio_score(volume, start=0.4, full=2.0))`
+- **Line 128** (Matched `\b\d+\.\d+\b`): `0.30 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 128** (Matched `\b\d{2,}\b`): `0.30 * ratio_score(stretch_abs, start=MIN_STRETCH_FROM_VWAP_PCT, full=MAX_ENTRY_STRETCH_PCT)`
+- **Line 129** (Matched `\b\d+\.\d+\b`): `+ 0.25 * pe_stall`
+- **Line 129** (Matched `\b\d{2,}\b`): `+ 0.25 * pe_stall`
+- **Line 130** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ce_confirm`
+- **Line 130** (Matched `\b\d{2,}\b`): `+ 0.20 * ce_confirm`
+- **Line 131** (Matched `\b\d+\.\d+\b`): `+ 0.15 * volume_fade`
+- **Line 131** (Matched `\b\d{2,}\b`): `+ 0.15 * volume_fade`
+- **Line 132** (Matched `\b\d+\.\d+\b`): `+ 0.10 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 132** (Matched `\b\d{2,}\b`): `+ 0.10 * clamp_score(regime.scores.get("EXHAUSTION_RISK", 0.0))`
+- **Line 145** (Matched `\b\d+\.\d+\b`): `0.65 * ratio_score(premium, start=4.0, full=20.0)`
+- **Line 145** (Matched `\b\d{2,}\b`): `0.65 * ratio_score(premium, start=4.0, full=20.0)`
+- **Line 146** (Matched `\b\d+\.\d+\b`): `+ 0.35 * ratio_score(volume, start=1.0, full=3.0)`
+- **Line 146** (Matched `\b\d{2,}\b`): `+ 0.35 * ratio_score(volume, start=1.0, full=3.0)`
+
+### strategies/movement/late_day_momentum.py
+- **Line 23** (Matched `\b\d{2,}\b`): `MIN_MINUTES_SINCE_OPEN = 240`
+- **Line 24** (Matched `\b\d{2,}\b`): `MIN_MINUTES_TO_CLOSE = 20`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MIN_DIRECTIONAL_SCORE = 0.45`
+- **Line 25** (Matched `\b\d{2,}\b`): `MIN_DIRECTIONAL_SCORE = 0.45`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_VWAP_DISTANCE_PCT = 0.002`
+- **Line 26** (Matched `\b\d{2,}\b`): `MIN_VWAP_DISTANCE_PCT = 0.002`
+- **Line 27** (Matched `\b\d+\.\d+\b`): `MAX_CHASE_DISTANCE_PCT = 0.012`
+- **Line 27** (Matched `\b\d{2,}\b`): `MAX_CHASE_DISTANCE_PCT = 0.012`
+- **Line 28** (Matched `\b\d+\.\d+\b`): `MAX_CHOP_SCORE = 0.50`
+- **Line 28** (Matched `\b\d{2,}\b`): `MAX_CHOP_SCORE = 0.50`
+- **Line 43** (Matched `\b\d+\.\d+\b`): `if float(regime.scores.get("CHOP", 0.0)) >= MAX_CHOP_SCORE:`
+- **Line 58** (Matched `\b\d+\.\d+\b`): `trend_up = float(regime.scores.get("TREND_UP", 0.0))`
+- **Line 59** (Matched `\b\d+\.\d+\b`): `trend_down = float(regime.scores.get("TREND_DOWN", 0.0))`
+- **Line 78** (Matched `\b\d+\.\d+\b`): `0.40 * directional_score`
+- **Line 78** (Matched `\b\d{2,}\b`): `0.40 * directional_score`
+- **Line 79** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ratio_score(vwap_distance_abs, start=MIN_VWAP_DISTANCE_PCT, full=MAX_CHASE_DISTANCE_PCT)`
+- **Line 79** (Matched `\b\d{2,}\b`): `+ 0.25 * ratio_score(vwap_distance_abs, start=MIN_VWAP_DISTANCE_PCT, full=MAX_CHASE_DISTANCE_PCT)`
+- **Line 80** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(safe_float(ctx.volume_z), start=0.8, full=2.5)`
+- **Line 80** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(safe_float(ctx.volume_z), start=0.8, full=2.5)`
+- **Line 81** (Matched `\b\d+\.\d+\b`): `+ 0.15 * timing_quality`
+- **Line 81** (Matched `\b\d{2,}\b`): `+ 0.15 * timing_quality`
+- **Line 121** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 122** (Matched `\b\d+\.\d+\b`): `afternoon_score = ratio_score(since_open, start=MIN_MINUTES_SINCE_OPEN, full=330.0)`
+- **Line 122** (Matched `\b\d{2,}\b`): `afternoon_score = ratio_score(since_open, start=MIN_MINUTES_SINCE_OPEN, full=330.0)`
+- **Line 123** (Matched `\b\d+\.\d+\b`): `close_buffer_score = clamp_score(to_close / 90.0)`
+- **Line 123** (Matched `\b\d{2,}\b`): `close_buffer_score = clamp_score(to_close / 90.0)`
+- **Line 124** (Matched `\b\d+\.\d+\b`): `return clamp_score(0.65 * afternoon_score + 0.35 * close_buffer_score)`
+- **Line 124** (Matched `\b\d{2,}\b`): `return clamp_score(0.65 * afternoon_score + 0.35 * close_buffer_score)`
+
+### strategies/movement/event_volatility_expansion.py
+- **Line 23** (Matched `\b\d+\.\d+\b`): `MIN_VOL_EXPANSION_SCORE = 0.40`
+- **Line 23** (Matched `\b\d{2,}\b`): `MIN_VOL_EXPANSION_SCORE = 0.40`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `MIN_IMPULSE_FROM_VWAP_PCT = 0.0025`
+- **Line 24** (Matched `\b\d{2,}\b`): `MIN_IMPULSE_FROM_VWAP_PCT = 0.0025`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MAX_CHASE_DISTANCE_PCT = 0.014`
+- **Line 25** (Matched `\b\d{2,}\b`): `MAX_CHASE_DISTANCE_PCT = 0.014`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_VOLUME_Z = 1.2`
+- **Line 27** (Matched `\b\d+\.\d+\b`): `MIN_ATR_EXPANSION_RATIO = 1.15`
+- **Line 27** (Matched `\b\d{2,}\b`): `MIN_ATR_EXPANSION_RATIO = 1.15`
+- **Line 70** (Matched `\b\d+\.\d+\b`): `0.40 * expansion_score`
+- **Line 70** (Matched `\b\d{2,}\b`): `0.40 * expansion_score`
+- **Line 71** (Matched `\b\d+\.\d+\b`): `+ 0.30 * ratio_score(impulse_abs, start=MIN_IMPULSE_FROM_VWAP_PCT, full=MAX_CHASE_DISTANCE_PCT)`
+- **Line 71** (Matched `\b\d{2,}\b`): `+ 0.30 * ratio_score(impulse_abs, start=MIN_IMPULSE_FROM_VWAP_PCT, full=MAX_CHASE_DISTANCE_PCT)`
+- **Line 72** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(safe_float(ctx.volume_z), start=MIN_VOLUME_Z, full=3.0)`
+- **Line 72** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(safe_float(ctx.volume_z), start=MIN_VOLUME_Z, full=3.0)`
+- **Line 73** (Matched `\b\d+\.\d+\b`): `+ 0.10 * ratio_score(atr_ratio, start=MIN_ATR_EXPANSION_RATIO, full=2.0)`
+- **Line 73** (Matched `\b\d{2,}\b`): `+ 0.10 * ratio_score(atr_ratio, start=MIN_ATR_EXPANSION_RATIO, full=2.0)`
+- **Line 111** (Matched `\b\d+\.\d+\b`): `regime_score = safe_float(regime.scores.get("VOLATILITY_EXPANSION")) or 0.0`
+- **Line 113** (Matched `\b\d+\.\d+\b`): `volatility_state_bonus = 1.0 if str(ctx.volatility_state or "").strip().upper() in {"EXPANDING", "EX...`
+- **Line 115** (Matched `\b\d+\.\d+\b`): `0.40 * regime_score`
+- **Line 115** (Matched `\b\d{2,}\b`): `0.40 * regime_score`
+- **Line 116** (Matched `\b\d+\.\d+\b`): `+ 0.30 * ratio_score(atr_ratio, start=MIN_ATR_EXPANSION_RATIO, full=2.0)`
+- **Line 116** (Matched `\b\d{2,}\b`): `+ 0.30 * ratio_score(atr_ratio, start=MIN_ATR_EXPANSION_RATIO, full=2.0)`
+- **Line 117** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(volume, start=MIN_VOLUME_Z, full=3.0)`
+- **Line 117** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(volume, start=MIN_VOLUME_Z, full=3.0)`
+- **Line 118** (Matched `\b\d+\.\d+\b`): `+ 0.10 * volatility_state_bonus`
+- **Line 118** (Matched `\b\d{2,}\b`): `+ 0.10 * volatility_state_bonus`
+
+### strategies/movement/opening_drive.py
+- **Line 24** (Matched `\b\d{2,}\b`): `MAX_OPENING_DRIVE_MINUTES = 20`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MIN_OPEN_MOVE_PCT = 0.0015`
+- **Line 25** (Matched `\b\d{2,}\b`): `MIN_OPEN_MOVE_PCT = 0.0015`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_VWAP_ALIGNMENT_PCT = 0.0005`
+- **Line 26** (Matched `\b\d{2,}\b`): `MIN_VWAP_ALIGNMENT_PCT = 0.0005`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `0.45 * ratio_score(open_move_abs, start=MIN_OPEN_MOVE_PCT, full=0.006)`
+- **Line 68** (Matched `\b\d{2,}\b`): `0.45 * ratio_score(open_move_abs, start=MIN_OPEN_MOVE_PCT, full=0.006)`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `+ 0.30 * ratio_score(vwap_move_abs, start=MIN_VWAP_ALIGNMENT_PCT, full=0.004)`
+- **Line 69** (Matched `\b\d{2,}\b`): `+ 0.30 * ratio_score(vwap_move_abs, start=MIN_VWAP_ALIGNMENT_PCT, full=0.004)`
+- **Line 70** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ratio_score(orb_distance, start=0.0, full=0.003)`
+- **Line 70** (Matched `\b\d{2,}\b`): `+ 0.25 * ratio_score(orb_distance, start=0.0, full=0.003)`
+- **Line 105** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 109** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 110** (Matched `\b\d+\.\d+\b`): `return pct_distance(spot, level) or 0.0`
+- **Line 114** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 115** (Matched `\b\d+\.\d+\b`): `return pct_distance(spot, level) or 0.0`
+- **Line 116** (Matched `\b\d+\.\d+\b`): `return 0.0`
+
+### strategies/movement/no_trade_chop.py
+- **Line 40** (Matched `confidence`): `confidence_score=assessment.severity,`
+- **Line 41** (Matched `\b\d+\.\d+\b`): `price_structure_score=0.0,`
+- **Line 42** (Matched `\b\d+\.\d+\b`): `option_confirmation_score=0.0,`
+- **Line 43** (Matched `\b\d+\.\d+\b`): `liquidity_score=0.0,`
+- **Line 44** (Matched `\b\d+\.\d+\b`): `freshness_score=0.0,`
+- **Line 45** (Matched `\b\d+\.\d+\b`): `volatility_score=clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0)),`
+- **Line 46** (Matched `\b\d+\.\d+\b`): `regime_alignment_score=clamp_score(max(regime.scores.get("CHOP", 0.0), regime.scores.get("INCONCLUSI...`
+- **Line 47** (Matched `\b\d+\.\d+\b`): `timing_score=0.0,`
+- **Line 48** (Matched `\b\d+\.\d+\b`): `trap_risk_score=clamp_score(regime.scores.get("TRAP_RISK", 0.0)),`
+
+### strategies/movement/option_pressure.py
+- **Line 17** (Matched `\b\d+\.\d+\b`): `MIN_PRESSURE_SCORE = 0.45`
+- **Line 17** (Matched `\b\d{2,}\b`): `MIN_PRESSURE_SCORE = 0.45`
+- **Line 61** (Matched `confidence`): `confidence_score=clamp_score(score * (1.0 - clamp_score(regime.scores.get("TRAP_RISK", 0.0)) * 0.20)...`
+- **Line 61** (Matched `\b\d+\.\d+\b`): `confidence_score=clamp_score(score * (1.0 - clamp_score(regime.scores.get("TRAP_RISK", 0.0)) * 0.20)...`
+- **Line 61** (Matched `\b\d{2,}\b`): `confidence_score=clamp_score(score * (1.0 - clamp_score(regime.scores.get("TRAP_RISK", 0.0)) * 0.20)...`
+- **Line 62** (Matched `\b\d+\.\d+\b`): `price_structure_score=clamp_score(max(regime.scores.get("TREND_UP", 0.0), regime.scores.get("TREND_D...`
+- **Line 66** (Matched `\b\d+\.\d+\b`): `volatility_score=clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0)),`
+- **Line 67** (Matched `\b\d+\.\d+\b`): `regime_alignment_score=clamp_score(max(regime.scores.get("TREND_UP", 0.0), regime.scores.get("TREND_...`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `timing_score=0.5,`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `trap_risk_score=clamp_score(regime.scores.get("TRAP_RISK", 0.0)),`
+
+### strategies/movement/compression_breakout.py
+- **Line 23** (Matched `\b\d+\.\d+\b`): `MAX_RANGE_WIDTH_PCT = 0.35`
+- **Line 23** (Matched `\b\d{2,}\b`): `MAX_RANGE_WIDTH_PCT = 0.35`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `MAX_ATR_RATIO = 0.75`
+- **Line 24** (Matched `\b\d{2,}\b`): `MAX_ATR_RATIO = 0.75`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MIN_COMPRESSION_SCORE = 0.50`
+- **Line 25** (Matched `\b\d{2,}\b`): `MIN_COMPRESSION_SCORE = 0.50`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_BREAKOUT_DISTANCE_PCT = 0.0008`
+- **Line 26** (Matched `\b\d{2,}\b`): `MIN_BREAKOUT_DISTANCE_PCT = 0.0008`
+- **Line 27** (Matched `\b\d+\.\d+\b`): `MIN_VWAP_ALIGNMENT_PCT = 0.0004`
+- **Line 27** (Matched `\b\d{2,}\b`): `MIN_VWAP_ALIGNMENT_PCT = 0.0004`
+- **Line 94** (Matched `\b\d+\.\d+\b`): `0.45 * compression_score`
+- **Line 94** (Matched `\b\d{2,}\b`): `0.45 * compression_score`
+- **Line 95** (Matched `\b\d+\.\d+\b`): `+ 0.35 * ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.006)`
+- **Line 95** (Matched `\b\d{2,}\b`): `+ 0.35 * ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.006)`
+- **Line 96** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(vwap_alignment, start=MIN_VWAP_ALIGNMENT_PCT, full=0.004)`
+- **Line 96** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(vwap_alignment, start=MIN_VWAP_ALIGNMENT_PCT, full=0.004)`
+- **Line 143** (Matched `\b\d+\.\d+\b`): `return 0.0`
+
+### strategies/movement/mean_reversion_extension.py
+- **Line 22** (Matched `\b\d+\.\d+\b`): `MIN_RANGE_OR_CHOP_SCORE = 0.45`
+- **Line 22** (Matched `\b\d{2,}\b`): `MIN_RANGE_OR_CHOP_SCORE = 0.45`
+- **Line 23** (Matched `\b\d+\.\d+\b`): `MIN_EXTENSION_FROM_VWAP_PCT = 0.0035`
+- **Line 23** (Matched `\b\d{2,}\b`): `MIN_EXTENSION_FROM_VWAP_PCT = 0.0035`
+- **Line 24** (Matched `\b\d+\.\d+\b`): `MAX_EXTENSION_FROM_VWAP_PCT = 0.014`
+- **Line 24** (Matched `\b\d{2,}\b`): `MAX_EXTENSION_FROM_VWAP_PCT = 0.014`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MAX_TREND_CONTINUATION_SCORE = 0.55`
+- **Line 25** (Matched `\b\d{2,}\b`): `MAX_TREND_CONTINUATION_SCORE = 0.55`
+- **Line 39** (Matched `\b\d+\.\d+\b`): `range_chop_score = max(float(regime.scores.get("RANGE", 0.0)), float(regime.scores.get("CHOP", 0.0))...`
+- **Line 67** (Matched `\b\d+\.\d+\b`): `0.45 * range_chop_score`
+- **Line 67** (Matched `\b\d{2,}\b`): `0.45 * range_chop_score`
+- **Line 68** (Matched `\b\d+\.\d+\b`): `+ 0.35 * ratio_score(extension_abs, start=MIN_EXTENSION_FROM_VWAP_PCT, full=MAX_EXTENSION_FROM_VWAP_...`
+- **Line 68** (Matched `\b\d{2,}\b`): `+ 0.35 * ratio_score(extension_abs, start=MIN_EXTENSION_FROM_VWAP_PCT, full=MAX_EXTENSION_FROM_VWAP_...`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `+ 0.20 * _range_boundary_score(ctx, direction)`
+- **Line 69** (Matched `\b\d{2,}\b`): `+ 0.20 * _range_boundary_score(ctx, direction)`
+- **Line 107** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 111** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 113** (Matched `\b\d+\.\d+\b`): `return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))`
+- **Line 113** (Matched `\b\d{2,}\b`): `return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))`
+- **Line 117** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 119** (Matched `\b\d+\.\d+\b`): `return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))`
+- **Line 119** (Matched `\b\d{2,}\b`): `return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))`
+- **Line 120** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 126** (Matched `\b\d+\.\d+\b`): `trend = float(regime.scores.get("TREND_UP", 0.0))`
+- **Line 129** (Matched `\b\d+\.\d+\b`): `trend = float(regime.scores.get("TREND_DOWN", 0.0))`
+- **Line 132** (Matched `\b\d+\.\d+\b`): `trend = 0.0`
+- **Line 134** (Matched `\b\d+\.\d+\b`): `expansion = float(regime.scores.get("VOLATILITY_EXPANSION", 0.0))`
+- **Line 136** (Matched `\b\d+\.\d+\b`): `0.40 * trend`
+- **Line 136** (Matched `\b\d{2,}\b`): `0.40 * trend`
+- **Line 137** (Matched `\b\d+\.\d+\b`): `+ 0.25 * expansion`
+- **Line 137** (Matched `\b\d{2,}\b`): `+ 0.25 * expansion`
+- **Line 138** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ratio_score(premium, start=4.0, full=18.0)`
+- **Line 138** (Matched `\b\d{2,}\b`): `+ 0.25 * ratio_score(premium, start=4.0, full=18.0)`
+- **Line 139** (Matched `\b\d+\.\d+\b`): `+ 0.10 * ratio_score(volume, start=1.0, full=3.0)`
+- **Line 139** (Matched `\b\d{2,}\b`): `+ 0.10 * ratio_score(volume, start=1.0, full=3.0)`
+
+### strategies/movement/trend_pullback.py
+- **Line 24** (Matched `\b\d+\.\d+\b`): `MIN_TREND_SCORE = 0.45`
+- **Line 24** (Matched `\b\d{2,}\b`): `MIN_TREND_SCORE = 0.45`
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MAX_PULLBACK_DISTANCE_PCT = 0.0035`
+- **Line 25** (Matched `\b\d{2,}\b`): `MAX_PULLBACK_DISTANCE_PCT = 0.0035`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MIN_STRUCTURE_RESUME_PCT = 0.0004`
+- **Line 26** (Matched `\b\d{2,}\b`): `MIN_STRUCTURE_RESUME_PCT = 0.0004`
+- **Line 41** (Matched `\b\d+\.\d+\b`): `trend_up = safe_float(regime.scores.get("TREND_UP")) or 0.0`
+- **Line 42** (Matched `\b\d+\.\d+\b`): `trend_down = safe_float(regime.scores.get("TREND_DOWN")) or 0.0`
+- **Line 90** (Matched `\b\d+\.\d+\b`): `pullback_distance = pct_distance(spot, anchor) or 0.0`
+- **Line 93** (Matched `\b\d+\.\d+\b`): `0.45 * trend_score`
+- **Line 93** (Matched `\b\d{2,}\b`): `0.45 * trend_score`
+- **Line 94** (Matched `\b\d+\.\d+\b`): `+ 0.35 * (1.0 - ratio_score(pullback_distance, start=0.0, full=MAX_PULLBACK_DISTANCE_PCT))`
+- **Line 94** (Matched `\b\d{2,}\b`): `+ 0.35 * (1.0 - ratio_score(pullback_distance, start=0.0, full=MAX_PULLBACK_DISTANCE_PCT))`
+- **Line 95** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(resume_distance, start=MIN_STRUCTURE_RESUME_PCT, full=0.003)`
+- **Line 95** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(resume_distance, start=MIN_STRUCTURE_RESUME_PCT, full=0.003)`
+- **Line 139** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 144** (Matched `\b\d+\.\d+\b`): `return 0.0`
+
+### strategies/movement/vwap_reclaim.py
+- **Line 25** (Matched `\b\d+\.\d+\b`): `MIN_VWAP_DISTANCE_PCT = 0.00035`
+- **Line 25** (Matched `\b\d{2,}\b`): `MIN_VWAP_DISTANCE_PCT = 0.00035`
+- **Line 26** (Matched `\b\d+\.\d+\b`): `MAX_VWAP_ENTRY_DISTANCE_PCT = 0.0035`
+- **Line 26** (Matched `\b\d{2,}\b`): `MAX_VWAP_ENTRY_DISTANCE_PCT = 0.0035`
+- **Line 27** (Matched `\b\d+\.\d+\b`): `MAX_CHOP_SCORE = 0.55`
+- **Line 27** (Matched `\b\d{2,}\b`): `MAX_CHOP_SCORE = 0.55`
+- **Line 36** (Matched `\b\d+\.\d+\b`): `if float(regime.scores.get("CHOP", 0.0)) >= MAX_CHOP_SCORE:`
+- **Line 67** (Matched `\b\d+\.\d+\b`): `distance_quality = clamp_score(1.0 - ratio_score(vwap_distance_abs, start=0.0, full=MAX_VWAP_ENTRY_D...`
+- **Line 69** (Matched `\b\d+\.\d+\b`): `0.45 * distance_quality`
+- **Line 69** (Matched `\b\d{2,}\b`): `0.45 * distance_quality`
+- **Line 70** (Matched `\b\d+\.\d+\b`): `+ 0.30 * slope_score`
+- **Line 70** (Matched `\b\d{2,}\b`): `+ 0.30 * slope_score`
+- **Line 71** (Matched `\b\d+\.\d+\b`): `+ 0.25 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.5, full=2.0)`
+- **Line 71** (Matched `\b\d{2,}\b`): `+ 0.25 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.5, full=2.0)`
+- **Line 123** (Matched `\b\d+\.\d+\b`): `return 0.5`
+- **Line 125** (Matched `\b\d+\.\d+\b`): `return clamp_score(0.5 + ratio_score(abs(slope), start=0.0, full=0.08) * 0.5)`
+- **Line 125** (Matched `\b\d{2,}\b`): `return clamp_score(0.5 + ratio_score(abs(slope), start=0.0, full=0.08) * 0.5)`
+- **Line 127** (Matched `\b\d+\.\d+\b`): `return clamp_score(0.5 + ratio_score(abs(slope), start=0.0, full=0.08) * 0.5)`
+- **Line 127** (Matched `\b\d{2,}\b`): `return clamp_score(0.5 + ratio_score(abs(slope), start=0.0, full=0.08) * 0.5)`
+- **Line 128** (Matched `\b\d+\.\d+\b`): `return 0.15`
+- **Line 128** (Matched `\b\d{2,}\b`): `return 0.15`
+
+### strategies/movement/_utils.py
+- **Line 17** (Matched `\b\d+\.\d+\b`): `MAX_OPTION_LTP_AGE_SEC = 2.5`
+- **Line 18** (Matched `\b\d+\.\d+\b`): `MAX_OPTION_SPREAD_PCT = 4.0`
+- **Line 19** (Matched `\b\d+\.\d+\b`): `MIN_OPTION_DEPTH = 1.0`
+- **Line 20** (Matched `\b\d+\.\d+\b`): `MIN_PREMIUM_CONFIRMATION = 0.0`
+- **Line 49** (Matched `\b\d+\.\d+\b`): `def clamp_score(value: float | None, low: float = 0.0, high: float = 1.0) -> float:`
+- **Line 58** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 118** (Matched `\b\d+\.\d+\b`): `option_confirmation_score = 0.0 if premium_change is None else ratio_score(premium_change, start=0.0...`
+- **Line 118** (Matched `\b\d{2,}\b`): `option_confirmation_score = 0.0 if premium_change is None else ratio_score(premium_change, start=0.0...`
+- **Line 120** (Matched `\b\d+\.\d+\b`): `option_confirmation_score = 0.0`
+- **Line 123** (Matched `\b\d+\.\d+\b`): `spread_score = 0.0`
+- **Line 125** (Matched `\b\d+\.\d+\b`): `spread_score = clamp_score(1.0 - (spread_pct / MAX_OPTION_SPREAD_PCT))`
+- **Line 127** (Matched `\b\d+\.\d+\b`): `depth_score = 0.0`
+- **Line 129** (Matched `\b\d+\.\d+\b`): `depth_score = clamp_score(depth / 1000.0)`
+- **Line 129** (Matched `\b\d{2,}\b`): `depth_score = clamp_score(depth / 1000.0)`
+- **Line 130** (Matched `\b\d+\.\d+\b`): `liquidity_score = clamp_score((spread_score * 0.7) + (depth_score * 0.3))`
+- **Line 133** (Matched `\b\d+\.\d+\b`): `freshness_score = 0.0`
+- **Line 135** (Matched `\b\d+\.\d+\b`): `freshness_score = clamp_score(1.0 - (age / MAX_OPTION_LTP_AGE_SEC))`
+- **Line 152** (Matched `\b\d+\.\d+\b`): `return ratio_score(safe_float(ctx.volume_z), start=0.5, full=2.0)`
+- **Line 159** (Matched `\b\d+\.\d+\b`): `0.65 * regime.scores.get("TREND_UP", 0.0)`
+- **Line 159** (Matched `\b\d{2,}\b`): `0.65 * regime.scores.get("TREND_UP", 0.0)`
+- **Line 160** (Matched `\b\d+\.\d+\b`): `+ 0.20 * regime.scores.get("VOLATILITY_EXPANSION", 0.0)`
+- **Line 160** (Matched `\b\d{2,}\b`): `+ 0.20 * regime.scores.get("VOLATILITY_EXPANSION", 0.0)`
+- **Line 161** (Matched `\b\d+\.\d+\b`): `+ 0.15 * regime.scores.get("COMPRESSION", 0.0)`
+- **Line 161** (Matched `\b\d{2,}\b`): `+ 0.15 * regime.scores.get("COMPRESSION", 0.0)`
+- **Line 165** (Matched `\b\d+\.\d+\b`): `0.65 * regime.scores.get("TREND_DOWN", 0.0)`
+- **Line 165** (Matched `\b\d{2,}\b`): `0.65 * regime.scores.get("TREND_DOWN", 0.0)`
+- **Line 166** (Matched `\b\d+\.\d+\b`): `+ 0.20 * regime.scores.get("VOLATILITY_EXPANSION", 0.0)`
+- **Line 166** (Matched `\b\d{2,}\b`): `+ 0.20 * regime.scores.get("VOLATILITY_EXPANSION", 0.0)`
+- **Line 167** (Matched `\b\d+\.\d+\b`): `+ 0.15 * regime.scores.get("COMPRESSION", 0.0)`
+- **Line 167** (Matched `\b\d{2,}\b`): `+ 0.15 * regime.scores.get("COMPRESSION", 0.0)`
+- **Line 169** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 194** (Matched `\b\d+\.\d+\b`): `trap_risk_score = clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 196** (Matched `\b\d+\.\d+\b`): `0.25 * price_structure_score`
+- **Line 196** (Matched `\b\d{2,}\b`): `0.25 * price_structure_score`
+- **Line 197** (Matched `\b\d+\.\d+\b`): `+ 0.25 * side.option_confirmation_score`
+- **Line 197** (Matched `\b\d{2,}\b`): `+ 0.25 * side.option_confirmation_score`
+- **Line 198** (Matched `\b\d+\.\d+\b`): `+ 0.20 * side.liquidity_score`
+- **Line 198** (Matched `\b\d{2,}\b`): `+ 0.20 * side.liquidity_score`
+- **Line 199** (Matched `\b\d+\.\d+\b`): `+ 0.15 * side.freshness_score`
+- **Line 199** (Matched `\b\d{2,}\b`): `+ 0.15 * side.freshness_score`
+- **Line 200** (Matched `\b\d+\.\d+\b`): `+ 0.15 * align_score`
+- **Line 200** (Matched `\b\d{2,}\b`): `+ 0.15 * align_score`
+- **Line 203** (Matched `confidence`): `confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))`
+- **Line 203** (Matched `\b\d+\.\d+\b`): `confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))`
+- **Line 203** (Matched `\b\d{2,}\b`): `confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))`
+- **Line 213** (Matched `confidence`): `confidence_score=confidence_score,`
+- **Line 240** (Matched `\b\d+\.\d+\b`): `return 0.5`
+- **Line 242** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 243** (Matched `\b\d{2,}\b`): `if minutes <= 20:`
+- **Line 244** (Matched `\b\d+\.\d+\b`): `return 1.0`
+- **Line 245** (Matched `\b\d{2,}\b`): `if minutes <= 45:`
+- **Line 246** (Matched `\b\d+\.\d+\b`): `return clamp_score(1.0 - ((minutes - 20.0) / 25.0))`
+- **Line 246** (Matched `\b\d{2,}\b`): `return clamp_score(1.0 - ((minutes - 20.0) / 25.0))`
+- **Line 247** (Matched `\b\d+\.\d+\b`): `return 0.0`
+
+### strategies/movement/failed_breakout_trap.py
+- **Line 17** (Matched `\b\d+\.\d+\b`): `MAX_REENTRY_DISTANCE_PCT = 0.0035`
+- **Line 17** (Matched `\b\d{2,}\b`): `MAX_REENTRY_DISTANCE_PCT = 0.0035`
+- **Line 18** (Matched `\b\d+\.\d+\b`): `MIN_FAILED_BREAK_DISTANCE_PCT = 0.0006`
+- **Line 18** (Matched `\b\d{2,}\b`): `MIN_FAILED_BREAK_DISTANCE_PCT = 0.0006`
+- **Line 19** (Matched `\b\d+\.\d+\b`): `MIN_TRAP_EVIDENCE_SCORE = 0.45`
+- **Line 19** (Matched `\b\d{2,}\b`): `MIN_TRAP_EVIDENCE_SCORE = 0.45`
+- **Line 53** (Matched `\b\d+\.\d+\b`): `0.55 * trap_score`
+- **Line 53** (Matched `\b\d{2,}\b`): `0.55 * trap_score`
+- **Line 54** (Matched `\b\d+\.\d+\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 54** (Matched `\b\d{2,}\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 55** (Matched `\b\d+\.\d+\b`): `+ 0.20 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.4, full=2.0)`
+- **Line 55** (Matched `\b\d{2,}\b`): `+ 0.20 * ratio_score(abs(safe_float(ctx.volume_z) or 0.0), start=0.4, full=2.0)`
+- **Line 97** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 100** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 105** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 108** (Matched `\b\d+\.\d+\b`): `0.40 * ratio_score(reentry_distance, start=MIN_FAILED_BREAK_DISTANCE_PCT, full=MAX_REENTRY_DISTANCE_...`
+- **Line 108** (Matched `\b\d{2,}\b`): `0.40 * ratio_score(reentry_distance, start=MIN_FAILED_BREAK_DISTANCE_PCT, full=MAX_REENTRY_DISTANCE_...`
+- **Line 109** (Matched `\b\d+\.\d+\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 109** (Matched `\b\d{2,}\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 110** (Matched `\b\d+\.\d+\b`): `+ 0.20 * option_stall`
+- **Line 110** (Matched `\b\d{2,}\b`): `+ 0.20 * option_stall`
+- **Line 111** (Matched `\b\d+\.\d+\b`): `+ 0.15 * (1.0 if explicit_reentry else 0.5)`
+- **Line 111** (Matched `\b\d{2,}\b`): `+ 0.15 * (1.0 if explicit_reentry else 0.5)`
+- **Line 119** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 122** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 127** (Matched `\b\d+\.\d+\b`): `return 0.0`
+- **Line 130** (Matched `\b\d+\.\d+\b`): `0.40 * ratio_score(reentry_distance, start=MIN_FAILED_BREAK_DISTANCE_PCT, full=MAX_REENTRY_DISTANCE_...`
+- **Line 130** (Matched `\b\d{2,}\b`): `0.40 * ratio_score(reentry_distance, start=MIN_FAILED_BREAK_DISTANCE_PCT, full=MAX_REENTRY_DISTANCE_...`
+- **Line 131** (Matched `\b\d+\.\d+\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 131** (Matched `\b\d{2,}\b`): `+ 0.25 * clamp_score(regime.scores.get("TRAP_RISK", 0.0))`
+- **Line 132** (Matched `\b\d+\.\d+\b`): `+ 0.20 * option_stall`
+- **Line 132** (Matched `\b\d{2,}\b`): `+ 0.20 * option_stall`
+- **Line 133** (Matched `\b\d+\.\d+\b`): `+ 0.15 * (1.0 if explicit_reentry else 0.5)`
+- **Line 133** (Matched `\b\d{2,}\b`): `+ 0.15 * (1.0 if explicit_reentry else 0.5)`
+- **Line 156** (Matched `\b\d+\.\d+\b`): `ce_stall = 1.0 if ce_change is None or ce_change <= 0 else 0.0`
+- **Line 157** (Matched `\b\d+\.\d+\b`): `pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)`
+- **Line 157** (Matched `\b\d{2,}\b`): `pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)`
+- **Line 158** (Matched `\b\d+\.\d+\b`): `return clamp_score(0.55 * ce_stall + 0.45 * pe_confirm)`
+- **Line 158** (Matched `\b\d{2,}\b`): `return clamp_score(0.55 * ce_stall + 0.45 * pe_confirm)`
+- **Line 164** (Matched `\b\d+\.\d+\b`): `pe_stall = 1.0 if pe_change is None or pe_change <= 0 else 0.0`
+- **Line 165** (Matched `\b\d+\.\d+\b`): `ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)`
+- **Line 165** (Matched `\b\d{2,}\b`): `ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)`
+- **Line 166** (Matched `\b\d+\.\d+\b`): `return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)`
+- **Line 166** (Matched `\b\d{2,}\b`): `return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)`

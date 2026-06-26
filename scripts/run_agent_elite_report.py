@@ -14,7 +14,11 @@ from tools.code_excellence.unified_agent_elite_report import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build unified Agent Elite report")
-    parser.add_argument("--signals-json", default=None, help="Optional JSON file containing a list of agent signal objects")
+    parser.add_argument(
+        "--signals-json",
+        default=None,
+        help="Optional JSON file containing a list of agent signal objects",
+    )
     parser.add_argument("--out", required=True, help="Markdown report output path")
     parser.add_argument(
         "--require-ci-pass",
@@ -34,11 +38,15 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(render_markdown(report), encoding="utf-8")
     if args.require_ci_pass:
-        return _required_gate_exit_code(report.verdict, out_path, args.unknown_explanation)
+        return _required_gate_exit_code(
+            report.verdict, out_path, args.unknown_explanation
+        )
     return 1 if report.verdict == "FAIL" else 0
 
 
-def _required_gate_exit_code(verdict: str, out_path: Path, unknown_explanation: str | None) -> int:
+def _required_gate_exit_code(
+    verdict: str, out_path: Path, unknown_explanation: str | None
+) -> int:
     if not out_path.exists() or out_path.stat().st_size == 0:
         return 1
     if verdict == "FAIL":
@@ -66,7 +74,9 @@ def _load_signals(path: str | None) -> tuple[AgentEliteSignal, ...]:
         payload = payload.get("agents", [])
     if not isinstance(payload, list):
         return ()
-    return tuple(signal_from_mapping(item) for item in payload if isinstance(item, dict))
+    return tuple(
+        signal_from_mapping(item) for item in payload if isinstance(item, dict)
+    )
 
 
 if __name__ == "__main__":

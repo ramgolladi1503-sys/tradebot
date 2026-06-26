@@ -16,8 +16,12 @@ from core.outcome_truth_pipeline import run_outcome_truth_pipeline
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Reconcile outcomes from trades and refresh truth dataset.")
-    parser.add_argument("--strict", action="store_true", help="Return non-zero when blockers exist.")
+    parser = argparse.ArgumentParser(
+        description="Reconcile outcomes from trades and refresh truth dataset."
+    )
+    parser.add_argument(
+        "--strict", action="store_true", help="Return non-zero when blockers exist."
+    )
     parser.add_argument(
         "--no-refresh",
         action="store_true",
@@ -36,4 +40,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

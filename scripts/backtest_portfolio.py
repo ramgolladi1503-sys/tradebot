@@ -1,7 +1,10 @@
 import argparse
 
 from core.historical_data import load_market_data
-from tools.legacy.multi_strategy_backtest import MultiStrategyBacktestEngine, StrategyAdapter
+from tools.legacy.multi_strategy_backtest import (
+    MultiStrategyBacktestEngine,
+    StrategyAdapter,
+)
 from core.trade_builder_backtest_adapter_v2 import TradeBuilderBacktestAdapterV2
 
 

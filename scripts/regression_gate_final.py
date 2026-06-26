@@ -69,7 +69,9 @@ def _most_recent_trade_date(db_path: Path) -> str:
     tables = ["ticks", "depth_snapshots", "decision_events", "trades"]
     max_ts = None
     for table in tables:
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        )
         if not cur.fetchone():
             continue
         try:
@@ -132,14 +134,17 @@ def main():
         ["python", "scripts/partial_profit_smoketest.py"],
         ["python", "scripts/verify_risk_units.py"],
         ["python", "scripts/verify_desk_paths.py"],
-        ["python", "scripts/verify_feed_sla.py"] + (["--market-open"] if market_open else []),
+        ["python", "scripts/verify_feed_sla.py"]
+        + (["--market-open"] if market_open else []),
         ["python", "scripts/run_pilot_checklist.py", "--dry-run"],
     ]
 
     if full_mode:
         commands.append(["python", "scripts/run_stress_tests.py"])
         replay_date = _most_recent_trade_date(Path(cfg.TRADE_DB_PATH))
-        commands.append(["python", "scripts/replay_day.py", "--date", replay_date, "--speed", "100"])
+        commands.append(
+            ["python", "scripts/replay_day.py", "--date", replay_date, "--speed", "100"]
+        )
 
     commands.append(["python", "scripts/import_sanity.py"])
 

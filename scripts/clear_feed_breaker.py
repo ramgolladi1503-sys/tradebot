@@ -7,7 +7,9 @@ from core import feed_circuit_breaker
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--yes-i-mean-it", action="store_true", help="Required to clear breaker.")
+    parser.add_argument(
+        "--yes-i-mean-it", action="store_true", help="Required to clear breaker."
+    )
     args = parser.parse_args()
     if not args.yes_i_mean_it:
         raise SystemExit("Refusing to clear feed breaker without --yes-i-mean-it")

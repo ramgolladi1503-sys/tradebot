@@ -3,6 +3,7 @@ import sqlite3
 import datetime
 from core.intelligence.config import config
 
+
 def generate_report():
     print("Generating MIP Advisory Dashboard Report...")
     print("=========================================")
@@ -28,7 +29,11 @@ def generate_report():
     """).fetchall()
 
     for s in sources:
-        ts = datetime.datetime.fromtimestamp(s['last_fetch']).isoformat() if s['last_fetch'] else "NEVER"
+        ts = (
+            datetime.datetime.fromtimestamp(s["last_fetch"]).isoformat()
+            if s["last_fetch"]
+            else "NEVER"
+        )
         print(f"[{s['source_id']}] Health: {s['status']} | Last Fetch: {ts}")
 
     print("\n## Latest Advisory Events")
@@ -44,7 +49,11 @@ def generate_report():
         print("No extracted events found.")
 
     for e in events:
-        pts = datetime.datetime.fromtimestamp(e['published_timestamp']).isoformat() if e['published_timestamp'] else "UNKNOWN"
+        pts = (
+            datetime.datetime.fromtimestamp(e["published_timestamp"]).isoformat()
+            if e["published_timestamp"]
+            else "UNKNOWN"
+        )
         print(f"\n--- Event ID: {e['event_id']} ---")
         print(f"Title: {e['title']}")
         print(f"Date: {pts}")
@@ -54,11 +63,15 @@ def generate_report():
 
         # Factor Breakdown
         print("Factor Breakdown:")
-        factors = conn.execute("SELECT name, value, unit FROM intelligence_factors WHERE event_id = ?", (e['event_id'],)).fetchall()
+        factors = conn.execute(
+            "SELECT name, value, unit FROM intelligence_factors WHERE event_id = ?",
+            (e["event_id"],),
+        ).fetchall()
         for f in factors:
             print(f"  - {f['name']}: {f['value']} {f['unit']}")
 
     conn.close()
+
 
 if __name__ == "__main__":
     generate_report()

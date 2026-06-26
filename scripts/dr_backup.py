@@ -37,13 +37,22 @@ def _collect_files() -> list[Path]:
     if log_dir.exists():
         for p in log_dir.glob("model_registry.json"):
             files.append(p)
-        decision_log = Path(getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl")))
+        decision_log = Path(
+            getattr(cfg, "DECISION_LOG_PATH", str(logs_dir() / "decision_events.jsonl"))
+        )
         if decision_log.exists():
             files.append(decision_log)
-        audit_log = Path(getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl")))
+        audit_log = Path(
+            getattr(cfg, "AUDIT_LOG_PATH", str(logs_dir() / "audit_log.jsonl"))
+        )
         if audit_log.exists():
             files.append(audit_log)
-        for pat in ["daily_audit_*.json", "execution_report_*.json", "decay_report_*.json", "rl_shadow_report_*.json"]:
+        for pat in [
+            "daily_audit_*.json",
+            "execution_report_*.json",
+            "decay_report_*.json",
+            "rl_shadow_report_*.json",
+        ]:
             for p in log_dir.glob(pat):
                 files.append(p)
     return files
@@ -51,7 +60,9 @@ def _collect_files() -> list[Path]:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", default=None, help="Output zip path (default logs/dr_backup_<ts>.zip)")
+    parser.add_argument(
+        "--out", default=None, help="Output zip path (default logs/dr_backup_<ts>.zip)"
+    )
     args = parser.parse_args()
 
     ts = time.strftime("%Y%m%d_%H%M%S")

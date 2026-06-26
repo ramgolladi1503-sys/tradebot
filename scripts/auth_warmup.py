@@ -28,7 +28,9 @@ def _masked_stats(name: str, value: str) -> dict:
 
 
 def _write_payload(payload: dict) -> None:
-    path = Path(getattr(cfg, "AUTH_WARMUP_LOG_PATH", str(logs_dir() / "auth_warmup.json")))
+    path = Path(
+        getattr(cfg, "AUTH_WARMUP_LOG_PATH", str(logs_dir() / "auth_warmup.json"))
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -49,10 +51,14 @@ def main() -> int:
             require_access_token=True,
             caller_module=__name__,
         )
-        _, token = get_kite_credentials(repo_root_path=Path(__file__).resolve().parents[1])
+        _, token = get_kite_credentials(
+            repo_root_path=Path(__file__).resolve().parents[1]
+        )
         token = str(token or "").strip()
         payload["details"].update(_masked_stats("access_token", token))
-        payload["details"].update(_masked_stats("api_key", str(getattr(cfg, "KITE_API_KEY", ""))))
+        payload["details"].update(
+            _masked_stats("api_key", str(getattr(cfg, "KITE_API_KEY", "")))
+        )
 
         kite_client.kite = None
         kite_client.last_init_error = None
@@ -64,14 +70,18 @@ def main() -> int:
             raise RuntimeError(str(reason))
         margins = kite_client.kite.margins()
         user_id = str((auth_payload or {}).get("user_id", ""))
-        margin_keys = sorted((margins or {}).keys()) if isinstance(margins, dict) else []
+        margin_keys = (
+            sorted((margins or {}).keys()) if isinstance(margins, dict) else []
+        )
 
         payload["ok"] = True
         payload["reason_code"] = "AUTH_WARMUP_OK"
         payload["details"]["user_last4"] = user_id[-4:] if user_id else ""
         payload["details"]["margin_keys"] = margin_keys
         _write_payload(payload)
-        print(f"[AUTH_WARMUP] ok user_last4={payload['details']['user_last4']} margin_keys={','.join(margin_keys)}")
+        print(
+            f"[AUTH_WARMUP] ok user_last4={payload['details']['user_last4']} margin_keys={','.join(margin_keys)}"
+        )
         return 0
     except Exception as exc:
         payload["ok"] = False

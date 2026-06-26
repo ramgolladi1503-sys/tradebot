@@ -54,6 +54,7 @@ def _looks_placeholder_api_key(value):
         "changeme",
     }
 
+
 def _persist_local_token(access_token):
     token = str(access_token or "").strip()
     if not token:
@@ -110,13 +111,17 @@ def generate_token_flow(
     token_path = None
     if update_store:
         token_path = persist_fn(access_token)
-    auth_payload = {"user_id": (profile or {}).get("user_id", ""), "user_name": (profile or {}).get("user_name", "")}
+    auth_payload = {
+        "user_id": (profile or {}).get("user_id", ""),
+        "user_name": (profile or {}).get("user_name", ""),
+    }
     return {
         "access_token": access_token,
         "profile": auth_payload,
         "margins": margins,
         "token_path": token_path,
     }
+
 
 if __name__ == "__main__":
     try:

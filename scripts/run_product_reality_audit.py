@@ -5,17 +5,28 @@ import argparse
 from pathlib import Path
 
 from tools.repo_forensics.config_loader import ConfigError, load_config
-from tools.repo_forensics.product_reality import audit_product_reality, write_product_reality_report
+from tools.repo_forensics.product_reality import (
+    audit_product_reality,
+    write_product_reality_report,
+)
 
 
 DEFAULT_OUTPUT = "docs/repo_forensics/reports/product_reality_latest.md"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run static TradeBot product reality audit.")
-    parser.add_argument("--repo", default=".", help="Repository root. Default: current directory.")
-    parser.add_argument("--config", default=".gsd-forensics.yaml", help="Forensics config path.")
-    parser.add_argument("--out", default=DEFAULT_OUTPUT, help="Product reality report output path.")
+    parser = argparse.ArgumentParser(
+        description="Run static TradeBot product reality audit."
+    )
+    parser.add_argument(
+        "--repo", default=".", help="Repository root. Default: current directory."
+    )
+    parser.add_argument(
+        "--config", default=".gsd-forensics.yaml", help="Forensics config path."
+    )
+    parser.add_argument(
+        "--out", default=DEFAULT_OUTPUT, help="Product reality report output path."
+    )
     return parser.parse_args()
 
 

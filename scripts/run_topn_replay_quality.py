@@ -14,9 +14,17 @@ from core.expectancy.topn_replay_quality import write_topn_replay_quality_report
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Top-N replay quality report from explicit inputs.")
-    parser.add_argument("--candidate-outcomes", required=True, help="Path to candidate outcomes JSON/JSONL.")
-    parser.add_argument("--top-opportunities", required=True, help="Path to top opportunities JSON.")
+    parser = argparse.ArgumentParser(
+        description="Run the Top-N replay quality report from explicit inputs."
+    )
+    parser.add_argument(
+        "--candidate-outcomes",
+        required=True,
+        help="Path to candidate outcomes JSON/JSONL.",
+    )
+    parser.add_argument(
+        "--top-opportunities", required=True, help="Path to top opportunities JSON."
+    )
     parser.add_argument(
         "--candidate-journal",
         default=None,
@@ -27,7 +35,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional explicit observation source JSON/JSONL used for diagnostics.",
     )
-    parser.add_argument("--out-dir", default=str(Path(".runtime") / "replay_quality"), help="Directory for Top-N replay quality outputs.")
+    parser.add_argument(
+        "--out-dir",
+        default=str(Path(".runtime") / "replay_quality"),
+        help="Directory for Top-N replay quality outputs.",
+    )
     parser.add_argument(
         "--mirror-runtime",
         action="store_true",

@@ -38,7 +38,9 @@ def main(argv: list[str] | None = None) -> dict:
     parser.add_argument("--chunk-days", type=int, default=60)
     parser.add_argument("--start", default="")
     parser.add_argument("--end", default="")
-    parser.add_argument("--input-output", default="", help="Output CSV path for fetched candles")
+    parser.add_argument(
+        "--input-output", default="", help="Output CSV path for fetched candles"
+    )
     parser.add_argument("--train-window-days", type=int, default=60)
     parser.add_argument("--test-window-days", type=int, default=10)
     parser.add_argument("--step-days", type=int, default=10)
@@ -48,8 +50,10 @@ def main(argv: list[str] | None = None) -> dict:
 
     now_utc = datetime.now(timezone.utc)
     end_dt = _parse_dt(args.end) if str(args.end).strip() else now_utc
-    start_dt = _parse_dt(args.start) if str(args.start).strip() else (
-        end_dt - timedelta(days=max(1, int(args.lookback_days)))
+    start_dt = (
+        _parse_dt(args.start)
+        if str(args.start).strip()
+        else (end_dt - timedelta(days=max(1, int(args.lookback_days))))
     )
     input_output = (
         Path(str(args.input_output).strip())

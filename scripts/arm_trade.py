@@ -19,7 +19,9 @@ from core.review_queue import get_queue_entry, order_payload_hash
 from core.time_utils import normalize_epoch_seconds, now_utc_epoch
 
 
-def _resolve_payload_hash(trade_id: Optional[str], payload_hash: Optional[str]) -> Optional[str]:
+def _resolve_payload_hash(
+    trade_id: Optional[str], payload_hash: Optional[str]
+) -> Optional[str]:
     if payload_hash:
         return payload_hash
     if not trade_id:
@@ -31,7 +33,9 @@ def _resolve_payload_hash(trade_id: Optional[str], payload_hash: Optional[str]) 
 
 
 def _confirm_phrase() -> str:
-    return str(getattr(cfg, "ARMING_CONFIRM_PHRASE", "YES I UNDERSTAND") or "YES I UNDERSTAND")
+    return str(
+        getattr(cfg, "ARMING_CONFIRM_PHRASE", "YES I UNDERSTAND") or "YES I UNDERSTAND"
+    )
 
 
 def _require_recent_health_pass() -> bool:
@@ -48,7 +52,10 @@ def _p0_cooldown_sec() -> float:
 
 def _cooldown_path():
     default_path = logs_dir() / "arming_cooldown.json"
-    path_text = str(getattr(cfg, "ARMING_COOLDOWN_STATE_PATH", str(default_path)) or str(default_path))
+    path_text = str(
+        getattr(cfg, "ARMING_COOLDOWN_STATE_PATH", str(default_path))
+        or str(default_path)
+    )
     return type(default_path)(path_text)
 
 
@@ -62,7 +69,12 @@ def _load_json(path) -> dict:
     return {}
 
 
-def _record_p0_cooldown(*, reason_codes: list[str], evidence: dict | None = None, now_ts: float | None = None) -> None:
+def _record_p0_cooldown(
+    *,
+    reason_codes: list[str],
+    evidence: dict | None = None,
+    now_ts: float | None = None,
+) -> None:
     now_epoch = float(now_ts if now_ts is not None else now_utc_epoch())
     until_epoch = now_epoch + _p0_cooldown_sec()
     payload = {
@@ -77,7 +89,11 @@ def _record_p0_cooldown(*, reason_codes: list[str], evidence: dict | None = None
     try:
         from datetime import datetime, timezone
 
-        payload["until_ts_iso"] = datetime.fromtimestamp(until_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        payload["until_ts_iso"] = (
+            datetime.fromtimestamp(until_epoch, tz=timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
     except Exception:
         payload["until_ts_iso"] = None
     try:
@@ -111,11 +127,19 @@ def _health_gate_recency_status(now_ts: float | None = None) -> tuple[bool, str,
     if not report:
         return False, "health_gate_report_invalid", {"path": str(path)}
     if not bool(report.get("pass")):
-        return False, "health_gate_not_passed", {"path": str(path), "exit_code": report.get("exit_code")}
+        return (
+            False,
+            "health_gate_not_passed",
+            {"path": str(path), "exit_code": report.get("exit_code")},
+        )
     issues = list(report.get("issues") or [])
     p0_issues = [row for row in issues if str((row or {}).get("priority")) == "P0"]
     if p0_issues:
-        return False, "health_gate_contains_p0", {"path": str(path), "p0_count": len(p0_issues)}
+        return (
+            False,
+            "health_gate_contains_p0",
+            {"path": str(path), "p0_count": len(p0_issues)},
+        )
     run_ts = normalize_epoch_seconds(report.get("generated_ts"))
     if run_ts is None:
         try:
@@ -127,14 +151,24 @@ def _health_gate_recency_status(now_ts: float | None = None) -> tuple[bool, str,
     age_sec = max(0.0, now_epoch - float(run_ts))
     max_age = _health_pass_max_age_sec()
     if age_sec > max_age:
-        return False, "health_gate_pass_too_old", {"path": str(path), "age_sec": age_sec, "max_age_sec": max_age}
+        return (
+            False,
+            "health_gate_pass_too_old",
+            {"path": str(path), "age_sec": age_sec, "max_age_sec": max_age},
+        )
     return True, "ok", {"path": str(path), "age_sec": age_sec, "max_age_sec": max_age}
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Arm a previously approved order intent for live execution.")
+    parser = argparse.ArgumentParser(
+        description="Arm a previously approved order intent for live execution."
+    )
     parser.add_argument("--trade-id", default=None, help="Trade id in review queue")
-    parser.add_argument("--payload-hash", default=None, help="Direct order intent hash (if not using trade-id)")
+    parser.add_argument(
+        "--payload-hash",
+        default=None,
+        help="Direct order intent hash (if not using trade-id)",
+    )
     parser.add_argument(
         "--arm-ttl-sec",
         type=int,
@@ -151,7 +185,9 @@ def main() -> int:
     desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT")
     payload_hash = _resolve_payload_hash(args.trade_id, args.payload_hash)
     if not payload_hash:
-        print("Cannot arm: missing payload hash. Provide --trade-id (queued) or --payload-hash directly.")
+        print(
+            "Cannot arm: missing payload hash. Provide --trade-id (queued) or --payload-hash directly."
+        )
         return 2
 
     in_cooldown, remaining_sec, cooldown_data = _cooldown_status()
@@ -168,7 +204,10 @@ def main() -> int:
             "ARM blocked: go-live scorecard failed. "
             f"See {scorecard.get('report_json_path')} and {scorecard.get('report_md_path')}"
         )
-        failed_codes = [str(item.get("code") or "") for item in list(scorecard.get("failures") or [])]
+        failed_codes = [
+            str(item.get("code") or "")
+            for item in list(scorecard.get("failures") or [])
+        ]
         if failed_codes:
             print(f"Blocking failures: {','.join(failed_codes)}")
             _record_p0_cooldown(
@@ -184,7 +223,9 @@ def main() -> int:
     if _require_recent_health_pass():
         health_ok, health_reason, health_evidence = _health_gate_recency_status()
         if not health_ok:
-            print(f"ARM blocked: health gate recency check failed ({health_reason}). evidence={health_evidence}")
+            print(
+                f"ARM blocked: health gate recency check failed ({health_reason}). evidence={health_evidence}"
+            )
             return 2
 
     if bool(getattr(cfg, "CONFIG_APPROVAL_ENFORCE_ON_ARM", True)):
@@ -208,7 +249,11 @@ def main() -> int:
         return 2
 
     actor = os.getenv("USER") or "manual"
-    arm_ttl = args.arm_ttl_sec if args.arm_ttl_sec is not None else int(getattr(cfg, "ORDER_ARM_TTL_SEC", 60))
+    arm_ttl = (
+        args.arm_ttl_sec
+        if args.arm_ttl_sec is not None
+        else int(getattr(cfg, "ORDER_ARM_TTL_SEC", 60))
+    )
     ok, reason = arm_order_intent(
         order_intent_hash=payload_hash,
         approver_id=actor,

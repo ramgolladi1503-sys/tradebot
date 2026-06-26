@@ -9,6 +9,7 @@ from pathlib import Path
 
 QUEUE_PATH = logs_dir() / "review_queue.json"
 
+
 def migrate():
     if not QUEUE_PATH.exists():
         print("No review queue file found.")
@@ -29,6 +30,7 @@ def migrate():
             row.setdefault(k, v)
     QUEUE_PATH.write_text(json.dumps(data, indent=2))
     print(f"Migrated {len(data)} queued trades.")
+
 
 if __name__ == "__main__":
     migrate()

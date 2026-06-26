@@ -27,13 +27,19 @@ def main():
         (["python", "-m", "compileall", "."], "fix syntax/import errors"),
         (["python", "-m", "pytest", "-q"], "review failing tests"),
         (["python", "scripts/regression_gate_12_14.py"], "inspect phase 12-14 gates"),
-        (["python", "scripts/run_pilot_checklist.py", "--dry-run"], "review pilot checklist reasons"),
+        (
+            ["python", "scripts/run_pilot_checklist.py", "--dry-run"],
+            "review pilot checklist reasons",
+        ),
         (["python", "scripts/sla_check.py"], "verify epoch fields in DB"),
         (["python", "scripts/verify_audit_chain.py"], "verify audit chain integrity"),
         (["python", "scripts/verify_risk_units.py"], "risk unit mismatch"),
         (["python", "scripts/verify_desk_paths.py"], "desk config paths"),
         (["python", "scripts/verify_feed_sla.py"], "feed SLA status"),
-        (["python", "scripts/run_stress_tests.py"], "run stress tests or generate data"),
+        (
+            ["python", "scripts/run_stress_tests.py"],
+            "run stress tests or generate data",
+        ),
         (["python", "scripts/import_sanity.py"], "import failures in core modules"),
     ]
     for cmd, action in steps:
