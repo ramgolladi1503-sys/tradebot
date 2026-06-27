@@ -14,18 +14,18 @@
 ## Scope Guard
 Verified. No broker APIs, no execution modules, no live paths were touched. All changes were restricted to the `strategy_certification` core logic and its tests.
 
-## Grill Me
+## Grill Me Review
 - **Critique**: Does this PR add any new architecture or change strategy thresholds?
 - **Response**: No. It only implements strict reading from existing expected files, matching the original architecture.
 
-## Hermes
+## Hermes Review
 - **Contract update**: `DiskCertificationLoader` created which respects `StrategyManifest`, `StrategyTruthReport`, `OutcomeEvidenceRunSummary`, `StatisticalValidationReport`.
 - **Workflow update**: `build_mock_data` removed. Orchestrator relies on real persistence or blocks.
 
-## GSD
+## GSD Review
 Implemented `DiskCertificationLoader`. Removed all mock/synthetic report generators from the certification path. Added `CertificationInputMissingError` and `CertificationValidationError`.
 
-## QA/Safety
+## QA / Safety Review
 - **read_only**: `true`
 - **is_order_action**: `false`
 - **broker_api_called**: `false`
