@@ -28,7 +28,17 @@ def main():
         print("Must specify either --strategy or --all", file=sys.stderr)
         sys.exit(1)
         
-    strategies = [args.strategy] if args.strategy else ["dummy_strategy_1", "dummy_strategy_2"] # Mock for --all
+    if args.all:
+        from core.strategy_registry.strategy_registry import StrategyRegistry
+        from core.strategy_registry.registry_loader import RegistryLoader
+        registry = StrategyRegistry()
+        loader = RegistryLoader(registry)
+        loader.load_all()
+        strategies = [s.contract.strategy_id for s in registry.get_all_strategies()]
+        if not strategies:
+            print("Warning: 0 strategies loaded from Strategy Registry.", file=sys.stderr)
+    else:
+        strategies = [args.strategy]
     
     engine = StrategyPipelineEngine()
     generator = ReportGenerator()

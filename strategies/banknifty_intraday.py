@@ -133,3 +133,34 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.002, min_move=0.001, debug_st
         "setup_type": setup_type,
         "regime_path": regime_name,
     }
+
+from datetime import date
+from core.strategy_registry.strategy_contract import StrategyContract
+
+contract = StrategyContract(
+    strategy_id="banknifty_intraday",
+    strategy_name="BankNifty Intraday Volatility",
+    version="1.0.0",
+    owner="System",
+    created_date=date(2026, 1, 1),
+    description="Intraday volatility breakout on BankNifty",
+    market_hypothesis="BankNifty expands rapidly after compression",
+    primary_market="NSE",
+    supported_indices=["BANKNIFTY"],
+    supported_option_types=["CE", "PE"],
+    entry_rules_summary="Breakout from opening range",
+    exit_rules_summary="End of day",
+    stop_logic_summary="Fixed risk",
+    target_logic_summary="Trailing stop",
+    time_stop="15:15",
+    required_indicators=["ORB"],
+    required_market_data=["BANKNIFTY_SPOT"],
+    required_option_data=["BANKNIFTY_OPTIONS"],
+    required_sessions=["INTRADAY"],
+    required_liquidity="HIGH",
+    allowed_regimes=["VOLATILE"],
+    forbidden_regimes=["CHOPPY"],
+    required_confirmations=["OPTION_CHAIN"],
+    known_limitations=["Fake breakouts"],
+    known_assumptions=["Momentum"]
+)

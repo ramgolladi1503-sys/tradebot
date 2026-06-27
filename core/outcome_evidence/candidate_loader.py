@@ -65,7 +65,7 @@ class CandidateLoader:
         option_type = data.get("option_type")
         
         # Execution eligibility
-        execution_ok = bool(data.get("execution_ok", False))
+        execution_ok = bool(data.get("execution_ok", False) or data.get("execution_allowed", False))
         if "veto_reasons" not in data and not execution_ok and data.get("status") == "EXECUTED":
             execution_ok = True
             

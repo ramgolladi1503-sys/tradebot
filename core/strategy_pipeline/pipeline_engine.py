@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 from core.strategy_pipeline.pipeline_models import EngineType, EngineResult, PipelineState, FinalDecision
 from core.strategy_pipeline.pipeline_context import PipelineContext
@@ -74,6 +75,22 @@ class StrategyPipelineEngine:
                     blockers=["certification loader missing real disk support"],
                     limitations=[]
                 )
+            elif tracker.blocked_at == EngineType.RESEARCH:
+                tracker.final_decision = FinalDecision(
+                    strategy_id=strategy_id,
+                    certification_status="Blocked",
+                    reason="EMPTY_RESEARCH_REGISTRY",
+                    blockers=["Research registry requires real data implementation"],
+                    limitations=[]
+                )
+            elif tracker.blocked_at == EngineType.DRIFT:
+                tracker.final_decision = FinalDecision(
+                    strategy_id=strategy_id,
+                    certification_status="Blocked",
+                    reason="live drift real baseline missing",
+                    blockers=["Provide real certified baseline and live snapshot"],
+                    limitations=[]
+                )
             else:
                 tracker.final_decision = FinalDecision(
                     strategy_id=strategy_id,
@@ -117,17 +134,79 @@ class StrategyPipelineEngine:
         if context.dry_run:
             return EngineResult(engine=engine, state=PipelineState.FAILED, errors=["Artifact missing in reports-only mode"])
             
-        # Simulating specific blockers
+        # Hardening: Block synthetic/mock paths
+        if engine == EngineType.RESEARCH:
+            # We enforce that research registry must have real data. Currently it is a stub.
+            # We can check if any real research files exist. They don't.
+            return EngineResult(engine=engine, state=PipelineState.BLOCKED, errors=["EMPTY_RESEARCH_REGISTRY"])
+            
+        if engine == EngineType.CERTIFICATION:
+            # Certification requires disk loader for upstream reports.
+            # Since the real disk loader is unavailable, we must block.
+            return EngineResult(engine=engine, state=PipelineState.BLOCKED, errors=["certification loader missing real disk support"])
+            
+        if engine == EngineType.DRIFT:
+            # Live Drift requires a real baseline and snapshot.
+            return EngineResult(engine=engine, state=PipelineState.BLOCKED, errors=["live drift real baseline missing"])
+            
+        # Simulating specific blockers for tests
         if engine == EngineType.TRUTH and strategy_id == "zero_truth":
+            from core.strategy_pipeline.pipeline_models import EngineMetrics
             return EngineResult(engine=engine, state=PipelineState.BLOCKED, metrics=EngineMetrics(strategies_loaded=0))
             
         if engine == EngineType.OUTCOMES and strategy_id == "zero_executable":
+            from core.strategy_pipeline.pipeline_models import EngineMetrics
             return EngineResult(engine=engine, state=PipelineState.BLOCKED, metrics=EngineMetrics(rejected_count=61046, executable_count=0))
             
-        if engine == EngineType.CERTIFICATION and strategy_id == "cert_missing":
-            return EngineResult(engine=engine, state=PipelineState.BLOCKED, errors=["certification loader missing real disk support"])
-
-        return EngineResult(engine=engine, state=PipelineState.SUCCESS, artifacts_generated=[])
+        import subprocess
+        
+        script_map = {
+            EngineType.RESEARCH: "scripts/run_research_registry.py", # Assuming it exists, though it might be manual
+            EngineType.REGISTRY: None, # Handled automatically by loading
+            EngineType.TRUTH: "scripts/run_strategy_truth_audit.py",
+            EngineType.OUTCOMES: "scripts/run_outcome_evidence_replay.py",
+            EngineType.STATISTICS: "scripts/run_statistical_validation.py",
+            EngineType.CERTIFICATION: "scripts/run_strategy_certification.py",
+            EngineType.DRIFT: "scripts/run_live_drift.py"
+        }
+        
+        script_path = script_map.get(engine)
+        if not script_path:
+            # For registry or research, maybe just pass
+            return EngineResult(engine=engine, state=PipelineState.SUCCESS, artifacts_generated=[], created_timestamp=str(time.time()))
+            
+        args = ["python", script_path]
+        if engine == EngineType.OUTCOMES:
+            # We need specific args for outcome evidence
+            # Fake arguments for now since the script expects files
+            args.extend([
+                "--candidate-file", ".runtime/logs/desks/DEFAULT/candidate_decisions.jsonl",
+                "--option-trace", ".runtime/logs/desks/DEFAULT/price_trace.jsonl",
+                "--json"
+            ])
+        elif engine == EngineType.STATISTICS:
+            import glob
+            evidence_files = glob.glob("runtime/outcome_evidence/evidence_*.jsonl")
+            if evidence_files:
+                latest_evidence = max(evidence_files, key=os.path.getctime)
+                args.extend(["--evidence-file", latest_evidence])
+            else:
+                args.extend(["--evidence-file", "missing.jsonl"])
+        elif engine == EngineType.DRIFT:
+            pass # No args needed
+        else:
+            args.extend(["--strategy", strategy_id])
+            
+        try:
+            result = subprocess.run(args, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                logger.error(f"Engine {engine.value} failed: {result.stderr}")
+                # For specific blockers we might parse stdout/stderr but for now we rely on exit codes
+                return EngineResult(engine=engine, state=PipelineState.FAILED, errors=[result.stderr])
+            else:
+                return EngineResult(engine=engine, state=PipelineState.SUCCESS, artifacts_generated=[], created_timestamp=str(time.time()))
+        except Exception as e:
+            return EngineResult(engine=engine, state=PipelineState.FAILED, errors=[str(e)])
 
     def _get_cached_path(self, engine: EngineType, strategy_id: str) -> Optional[str]:
         if engine == EngineType.RESEARCH:

@@ -202,7 +202,14 @@ def test_engine_init():
 def test_engine_run_all_success():
     eng = StrategyPipelineEngine()
     ctx = PipelineContext()
-    tracker = eng.run("s1", ctx)
+    
+    # Mock _run_engine to succeed everywhere so we can test the tracker states
+    def mock_run(engine, strategy_id, context):
+        return EngineResult(engine=engine, state=PipelineState.SUCCESS)
+        
+    with patch.object(eng, '_run_engine', side_effect=mock_run):
+        tracker = eng.run("s1", ctx)
+        
     assert tracker.global_state == PipelineState.SUCCESS
     assert tracker.final_decision is not None
     assert tracker.final_decision.certification_status == "Research Only"
@@ -213,11 +220,10 @@ def test_engine_run_with_failure_aborts():
     eng = StrategyPipelineEngine()
     
     # Mock _run_engine to fail on REGISTRY
-    original_run = eng._run_engine
     def mock_run(engine, strategy_id, context):
         if engine == EngineType.REGISTRY:
             return EngineResult(engine=engine, state=PipelineState.FAILED)
-        return original_run(engine, strategy_id, context)
+        return EngineResult(engine=engine, state=PipelineState.SUCCESS)
         
     with patch.object(eng, '_run_engine', side_effect=mock_run):
         ctx = PipelineContext()
@@ -383,8 +389,17 @@ def test_engine_result_with_errors():
 
 def test_truth_stage_zero_strategies():
     eng = StrategyPipelineEngine()
-    ctx = PipelineContext()
-    tracker = eng.run("zero_truth", ctx)
+    
+    original_run = eng._run_engine
+    def mock_run(engine, strategy_id, context):
+        if engine in (EngineType.RESEARCH, EngineType.REGISTRY):
+            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
+        return original_run(engine, strategy_id, context)
+        
+    with patch.object(eng, '_run_engine', side_effect=mock_run):
+        ctx = PipelineContext(force_refresh=True)
+        tracker = eng.run("zero_truth", ctx)
+        
     assert tracker.global_state == PipelineState.BLOCKED
     assert tracker.blocked_at == EngineType.TRUTH
     assert tracker.get_engine_state(EngineType.OUTCOMES) == PipelineState.PENDING # downstream skipped
@@ -393,8 +408,17 @@ def test_truth_stage_zero_strategies():
 
 def test_outcome_stage_zero_executable():
     eng = StrategyPipelineEngine()
-    ctx = PipelineContext()
-    tracker = eng.run("zero_executable", ctx)
+    
+    original_run = eng._run_engine
+    def mock_run(engine, strategy_id, context):
+        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH):
+            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
+        return original_run(engine, strategy_id, context)
+        
+    with patch.object(eng, '_run_engine', side_effect=mock_run):
+        ctx = PipelineContext(force_refresh=True)
+        tracker = eng.run("zero_executable", ctx)
+        
     assert tracker.global_state == PipelineState.BLOCKED
     assert tracker.blocked_at == EngineType.OUTCOMES
     assert tracker.get_engine_state(EngineType.STATISTICS) == PipelineState.PENDING
@@ -402,15 +426,50 @@ def test_outcome_stage_zero_executable():
     
 def test_certification_missing_disk():
     eng = StrategyPipelineEngine()
-    ctx = PipelineContext()
-    tracker = eng.run("cert_missing", ctx)
+    
+    original_run = eng._run_engine
+    def mock_run(engine, strategy_id, context):
+        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH, EngineType.OUTCOMES, EngineType.STATISTICS):
+            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
+        return original_run(engine, strategy_id, context)
+        
+    with patch.object(eng, '_run_engine', side_effect=mock_run):
+        ctx = PipelineContext(force_refresh=True)
+        tracker = eng.run("cert_missing", ctx)
+        
     assert tracker.global_state == PipelineState.BLOCKED
     assert tracker.blocked_at == EngineType.CERTIFICATION
     assert tracker.final_decision.reason == "certification artifacts unavailable"
 
+def test_research_missing():
+    eng = StrategyPipelineEngine()
+    ctx = PipelineContext(force_refresh=True)
+    tracker = eng.run("s1", ctx)
+    assert tracker.global_state == PipelineState.BLOCKED
+    assert tracker.blocked_at == EngineType.RESEARCH
+    assert tracker.final_decision.reason == "EMPTY_RESEARCH_REGISTRY"
+
+def test_live_drift_missing_baseline():
+    eng = StrategyPipelineEngine()
+    
+    original_run = eng._run_engine
+    def mock_run(engine, strategy_id, context):
+        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH, EngineType.OUTCOMES, EngineType.STATISTICS, EngineType.CERTIFICATION):
+            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
+        return original_run(engine, strategy_id, context)
+        
+    with patch.object(eng, '_run_engine', side_effect=mock_run):
+        ctx = PipelineContext(force_refresh=True)
+        tracker = eng.run("s1", ctx)
+        
+    assert tracker.global_state == PipelineState.BLOCKED
+    assert tracker.blocked_at == EngineType.DRIFT
+    assert tracker.final_decision.reason == "live drift real baseline missing"
+
 def test_reports_only_mode():
     eng = StrategyPipelineEngine()
     ctx = PipelineContext(dry_run=True, force_refresh=True)
+    # The first engine it hits is RESEARCH, which will just fail with dry_run
     tracker = eng.run("s1", ctx)
     assert tracker.global_state == PipelineState.FAILED
     assert "Artifact missing in reports-only mode" in tracker.engine_results[EngineType.RESEARCH].errors
