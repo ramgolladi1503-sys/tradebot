@@ -42,7 +42,7 @@ class SemanticComparator:
         return None
 
     def _check_ordering_flaws(self) -> List[SemanticResult]:
-        flaws = []
+        flaws: list[SemanticResult] = []
         if not self.cfg.is_reconstructable:
             return flaws
 
