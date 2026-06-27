@@ -38,7 +38,7 @@ source: agent_pr
 The PR performs strictly offline static data monitoring.
 
 # Acceptance Proof
-Tests cover all drift paths (e.g. Expectancy Collapse), stale evidence, invalid transitions, and audit logging. 43 robust tests implemented.
+Tests cover all drift paths (e.g. Expectancy Collapse), stale evidence, invalid transitions, and audit logging. 45 robust tests implemented.
 
 # What This PR Does Not Prove
 - Does not prove that the underlying baseline statistics are correct.
@@ -46,3 +46,6 @@ Tests cover all drift paths (e.g. Expectancy Collapse), stale evidence, invalid 
 
 # Human Approval
 - Approved via user's explicit request and plan approval.
+
+# Runtime Proof Required After Merge
+- None.
