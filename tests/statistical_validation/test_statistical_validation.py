@@ -162,7 +162,8 @@ def test_drawdown_computation():
     assert rep.peak_equity == 150.0
     assert rep.maximum_drawdown == 150.0
     assert rep.max_drawdown_duration_seconds == 2.0
-    assert len(rep.equity_curve) == 4
+    curve_len = len(rep.equity_curve)
+    assert curve_len == 4
 
 # --- Distribution Tests ---
 
@@ -255,7 +256,8 @@ def test_walk_forward_computation():
     config = ValidationConfig(walk_forward_window_size=30)
     rep = compute_walk_forward(records, config)
     assert rep.status == StabilityStatus.STABLE
-    assert len(rep.windows) == 2
+    window_count = len(rep.windows)
+    assert window_count == 2
 
 def test_walk_forward_unstable():
     records = [_make_record(net_pnl=-10, created_timestamp=i) for i in range(60)]
@@ -267,7 +269,8 @@ def test_walk_forward_skips_small_remainder():
     records = [_make_record(created_timestamp=i) for i in range(40)]
     config = ValidationConfig(walk_forward_window_size=30)
     rep = compute_walk_forward(records, config)
-    assert len(rep.windows) == 1
+    window_count = len(rep.windows)
+    assert window_count == 1
 
 # --- Stability Tests ---
 
@@ -281,7 +284,8 @@ def test_stability_computation():
     config = ValidationConfig(stability_rolling_window_size=30)
     rep = compute_stability(records, config)
     assert rep.status == StabilityStatus.STABLE
-    assert len(rep.rolling_metrics) == 31
+    metrics_count = len(rep.rolling_metrics)
+    assert metrics_count == 31
     assert rep.performance_drift == 0.0
 
 def test_stability_collapse():
