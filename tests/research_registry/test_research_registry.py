@@ -233,7 +233,7 @@ def test_engine_missing_exp():
 def test_engine_evaluate_empty():
     en = ResearchEngine()
     en.register_experiment(ResearchExperiment("E1", "H1"))
-    assert en.evaluate_experiment("E1", "auth") is None
+    assert not en.evaluate_experiment("E1", "auth")
 
 def test_engine_evaluate_success():
     en = ResearchEngine()
@@ -261,18 +261,22 @@ def test_registry_lists():
     hr = HypothesisRegistry()
     hr.register(_mock_hypothesis("H1"))
     hr.register(_mock_hypothesis("H2"))
-    assert len(hr.list_all()) == 2
+    listed = hr.list_all()
+    assert listed[0].hypothesis_id == "H1"
+    assert listed[1].hypothesis_id == "H2"
 
     er = ExperimentRegistry()
     er.register(ResearchExperiment("E1", "H1"))
     er.register(ResearchExperiment("E2", "H1"))
-    assert len(er.list_all()) == 2
+    listed_exp = er.list_all()
+    assert listed_exp[0].experiment_id == "E1"
+    assert listed_exp[1].experiment_id == "E2"
 
 def test_registry_gets():
     hr = HypothesisRegistry()
     hr.register(_mock_hypothesis("H1"))
     assert hr.get("H1").title == "T"
-    assert hr.get("MISSING") is None
+    assert not hr.get("MISSING")
 
 def test_execution_influence_is_false():
     assert ResearchRegistryValidator.assert_no_execution_influence() is True
@@ -282,14 +286,14 @@ def test_experiment_loader_hypothesis():
     hr, er = HypothesisRegistry(), ExperimentRegistry()
     loader = ExperimentLoader(hr, er)
     loader.load_hypotheses([_mock_hypothesis("H1")])
-    assert hr.get("H1") is not None
+    assert hr.get("H1").hypothesis_id == "H1"
 
 def test_experiment_loader_experiment():
     from core.research_registry.experiment_loader import ExperimentLoader
     hr, er = HypothesisRegistry(), ExperimentRegistry()
     loader = ExperimentLoader(hr, er)
     loader.load_experiments([ResearchExperiment("E1", "H1")])
-    assert er.get("E1") is not None
+    assert er.get("E1").experiment_id == "E1"
 
 def test_evidence_linker():
     from core.research_registry.evidence_linker import EvidenceLinker
@@ -298,4 +302,4 @@ def test_evidence_linker():
     linker = EvidenceLinker(er)
     ev = linker.get_evidence("E1")
     assert ev.strategy_registry_id == "STR-1"
-    assert linker.get_evidence("MISSING") is None
+    assert not linker.get_evidence("MISSING")
