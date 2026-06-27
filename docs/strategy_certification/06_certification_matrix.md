@@ -1,6 +1,6 @@
 # Certification Matrix
 
-**Strategy ID**: TEST_STRAT
+**Strategy ID**: nifty_intraday
 **Version**: 1.0
 
 | Gate | Status | Reason |

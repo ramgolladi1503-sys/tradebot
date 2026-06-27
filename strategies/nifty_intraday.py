@@ -141,3 +141,34 @@ def generate_signal(ltp, vwap, bias, vwap_buffer=0.0015, min_move=0.001, debug_s
         "setup_type": setup_type,
         "regime_path": regime_name,
     }
+
+from datetime import date
+from core.strategy_registry.strategy_contract import StrategyContract
+
+contract = StrategyContract(
+    strategy_id="nifty_intraday",
+    strategy_name="Nifty Intraday Trend",
+    version="1.0.0",
+    owner="System",
+    created_date=date(2026, 1, 1),
+    description="Intraday trend following on Nifty",
+    market_hypothesis="Momentum persists intraday",
+    primary_market="NSE",
+    supported_indices=["NIFTY"],
+    supported_option_types=["CE", "PE"],
+    entry_rules_summary="Breakout above VWAP",
+    exit_rules_summary="Reversion to mean",
+    stop_logic_summary="Fixed risk",
+    target_logic_summary="Fixed reward",
+    time_stop="15:15",
+    required_indicators=["VWAP"],
+    required_market_data=["NIFTY_SPOT"],
+    required_option_data=["NIFTY_OPTIONS"],
+    required_sessions=["INTRADAY"],
+    required_liquidity="HIGH",
+    allowed_regimes=["TRENDING_UP", "TRENDING_DOWN"],
+    forbidden_regimes=["CHOPPY"],
+    required_confirmations=["VOLUMES"],
+    known_limitations=["Whipsaws in choppy regimes"],
+    known_assumptions=["Continuous liquidity"]
+)

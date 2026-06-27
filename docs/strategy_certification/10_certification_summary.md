@@ -1,8 +1,8 @@
 # Strategy Certification Summary
 
-**Strategy ID**: TEST_STRAT
+**Strategy ID**: nifty_intraday
 **Version**: 1.0
-**Evaluated At**: 2026-06-27T06:28:51.435413
+**Evaluated At**: 2026-06-27T08:17:53.104233
 
 ## Decision
 
