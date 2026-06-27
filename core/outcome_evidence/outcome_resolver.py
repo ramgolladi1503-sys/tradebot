@@ -10,7 +10,7 @@ class OutcomeResolver:
         if not traces:
             return self._build_empty_outcome(candidate, OutcomeStatus.NO_TRACE_DATA, ExitReason.UNKNOWN)
 
-        if candidate.target_price <= 0 or candidate.stop_price <= 0:
+        if candidate.target_price is None or candidate.stop_price is None or candidate.entry_price is None:
             return self._build_empty_outcome(
                 candidate, OutcomeStatus.INSUFFICIENT_CANDIDATE_FIELDS, ExitReason.UNKNOWN
             )
@@ -32,8 +32,8 @@ class OutcomeResolver:
         for trace in traces:
             end_tick = trace
             if candidate.time_stop and trace.timestamp >= candidate.time_stop:
-                time_stop_tick = trace
-                break
+                if not time_stop_tick:
+                    time_stop_tick = trace
 
             if is_long:
                 if trace.ltp >= candidate.target_price and not target_hit_tick:
@@ -46,10 +46,18 @@ class OutcomeResolver:
                 if trace.ltp >= candidate.stop_price and not stop_hit_tick:
                     stop_hit_tick = trace
 
-            if target_hit_tick and stop_hit_tick:
-                break
-            if target_hit_tick or stop_hit_tick:
-                break
+            if target_hit_tick or stop_hit_tick or time_stop_tick:
+                hit_times = []
+                if target_hit_tick:
+                    hit_times.append(target_hit_tick.timestamp)
+                if stop_hit_tick:
+                    hit_times.append(stop_hit_tick.timestamp)
+                if time_stop_tick:
+                    hit_times.append(time_stop_tick.timestamp)
+                
+                min_hit_time = min(hit_times)
+                if trace.timestamp > min_hit_time:
+                    break
 
         if target_hit_tick and stop_hit_tick:
             if target_hit_tick.timestamp == stop_hit_tick.timestamp:
@@ -110,8 +118,11 @@ class OutcomeResolver:
             end_time=exit_time,
             duration_seconds=exit_time - start_time
         )
-        is_long = candidate.target_price > candidate.entry_price
-        gross_pnl = (exit_price - candidate.entry_price) if is_long else (candidate.entry_price - exit_price)
+        if candidate.entry_price is None:
+            gross_pnl = 0.0
+        else:
+            is_long = candidate.target_price > candidate.entry_price if candidate.target_price is not None else True
+            gross_pnl = (exit_price - candidate.entry_price) if is_long else (candidate.entry_price - exit_price)
         
         return ReplayOutcome(
             status=status,

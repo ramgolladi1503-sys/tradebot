@@ -43,22 +43,27 @@ class ReportGenerator:
         for r in records:
             counts[r.evidence_quality.name] += 1
             
-        content = "# 04 Outcome Quality Report\n\n## Evidence Quality Breakdown\n"
+        content = "# 04 Outcome Quality Report\n\n## Evidence Quality Breakdown\n\n"
         for q, c in counts.items():
             content += f"- **{q}**: {c}\n"
+            
+        unusable = [r for r in records if r.evidence_quality == EvidenceQuality.UNUSABLE]
+        content += f"\n## Unusable Breakdown\n- Total Unusable: {len(unusable)}\n"
         (self.output_dir / "04_outcome_quality_report.md").write_text(content)
 
     def _generate_rejected_candidate_report(self, records: List[OutcomeEvidenceRecord]):
         rejected = [r for r in records if r.simulation.is_hypothetical_rejected]
-        content = f"# 05 Rejected Candidate Report\n\nTotal Rejected (Hypothetical Outcomes): {len(rejected)}\n"
+        content = f"# 05 Rejected Candidate Report\n\nTotal Rejected (Hypothetical Outcomes): {len(rejected)}\n\n"
+        content += "Rejected candidates are strictly separated from executable candidates. They carry the `HYPOTHETICAL_REJECTED_CANDIDATE` simulation tag and DO NOT pollute actual run summaries.\n"
         (self.output_dir / "05_rejected_candidate_report.md").write_text(content)
 
     def _generate_cost_model_report(self, records: List[OutcomeEvidenceRecord]):
-        content = "# 06 Cost Model Report\n\nRecords cost assumptions. Default spreads/slippage are used when exact bid/ask unavailable.\n"
+        content = "# 06 Cost Model Report\n\nRecords explicit cost component breakdowns instead of magic numbers. Each `CostComponent` specifies origin (`config` vs `trace`), value, and estimation status.\n"
         (self.output_dir / "06_cost_model_report.md").write_text(content)
 
     def _generate_regime_context_report(self, records: List[OutcomeEvidenceRecord]):
-        content = "# 07 Regime Context Report\n\nDescribes attached regimes during candidates timeframe.\n"
+        with_regime = len([r for r in records if r.regime_context.trend is not None])
+        content = f"# 07 Regime Context Report\n\n- Total Records: {len(records)}\n- Records with regime context: {with_regime}\n"
         (self.output_dir / "07_regime_context_report.md").write_text(content)
 
     def _generate_limitations_report(self):

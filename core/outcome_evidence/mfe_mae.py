@@ -8,12 +8,12 @@ class MfeMaeCalculator:
     def calculate(
         self, candidate: ReplayCandidate, traces: List[OptionTracePoint], exit_time: Optional[float]
     ) -> Optional[MfeMaeEvidence]:
-        if not traces or candidate.entry_price <= 0:
+        if not traces or candidate.entry_price is None or exit_time is None:
             return None
 
         # Determine risk amount for R calculations
-        is_long = candidate.target_price > candidate.entry_price
-        risk = abs(candidate.entry_price - candidate.stop_price)
+        is_long = candidate.target_price > candidate.entry_price if candidate.target_price is not None else True
+        risk = abs(candidate.entry_price - candidate.stop_price) if candidate.stop_price is not None else 1.0
         if risk == 0:
             risk = 1.0  # fallback to avoid division by zero
             

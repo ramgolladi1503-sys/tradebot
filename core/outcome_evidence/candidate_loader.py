@@ -29,31 +29,31 @@ class CandidateLoader:
             data = json.loads(line)
         except json.JSONDecodeError:
             return ReplayCandidate(
-                candidate_id=f"unparsable_{offset}",
-                strategy_id="UNKNOWN",
+                candidate_id=None,
+                strategy_id=None,
                 timestamp=0.0,
-                instrument_id="UNKNOWN",
-                underlying="UNKNOWN",
-                entry_price=0.0,
-                stop_price=0.0,
-                target_price=0.0,
+                instrument_id=None,
+                underlying=None,
+                entry_price=None,
+                stop_price=None,
+                target_price=None,
                 source_path=str(self.source_path),
                 source_offset=offset,
                 source_status=CandidateSourceStatus.UNPARSABLE,
                 evidence_quality=EvidenceQuality.UNUSABLE
             )
 
-        candidate_id = str(data.get("candidate_id") or data.get("decision_id", f"missing_id_{offset}"))
-        strategy_id = str(data.get("strategy_id", "UNKNOWN"))
+        candidate_id = str(data.get("candidate_id") or data.get("decision_id")) if data.get("candidate_id") or data.get("decision_id") else None
+        strategy_id = str(data.get("strategy_id")) if data.get("strategy_id") else None
         strategy_version = data.get("strategy_version")
         timestamp = float(data.get("timestamp") or data.get("timestamp_epoch", 0.0))
-        instrument_id = str(data.get("instrument_id") or data.get("option_symbol", "UNKNOWN"))
-        underlying = str(data.get("underlying") or data.get("index_name", "UNKNOWN"))
+        instrument_id = str(data.get("instrument_id") or data.get("option_symbol")) if data.get("instrument_id") or data.get("option_symbol") else None
+        underlying = str(data.get("underlying") or data.get("index_name")) if data.get("underlying") or data.get("index_name") else None
         
         # Prices
-        entry_price = float(data.get("entry_price") or data.get("entry", 0.0))
-        stop_price = float(data.get("stop_price") or data.get("stop", 0.0))
-        target_price = float(data.get("target_price") or data.get("target", 0.0))
+        entry_price = float(data.get("entry_price") or data.get("entry")) if data.get("entry_price") or data.get("entry") else None
+        stop_price = float(data.get("stop_price") or data.get("stop")) if data.get("stop_price") or data.get("stop") else None
+        target_price = float(data.get("target_price") or data.get("target")) if data.get("target_price") or data.get("target") else None
         time_stop = data.get("time_stop")
         if time_stop is not None:
             time_stop = float(time_stop)
@@ -75,20 +75,20 @@ class CandidateLoader:
 
         # Determine evidence quality
         missing_fields = []
-        if not candidate_id or candidate_id.startswith("missing"):
+        if not candidate_id:
             missing_fields.append("candidate_id")
-        if not entry_price:
+        if entry_price is None:
             missing_fields.append("entry_price")
-        if not stop_price:
+        if stop_price is None:
             missing_fields.append("stop_price")
-        if not target_price:
+        if target_price is None:
             missing_fields.append("target_price")
             
         quality = EvidenceQuality.COMPLETE
         status = CandidateSourceStatus.LOADED
         if missing_fields:
             status = CandidateSourceStatus.MISSING_FIELDS
-            quality = EvidenceQuality.INSUFFICIENT
+            quality = EvidenceQuality.UNUSABLE
 
         return ReplayCandidate(
             candidate_id=candidate_id,

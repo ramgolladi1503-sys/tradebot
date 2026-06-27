@@ -9,7 +9,7 @@ from core.outcome_evidence.cost_model import IndianIndexOptionsCostModel
 
 
 def main():
-    parser = argparse.add_argument_group("Outcome Evidence Replay")
+    parser = argparse.ArgumentParser(description="Outcome Evidence Replay")
     parser.add_argument("--candidate-file", type=str, required=True, help="Path to candidate_decisions.jsonl")
     parser.add_argument("--option-trace", type=str, required=True, help="Path to option_price_trace.jsonl")
     parser.add_argument("--regime-file", type=str, help="Path to regime_monitor.jsonl (optional)")
@@ -32,11 +32,21 @@ def main():
     regime_path = Path(args.regime_file) if args.regime_file else None
     
     if not candidate_path.exists():
-        print(f"Error: Candidate file not found at {candidate_path}")
+        msg = f"Error: Candidate file not found at {candidate_path}"
+        if args.json:
+            import json
+            print(json.dumps({"error": msg}))
+        else:
+            print(msg)
         sys.exit(1)
         
     if not trace_path.exists():
-        print(f"Error: Trace file not found at {trace_path}")
+        msg = f"Error: Trace file not found at {trace_path}"
+        if args.json:
+            import json
+            print(json.dumps({"error": msg}))
+        else:
+            print(msg)
         sys.exit(1)
         
     summary = runner.run(

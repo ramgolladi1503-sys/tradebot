@@ -95,8 +95,8 @@ class OutcomeEvidenceRunner:
                 
             record = OutcomeEvidenceRecord(
                 run_id=self.run_id,
-                candidate_id=candidate.candidate_id,
-                strategy_id=candidate.strategy_id,
+                candidate_id=candidate.candidate_id or "UNKNOWN",
+                strategy_id=candidate.strategy_id or "UNKNOWN",
                 input_source=str(candidate_file),
                 evidence_quality=candidate.evidence_quality,
                 outcome_status=outcome.status,

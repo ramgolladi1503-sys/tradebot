@@ -1,11 +1,15 @@
 from typing import Optional
 from .evidence_models import ReplayCandidate, OptionTracePoint, ExecutionSimulation
+from .evidence_types import EvidenceQuality
 
 
 class ExecutionSimulator:
     """Simulates realistic execution fills and records candidate hypothetical status."""
     
     def simulate(self, candidate: ReplayCandidate, entry_tick: Optional[OptionTracePoint], exit_tick: Optional[OptionTracePoint]) -> ExecutionSimulation:
+        if candidate.evidence_quality == EvidenceQuality.UNUSABLE or candidate.entry_price is None or candidate.target_price is None:
+            return ExecutionSimulation(0.0, 0.0, 0.0, 0.0, False, False, not candidate.execution_ok)
+            
         # Default fills are the requested prices unless we have exact trace data
         entry_fill = candidate.entry_price
         exit_fill = 0.0

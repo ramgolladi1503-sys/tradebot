@@ -26,14 +26,14 @@ class MarketSnapshotEvidence:
 
 @dataclass(frozen=True)
 class ReplayCandidate:
-    candidate_id: str
-    strategy_id: str
+    candidate_id: Optional[str]
+    strategy_id: Optional[str]
     timestamp: float
-    instrument_id: str
-    underlying: str
-    entry_price: float
-    stop_price: float
-    target_price: float
+    instrument_id: Optional[str]
+    underlying: Optional[str]
+    entry_price: Optional[float]
+    stop_price: Optional[float]
+    target_price: Optional[float]
     strategy_version: Optional[str] = None
     option_symbol: Optional[str] = None
     strike: Optional[float] = None
@@ -77,15 +77,17 @@ class MfeMaeEvidence:
 
 
 @dataclass(frozen=True)
+class CostComponent:
+    name: str
+    value: float
+    source_origin: str
+    is_estimated: bool
+    bid_ask_available: bool
+
+
+@dataclass(frozen=True)
 class CostBreakdown:
-    brokerage: float
-    stt: float
-    exchange_tx: float
-    sebi: float
-    stamp_duty: float
-    gst: float
-    slippage: float
-    spread_cost: float
+    components: List[CostComponent]
     total_cost: float
     lot_size: int
     status: CostModelStatus
