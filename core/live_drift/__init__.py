@@ -5,6 +5,8 @@ from core.live_drift.drift_models import (
 )
 from core.live_drift.baseline_loader import BaselineLoader
 from core.live_drift.live_snapshot_loader import LiveSnapshotLoader
+from core.live_drift.drift_errors import LiveDriftInputMissingError, InvalidBaselineError, InvalidSnapshotError
+from core.live_drift.disk_loader import DiskLiveDriftLoader
 from core.live_drift.drift_detector import DriftDetector
 from core.live_drift.certification_lifecycle import CertificationLifecycle
 from core.live_drift.notification_engine import NotificationEngine
@@ -25,6 +27,10 @@ __all__ = [
     "AuditLogEntry",
     "BaselineLoader",
     "LiveSnapshotLoader",
+    "DiskLiveDriftLoader",
+    "LiveDriftInputMissingError",
+    "InvalidBaselineError",
+    "InvalidSnapshotError",
     "DriftDetector",
     "CertificationLifecycle",
     "NotificationEngine",

@@ -1,44 +1,36 @@
 #!/usr/bin/env python3
 import sys
+import argparse
 from pathlib import Path
 from datetime import datetime, timezone
 import uuid
+import logging
+
 from core.live_drift import (
-    CertifiedBaseline, LiveSnapshot, DriftDetector,
-    CertificationLifecycle, NotificationEngine, AuditLog, AuditLogEntry,
-    ReportGenerator, LifecycleState, ActionRecommendation,
-    LiveDriftValidator
+    DriftDetector, CertificationLifecycle, NotificationEngine, 
+    AuditLog, AuditLogEntry, ReportGenerator, LifecycleState, 
+    ActionRecommendation, LiveDriftValidator,
+    DiskLiveDriftLoader, LiveDriftInputMissingError,
+    InvalidBaselineError, InvalidSnapshotError
 )
 
-def build_mock_data():
-    now = datetime.now(timezone.utc)
-    
-    baseline = CertifiedBaseline(
-        strategy_id="STR-ALPHA",
-        certification_id="CERT-999",
-        certified_timestamp=now,
-        expected_expectancy=1.5,
-        expected_profit_factor=2.0,
-        max_drawdown_limit=0.15,
-        regime_signature="high_vol_bear"
-    )
-
-    snapshot = LiveSnapshot(
-        strategy_id="STR-ALPHA",
-        snapshot_timestamp=now,
-        observed_expectancy=0.6,
-        observed_profit_factor=1.2,
-        current_drawdown=0.18,
-        current_regime_signature="low_vol_bull",
-        slippage_ratio=2.5,
-        total_observations=120,
-        data_freshness_seconds=3600
-    )
-
-    return baseline, snapshot
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 def main():
-    baseline, snapshot = build_mock_data()
+    parser = argparse.ArgumentParser(description="Run Live Drift Detection")
+    parser.add_argument("--strategy", type=str, required=True, help="Strategy ID to evaluate drift for")
+    parser.add_argument("--dry-run", action="store_true", help="Run with mock data (disabled, must use real data)")
+    args = parser.parse_args()
+
+    logging.info(f"Running Live Drift detection for {args.strategy}")
+    loader = DiskLiveDriftLoader()
+    
+    try:
+        baseline = loader.load_baseline(args.strategy)
+        snapshot = loader.load_snapshot(args.strategy)
+    except (LiveDriftInputMissingError, InvalidBaselineError, InvalidSnapshotError) as e:
+        logging.error(f"LIVE_DRIFT_BLOCKED: {e}")
+        return 1
     
     LiveDriftValidator.assert_no_strategy_mutation(baseline, snapshot)
     LiveDriftValidator.assert_no_broker_apis_called()
@@ -73,7 +65,7 @@ def main():
     generator = ReportGenerator(out_dir)
     generator.generate(report, notification, lifecycle, audit_log)
     
-    print("Live Drift reports generated in docs/live_drift/")
+    logging.info("Live Drift reports generated in docs/live_drift/")
     return 0
 
 if __name__ == "__main__":
