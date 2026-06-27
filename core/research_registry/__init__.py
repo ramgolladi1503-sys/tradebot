@@ -6,7 +6,7 @@ from core.research_registry.research_models import (
 )
 from core.research_registry.hypothesis_registry import HypothesisRegistry
 from core.research_registry.experiment_registry import ExperimentRegistry
-from core.research_registry.experiment_loader import ExperimentLoader
+from core.research_registry.experiment_loader import DiskResearchLoader
 from core.research_registry.experiment_validator import ExperimentValidator
 from core.research_registry.evidence_linker import EvidenceLinker
 from core.research_registry.dependency_graph import DependencyGraph
@@ -31,7 +31,7 @@ __all__ = [
     "ResearchRegistryReport",
     "HypothesisRegistry",
     "ExperimentRegistry",
-    "ExperimentLoader",
+    "DiskResearchLoader",
     "ExperimentValidator",
     "EvidenceLinker",
     "DependencyGraph",

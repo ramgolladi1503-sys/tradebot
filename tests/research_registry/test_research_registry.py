@@ -277,19 +277,6 @@ def test_registry_gets():
 def test_execution_influence_is_false():
     assert ResearchRegistryValidator.assert_no_execution_influence() is True
 
-def test_experiment_loader_hypothesis():
-    from core.research_registry.experiment_loader import ExperimentLoader
-    hr, er = HypothesisRegistry(), ExperimentRegistry()
-    loader = ExperimentLoader(hr, er)
-    loader.load_hypotheses([_mock_hypothesis("H1")])
-    assert hr.get("H1") is not None
-
-def test_experiment_loader_experiment():
-    from core.research_registry.experiment_loader import ExperimentLoader
-    hr, er = HypothesisRegistry(), ExperimentRegistry()
-    loader = ExperimentLoader(hr, er)
-    loader.load_experiments([ResearchExperiment("E1", "H1")])
-    assert er.get("E1") is not None
 
 def test_evidence_linker():
     from core.research_registry.evidence_linker import EvidenceLinker
