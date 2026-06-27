@@ -205,7 +205,7 @@ def test_stats_gate_wf_unstable():
 def test_risk_gate_pass():
     res = RiskGate.evaluate(build_stats(), build_evidence())
     assert res.status == GateStatus.PASS
-    assert len(res.warnings) == 0
+    assert not res.warnings
 
 def test_risk_gate_excessive_drawdown():
     res = RiskGate.evaluate(build_stats(dd_status=DrawdownStatus.EXCESSIVE), build_evidence())
