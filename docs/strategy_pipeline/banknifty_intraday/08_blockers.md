@@ -1,3 +1,3 @@
 # Blockers
 
-None.
+- certification loader missing real disk support

@@ -2,8 +2,8 @@
 
 Current Certification
 
-Research Only
+Blocked
 
 WHY
 
-Passed initial baseline pipeline.
+certification artifacts unavailable
