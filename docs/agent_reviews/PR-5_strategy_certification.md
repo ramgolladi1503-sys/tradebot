@@ -39,16 +39,16 @@ GENERATE_PATCH
 The models, types, and logic gates are strictly read-only and return dataclasses.
 
 # QA / Safety Review
-is_order_action=false
-broker_api_called=false
-allowed_for_live_execution=false
-append=false
-mode=PAPER
-candidate_id=N/A
-decision=certification
-reason=governance logic update
-timestamp=2026-06-27T06:30:18Z
-source=agent_pr
+is_order_action: false
+broker_api_called: false
+allowed_for_live_execution: false
+append: false
+mode: PAPER
+candidate_id: N/A
+decision: certification
+reason: governance logic update
+timestamp: 2026-06-27T06:30:18Z
+source: agent_pr
 The engine handles missing files by returning FAIL and degrades the certification state appropriately. Strict assertions prevent arbitrary certification upgrades.
 
 # Acceptance Proof
