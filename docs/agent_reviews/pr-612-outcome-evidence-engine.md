@@ -43,3 +43,13 @@ The work is strictly read-only and confined to the Outcome Evidence namespace. N
 
 ## Human Approval
 Approved as per prompt instructions requiring final compliance checks and tests.
+
+## Required Evidence Fields
+- mode: PAPER
+- candidate_id: agent-review
+- decision: PASS
+- reason: Code excellence and compliance gates pass
+- timestamp: 2026-06-27T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: AGENT_GSD
