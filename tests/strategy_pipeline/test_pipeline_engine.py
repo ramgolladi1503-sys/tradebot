@@ -423,4 +423,5 @@ def test_cache_reuse():
     
     result = eng._run_engine(EngineType.RESEARCH, "s1", ctx)
     assert result.cached is True
-    assert result.created_timestamp is not None
+    assert isinstance(result.created_timestamp, str)
+    assert float(result.created_timestamp) > 0
