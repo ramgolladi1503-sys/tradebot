@@ -26,10 +26,18 @@ Verified. No broker APIs, no execution modules, no live paths were touched. All 
 Implemented `DiskCertificationLoader`. Removed all mock/synthetic report generators from the certification path. Added `CertificationInputMissingError` and `CertificationValidationError`.
 
 ## QA / Safety Review
-- **read_only**: `true`
-- **is_order_action**: `false`
-- **broker_api_called**: `false`
-- **allowed_for_live_execution**: `false` (Not applicable for offline evaluation pipeline)
+- mode: offline
+- candidate_id: N/A
+- decision: PASS
+- reason: Implemented disk loader, removed mocks
+- timestamp: 2026-06-27T17:00:00Z
+- source: agent_review
+- read_only: true
+- is_order_action: false
+- broker_api_called: false
+- allowed_for_live_execution: false
+- live_order_action: false
+- broker_order_action: false
 
 ## Acceptance Proof
 Executed `python scripts/run_strategy_certification.py --strategy nifty_intraday`.
