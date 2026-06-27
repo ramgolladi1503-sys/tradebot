@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from core.live_drift import (
     DriftType, LifecycleState, ActionRecommendation,
     CertifiedBaseline, LiveSnapshot, DriftObservation, DriftReport,
@@ -13,7 +13,7 @@ def _mock_baseline(expectancy=1.0, pf=1.5, dd=0.2, regime="bull"):
     return CertifiedBaseline(
         strategy_id="STR-1",
         certification_id="CERT-1",
-        certified_timestamp=datetime.utcnow(),
+        certified_timestamp=datetime.now(timezone.utc),
         expected_expectancy=expectancy,
         expected_profit_factor=pf,
         max_drawdown_limit=dd,
@@ -23,7 +23,7 @@ def _mock_baseline(expectancy=1.0, pf=1.5, dd=0.2, regime="bull"):
 def _mock_snapshot(expectancy=1.0, pf=1.5, dd=0.1, regime="bull", slippage=1.0, freshness=100, obs=100):
     return LiveSnapshot(
         strategy_id="STR-1",
-        snapshot_timestamp=datetime.utcnow(),
+        snapshot_timestamp=datetime.now(timezone.utc),
         observed_expectancy=expectancy,
         observed_profit_factor=pf,
         current_drawdown=dd,
@@ -50,22 +50,22 @@ def test_observation_immutable():
         o.severity_score = 1.0
 
 def test_report_immutable():
-    r = DriftReport("STR-1", datetime.utcnow(), _mock_baseline(), _mock_snapshot(), [], DriftType.NO_DRIFT)
+    r = DriftReport("STR-1", datetime.now(timezone.utc), _mock_baseline(), _mock_snapshot(), [], DriftType.NO_DRIFT)
     with pytest.raises(Exception):
         r.primary_drift = DriftType.UNKNOWN
 
 def test_transition_immutable():
-    t = LifecycleTransition("STR-1", datetime.utcnow(), LifecycleState.PRODUCTION_CANDIDATE, LifecycleState.WARNING, "reason")
+    t = LifecycleTransition("STR-1", datetime.now(timezone.utc), LifecycleState.PRODUCTION_CANDIDATE, LifecycleState.WARNING, "reason")
     with pytest.raises(Exception):
         t.reason = "new"
 
 def test_notification_immutable():
-    n = NotificationRecord("STR-1", datetime.utcnow(), ActionRecommendation.NO_ACTION, [])
+    n = NotificationRecord("STR-1", datetime.now(timezone.utc), ActionRecommendation.NO_ACTION, [])
     with pytest.raises(Exception):
         n.recommendation = ActionRecommendation.MONITOR
 
 def test_audit_log_entry_immutable():
-    a = AuditLogEntry("1", datetime.utcnow(), "STR-1", "EVENT", {})
+    a = AuditLogEntry("1", datetime.now(timezone.utc), "STR-1", "EVENT", {})
     with pytest.raises(Exception):
         a.event_type = "NEW"
 
@@ -139,6 +139,16 @@ def test_drift_detector_insufficient_evidence():
     s = _mock_snapshot(obs=10) # < 30
     obs = DriftDetector.detect(b, s)
     assert any(o.drift_type == DriftType.INSUFFICIENT_DATA for o in obs)
+    
+def test_drift_detector_multiple_drifts_simultaneously():
+    # Test 44: multiple drifts detected simultaneously
+    b = _mock_baseline(expectancy=2.0, pf=2.0, dd=0.1, regime="bull")
+    s = _mock_snapshot(expectancy=0.5, pf=1.0, dd=0.2, regime="bear", slippage=3.0, freshness=90000, obs=5)
+    obs = DriftDetector.detect(b, s)
+    assert len(obs) == 7 # Expectancy, PF, Drawdown, Regime, Execution, Data Quality, Insufficient Data
+    drift_types = [o.drift_type for o in obs]
+    assert DriftType.EXPECTANCY_DRIFT in drift_types
+    assert DriftType.EXECUTION_DRIFT in drift_types
 
 # --- Certification Lifecycle ---
 def test_lifecycle_initial_state():
@@ -192,6 +202,12 @@ def test_lifecycle_invalid_transition_revoked_to_prod():
     cl.transition("STR-1", LifecycleState.REVOKED, "Final")
     with pytest.raises(ValueError, match="Invalid transition"):
         cl.transition("STR-1", LifecycleState.PRODUCTION_CANDIDATE, "Recovery")
+        
+def test_lifecycle_invalid_transition_same_state():
+    # Test 45: same state transition is invalid if not explicitly allowed (it isn't by VALID_TRANSITIONS)
+    cl = CertificationLifecycle()
+    with pytest.raises(ValueError, match="Invalid transition"):
+        cl.transition("STR-1", LifecycleState.PRODUCTION_CANDIDATE, "Should fail")
 
 def test_lifecycle_history_tracking():
     cl = CertificationLifecycle()
@@ -251,21 +267,21 @@ def test_notification_reasons_included():
 # --- Audit Log ---
 def test_audit_log_append_and_get():
     log = AuditLog()
-    entry = AuditLogEntry("1", datetime.utcnow(), "STR-1", "TEST", {})
+    entry = AuditLogEntry("1", datetime.now(timezone.utc), "STR-1", "TEST", {})
     log.append(entry)
     entries = log.get_entries()
     assert entries[0].entry_id == "1"
 
 def test_audit_log_filter_by_strategy():
     log = AuditLog()
-    log.append(AuditLogEntry("1", datetime.utcnow(), "STR-1", "TEST", {}))
-    log.append(AuditLogEntry("2", datetime.utcnow(), "STR-2", "TEST", {}))
+    log.append(AuditLogEntry("1", datetime.now(timezone.utc), "STR-1", "TEST", {}))
+    log.append(AuditLogEntry("2", datetime.now(timezone.utc), "STR-2", "TEST", {}))
     entries = log.get_entries("STR-1")
     assert entries[0].entry_id == "1"
     
 def test_audit_log_copy():
     log = AuditLog()
-    log.append(AuditLogEntry("1", datetime.utcnow(), "STR-1", "TEST", {}))
+    log.append(AuditLogEntry("1", datetime.now(timezone.utc), "STR-1", "TEST", {}))
     entries = log.get_entries()
     entries.clear()
     assert log.get_entries()[0].entry_id == "1"
