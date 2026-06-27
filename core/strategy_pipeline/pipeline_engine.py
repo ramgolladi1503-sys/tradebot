@@ -180,8 +180,8 @@ class StrategyPipelineEngine:
             # We need specific args for outcome evidence
             # Fake arguments for now since the script expects files
             args.extend([
-                "--candidate-file", ".runtime/logs/desks/DEFAULT/candidate_decisions.jsonl",
-                "--option-trace", ".runtime/logs/desks/DEFAULT/price_trace.jsonl",
+                "--candidate-file", os.path.join(".runtime", "logs", "desks", "DEFAULT", "candidate_decisions.jsonl"),
+                "--option-trace", os.path.join(".runtime", "logs", "desks", "DEFAULT", "price_trace.jsonl"),
                 "--json"
             ])
         elif engine == EngineType.STATISTICS:
