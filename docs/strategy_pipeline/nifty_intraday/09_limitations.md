@@ -1,3 +1,3 @@
 # Limitations
 
-- Requires full live data
+None.
