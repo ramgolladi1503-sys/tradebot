@@ -2800,7 +2800,7 @@ _opt_list = [s.strip() for s in _optional_default.split(",") if s.strip()]
 
 CROSS_FEED_STATUS = {}
 
-def _set_feed_status(feed_key: str, status: str, reason: str | None = None):
+def _set_feed_status(feed_key: str, status: str, reason=None):
     CROSS_FEED_STATUS[feed_key] = {"status": status, "reason": reason}
 
 def _classify_feed(feed_key: str, preferred: str):

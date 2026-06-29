@@ -383,7 +383,7 @@ def test_on_error_does_not_schedule_restart_when_reactor_blocked(monkeypatch, tm
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"schedule": 0, "persist": 0}
@@ -445,7 +445,7 @@ def test_on_close_recoverable_ws1006_keeps_retry_path_open(monkeypatch, tmp_path
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"schedule": 0, "persist": 0}
@@ -501,7 +501,7 @@ def test_ws1006_on_error_keeps_reconnect_path_open_first(monkeypatch, tmp_path):
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"schedule": 0}
@@ -570,7 +570,7 @@ def test_ws1006_on_close_keeps_reconnect_path_open_first(monkeypatch, tmp_path):
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"schedule": 0}
@@ -639,7 +639,7 @@ def test_terminal_recovery_internal_retry_suppression_is_safe_without_stop_retry
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
 
@@ -681,7 +681,7 @@ def test_ws1006_recovery_does_not_overlap_when_already_in_progress(monkeypatch, 
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: True, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_soft_resubscribe_current", lambda reason: False, raising=False)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
@@ -780,7 +780,7 @@ def test_non_terminal_network_error_still_uses_existing_restart_behavior(monkeyp
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
-    monkeypatch.setattr(ws, "_use_internal_reconnect", lambda: False, raising=False)
+    monkeypatch.setattr(ws, "_use_native_reconnect", lambda: False, raising=False)
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     calls = {"restart": 0, "stop_retry": 0}
