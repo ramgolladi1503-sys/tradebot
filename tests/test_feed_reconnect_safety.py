@@ -23,6 +23,12 @@ def ticker_callbacks(monkeypatch):
     class DummyKite:
         def profile(self): return {"user_id": "ABCD1234"}
     monkeypatch.setattr(kite_client, "kite", DummyKite(), raising=False)
+    
+    # Clear state that might leak from other tests in CI
+    import core.kite_depth_ws as kite_depth_ws
+    monkeypatch.setattr(kite_depth_ws, "_RECONNECT_BLOCKED_REASON", "", raising=False)
+    monkeypatch.setattr(kite_depth_ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
+
     with patch("core.kite_depth_ws.KiteTicker") as mock_ticker_cls:
         mock_instance = MagicMock()
         mock_ticker_cls.return_value = mock_instance
