@@ -215,7 +215,8 @@ def test_filter_invalid_cycle_candidates_drops_none_and_symbol_less(monkeypatch)
     )
 
     assert [row["trade_id"] for row in valid] == ["GOOD-1"]
-    assert len(invalid) == 2
+    invalid_len = len(invalid)
+    assert invalid_len == 2
 
 
 def test_build_top_opportunities_payload_filters_invalid_candidates_before_phase2(monkeypatch):
@@ -275,7 +276,8 @@ def test_augment_ranked_candidates_with_soft_reject_keeps_unrankable_soft_rows_o
     )
 
     assert ranked == []
-    assert len(soft) == 1
+    soft_len = len(soft)
+    assert soft_len == 1
     assert soft[0]["symbol"] == "NIFTY"
     assert soft[0]["trade_id"].startswith("tbsoft_NIFTY_")
     assert soft[0]["rank_score"] is None
@@ -349,7 +351,8 @@ def test_build_cycle_market_data_attaches_feed_runtime_evidence(monkeypatch):
         ]
     )
 
-    assert len(out) == 1
+    out_len = len(out)
+    assert out_len == 1
     row = out[0]
     assert row["ws_connected"] is True
     assert row["subscribed_option_tokens_count"] == 24

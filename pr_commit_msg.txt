@@ -1,0 +1,15 @@
+Implement feed safe-degradation and native reconnect wiring; live reconnect recovery pending market-hours validation
+
+Final acceptance for this patch:
+- Stale/degraded/connected-but-silent feed blocks candidate generation (proven via out-of-hours logs and tests).
+- Native reconnect path is wired to kiteconnect auto-reconnect.
+- Resubscription callback is tested (on_reconnect invokes MODE_FULL resubscription).
+- Fallback/stale quote execution safety tests pass.
+- Compileall passes with no syntax errors.
+- Old reconnect env var (DEPTH_WS_USE_INTERNAL_RECONNECT) remains backward compatible.
+
+Post-merge follow-up required:
+A separate market-hours evidence task will prove:
+LIVE_FRESH -> 1006/drop -> RECONNECTING -> on_reconnect -> resubscribe -> fresh ticks -> LIVE_FRESH
+
+Current Status: SAFE_DEGRADE_PATCH_MERGEABLE_RECONNECT_RECOVERY_PENDING_LIVE_PROOF

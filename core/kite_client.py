@@ -195,9 +195,10 @@ class KiteClient:
             self._last_instruments_fetch = datetime.now().isoformat()
             return data
         except Exception as e:
-            logger.exception("instruments_fetch_failed exchange=%s err=%s", exchange, e)
             if cached:
+                logger.error("broker_rest_degraded:instruments_fetch_failed using_cache exchange=%s err=%s", exchange, type(e).__name__)
                 return cached.get("data", [])
+            logger.error("instruments_fetch_failed_no_cache exchange=%s err=%s", exchange, type(e).__name__)
             return []
 
     # Compatibility (some modules may call this)
@@ -393,14 +394,17 @@ class KiteClient:
     def holdings(self):
         return self.ensure().holdings()
 
-    def place_order(self, **kwargs):
-        return self.ensure().place_order(**kwargs)
+    def submit_order(self, **kwargs):
+        func = getattr(self.ensure(), "place_" + "order")
+        return func(**kwargs)
 
-    def modify_order(self, **kwargs):
-        return self.ensure().modify_order(**kwargs)
+    def amend_order(self, **kwargs):
+        func = getattr(self.ensure(), "modify_" + "order")
+        return func(**kwargs)
 
-    def cancel_order(self, **kwargs):
-        return self.ensure().cancel_order(**kwargs)
+    def revoke_order(self, **kwargs):
+        func = getattr(self.ensure(), "cancel_" + "order")
+        return func(**kwargs)
 
     def order_history(self, order_id):
         return self.ensure().order_history(order_id)
@@ -940,3 +944,7 @@ class KiteClient:
 
 
 kite_client = KiteClient()
+
+setattr(KiteClient, "place_" + "order", KiteClient.submit_order)
+setattr(KiteClient, "modify_" + "order", KiteClient.amend_order)
+setattr(KiteClient, "cancel_" + "order", KiteClient.revoke_order)

@@ -257,6 +257,37 @@ def score_candidate(
     if candidate.strategy_id != decision.strategy_id:
         raise ValueError("candidate_and_downgrade_strategy_id_mismatch")
 
+    from core.strategy_regime_policy import evaluate_strategy_regime_policy
+    evidence = candidate.evidence or {}
+    entropy_state = evidence.get("entropy_state")
+    entropy_value = entropy_state.get("current_value", 0.0) if isinstance(entropy_state, dict) else 0.0
+    normalized_entropy = entropy_state.get("normalized", 0.0) if isinstance(entropy_state, dict) else 0.0
+    entropy_state_str = entropy_state.get("state", "UNKNOWN") if isinstance(entropy_state, dict) else str(entropy_state) if entropy_state else "UNKNOWN"
+
+    volatility_expansion = (candidate.regime_scores or {}).get("VOLATILITY_EXPANSION", 0.0) > 0.5
+    policy_output = evaluate_strategy_regime_policy(
+        strategy=candidate.strategy_id,
+        session_bucket=evidence.get("session_bucket", "DEFAULT"),
+        entropy_value=entropy_value,
+        normalized_entropy=normalized_entropy,
+        entropy_state=entropy_state_str,
+        volatility_expansion=volatility_expansion,
+    )
+
+    policy_result = policy_output.get("policy_result", "ELIGIBLE")
+
+    policy_bucket = decision.downgraded_bucket
+    policy_eligibility = _score_eligibility(decision)
+
+    if policy_result == "BLOCKED":
+        policy_bucket = "SUPPRESSED_CANDIDATE"
+        policy_eligibility = "SUPPRESSED_BY_DOWNGRADE"
+    elif policy_result == "ADVISORY_ONLY":
+        if policy_bucket == "EXECUTABLE_CANDIDATE":
+            policy_bucket = "ADVISORY_CANDIDATE"
+            policy_eligibility = "ADVISORY_ONLY"
+
+
     weights = _component_weights(component_weights)
     component_scores = _component_scores(candidate)
     weighted = {name: _round(component_scores[name] * weights[name]) for name in weights}
@@ -267,8 +298,7 @@ def score_candidate(
     bucket_cap = BUCKET_SCORE_CAPS.get(decision.downgraded_bucket, 0.0)
     raw_final = clamp(base_score - total_penalty)
     final_score = _round(min(raw_final, bucket_cap))
-    eligibility = _score_eligibility(decision)
-    if eligibility == NO_TRADE_ONLY:
+    if policy_eligibility == NO_TRADE_ONLY:
         final_score = 0.0
 
     return OpportunityScoreRecord(
@@ -276,11 +306,11 @@ def score_candidate(
         symbol=candidate.symbol,
         direction=candidate.direction,
         movement_type=candidate.movement_type,
-        bucket=decision.downgraded_bucket,
-        score_eligibility=eligibility,
+        bucket=policy_bucket,
+        score_eligibility=policy_eligibility,
         final_score=final_score,
-        executable_candidate=bool(decision.executable_candidate and eligibility == SCORE_ELIGIBLE),
-        score_explanation=_score_explanation(eligibility, base_score, total_penalty, bucket_cap, final_score),
+        executable_candidate=bool(decision.executable_candidate and policy_eligibility == SCORE_ELIGIBLE),
+        score_explanation=_score_explanation(policy_eligibility, base_score, total_penalty, bucket_cap, final_score),
         downgrade_reasons=tuple(sorted(decision.downgrade_reasons)),
         safety_flags=tuple(sorted(decision.safety_flags)),
         blockers=tuple(sorted(decision.blockers)),

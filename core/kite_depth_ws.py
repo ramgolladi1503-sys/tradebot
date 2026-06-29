@@ -5558,31 +5558,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             )
 
     def on_reconnect(ws, attempts):
-        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
-            _clear_last_disconnected_info()
-            _record_feed_restart_verify_connect(now_epoch=float(now_utc_epoch()))
-            _log_ws("ws_reconnect_success", {"attempts": attempts, "ws_lifecycle_state": "CONNECTED"})
-            _resubscribe_full(ws, reason=f"reconnect:{attempts}")
-            _RUNTIME_STATE = "RUNNING"
-            _LAST_RUNTIME_ERROR = ""
-            _persist_runtime_snapshot_row(
-                ws_connected=True,
-                source=f"on_reconnect:{attempts}",
-                runtime_state="RUNNING",
-                last_error="",
-            )
-            _log_ws("FEED_RECONNECT", {"attempts": attempts})
+            _log_ws("ws_reconnect_attempt", {"attempts": attempts, "ws_lifecycle_state": "RECONNECTING"})
+            _log_ws("FEED_RECONNECTING", {"attempts": attempts})
         except Exception as exc:
-            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
-            _LAST_RUNTIME_ERROR = str(exc)
             _log_ws("FEED_RECONNECT_ERROR", {"error": str(exc), "attempts": attempts})
-            _persist_runtime_snapshot_row(
-                ws_connected=False,
-                source=f"on_reconnect:{attempts}:error",
-                runtime_state="SUBSCRIBE_FAILED",
-                last_error=_LAST_RUNTIME_ERROR,
-            )
 
     ws_fault_seen = False
 

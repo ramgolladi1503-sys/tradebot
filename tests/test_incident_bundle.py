@@ -410,6 +410,7 @@ def test_incident_bundle_log_filtering_keeps_recent_relevant_symbol_lines(tmp_pa
     )
 
     main_lines = bundle["log_snippets"]["files"]["main.log"]
-    assert len(main_lines) == 2
+    main_lines_len = len(main_lines)
+    assert main_lines_len == 2
     assert all("NIFTY" in line for line in main_lines)
     assert all("BANKNIFTY" not in line for line in main_lines)
