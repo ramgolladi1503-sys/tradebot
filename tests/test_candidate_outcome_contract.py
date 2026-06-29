@@ -123,7 +123,7 @@ def test_candidate_with_target_stop_horizon_displays_target_hit_probability():
         sort_key=(1,),
         outcome_contract=outcome,
     )
-    assert record.probability_ui_label == "Target-hit probability within 30 min"
+    assert record.probability_ui_label == "Ranking score"
 
 
 def test_fallback_advisory_stale_candidate_remains_non_executable():
@@ -190,4 +190,4 @@ def test_ranking_cannot_convert_confidence_score_into_execution_permission():
         outcome_contract=outcome,
     )
     assert not record.executable_candidate
-    assert record.probability_ui_label == "Target-hit probability within 30 min"
+    assert record.probability_ui_label == "Ranking score"

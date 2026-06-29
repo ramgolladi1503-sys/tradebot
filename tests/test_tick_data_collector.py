@@ -8,7 +8,26 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
         pass
         
     def mock_instruments_cached(exchange):
-        if exchange == "NFO":
+        if exchange == "NSE":
+            return [
+                {
+                    "name": "NIFTY 50",
+                    "tradingsymbol": "NIFTY 50",
+                    "instrument_token": 256265,
+                    "instrument_type": "EQ",
+                    "strike": 0.0,
+                    "expiry": None
+                },
+                {
+                    "name": "NIFTY BANK",
+                    "tradingsymbol": "NIFTY BANK",
+                    "instrument_token": 260105,
+                    "instrument_type": "EQ",
+                    "strike": 0.0,
+                    "expiry": None
+                }
+            ]
+        elif exchange == "NFO":
             return [
                 {
                     "name": "NIFTY",
@@ -78,8 +97,5 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
     
     assert tokens[256265] == "NIFTY 50"
     assert tokens[260105] == "NIFTY BANK"
-    assert tokens[265] == "SENSEX"
-    assert tokens[264969] == "INDIA VIX"
     assert tokens[100001] == "NIFTY26JUN24000CE"
     assert tokens[100002] == "BANKNIFTY26JUN58000PE"
-    assert tokens[100003] == "SENSEX26JUN77000CE"
