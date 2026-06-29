@@ -149,6 +149,7 @@ from core.runtime_execution_truth import (
     normalize_candidate_execution_truth_payload,
 )
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
+from core.candidate_lineage_ledger import write_candidate_lineage_ledger
 from core.runtime_candidate_handoff_root_cause import (
     build_candidate_handoff_root_cause_payload,
     write_candidate_handoff_root_cause_latest,
@@ -7555,6 +7556,71 @@ class Orchestrator:
                     except Exception as ranked_pipeline_exc:
                         logger.error("[RANKED_PIPELINE_RUNTIME_ERROR] error=%s", ranked_pipeline_exc)
                     feature_timing["GAP_write_ranked_pipeline_ms"] = _perf_ms(t0)
+
+                    t0 = time.perf_counter()
+                    try:
+                        lineage_cycle_id = str(
+                            top_payload.get("cycle_id")
+                            or top_payload.get("cycle_key")
+                            or top_payload.get("session_id")
+                            or top_payload.get("generated_epoch")
+                            or ""
+                        ).strip() or f"cycle_{int(cycle_perf_start)}"
+                        lineage_rows: list[dict[str, Any]] = []
+                        lineage_rows.extend(
+                            {
+                                **dict(row),
+                                "stage": dict(row).get("stage") or "tradebuilder",
+                                "stage_status": dict(row).get("stage_status") or ("blocked" if dict(row).get("reject_reason") else "passed"),
+                                "source_stage": "tradebuilder",
+                                "entry_path": dict(row).get("entry_path") or "strategy_to_tradebuilder",
+                            }
+                            for row in list(cycle_candidate_handoff_snapshots or [])
+                            if isinstance(row, dict)
+                        )
+                        lineage_rows.extend(
+                            {
+                                **dict(row),
+                                "stage": dict(row).get("stage") or "phase2",
+                                "stage_status": dict(row).get("stage_status") or ("selected" if dict(row).get("top_opportunity") else "passed"),
+                                "source_stage": "phase2",
+                                "entry_path": dict(row).get("entry_path") or "phase2_direct",
+                            }
+                            for row in list(cycle_ranked_candidates or [])
+                            if isinstance(row, dict)
+                        )
+                        if isinstance(top_payload, dict):
+                            for key in ("top_executable_opportunities", "top_advisory_opportunities", "top_blocked_opportunities"):
+                                for row in list(top_payload.get(key) or []):
+                                    if isinstance(row, dict):
+                                        candidate_row = dict(row)
+                                        candidate_row.setdefault("stage", "top_opportunity")
+                                        candidate_row.setdefault("stage_status", "selected" if key == "top_executable_opportunities" else "blocked")
+                                        candidate_row.setdefault("top_opportunity", key == "top_executable_opportunities")
+                                        candidate_row.setdefault("source_stage", "top_opportunity")
+                                        candidate_row.setdefault("entry_path", "ranking_existing_candidate")
+                                        lineage_rows.append(candidate_row)
+                        summary_inputs = {
+                            "generated_total": int(cycle_candidate_pool_count),
+                            "tradebuilder_input_total": int(sum(1 for row in lineage_rows if str(row.get("source_stage") or "").strip().lower() == "tradebuilder")),
+                            "tradebuilder_passed_total": int(sum(1 for row in lineage_rows if str(row.get("source_stage") or "").strip().lower() == "tradebuilder" and str(row.get("stage_status") or "").strip().lower() in {"passed", "ranked", "selected"})),
+                            "phase2_input_total": int(sum(1 for row in lineage_rows if str(row.get("source_stage") or "").strip().lower() == "phase2")),
+                            "phase2_passed_total": int(len(top_payload.get("top_executable_opportunities") or []) if isinstance(top_payload, dict) else 0),
+                            "displayable_total": int(len((top_payload.get("top_executable_opportunities") or []) + (top_payload.get("top_advisory_opportunities") or [])) if isinstance(top_payload, dict) else 0),
+                            "rankable_total": int(len(cycle_ranked_candidates or [])),
+                            "executable_total": int(len(top_payload.get("top_executable_opportunities") or []) if isinstance(top_payload, dict) else 0),
+                            "top_opportunity_total": int(len(top_payload.get("top_executable_opportunities") or []) if isinstance(top_payload, dict) else 0),
+                            "blocked_total": int(sum(1 for row in lineage_rows if str(row.get("stage_status") or "").strip().lower() == "blocked")),
+                        }
+                        write_candidate_lineage_ledger(
+                            cycle_id=lineage_cycle_id,
+                            mode=str(getattr(cfg, "EXECUTION_MODE", "SIM") or "SIM").lower(),
+                            stage_rows=lineage_rows,
+                            summary_inputs=summary_inputs,
+                        )
+                    except Exception as lineage_exc:
+                        logger.warning("candidate_lineage_ledger_write_failed err=%s", lineage_exc)
+                    feature_timing["GAP_candidate_lineage_ms"] = _perf_ms(t0)
 
                     t0 = time.perf_counter()
                     write_top_opportunities_snapshots(payload=top_payload, producer="orchestrator")
