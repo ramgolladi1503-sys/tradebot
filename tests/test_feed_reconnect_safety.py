@@ -6,8 +6,23 @@ from core.feed_truth_contract import build_feed_truth_contract
 from config import config as cfg
 import time
 
+@pytest.fixture(autouse=True)
+def mock_api_key(monkeypatch):
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key")
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token")
+
 @pytest.fixture
-def ticker_callbacks():
+def ticker_callbacks(monkeypatch):
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key", raising=False)
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token", raising=False)
+    import core.feed.runtime_store as runtime_store
+    monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: {}, raising=False)
+    import core.auth_health as auth_health
+    monkeypatch.setattr("core.kite_depth_ws.get_kite_auth_health", lambda force=False, **kwargs: {"ok": True, "user_id": "ABCD1234"}, raising=False)
+    import core.kite_client as kite_client
+    class DummyKite:
+        def profile(self): return {"user_id": "ABCD1234"}
+    monkeypatch.setattr(kite_client, "kite", DummyKite(), raising=False)
     with patch("core.kite_depth_ws.KiteTicker") as mock_ticker_cls:
         mock_instance = MagicMock()
         mock_ticker_cls.return_value = mock_instance
