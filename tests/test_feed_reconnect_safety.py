@@ -71,16 +71,15 @@ def test_on_reconnect_logs_success_and_transitions_state(ticker_callbacks):
     with patch("core.kite_depth_ws._RUNTIME_STATE", "LIVE"), \
          patch("core.kite_depth_ws._log_ws") as mock_log:
         ticker_callbacks["on_reconnect"](mock_ws, 1)
-        # on_reconnect logs success and goes to RUNNING
-        assert kite_depth_ws._RUNTIME_STATE == "RUNNING"
-        mock_log.assert_any_call("ws_reconnect_success", {"attempts": 1, "ws_lifecycle_state": "CONNECTED"})
+        assert kite_depth_ws._RUNTIME_STATE == "LIVE"
+        mock_log.assert_any_call("ws_reconnect_attempt", {"attempts": 1, "ws_lifecycle_state": "RECONNECTING"})
 
 
-def test_on_reconnect_resubscribes_all_tokens_and_restores_mode(ticker_callbacks):
+def test_on_connect_resubscribes_all_tokens_and_restores_mode(ticker_callbacks):
     mock_ws = MagicMock()
     with patch("core.kite_depth_ws._LAST_TOKENS", [123, 456]), \
          patch("core.kite_depth_ws._log_ws") as mock_log:
-        ticker_callbacks["on_reconnect"](mock_ws, 1)
+        ticker_callbacks["on_connect"](mock_ws, "response")
         mock_ws.subscribe.assert_called_with([123, 456])
         mock_ws.set_mode.assert_called_with(mock_ws.MODE_FULL, [123, 456])
         # It transitions to RUNNING, which gets converted to STALE/DEGRADED if ticks are delayed.
