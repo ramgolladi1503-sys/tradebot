@@ -750,6 +750,20 @@ def _summarize_signals(signals: list[NormalizedSignal]) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("signal_count", ascending=False)
 
 
+def _markdown_table(frame: pd.DataFrame) -> str:
+    if frame.empty:
+        return ""
+    columns = [str(col) for col in frame.columns]
+    lines = [
+        "| " + " | ".join(columns) + " |",
+        "| " + " | ".join("---" for _ in columns) + " |",
+    ]
+    for row in frame.astype(object).where(pd.notna(frame), "").itertuples(index=False, name=None):
+        values = [str(value).replace("|", "\\|").replace("\n", " ") for value in row]
+        lines.append("| " + " | ".join(values) + " |")
+    return "\n".join(lines)
+
+
 def _write_report(
     *,
     out_dir: Path,
@@ -816,7 +830,7 @@ def _write_report(
         "",
     ]
     skipped = matrix[matrix["capability_bucket"] == "UNSUPPORTED_EXECUTABLE"][["strategy", "missing_inputs", "reason"]]
-    lines.append(skipped.to_markdown(index=False) if not skipped.empty else "No unsupported executable strategies.")
+    lines.append(_markdown_table(skipped) if not skipped.empty else "No unsupported executable strategies.")
     lines.extend(["", "## Proxy-Positive Strategies", ""])
     lines.append("\n".join(f"- {item}" for item in proxy_positive) if proxy_positive else "None at 15m / 2 bps.")
     lines.extend(["", "## Proxy-Negative Strategies", ""])
@@ -829,7 +843,7 @@ def _write_report(
     lines.append("\n".join(f"- {item}" for item in invalid_volume) if invalid_volume else "None.")
     lines.extend(["", "## Top Proxy Rows At 15m / 2bps", ""])
     top = proxy_summary[(proxy_summary["exit_horizon_min"] == 15) & (proxy_summary["cost_bps"] == 2.0)].head(20)
-    lines.append(top.to_markdown(index=False) if not top.empty else "No proxy rows.")
+    lines.append(_markdown_table(top) if not top.empty else "No proxy rows.")
     lines.extend(["", "## Safety", "", "- broker_api_called=false", "- is_order_action=false", "- allowed_for_live_execution=false", "- read_only=true"])
     (out_dir / f"all_strategy_report_{trade_date.replace('-', '')}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return payload

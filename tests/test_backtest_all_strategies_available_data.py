@@ -150,3 +150,19 @@ def test_proxy_trade_uses_current_close_and_future_exit_without_option_pnl_claim
     assert horizon_5_zero_cost["exit_underlying"] == frames["NIFTY"].loc[10, "close"]
     assert horizon_5_zero_cost["executable"] is False
     assert horizon_5_zero_cost["verdict"] == mod.FINAL_VERDICT
+
+
+def test_report_writer_does_not_require_optional_tabulate(tmp_path: Path, monkeypatch) -> None:
+    data_path = _sample_data(tmp_path / "bars.parquet")
+    out_dir = tmp_path / "out"
+
+    def _missing_tabulate(*_args, **_kwargs):
+        raise ImportError("tabulate is intentionally unavailable")
+
+    monkeypatch.setattr(pd.DataFrame, "to_markdown", _missing_tabulate, raising=False)
+
+    mod.run_backtest(data_path=data_path, out_dir=out_dir, trade_date="2026-06-29")
+
+    report = (out_dir / "all_strategy_report_20260629.md").read_text(encoding="utf-8")
+    assert "Final verdict" in report
+    assert "NOT_EXECUTABLE_OPTION_BACKTEST" in report
