@@ -41,12 +41,13 @@ def ticker_callbacks(monkeypatch):
         mock_instance = MagicMock()
         mock_ticker_cls.return_value = mock_instance
         kite_depth_ws.start_depth_ws([123], skip_guard=True)
-        return {
+        yield {
             "on_connect": mock_instance.on_connect,
             "on_close": mock_instance.on_close,
             "on_error": mock_instance.on_error,
             "on_reconnect": mock_instance.on_reconnect
         }
+        kite_depth_ws.stop_depth_ws(reason="teardown")
 
 def test_kite_1006_close_does_not_terminate_orchestrator(ticker_callbacks):
     with patch("core.kite_depth_ws.restart_depth_ws") as mock_restart, \
@@ -81,6 +82,8 @@ def test_on_connect_resubscribes_all_tokens_and_restores_mode(ticker_callbacks):
         ticker_callbacks["on_connect"](mock_ws, "response")
         mock_ws.subscribe.assert_called_with([123, 456])
         mock_ws.set_mode.assert_called_with(mock_ws.MODE_FULL, [123, 456])
+        # It transitions to RUNNING, which gets converted to STALE/DEGRADED if ticks are delayed.
+        # It doesn't become LIVE/LIVE_FRESH until ticks arrive.
         assert kite_depth_ws._RUNTIME_STATE == "RUNNING"
 
 
