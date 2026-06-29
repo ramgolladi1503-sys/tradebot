@@ -182,4 +182,9 @@ def test_batch_outputs_do_not_overwrite_previous_results(tmp_path: Path) -> None
     )
     second = pd.read_csv(tmp_path / "audit" / "all_available_strategy_edge_by_dataset.csv")
 
-    assert len(second) >= len(first)
+    key_columns = ["strategy", "dataset_path", "dataset_fingerprint", "analysis_mode", "verdict"]
+    first_keys = set(map(tuple, first[key_columns].astype(str).to_numpy()))
+    second_keys = set(map(tuple, second[key_columns].astype(str).to_numpy()))
+
+    assert second.shape[0] > first.shape[0]
+    assert first_keys.issubset(second_keys)

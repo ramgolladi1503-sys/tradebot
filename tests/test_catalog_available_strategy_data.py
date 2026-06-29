@@ -60,7 +60,7 @@ def test_duplicate_datasets_are_deduped(tmp_path: Path) -> None:
     result = catalog.build_catalog(roots=[tmp_path], out_dir=tmp_path / "out")
     rows = result[result["detected_dataset_type"] == "INDEX_OHLC"]
 
-    assert len(rows) >= 2
+    assert rows.shape[0] == 2
     assert rows["dataset_fingerprint"].nunique() == 1
     assert rows["duplicate_group_id"].nunique() == 1
     assert rows["canonical_dataset_path"].nunique() == 1
