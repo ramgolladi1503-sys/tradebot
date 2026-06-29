@@ -223,7 +223,8 @@ def test_load_live_suggestions_df_identity_includes_option_side(tmp_path, monkey
     df_live = runtime._load_live_suggestions_df(limit=5)
     display = select_display_df(df_live, "advisory")
 
-    assert len(display) == 1
+    display_len = len(display)
+    assert display_len == 1
     assert display.iloc[0]["identity"] == "NIFTY\n2026-03-17\n23850 PE"
 
 
@@ -831,7 +832,8 @@ def test_load_live_suggestions_df_preserves_canonical_advisory_fields(tmp_path, 
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
-    assert len(df_live) == 1
+    df_live_len = len(df_live)
+    assert df_live_len == 1
     loaded = df_live.iloc[0]
     assert float(loaded["entry"]) == 72.5
     assert float(loaded["confidence_base"]) == 0.82
@@ -1036,7 +1038,8 @@ def test_dashboard_view_matches_engine_row_after_recovery(tmp_path, monkeypatch)
 
     df_live = runtime._load_live_suggestions_df(limit=10)
 
-    assert len(df_live) == 1
+    df_live_len = len(df_live)
+    assert df_live_len == 1
     loaded = df_live.iloc[0]
     assert loaded["trade_id"] == "T-RECOVER"
     assert float(loaded["entry"]) == 73.0

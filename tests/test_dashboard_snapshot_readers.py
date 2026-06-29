@@ -195,7 +195,8 @@ def test_read_advisory_snapshot_rows_keeps_latest_recovery_row_exactly(tmp_path)
     loaded = read_advisory_snapshot_rows(path, limit=10)
 
     assert loaded["state"] == "ok"
-    assert len(loaded["rows"]) == 1
+    rows_len = len(loaded["rows"])
+    assert rows_len == 1
     assert loaded["rows"][0]["entry"] == 73.0
     assert loaded["rows"][0]["blockers"] == []
     assert loaded["rows"][0]["quote_age_sec"] == 1.0

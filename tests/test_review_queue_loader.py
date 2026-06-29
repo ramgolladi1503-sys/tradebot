@@ -37,7 +37,8 @@ def test_load_queue_rows_converts_float_seconds_timestamp(tmp_path):
     ]
     path.write_text(json.dumps(payload))
     rows = load_queue_rows(path)
-    assert len(rows) == 1
+    rows_len = len(rows)
+    assert rows_len == 1
     assert rows[0]["timestamp_epoch_ms"] == 1700000000000
     assert rows[0]["timestamp_utc_iso"].endswith("+00:00")
 
@@ -65,7 +66,8 @@ def test_load_queue_rows_clears_entry_when_entry_status_stale(tmp_path):
     ]
     path.write_text(json.dumps(payload))
     rows = load_queue_rows(path)
-    assert len(rows) == 1
+    rows_len = len(rows)
+    assert rows_len == 1
     assert rows[0]["entry"] is None
 
 
@@ -100,7 +102,8 @@ def test_load_queue_rows_rehydrates_canonical_trade_lifecycle(tmp_path):
 
     rows = load_queue_rows(path)
 
-    assert len(rows) == 1
+    rows_len = len(rows)
+    assert rows_len == 1
     assert rows[0]["trade_lifecycle_state"] == "execution_pending"
     assert rows[0]["trade_lifecycle_reason"] == "queue_normalized"
     assert rows[0]["trade_lifecycle_history"][-1]["state"] == "execution_pending"

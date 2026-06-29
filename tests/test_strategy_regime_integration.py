@@ -380,9 +380,11 @@ def test_mixed_ranking():
     
     # Expose only the fully valid executable ORB candidate
     exec_cands = [r for r in ranked.ranks if r.executable_candidate]
-    assert len(exec_cands) == 1
+    exec_cands_len = len(exec_cands)
+    assert exec_cands_len == 1
     assert exec_cands[0].strategy_id == "ORB"
     assert exec_cands[0].executable_candidate is True
     
-    assert len(ranked.ranks) == 3
+    ranks_len = len(ranked.ranks)
+    assert ranks_len == 3
 
