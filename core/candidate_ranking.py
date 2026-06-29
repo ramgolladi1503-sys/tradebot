@@ -156,7 +156,7 @@ class CandidateRankRecord:
             and self.outcome_contract.prediction_horizon_minutes
             and self.outcome_contract.calibration_source
         ):
-            return f"Target-hit probability within {self.outcome_contract.prediction_horizon_minutes} min"
+            return "Ranking score"
         return "Setup score"
 
     def to_dict(self) -> dict[str, Any]:

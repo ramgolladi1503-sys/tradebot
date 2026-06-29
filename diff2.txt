@@ -1,0 +1,308 @@
+diff --git a/core/kite_depth_ws.py b/core/kite_depth_ws.py
+index aa588090..d28404ce 100644
+--- a/core/kite_depth_ws.py
++++ b/core/kite_depth_ws.py
+@@ -176,8 +176,8 @@ _WS_LOG_THROTTLE_LOCK = threading.Lock()
+ _WS_LOG_LAST_EMIT: dict[str, float] = {}
+ 
+ 
+-def _use_internal_reconnect() -> bool:
+-    return bool(getattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True))
++def _use_native_reconnect() -> bool:
++    return bool(getattr(cfg, "DEPTH_WS_USE_NATIVE_RECONNECT", True))
+ 
+ 
+ def _maybe_reset_restart_guard_on_market_open(
+@@ -1409,7 +1409,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
+             last_error=f"{code}:{reason_text}"[:1000],
+             disconnected_code=code if code is None else int(code),
+             disconnected_reason=reason_text,
+-            restart_attempt_allowed=True,
++            native_reconnect_delegated=True,
+             restart_attempted=False,
+             reconnect_blocked_reason=None,
+         )
+@@ -1432,8 +1432,9 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
+         last_error=_LAST_RUNTIME_ERROR,
+         disconnected_code=code if code is None else int(code),
+         disconnected_reason=reason_text,
+-        restart_attempt_allowed=True,
+-        restart_attempted=True,
++        native_reconnect_delegated=True,
++        manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
+         reconnect_blocked_reason=None,
+     )
+     if not getattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True):
+@@ -1453,7 +1454,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
+             last_error=_LAST_RUNTIME_ERROR,
+             disconnected_code=code if code is None else int(code),
+             disconnected_reason=reason_text,
+-            restart_attempt_allowed=True,
++            native_reconnect_delegated=True,
+             restart_attempted=False,
+             reconnect_blocked_reason=None,
+         )
+@@ -1468,7 +1469,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
+             )
+         return True
+ 
+-    if _use_internal_reconnect():
++    if _use_native_reconnect():
+         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
+         if not soft_ok:
+             _log_ws(
+@@ -1492,7 +1493,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
+                 last_error=_LAST_RUNTIME_ERROR,
+                 disconnected_code=code if code is None else int(code),
+                 disconnected_reason=reason_text,
+-                restart_attempt_allowed=True,
++                native_reconnect_delegated=True,
+                 restart_attempted=False,
+                 reconnect_blocked_reason=None,
+             )
+@@ -3125,6 +3126,8 @@ def _persist_runtime_snapshot_row(
+     internal_retry_error: str | None = None,
+     internal_retry_reason: str | None = None,
+     process_restart_required: bool | None = None,
++    native_reconnect_delegated: bool | None = None,
++    manual_reactor_restart_suppressed: bool | None = None,
+ ) -> None:
+     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
+     state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
+@@ -3368,17 +3371,31 @@ def _run_db_tick_watchdog_cycle(
+                 "stale_strikes": 0,
+             },
+         )
+-    elif db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
++    ws_stale_limit = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
++    is_stale = False
++    stale_source = "unknown"
++    stale_age = 0.0
++
++    if db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
++        is_stale = True
++        stale_source = "db"
++        stale_age = db_tick_age_sec
++    elif ws_tick_age_sec is not None and ws_tick_age_sec > float(ws_stale_limit):
++        is_stale = True
++        stale_source = "ws"
++        stale_age = ws_tick_age_sec
++
++    if is_stale:
+         _STALE_STRIKES += 1
+         _log_ws(
+             "FEED_TICK_STALE",
+-            {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES},
++            {"age_sec": stale_age, "source": stale_source, "strikes": _STALE_STRIKES},
+             throttle_key="FEED_TICK_STALE",
+         )
+         _emit_feed_health(
+             "FEED_STALE",
+             {
+-                "reason": "db_tick_stale",
++                "reason": f"{stale_source}_tick_stale",
+                 "last_ws_tick_epoch": ws_tick_epoch,
+                 "last_ws_tick_age_sec": ws_tick_age_sec,
+                 "last_db_tick_epoch": db_tick_epoch,
+@@ -3406,7 +3423,7 @@ def _run_db_tick_watchdog_cycle(
+                     )
+                 except TypeError:
+                     restarted = bool(cb("tick_stalled"))
+-    elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
++    elif not is_stale and ((db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec)) or (ws_tick_age_sec is not None and ws_tick_age_sec <= float(reset_sec))):
+         if _STALE_STRIKES:
+             _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
+         _STALE_STRIKES = 0
+@@ -4983,8 +5000,9 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
+                 runtime_state="RESTART_REQUIRED",
+                 last_error=str(reason),
+                 intended_tokens_count=len(tokens),
+-                restart_attempt_allowed=True,
+-                restart_attempted=True,
++                native_reconnect_delegated=True,
++                manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
+                 process_restart_required=True,
+             )
+             import os
+@@ -4997,8 +5015,9 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
+                 runtime_state="RESTARTING",
+                 last_error=str(reason),
+                 intended_tokens_count=len(tokens),
+-                restart_attempt_allowed=True,
+-                restart_attempted=True,
++                native_reconnect_delegated=True,
++                manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
+             )
+ 
+             stop_depth_ws(reason=f"restart:{reason}")
+@@ -5554,17 +5573,23 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+                 runtime_state="RUNNING",
+                 last_error="",
+             )
+-            _log_ws("FEED_RECONNECT", {"attempts": attempts})
+         except Exception as exc:
++            _log_ws("FEED_RECONNECT_RESUBSCRIBE_ERROR", {"attempts": attempts, "error": str(exc)})
+             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+-            _LAST_RUNTIME_ERROR = str(exc)
+-            _log_ws("FEED_RECONNECT_ERROR", {"error": str(exc), "attempts": attempts})
+-            _persist_runtime_snapshot_row(
+-                ws_connected=False,
+-                source=f"on_reconnect:{attempts}:error",
+-                runtime_state="SUBSCRIBE_FAILED",
+-                last_error=_LAST_RUNTIME_ERROR,
+-            )
++            _LAST_RUNTIME_ERROR = f"reconnect_resubscribe_error:{exc}"[:1000]
++
++    def on_noreconnect(ws):
++        global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
++        _log_ws("FEED_NORECONNECT", {"ws_lifecycle_state": "DISCONNECTED"})
++        _RUNTIME_STATE = "FAILED"
++        _LAST_RUNTIME_ERROR = "native_reconnect_failed"
++        _persist_runtime_snapshot_row(
++            ws_connected=False,
++            source="on_noreconnect",
++            runtime_state="FAILED",
++            last_error=_LAST_RUNTIME_ERROR,
++        )
++
+ 
+     ws_fault_seen = False
+ 
+@@ -5637,36 +5662,33 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
+                 _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text, ticker=ws)
+                 return
+-            if _use_internal_reconnect():
+-                if _reconnect_recovery_blocked_active():
+-                    blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+-                    _emit_reconnect_recovery_blocked_snapshot(
+-                        source="on_error:reconnect_suppressed",
+-                        reason=blocked_reason,
+-                    )
+-                    return
+-                _persist_runtime_snapshot_row(
+-                    ws_connected=False,
+-                    source=f"on_error:restart_attempt:{code}",
+-                    runtime_state="RESTARTING",
+-                    last_error=_LAST_RUNTIME_ERROR,
+-                    disconnected_code=code_int,
+-                    disconnected_reason=reason_text,
+-                    restart_attempt_allowed=True,
+-                    restart_attempted=True,
+-                )
+-                _log_ws(
+-                    "FEED_INTERNAL_RECONNECT_FORCE_FULL",
+-                    {"source": "on_error", "code": code, "reason": reason_text},
+-                )
+-                _schedule_restart_depth_ws(
+-                    reason=f"ws_error:{code}",
+-                    ignore_cooldown=ignore_cooldown,
+-                    force_full_restart=True,
+-                    source="on_error",
++        if _use_native_reconnect():
++            if _reconnect_recovery_blocked_active():
++                blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
++                _emit_reconnect_recovery_blocked_snapshot(
++                    source="on_error:reconnect_suppressed",
++                    reason=blocked_reason,
+                 )
+                 return
+-            restart_depth_ws(reason=f"ws_error:{code}", ignore_cooldown=ignore_cooldown)
++            _RUNTIME_STATE = "RECONNECTING"
++            _LAST_RUNTIME_ERROR = f"reconnecting_after_error_{code}"
++            _persist_runtime_snapshot_row(
++                ws_connected=False,
++                source=f"on_error:reconnecting:{code}",
++                runtime_state="RECONNECTING",
++                last_error=_LAST_RUNTIME_ERROR,
++                disconnected_code=code_int,
++                disconnected_reason=reason_text,
++                native_reconnect_delegated=True,
++                manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
++            )
++            _log_ws("FEED_INTERNAL_RECONNECT_WAIT", {"source": "on_error", "code": code, "reason": reason_text})
++            # Let the native reconnect in KiteTicker handle this.
++            return
++        
++        # Native reconnect handles it, but if internal is disabled, we fallback to our manual restart logic.
++        restart_depth_ws(reason=f"ws_error:{code}", ignore_cooldown=ignore_cooldown)
+ 
+     def on_close(ws, code, reason):
+         nonlocal ws_fault_seen
+@@ -5745,7 +5767,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
+                 _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text, ticker=ws)
+                 return
+-            if _use_internal_reconnect():
++            if _use_native_reconnect():
+                 if fatal:
+                     if _reconnect_recovery_blocked_active():
+                         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
+@@ -5761,8 +5783,9 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+                         last_error=_LAST_RUNTIME_ERROR,
+                         disconnected_code=code_int,
+                         disconnected_reason=reason_text,
+-                        restart_attempt_allowed=True,
+-                        restart_attempted=True,
++                        native_reconnect_delegated=True,
++                        manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
+                     )
+                     _log_ws(
+                         "FEED_INTERNAL_RECONNECT_FORCE_FULL",
+@@ -5775,12 +5798,27 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+                         source="on_close",
+                     )
+                     return
++                
++                _RUNTIME_STATE = "RECONNECTING"
++                _LAST_RUNTIME_ERROR = f"reconnecting_after_close_{code}"
++                _persist_runtime_snapshot_row(
++                    ws_connected=False,
++                    source=f"on_close:reconnecting:{code}",
++                    runtime_state="RECONNECTING",
++                    last_error=_LAST_RUNTIME_ERROR,
++                    disconnected_code=code_int,
++                    disconnected_reason=reason_text,
++                    native_reconnect_delegated=True,
++                    manual_reactor_restart_suppressed=True,
++                restart_attempted=False,
++                )
+                 _log_ws(
+                     "FEED_INTERNAL_RECONNECT_WAIT",
+                     {"source": "on_close", "code": code, "reason": reason_text},
+                 )
+                 _log_ws("ws_reconnect_attempt", {"attempts": 1, "source": "on_close", "ws_lifecycle_state": "RECONNECTING"})
+-                _soft_resubscribe_current(reason=f"on_close:{code}")
++                # We do NOT manually try to _soft_resubscribe_current here; kiteconnect's native reconnect
++                # will call on_reconnect or on_connect when it succeeds. We just wait.
+                 return
+             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
+ 
+@@ -5831,10 +5869,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+                 state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
+             elif last_tick_age_sec is None:
+                 state_machine = {"state": "STARTING", "reason": "awaiting_first_tick"}
+-            elif last_tick_age_sec <= 10.0:
++            elif last_tick_age_sec <= float(getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)):
+                 state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
++            elif last_tick_age_sec <= float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0)):
++                state_machine = {"state": "DEGRADED", "reason": "ticks_delayed"}
+             else:
+-                state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
++                state_machine = {"state": "STALE", "reason": "no_ws_messages"}
+             option_state = _option_runtime_state(
+                 now_epoch=now_epoch,
+                 tokens=_LAST_TOKENS,
+@@ -6273,6 +6313,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool =
+ 
+     kws.on_connect = on_connect
+     kws.on_reconnect = on_reconnect
++    kws.on_noreconnect = on_noreconnect
+     kws.on_error = on_error
+     kws.on_close = on_close
+     kws.on_ticks = on_ticks
