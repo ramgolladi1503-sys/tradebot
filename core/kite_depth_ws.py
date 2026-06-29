@@ -176,7 +176,10 @@ _WS_LOG_THROTTLE_LOCK = threading.Lock()
 _WS_LOG_LAST_EMIT: dict[str, float] = {}
 
 
-def _use_internal_reconnect() -> bool:
+def _use_native_reconnect() -> bool:
+    if hasattr(cfg, "DEPTH_WS_USE_NATIVE_RECONNECT"):
+        return bool(cfg.DEPTH_WS_USE_NATIVE_RECONNECT)
+    # Fallback to old name for backward compatibility
     return bool(getattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True))
 
 
@@ -1468,7 +1471,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
             )
         return True
 
-    if _use_internal_reconnect():
+    if _use_native_reconnect():
         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
         if not soft_ok:
             _log_ws(
@@ -3368,59 +3371,74 @@ def _run_db_tick_watchdog_cycle(
                 "stale_strikes": 0,
             },
         )
-    elif db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
-        _STALE_STRIKES += 1
-        _log_ws(
-            "FEED_TICK_STALE",
-            {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES},
-            throttle_key="FEED_TICK_STALE",
-        )
-        _emit_feed_health(
-            "FEED_STALE",
-            {
-                "reason": "db_tick_stale",
-                "last_ws_tick_epoch": ws_tick_epoch,
-                "last_ws_tick_age_sec": ws_tick_age_sec,
-                "last_db_tick_epoch": db_tick_epoch,
-                "last_db_tick_age_sec": db_tick_age_sec,
-                "stale_strikes": int(_STALE_STRIKES),
-            },
-        )
-        if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
-            cb = restart_cb or restart_depth_ws
-            try:
-                restarted = bool(
-                    cb(
-                        reason="tick_stalled",
-                        ignore_cooldown=True,
-                        force_full_restart=True,
-                    )
-                )
-            except TypeError:
+    else:
+        ws_stale_limit = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
+        is_stale = False
+        stale_source = "unknown"
+        stale_age = 0.0
+
+        if db_tick_age_sec is not None and db_tick_age_sec > float(stale_restart_sec):
+            is_stale = True
+            stale_source = "db"
+            stale_age = db_tick_age_sec
+        elif ws_tick_age_sec is not None and ws_tick_age_sec > float(ws_stale_limit):
+            is_stale = True
+            stale_source = "ws"
+            stale_age = ws_tick_age_sec
+
+        if is_stale:
+            _STALE_STRIKES += 1
+            _log_ws(
+                "FEED_TICK_STALE",
+                {"age_sec": stale_age, "source": stale_source, "strikes": _STALE_STRIKES},
+                throttle_key="FEED_TICK_STALE",
+            )
+            _emit_feed_health(
+                "FEED_STALE",
+                {
+                    "reason": f"{stale_source}_tick_stale",
+                    "last_ws_tick_epoch": ws_tick_epoch,
+                    "last_ws_tick_age_sec": ws_tick_age_sec,
+                    "last_db_tick_epoch": db_tick_epoch,
+                    "last_db_tick_age_sec": db_tick_age_sec,
+                    "stale_strikes": int(_STALE_STRIKES),
+                },
+            )
+            if _STALE_STRIKES >= max(1, int(strikes_to_restart)):
+                cb = restart_cb or restart_depth_ws
                 try:
                     restarted = bool(
                         cb(
                             reason="tick_stalled",
                             ignore_cooldown=True,
+                            force_full_restart=True,
                         )
                     )
                 except TypeError:
-                    restarted = bool(cb("tick_stalled"))
-    elif db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec):
-        if _STALE_STRIKES:
-            _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
-        _STALE_STRIKES = 0
-        _emit_feed_health(
-            "FEED_HEALTH_OK",
-            {
-                "reason": "db_ticks_recovered",
-                "last_ws_tick_epoch": ws_tick_epoch,
-                "last_ws_tick_age_sec": ws_tick_age_sec,
-                "last_db_tick_epoch": db_tick_epoch,
-                "last_db_tick_age_sec": db_tick_age_sec,
-                "stale_strikes": 0,
-            },
-        )
+                    try:
+                        restarted = bool(
+                            cb(
+                                reason="tick_stalled",
+                                ignore_cooldown=True,
+                            )
+                        )
+                    except TypeError:
+                        restarted = bool(cb("tick_stalled"))
+        elif not is_stale and ((db_tick_age_sec is not None and db_tick_age_sec <= float(reset_sec)) or (ws_tick_age_sec is not None and ws_tick_age_sec <= float(reset_sec))):
+            if _STALE_STRIKES:
+                _log_ws("FEED_TICK_RECOVERED", {"age_sec": db_tick_age_sec, "source": "db", "strikes": _STALE_STRIKES})
+            _STALE_STRIKES = 0
+            _emit_feed_health(
+                "FEED_HEALTH_OK",
+                {
+                    "reason": "db_ticks_recovered",
+                    "last_ws_tick_epoch": ws_tick_epoch,
+                    "last_ws_tick_age_sec": ws_tick_age_sec,
+                    "last_db_tick_epoch": db_tick_epoch,
+                    "last_db_tick_age_sec": db_tick_age_sec,
+                    "stale_strikes": 0,
+                },
+            )
 
     return {
         "last_db_tick_epoch": db_tick_epoch,
@@ -4879,7 +4897,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         return False
 
     now = time.time()
-    if _use_internal_reconnect() and _KITE_TICKER is not None and not bool(force_full_restart):
+    if _use_native_reconnect() and _KITE_TICKER is not None and not bool(force_full_restart):
         ws_connected = _ws_connected_state()
         soft_allowed, soft_reason = _soft_resubscribe_eligibility(reason=reason, now_epoch=now)
         if soft_allowed:
@@ -5317,7 +5335,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
         kws = get_kite_ticker(api_key=api_key, access_token=access_token, debug=False)
         if hasattr(kws, "auto_reconnect"):
             try:
-                kws.auto_reconnect = _use_internal_reconnect()
+                kws.auto_reconnect = _use_native_reconnect()
             except Exception:
                 pass
         logger.info(
@@ -5637,7 +5655,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
                 _block_reconnect_for_process_restart(source="on_error", code=code_int, reason=reason_text, ticker=ws)
                 return
-            if _use_internal_reconnect():
+            if _use_native_reconnect():
                 if _reconnect_recovery_blocked_active():
                     blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()
                     _emit_reconnect_recovery_blocked_snapshot(
@@ -5745,7 +5763,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             if _should_require_process_restart_for_ws_fault(code=code_int, reason_text=reason_text):
                 _block_reconnect_for_process_restart(source="on_close", code=code_int, reason=reason_text, ticker=ws)
                 return
-            if _use_internal_reconnect():
+            if _use_native_reconnect():
                 if fatal:
                     if _reconnect_recovery_blocked_active():
                         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower()

@@ -18,7 +18,15 @@ def _load_generate_module():
     return module
 
 
+@pytest.fixture(autouse=True)
+def mock_api_key(monkeypatch):
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key")
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token")
+
 def test_profile_fail_blocks_persist_and_ticker_start(monkeypatch):
+    import config.config as cfg
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key", raising=False)
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token", raising=False)
     mod = _load_generate_module()
 
     class _KiteFailProfile:
@@ -68,6 +76,11 @@ def test_profile_fail_blocks_persist_and_ticker_start(monkeypatch):
 
 
 def test_profile_ok_persists_and_ticker_allowed(monkeypatch):
+    import config.config as cfg
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key", raising=False)
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token", raising=False)
+    import core.feed.runtime_store as runtime_store
+    monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: {}, raising=False)
     mod = _load_generate_module()
 
     class _KiteOk:
@@ -124,6 +137,12 @@ def test_profile_ok_persists_and_ticker_allowed(monkeypatch):
 
 
 def test_start_depth_ws_does_not_seed_ohlc(monkeypatch):
+    import config.config as cfg
+    import core.orchestrator as orchestrator_mod
+    import core.feed.runtime_store as runtime_store
+    monkeypatch.setattr(runtime_store, "read_latest_runtime_snapshot", lambda: {})
+    monkeypatch.setattr(cfg, "KITE_API_KEY", "mock_key", raising=False)
+    monkeypatch.setattr(cfg, "KITE_ACCESS_TOKEN", "mock_token", raising=False)
     import core.orchestrator as orchestrator_mod
     import core.kite_depth_ws as ws
     import core.auth_health as auth_health
