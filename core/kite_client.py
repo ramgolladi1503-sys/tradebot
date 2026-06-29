@@ -195,9 +195,10 @@ class KiteClient:
             self._last_instruments_fetch = datetime.now().isoformat()
             return data
         except Exception as e:
-            logger.exception("instruments_fetch_failed exchange=%s err=%s", exchange, e)
             if cached:
+                logger.error("broker_rest_degraded:instruments_fetch_failed using_cache exchange=%s err=%s", exchange, type(e).__name__)
                 return cached.get("data", [])
+            logger.error("instruments_fetch_failed_no_cache exchange=%s err=%s", exchange, type(e).__name__)
             return []
 
     # Compatibility (some modules may call this)
