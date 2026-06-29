@@ -66,7 +66,7 @@ def test_manual_twisted_restart_not_attempted_after_1006(ticker_callbacks):
         mock_restart.assert_not_called()
 
 
-def test_native_reconnect_changes_state_to_reconnecting(ticker_callbacks):
+def test_on_reconnect_logs_success_and_transitions_state(ticker_callbacks):
     mock_ws = MagicMock()
     with patch("core.kite_depth_ws._RUNTIME_STATE", "LIVE"), \
          patch("core.kite_depth_ws._log_ws") as mock_log:
