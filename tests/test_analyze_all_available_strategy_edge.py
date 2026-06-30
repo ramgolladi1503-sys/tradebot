@@ -186,5 +186,30 @@ def test_batch_outputs_do_not_overwrite_previous_results(tmp_path: Path) -> None
     first_keys = set(map(tuple, first[key_columns].astype(str).to_numpy()))
     second_keys = set(map(tuple, second[key_columns].astype(str).to_numpy()))
 
+
     assert second.shape[0] > first.shape[0]
     assert first_keys.issubset(second_keys)
+
+
+def test_quote_age_sec_required_for_executable_replay_readiness(tmp_path: Path) -> None:
+    quote = tmp_path / "option_quote.csv"
+    pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-06-29 09:15:00",
+                "candidate_id": "c1",
+                "tradingsymbol": "NIFTYCE",
+                "strike": 24000,
+                "option_type": "CE",
+                "ltp": 100.0,
+                "bid": 99.0,
+                "ask": 101.0,
+                "depth": "{}",
+            }
+        ]
+    ).to_csv(quote, index=False)
+    catalog.build_catalog(roots=[tmp_path], out_dir=tmp_path / "audit")
+    analyzer.analyze_catalog(catalog_path=tmp_path / "audit" / "available_data_catalog.csv", out_dir=tmp_path / "audit")
+    by_dataset = pd.read_csv(tmp_path / "audit" / "all_available_strategy_edge_by_dataset.csv")
+
+    assert bool(by_dataset["executable_replay_ready"].any()) is False

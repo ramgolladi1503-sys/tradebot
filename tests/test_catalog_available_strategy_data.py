@@ -105,6 +105,7 @@ def test_option_quote_truth_requires_bid_ask_depth_for_executable_replay(tmp_pat
                 "bid": 99.5,
                 "ask": 100.5,
                 "depth": "{}",
+                "quote_age_sec": 0.5,
             }
         ]
     ).to_csv(quote, index=False)
