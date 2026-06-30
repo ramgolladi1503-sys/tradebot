@@ -7,6 +7,10 @@ def _pace_loop(poll_interval: float, loop_start_time: float) -> None:
         time.sleep(sleep_time)
 
 import time
+import concurrent.futures
+import copy
+
+_BACKGROUND_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix='io_defer')
 import json
 import argparse
 import copy
@@ -673,6 +677,9 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         regime_prob_max=row.get("regime_prob_max") or row.get("regime_probs_max"),
     )
 
+    if entropy_gate.get("gate_passed") is False or entropy_gate.get("uncertain"):
+        reasons.append("entropy_too_high")
+
     return {
         "symbol": symbol,
         "gate_reasons": reasons,
@@ -680,9 +687,10 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         "primary_regime": row.get("primary_regime") or row.get("regime"),
         "regime_prob_max": regime_prob_max,
         "regime_entropy": entropy_gate["raw_entropy"],
+        "regime_entropy_raw_max": entropy_gate["max_entropy"],
         "regime_entropy_normalized": entropy_gate["normalized_entropy"],
         "regime_prob_min": regime_prob_min,
-        "regime_entropy_max": entropy_gate["threshold"],
+        "regime_entropy_norm_max": entropy_gate["threshold"],
         "regime_entropy_max_source": entropy_gate["threshold_source"],
         "unstable_reasons": [str(x) for x in list(row.get("unstable_reasons") or []) if str(x).strip()],
         "regime_unstable_streak": int(row.get("regime_unstable_streak") or 0),
@@ -3507,7 +3515,7 @@ class Orchestrator:
             primary_regime=market_data.get("primary_regime") or market_data.get("regime") or "",
             regime_prob_max=market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),
         )
-        if entropy_gate["uncertain"]:
+        if entropy_gate.get("gate_passed") is False or entropy_gate.get("uncertain"):
             unstable_reasons.append("entropy_too_high")
 
         return bool(unstable_reasons)
@@ -4855,7 +4863,7 @@ class Orchestrator:
             feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
             feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
             try:
-                if getattr(globals().get("cfg"), "FEED_USE_SUBPROCESS", False):
+                if getattr(globals().get("cfg"), "DEPTH_WS_USE_SUBPROCESS", False):
                     monitor_depth_ws_subprocess()
             except Exception as exc:
                 logger.error("subprocess_monitor_error err=%s", exc, exc_info=True)
@@ -4972,8 +4980,9 @@ class Orchestrator:
                     logger.warning("v2_shadow_pipeline_cycle_error err=%s", exc)
                 try:
                     t0 = time.perf_counter()
-                    produce_and_store_runtime_snapshots(
-                        market_snapshot=dashboard_market_snapshot,
+                    _BACKGROUND_EXECUTOR.submit(
+                        produce_and_store_runtime_snapshots,
+                        market_snapshot=copy.deepcopy(dashboard_market_snapshot),
                         producer="orchestrator_cycle",
                         loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
                     )
@@ -7302,7 +7311,8 @@ class Orchestrator:
                 t_post_sym = time.perf_counter()
                 try:
                     t_stat = time.perf_counter()
-                    self._write_cycle_status_files(
+                    _BACKGROUND_EXECUTOR.submit(
+                        self._write_cycle_status_files,
                         cycle_ok=not bool(cycle_error),
                         cycle_stage=cycle_stage,
                         cycle_reason=cycle_reason,
@@ -7314,7 +7324,7 @@ class Orchestrator:
                         candidates_seen=cycle_candidates_seen,
                         candidates_blocked=cycle_candidates_blocked,
                         candidates_enqueued=cycle_candidates_enqueued,
-                        blocker_counts=cycle_blockers,
+                        blocker_counts=copy.deepcopy(cycle_blockers),
                         suggestion_count=cycle_suggestion_count,
                     )
                     feature_timing["GAP_write_status_ms"] = _perf_ms(t_stat)
@@ -7371,56 +7381,65 @@ class Orchestrator:
                     feature_timing["GAP_post_symbol_loop_ms"] = _perf_ms(t_post_sym)
                     try:
                         t_heavy_io = time.perf_counter()
-                        # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
-                        phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
-                        feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
-                        indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
-                        try:
-                            # Refresh indicator readiness artifact from current cycle market snapshots so
-                            # it cannot remain stale when the orchestrator is actively running.
-                            indicator_report = build_live_indicator_readiness_report(
-                                [row for row in list(market_data_list or []) if isinstance(row, dict)],
-                                now_epoch=float(time.time()),
-                                warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
-                                source="orchestrator_live_indicator_readiness_v2",
-                            )
-                            write_live_indicator_readiness_latest(indicator_report, now_epoch=float(time.time()))
+                        def _do_heavy_io(md_list, r_cause, top, c_blockers, lat_guard, t_now):
+                            phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
+                            feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
                             indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
-                        except Exception:
-                            pass
-                        regime_by_symbol = {}
-                        regime_gate_reasons = {}
-                        try:
-                            for md in list(market_data_list or []):
-                                if not isinstance(md, dict):
-                                    continue
-                                sym = str(md.get("symbol") or "").strip().upper()
-                                if not sym:
-                                    continue
-                                unstable = md.get("unstable_reasons") if isinstance(md.get("unstable_reasons"), list) else []
-                                if unstable:
-                                    regime_by_symbol[sym] = {
-                                        "primary_regime": md.get("primary_regime") or md.get("regime"),
-                                        "regime_entropy": md.get("regime_entropy"),
-                                        "regime_prob_max": md.get("regime_prob_max") or md.get("regime_probs_max"),
-                                        "unstable_reasons": unstable,
-                                    }
-                            if regime_by_symbol:
-                                regime_gate_reasons["REGIME_UNSTABLE"] = len(regime_by_symbol)
-                        except Exception:
+                            try:
+                                indicator_report = build_live_indicator_readiness_report(
+                                    [row for row in list(md_list or []) if isinstance(row, dict)],
+                                    now_epoch=t_now,
+                                    warmup_min_bars=int(getattr(cfg, "WARMUP_MIN_BARS", 50)),
+                                    source="orchestrator_live_indicator_readiness_v2",
+                                )
+                                write_live_indicator_readiness_latest(indicator_report, now_epoch=t_now)
+                                indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
+                            except Exception:
+                                pass
                             regime_by_symbol = {}
                             regime_gate_reasons = {}
-                        notrade_payload = build_notrade_reason_truth_payload(
-                            candidate_handoff=root_cause_payload if isinstance(root_cause_payload, dict) else {},
-                            phase2_rejection=phase2_rejection_payload,
-                            feed_truth=feed_truth_payload,
-                            top_opportunities=top_payload,
-                            cycle_blockers=dict(cycle_blockers),
-                            indicator_readiness=indicator_payload,
-                            regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
-                            latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
+                            try:
+                                for md in list(md_list or []):
+                                    if not isinstance(md, dict): continue
+                                    sym = str(md.get("symbol") or "").strip().upper()
+                                    if not sym: continue
+                                    unstable = md.get("unstable_reasons") if isinstance(md.get("unstable_reasons"), list) else []
+                                    if unstable:
+                                        regime_by_symbol[sym] = {
+                                            "primary_regime": md.get("primary_regime") or md.get("regime"),
+                                            "regime_entropy": md.get("regime_entropy"),
+                                            "regime_prob_max": md.get("regime_prob_max") or md.get("regime_probs_max"),
+                                            "unstable_reasons": unstable,
+                                        }
+                                if regime_by_symbol:
+                                    regime_gate_reasons["REGIME_UNSTABLE"] = len(regime_by_symbol)
+                            except Exception:
+                                regime_by_symbol = {}
+                                regime_gate_reasons = {}
+                            notrade_payload = build_notrade_reason_truth_payload(
+                                candidate_handoff=r_cause if isinstance(r_cause, dict) else {},
+                                phase2_rejection=phase2_rejection_payload,
+                                feed_truth=feed_truth_payload,
+                                top_opportunities=top,
+                                cycle_blockers=c_blockers,
+                                indicator_readiness=indicator_payload,
+                                regime_truth={"by_symbol": regime_by_symbol, "gate_reasons": regime_gate_reasons},
+                                latency_guard=lat_guard,
+                            )
+                            write_notrade_reason_truth_latest(payload=notrade_payload)
+                        _BACKGROUND_EXECUTOR.submit(
+                            _do_heavy_io,
+                            md_list=copy.deepcopy(market_data_list),
+                            r_cause=copy.deepcopy(root_cause_payload) if 'root_cause_payload' in locals() else {},
+                            top=copy.deepcopy(top_payload),
+                            c_blockers=copy.deepcopy(dict(cycle_blockers)),
+                            lat_guard=copy.deepcopy(dict(getattr(self, "_latency_guard_state", {}) or {})),
+                            t_now=float(time.time())
                         )
-                        write_notrade_reason_truth_latest(payload=notrade_payload)
+                        indicator_payload = {}
+                        regime_by_symbol = {}
+                        regime_gate_reasons = {}
+                        phase2_rejection_payload = {}
                         feature_timing["heavy_io_telemetry_ms"] = _perf_ms(t_heavy_io)
                     except Exception as notrade_exc:
                         logger.warning("notrade_reason_truth_write_failed err=%s", notrade_exc)
@@ -7967,7 +7986,7 @@ class Orchestrator:
         if not tokens:
             raise RuntimeError("kite_depth_ws_init_failed:no_tokens_resolved")
         logger.info("WS: tokens_count=%d", len(tokens))
-        if getattr(cfg, "FEED_USE_SUBPROCESS", False):
+        if getattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False):
             start_depth_ws_subprocess(tokens, profile_verified=True)
         else:
             start_depth_ws(tokens, profile_verified=True)

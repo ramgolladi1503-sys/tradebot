@@ -514,7 +514,7 @@ def _patch_trade_builder(module: Any) -> None:
             elif isinstance(ctx, dict) and iv_reject_chain and explicit_no_fallback and _mode(module, md) == "LIVE":
                 ctx["reason"] = "no_candidates_survived"
             elif isinstance(ctx, dict) and live_fallback and _mode(module, md) == "LIVE" and bool(md.get("market_open")):
-                ctx["reason"] = "lifecycle_gate_fail"
+                ctx["reason"] = "STRATEGY_NO_SIGNAL"
             legacy_unspecified_mode = "execution_mode" not in md and "market_context" not in md and "market_open" not in md
             if not strict and not explicit_no_fallback and (_mode(module, md) != "LIVE" or legacy_unspecified_mode) and len(chain) == 1:
                 row = chain[0]
