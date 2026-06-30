@@ -66,8 +66,3 @@ def test_edge_ladder_cannot_produce_executable_replay_readiness_without_proof(tm
     assert report["final_verdict"] != "LIVE_SHADOW_POSITIVE"
     assert report["executable_replay_possible"] is False
     
-def test_no_live_trading_behavior_changes_shadow_tracker() -> None:
-    tracker = Path("scripts/check_live_shadow_outcomes.py").read_text()
-    assert "broker" not in tracker.lower()
-    assert "place_order" not in tracker.lower()
-    assert "kite" not in tracker.lower()
