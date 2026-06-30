@@ -673,6 +673,9 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         regime_prob_max=row.get("regime_prob_max") or row.get("regime_probs_max"),
     )
 
+    if entropy_gate.get("gate_passed") is False or entropy_gate.get("uncertain"):
+        reasons.append("entropy_too_high")
+
     return {
         "symbol": symbol,
         "gate_reasons": reasons,

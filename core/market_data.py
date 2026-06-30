@@ -1105,6 +1105,8 @@ def _derive_unstable_reasons(
     min_bars: int,
     missing_inputs: list[str] | None = None,
     model_unstable_flag: bool = False,
+    primary_regime: str = "",
+    symbol: str = "",
 ):
     """
     Build explicit reasons for regime instability.
@@ -1154,9 +1156,11 @@ def _derive_unstable_reasons(
         probabilities=probs if probs else None,
         session_bucket="DEFAULT",
         regime_prob_max=max_prob,
+        primary_regime=primary_regime,
+        market_data={"symbol": symbol},
     )
 
-    if entropy_gate["uncertain"]:
+    if entropy_gate.get("gate_passed") is False or entropy_gate.get("uncertain"):
         reasons.append("entropy_too_high")
     if max_prob < prob_min:
         reasons.append("prob_too_low")
@@ -3379,6 +3383,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             min_bars=min_bars,
             missing_inputs=missing_inputs,
             model_unstable_flag=model_unstable_flag,
+            primary_regime=primary_regime,
+            symbol=symbol,
         )
         unstable_regime_flag = bool(unstable_reasons)
 
