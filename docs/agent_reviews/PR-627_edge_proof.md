@@ -40,3 +40,13 @@
 
 ## Human Approval
 - Reviewed by Human, authorized for merge.
+
+## Evidence Fields
+- mode: PAPER
+- candidate_id: PR-627
+- decision: MERGE
+- reason: Offline checks implemented
+- timestamp: 2026-06-30
+- is_order_action: false
+- broker_api_called: false
+- source: Agent Review
