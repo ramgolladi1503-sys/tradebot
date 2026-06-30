@@ -5,6 +5,8 @@ from unittest.mock import patch, MagicMock
 from config import config as cfg
 from core.orchestrator import Orchestrator
 from core.trade_schema import Trade
+import core.market_data
+import core.tick_store
 
 
 @pytest.fixture
@@ -31,7 +33,7 @@ def orchestrator():
     return orch
 
 @patch("core.tick_store.get_last_tick")
-@patch("core.symbol_resolver.get_token_for_symbol")
+@patch("core.market_data.get_token_for_symbol")
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
@@ -95,7 +97,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     )
 
 @patch("core.tick_store.get_last_tick")
-@patch("core.symbol_resolver.get_token_for_symbol")
+@patch("core.market_data.get_token_for_symbol")
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
