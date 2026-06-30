@@ -626,6 +626,7 @@ def _candidate_trace_payload(candidate, *, execution_truth_context: dict | None 
         "stop_loss": _trade_attr(candidate, "stop_loss"),
         "target_price": _trade_attr(candidate, "target_price"),
         "visibility_bucket": _trade_attr(candidate, "visibility_bucket"),
+        "subscription_ok": _trade_attr(candidate, "subscription_ok"),
         "reportable_executable": _trade_attr(candidate, "reportable_executable"),
         "synthetic_candidate": _trade_attr(candidate, "synthetic_candidate"),
         **runtime_truth,
@@ -4973,16 +4974,7 @@ class Orchestrator:
                     feature_timing["v2_shadow_pipeline_ms"] = _perf_ms(t0)
                 except Exception as exc:
                     logger.warning("v2_shadow_pipeline_cycle_error err=%s", exc)
-                try:
-                    t0 = time.perf_counter()
-                    produce_and_store_runtime_snapshots(
-                        market_snapshot=dashboard_market_snapshot,
-                        producer="orchestrator_cycle",
-                        loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
-                    )
-                    feature_timing["produce_runtime_snapshots_ms"] = _perf_ms(t0)
-                except Exception as exc:
-                    logger.error("[RUNTIME_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
+
                 try:
                     t0 = time.perf_counter()
                     self._maybe_run_suggestion_reliability_check()
@@ -6704,6 +6696,51 @@ class Orchestrator:
                                 logger.warning("rl_size_trade_blocked reason=qty_after_rl_sizing_zero")
                                 continue
                     trade = replace(trade, qty=final_qty, capital_at_risk=round((trade.entry_price - trade.stop_loss) * final_qty * lot_size, 2))
+                    
+                    # Phase B: Split Quote Freshness & Just-In-Time Revalidation
+                    final_executable_quote_age = None
+                    try:
+                        from core.tick_store import get_last_tick
+                        from core.market_data import get_token_for_symbol
+                        token = get_token_for_symbol(trade.symbol)
+                        if token:
+                            tick = get_last_tick(token)
+                            if tick and tick.get("ts_epoch"):
+                                final_executable_quote_age = time.time() - float(tick.get("ts_epoch"))
+                    except Exception as e:
+                        logger.warning("jit_quote_revalidation_failed error=%s", e)
+                        
+                    if final_executable_quote_age is not None and final_executable_quote_age > 2.5:
+                        logger.warning("execution_guard_trade_blocked reason=stale_final_executable_quote age=%.2f", final_executable_quote_age)
+                        try:
+                            blocked_reasons = list(getattr(trade, "tradable_reasons_blocking", []) or [])
+                            blocked_reasons.append("stale_final_executable_quote")
+                            source_flags = dict(getattr(trade, "source_flags", {}) or {})
+                            source_flags["risk_guard_passed"] = False
+                            blocked_trade = replace(
+                                trade,
+                                tradable=False,
+                                tradable_reasons_blocking=blocked_reasons,
+                                source_flags=source_flags,
+                            )
+                            ticket = self._build_trade_ticket(blocked_trade, market_data)
+                            send_trade_ticket(ticket)
+                        except Exception:
+                            pass
+                        try:
+                            update_execution(
+                                trade.trade_id,
+                                {
+                                    "exec_guard_allowed": 0,
+                                    "exec_guard_reason": "stale_final_executable_quote",
+                                    "exec_guard_reason_code": "stale_quote",
+                                    "veto_reasons": ["stale_quote"],
+                                },
+                            )
+                        except Exception:
+                            pass
+                        continue
+
                     # Phase B: Execution guard (after sizing)
                     guard_decision = self.execution_guard.evaluate(
                         trade,
@@ -6754,6 +6791,8 @@ class Orchestrator:
                                     "exec_guard_reason": reason,
                                     "exec_guard_reason_code": reason_code,
                                     "planning_only": bool(guard_decision.planning_only),
+                                    "cycle_processing_latency_ms": (time.perf_counter() - loop_start_time) * 1000.0 if 'loop_start_time' in locals() else None,
+                                    "final_quote_revalidation_age_ms": final_executable_quote_age * 1000.0 if final_executable_quote_age else None,
                                 },
                             )
                         except Exception:
@@ -7636,6 +7675,16 @@ class Orchestrator:
                     feature_timing["write_runtime_health_ms"] = _perf_ms(t_health)
                 except Exception as health_exc:
                     logger.warning("runtime_health_snapshot_error err=%s", health_exc)
+                try:
+                    t0 = time.perf_counter()
+                    produce_and_store_runtime_snapshots(
+                        market_snapshot=dashboard_market_snapshot,
+                        producer="orchestrator_cycle",
+                        loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
+                    )
+                    feature_timing["produce_runtime_snapshots_ms"] = _perf_ms(t0)
+                except Exception as exc:
+                    logger.error("[RUNTIME_SNAPSHOT_WRITE_ERROR] phase=cycle error=%s:%s", type(exc).__name__, exc)
                 t_end_gap = time.perf_counter()
                 if (time.perf_counter() - loop_start_time) > 1.0:
                     logger.warning("LEGACY_CYCLE_END_TO_END_TIMING total_ms=%.1f timings=%s", (time.perf_counter() - loop_start_time) * 1000.0, feature_timing)
