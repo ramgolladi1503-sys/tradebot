@@ -30,8 +30,11 @@ def orchestrator():
     orch._pilot_exec_degradation = MagicMock()
     return orch
 
+@patch("core.tick_store.get_last_tick")
+@patch("core.symbol_resolver.get_token_for_symbol")
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
+@patch("core.orchestrator.fetch_live_market_data")
 @patch("core.orchestrator.build_live_indicator_readiness_report")
 @patch("core.orchestrator.produce_and_store_market_snapshot")
 @patch("core.orchestrator.produce_and_store_runtime_snapshots")
@@ -91,8 +94,8 @@ def test_jit_quote_revalidation_blocks_stale_quote(
         }
     )
 
-@patch("core.orchestrator.get_last_tick")
-@patch("core.orchestrator.get_token_for_symbol")
+@patch("core.tick_store.get_last_tick")
+@patch("core.symbol_resolver.get_token_for_symbol")
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
