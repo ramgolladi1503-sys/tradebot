@@ -43,6 +43,7 @@ OUTPUT_COLUMNS = [
     "has_entry_target_stop",
     "has_executable_flag",
     "has_rejection_reason",
+    "has_quote_age",
     "usable_for_directional_proxy",
     "usable_for_vwap_or_volume_proxy",
     "usable_for_option_ltp_replay",
@@ -83,6 +84,7 @@ class CatalogRow:
     has_entry_target_stop: bool
     has_executable_flag: bool
     has_rejection_reason: bool
+    has_quote_age: bool
     usable_for_directional_proxy: bool
     usable_for_vwap_or_volume_proxy: bool
     usable_for_option_ltp_replay: bool
@@ -248,6 +250,7 @@ def classify_dataset(path: Path, frame: pd.DataFrame) -> CatalogRow:
     has_entry_target_stop = _has_any(cols, ("entry", "entry_price", "entry_underlying")) and _has_any(cols, ("target", "target_price")) and _has_any(cols, ("stop", "stop_loss", "sl"))
     has_executable_flag = _has_any(cols, ("executable", "execution_ok", "allowed_for_live_execution"))
     has_rejection_reason = _has_any(cols, ("rejection_reason", "block_reason", "reason", "reject_reason"))
+    has_quote_age = _has_any(cols, ("quote_age", "quote_age_sec", "option_quote_age_sec", "age_ms", "age_sec"))
     origin = "UNKNOWN"
     eligible_raw = False
     exclusion_reason = ""
@@ -305,7 +308,7 @@ def classify_dataset(path: Path, frame: pd.DataFrame) -> CatalogRow:
     usable_directional = dtype == "INDEX_OHLC"
     usable_vwap = usable_directional and volume_quality == "OK"
     usable_option_ltp = dtype in {"OPTION_OHLC_OR_LTP", "OPTION_QUOTE_TRUTH"}
-    usable_executable = dtype == "OPTION_QUOTE_TRUTH" and has_candidate_id and has_bid_ask and has_spread and has_depth
+    usable_executable = dtype == "OPTION_QUOTE_TRUTH" and has_candidate_id and has_bid_ask and has_spread and has_depth and has_quote_age
     if dtype == "BACKTEST_REPORT":
         usable_directional = usable_vwap = usable_option_ltp = usable_executable = False
     if dtype in {"BACKTEST_REPORT", "STRATEGY_SIGNAL_TRACE", "RANKING_SNAPSHOTS", "CANDIDATE_DECISIONS", "LIVE_LOG"}:
@@ -365,6 +368,7 @@ def classify_dataset(path: Path, frame: pd.DataFrame) -> CatalogRow:
         has_entry_target_stop=has_entry_target_stop,
         has_executable_flag=has_executable_flag,
         has_rejection_reason=has_rejection_reason,
+        has_quote_age=has_quote_age,
         usable_for_directional_proxy=usable_directional,
         usable_for_vwap_or_volume_proxy=usable_vwap,
         usable_for_option_ltp_replay=usable_option_ltp,
@@ -405,6 +409,7 @@ def error_row(path: Path, message: str) -> CatalogRow:
         has_entry_target_stop=False,
         has_executable_flag=False,
         has_rejection_reason=False,
+        has_quote_age=False,
         usable_for_directional_proxy=False,
         usable_for_vwap_or_volume_proxy=False,
         usable_for_option_ltp_replay=False,
