@@ -626,6 +626,7 @@ def _candidate_trace_payload(candidate, *, execution_truth_context: dict | None 
         "stop_loss": _trade_attr(candidate, "stop_loss"),
         "target_price": _trade_attr(candidate, "target_price"),
         "visibility_bucket": _trade_attr(candidate, "visibility_bucket"),
+        "subscription_ok": _trade_attr(candidate, "subscription_ok"),
         "reportable_executable": _trade_attr(candidate, "reportable_executable"),
         "synthetic_candidate": _trade_attr(candidate, "synthetic_candidate"),
         **runtime_truth,
@@ -6700,7 +6701,7 @@ class Orchestrator:
                     final_executable_quote_age = None
                     try:
                         from core.tick_store import get_last_tick
-                        from core.symbol_resolver import get_token_for_symbol
+                        from core.market_data import get_token_for_symbol
                         token = get_token_for_symbol(trade.symbol)
                         if token:
                             tick = get_last_tick(token)
