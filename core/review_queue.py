@@ -5616,7 +5616,32 @@ def _append_permission_promotion_trace(entry: dict, *, old_permission: str, old_
     _append_jsonl([_promotion_trace_path()], record)
 
 
+def _downgrade_execution_intent(out, action, block_reason):
+    out["final_action"] = "QUEUE_ONLY" if action == "QUEUE_ONLY" else action
+    out["permission"] = "QUEUE_ONLY" if action == "QUEUE_ONLY" else action
+    out["execution_allowed"] = False
+    out["execution_ok"] = False
+    out["eligible_for_execution"] = False
+    out["is_executable"] = False
+    out["promotion_block_reason"] = block_reason
+    out["status"] = "QUEUE_ONLY"
+    # Note: we do NOT overwrite status_raw here so we don't break tests that expect PLANNING.
+
 def _maybe_promote_execute_candidate(entry: dict) -> dict:
+    out = _maybe_promote_execute_candidate_impl(entry)
+    
+    if out.get("final_action") == "EXECUTE":
+        # Rule: If any downstream final decision is not EXECUTE, downgrade
+        if out.get("execution_ok") is False:
+            _downgrade_execution_intent(out, "REJECT", "execution_ok_false")
+        elif str(out.get("order_policy") or "").strip().lower() == "reject":
+            _downgrade_execution_intent(out, "REJECT", "order_policy_reject")
+        elif str(out.get("decision_action") or "").upper() in ("REJECT", "QUEUE"):
+            _downgrade_execution_intent(out, "REJECT", "decision_engine_reject")
+            
+    return out
+
+def _maybe_promote_execute_candidate_impl(entry: dict) -> dict:
     if not isinstance(entry, dict):
         return entry
     out = dict(entry)
