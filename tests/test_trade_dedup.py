@@ -22,7 +22,6 @@ def _make_trade(**overrides):
         "target": 115.0,
         "strategy": "CORE",
         "timestamp": "2026-02-26T10:00:00",
-        "truth_quality": "TRUTH_LIVE_FRESH",
     }
     base.update(overrides)
     return base
