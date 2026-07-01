@@ -3715,6 +3715,15 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
     symbols = list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))
+    symbols_upper = [str(s).upper() for s in symbols]
+    if "NIFTY" in symbols_upper and "BANKNIFTY" in symbols_upper:
+        for s in ["SENSEX", "INDIA VIX"]:
+            if s not in symbols_upper:
+                try:
+                    if kite_client.resolve_index_token(s):
+                        symbols.append(s)
+                except Exception:
+                    pass
     tokens: list[int] = []
     resolution: list[dict] = []
     underlying_tokens: list[int] = []
@@ -3819,15 +3828,16 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             else:
                 option_coverage_status = "FULL"
                 option_coverage_reason = "full_coverage"
-            _maybe_raise_option_token_incident(
-                symbol=sym_upper,
-                exchange=exchange,
-                expiry=expiry,
-                option_count=len(option_tokens),
-                min_required=min_option_tokens,
-                sample_tokens=option_tokens[:10],
-                fail_reason=option_fail_reason,
-            )
+            if sym_upper not in ("INDIA VIX", "INDIAVIX"):
+                _maybe_raise_option_token_incident(
+                    symbol=sym_upper,
+                    exchange=exchange,
+                    expiry=expiry,
+                    option_count=len(option_tokens),
+                    min_required=min_option_tokens,
+                    sample_tokens=option_tokens[:10],
+                    fail_reason=option_fail_reason,
+                )
         else:
             resolved_option_count = len(option_tokens)
             option_coverage_status = "FULL"

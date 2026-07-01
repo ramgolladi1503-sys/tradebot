@@ -2000,6 +2000,7 @@ def _finalize_append_payload_for_runtime_write(
         if not candidate_type or candidate_type == "unknown":
             out["candidate_type"] = "forced"
     out = _apply_fallback_execution_kill(out)
+    out = _normalize_truth_quality(out)
     if require_terminal_scoring:
         assert bool(out.get("terminal_scoring_applied")), "terminal scoring not applied at emit"
     if require_ranked_candidate_ready:
@@ -5652,12 +5653,11 @@ def _normalize_truth_quality(out: dict) -> dict:
             out["truth_quality"] = "TRUTH_DEGRADED_BLOCKED"
             out["truth_allows_execution"] = False
             out["truth_block_reason"] = "degraded_blocked"
-    elif truth in ("REAL", "LIVE"):
+    elif truth in ("REAL", "LIVE", "TRUTH_LIVE_FRESH"):
         out["truth_quality"] = "TRUTH_LIVE_FRESH"
         out["truth_allows_execution"] = True
         out["truth_block_reason"] = None
-    elif is_exec:
-        # EXECUTE requires live or degraded truth
+    elif out.get("truth_allows_execution") is True and out.get("quote_truth_state") in ("live", "fresh"):
         out["truth_quality"] = "TRUTH_LIVE_FRESH"
         out["truth_allows_execution"] = True
         out["truth_block_reason"] = None
@@ -5666,7 +5666,7 @@ def _normalize_truth_quality(out: dict) -> dict:
         out["truth_allows_execution"] = False
         out["truth_block_reason"] = "unknown_truth"
 
-    if is_exec and out["truth_quality"] not in ("TRUTH_LIVE_FRESH", "TRUTH_DEGRADED_ALLOWED"):
+    if out.get("final_action") == "EXECUTE" and out["truth_quality"] not in ("TRUTH_LIVE_FRESH", "TRUTH_DEGRADED_ALLOWED"):
         _downgrade_execution_intent(out, "REJECT", f"truth_violation_{out['truth_quality']}")
 
     return out
@@ -5683,7 +5683,7 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
         elif str(out.get("decision_action") or "").upper() in ("REJECT", "QUEUE"):
             _downgrade_execution_intent(out, "REJECT", "decision_engine_reject")
 
-    return _normalize_truth_quality(out)
+    return out
 
 def _maybe_promote_execute_candidate_impl(entry: dict) -> dict:
     if not isinstance(entry, dict):
