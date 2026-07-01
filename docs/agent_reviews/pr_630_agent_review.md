@@ -8,6 +8,27 @@
 Audit and refactor active movement strategies so they remain read-only StrategyCandidate generators, but become WFA-ready, parameter-profile-driven, and promotion-controlled.
 ```
 
+- mode: PAPER
+- candidate_id: N/A
+- decision: ADVISORY_ONLY
+- reason: Safe Refactor
+- timestamp: 2026-07-01
+- is_order_action: false
+- broker_api_called: false
+- source: GSD
+- source_agent: Antigravity
+- action: STRATEGY_PROFILES_REFACTOR
+- title: Refactor movement strategies for WFA-safe parameter profiles
+- scope: core, strategies, tests
+- requested_paths: core/opportunity_scoring.py, core/strategy_parameter_profiles.py, strategies/movement/*, tests/*
+- allowed_paths: core/opportunity_scoring.py, core/strategy_parameter_profiles.py, strategies/movement/*, tests/*
+- forbidden_paths: core/broker*, core/execution*, core/order*
+- expected_tests: tests/test_opportunity_scoring.py, tests/test_strategy_generators_lineage.py
+- acceptance_proof: 39 passing tests and evidence that candidates get tagged with ADVISORY_ONLY
+- read_only: true
+- allowed_for_live_execution: false
+- append: false
+
 ### Files Changed
 
 - core/opportunity_scoring.py
@@ -77,7 +98,7 @@ PASS
 
 PASS
 
-## QA/Safety
+## QA / Safety Review
 
 - Verified that `PROMOTED` is explicitly checked and everything else defaults to `ADVISORY_ONLY`.
 
