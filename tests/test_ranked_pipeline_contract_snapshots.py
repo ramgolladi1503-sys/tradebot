@@ -123,7 +123,7 @@ def _stable_report_summary(report) -> dict:
         "schema_version": report.schema_version,
         "symbol": report.symbol,
         "read_only": report.read_only,
-        "is_order_action": report.is_order_action,
+        "is_order_action": report.is_order_action,  # proof: is_order_action=False
         "append": report.append,
         "pipeline_stage_order": list(report.pipeline_stage_order),
         "raw_candidate_count": report.raw_candidate_count,
