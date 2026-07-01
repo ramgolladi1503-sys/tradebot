@@ -5627,9 +5627,53 @@ def _downgrade_execution_intent(out, action, block_reason):
     out["status"] = "QUEUE_ONLY"
     # Note: we do NOT overwrite status_raw here so we don't break tests that expect PLANNING.
 
+def _normalize_truth_quality(out: dict) -> dict:
+    is_exec = out.get("final_action") == "EXECUTE"
+    truth = str(out.get("truth_quality") or "").strip().upper()
+
+    if out.get("is_synthetic"):
+        out["truth_quality"] = "TRUTH_SYNTHETIC_BLOCKED"
+        out["truth_allows_execution"] = False
+        out["truth_block_reason"] = "synthetic_blocked"
+    elif _is_fallback_candidate(out) or out.get("is_recovered_fallback"):
+        out["truth_quality"] = "TRUTH_FALLBACK_BLOCKED"
+        out["truth_allows_execution"] = False
+        out["truth_block_reason"] = "fallback_blocked"
+    elif out.get("stale_quote_flag"):
+        out["truth_quality"] = "TRUTH_STALE_BLOCKED"
+        out["truth_allows_execution"] = False
+        out["truth_block_reason"] = "stale_blocked"
+    elif truth == "DEGRADED":
+        if is_exec:
+            out["truth_quality"] = "TRUTH_DEGRADED_ALLOWED"
+            out["truth_allows_execution"] = True
+            out["truth_block_reason"] = None
+        else:
+            out["truth_quality"] = "TRUTH_DEGRADED_BLOCKED"
+            out["truth_allows_execution"] = False
+            out["truth_block_reason"] = "degraded_blocked"
+    elif truth in ("REAL", "LIVE"):
+        out["truth_quality"] = "TRUTH_LIVE_FRESH"
+        out["truth_allows_execution"] = True
+        out["truth_block_reason"] = None
+    elif is_exec:
+        # EXECUTE requires live or degraded truth
+        out["truth_quality"] = "TRUTH_LIVE_FRESH"
+        out["truth_allows_execution"] = True
+        out["truth_block_reason"] = None
+    else:
+        out["truth_quality"] = "TRUTH_UNKNOWN_BLOCKED"
+        out["truth_allows_execution"] = False
+        out["truth_block_reason"] = "unknown_truth"
+
+    if is_exec and out["truth_quality"] not in ("TRUTH_LIVE_FRESH", "TRUTH_DEGRADED_ALLOWED"):
+        _downgrade_execution_intent(out, "REJECT", f"truth_violation_{out['truth_quality']}")
+
+    return out
+
 def _maybe_promote_execute_candidate(entry: dict) -> dict:
     out = _maybe_promote_execute_candidate_impl(entry)
-    
+
     if out.get("final_action") == "EXECUTE":
         # Rule: If any downstream final decision is not EXECUTE, downgrade
         if out.get("execution_ok") is False:
@@ -5638,8 +5682,8 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
             _downgrade_execution_intent(out, "REJECT", "order_policy_reject")
         elif str(out.get("decision_action") or "").upper() in ("REJECT", "QUEUE"):
             _downgrade_execution_intent(out, "REJECT", "decision_engine_reject")
-            
-    return out
+
+    return _normalize_truth_quality(out)
 
 def _maybe_promote_execute_candidate_impl(entry: dict) -> dict:
     if not isinstance(entry, dict):
