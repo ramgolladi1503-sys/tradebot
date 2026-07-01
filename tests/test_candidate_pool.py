@@ -152,7 +152,7 @@ def test_candidate_pool_rejects_non_candidate_items():
 def test_lifecycle_snapshot_joins_pipeline_reports_with_exact_score_and_rank():
     candidate = _candidate(
         strategy_id="clean_breakout",
-        lineage={"candidate_id": "candidate-1", "candidate_intent_id": "intent-1"},
+        lineage={"candidate_id": "candidate-1", "candidate_intent_id": "intent-1", "promotion_state": "PROMOTED"},
         evidence={"evidence_refs": ["evidence://cycle/1"]},
     )
     pool = build_candidate_pool([candidate])
