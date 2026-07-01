@@ -8,6 +8,7 @@ alter execution paths.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import (
     clamp_score,
@@ -20,12 +21,6 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "late_day_momentum_v1"
 MOVEMENT_TYPE = "LATE_DAY_MOMENTUM"
-MIN_MINUTES_SINCE_OPEN = 240
-MIN_MINUTES_TO_CLOSE = 20
-MIN_DIRECTIONAL_SCORE = 0.45
-MIN_VWAP_DISTANCE_PCT = 0.002
-MAX_CHASE_DISTANCE_PCT = 0.012
-MAX_CHOP_SCORE = 0.50
 
 
 def generate_late_day_momentum_candidates(
@@ -34,13 +29,22 @@ def generate_late_day_momentum_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate late-day continuation candidates when timing and evidence align."""
 
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_minutes_since_open = float(params.get("MIN_MINUTES_SINCE_OPEN", 240))
+    min_minutes_to_close = float(params.get("MIN_MINUTES_TO_CLOSE", 20))
+    min_directional_score = float(params.get("MIN_DIRECTIONAL_SCORE", 0.45))
+    min_vwap_distance_pct = float(params.get("MIN_VWAP_DISTANCE_PCT", 0.002))
+    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.012))
+    max_chop_score = float(params.get("MAX_CHOP_SCORE", 0.50))
+
     minutes_since_open = safe_float(ctx.minutes_since_open)
     minutes_to_close = safe_float(ctx.minutes_to_close)
-    if minutes_since_open is None or minutes_since_open < MIN_MINUTES_SINCE_OPEN:
+    if minutes_since_open is None or minutes_since_open < min_minutes_since_open:
         return ()
-    if minutes_to_close is None or minutes_to_close < MIN_MINUTES_TO_CLOSE:
+    if minutes_to_close is None or minutes_to_close < min_minutes_to_close:
         return ()
-    if float(regime.scores.get("CHOP", 0.0)) >= MAX_CHOP_SCORE:
+    if float(regime.scores.get("CHOP", 0.0)) >= max_chop_score:
         return ()
 
     spot = safe_float(ctx.spot_ltp)
@@ -49,18 +53,36 @@ def generate_late_day_momentum_candidates(
         return ()
 
     vwap_move = signed_pct_distance(spot, vwap)
-    if vwap_move is None or abs(vwap_move) < MIN_VWAP_DISTANCE_PCT:
+    if vwap_move is None or abs(vwap_move) < min_vwap_distance_pct:
         return ()
-    if abs(vwap_move) > MAX_CHASE_DISTANCE_PCT:
+    if abs(vwap_move) > max_chase_distance_pct:
         return ()
 
     candidates: list[StrategyCandidate] = []
     trend_up = float(regime.scores.get("TREND_UP", 0.0))
     trend_down = float(regime.scores.get("TREND_DOWN", 0.0))
-    if vwap_move > 0 and trend_up >= MIN_DIRECTIONAL_SCORE:
-        candidates.append(_build_candidate(ctx, regime, "BUY_CALL", trend_up, abs(vwap_move), "late_day_upside_momentum"))
-    if vwap_move < 0 and trend_down >= MIN_DIRECTIONAL_SCORE:
-        candidates.append(_build_candidate(ctx, regime, "BUY_PUT", trend_down, abs(vwap_move), "late_day_downside_momentum"))
+    if vwap_move > 0 and trend_up >= min_directional_score:
+        candidates.append(
+            _build_candidate(
+                ctx,
+                regime,
+                "BUY_CALL",
+                trend_up,
+                abs(vwap_move),
+                "late_day_upside_momentum",
+            )
+        )
+    if vwap_move < 0 and trend_down >= min_directional_score:
+        candidates.append(
+            _build_candidate(
+                ctx,
+                regime,
+                "BUY_PUT",
+                trend_down,
+                abs(vwap_move),
+                "late_day_downside_momentum",
+            )
+        )
     return tuple(candidates)
 
 
@@ -72,11 +94,19 @@ def _build_candidate(
     vwap_distance_abs: float,
     momentum_type: str,
 ) -> StrategyCandidate:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_vwap_distance_pct = float(params.get("MIN_VWAP_DISTANCE_PCT", 0.002))
+    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.012))
     side = side_evidence(ctx, direction)
     timing_quality = _timing_quality(ctx)
     price_structure_score = clamp_score(
         0.40 * directional_score
-        + 0.25 * ratio_score(vwap_distance_abs, start=MIN_VWAP_DISTANCE_PCT, full=MAX_CHASE_DISTANCE_PCT)
+        + 0.25
+        * ratio_score(
+            vwap_distance_abs, start=min_vwap_distance_pct, full=max_chase_distance_pct
+        )
         + 0.20 * ratio_score(safe_float(ctx.volume_z), start=0.8, full=2.5)
         + 0.15 * timing_quality
     )
@@ -111,15 +141,23 @@ def _build_candidate(
         warnings=warnings,
         confluence_tags=("late_day", "momentum", "option_confirmation"),
         suppression_tags=("avoid_end_of_day_decay_chase",),
+        strategy_version="v1",
+        params_used=params,
+        params_hash=profile.params_hash if profile else None,
+        promotion_state="ADVISORY_ONLY",
     )
 
 
 def _timing_quality(ctx: StrategyContext) -> float:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_minutes_since_open = float(params.get("MIN_MINUTES_SINCE_OPEN", 240))
     since_open = safe_float(ctx.minutes_since_open)
     to_close = safe_float(ctx.minutes_to_close)
     if since_open is None or to_close is None:
         return 0.0
-    afternoon_score = ratio_score(since_open, start=MIN_MINUTES_SINCE_OPEN, full=330.0)
+    afternoon_score = ratio_score(since_open, start=min_minutes_since_open, full=330.0)
     close_buffer_score = clamp_score(to_close / 90.0)
     return clamp_score(0.65 * afternoon_score + 0.35 * close_buffer_score)
 

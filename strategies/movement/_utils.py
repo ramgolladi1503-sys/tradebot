@@ -115,7 +115,11 @@ def side_evidence(ctx: StrategyContext, direction: str) -> SideEvidence:
     elif age > MAX_OPTION_LTP_AGE_SEC:
         blockers.append("STALE_OPTION_LTP")
 
-    option_confirmation_score = 0.0 if premium_change is None else ratio_score(premium_change, start=0.0, full=20.0)
+    option_confirmation_score = (
+        0.0
+        if premium_change is None
+        else ratio_score(premium_change, start=0.0, full=20.0)
+    )
     if option_ltp is None or option_ltp <= 0:
         option_confirmation_score = 0.0
 
@@ -185,6 +189,10 @@ def make_candidate(
     warnings: tuple[str, ...] = (),
     confluence_tags: tuple[str, ...] = (),
     suppression_tags: tuple[str, ...] = (),
+    strategy_version: str = "v1",
+    params_used: dict[str, Any] | None = None,
+    params_hash: str | None = None,
+    promotion_state: str = "ADVISORY_ONLY",
 ) -> StrategyCandidate:
     blockers = tuple(sorted(set(side.blockers)))
     merged_warnings = tuple(sorted(set(tuple(side.warnings) + tuple(warnings))))
@@ -230,7 +238,14 @@ def make_candidate(
         source_signals=(strategy_id, movement_type),
         regime_scores=regime.scores,
         evidence=evidence,
-        lineage={"source": "movement_strategy", "strategy_id": strategy_id},
+        lineage={
+            "source": "movement_strategy",
+            "strategy_id": strategy_id,
+            "strategy_version": strategy_version,
+            "params_used": params_used or {},
+            "params_hash": params_hash,
+            "promotion_state": promotion_state,
+        },
     )
 
 

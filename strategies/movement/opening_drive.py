@@ -8,6 +8,7 @@ orders, alter execution gates, touch depth subscriptions, or tune live trading.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import (
     clamp_score,
@@ -21,9 +22,6 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "opening_drive_v1"
 MOVEMENT_TYPE = "OPENING_DRIVE"
-MAX_OPENING_DRIVE_MINUTES = 20
-MIN_OPEN_MOVE_PCT = 0.0015
-MIN_VWAP_ALIGNMENT_PCT = 0.0005
 
 
 def generate_opening_drive_candidates(
@@ -32,8 +30,14 @@ def generate_opening_drive_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate opening-drive candidates for CALL/PUT when evidence exists."""
 
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_opening_drive_minutes = float(params.get("MAX_OPENING_DRIVE_MINUTES", 20))
+    min_open_move_pct = float(params.get("MIN_OPEN_MOVE_PCT", 0.0015))
+    min_vwap_alignment_pct = float(params.get("MIN_VWAP_ALIGNMENT_PCT", 0.0005))
+
     minutes = safe_float(ctx.minutes_since_open)
-    if minutes is None or minutes < 0 or minutes > MAX_OPENING_DRIVE_MINUTES:
+    if minutes is None or minutes < 0 or minutes > max_opening_drive_minutes:
         return ()
 
     spot = safe_float(ctx.spot_ltp)
@@ -48,10 +52,14 @@ def generate_opening_drive_candidates(
         return ()
 
     candidates: list[StrategyCandidate] = []
-    if open_move >= MIN_OPEN_MOVE_PCT and vwap_move >= MIN_VWAP_ALIGNMENT_PCT:
-        candidates.append(_build_candidate(ctx, regime, "BUY_CALL", open_move, vwap_move))
-    if open_move <= -MIN_OPEN_MOVE_PCT and vwap_move <= -MIN_VWAP_ALIGNMENT_PCT:
-        candidates.append(_build_candidate(ctx, regime, "BUY_PUT", abs(open_move), abs(vwap_move)))
+    if open_move >= min_open_move_pct and vwap_move >= min_vwap_alignment_pct:
+        candidates.append(
+            _build_candidate(ctx, regime, "BUY_CALL", open_move, vwap_move)
+        )
+    if open_move <= -min_open_move_pct and vwap_move <= -min_vwap_alignment_pct:
+        candidates.append(
+            _build_candidate(ctx, regime, "BUY_PUT", abs(open_move), abs(vwap_move))
+        )
     return tuple(candidates)
 
 
@@ -62,11 +70,16 @@ def _build_candidate(
     open_move_abs: float,
     vwap_move_abs: float,
 ) -> StrategyCandidate:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_open_move_pct = float(params.get("MIN_OPEN_MOVE_PCT", 0.0015))
+    min_vwap_alignment_pct = float(params.get("MIN_VWAP_ALIGNMENT_PCT", 0.0005))
     side = side_evidence(ctx, direction)
     orb_distance = _orb_distance(ctx, direction)
     price_structure_score = clamp_score(
-        0.45 * ratio_score(open_move_abs, start=MIN_OPEN_MOVE_PCT, full=0.006)
-        + 0.30 * ratio_score(vwap_move_abs, start=MIN_VWAP_ALIGNMENT_PCT, full=0.004)
+        0.45 * ratio_score(open_move_abs, start=min_open_move_pct, full=0.006)
+        + 0.30 * ratio_score(vwap_move_abs, start=min_vwap_alignment_pct, full=0.004)
         + 0.25 * ratio_score(orb_distance, start=0.0, full=0.003)
     )
     evidence = {
@@ -96,6 +109,10 @@ def _build_candidate(
         evidence=evidence,
         warnings=(),
         confluence_tags=("opening_drive", "vwap_alignment", "option_confirmation"),
+        strategy_version="v1",
+        params_used=params,
+        params_hash=profile.params_hash if profile else None,
+        promotion_state="ADVISORY_ONLY",
     )
 
 

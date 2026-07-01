@@ -8,13 +8,13 @@ or alter runtime behavior.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import assess_option_pressure
 from strategies.movement._utils import clamp_score
 
 STRATEGY_ID = "option_pressure_confirmation_v1"
 MOVEMENT_TYPE = "OPTION_PRESSURE_CONFIRMATION"
-MIN_PRESSURE_SCORE = 0.45
 
 
 def generate_option_pressure_candidates(
@@ -22,6 +22,10 @@ def generate_option_pressure_candidates(
     regime: MovementRegimeResult,
 ) -> tuple[StrategyCandidate, ...]:
     """Emit advisory option-pressure candidates for the dominant side."""
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_pressure_score = float(params.get("MIN_PRESSURE_SCORE", 0.45))
 
     assessment = assess_option_pressure(ctx)
     if assessment.dominant_direction == "NEUTRAL":
@@ -36,7 +40,7 @@ def generate_option_pressure_candidates(
         side = assessment.pe
         opposite_score = assessment.bullish_score
 
-    if score < MIN_PRESSURE_SCORE:
+    if score < min_pressure_score:
         return ()
 
     blockers = tuple(sorted(set(side.blockers)))
@@ -58,13 +62,28 @@ def generate_option_pressure_candidates(
             direction=assessment.dominant_direction,
             status=status,
             raw_score=score,
-            confidence_score=clamp_score(score * (1.0 - clamp_score(regime.scores.get("TRAP_RISK", 0.0)) * 0.20)),
-            price_structure_score=clamp_score(max(regime.scores.get("TREND_UP", 0.0), regime.scores.get("TREND_DOWN", 0.0), regime.scores.get("VOLATILITY_EXPANSION", 0.0))),
+            confidence_score=clamp_score(
+                score * (1.0 - clamp_score(regime.scores.get("TRAP_RISK", 0.0)) * 0.20)
+            ),
+            price_structure_score=clamp_score(
+                max(
+                    regime.scores.get("TREND_UP", 0.0),
+                    regime.scores.get("TREND_DOWN", 0.0),
+                    regime.scores.get("VOLATILITY_EXPANSION", 0.0),
+                )
+            ),
             option_confirmation_score=score,
             liquidity_score=side.liquidity_score,
             freshness_score=side.freshness_score,
-            volatility_score=clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0)),
-            regime_alignment_score=clamp_score(max(regime.scores.get("TREND_UP", 0.0), regime.scores.get("TREND_DOWN", 0.0))),
+            volatility_score=clamp_score(
+                regime.scores.get("VOLATILITY_EXPANSION", 0.0)
+            ),
+            regime_alignment_score=clamp_score(
+                max(
+                    regime.scores.get("TREND_UP", 0.0),
+                    regime.scores.get("TREND_DOWN", 0.0),
+                )
+            ),
             timing_score=0.5,
             trap_risk_score=clamp_score(regime.scores.get("TRAP_RISK", 0.0)),
             confluence_score=score,
@@ -73,12 +92,23 @@ def generate_option_pressure_candidates(
             rank_reason="option side pressure is dominant and quote quality is visible",
             blockers=blockers,
             warnings=assessment.warnings,
-            confluence_tags=("option_pressure", "premium_confirmation", "quote_quality"),
+            confluence_tags=(
+                "option_pressure",
+                "premium_confirmation",
+                "quote_quality",
+            ),
             suppression_tags=("confirmation_layer_not_execution_signal",),
             source_signals=(STRATEGY_ID, MOVEMENT_TYPE),
             regime_scores=regime.scores,
             evidence=evidence,
-            lineage={"source": "option_confirmation", "strategy_id": STRATEGY_ID},
+            lineage={
+                "source": "option_confirmation",
+                "strategy_id": STRATEGY_ID,
+                "strategy_version": "v1",
+                "params_used": params,
+                "params_hash": profile.params_hash if profile else None,
+                "promotion_state": profile.promotion_state if profile else "ADVISORY_ONLY",
+            },
         ),
     )
 

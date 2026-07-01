@@ -7,6 +7,7 @@ to fade strong continuation and emits read-only StrategyCandidate objects only.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import (
     clamp_score,
@@ -19,10 +20,6 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "mean_reversion_extension_v1"
 MOVEMENT_TYPE = "MEAN_REVERSION_EXTENSION"
-MIN_RANGE_OR_CHOP_SCORE = 0.45
-MIN_EXTENSION_FROM_VWAP_PCT = 0.0035
-MAX_EXTENSION_FROM_VWAP_PCT = 0.014
-MAX_TREND_CONTINUATION_SCORE = 0.55
 
 
 def generate_mean_reversion_extension_candidates(
@@ -31,26 +28,67 @@ def generate_mean_reversion_extension_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate mean-reversion candidates only in range/chop extension contexts."""
 
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_range_or_chop_score = float(params.get("MIN_RANGE_OR_CHOP_SCORE", 0.45))
+    min_extension_from_vwap_pct = float(
+        params.get("MIN_EXTENSION_FROM_VWAP_PCT", 0.0035)
+    )
+    max_extension_from_vwap_pct = float(
+        params.get("MAX_EXTENSION_FROM_VWAP_PCT", 0.014)
+    )
+    max_trend_continuation_score = float(
+        params.get("MAX_TREND_CONTINUATION_SCORE", 0.55)
+    )
+
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     if spot is None or vwap is None:
         return ()
 
-    range_chop_score = max(float(regime.scores.get("RANGE", 0.0)), float(regime.scores.get("CHOP", 0.0)))
-    if range_chop_score < MIN_RANGE_OR_CHOP_SCORE:
+    range_chop_score = max(
+        float(regime.scores.get("RANGE", 0.0)), float(regime.scores.get("CHOP", 0.0))
+    )
+    if range_chop_score < min_range_or_chop_score:
         return ()
 
     distance = signed_pct_distance(spot, vwap)
-    if distance is None or abs(distance) < MIN_EXTENSION_FROM_VWAP_PCT:
+    if distance is None or abs(distance) < min_extension_from_vwap_pct:
         return ()
-    if abs(distance) > MAX_EXTENSION_FROM_VWAP_PCT:
+    if abs(distance) > max_extension_from_vwap_pct:
         return ()
 
     candidates: list[StrategyCandidate] = []
-    if distance > 0 and _trend_continuation_score(ctx, regime, "BUY_CALL") <= MAX_TREND_CONTINUATION_SCORE:
-        candidates.append(_build_candidate(ctx, regime, "BUY_PUT", range_chop_score, abs(distance), "upper_extension_reversion"))
-    if distance < 0 and _trend_continuation_score(ctx, regime, "BUY_PUT") <= MAX_TREND_CONTINUATION_SCORE:
-        candidates.append(_build_candidate(ctx, regime, "BUY_CALL", range_chop_score, abs(distance), "lower_extension_reversion"))
+    if (
+        distance > 0
+        and _trend_continuation_score(ctx, regime, "BUY_CALL")
+        <= max_trend_continuation_score
+    ):
+        candidates.append(
+            _build_candidate(
+                ctx,
+                regime,
+                "BUY_PUT",
+                range_chop_score,
+                abs(distance),
+                "upper_extension_reversion",
+            )
+        )
+    if (
+        distance < 0
+        and _trend_continuation_score(ctx, regime, "BUY_PUT")
+        <= max_trend_continuation_score
+    ):
+        candidates.append(
+            _build_candidate(
+                ctx,
+                regime,
+                "BUY_CALL",
+                range_chop_score,
+                abs(distance),
+                "lower_extension_reversion",
+            )
+        )
     return tuple(candidates)
 
 
@@ -62,10 +100,24 @@ def _build_candidate(
     extension_abs: float,
     reversion_type: str,
 ) -> StrategyCandidate:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_extension_from_vwap_pct = float(
+        params.get("MIN_EXTENSION_FROM_VWAP_PCT", 0.0035)
+    )
+    max_extension_from_vwap_pct = float(
+        params.get("MAX_EXTENSION_FROM_VWAP_PCT", 0.014)
+    )
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.45 * range_chop_score
-        + 0.35 * ratio_score(extension_abs, start=MIN_EXTENSION_FROM_VWAP_PCT, full=MAX_EXTENSION_FROM_VWAP_PCT)
+        + 0.35
+        * ratio_score(
+            extension_abs,
+            start=min_extension_from_vwap_pct,
+            full=max_extension_from_vwap_pct,
+        )
         + 0.20 * _range_boundary_score(ctx, direction)
     )
     evidence = {
@@ -98,6 +150,10 @@ def _build_candidate(
         warnings=(),
         confluence_tags=("mean_reversion", "range_extension", "option_confirmation"),
         suppression_tags=("avoid_fading_strong_trend",),
+        strategy_version="v1",
+        params_used=params,
+        params_hash=profile.params_hash if profile else None,
+        promotion_state="ADVISORY_ONLY",
     )
 
 
@@ -120,7 +176,9 @@ def _range_boundary_score(ctx: StrategyContext, direction: str) -> float:
     return 0.0
 
 
-def _trend_continuation_score(ctx: StrategyContext, regime: MovementRegimeResult, direction: str) -> float:
+def _trend_continuation_score(
+    ctx: StrategyContext, regime: MovementRegimeResult, direction: str
+) -> float:
     if direction == "BUY_CALL":
         premium = safe_float(ctx.ce_premium_change)
         trend = float(regime.scores.get("TREND_UP", 0.0))
@@ -140,4 +198,8 @@ def _trend_continuation_score(ctx: StrategyContext, regime: MovementRegimeResult
     )
 
 
-__all__ = ["STRATEGY_ID", "MOVEMENT_TYPE", "generate_mean_reversion_extension_candidates"]
+__all__ = [
+    "STRATEGY_ID",
+    "MOVEMENT_TYPE",
+    "generate_mean_reversion_extension_candidates",
+]

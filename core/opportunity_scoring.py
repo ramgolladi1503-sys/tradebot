@@ -278,6 +278,7 @@ def score_candidate(
 
     policy_bucket = decision.downgraded_bucket
     policy_eligibility = _score_eligibility(decision)
+    safety_flags = list(decision.safety_flags)
 
     if policy_result == "BLOCKED":
         policy_bucket = "SUPPRESSED_CANDIDATE"
@@ -287,6 +288,23 @@ def score_candidate(
             policy_bucket = "ADVISORY_CANDIDATE"
             policy_eligibility = "ADVISORY_ONLY"
 
+    # Strict promotion state enforcement
+    promotion_state = (candidate.lineage or {}).get("promotion_state", "ADVISORY_ONLY")
+
+    # 1. Negative evidence -> DISABLED
+    if promotion_state == "DISABLED" or promotion_state == "NEGATIVE_EVIDENCE":
+        policy_bucket = "NO_TRADE_CANDIDATE"
+        policy_eligibility = "NO_TRADE_ONLY"
+    # 2. ADVISORY or EXPERIMENTAL or unknown -> not executable
+    elif promotion_state in ("ADVISORY_ONLY", "EXPERIMENTAL", "UNKNOWN"):
+        if policy_bucket == "EXECUTABLE_CANDIDATE":
+            policy_bucket = "ADVISORY_CANDIDATE"
+            policy_eligibility = "ADVISORY_ONLY"
+    # 3. PAPER_EXECUTABLE -> adds a safety flag to block real execution
+    elif promotion_state == "PAPER_EXECUTABLE":
+        if "paper_executable_only" not in safety_flags:
+            safety_flags.append("paper_executable_only")
+    # 4. MANUAL_APPROVAL_ELIGIBLE or PROMOTED -> no downgrade (but doesn't upgrade if truth gates blocked it)
 
     weights = _component_weights(component_weights)
     component_scores = _component_scores(candidate)
@@ -295,7 +313,7 @@ def score_candidate(
     trap_penalty = _round(clamp(float(candidate.trap_risk_score)) * 0.15)
     penalties = _penalties(decision)
     total_penalty = _round(sum(penalties.values()) + trap_penalty)
-    bucket_cap = BUCKET_SCORE_CAPS.get(decision.downgraded_bucket, 0.0)
+    bucket_cap = BUCKET_SCORE_CAPS.get(policy_bucket, 0.0)
     raw_final = clamp(base_score - total_penalty)
     final_score = _round(min(raw_final, bucket_cap))
     if policy_eligibility == NO_TRADE_ONLY:
@@ -312,7 +330,7 @@ def score_candidate(
         executable_candidate=bool(decision.executable_candidate and policy_eligibility == SCORE_ELIGIBLE),
         score_explanation=_score_explanation(policy_eligibility, base_score, total_penalty, bucket_cap, final_score),
         downgrade_reasons=tuple(sorted(decision.downgrade_reasons)),
-        safety_flags=tuple(sorted(decision.safety_flags)),
+        safety_flags=tuple(sorted(safety_flags)),
         blockers=tuple(sorted(decision.blockers)),
         warnings=tuple(sorted(decision.warnings)),
         breakdown=OpportunityScoreBreakdown(
