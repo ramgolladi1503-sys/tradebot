@@ -25,14 +25,6 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
                     "instrument_type": "EQ",
                     "strike": 0.0,
                     "expiry": None
-                },
-                {
-                    "name": "INDIA VIX",
-                    "tradingsymbol": "INDIA VIX",
-                    "instrument_token": 264969,
-                    "instrument_type": "EQ",
-                    "strike": 0.0,
-                    "expiry": None
                 }
             ]
         elif exchange == "NFO":
@@ -63,17 +55,6 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
                     "instrument_type": "CE",
                     "strike": 77000.0,
                     "expiry": date(2026, 6, 26)
-                }
-            ]
-        elif exchange == "BSE":
-            return [
-                {
-                    "name": "SENSEX",
-                    "tradingsymbol": "SENSEX",
-                    "instrument_token": 265,
-                    "instrument_type": "EQ",
-                    "strike": 0.0,
-                    "expiry": None
                 }
             ]
         return []
@@ -116,7 +97,5 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
     
     assert tokens[256265] == "NIFTY 50"
     assert tokens[260105] == "NIFTY BANK"
-    assert tokens[265] == "SENSEX"
-    assert tokens[264969] == "INDIA VIX"
     assert tokens[100001] == "NIFTY26JUN24000CE"
     assert tokens[100002] == "BANKNIFTY26JUN58000PE"

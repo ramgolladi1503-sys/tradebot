@@ -30,12 +30,11 @@ logger = logging.getLogger("tick_collector")
 
 
 def get_target_tokens() -> dict[int, str]:
-    """Dynamically resolves instrument tokens for NIFTY/BANKNIFTY ATM +/- wide range, SENSEX, and INDIA VIX."""
-    logger.info("Fetching instruments from NFO/NSE/BSE...")
+    """Dynamically resolves instrument tokens for NIFTY/BANKNIFTY ATM +/- wide range."""
+    logger.info("Fetching instruments from NFO/NSE...")
     kite_client.ensure()
     nfo_insts = kite_client.instruments_cached("NFO")
     nse_insts = kite_client.instruments_cached("NSE")
-    bse_insts = kite_client.instruments_cached("BSE")
 
     nifty_token = None
     banknifty_token = None
@@ -44,18 +43,6 @@ def get_target_tokens() -> dict[int, str]:
             nifty_token = inst["instrument_token"]
         if inst["tradingsymbol"] == "NIFTY BANK":
             banknifty_token = inst["instrument_token"]
-
-    sensex_token = None
-    for inst in bse_insts:
-        if inst["tradingsymbol"] == "SENSEX":
-            sensex_token = inst["instrument_token"]
-            break
-
-    vix_token = None
-    for inst in nse_insts:
-        if inst["tradingsymbol"] == "INDIA VIX":
-            vix_token = inst["instrument_token"]
-            break
 
     prices = kite_client.ltp([f"NSE:NIFTY 50", f"NSE:NIFTY BANK"])
     nifty_spot = prices.get("NSE:NIFTY 50", {}).get("last_price", 22000.0)
@@ -88,10 +75,6 @@ def get_target_tokens() -> dict[int, str]:
         target_tokens[nifty_token] = "NIFTY 50"
     if banknifty_token:
         target_tokens[banknifty_token] = "NIFTY BANK"
-    if sensex_token:
-        target_tokens[sensex_token] = "SENSEX"
-    if vix_token:
-        target_tokens[vix_token] = "INDIA VIX"
 
     if nifty_expiries:
         exp = nifty_expiries[0]
@@ -144,8 +127,9 @@ def main():
 
     f_out = open(out_file, "a", buffering=1)  # Line buffered
 
+    kws = KiteTicker(API_KEY, ACCESS_TOKEN)
+
     stop_time = datetime_time(15, 35)
-    kws = None
 
     def on_ticks(ws, ticks):
         now = datetime.now()
@@ -191,46 +175,25 @@ def main():
     def on_error(ws, code, reason):
         logger.error(f"WebSocket error: {code} - {reason}")
 
+    kws.on_ticks = on_ticks
+    kws.on_connect = on_connect
+    kws.on_close = on_close
+    kws.on_error = on_error
+
     def handle_sigint(*args):
         logger.info("Shutting down collector due to signal...")
-        if kws is not None:
-            try:
-                kws.close()
-            except:
-                pass
         try:
-            f_out.close()
+            kws.close()
         except:
             pass
+        f_out.close()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
-    while True:
-        now = datetime.now()
-        if now.time() >= stop_time:
-            logger.info("Market close reached. Shutting down tick collector.")
-            break
-
-        logger.info("Initializing KiteTicker client...")
-        kws = KiteTicker(API_KEY, ACCESS_TOKEN)
-        kws.on_ticks = on_ticks
-        kws.on_connect = on_connect
-        kws.on_close = on_close
-        kws.on_error = on_error
-
-        try:
-            logger.info("Starting KiteTicker loop...")
-            kws.connect(threaded=False)
-        except Exception as e:
-            logger.error(f"KiteTicker exception in loop: {e}")
-
-        if datetime.now().time() >= stop_time:
-            break
-
-        logger.info("Reconnection cooldown. Waiting 5 seconds...")
-        time.sleep(5)
+    logger.info("Starting KiteTicker loop...")
+    kws.connect(threaded=False)
 
 
 if __name__ == "__main__":

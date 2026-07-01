@@ -42,15 +42,8 @@ def generate_no_trade_candidates(
             option_confirmation_score=0.0,
             liquidity_score=0.0,
             freshness_score=0.0,
-            volatility_score=clamp_score(
-                regime.scores.get("VOLATILITY_EXPANSION", 0.0)
-            ),
-            regime_alignment_score=clamp_score(
-                max(
-                    regime.scores.get("CHOP", 0.0),
-                    regime.scores.get("INCONCLUSIVE", 0.0),
-                )
-            ),
+            volatility_score=clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0)),
+            regime_alignment_score=clamp_score(max(regime.scores.get("CHOP", 0.0), regime.scores.get("INCONCLUSIVE", 0.0))),
             timing_score=0.0,
             trap_risk_score=clamp_score(regime.scores.get("TRAP_RISK", 0.0)),
             confluence_score=assessment.severity,

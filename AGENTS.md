@@ -240,6 +240,3 @@ scripts/run_daily_intel.sh
 # Explicit date
 scripts/run_daily_intel.sh --date YYYY-MM-DD
 ```
-
-## Running Live
-Whenever the user asks to "run live" or start the live pipeline, you MUST execute `scripts/run_live_agentic.sh`. Do NOT use `run_live.sh` directly, as `run_live_agentic.sh` handles the required cleanup and environment variables to avoid lock deadlocks.
