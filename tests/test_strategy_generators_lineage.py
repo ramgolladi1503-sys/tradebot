@@ -52,7 +52,7 @@ def test_opening_drive_generator_lineage():
     regime = dummy_regime()
     candidates = generate_opening_drive_candidates(ctx, regime)
     
-    assert len(candidates) > 0
+    assert candidates
     c = candidates[0]
     
     assert "strategy_version" in c.lineage
@@ -62,8 +62,7 @@ def test_opening_drive_generator_lineage():
     assert "params_used" in c.lineage
     assert isinstance(c.lineage["params_used"], dict)
     assert "params_hash" in c.lineage
-    # It seems params_hash might be None if the hash is not generated?
-    assert c.lineage["params_hash"] is not None, f"Hash was None. Profile config issue? lineage: {c.lineage}"
+    assert isinstance(c.lineage["params_hash"], str), f"Hash was None. Profile config issue? lineage: {c.lineage}"
     assert "promotion_state" in c.lineage
     assert c.lineage["promotion_state"] == "ADVISORY_ONLY"
 
@@ -73,7 +72,7 @@ def test_vwap_reclaim_generator_lineage():
     regime = dummy_regime()
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, regime)
     
-    assert len(candidates) > 0
+    assert candidates
     c = candidates[0]
     
     assert "strategy_version" in c.lineage
@@ -82,7 +81,6 @@ def test_vwap_reclaim_generator_lineage():
     
     assert "params_used" in c.lineage
     assert isinstance(c.lineage["params_used"], dict)
-    assert "params_hash" in c.lineage
-    assert c.lineage["params_hash"] is not None
+    assert isinstance(c.lineage["params_hash"], str)
     assert "promotion_state" in c.lineage
     assert c.lineage["promotion_state"] == "ADVISORY_ONLY"
