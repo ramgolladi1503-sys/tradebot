@@ -7952,6 +7952,13 @@ class TradeBuilder:
         penalty_reasons: list[str] | None = None,
         use_confidence_as_model: bool = True,
         use_confidence_as_final_stage: bool = True,
+        ml_model_raw_proba: float | None = None,
+        ml_pre_quality_proba: float | None = None,
+        ml_post_quality_proba: float | None = None,
+        gating_confidence: float | None = None,
+        sizing_confidence: float | None = None,
+        ml_model_name: str | None = None,
+        ml_model_version: str | None = None,
     ) -> dict:
         final_conf = self._clamp_confidence(confidence)
         model_raw_val = self._clamp_confidence(model_raw)
@@ -7983,6 +7990,17 @@ class TradeBuilder:
                 penalty_total_val = 0.0
         if gate_threshold is None and final_gate_threshold is not None:
             gate_threshold = final_gate_threshold
+
+        if ml_model_raw_proba is None:
+            ml_model_raw_proba = model_raw_val
+        if ml_pre_quality_proba is None:
+            ml_pre_quality_proba = before_soft_veto_val
+        if ml_post_quality_proba is None:
+            ml_post_quality_proba = final_conf
+        if gating_confidence is None:
+            gating_confidence = after_soft_veto_val if after_soft_veto_val is not None else final_conf
+        if sizing_confidence is None:
+            sizing_confidence = final_conf
 
         def _round_optional(value: float | None) -> float | None:
             clamped = self._clamp_confidence(value)
@@ -8018,6 +8036,13 @@ class TradeBuilder:
             "confidence_base": _round_optional(base_val),
             "confidence_penalty_total": _round_optional(penalty_total_val),
             "confidence_penalty_reasons": penalty_reasons_out,
+            "ml_model_raw_proba": _round_optional(ml_model_raw_proba),
+            "ml_pre_quality_proba": _round_optional(ml_pre_quality_proba),
+            "ml_post_quality_proba": _round_optional(ml_post_quality_proba),
+            "gating_confidence": _round_optional(gating_confidence),
+            "sizing_confidence": _round_optional(sizing_confidence),
+            "ml_model_name": ml_model_name,
+            "ml_model_version": ml_model_version,
         }
 
     def _strategy_candidate_debug(self, market_data, strategy_name: str) -> dict:
@@ -10416,6 +10441,8 @@ class TradeBuilder:
                     penalty_total=confidence_penalty_total,
                     penalty_reasons=confidence_penalty_reasons,
                     use_confidence_as_model=confidence_model_component is not None,
+                    ml_model_name=model_type,
+                    ml_model_version=model_version,
                 ),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
@@ -13142,6 +13169,8 @@ class TradeBuilder:
                     penalty_total=0.0,
                     penalty_reasons=[],
                     use_confidence_as_model=confidence_model_component is not None,
+                    ml_model_name=model_type,
+                    ml_model_version=model_version,
                 ),
             )
             trade = self._decorate_trade_context(trade, market_data, confidence)
