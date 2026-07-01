@@ -89,6 +89,7 @@ def _candidate(
         entry_trigger="unit",
         invalid_if="unit",
         rank_reason="unit",
+        lineage={"promotion_state": "PROMOTED"},
         blockers=blockers,
         warnings=warnings,
     )

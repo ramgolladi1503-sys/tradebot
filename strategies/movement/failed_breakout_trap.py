@@ -72,6 +72,9 @@ def _build_candidate(
     trap_score: float,
     trap_type: str,
 ) -> StrategyCandidate:
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.55 * trap_score

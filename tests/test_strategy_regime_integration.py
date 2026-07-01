@@ -24,7 +24,7 @@ def test_orb_high_entropy_generation():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -74,7 +74,7 @@ def test_mean_reversion_high_entropy_blocked():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -125,7 +125,7 @@ def test_short_premium_high_entropy_blocked():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -176,7 +176,7 @@ def test_orb_fallback_advisory_quote_not_executable():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -227,7 +227,7 @@ def test_orb_stale_quote_not_executable():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -278,7 +278,7 @@ def test_unknown_strategy_high_entropy_blocked():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -328,7 +328,7 @@ def test_missing_unknown_entropy_fail_safe():
         confluence_score=0.8,
         entry_trigger="orb",
         invalid_if="no",
-        rank_reason="test",
+        rank_reason="test", lineage={"promotion_state": "PROMOTED"},
         blockers=(),
         warnings=(),
         confluence_tags=(),
@@ -362,17 +362,17 @@ def test_mixed_ranking():
     candidates = [
         # 1. Executable ORB
         score_candidate(
-            StrategyCandidate(schema_version=1, strategy_id="ORB", movement_type="OPENING_DRIVE", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={"VOLATILITY_EXPANSION": 0.8}, evidence={"session_bucket": "OPEN_DISCOVERY", "entropy_state": {"state": "HIGH"}}),
+            StrategyCandidate(schema_version=1, strategy_id="ORB", movement_type="OPENING_DRIVE", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", lineage={"promotion_state": "PROMOTED"}, blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={"VOLATILITY_EXPANSION": 0.8}, evidence={"session_bucket": "OPEN_DISCOVERY", "entropy_state": {"state": "HIGH"}}),
             HardDowngradeDecision("ORB", "NIFTY", "BUY_CALL", "OPENING_DRIVE", "EXECUTABLE_CANDIDATE", "EXECUTABLE_CANDIDATE", False, True, (), (), (), (), (), ())
         ),
         # 2. Fallback ORB
         score_candidate(
-            StrategyCandidate(schema_version=1, strategy_id="ORB", movement_type="OPENING_DRIVE", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={"VOLATILITY_EXPANSION": 0.8}, evidence={"session_bucket": "OPEN_DISCOVERY", "entropy_state": {"state": "HIGH"}}),
+            StrategyCandidate(schema_version=1, strategy_id="ORB", movement_type="OPENING_DRIVE", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", lineage={"promotion_state": "PROMOTED"}, blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={"VOLATILITY_EXPANSION": 0.8}, evidence={"session_bucket": "OPEN_DISCOVERY", "entropy_state": {"state": "HIGH"}}),
             HardDowngradeDecision("ORB", "NIFTY", "BUY_CALL", "OPENING_DRIVE", "EXECUTABLE_CANDIDATE", "ADVISORY_CANDIDATE", True, False, ("fallback_quote",), (), (), (), (), ())
         ),
         # 3. Blocked Mean Reversion
         score_candidate(
-            StrategyCandidate(schema_version=1, strategy_id="MEAN_REVERSION", movement_type="MEAN_REVERSION_EXTENSION", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={}, evidence={"session_bucket": "MIDDAY_CHOP", "entropy_state": {"state": "HIGH"}}),
+            StrategyCandidate(schema_version=1, strategy_id="MEAN_REVERSION", movement_type="MEAN_REVERSION_EXTENSION", symbol="NIFTY", direction="BUY_CALL", status="VALIDATED_CANDIDATE", raw_score=0.8, confidence_score=0.8, price_structure_score=0.8, option_confirmation_score=0.8, liquidity_score=0.8, freshness_score=0.8, volatility_score=0.8, regime_alignment_score=0.8, timing_score=0.8, trap_risk_score=0.0, confluence_score=0.8, entry_trigger="orb", invalid_if="no", rank_reason="test", lineage={"promotion_state": "PROMOTED"}, blockers=(), warnings=(), confluence_tags=(), suppression_tags=(), source_signals=(), regime_scores={}, evidence={"session_bucket": "MIDDAY_CHOP", "entropy_state": {"state": "HIGH"}}),
             HardDowngradeDecision("MEAN_REVERSION", "NIFTY", "BUY_CALL", "MEAN_REVERSION_EXTENSION", "EXECUTABLE_CANDIDATE", "EXECUTABLE_CANDIDATE", False, True, (), (), (), (), (), ())
         ),
     ]

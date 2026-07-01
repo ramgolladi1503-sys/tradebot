@@ -102,6 +102,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
+    patch("core.orchestrator.risk_halt.is_halted", return_value=False).start()
     
     mock_prepare.return_value = (trade, True, [])
 
@@ -207,6 +208,7 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
+    patch("core.orchestrator.risk_halt.is_halted", return_value=False).start()
 
     mock_prepare.return_value = (trade, True, [])
 
