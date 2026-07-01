@@ -53,6 +53,7 @@ def _candidate(
         rank_reason="unit",
         blockers=blockers,
         warnings=warnings,
+        lineage={"promotion_state": "PROMOTED"},
     )
 
 
