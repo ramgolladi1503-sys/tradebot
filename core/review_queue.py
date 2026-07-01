@@ -5618,6 +5618,10 @@ def _append_permission_promotion_trace(entry: dict, *, old_permission: str, old_
 
 
 def _downgrade_execution_intent(out, action, block_reason):
+    if out.get("permission") not in ("REJECT", "BLOCK", "QUEUE_ONLY"):
+        out["permission_downgraded_from"] = out.get("permission")
+        out["permission_downgrade_reason"] = block_reason
+    
     out["final_action"] = "QUEUE_ONLY" if action == "QUEUE_ONLY" else action
     out["permission"] = "QUEUE_ONLY" if action == "QUEUE_ONLY" else action
     out["execution_allowed"] = False
@@ -7625,6 +7629,11 @@ def _build_review_queue_entry(trade, *, extra=None, default_mode: str = "ADVISOR
         "adaptive_threshold_impact_score": _trade_attr(trade, "adaptive_threshold_impact_score", None),
         "adaptive_threshold_applied": _trade_attr(trade, "adaptive_threshold_applied", None),
         "adaptive_threshold_key": _trade_attr(trade, "adaptive_threshold_key", None),
+        "truth_quality": _trade_attr(trade, "truth_quality", None),
+        "truth_quality_source": _trade_attr(trade, "truth_quality_source", None),
+        "truth_allows_execution": _trade_attr(trade, "truth_allows_execution", None),
+        "truth_block_reason": _trade_attr(trade, "truth_block_reason", None),
+        "quote_truth_state": _trade_attr(trade, "quote_truth_state", None),
         "risk_budget_ok": _trade_attr(trade, "risk_budget_ok", None),
         "risk_budget_reason": _trade_attr(trade, "risk_budget_reason", None),
         "position_size_estimate": _trade_attr(trade, "position_size_estimate", None),
