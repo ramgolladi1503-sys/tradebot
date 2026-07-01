@@ -1163,6 +1163,8 @@ def _apply_sizing_telemetry(entry: dict) -> dict:
     ok, conf_mult, reason = _POSITION_SIZER.confidence_multiplier(ml_proba, confluence)
     if out.get("sizing_reason") in (None, "", "None"):
         out["sizing_reason"] = str(reason)
+    if out.get("sizing_confidence") is None:
+        out["sizing_confidence"] = ml_proba
     out["ml_proba_input"] = ml_proba
     out["confluence_input"] = confluence
     out["ml_proba_source"] = ml_proba_source or ("unavailable" if ml_proba is None else "unknown")

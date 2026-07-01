@@ -902,6 +902,13 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(detail, dict):
             out["sizing_confluence_score"] = _safe_float(detail.get("confluence_score"))
     out.setdefault("sizing_reason", _normalize_text(payload.get("sizing_reason")))
+    out.setdefault("ml_model_raw_proba", _safe_float(payload.get("ml_model_raw_proba")))
+    out.setdefault("ml_pre_quality_proba", _safe_float(payload.get("ml_pre_quality_proba")))
+    out.setdefault("ml_post_quality_proba", _safe_float(payload.get("ml_post_quality_proba")))
+    out.setdefault("gating_confidence", _safe_float(payload.get("gating_confidence")))
+    out.setdefault("sizing_confidence", _safe_float(payload.get("sizing_confidence")))
+    out.setdefault("ml_model_name", _normalize_text(payload.get("ml_model_name")))
+    out.setdefault("ml_model_version", _normalize_text(payload.get("ml_model_version")))
     out.setdefault("ml_proba_input", _safe_float(payload.get("ml_proba_input")))
     out.setdefault("confluence_input", _safe_float(payload.get("confluence_input")))
     out.setdefault("ml_proba_source", _normalize_text(payload.get("ml_proba_source")))
@@ -1426,6 +1433,13 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         ("gating_base_confidence", _safe_float(out.get("gating_base_confidence"))),
         ("gating_final_confidence", _safe_float(out.get("gating_final_confidence"))),
         ("sizing_confluence_score", _safe_float(out.get("sizing_confluence_score"))),
+        ("ml_model_raw_proba", _safe_float(out.get("ml_model_raw_proba"))),
+        ("ml_pre_quality_proba", _safe_float(out.get("ml_pre_quality_proba"))),
+        ("ml_post_quality_proba", _safe_float(out.get("ml_post_quality_proba"))),
+        ("gating_confidence", _safe_float(out.get("gating_confidence"))),
+        ("sizing_confidence", _safe_float(out.get("sizing_confidence"))),
+        ("ml_model_name", _normalize_text(out.get("ml_model_name"))),
+        ("ml_model_version", _normalize_text(out.get("ml_model_version"))),
         ("ml_proba_input", _safe_float(out.get("ml_proba_input"))),
         ("confluence_input", _safe_float(out.get("confluence_input"))),
         ("confidence_size_multiplier", _safe_float(out.get("confidence_size_multiplier"))),
@@ -1601,6 +1615,13 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         confidence = confidence_final
     out["sizing_confluence_score"] = _safe_float(out.get("sizing_confluence_score"))
     out["sizing_reason"] = _normalize_text(out.get("sizing_reason"))
+    out["ml_model_raw_proba"] = _safe_float(out.get("ml_model_raw_proba"))
+    out["ml_pre_quality_proba"] = _safe_float(out.get("ml_pre_quality_proba"))
+    out["ml_post_quality_proba"] = _safe_float(out.get("ml_post_quality_proba"))
+    out["gating_confidence"] = _safe_float(out.get("gating_confidence"))
+    out["sizing_confidence"] = _safe_float(out.get("sizing_confidence"))
+    out["ml_model_name"] = _normalize_text(out.get("ml_model_name"))
+    out["ml_model_version"] = _normalize_text(out.get("ml_model_version"))
     out["ml_proba_input"] = _safe_float(out.get("ml_proba_input"))
     out["confluence_input"] = _safe_float(out.get("confluence_input"))
     out["ml_proba_source"] = _normalize_text(out.get("ml_proba_source"))

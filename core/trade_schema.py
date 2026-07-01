@@ -357,6 +357,13 @@ class Trade:
     portfolio_optimization_penalty: float | None = None
     portfolio_optimization_penalty_reason: str | None = None
     sizing_reason: str | None = None
+    ml_model_raw_proba: float | None = None
+    ml_pre_quality_proba: float | None = None
+    ml_post_quality_proba: float | None = None
+    gating_confidence: float | None = None
+    sizing_confidence: float | None = None
+    ml_model_name: str | None = None
+    ml_model_version: str | None = None
     ml_proba_input: float | None = None
     confluence_input: float | None = None
     ml_proba_source: str | None = None
