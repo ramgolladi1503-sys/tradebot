@@ -65,6 +65,7 @@ def test_opening_drive_generator_lineage():
     assert isinstance(c.lineage["params_hash"], str), f"Hash was None. Profile config issue? lineage: {c.lineage}"
     assert "promotion_state" in c.lineage
     assert c.lineage["promotion_state"] == "ADVISORY_ONLY"
+    assert c.lineage["promotion_state"] != "PROMOTED"
 
 
 def test_vwap_reclaim_generator_lineage():
@@ -84,3 +85,4 @@ def test_vwap_reclaim_generator_lineage():
     assert isinstance(c.lineage["params_hash"], str)
     assert "promotion_state" in c.lineage
     assert c.lineage["promotion_state"] == "ADVISORY_ONLY"
+    assert c.lineage["promotion_state"] != "PROMOTED"
