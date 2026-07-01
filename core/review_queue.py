@@ -5683,7 +5683,7 @@ def _maybe_promote_execute_candidate(entry: dict) -> dict:
         elif str(out.get("decision_action") or "").upper() in ("REJECT", "QUEUE"):
             _downgrade_execution_intent(out, "REJECT", "decision_engine_reject")
 
-    return out
+    return _normalize_truth_quality(out)
 
 def _maybe_promote_execute_candidate_impl(entry: dict) -> dict:
     if not isinstance(entry, dict):
