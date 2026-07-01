@@ -10,7 +10,7 @@
 * `ml_model_version`: The specific artifact/hash/version generating the score.
 
 ## Field Assignments
-* **Which field drives gating?** `gating_confidence` explicitly drives the strict execution gating, avoiding raw/stale model artifacts from bypassing quality filters.
+* **Which field drives gating?** `gating_confidence` records the same value already used by the existing gating logic; this PR does not change gating behavior.
 * **Which field drives sizing?** `sizing_confidence` is explicitly consumed by `_apply_sizing_telemetry` and dictates capital allocation multipliers.
 * **Which field is raw model output?** `ml_model_raw_proba`.
 * **Which field is post-quality/display confidence?** `ml_post_quality_proba`.

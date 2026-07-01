@@ -48,18 +48,30 @@ def test_trade_builder_staged_confidence_payload():
 
 def test_legacy_compatibility():
     # 4. Add legacy compatibility tests
+    # Stronger compatibility check: verify minimal schema parses fully
     legacy_entry = {
+        "confidence_model_raw": 0.85,
         "builder_confidence": 0.55,
         "ml_proba_input": 0.55,
-        "confidence_model_raw": 0.85,
-        # missing new fields
+        "final_action": "EXECUTE",
+        "execution_allowed": True
+        # explicitly missing all new fields
     }
     
+    # Must run without key error or requiring new fields
     out = _apply_sizing_telemetry(legacy_entry)
     
     # Old rows must not crash and fallback to previous sizing
     assert out["sizing_confidence"] == 0.55
     assert out["ml_proba_input"] == 0.55
+    
+    # Existing fields remain
+    assert out["final_action"] == "EXECUTE"
+    assert out["execution_allowed"] is True
+    
+    # Ensure missing fields don't raise errors when serialized, they just remain None/absent
+    assert out.get("ml_model_raw_proba") is None
+    assert out.get("ml_model_name") is None
 
 def test_no_execution_behavior_changed():
     # 1. Prove no execution behavior changed
