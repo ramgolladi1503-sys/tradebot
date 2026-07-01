@@ -37,6 +37,7 @@ def orchestrator():
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
+@patch("core.orchestrator.evaluate_slo_status")
 @patch("core.orchestrator.risk_halt.is_halted")
 @patch("core.orchestrator.build_live_indicator_readiness_report")
 @patch("core.orchestrator.produce_and_store_market_snapshot")
@@ -53,6 +54,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_runtime_snap,
     mock_market_snap,
     mock_indicator_report,
+    mock_slo_status,
     mock_is_halted,
     mock_fetch_live,
     mock_send_ticket,
@@ -107,6 +109,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
     mock_is_halted.return_value = False
+    mock_slo_status.return_value = {"allowed": True}
     
     mock_prepare.return_value = (trade, True, [])
 
@@ -147,6 +150,7 @@ def test_jit_quote_revalidation_blocks_stale_quote(
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
+@patch("core.orchestrator.evaluate_slo_status")
 @patch("core.orchestrator.risk_halt.is_halted")
 @patch("core.orchestrator.build_live_indicator_readiness_report")
 @patch("core.orchestrator.produce_and_store_market_snapshot")
@@ -163,6 +167,7 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_runtime_snap,
     mock_market_snap,
     mock_indicator_report,
+    mock_slo_status,
     mock_is_halted,
     mock_fetch_live,
     mock_send_ticket,
@@ -217,6 +222,7 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
     mock_is_halted.return_value = False
+    mock_slo_status.return_value = {"allowed": True}
 
     mock_prepare.return_value = (trade, True, [])
 
