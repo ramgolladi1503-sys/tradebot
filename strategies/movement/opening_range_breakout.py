@@ -8,6 +8,7 @@ read-only and never calls broker/order/depth/execution code.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import (
     clamp_score,
@@ -20,10 +21,6 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "opening_range_retest_v1"
 MOVEMENT_TYPE = "OPENING_RANGE_RETEST"
-MIN_RETEST_MINUTES = 15
-MAX_RETEST_MINUTES = 90
-MAX_RETEST_DISTANCE_PCT = 0.0018
-MIN_BREAKOUT_DISTANCE_PCT = 0.0008
 
 
 def generate_opening_range_retest_candidates(
@@ -32,8 +29,13 @@ def generate_opening_range_retest_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate ORB retest candidates for CALL/PUT when evidence exists."""
 
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_retest_minutes = float(params.get("MIN_RETEST_MINUTES", 15))
+    max_retest_minutes = float(params.get("MAX_RETEST_MINUTES", 90))
+
     minutes = safe_float(ctx.minutes_since_open)
-    if minutes is None or minutes < MIN_RETEST_MINUTES or minutes > MAX_RETEST_MINUTES:
+    if minutes is None or minutes < min_retest_minutes or minutes > max_retest_minutes:
         return ()
 
     spot = safe_float(ctx.spot_ltp)
@@ -52,19 +54,27 @@ def generate_opening_range_retest_candidates(
 
 
 def _call_retest_confirmed(*, spot: float, vwap: float, orb_high: float) -> bool:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
     return (
         spot >= orb_high
         and spot >= vwap
-        and (pct_distance(spot, orb_high) or 1.0) <= MAX_RETEST_DISTANCE_PCT
+        and (pct_distance(spot, orb_high) or 1.0) <= max_retest_distance_pct
         and ((spot - orb_high) / abs(orb_high)) >= 0.0
     )
 
 
 def _put_retest_confirmed(*, spot: float, vwap: float, orb_low: float) -> bool:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
     return (
         spot <= orb_low
         and spot <= vwap
-        and (pct_distance(spot, orb_low) or 1.0) <= MAX_RETEST_DISTANCE_PCT
+        and (pct_distance(spot, orb_low) or 1.0) <= max_retest_distance_pct
         and ((orb_low - spot) / abs(orb_low)) >= 0.0
     )
 
@@ -75,13 +85,20 @@ def _build_candidate(
     direction: str,
     retest_level: float,
 ) -> StrategyCandidate:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
+    min_breakout_distance_pct = float(params.get("MIN_BREAKOUT_DISTANCE_PCT", 0.0008))
     side = side_evidence(ctx, direction)
     spot = safe_float(ctx.spot_ltp)
     retest_distance = pct_distance(spot, retest_level) or 0.0
     breakout_distance = _breakout_distance(ctx, direction)
     price_structure_score = clamp_score(
-        0.45 * (1.0 - ratio_score(retest_distance, start=0.0, full=MAX_RETEST_DISTANCE_PCT))
-        + 0.35 * ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.004)
+        0.45
+        * (1.0 - ratio_score(retest_distance, start=0.0, full=max_retest_distance_pct))
+        + 0.35
+        * ratio_score(breakout_distance, start=min_breakout_distance_pct, full=0.004)
         + 0.20 * clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0))
     )
     evidence = {
@@ -112,6 +129,10 @@ def _build_candidate(
         evidence=evidence,
         warnings=(),
         confluence_tags=("orb_retest", "vwap_alignment", "option_confirmation"),
+        strategy_version="v1",
+        params_used=params,
+        params_hash=profile.params_hash if profile else None,
+        promotion_state="ADVISORY_ONLY",
     )
 
 

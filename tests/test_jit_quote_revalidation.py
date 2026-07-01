@@ -37,6 +37,8 @@ def orchestrator():
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
+@patch("core.orchestrator.evaluate_slo_status")
+@patch("core.orchestrator.risk_halt.is_halted")
 @patch("core.orchestrator.build_live_indicator_readiness_report")
 @patch("core.orchestrator.produce_and_store_market_snapshot")
 @patch("core.orchestrator.produce_and_store_runtime_snapshots")
@@ -52,6 +54,8 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_runtime_snap,
     mock_market_snap,
     mock_indicator_report,
+    mock_is_halted,
+    mock_slo_status,
     mock_fetch_live,
     mock_send_ticket,
     mock_update_exec,
@@ -64,6 +68,8 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "LIVE_PILOT_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXEC_SLIPPAGE_BUDGET_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", False, raising=False)
     
     trade = Trade(
         trade_id="test_stale_quote",
@@ -102,6 +108,8 @@ def test_jit_quote_revalidation_blocks_stale_quote(
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
+    mock_is_halted.return_value = False
+    mock_slo_status.return_value = {"allowed": True}
     
     mock_prepare.return_value = (trade, True, [])
 
@@ -142,6 +150,8 @@ def test_jit_quote_revalidation_blocks_stale_quote(
 @patch("core.orchestrator.update_execution")
 @patch("core.orchestrator.send_trade_ticket")
 @patch("core.orchestrator.fetch_live_market_data")
+@patch("core.orchestrator.evaluate_slo_status")
+@patch("core.orchestrator.risk_halt.is_halted")
 @patch("core.orchestrator.build_live_indicator_readiness_report")
 @patch("core.orchestrator.produce_and_store_market_snapshot")
 @patch("core.orchestrator.produce_and_store_runtime_snapshots")
@@ -157,6 +167,8 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_runtime_snap,
     mock_market_snap,
     mock_indicator_report,
+    mock_is_halted,
+    mock_slo_status,
     mock_fetch_live,
     mock_send_ticket,
     mock_update_exec,
@@ -169,6 +181,8 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "LIVE_PILOT_MODE", False, raising=False)
     monkeypatch.setattr(cfg, "MANUAL_APPROVAL", False, raising=False)
+    monkeypatch.setattr(cfg, "EXEC_SLIPPAGE_BUDGET_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "EXECUTION_OPTIMIZER_ENABLE", False, raising=False)
     
     trade = Trade(
         trade_id="test_fresh_quote",
@@ -207,6 +221,8 @@ def test_jit_quote_revalidation_allows_fresh_quote(
     mock_gate.allowed = True
     mock_gate.blockers = []
     mock_eval_decision.return_value = mock_gate
+    mock_is_halted.return_value = False
+    mock_slo_status.return_value = {"allowed": True}
 
     mock_prepare.return_value = (trade, True, [])
 

@@ -9,6 +9,7 @@ trading.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import (
     clamp_score,
@@ -21,9 +22,6 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "trend_pullback_v1"
 MOVEMENT_TYPE = "TREND_PULLBACK"
-MIN_TREND_SCORE = 0.45
-MAX_PULLBACK_DISTANCE_PCT = 0.0035
-MIN_STRUCTURE_RESUME_PCT = 0.0004
 
 
 def generate_trend_pullback_candidates(
@@ -31,6 +29,10 @@ def generate_trend_pullback_candidates(
     regime: MovementRegimeResult,
 ) -> tuple[StrategyCandidate, ...]:
     """Generate CALL/PUT candidates after pullback hold and trend resumption."""
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    min_trend_score = float(params.get("MIN_TREND_SCORE", 0.45))
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
@@ -41,14 +43,19 @@ def generate_trend_pullback_candidates(
     trend_up = safe_float(regime.scores.get("TREND_UP")) or 0.0
     trend_down = safe_float(regime.scores.get("TREND_DOWN")) or 0.0
 
-    if trend_up >= MIN_TREND_SCORE and _call_pullback_holds(ctx):
+    if trend_up >= min_trend_score and _call_pullback_holds(ctx):
         candidates.append(_build_candidate(ctx, regime, "BUY_CALL", trend_up))
-    if trend_down >= MIN_TREND_SCORE and _put_pullback_holds(ctx):
+    if trend_down >= min_trend_score and _put_pullback_holds(ctx):
         candidates.append(_build_candidate(ctx, regime, "BUY_PUT", trend_down))
     return tuple(candidates)
 
 
 def _call_pullback_holds(ctx: StrategyContext) -> bool:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_pullback_distance_pct = float(params.get("MAX_PULLBACK_DISTANCE_PCT", 0.0035))
+    min_structure_resume_pct = float(params.get("MIN_STRUCTURE_RESUME_PCT", 0.0004))
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     support = safe_float(ctx.nearest_support)
@@ -58,12 +65,17 @@ def _call_pullback_holds(ctx: StrategyContext) -> bool:
     if spot < anchor or spot < vwap:
         return False
     distance = pct_distance(spot, anchor)
-    if distance is None or distance > MAX_PULLBACK_DISTANCE_PCT:
+    if distance is None or distance > max_pullback_distance_pct:
         return False
-    return ((spot - anchor) / abs(anchor)) >= MIN_STRUCTURE_RESUME_PCT
+    return ((spot - anchor) / abs(anchor)) >= min_structure_resume_pct
 
 
 def _put_pullback_holds(ctx: StrategyContext) -> bool:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_pullback_distance_pct = float(params.get("MAX_PULLBACK_DISTANCE_PCT", 0.0035))
+    min_structure_resume_pct = float(params.get("MIN_STRUCTURE_RESUME_PCT", 0.0004))
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     resistance = safe_float(ctx.nearest_resistance)
@@ -73,9 +85,9 @@ def _put_pullback_holds(ctx: StrategyContext) -> bool:
     if spot > anchor or spot > vwap:
         return False
     distance = pct_distance(spot, anchor)
-    if distance is None or distance > MAX_PULLBACK_DISTANCE_PCT:
+    if distance is None or distance > max_pullback_distance_pct:
         return False
-    return ((anchor - spot) / abs(anchor)) >= MIN_STRUCTURE_RESUME_PCT
+    return ((anchor - spot) / abs(anchor)) >= min_structure_resume_pct
 
 
 def _build_candidate(
@@ -84,6 +96,11 @@ def _build_candidate(
     direction: str,
     trend_score: float,
 ) -> StrategyCandidate:
+
+    profile = get_default_profile(STRATEGY_ID, "v1")
+    params = profile.params if profile else {}
+    max_pullback_distance_pct = float(params.get("MAX_PULLBACK_DISTANCE_PCT", 0.0035))
+    min_structure_resume_pct = float(params.get("MIN_STRUCTURE_RESUME_PCT", 0.0004))
     side = side_evidence(ctx, direction)
     anchor = _pullback_anchor(ctx, direction)
     spot = safe_float(ctx.spot_ltp)
@@ -91,8 +108,13 @@ def _build_candidate(
     resume_distance = _resume_distance(ctx, direction, anchor)
     price_structure_score = clamp_score(
         0.45 * trend_score
-        + 0.35 * (1.0 - ratio_score(pullback_distance, start=0.0, full=MAX_PULLBACK_DISTANCE_PCT))
-        + 0.20 * ratio_score(resume_distance, start=MIN_STRUCTURE_RESUME_PCT, full=0.003)
+        + 0.35
+        * (
+            1.0
+            - ratio_score(pullback_distance, start=0.0, full=max_pullback_distance_pct)
+        )
+        + 0.20
+        * ratio_score(resume_distance, start=min_structure_resume_pct, full=0.003)
     )
     evidence = {
         "spot_ltp": ctx.spot_ltp,
@@ -122,6 +144,10 @@ def _build_candidate(
         evidence=evidence,
         warnings=(),
         confluence_tags=("trend", "pullback_hold", "option_confirmation"),
+        strategy_version="v1",
+        params_used=params,
+        params_hash=profile.params_hash if profile else None,
+        promotion_state="ADVISORY_ONLY",
     )
 
 
@@ -133,7 +159,9 @@ def _pullback_anchor(ctx: StrategyContext, direction: str) -> float | None:
     return None
 
 
-def _resume_distance(ctx: StrategyContext, direction: str, anchor: float | None) -> float:
+def _resume_distance(
+    ctx: StrategyContext, direction: str, anchor: float | None
+) -> float:
     spot = safe_float(ctx.spot_ltp)
     if spot is None or anchor is None or anchor <= 0:
         return 0.0

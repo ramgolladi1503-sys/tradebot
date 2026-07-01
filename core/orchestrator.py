@@ -4825,6 +4825,8 @@ class Orchestrator:
             cycle_error = ""
             loop_start_time = time.perf_counter()
             cycle_perf_start = loop_start_time
+            dashboard_market_snapshot = None
+            dashboard_market_snapshot = None
             latency_critical_path_end_perf = None
             feature_build_ms = 0.0
             decision_build_ms = 0.0

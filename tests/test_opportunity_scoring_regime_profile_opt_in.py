@@ -32,6 +32,7 @@ def _candidate(**overrides):
         "rank_reason": "unit",
         "blockers": (),
         "warnings": (),
+        "lineage": {"promotion_state": "PROMOTED"},
     }
     payload.update(overrides)
     return StrategyCandidate(**payload)

@@ -41,6 +41,7 @@ def _candidate(strategy_id, *, regime_alignment_score, price_structure_score=0.4
         rank_reason="unit",
         blockers=blockers,
         warnings=warnings,
+        lineage={"promotion_state": "PROMOTED"},
     )
 
 
