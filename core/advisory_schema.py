@@ -902,6 +902,11 @@ def _legacy_adapter(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(detail, dict):
             out["sizing_confluence_score"] = _safe_float(detail.get("confluence_score"))
     out.setdefault("sizing_reason", _normalize_text(payload.get("sizing_reason")))
+    out.setdefault("truth_quality", _normalize_text(payload.get("truth_quality")))
+    out.setdefault("truth_quality_source", _normalize_text(payload.get("truth_quality_source")))
+    out.setdefault("truth_allows_execution", _normalize_bool(payload.get("truth_allows_execution")))
+    out.setdefault("truth_block_reason", _normalize_text(payload.get("truth_block_reason")))
+    out.setdefault("quote_truth_state", _normalize_text(payload.get("quote_truth_state")))
     out.setdefault("ml_model_raw_proba", _safe_float(payload.get("ml_model_raw_proba")))
     out.setdefault("ml_pre_quality_proba", _safe_float(payload.get("ml_pre_quality_proba")))
     out.setdefault("ml_post_quality_proba", _safe_float(payload.get("ml_post_quality_proba")))
@@ -1615,6 +1620,11 @@ def validate_advisory_row(payload: dict[str, Any], *, allow_legacy: bool = False
         confidence = confidence_final
     out["sizing_confluence_score"] = _safe_float(out.get("sizing_confluence_score"))
     out["sizing_reason"] = _normalize_text(out.get("sizing_reason"))
+    out["truth_quality"] = _normalize_text(out.get("truth_quality"))
+    out["truth_quality_source"] = _normalize_text(out.get("truth_quality_source"))
+    out["truth_allows_execution"] = _normalize_bool(out.get("truth_allows_execution"))
+    out["truth_block_reason"] = _normalize_text(out.get("truth_block_reason"))
+    out["quote_truth_state"] = _normalize_text(out.get("quote_truth_state"))
     out["ml_model_raw_proba"] = _safe_float(out.get("ml_model_raw_proba"))
     out["ml_pre_quality_proba"] = _safe_float(out.get("ml_pre_quality_proba"))
     out["ml_post_quality_proba"] = _safe_float(out.get("ml_post_quality_proba"))

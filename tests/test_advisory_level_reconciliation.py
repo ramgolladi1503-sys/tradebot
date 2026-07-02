@@ -43,6 +43,7 @@ def _canonical_row(**overrides):
         "target": 150.0,
         "capital_at_risk": 20.0,
         "rr_ratio": 1.5,
+        "truth_quality": "TRUTH_LIVE_FRESH",
     }
     row.update(overrides)
     return row
@@ -148,6 +149,7 @@ def test_apply_level_normalization_promotes_valid_queue_only_candidate():
         "execution_entry": 200.0,
         "stop_loss": 150.0,
         "target": 260.0,
+        "truth_quality": "TRUTH_LIVE_FRESH",
     }
     out = review_queue._apply_level_normalization_and_promotion(row)
 

@@ -39,6 +39,8 @@ def _candidate(**overrides):
         "liquidity_score": 0.8,
         "execution_ok": True,
         "data_state": "DATA_LIVE",
+        "truth_quality": "TRUTH_LIVE_FRESH",
+        "truth_allows_execution": True,
     }
     row.update(overrides)
     return row

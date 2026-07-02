@@ -43,6 +43,8 @@ def run_golden_path(desk: str, *, run_id: str) -> dict[str, Any]:
         "run_id": str(run_id),
         "mode": "PAPER",
         "ts": option_snapshot.get("ts") or utc_now().isoformat().replace("+00:00", "Z"),
+        "truth_quality": "TRUTH_LIVE_FRESH",
+        "truth_allows_execution": True,
     }
 
     append_event("trade_intent_created", intent)
@@ -225,6 +227,8 @@ def run_one_trade_can_build(desk: str, *, run_id: str) -> dict[str, Any]:
         "strategy": "healthcheck",
         "strategy_id": "healthcheck",
         "timestamp": now_iso,
+        "truth_quality": "TRUTH_LIVE_FRESH",
+        "truth_allows_execution": True,
     }
     with _memory_ticks_allowed_for_health_scenario():
         add_to_queue(

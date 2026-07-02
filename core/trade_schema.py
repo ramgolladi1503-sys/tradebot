@@ -357,6 +357,11 @@ class Trade:
     portfolio_optimization_penalty: float | None = None
     portfolio_optimization_penalty_reason: str | None = None
     sizing_reason: str | None = None
+    truth_quality: str | None = None
+    truth_quality_source: str | None = None
+    truth_allows_execution: bool | None = None
+    truth_block_reason: str | None = None
+    quote_truth_state: str | None = None
     ml_model_raw_proba: float | None = None
     ml_pre_quality_proba: float | None = None
     ml_post_quality_proba: float | None = None
