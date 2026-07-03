@@ -11257,16 +11257,37 @@ class TradeBuilder:
             ).strip().upper()
 
             paper_telemetry_enabled = bool(getattr(cfg, "PAPER_TELEMETRY_ENABLED", False))
-
             if exec_mode == "PAPER" and paper_telemetry_enabled:
+                sig = self._signal_for_symbol(market_data) or {}
+                sig_fam = sig.get("strategy_family", sig.get("family", ""))
+                sig_strat = sig.get("strategy", "")
+
                 cand_to_log = trade if trade is not None else dict(self._reject_ctx or {})
                 t_fam = getattr(cand_to_log, "strategy_family", getattr(cand_to_log, "family", cand_to_log.get("family", "") if isinstance(cand_to_log, dict) else ""))
                 t_strat = getattr(cand_to_log, "strategy", cand_to_log.get("strategy", "") if isinstance(cand_to_log, dict) else "")
 
+                if "OPENING_DRIVE_CONT" not in str(t_strat) and "OPENING_DRIVE_CONT" not in str(t_fam):
+                    if "OPENING_DRIVE_CONT" in str(sig_strat) or "OPENING_DRIVE_CONT" in str(sig_fam):
+                        cand_to_log = {
+                            "strategy": sig_strat,
+                            "family": sig_fam,
+                            "direction": sig.get("direction", ""),
+                            "status": "REJECTED_STALE_QUOTE_OR_SIMILAR",
+                            "is_fallback": False,
+                            "fallback_used": False,
+                            "is_advisory": False,
+                            "execution_allowed": False,
+                            "candidate_source": "raw_signal_rejection",
+                            "rejection_reason": str((self._reject_ctx or {}).get("reason") or "unknown_rejection"),
+                            "original_strategy": sig_strat,
+                            "replacement_candidate_id": getattr(trade, "trade_id", trade.get("trade_id") if isinstance(trade, dict) else None) if trade else None
+                        }
+                        t_fam = sig_fam
+                        t_strat = sig_strat
+
                 if not t_fam and not t_strat:
-                    sig = self._signal_for_symbol(market_data) or {}
-                    t_fam = sig.get("strategy_family", sig.get("family", ""))
-                    t_strat = sig.get("strategy", "")
+                    t_fam = sig_fam
+                    t_strat = sig_strat
                     if isinstance(cand_to_log, dict):
                         cand_to_log["strategy"] = t_strat
                         cand_to_log["family"] = t_fam
@@ -11274,6 +11295,7 @@ class TradeBuilder:
                 if "OPENING_DRIVE_CONT" in str(t_fam) or "OPENING_DRIVE_CONT" in str(t_strat):
                     from core.htf_paper_telemetry import log_htf_opening_drive_paper_candidate
                     log_htf_opening_drive_paper_candidate(cand_to_log if isinstance(cand_to_log, dict) else vars(cand_to_log), market_data)
+
         except Exception as e:
             import logging
             logging.getLogger("htf_telemetry").warning("Failed to log paper candidate: %s", e)

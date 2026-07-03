@@ -16,7 +16,7 @@ def test_live_enablement_gate_strict_if_live_fails_on_degraded_acceptance(monkey
             is_market_open=True,
             require_live_quotes=True,
             allow_stale_quotes=False,
-            planning_only=False,
+            planning_only=False, session_state="NORMAL_OPEN",
         ),
     )
     monkeypatch.setattr(live_enablement_gate, "check_trade_identity_schema", lambda: (True, "ok"))
@@ -42,7 +42,7 @@ def test_live_enablement_gate_non_live_degrades_without_fail(monkeypatch, tmp_pa
             is_market_open=False,
             require_live_quotes=False,
             allow_stale_quotes=True,
-            planning_only=True,
+            planning_only=True, session_state="CLOSED",
         ),
     )
     monkeypatch.setattr(live_enablement_gate, "check_trade_identity_schema", lambda: (True, "ok"))
@@ -68,7 +68,7 @@ def test_live_enablement_gate_live_statistical_gate_is_hard_fail(monkeypatch, tm
             is_market_open=True,
             require_live_quotes=True,
             allow_stale_quotes=False,
-            planning_only=False,
+            planning_only=False, session_state="NORMAL_OPEN",
         ),
     )
     monkeypatch.setattr(live_enablement_gate, "check_trade_identity_schema", lambda: (True, "ok"))

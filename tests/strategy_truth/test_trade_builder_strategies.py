@@ -5,7 +5,7 @@ def _base_market_data(overrides=None):
         "symbol": "NIFTY",
         "instrument": "OPT",
         "market_open": True,
-        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "market_context": {"execution_mode": "LIVE", "market_open": True, "session_state": "NORMAL_OPEN"},
         "ltp": 25100.0, # (ltp - vwap) / vwap = 100/25000 = 0.004 > 0.0015
         "vwap": 25000.0,
         "vwap_slope": 0.0,
@@ -50,6 +50,7 @@ def test_trade_builder_valid_bullish_maps_correctly(monkeypatch):
     monkeypatch.setattr(tb, "_signal_for_symbol", lambda *args, **kwargs: {
         "direction": "BUY_CALL", "reason": "test_bullish", "score": 0.9, "regime_day": "TREND"
     })
+    monkeypatch.setattr(tb.lifecycle, "can_allocate", lambda *args, **kwargs: (True, "ok"))
     md = _base_market_data({"ltp": 25200.0, "vwap_slope": 0.05})
     trade = tb.build(md)
     assert trade is not None
@@ -61,6 +62,7 @@ def test_trade_builder_valid_bearish_maps_correctly(monkeypatch):
     monkeypatch.setattr(tb, "_signal_for_symbol", lambda *args, **kwargs: {
         "direction": "BUY_PUT", "reason": "test_bearish", "score": 0.9, "regime_day": "TREND"
     })
+    monkeypatch.setattr(tb.lifecycle, "can_allocate", lambda *args, **kwargs: (True, "ok"))
     md = _base_market_data({"ltp": 24800.0, "vwap_slope": -0.05})
     trade = tb.build(md)
     assert trade is not None

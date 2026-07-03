@@ -8,7 +8,7 @@
 - requested_paths: `core/review_queue.py`, `core/trade_schema.py`, `core/advisory_schema.py`
 - allowed_paths: `core/review_queue.py`, `core/trade_schema.py`, `core/advisory_schema.py`, `tests/*`
 - forbidden_paths: broker integration, execution boundaries, strategies
-- expected_tests: Prove no execution behavior changed, test defaults for missing truth states, verify downgrade reason provenance.
+- expected_tests: Prove no execution behavior changed, test defaults for lack of truth states, verify downgrade logic provenance.
 - acceptance_proof: 100% of 108 tests passing in test_review_queue_live_entry.py and full suite green.
 
 ## High-Risk Path Review
@@ -27,7 +27,7 @@
 - What would fail in live or paper even if tests pass? If an exotic strategy omits `truth_quality` natively, it will be forcefully downgraded to `TRUTH_UNKNOWN_BLOCKED` and rejected from live execution.
 
 ## Hermes Review
-- This PR solidifies the contract for advisory telemetry rows. It guarantees that an `EXECUTE` final action MUST have an explicit `truth_allows_execution=True` and a valid `truth_quality` state, or it is safely downgraded to `REJECT`.
+- This PR solidifies the contract for advisory telemetry rows. It guarantees that an `EXECUTE` final action MUST have an explicit `truth_allows_execution=1` and a valid `truth_quality` state, or it is securely downgraded to `REJECT`.
 - All broker and live order paths remain strictly out of scope.
 
 ## GSD Review
@@ -52,3 +52,13 @@ All tests have passed locally. No execution thresholds were changed. The legacy 
 
 ## Human Approval
 - Awaiting human approval for final merge.
+
+## Traceability Checklist
+- mode: PAPER
+- candidate_id: N/A
+- decision: REJECT
+- reason: review_queue_blocked
+- timestamp: 2026-07-03T12:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review

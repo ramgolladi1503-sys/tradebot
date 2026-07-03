@@ -16,6 +16,7 @@ def _get_val(obj, key, default=""):
     return getattr(obj, key, default)
 
 def log_htf_opening_drive_paper_candidate(trade: dict, market_data: dict) -> None:
+    print("INSIDE LOG_HTF_OPENING", type(trade), trade)
     """
     Paper telemetry validation hook.
     Logs actual option quote metrics (bid/ask/spread/staleness) for HTF_OPENING_DRIVE_CONT candidates.
