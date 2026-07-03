@@ -27,7 +27,7 @@ def test_regime_entropy_max_overrides(monkeypatch):
         unstable_reasons=(), risk_ok=True, risk_reasons=(), governance_lock_active=False,
         broker_enabled=False, manual_review_required=False, instrument="OPT",
         bid=0, ask=0, quote_ok_input=True, quote_source_input="live",
-        feed_health={}, raw_data={}
+        feed_health={}, raw_data={}, session_state="NORMAL_OPEN"
     )
     result = _node_regime_ok(snapshot, {}, {})
     assert "entropy_too_high" in result.facts["unstable_reasons"]
@@ -45,6 +45,6 @@ def test_regime_entropy_max_overrides(monkeypatch):
     assert "entropy_too_high" not in result.facts["unstable_reasons"]
     
     # Override via high TREND probability
-    snapshot = replace(snapshot, raw_data={}, regime_prob_max=0.65)
+    snapshot = replace(snapshot, raw_data={}, session_state="NORMAL_OPEN", regime_prob_max=0.65)
     result = _node_regime_ok(snapshot, {}, {})
     assert "entropy_too_high" not in result.facts["unstable_reasons"]

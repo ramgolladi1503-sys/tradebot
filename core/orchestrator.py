@@ -2,6 +2,8 @@
 def _pace_loop(poll_interval: float, loop_start_time: float) -> None:
     import time
     elapsed = time.perf_counter() - loop_start_time
+    print('elapsed =', elapsed)
+    print('poll_interval =', poll_interval)
     sleep_time = max(0.0, poll_interval - elapsed)
     if sleep_time > 0:
         time.sleep(sleep_time)
@@ -4893,6 +4895,8 @@ class Orchestrator:
                     cycle_blockers[str(global_halt_reason)] += 1
                     self._emit_global_halt_events(global_halt_reason)
                     _pace_loop(self.poll_interval, loop_start_time)
+                    if run_once:
+                        break
                     continue
                 self._last_global_halt_reason = None
                 slo_guard = evaluate_slo_status(enforce_failover=True)
@@ -4909,6 +4913,8 @@ class Orchestrator:
                             ",".join(list(slo_guard.get("reasons") or []) or ["unknown"]),
                         )
                     _pace_loop(self.poll_interval, loop_start_time)
+                    if run_once:
+                        break
                     continue
                 # Feed freshness is now evaluated only in the Decision DAG from the
                 # immutable market snapshot. Do not recompute readiness here.

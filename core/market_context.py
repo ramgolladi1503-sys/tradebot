@@ -10,6 +10,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+SESSION_NORMAL_OPEN = "NORMAL_OPEN"
+SESSION_PRE_OPEN = "PRE_OPEN"
+SESSION_PRE_OPEN_MATCHING = "PRE_OPEN_MATCHING"
+SESSION_OPEN_WARMUP = "OPEN_WARMUP"
+SESSION_POST_CLOSE = "POST_CLOSE"
+SESSION_CLOSED = "CLOSED"
+
+
 from config import config as cfg
 from config.profile import resolve_trading_mode
 from core.time_utils import is_market_open_ist, now_ist
@@ -55,6 +63,7 @@ class MarketContext:
     require_live_quotes: bool
     allow_stale_quotes: bool
     planning_only: bool
+    session_state: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +72,7 @@ class MarketContext:
             "require_live_quotes": bool(self.require_live_quotes),
             "allow_stale_quotes": bool(self.allow_stale_quotes),
             "planning_only": bool(self.planning_only),
+            "session_state": self.session_state,
         }
 
 
@@ -94,6 +104,18 @@ def _extract_symbol_instrument(snapshot_or_config: Mapping[str, Any] | Any = Non
         symbol = str(raw_symbol).strip().upper() if raw_symbol not in (None, "") else None
         instrument = str(raw_instrument).strip().upper() if raw_instrument not in (None, "") else None
     return symbol, instrument
+
+
+def derive_session_state_ist(current_time=None, **kwargs) -> str:
+    from datetime import time
+    now_time = current_time or now_ist()
+    t = now_time.time()
+    if t < time(9, 0): return SESSION_PRE_OPEN
+    if t < time(9, 8): return SESSION_PRE_OPEN_MATCHING
+    if t < time(9, 15): return SESSION_OPEN_WARMUP
+    if t < time(15, 30): return SESSION_NORMAL_OPEN
+    if t <= time(16, 0): return SESSION_POST_CLOSE
+    return SESSION_CLOSED
 
 
 def coerce_segment_for_market_context(
@@ -161,6 +183,12 @@ def derive_market_context(
     elif snapshot_or_config is not None and explicit_market_open is None:
         explicit_market_open = _to_bool_or_none(getattr(snapshot_or_config, "market_open", None))
 
+    explicit_session_state = None
+    if isinstance(normalized, Mapping) and normalized.get("session_state"):
+        explicit_session_state = str(normalized.get("session_state")).strip().upper()
+
+    session_state = explicit_session_state or derive_session_state_ist(segment=resolved_segment)
+
     if force_enable:
         mode = "OFFHOURS" if exec_mode == "LIVE" else exec_mode
         is_market_open = False
@@ -208,6 +236,7 @@ def derive_market_context(
         require_live_quotes=bool(require_live_quotes),
         allow_stale_quotes=bool(allow_stale_quotes),
         planning_only=bool(planning_only),
+        session_state=session_state,
     )
 
 

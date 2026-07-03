@@ -26,8 +26,7 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "ORCHESTRATOR_FAST_LOOP_ENABLE", False, raising=False)
     orch = orch_mod.Orchestrator(total_capital=100000, poll_interval=1)
 
-    with pytest.raises(StopIteration):
-        orch.live_monitoring()
+    orch.live_monitoring(run_once=True)
 
     day = now_ist().date().isoformat()
     audit_path = Path(cfg.LOGS_ROOT) / f"daily_audit_{day}.json"

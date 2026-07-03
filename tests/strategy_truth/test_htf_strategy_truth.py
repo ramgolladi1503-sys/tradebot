@@ -179,7 +179,9 @@ def _base_market_data_for_test():
         "symbol": "NIFTY",
         "instrument": "OPT",
         "market_open": True,
-        "market_context": {"execution_mode": "LIVE", "market_open": True},
+        "execution_feed_ready": True,
+        "analytical_context_ready": True,
+        "market_context": {"execution_mode": "LIVE", "market_open": True, "session_state": "NORMAL_OPEN"},
         "ltp": 25100.0,
         "vwap": 25000.0,
         "vwap_slope": 0.0,
@@ -273,7 +275,7 @@ def test_paper_telemetry_no_live_orders_placed(monkeypatch, tmp_path):
     trade, _ = tb.build_with_trace(md)
 
     # Ensure telemetry was written
-    assert tmp_cand.exists()
+    print("TRADE:", trade, "\nREJECT_CTX:", tb._reject_ctx); assert tmp_cand.exists()
     with open(tmp_cand, "r") as f:
         lines = f.readlines()
         assert lines, "Expected at least one line of telemetry"
@@ -313,7 +315,7 @@ def test_stale_quote_candidate_is_rejected_and_logged(monkeypatch, tmp_path):
     # Actually build_with_trace softens the reject to candidate in paper mode.
     trade, _ = tb.build_with_trace(md)
 
-    assert tmp_cand.exists()
+    print("TRADE:", trade, "\nREJECT_CTX:", tb._reject_ctx); assert tmp_cand.exists()
     with open(tmp_cand, "r") as f:
         records = [json.loads(line) for line in f.readlines()]
         assert any(r["is_stale"] is True and r["execution_ok"] is False for r in records)

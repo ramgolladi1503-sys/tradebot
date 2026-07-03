@@ -12,7 +12,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from config import config as cfg
 from core.live_indicator_readiness import build_live_indicator_readiness_report
-from core.market_context import coerce_segment_for_market_context, derive_market_context
+from core.market_context import SESSION_NORMAL_OPEN, coerce_segment_for_market_context, derive_market_context
 from core.time_utils import compute_age_sec, now_utc_epoch
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 ReasonCode = str
 
 REASON_MARKET_CLOSED = "MARKET_CLOSED"
+REASON_SESSION_NOT_NORMAL_OPEN = "SESSION_NOT_NORMAL_OPEN"
 REASON_FEED_STALE = "FEED_STALE"
 REASON_WARMUP_INCOMPLETE = "WARMUP_INCOMPLETE"
 REASON_INDICATORS_MISSING = "INDICATORS_MISSING"
@@ -225,6 +226,7 @@ class MarketSnapshot:
     market_open: bool
     offhours_mode: bool
     allow_stale_quotes: bool
+    session_state: str
     market_context: Mapping[str, Any]
     ltp: float | None
     ltp_ts_epoch: float | None
@@ -615,6 +617,7 @@ def build_market_snapshot(
         market_open=market_open,
         offhours_mode=bool(offhours_mode),
         allow_stale_quotes=bool(allow_stale_quotes),
+        session_state=str(market_ctx.session_state),
         market_context=MappingProxyType(market_ctx.to_dict()),
         ltp=ltp,
         ltp_ts_epoch=ltp_ts_epoch,
@@ -668,6 +671,11 @@ def _node_feed_fresh(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Map
         feed["offhours_mode"] = bool(snapshot.offhours_mode)
         feed["allow_stale_quotes"] = True
         return NodeResult(ok=True, facts=feed)
+
+    execution_feed_ready = bool(snapshot.raw_data.get("execution_feed_ready", True)) if isinstance(snapshot.raw_data, Mapping) else True
+    if not execution_feed_ready:
+        return NodeResult(ok=False, reasons=(REASON_FEED_STALE,), facts=feed)
+
     if bool(feed.get("is_fresh")):
         return NodeResult(ok=True, facts=feed)
     if bool(getattr(cfg, "FEED_STALE_EVIDENCE_LOG_ENABLE", True)):
@@ -710,9 +718,13 @@ def _node_warmup_done(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Ma
     indicator_readiness_blockers: list[str] = []
     indicator_readiness_ready: bool | None = None
 
-    if system_state == "WARMUP":
+    analytical_context_ready = bool(snapshot.raw_data.get("analytical_context_ready", True))
+    execution_feed_ready = bool(snapshot.raw_data.get("execution_feed_ready", True))
+
+    if system_state in ("WARMUP", "COLD", "LIVE_WARMING") or not analytical_context_ready:
         reasons.append(REASON_WARMUP_INCOMPLETE)
-    if (system_state == "WARMUP") or has_explicit_bar_contract:
+
+    if (system_state in ("WARMUP", "COLD", "LIVE_WARMING")) or has_explicit_bar_contract:
         if snapshot.ohlc_bars_count < min_bars:
             reasons.append(REASON_WARMUP_INCOMPLETE)
 
@@ -1330,6 +1342,11 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
     if (not allowed) and (not blockers):
         blockers = [REASON_NO_STRATEGY_QUALIFIED]
         first_failing_node = NODE_N8_STRATEGY_SELECT
+
+    if snapshot.session_state != SESSION_NORMAL_OPEN:
+        allowed = False
+        if REASON_SESSION_NOT_NORMAL_OPEN not in blockers:
+            blockers.insert(0, REASON_SESSION_NOT_NORMAL_OPEN)
 
     stage = first_failing_node or NODE_N11_FINAL_DECISION
     decision = DecisionReport(
