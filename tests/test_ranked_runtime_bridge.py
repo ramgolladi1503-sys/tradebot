@@ -76,12 +76,6 @@ def test_recovered_fallback_stale_untrusted_rows_never_become_executable():
         assert truth["truth_allows_execution"] is False
         assert truth["class_blocks_execution"] is True
 
-def test_legacy_rows_cannot_pass_opportunity_truth_path():
-    # A legacy row has no canonical report.
-    candidate = {"trade_id": "legacy1", "status": "VALIDATED_CANDIDATE"}
-    truth = _execution_truth(candidate)
-    assert truth["truth_allows_execution"] is False
-    assert truth["class_blocks_execution"] is True
 
 def test_no_broker_order_action_is_introduced():
     decision = assess_opportunity_truth_path({

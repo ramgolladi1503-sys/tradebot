@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Dict
 
@@ -192,7 +194,6 @@ class CandidateRankingReport:
     """Read-only ranking report for scored opportunities."""
 
     schema_version: int
-    ranked_report_id: str
     read_only: bool
     is_order_action: bool  # is_order_action=false
     append: bool
@@ -208,6 +209,8 @@ class CandidateRankingReport:
     safety_flags: tuple[str, ...]
     directional_imbalance_flags: tuple[str, ...]
     metadata: dict[str, Any] = field(default_factory=dict)
+    ranked_report_id: str = field(default_factory=lambda: f"ranking-{uuid.uuid4()}")
+    generated_epoch: float = field(default_factory=time.time)
     generated_epoch: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
