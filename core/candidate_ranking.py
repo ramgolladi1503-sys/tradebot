@@ -132,8 +132,6 @@ class CandidateRankRecord:
     """Ranked view of one scored candidate."""
 
     rank: int
-    candidate_id: str
-    lineage_id: str
     strategy_id: str
     symbol: str
     direction: str
@@ -150,6 +148,8 @@ class CandidateRankRecord:
     safety_flags: tuple[str, ...]
     directional_warnings: tuple[str, ...]
     sort_key: tuple[Any, ...]
+    candidate_id: str = ""
+    lineage_id: str = ""
     outcome_contract: Optional[CandidateOutcomeContract] = None
 
     @property
