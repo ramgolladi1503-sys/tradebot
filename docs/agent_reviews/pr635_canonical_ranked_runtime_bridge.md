@@ -30,3 +30,13 @@ This PR does not prove profitability or order execution success.
 
 # Human Approval
 Approved by the human author.
+
+# Evidence Audit Fields
+mode: LIVE
+candidate_id: preserved
+decision: BLOCK fallback legacy execution
+reason: Fallback data not executable
+timestamp: checked
+is_order_action: false
+broker_api_called: false
+source: agent

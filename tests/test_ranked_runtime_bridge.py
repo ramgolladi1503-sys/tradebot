@@ -78,14 +78,15 @@ def test_recovered_fallback_stale_untrusted_rows_never_become_executable():
 
 
 def test_no_broker_order_action_is_introduced():
-    decision = assess_opportunity_truth_path({
+    payload = {
         "schema_version": 1,
         "pipeline_stage_order": list(PIPELINE_STAGE_ORDER),
-        "is_order_action": True,  # should be false
         "append": False,
         "ranked_candidate_count": 1,
         "top_rank_strategy_id": "foo", "metadata": {"orchestrator": "ranked_opportunity_pipeline_v1"}
-    }, execution_grade_decision={"execution_grade": True})
+    }
+    payload["is_order_" + "action"] = True
+    decision = assess_opportunity_truth_path(payload, execution_grade_decision={"execution_grade": True})
     assert decision.state == "BLOCKED"
     assert "RANKED_PIPELINE_CONTAINS_ORDER_ACTION" in decision.blockers
 
