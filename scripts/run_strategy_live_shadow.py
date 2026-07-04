@@ -41,9 +41,9 @@ def main():
 
     out_path = Path(args.output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     shadow_trades = []
-    
+
     if args.fixture_mode:
         shadow_trades.append({
             "strategy_id": args.strategy_id,
@@ -80,30 +80,30 @@ def main():
             with open(out_path, "w") as f:
                 pass
             return
-            
+
         candles = []
         with open(candles_path, "r") as f:
             for line in f:
                 if line.strip(): candles.append(json.loads(line))
-                
+
         if not candles:
             with open(out_path, "w") as f:
                 pass
             return
-            
+
         # Strategy module
         strat = load_strategy_module("strategies/simple_orb.py")
         signals = strat.generate_signals(candles)
-        
+
         # Load Option Snapshot
         chain = {}
         if Path(args.option_chain_snapshot_path).exists():
             with open(args.option_chain_snapshot_path, "r") as f:
                 for line in f:
-                    if line.strip(): 
+                    if line.strip():
                         row = json.loads(line)
                         chain[(row["strike"], row["direction"])] = row
-        
+
         # Load Live Quotes
         quotes = []
         if Path(args.live_option_quotes_path).exists():
@@ -113,13 +113,13 @@ def main():
         quotes_df = pd.DataFrame(quotes)
         if not quotes_df.empty:
             quotes_df["quote_ts_obj"] = pd.to_datetime(quotes_df["quote_ts"])
-        
+
         for idx, sig in enumerate(signals):
             sig_ts = pd.to_datetime(sig["signal_ts"])
             direction = sig["direction"]
             spot = sig.get("spot_price", 0.0)
             strike = int(round_to_nearest_strike(spot, 100))
-            
+
             row = {
                 "strategy_id": args.strategy_id,
                 "signal_id": sig.get("signal_id", f"SIG_{idx}"),
@@ -148,69 +148,69 @@ def main():
                 "source_hashes": {},
                 "input_artifact_hashes": {}
             }
-            
+
             # Resolve Chain
             opt = chain.get((strike, direction))
             if not opt:
                 row["rejection_reason"] = "MISSING_OPTION_CONTRACT"
                 shadow_trades.append(row)
                 continue
-                
+
             row["option_symbol"] = opt["symbol"]
             row["option_instrument_key"] = opt["instrument_key"]
-            
+
             # Find quote
             if quotes_df.empty:
                 row["rejection_reason"] = "MISSING_QUOTE"
                 shadow_trades.append(row)
                 continue
-                
+
             # Nearest quote at or before signal
             valid_quotes = quotes_df[(quotes_df["instrument_key"] == opt["instrument_key"]) & (quotes_df["quote_ts_obj"] <= sig_ts)]
             if valid_quotes.empty:
                 row["rejection_reason"] = "MISSING_QUOTE"
                 shadow_trades.append(row)
                 continue
-                
+
             best_quote = valid_quotes.iloc[-1]
             row["entry_quote_ts"] = best_quote["quote_ts"]
-            
+
             q_ts = pd.to_datetime(best_quote["quote_ts"])
             age_sec = (sig_ts - q_ts).total_seconds()
             row["entry_quote_age_sec"] = age_sec
-            
+
             row["bid"] = float(best_quote.get("bid", 0.0))
             row["ask"] = float(best_quote.get("ask", 0.0))
             row["mid"] = float((row["bid"] + row["ask"]) / 2.0 if row["bid"] > 0 and row["ask"] > 0 else 0.0)
-            
+
             if row["bid"] <= 0 or row["ask"] <= 0 or row["mid"] <= 0:
                 row["rejection_reason"] = "BAD_QUOTE"
                 shadow_trades.append(row)
                 continue
-                
+
             row["spread_pct_of_premium"] = float((row["ask"] - row["bid"]) / row["mid"])
-            
+
             if sig.get("entry_reason", "") in ["fallback", "recovered", "advisory"]:
                 row["rejection_reason"] = "FALLBACK_OR_ADVISORY_NOT_EXECUTABLE"
                 shadow_trades.append(row)
                 continue
-                
+
             if age_sec > args.quote_max_age_sec:
                 row["rejection_reason"] = "STALE_QUOTE"
                 shadow_trades.append(row)
                 continue
-                
+
             if row["spread_pct_of_premium"] > args.max_spread_pct:
                 row["rejection_reason"] = "WIDE_SPREAD"
                 shadow_trades.append(row)
                 continue
-                
+
             row["intended_entry_price"] = row["mid"]
             row["fillable_entry_price"] = row["ask"] # slip to ask
             # Just simulated close
-            row["fillable_pnl"] = 100.0 
+            row["fillable_pnl"] = 100.0
             row["theoretical_pnl"] = 100.0
-            
+
             shadow_trades.append(row)
 
     with open(out_path, "w") as f:

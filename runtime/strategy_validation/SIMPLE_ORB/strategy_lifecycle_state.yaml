@@ -1,5 +1,5 @@
 strategy_id: SIMPLE_ORB
-lifecycle_state: PHASE_6_SCAFFOLD_READY
+lifecycle_state: PHASE_6_FAILED_VIOLATION
 phase_1_passed: true
 phase_2_passed: true
 phase_3_passed: true

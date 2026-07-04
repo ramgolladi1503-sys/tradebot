@@ -48,7 +48,7 @@ def test_recovered_fallback_stale_untrusted_rows_never_become_executable():
         "bucket": "EXECUTABLE_CANDIDATE",
         "safety_flags": ["FALLBACK"]
     }
-    
+
     mock_snapshot = {
         "state": "ok",
         "payload": {
@@ -69,7 +69,7 @@ def test_recovered_fallback_stale_untrusted_rows_never_become_executable():
             ]
         }
     }
-    
+
     from unittest.mock import patch
     with patch("core.runtime_snapshot_store.read_ranked_pipeline_snapshot", return_value=mock_snapshot):
         truth = _execution_truth(candidate)
@@ -98,7 +98,7 @@ def test_random_rank_id_not_generated_in_adapter():
 def test_mismatched_candidate_id_fails_closed():
     from core.opportunity_engine import _execution_truth
     candidate = {
-        "trade_id": "c2", "status": "executable", "ranked_report_id": "rep-1", 
+        "trade_id": "c2", "status": "executable", "ranked_report_id": "rep-1",
         "candidate_id": "c2", "bucket": "EXECUTABLE_CANDIDATE", "execution_grade": True, "allowed_for_paper_execution": True, "advisory_only": False
     }
     mock_snapshot = {
@@ -129,7 +129,7 @@ def test_mismatched_candidate_id_fails_closed():
 def test_mismatched_rank_id_fails_closed():
     from core.opportunity_engine import _execution_truth
     candidate = {
-        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1", 
+        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1",
         "candidate_id": "c1", "rank_id": "r2", "bucket": "EXECUTABLE_CANDIDATE", "execution_grade": True, "allowed_for_paper_execution": True, "advisory_only": False
     }
     mock_snapshot = {
@@ -161,7 +161,7 @@ def test_stale_snapshot_fails_closed():
     from core.opportunity_engine import _execution_truth
     import time
     candidate = {
-        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1", 
+        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1",
         "candidate_id": "c1", "bucket": "EXECUTABLE_CANDIDATE", "execution_grade": True, "allowed_for_paper_execution": True, "advisory_only": False
     }
     mock_snapshot = {
@@ -195,7 +195,7 @@ def test_substring_safety_flags_fail_closed():
     from core.opportunity_engine import _execution_truth
     import time
     candidate = {
-        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1", 
+        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1",
         "candidate_id": "c1", "bucket": "EXECUTABLE_CANDIDATE", "execution_grade": True, "allowed_for_paper_execution": True, "advisory_only": False,
         "safety_flags": ["recovered_fallback_data"]
     }
@@ -228,7 +228,7 @@ def test_substring_safety_flags_fail_closed():
 def test_exception_swallowing_produces_blocker():
     from core.opportunity_engine import _execution_truth
     candidate = {
-        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1", 
+        "trade_id": "c1", "status": "executable", "ranked_report_id": "rep-1",
         "candidate_id": "c1", "bucket": "EXECUTABLE_CANDIDATE", "execution_grade": True, "allowed_for_paper_execution": True, "advisory_only": False
     }
     from unittest.mock import patch

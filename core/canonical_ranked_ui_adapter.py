@@ -7,7 +7,7 @@ def adapt_candidate_rank_record_to_ui(record: dict) -> dict:
     """Convert a CandidateRankRecord to a safe UI row."""
     if not isinstance(record, dict):
         raise AdvisorySchemaError("record_not_dict")
-    
+
     import uuid
     import time
     return {
