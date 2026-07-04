@@ -414,7 +414,7 @@ def _token_payload_from_exact_match(*, token: int, entry: dict, exchange: str, s
         "resolution_path": "exact_contract_match",
         "fallback_candidate": False,
         "candidate_origin": "exact_contract",
-        "execution_grade": True,
+        "execution_grade": False,
         "advisory_only": False,
     }
 
@@ -528,7 +528,7 @@ def resolve_option_token(
                 "exchange": exchange,
                 "data_source": data_source,
                 "resolution_path": "exact_contract_match",
-                "execution_grade": True,
+                "execution_grade": False,
             }
         )
         return payload
@@ -559,7 +559,7 @@ def resolve_option_token(
                 "exchange": exchange,
                 "data_source": data_source,
                 "resolution_path": "exact_contract_match",
-                "execution_grade": True,
+                "execution_grade": False,
             }
         )
         return payload
