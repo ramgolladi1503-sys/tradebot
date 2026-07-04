@@ -1,6 +1,9 @@
 import argparse
 import json
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 from pathlib import Path
 from datetime import datetime, UTC
 
@@ -89,7 +92,7 @@ def main():
         json.dump(report, f, indent=4)
 
     lifecycle_path = Path(f"runtime/strategy_validation/{args.strategy_id}/strategy_lifecycle_state.yaml")
-    if lifecycle_path.exists():
+    if lifecycle_path.exists() and yaml is not None:
         with open(lifecycle_path, "r") as f:
             state = yaml.safe_load(f)
 

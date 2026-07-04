@@ -3,6 +3,12 @@ import subprocess
 from pathlib import Path
 import pytest
 
+def write_mock_strategy(tmp_path):
+    strat_path = tmp_path / "mock_strategy.py"
+    with open(strat_path, "w") as f:
+        f.write("def generate_signals(candles):\n    return [{'signal_ts': '2026-07-01T09:40:00Z', 'direction': 'CE', 'entry_price': 10.0, 'spot_price': 100.0, 'symbol': 'TEST'}]\n")
+    return strat_path
+
 def test_shadow_missing_option_chain_contract(tmp_path):
     candles_path = tmp_path / "candles.jsonl"
     quotes_path = tmp_path / "quotes.jsonl"
@@ -21,7 +27,8 @@ def test_shadow_missing_option_chain_contract(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),
@@ -53,7 +60,8 @@ def test_shadow_missing_quote(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),
@@ -85,7 +93,8 @@ def test_shadow_stale_quote(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),
@@ -117,7 +126,8 @@ def test_shadow_wide_spread(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),
@@ -149,7 +159,8 @@ def test_shadow_bad_quote(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),
@@ -168,7 +179,8 @@ def test_fixture_mode_still_rejected_by_analyzer(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--fixture-mode",
         "--output-path", str(out_path)
     ]
@@ -176,7 +188,7 @@ def test_fixture_mode_still_rejected_by_analyzer(tmp_path):
 
     cmd2 = [
         "python", "scripts/analyze_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
         "--shadow-trades-path", str(out_path),
         "--output-path", str(report_path)
     ]
@@ -207,7 +219,8 @@ def test_shadow_valid_execution(tmp_path):
 
     cmd = [
         "python", "scripts/run_strategy_live_shadow.py",
-        "--strategy-id", "SIMPLE_ORB",
+        "--strategy-id", "VWAP_ORB",
+        "--strategy-path", str(write_mock_strategy(tmp_path)),
         "--current-day-candles-path", str(candles_path),
         "--live-option-quotes-path", str(quotes_path),
         "--option-chain-snapshot-path", str(chain_path),

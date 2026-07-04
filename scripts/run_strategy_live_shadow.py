@@ -29,6 +29,7 @@ def round_to_nearest_strike(price, base=100):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy-id", required=True)
+    parser.add_argument("--strategy-path", required=False, default="")
     parser.add_argument("--current-day-candles-path", required=False, default="")
     parser.add_argument("--live-option-quotes-path", required=False, default="")
     parser.add_argument("--option-chain-snapshot-path", required=False, default="")
@@ -92,7 +93,10 @@ def main():
             return
 
         # Strategy module
-        strat = load_strategy_module("strategies/simple_orb.py")
+        if args.strategy_path:
+            strat = load_strategy_module(args.strategy_path)
+        else:
+            strat = load_strategy_module(f"strategies/{args.strategy_id.lower()}.py")
         signals = strat.generate_signals(candles)
 
         # Load Option Snapshot
