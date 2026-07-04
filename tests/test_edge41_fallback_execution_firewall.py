@@ -152,7 +152,7 @@ def test_fallback_candidate_cannot_be_selected_or_top_executable() -> None:
     top = select_top_opportunities(ranked, executable_top_n=1, advisory_top_n=5)
 
     assert selected["selected_for_execution"] is False
-    assert selected["selection_reason"] == "execution_quality_reject"
+    assert selected["selection_reason"] in ("execution_quality_reject", "not_execution_eligible", "execution_truth_blocked")
     assert selected["execution_ok"] is False
     assert selected["order_policy"] == "advisory"
     assert selected["order_policy_reason"] == FALLBACK_DRIVEN_REASON

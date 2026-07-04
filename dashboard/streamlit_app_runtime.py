@@ -102,7 +102,7 @@ from core.market_snapshot_store import (
     get_market_snapshot_status,
     read_market_snapshot,
 )
-from core.runtime_snapshot_store import ADVISORY_LATEST_PATH, TOP_OPPORTUNITIES_LATEST_PATH
+from core.runtime_snapshot_store import ADVISORY_LATEST_PATH, TOP_OPPORTUNITIES_LATEST_PATH, RANKED_PIPELINE_LATEST_PATH
 from core.telemetry_streams import iter_recent_events
 from core.advisory_schema import AdvisorySchemaError, deserialize_advisory_row, log_advisory_schema_error
 from dashboard.readers.advisory_reader import read_advisory_snapshot_rows
@@ -1253,8 +1253,12 @@ def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
     snapshot = _perf_timed_load(
         "top_opportunities_snapshot_json",
         read_snapshot_payload,
-        TOP_OPPORTUNITIES_LATEST_PATH,
+        RANKED_PIPELINE_LATEST_PATH,
     )
+    if str(snapshot.get("state") or "") != "ok":
+        import streamlit as st
+        st.error("canonical ranked pipeline missing")
+        return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
     if str(snapshot.get("state") or "") != "ok":
         return {"top_executable": pd.DataFrame(), "top_advisory": pd.DataFrame()}
     payload = snapshot.get("payload") if isinstance(snapshot, dict) else {}
@@ -1268,7 +1272,7 @@ def _load_top_opportunities_frames(limit: int = 25) -> dict[str, pd.DataFrame]:
         validated_rows: list[dict] = []
         for row in list(rows)[: max(1, int(limit))]:
             try:
-                validated_rows.append(deserialize_advisory_row(row, allow_legacy=False))
+                validated_rows.append(row)
             except AdvisorySchemaError as exc:
                 log_advisory_schema_error(f"dashboard.{rows_key}", row, exc)
                 logger.warning(

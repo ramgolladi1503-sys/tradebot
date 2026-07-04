@@ -1641,20 +1641,100 @@ def _candidate_class(candidate: Any) -> str:
     return "executable"
 
 
-def _execution_truth(candidate: Any) -> dict[str, Any]:
+def _requires_canonical_runtime_truth(candidate: Any) -> bool:
+    ranked_report_id = _get_value(candidate, "ranked_report_id")
+    canonical_source = _get_value(candidate, "canonical_source")
+    source = _get_value(candidate, "source")
+    runtime_source = _get_value(candidate, "runtime_source")
+
+    return bool(
+        ranked_report_id or
+        canonical_source == "ranked_opportunity_pipeline_v1" or
+        source == "ranked_opportunity_pipeline_v1" or
+        runtime_source == "ranked_opportunity_pipeline_v1"
+    )
+
+def _canonical_execution_truth(candidate: Any) -> tuple[bool, str | None]:
+    from core.opportunity_truth_path import assess_opportunity_truth_path
+    from core.runtime_snapshot_store import read_ranked_pipeline_snapshot
+    import time
+
+    ranked_report_id = _get_value(candidate, "ranked_report_id")
+    candidate_id = _get_value(candidate, "candidate_id") or _get_value(candidate, "trade_id")
+    rank_id = _get_value(candidate, "rank_id")
+    lineage_id = _get_value(candidate, "lineage_id")
+    bucket = _get_value(candidate, "bucket")
+    safety_flags = [str(f) for f in (_get_value(candidate, "safety_flags") or []) if f]
+
+    has_truth = False
+    exception_blocker = None
+
+    try:
+        snapshot = read_ranked_pipeline_snapshot()
+        if isinstance(snapshot, dict) and snapshot.get("state") == "ok":
+            reports = snapshot.get("payload", {}).get("reports", [])
+
+            for report in reports:
+                report_id = report.get("ranked_report_id") or report.get("ranking", {}).get("ranked_report_id")
+                if report_id != ranked_report_id:
+                    continue
+
+                report_epoch = report.get("generated_epoch") or report.get("ranking", {}).get("generated_epoch", 0)
+                if time.time() - float(report_epoch) > 300:
+                    exception_blocker = "CANONICAL_RANKED_SNAPSHOT_STALE"
+                    break
+
+                truth = assess_opportunity_truth_path(report, execution_grade_decision=candidate)
+
+                if (truth.canonical and
+                    not truth.advisory_only and
+                    not truth.blockers and
+                    truth.state == "PAPER_INTENT_ELIGIBLE"):
+
+                    for rank in report.get("ranking", {}).get("ranks", []):
+                        rank_cand_id = rank.get("candidate_id")
+                        if rank_cand_id == candidate_id:
+                            # Strict match check
+                            if rank_id and rank.get("rank_id") != rank_id: continue
+                            if lineage_id and rank.get("lineage_id") != lineage_id: continue
+
+                            rank_bucket = rank.get("bucket") or bucket
+                            if rank_bucket != bucket: continue
+
+                            rank_safety = rank.get("safety_flags", [])
+                            combined_safety = set(safety_flags) | set(rank_safety)
+
+                            if rank_bucket == "EXECUTABLE_CANDIDATE" and rank_bucket != "NEAR_EXECUTABLE_CANDIDATE":
+                                combined_text = " ".join(str(x).lower() for x in combined_safety)
+                                forbidden_tokens = ("fallback", "recovered", "stale", "untrusted", "synthetic")
+                                has_forbidden = any(token in combined_text for token in forbidden_tokens)
+                                if not has_forbidden:
+                                    has_truth = True
+                                    break
+                if has_truth or exception_blocker:
+                    break
+    except Exception as e:
+        exception_blocker = f"CANONICAL_TRUTH_EXCEPTION:{type(e).__name__}"
+
+    return has_truth, exception_blocker
+
+def _base_execution_truth(candidate: Any, force_block: bool = False, exception_blocker: str | None = None) -> dict[str, Any]:
     source_flags = dict(_get_value(candidate, "source_flags", {}) or {})
     candidate_class = _candidate_class(candidate)
+
     execution_entry = _safe_float(_get_value(candidate, "execution_entry"))
     execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
     execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
     tradable = bool(_get_value(candidate, "tradable", False))
+
     execution_truth = bool(
         execution_entry is not None
         and execution_entry_status == "executable"
         and execution_allowed
         and tradable
+        and not force_block
     )
-    class_blocks = candidate_class in {
+    class_blocks = force_block or candidate_class in {
         "fallback",
         "planning_only",
         "synthetic",
@@ -1670,14 +1750,29 @@ def _execution_truth(candidate: Any) -> dict[str, Any]:
         or source_flags.get("debug_candidate")
     )
     truth_allows_execution = bool(execution_truth and not class_blocks and not debug_block)
+
     return {
         "candidate_class": candidate_class,
         "execution_truth": execution_truth,
         "truth_allows_execution": truth_allows_execution,
         "class_blocks_execution": class_blocks,
         "debug_blocks_execution": debug_block,
+        "exception_blocker": exception_blocker,
     }
 
+def _execution_truth(candidate: Any) -> dict[str, Any]:
+    force_block = False
+    exception_blocker = None
+
+    if _requires_canonical_runtime_truth(candidate):
+        status = str(_get_value(candidate, "status")).strip().upper()
+        candidate_class = _candidate_class(candidate)
+        if status == "RANKED_OPPORTUNITY" or candidate_class == "executable":
+            has_truth, exception_blocker = _canonical_execution_truth(candidate)
+            if not has_truth or exception_blocker:
+                force_block = True
+
+    return _base_execution_truth(candidate, force_block=force_block, exception_blocker=exception_blocker)
 
 def _is_near_executable_opportunity(candidate: Any) -> bool:
     candidate_class = str(_get_value(candidate, "candidate_class") or "").strip().upper()
