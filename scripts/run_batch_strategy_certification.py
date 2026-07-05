@@ -97,18 +97,42 @@ def main(args=None):
                 # Replay does not overwrite state file directly in the batch runner, 
                 # but might write candidate_replay_report.json
                 replay_report = runtime_dir / strategy_id / "candidate_replay_report.json"
-                if replay_report.exists():
-                    with open(replay_report) as f:
-                        replay_data = json.load(f)
-                    state["lifecycle_state"] = replay_data.get("lifecycle_state", state.get("lifecycle_state"))
-                    
+                
+                replay_status = "CANDIDATE_REPLAY_NOT_RUN"
+                replay_data = {}
+                
+                if not success:
+                    replay_status = "CANDIDATE_REPLAY_FAILED"
+                elif replay_report.exists():
+                    try:
+                        with open(replay_report) as f:
+                            replay_data = json.load(f)
+                        
+                        state["lifecycle_state"] = replay_data.get("lifecycle_state", state.get("lifecycle_state"))
+                        
+                        adapter_approved = replay_data.get("adapter_approved_for_replay", False)
+                        certifiable = replay_data.get("certifiable_data", False)
+                        blockers = replay_data.get("certification_blockers", [])
+                        
+                        if adapter_approved and certifiable:
+                            replay_status = "CANDIDATE_REPLAY_PASSED"
+                        elif blockers or not adapter_approved:
+                            replay_status = "CANDIDATE_REPLAY_DATA_BLOCKED"
+                        else:
+                            replay_status = "CANDIDATE_REPLAY_FAILED"
+                    except Exception:
+                        replay_status = "CANDIDATE_REPLAY_FAILED"
+                else:
+                    replay_status = "CANDIDATE_REPLAY_FAILED"
+                
+                if parsed_args.include_candidate_replay:
                     candidate_replay_reports.append({
                         "strategy_id": strategy_id,
                         "strategy_type": "candidate_generator_strategy",
-                        "lifecycle_state": state["lifecycle_state"],
-                        "contract_audit_status": "CANDIDATE_GENERATOR_CONTRACT_PASSED",
-                        "candidate_replay_status": replay_data.get("lifecycle_state"),
-                        "data_fetch_status": replay_data.get("data_fetch_status"),
+                        "lifecycle_state": state.get("lifecycle_state", "UNKNOWN"),
+                        "contract_audit_status": "CANDIDATE_GENERATOR_CONTRACT_PASSED" if success else "CERTIFICATION_FAILED",
+                        "candidate_replay_status": replay_status,
+                        "data_fetch_status": replay_data.get("data_fetch_status", "UNKNOWN"),
                         "data_fetch_blockers": replay_data.get("data_fetch_blockers", []),
                         "certification_blockers": replay_data.get("certification_blockers", []),
                         "certifiable_data": replay_data.get("certifiable_data", False),
