@@ -143,6 +143,8 @@ def main():
     data_fetch_blockers = []
     fetched_underlying = 0
     fetched_options = 0
+    provenance = []
+    certifiable_data = False
     
     if not data_file.exists():
         if args.fetch_missing_data:
@@ -156,6 +158,11 @@ def main():
                 fetched_options = meta.get("fetched_option_candles_count", 0)
                 lifecycle_state = status
                 final_reason = reason
+                
+                # Only if real usable data was fetched do we set certifiable_data to true and provenance
+                if status == "SUCCESS": # Note: currently our mock only returns blocked reasons
+                    certifiable_data = True
+                    provenance = ["real_upstox"]
             else:
                 data_fetch_status = "DATA_BLOCKED_UNSUPPORTED_PROVIDER"
                 data_fetch_blockers.append(f"Unsupported provider: {args.data_provider}")
@@ -175,17 +182,17 @@ def main():
         "reason": final_reason,
         "execution_model": "historical_option_replay",
         "cost_model": cost_model,
-        "data_provider": args.data_provider or "none",
+        "requested_data_provider": args.data_provider or "none",
         "data_fetch_attempted": data_fetch_attempted,
         "data_fetch_status": data_fetch_status,
         "data_fetch_blockers": data_fetch_blockers,
+        "certifiable_data": certifiable_data,
+        "provenance": provenance,
         "fetched_underlying_candles_count": fetched_underlying,
         "fetched_option_candles_count": fetched_options,
         "instrument_keys": [],
         "date_range": {"from": args.from_date, "to": args.to_date},
         "interval": "1m",
-        "provenance": args.data_provider if data_fetch_attempted else "local",
-        "certifiable_data": False,
         "adapter_approved_for_replay": False,
         "replay_engine": "historical_option_replay",
         "paper_live_allowed": False,

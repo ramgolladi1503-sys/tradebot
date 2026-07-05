@@ -208,3 +208,26 @@ def test_upstox_ohlc_returns_no_tick_spread_truth(monkeypatch):
     monkeypatch.setattr("requests.get", lambda *args, **kwargs: MockRes())
     status, reason, meta = replay_mod.fetch_upstox_historical("NIFTY", "2026-07-01", "2026-07-05")
     assert status == "DATA_BLOCKED_UPSTOX_NO_TICK_OR_SPREAD_TRUTH"
+
+def test_auth_failure_no_provenance(monkeypatch, tmp_path):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "invalid")
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    class MockRes:
+        status_code = 401
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: MockRes())
+    import sys
+    monkeypatch.setattr(sys, "argv", ["prog", "--strategy", "TEST", "--fetch-missing-data", "--data-provider", "real_upstox"])
+    # mock Path to write to tmp_path
+    monkeypatch.chdir(tmp_path)
+    try:
+        replay_mod.main()
+    except SystemExit:
+        pass
+    import json
+    report = json.load(open("runtime/strategy_validation/TEST/candidate_replay_report.json"))
+    assert report["requested_data_provider"] == "real_upstox"
+    assert report["provenance"] == []
+    assert report["certifiable_data"] is False
+    assert report["adapter_approved_for_replay"] is False
+    assert report["data_fetch_status"] == "DATA_BLOCKED_UPSTOX_FETCH_FAILED"
+    
