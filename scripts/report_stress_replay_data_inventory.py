@@ -2,29 +2,53 @@ import json
 import pandas as pd
 from pathlib import Path
 import os
+import argparse
+import csv
 
-def load_instrument_master(roots):
-    for root in roots:
-        p = Path(root)
-        if not p.exists():
-            continue
-        for f in p.rglob("*"):
-            if f.is_file() and any(x in f.name.lower() for x in ["instrument", "kite", "upstox"]) and f.suffix.lower() == ".json":
-                try:
-                    with open(f) as fh:
-                        data = json.load(fh)
-                        if isinstance(data, list) and len(data) > 0 and "instrument_token" in data[0]:
-                            mapping = {str(item["instrument_token"]): item for item in data}
-                            return str(f), mapping
-                except Exception:
-                    pass
+def load_instrument_master(file_path):
+    p = Path(file_path)
+    if not p.exists():
+        return None, {}
+        
+    mapping = {}
+    try:
+        if p.suffix.lower() == ".json":
+            with open(p) as fh:
+                data = json.load(fh)
+                items = []
+                if isinstance(data, list):
+                    items = data
+                elif isinstance(data, dict):
+                    for k, v in data.items():
+                        if isinstance(v, list):
+                            items.extend(v)
+                for item in items:
+                    if isinstance(item, dict) and "instrument_token" in item:
+                        mapping[str(item["instrument_token"])] = item
+        elif p.suffix.lower() == ".csv":
+            with open(p, newline="") as fh:
+                reader = csv.DictReader(fh)
+                for item in reader:
+                    if "instrument_token" in item:
+                        mapping[str(item["instrument_token"])] = item
+        elif p.suffix.lower() == ".parquet":
+            df = pd.read_parquet(p)
+            for item in df.to_dict("records"):
+                if "instrument_token" in item:
+                    mapping[str(item["instrument_token"])] = item
+    except Exception as e:
+        print(f"Error loading instrument master {file_path}: {e}")
+    
+    if mapping:
+        return str(p), mapping
     return None, {}
 
-def create_report():
+def create_report(instrument_master_path=None):
     report = []
-    roots = ["runtime", ".runtime", "data", "configs", "reports", "."]
     
-    im_path, im_map = load_instrument_master(roots)
+    im_path, im_map = None, {}
+    if instrument_master_path:
+        im_path, im_map = load_instrument_master(instrument_master_path)
     
     # Check JSON/JSONL
     for root in ["runtime", ".runtime", "data", "reports"]:
@@ -50,12 +74,13 @@ def create_report():
                             "unsafe_source_markers_found": [],
                             "missing_required_fields": [],
                             "instrument_metadata_verified": False,
-                            "instrument_master_path": None,
+                            "instrument_master_path": im_path,
                             "instrument_tokens_sampled": 0,
                             "instrument_tokens_resolved": 0,
                             "instrument_tokens_unresolved": 0,
                             "resolved_option_contracts_count": 0,
                             "resolved_underlying_symbols": [],
+                            "resolved_option_contracts_sample": [],
                             "metadata_blockers": ["DATA_BLOCKED_TOO_LARGE"],
                             "notes": "File too large"
                         })
@@ -92,6 +117,7 @@ def create_report():
                 tokens_unresolved = 0
                 option_contracts = 0
                 underlying_symbols = set()
+                option_contracts_sample = []
                 metadata_blockers = []
                 instrument_metadata_verified = False
 
@@ -99,7 +125,10 @@ def create_report():
                     unique_tokens = df["instrument_token"].dropna().unique()
                     tokens_sampled = len(unique_tokens)
                     
-                    if not im_map:
+                    if not instrument_master_path:
+                        metadata_blockers.append("DATA_BLOCKED_INSTRUMENT_METADATA_NOT_VERIFIED")
+                        tokens_unresolved = tokens_sampled
+                    elif not im_map:
                         metadata_blockers.append("DATA_BLOCKED_INSTRUMENT_METADATA_NOT_VERIFIED")
                         tokens_unresolved = tokens_sampled
                     else:
@@ -109,13 +138,24 @@ def create_report():
                                 tokens_resolved += 1
                                 item = im_map[token_str]
                                 
-                                has_expiry = item.get("expiry") is not None
-                                has_strike = item.get("strike") is not None and item.get("strike") > 0
+                                has_expiry = item.get("expiry") is not None and item.get("expiry") != ""
+                                
+                                strike_val = item.get("strike")
+                                try:
+                                    strike_val = float(strike_val)
+                                except (TypeError, ValueError):
+                                    strike_val = 0
+                                has_strike = strike_val > 0
+                                
                                 is_option = item.get("instrument_type") in ["CE", "PE"] or item.get("segment") in ["NFO-OPT", "BFO-OPT"]
                                 
-                                if has_expiry and has_strike and is_option:
+                                has_trading_symbol = item.get("tradingsymbol") is not None and item.get("tradingsymbol") != ""
+                                
+                                if has_expiry and has_strike and is_option and has_trading_symbol:
                                     option_contracts += 1
                                     instrument_metadata_verified = True
+                                    if len(option_contracts_sample) < 5:
+                                        option_contracts_sample.append(item.get("tradingsymbol"))
                                 else:
                                     underlying_symbols.add(item.get("tradingsymbol", "UNKNOWN"))
                                     
@@ -163,6 +203,9 @@ def create_report():
                 else:
                     classification = "INSUFFICIENT_SCHEMA"
                     
+                if not instrument_master_path:
+                    im_path = None
+                    
                 report.append({
                     "path": str(f),
                     "format": "parquet",
@@ -183,6 +226,7 @@ def create_report():
                     "instrument_tokens_unresolved": tokens_unresolved,
                     "resolved_option_contracts_count": option_contracts,
                     "resolved_underlying_symbols": list(underlying_symbols),
+                    "resolved_option_contracts_sample": option_contracts_sample,
                     "metadata_blockers": metadata_blockers,
                     "notes": ""
                 })
@@ -190,12 +234,17 @@ def create_report():
             except Exception as e:
                 pass
                 
+    if not instrument_master_path and not report:
+        pass
+        
     out_dir = Path("runtime/strategy_validation")
     out_dir.mkdir(parents=True, exist_ok=True)
     with open(out_dir / "stress_replay_data_inventory_report.json", "w") as f:
         json.dump(report, f, indent=2)
         
     md_lines = ["# Stress Replay Data Inventory Report\n"]
+    if not instrument_master_path:
+        md_lines.append("**INSTRUMENT_MASTER_MISSING**: No instrument master was provided via --instrument-master. Option metadata cannot be verified.\n")
     for r in report:
         md_lines.append(f"## {r['path']}")
         md_lines.append(f"- Classification: {r['classification']}")
@@ -209,4 +258,7 @@ def create_report():
         f.write("\n".join(md_lines))
         
 if __name__ == "__main__":
-    create_report()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--instrument-master", help="Path to instrument master JSON/CSV/Parquet")
+    args = parser.parse_args()
+    create_report(args.instrument_master)

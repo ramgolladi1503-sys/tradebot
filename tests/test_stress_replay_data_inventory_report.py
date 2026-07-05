@@ -67,7 +67,7 @@ def test_inventory_report_logic(tmp_path, monkeypatch):
 
     monkeypatch.setattr(rep_mod, "Path", lambda p_str: tmp_path / p_str if p_str in ["runtime", ".runtime", "data", "configs", "reports", "."] else (tmp_path / p_str if p_str == "runtime/strategy_validation" else Path(p_str)))
 
-    rep_mod.create_report()
+    rep_mod.create_report(str(master_file))
     
     out_json = tmp_path / "runtime/strategy_validation/stress_replay_data_inventory_report.json"
     with open(out_json) as f:
