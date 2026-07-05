@@ -246,7 +246,7 @@ def test_missing_token_blocker_format(monkeypatch, tmp_path):
     assert report["data_fetch_status"] == "DATA_BLOCKED_UPSTOX_TOKEN_MISSING"
     assert "DATA_BLOCKED_UPSTOX_TOKEN_MISSING" in report["data_fetch_blockers"]
     assert len(report["data_fetch_blocker_details"]) > 0
-    assert "UPSTOX_ACCESS_TOKEN" in report["data_fetch_blocker_details"][0]
+    assert "UPSTOX_ACCESS_TOKEN" in report["data_fetch_blocker_details"]["DATA_BLOCKED_UPSTOX_TOKEN_MISSING"]
 
 def test_data_capability_classification_underlying_only():
     from scripts.replay_candidate_generator_strategy import determine_data_capability
@@ -293,5 +293,5 @@ def test_offline_replay_no_fetch_produces_not_requested(monkeypatch, tmp_path):
     assert report["data_fetch_attempted"] is False
     assert "DATA_FETCH_NOT_REQUESTED" in report["data_fetch_blockers"]
     assert len(report["data_fetch_blocker_details"]) > 0
-    assert "Fetch was not requested" in report["data_fetch_blocker_details"][0]
+    assert "Fetch was not requested" in report["data_fetch_blocker_details"]["DATA_FETCH_NOT_REQUESTED"]
 

@@ -123,17 +123,6 @@ def determine_data_capability(fetched_underlying, fetched_options, data_provider
         "certification_blockers": []
     }
     
-    if fetched_underlying > 0 and fetched_options == 0:
-        cap["underlying_data_capability"] = "UNDERLYING_OHLC_ONLY"
-        cap["certification_blockers"].append("DATA_BLOCKED_UNDERLYING_ONLY_NO_OPTION_TRUTH")
-        cap["certification_blockers"].append("DATA_BLOCKED_REAL_OPTION_LTP_MISSING")
-    
-    if fetched_options > 0:
-        cap["option_data_capability"] = "OPTION_OHLC"
-        cap["option_ltp_truth_available"] = True
-        cap["candle_replay_supported"] = True
-        cap["certification_blockers"].append("DATA_BLOCKED_OPTION_OHLC_NO_SPREAD_TRUTH")
-        
     if data_provider == "live_captured":
         cap["option_data_capability"] = "OPTION_QUOTE_OR_DEPTH_TRUTH"
         cap["spread_truth_available"] = True
@@ -142,10 +131,24 @@ def determine_data_capability(fetched_underlying, fetched_options, data_provider
         cap["option_ltp_truth_available"] = True
         cap["stress_replay_supported"] = True
         cap["candle_replay_supported"] = True
-        cap["certification_blockers"] = []
+    else:
+        if fetched_underlying > 0 and fetched_options == 0:
+            cap["underlying_data_capability"] = "UNDERLYING_OHLC_ONLY"
+            cap["certification_blockers"].append("DATA_BLOCKED_UNDERLYING_ONLY_NO_OPTION_TRUTH")
+            cap["certification_blockers"].append("DATA_BLOCKED_REAL_OPTION_LTP_MISSING")
+        elif fetched_options > 0:
+            cap["option_data_capability"] = "OPTION_OHLC"
+            cap["option_ltp_truth_available"] = True
+            cap["candle_replay_supported"] = True
+            cap["certification_blockers"].append("DATA_BLOCKED_OPTION_OHLC_NO_SPREAD_TRUTH")
+        elif fetched_options == 0 and fetched_underlying == 0:
+            cap["certification_blockers"].append("DATA_BLOCKED_REAL_OPTION_LTP_MISSING")
 
     if not cap["stress_replay_supported"]:
         cap["certification_blockers"].append("DATA_BLOCKED_STRESS_REPLAY_UNSUPPORTED_BY_DATA_CAPABILITY")
+        
+    cap["certification_blockers"] = [b for b in cap["certification_blockers"] if b]
+    cap["certification_blockers"] = list(dict.fromkeys(cap["certification_blockers"]))
         
     return cap
 
@@ -183,7 +186,13 @@ def main():
     data_fetch_attempted = False
     data_fetch_status = "DATA_FETCH_NOT_REQUESTED"
     data_fetch_blockers = []
-    data_fetch_blocker_details = []
+    data_fetch_blocker_details = {}
+    certification_blocker_details = {
+        "DATA_BLOCKED_REAL_OPTION_LTP_MISSING": "Real option LTP truth is unavailable",
+        "DATA_BLOCKED_STRESS_REPLAY_UNSUPPORTED_BY_DATA_CAPABILITY": "Stress replay requires option tick/spread/depth truth",
+        "DATA_BLOCKED_UNDERLYING_ONLY_NO_OPTION_TRUTH": "Only underlying data available, missing option truth",
+        "DATA_BLOCKED_OPTION_OHLC_NO_SPREAD_TRUTH": "Option OHLC lacks spread truth needed for stress replay"
+    }
     fetched_underlying = 0
     fetched_options = 0
     provenance = []
@@ -191,7 +200,7 @@ def main():
     
     if not args.fetch_missing_data:
         data_fetch_blockers.append("DATA_FETCH_NOT_REQUESTED")
-        data_fetch_blocker_details.append("Fetch was not requested for this offline replay run")
+        data_fetch_blocker_details["DATA_FETCH_NOT_REQUESTED"] = "Fetch was not requested for this offline replay run"
     
     if not data_file.exists():
         if args.fetch_missing_data:
@@ -201,7 +210,7 @@ def main():
                 data_fetch_status = status
                 if reason:
                     data_fetch_blockers.append(status)
-                    data_fetch_blocker_details.append(reason)
+                    data_fetch_blocker_details[status] = reason
                 fetched_underlying = meta.get("fetched_underlying_candles_count", 0)
                 fetched_options = meta.get("fetched_option_candles_count", 0)
                 lifecycle_state = status
@@ -220,9 +229,9 @@ def main():
             else:
                 data_fetch_status = "DATA_BLOCKED_UNSUPPORTED_PROVIDER"
                 data_fetch_blockers.append("DATA_BLOCKED_UNSUPPORTED_PROVIDER")
-                data_fetch_blocker_details.append(f"Unsupported provider: {args.data_provider}")
+                data_fetch_blocker_details["DATA_BLOCKED_UNSUPPORTED_PROVIDER"] = f"Unsupported provider: {args.data_provider}"
                 lifecycle_state = data_fetch_status
-                final_reason = data_fetch_blocker_details[0]
+                final_reason = data_fetch_blocker_details["DATA_BLOCKED_UNSUPPORTED_PROVIDER"]
                 cap = determine_data_capability(0, 0, args.data_provider)
         else:
             lifecycle_state = "DATA_FETCH_PENDING"
@@ -243,7 +252,7 @@ def main():
         "requested_data_provider": args.data_provider or "none",
         "data_fetch_attempted": data_fetch_attempted,
         "data_fetch_status": data_fetch_status,
-        "data_fetch_blockers": data_fetch_blockers,
+        "data_fetch_blockers": list(dict.fromkeys([b for b in data_fetch_blockers if b])),
         "data_fetch_blocker_details": data_fetch_blocker_details,
         "data_capability": cap,
         "underlying_data_capability": cap["underlying_data_capability"],
@@ -255,6 +264,7 @@ def main():
         "stress_replay_supported": cap["stress_replay_supported"],
         "candle_replay_supported": cap["candle_replay_supported"],
         "certification_blockers": cap["certification_blockers"],
+        "certification_blocker_details": {k: v for k, v in certification_blocker_details.items() if k in cap["certification_blockers"]},
         "certifiable_data": certifiable_data,
         "provenance": provenance,
         "fetched_underlying_candles_count": fetched_underlying,
