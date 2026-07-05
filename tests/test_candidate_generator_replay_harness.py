@@ -231,3 +231,19 @@ def test_auth_failure_no_provenance(monkeypatch, tmp_path):
     assert report["adapter_approved_for_replay"] is False
     assert report["data_fetch_status"] == "DATA_BLOCKED_UPSTOX_FETCH_FAILED"
     
+
+def test_missing_token_blocker_format(monkeypatch, tmp_path):
+    monkeypatch.delenv("UPSTOX_ACCESS_TOKEN", raising=False)
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    import sys, json
+    monkeypatch.setattr(sys, "argv", ["prog", "--strategy", "TEST_FORMAT", "--fetch-missing-data", "--data-provider", "real_upstox"])
+    monkeypatch.chdir(tmp_path)
+    try:
+        replay_mod.main()
+    except SystemExit:
+        pass
+    report = json.load(open("runtime/strategy_validation/TEST_FORMAT/candidate_replay_report.json"))
+    assert report["data_fetch_status"] == "DATA_BLOCKED_UPSTOX_TOKEN_MISSING"
+    assert "DATA_BLOCKED_UPSTOX_TOKEN_MISSING" in report["data_fetch_blockers"]
+    assert len(report["data_fetch_blocker_details"]) > 0
+    assert "UPSTOX_ACCESS_TOKEN" in report["data_fetch_blocker_details"][0]

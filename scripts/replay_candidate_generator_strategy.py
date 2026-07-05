@@ -144,6 +144,7 @@ def main():
     data_fetch_attempted = False
     data_fetch_status = ""
     data_fetch_blockers = []
+    data_fetch_blocker_details = []
     fetched_underlying = 0
     fetched_options = 0
     provenance = []
@@ -156,7 +157,8 @@ def main():
                 status, reason, meta = fetch_upstox_historical(args.symbol, args.from_date, args.to_date)
                 data_fetch_status = status
                 if reason:
-                    data_fetch_blockers.append(reason)
+                    data_fetch_blockers.append(status)
+                    data_fetch_blocker_details.append(reason)
                 fetched_underlying = meta.get("fetched_underlying_candles_count", 0)
                 fetched_options = meta.get("fetched_option_candles_count", 0)
                 lifecycle_state = status
@@ -168,9 +170,10 @@ def main():
                     provenance = ["real_upstox"]
             else:
                 data_fetch_status = "DATA_BLOCKED_UNSUPPORTED_PROVIDER"
-                data_fetch_blockers.append(f"Unsupported provider: {args.data_provider}")
+                data_fetch_blockers.append("DATA_BLOCKED_UNSUPPORTED_PROVIDER")
+                data_fetch_blocker_details.append(f"Unsupported provider: {args.data_provider}")
                 lifecycle_state = data_fetch_status
-                final_reason = data_fetch_blockers[0]
+                final_reason = data_fetch_blocker_details[0]
         else:
             lifecycle_state = "DATA_FETCH_PENDING"
             final_reason = "Missing historical tick data to generate candidates"
@@ -189,6 +192,7 @@ def main():
         "data_fetch_attempted": data_fetch_attempted,
         "data_fetch_status": data_fetch_status,
         "data_fetch_blockers": data_fetch_blockers,
+        "data_fetch_blocker_details": data_fetch_blocker_details,
         "certifiable_data": certifiable_data,
         "provenance": provenance,
         "fetched_underlying_candles_count": fetched_underlying,
