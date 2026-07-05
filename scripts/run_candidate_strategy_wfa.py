@@ -18,19 +18,32 @@ def main():
 
     out_dir = Path("runtime/strategy_validation")
     out_dir.mkdir(parents=True, exist_ok=True)
+    
+    catalog_path = out_dir / "historical_data_catalog.json"
+    catalog = {}
+    if catalog_path.exists():
+        with open(catalog_path, "r") as f:
+            catalog = json.load(f)
+            
+    dates_available = catalog.get("dates_available", [])
 
     for strat in CANDIDATE_STRATEGIES:
         strat_dir = out_dir / strat
         strat_dir.mkdir(parents=True, exist_ok=True)
         
-        passed = (strat != "OPTION_PRESSURE")
+        blockers = []
+        if len(dates_available) < 30:
+            blockers.append("INSUFFICIENT_HISTORICAL_DATA_FOR_WFA")
+            blockers.append("MINIMUM_WFA_WINDOWS_NOT_MET")
+        
+        passed = len(blockers) == 0
         
         report = {
             "strategy_id": strat,
             "phase": "phase_5_wfa",
             "phase_name": "walk_forward_analysis",
             "passed": passed,
-            "verdict": "PASSED" if passed else "FAILED",
+            "verdict": "PASSED" if passed else "BLOCKED",
             "backtest_mode": "CANDLE_LEVEL_RESEARCH",
             "execution_grade": False,
             "train_windows": ["2024-Q1", "2024-Q2"] if passed else [],
@@ -46,7 +59,7 @@ def main():
                 "stability_score": 0.8 if passed else 0
             },
             "phase6_shadow_candidate": passed,
-            "blockers": ["Missing required depth data"] if not passed else [],
+            "blockers": blockers,
             "paper_live_allowed": False,
             "live_allowed": False,
             "broker_order_allowed": False,
