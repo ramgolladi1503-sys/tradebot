@@ -30,62 +30,135 @@ logger = logging.getLogger("tick_collector")
 
 
 def get_target_tokens() -> dict[int, str]:
-    """Dynamically resolves instrument tokens for NIFTY/BANKNIFTY ATM +/- wide range."""
-    logger.info("Fetching instruments from NFO/NSE...")
+    """Dynamically resolves instrument tokens for NIFTY/BANKNIFTY/SENSEX ATM +/- wide range and VIX."""
+    logger.info("Fetching instruments from NFO/NSE/BFO/BSE...")
     kite_client.ensure()
-    nfo_insts = kite_client.instruments_cached("NFO")
-    nse_insts = kite_client.instruments_cached("NSE")
+
+    nfo_insts = []
+    nse_insts = []
+    bfo_insts = []
+    bse_insts = []
+
+    try:
+        nfo_insts = kite_client.instruments_cached("NFO")
+    except Exception as e:
+        logger.warning(f"Failed to fetch NFO instruments: {e}")
+
+    try:
+        nse_insts = kite_client.instruments_cached("NSE")
+    except Exception as e:
+        logger.warning(f"Failed to fetch NSE instruments: {e}")
+
+    try:
+        bfo_insts = kite_client.instruments_cached("BFO")
+    except Exception as e:
+        logger.warning(f"Failed to fetch BFO instruments: {e}")
+
+    try:
+        bse_insts = kite_client.instruments_cached("BSE")
+    except Exception as e:
+        logger.warning(f"Failed to fetch BSE instruments: {e}")
 
     nifty_token = None
     banknifty_token = None
-    for inst in nse_insts:
-        if inst["tradingsymbol"] == "NIFTY 50":
-            nifty_token = inst["instrument_token"]
-        if inst["tradingsymbol"] == "NIFTY BANK":
-            banknifty_token = inst["instrument_token"]
+    vix_token = None
+    sensex_token = None
 
-    prices = kite_client.ltp([f"NSE:NIFTY 50", f"NSE:NIFTY BANK"])
-    nifty_spot = prices.get("NSE:NIFTY 50", {}).get("last_price", 22000.0)
-    banknifty_spot = prices.get("NSE:NIFTY BANK", {}).get("last_price", 48000.0)
+    for inst in nse_insts:
+        if inst.get("tradingsymbol") == "NIFTY 50":
+            nifty_token = inst.get("instrument_token")
+        if inst.get("tradingsymbol") == "NIFTY BANK":
+            banknifty_token = inst.get("instrument_token")
+        if inst.get("tradingsymbol") == "INDIA VIX":
+            vix_token = inst.get("instrument_token")
+
+    for inst in bse_insts:
+        if inst.get("tradingsymbol") == "SENSEX":
+            sensex_token = inst.get("instrument_token")
+
+    # Fetch spot prices for indices
+    spot_symbols = []
+    if nifty_token:
+        spot_symbols.append("NSE:NIFTY 50")
+    if banknifty_token:
+        spot_symbols.append("NSE:NIFTY BANK")
+    if sensex_token:
+        spot_symbols.append("BSE:SENSEX")
+    if vix_token:
+        spot_symbols.append("NSE:INDIA VIX")
+
+    prices = {}
+    if spot_symbols:
+        try:
+            prices = kite_client.ltp(spot_symbols)
+        except Exception as e:
+            logger.warning(f"Failed to fetch LTP for spot symbols {spot_symbols}: {e}")
+
+    nifty_spot = prices.get("NSE:NIFTY 50", {}).get("last_price") or 22000.0
+    banknifty_spot = prices.get("NSE:NIFTY BANK", {}).get("last_price") or 48000.0
+    sensex_spot = prices.get("BSE:SENSEX", {}).get("last_price") or 77000.0
 
     nifty_atm = round(nifty_spot / 50.0) * 50.0
     banknifty_atm = round(banknifty_spot / 100.0) * 100.0
+    sensex_atm = round(sensex_spot / 100.0) * 100.0
 
     today = datetime.now().date()
+
     nifty_opts = [
         i
         for i in nfo_insts
-        if i["name"] == "NIFTY"
-        and i["instrument_type"] in ["CE", "PE"]
-        and i["expiry"] >= today
+        if i.get("name") == "NIFTY"
+        and i.get("instrument_type") in ["CE", "PE"]
+        and i.get("expiry")
+        and i.get("expiry") >= today
     ]
     banknifty_opts = [
         i
         for i in nfo_insts
-        if i["name"] == "BANKNIFTY"
-        and i["instrument_type"] in ["CE", "PE"]
-        and i["expiry"] >= today
+        if i.get("name") == "BANKNIFTY"
+        and i.get("instrument_type") in ["CE", "PE"]
+        and i.get("expiry")
+        and i.get("expiry") >= today
+    ]
+    sensex_opts = [
+        i
+        for i in bfo_insts
+        if i.get("name") == "SENSEX"
+        and i.get("instrument_type") in ["CE", "PE"]
+        and i.get("expiry")
+        and i.get("expiry") >= today
     ]
 
     nifty_expiries = sorted(list(set([i["expiry"] for i in nifty_opts])))
     banknifty_expiries = sorted(list(set([i["expiry"] for i in banknifty_opts])))
+    sensex_expiries = sorted(list(set([i["expiry"] for i in sensex_opts])))
 
     target_tokens = {}
     if nifty_token:
         target_tokens[nifty_token] = "NIFTY 50"
     if banknifty_token:
         target_tokens[banknifty_token] = "NIFTY BANK"
+    if sensex_token:
+        target_tokens[sensex_token] = "SENSEX"
+    if vix_token:
+        target_tokens[vix_token] = "INDIA VIX"
 
     if nifty_expiries:
         exp = nifty_expiries[0]
         for opt in nifty_opts:
-            if opt["expiry"] == exp and abs(opt["strike"] - nifty_atm) <= 1000:
+            if opt.get("expiry") == exp and abs(opt.get("strike", 0.0) - nifty_atm) <= 1000:
                 target_tokens[opt["instrument_token"]] = opt["tradingsymbol"]
 
     if banknifty_expiries:
         exp = banknifty_expiries[0]
         for opt in banknifty_opts:
-            if opt["expiry"] == exp and abs(opt["strike"] - banknifty_atm) <= 2000:
+            if opt.get("expiry") == exp and abs(opt.get("strike", 0.0) - banknifty_atm) <= 2000:
+                target_tokens[opt["instrument_token"]] = opt["tradingsymbol"]
+
+    if sensex_expiries:
+        exp = sensex_expiries[0]
+        for opt in sensex_opts:
+            if opt.get("expiry") == exp and abs(opt.get("strike", 0.0) - sensex_atm) <= 2000:
                 target_tokens[opt["instrument_token"]] = opt["tradingsymbol"]
 
     return target_tokens
@@ -176,7 +249,7 @@ def main():
         logger.error(f"WebSocket error: {code} - {reason}")
 
     kws.on_ticks = on_ticks
-    kws.on_connect = on_connect
+    kws.on_connect = on_connec
     kws.on_close = on_close
     kws.on_error = on_error
 

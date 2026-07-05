@@ -1,6 +1,6 @@
 import os
 import json
-import pytes
+import pytest
 from pathlib import Path
 import subprocess
 import sys

@@ -1,0 +1,59 @@
+{
+  "contract_id": "next_day_option_tick_capture",
+  "version": "1.0",
+  "description": "Defines the required artifacts, fields, and quality gates for a valid next-day live capture dataset to be used for certification replay.",
+  "required_artifacts": {
+    "instrument_master": "runtime/live_capture/{YYYYMMDD}/instrument_master/kite_instruments_{YYYYMMDD}.json",
+    "option_ticks": "runtime/live_capture/{YYYYMMDD}/ticks/option_ticks_{YYYYMMDD}.parquet",
+    "manifest": "runtime/live_capture/{YYYYMMDD}/manifests/capture_manifest_{YYYYMMDD}.json",
+    "quality_report": "runtime/live_capture/{YYYYMMDD}/quality/capture_quality_report_{YYYYMMDD}.json"
+  },
+  "required_instrument_master_fields": [
+    "instrument_token",
+    "tradingsymbol",
+    "name",
+    "expiry",
+    "strike",
+    "instrument_type",
+    "segment",
+    "exchange",
+    "lot_size"
+  ],
+  "required_option_tick_fields": [
+    "local_ts",
+    "instrument_token",
+    "last_price",
+    "best_bid",
+    "best_ask",
+    "depth_json"
+  ],
+  "required_manifest_fields": [
+    "capture_date",
+    "market",
+    "source",
+    "instrument_master_path",
+    "option_ticks_path",
+    "instrument_master_hash",
+    "option_ticks_hash",
+    "instrument_master_captured_at_utc",
+    "ticks_capture_started_at_utc",
+    "ticks_capture_ended_at_utc",
+    "session_start_ist",
+    "session_end_ist"
+  ],
+  "quality_gates": {
+    "instrument_master_date_equals_capture_date": True,
+    "tick_trading_date_equals_capture_date": True,
+    "token_index_resolves_with_same_day_master": True,
+    "unresolved_tokens_excluded": True,
+    "spread_outlier_rate_passes": True,
+    "lineage_valid_before_certification": True,
+    "no_certification_from_debug_datasets": True
+  },
+  "safety_overrides": {
+    "paper_live_allowed": False,
+    "live_allowed": False,
+    "broker_order_allowed": False,
+    "execution_allowed": False
+  }
+}
