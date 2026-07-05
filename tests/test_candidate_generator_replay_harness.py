@@ -151,3 +151,60 @@ def test_no_live_flags_modified():
     assert signals[0]["paper_live_allowed"] is False
     assert signals[0]["broker_order_allowed"] is False
     assert signals[0]["execution_allowed"] is False
+
+def test_missing_token_fails_closed(monkeypatch, tmp_path):
+    monkeypatch.delenv("UPSTOX_ACCESS_TOKEN", raising=False)
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    status, reason, meta = replay_mod.fetch_upstox_historical("NIFTY", "2026-07-01", "2026-07-05")
+    assert status == "DATA_BLOCKED_UPSTOX_TOKEN_MISSING"
+
+def test_auth_failure_fails_closed(monkeypatch):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "invalid")
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    class MockRes:
+        status_code = 401
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: MockRes())
+    status, reason, meta = replay_mod.fetch_upstox_historical("NIFTY", "2026-07-01", "2026-07-05")
+    assert status == "DATA_BLOCKED_UPSTOX_FETCH_FAILED"
+    
+def test_empty_candles_fails_closed(monkeypatch):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "valid")
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    class MockRes:
+        status_code = 200
+        def json(self): return {"data": {"candles": []}}
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: MockRes())
+    status, reason, meta = replay_mod.fetch_upstox_historical("NIFTY", "2026-07-01", "2026-07-05")
+    assert status == "DATA_BLOCKED_UPSTOX_UNAVAILABLE"
+
+def test_fixture_data_non_certifiable():
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    passed, reason = replay_mod.run_historical_option_replay([{"data_source": "synthetic_test_fixture"}])
+    assert passed is False
+
+def test_missing_option_ltp_blocks_approval():
+    from core.candidate_to_signal_adapter import adapt_candidate_to_signals
+    ctx = Mock(spec=StrategyContext)
+    ctx.spot_ltp = 20000.0
+    ctx.metadata = {"expiry": "CURRENT_WEEK"}
+    
+    candidate = create_mock_candidate(evidence={"quote_source": "upstox_historical"})
+    signals = adapt_candidate_to_signals(candidate, ctx, mode="real")
+    # missing option_ltp -> should be rejected by adapter
+    assert not signals or signals[0].get("lifecycle_state") == "CANDIDATE_TO_SIGNAL_ADAPTER_REQUIRED"
+
+def test_no_synthetic_proxy_manual_stub_certifies():
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    for source in ["mock", "proxy", "manual_stub"]:
+        passed, reason = replay_mod.run_historical_option_replay([{"quote_source": source}])
+        assert passed is False
+
+def test_upstox_ohlc_returns_no_tick_spread_truth(monkeypatch):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "valid")
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    class MockRes:
+        status_code = 200
+        def json(self): return {"data": {"candles": [[1,2,3,4,5]]}}
+    monkeypatch.setattr("requests.get", lambda *args, **kwargs: MockRes())
+    status, reason, meta = replay_mod.fetch_upstox_historical("NIFTY", "2026-07-01", "2026-07-05")
+    assert status == "DATA_BLOCKED_UPSTOX_NO_TICK_OR_SPREAD_TRUTH"
