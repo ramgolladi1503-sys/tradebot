@@ -33,9 +33,11 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
         "timestamp_end_ist": None,
         "trading_dates_ist": [],
         "actual_tick_trading_dates_ist": [],
-        "instrument_master_path": instrument_master_path,
-        "instrument_master_date": None,
-        "instrument_master_date_alignment_ok": False,
+        "token_index_lineage_present": False,
+        "token_index_lineage_verdict": "TOKEN_INDEX_LINEAGE_BLOCKED",
+        "token_index_instrument_master_date": None,
+        "token_index_instrument_master_date_source": "unknown",
+        "token_index_lineage_blockers": [],
         "metadata_temporally_valid": False,
         "date_alignment_ok": False,
         "session_rows": 0,
@@ -70,23 +72,11 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
     }
     
     try:
-        # 1. Parse date from filename
         fname = Path(ticks_path).name
         match = re.search(r'(\d{4})(\d{2})(\d{2})', fname)
         if match:
             report["expected_date_from_filename"] = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
             
-        # Instrument master date derivation
-        im_date = None
-        if instrument_master_date_arg:
-            im_date = instrument_master_date_arg
-        elif instrument_master_path:
-            im_match = re.search(r'(\d{4})(\d{2})(\d{2})', Path(instrument_master_path).name)
-            if im_match:
-                im_date = f"{im_match.group(1)}-{im_match.group(2)}-{im_match.group(3)}"
-                
-        report["instrument_master_date"] = im_date
-        
         with open(token_index_path) as f:
             token_index = json.load(f)
             
@@ -94,6 +84,16 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
         for rt in token_index.get("resolved_option_tokens", []):
             resolved_tokens.add(str(rt.get("instrument_token")))
             
+        # Lineage from token index
+        if "lineage_verdict" in token_index:
+            report["token_index_lineage_present"] = True
+            report["token_index_lineage_verdict"] = token_index.get("lineage_verdict")
+            report["token_index_instrument_master_date"] = token_index.get("instrument_master_date")
+            report["token_index_instrument_master_date_source"] = token_index.get("instrument_master_date_source", "unknown")
+            report["token_index_lineage_blockers"] = token_index.get("lineage_blockers", [])
+        else:
+            report["lineage_blockers"].append("FILTERED_DATASET_TOKEN_INDEX_LINEAGE_MISSING")
+
         df = pd.read_parquet(ticks_path)
         report["total_rows"] = len(df)
         
@@ -117,7 +117,6 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
             missing.append("local_ts or exchange_timestamp")
             
         report["missing_required_columns"] = missing
-        
         if missing:
             report["blockers"].append("FILTERED_DATASET_MISSING_REQUIRED_COLUMNS")
             
@@ -261,17 +260,20 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
                     if report["session_coverage_ratio"] < 0.5:
                         report["blockers"].append("FILTERED_DATASET_SESSION_COVERAGE_INVALID")
                         
-                    # Instrument master date alignment
-                    if not im_date:
-                        report["lineage_blockers"].append("FILTERED_DATASET_INSTRUMENT_MASTER_DATE_UNKNOWN")
-                        report["instrument_master_date_alignment_ok"] = False
-                    else:
-                        if all(d == im_date for d in report["actual_tick_trading_dates_ist"]):
-                            report["instrument_master_date_alignment_ok"] = True
-                            report["metadata_temporally_valid"] = True
-                        else:
+                    # Instrument master date alignment from token index
+                    if report["token_index_lineage_present"]:
+                        im_date = report["token_index_instrument_master_date"]
+                        if not im_date:
+                            report["lineage_blockers"].append("FILTERED_DATASET_INSTRUMENT_MASTER_DATE_UNKNOWN")
+                        elif not all(d == im_date for d in dates_ist):
                             report["lineage_blockers"].append("FILTERED_DATASET_INSTRUMENT_MASTER_DATE_MISMATCH")
-                            report["instrument_master_date_alignment_ok"] = False
+                        else:
+                            report["metadata_temporally_valid"] = True
+                            
+                        # If a CLI arg is passed that contradicts token index, block
+                        if instrument_master_date_arg and im_date != instrument_master_date_arg:
+                            report["lineage_blockers"].append("FILTERED_DATASET_CLI_DATE_NOT_BACKED_BY_TOKEN_INDEX")
+                            report["metadata_temporally_valid"] = False
                             
                 except Exception as e:
                     report["blockers"].append(f"FILTERED_DATASET_INVALID_TIMESTAMPS: {e}")
@@ -305,10 +307,12 @@ def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, 
         f"- Actual IST Start/End: {report['timestamp_start_ist']} -> {report['timestamp_end_ist']}",
         f"- Actual Trading Dates (IST): {report['trading_dates_ist']}",
         f"- Date Alignment OK: {report['date_alignment_ok']}",
-        "## Lineage",
-        f"- Instrument Master Path: {report['instrument_master_path']}",
-        f"- Instrument Master Date: {report['instrument_master_date']}",
-        f"- Instrument Master Date Alignment OK: {report['instrument_master_date_alignment_ok']}",
+        "## Token Index Lineage",
+        f"- Token Index Lineage Present: {report['token_index_lineage_present']}",
+        f"- Token Index Lineage Verdict: {report['token_index_lineage_verdict']}",
+        f"- Token Index Instrument Master Date: {report['token_index_instrument_master_date']}",
+        f"- Token Index Instrument Master Date Source: {report['token_index_instrument_master_date_source']}",
+        f"- Token Index Lineage Blockers: {report['token_index_lineage_blockers']}",
         f"- Metadata Temporally Valid: {report['metadata_temporally_valid']}",
         f"- Lineage Blockers: {report['lineage_blockers']}",
         "## Session Coverage",

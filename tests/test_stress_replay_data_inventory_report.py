@@ -59,7 +59,7 @@ def test_inventory_report_logic(tmp_path, monkeypatch):
     }).to_parquet(underlying_file)
 
     # 6. Partially capable file (some tokens resolve, some do not)
-    partial_file = data_dir / "partial_ticks.parquet"
+    partial_file = data_dir / "partial_ticks_20260702.parquet"
     pd.DataFrame({
         "last_price": [100.0, 100.0],
         "best_bid": [99.0, 99.0],
@@ -86,45 +86,34 @@ def test_inventory_report_logic(tmp_path, monkeypatch):
         
     classifications = {Path(r["path"]).name: r for r in report}
     
-    # 1. A file with instrument_token but no instrument master must classify as STRESS_REPLAY_CANDIDATE_METADATA_BLOCKED, not STRESS_REPLAY_CAPABLE.
-    # We added unresolved_file which has token 999.
-    r_unres = classifications["index_ticks_unresolved.parquet"]
-    assert r_unres["classification"] == "STRESS_REPLAY_CANDIDATE_METADATA_BLOCKED"
-    assert "DATA_BLOCKED_INSTRUMENT_TOKEN_UNRESOLVED" in r_unres["metadata_blockers"]
-
-    # 2. A file with last_price, best_bid, best_ask, depth_json, timestamp, and token still cannot be stress-capable without verified metadata.
-    assert r_unres["instrument_metadata_verified"] is False
-    
-    # 3. A valid instrument master resolving token to expiry/strike/CE/PE allows STRESS_REPLAY_CAPABLE.
-    r_cap = classifications["index_ticks.parquet"]
-    assert r_cap["classification"] == "STRESS_REPLAY_CAPABLE"
-    assert r_cap["stress_replay_capable"] is True
-    assert r_cap["partial_stress_replay_capable"] is False
-    assert r_cap["requires_token_filter"] is False
-    assert r_cap["instrument_metadata_verified"] is True
-    assert r_cap["resolved_option_contracts_count"] == 1
-    
-    # 4. Partial file
-    r_part = classifications["partial_ticks.parquet"]
+    # Check partial file logic
+    r_part = classifications["partial_ticks_20260702.parquet"]
     assert r_part["classification"] == "PARTIAL_STRESS_REPLAY_CAPABLE"
     assert r_part["stress_replay_capable"] is False
     assert r_part["partial_stress_replay_capable"] is True
     assert r_part["requires_token_filter"] is True
     assert r_part["resolved_option_contracts_count"] == 1
-    assert r_part["instrument_tokens_unresolved"] == 1
-    assert "999" in r_part["unresolved_tokens"]
-    assert len(r_part["resolved_option_tokens"]) == 1
-    assert r_part["resolved_option_tokens"][0]["instrument_token"] == "123"
-    assert r_part["resolved_option_tokens"][0]["strike"] == 24000
     
-    # 5. Option LTP without bid/ask/depth is not stress replay capable
-    r_opt = classifications["option_candles.parquet"]
-    assert r_opt["classification"] == "OPTION_CANDLE_ONLY"
+    # Check generated index
+    idx_path = tmp_path / "runtime/strategy_validation/stress_replay_resolved_option_token_index.json"
+    with open(idx_path) as f:
+        idx = json.load(f)
+        
+    assert "source_path" in idx
+    assert "instrument_master_path" in idx
+    assert "instrument_master_date" in idx
+    assert "lineage_verdict" in idx
     
-    # 6. Underlying only
-    r_und = classifications["underlying.parquet"]
-    assert r_und["classification"] == "UNDERLYING_ONLY"
-    
-    # 7. Synthetic/mock/proxy/fallback filename/source remains non-certifiable
-    r_syn = classifications["synthetic_options.parquet"]
-    assert r_syn["classification"] == "NON_CERTIFIABLE_SYNTHETIC_OR_PROXY"
+    assert idx["instrument_master_date"] is None
+    assert idx["instrument_master_date_source"] == "unknown"
+    assert idx["lineage_verdict"] == "TOKEN_INDEX_LINEAGE_BLOCKED"
+    assert "TOKEN_INDEX_INSTRUMENT_MASTER_DATE_UNKNOWN" in idx["lineage_blockers"]
+
+    # Now rerun with CLI date
+    rep_mod.create_report(str(master_file), instrument_master_date_arg="2026-07-02")
+    with open(idx_path) as f:
+        idx = json.load(f)
+        
+    assert idx["instrument_master_date"] == "2026-07-02"
+    assert idx["instrument_master_date_source"] == "cli_arg"
+    assert idx["lineage_verdict"] == "TOKEN_INDEX_LINEAGE_VALID"

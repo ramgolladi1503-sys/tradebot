@@ -4,6 +4,8 @@ from pathlib import Path
 import os
 import argparse
 import csv
+import re
+import datetime
 
 def load_instrument_master(file_path):
     p = Path(file_path)
@@ -43,13 +45,25 @@ def load_instrument_master(file_path):
         return str(p), mapping
     return None, {}
 
-def create_report(instrument_master_path=None):
+def create_report(instrument_master_path=None, instrument_master_date_arg=None):
     report = []
     
     im_path, im_map = None, {}
     if instrument_master_path:
         im_path, im_map = load_instrument_master(instrument_master_path)
     
+    # Determine instrument master date
+    im_date = None
+    im_date_source = "unknown"
+    if instrument_master_date_arg:
+        im_date = instrument_master_date_arg
+        im_date_source = "cli_arg"
+    elif im_path:
+        im_match = re.search(r'(\d{4})(\d{2})(\d{2})', Path(im_path).name)
+        if im_match:
+            im_date = f"{im_match.group(1)}-{im_match.group(2)}-{im_match.group(3)}"
+            im_date_source = "filename"
+
     out_dir = Path("runtime/strategy_validation")
     out_dir.mkdir(parents=True, exist_ok=True)
     
@@ -234,15 +248,50 @@ def create_report(instrument_master_path=None):
                             partial_stress_replay_capable = True
                             requires_token_filter = True
                             
+                            # Determine source date from filename
+                            source_date = None
+                            match = re.search(r'(\d{4})(\d{2})(\d{2})', f.name)
+                            if match:
+                                source_date = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+                                
+                            # Lineage validation
+                            lineage_blockers = []
+                            lineage_verdict = "TOKEN_INDEX_LINEAGE_VALID"
+                            im_valid = True
+                            
+                            if not im_date:
+                                lineage_blockers.append("TOKEN_INDEX_INSTRUMENT_MASTER_DATE_UNKNOWN")
+                                lineage_verdict = "TOKEN_INDEX_LINEAGE_BLOCKED"
+                                im_valid = False
+                                
+                            im_mtime = 0
+                            im_size = 0
+                            if im_path:
+                                im_p = Path(im_path)
+                                if im_p.exists():
+                                    im_mtime = im_p.stat().st_mtime
+                                    im_size = im_p.stat().st_size
+                            
                             # Build token index
                             index_data = {
                                 "source_path": str(f),
-                                "instrument_master_path": im_path,
+                                "source_path_mtime": f.stat().st_mtime,
+                                "source_path_size": f.stat().st_size,
+                                "source_trading_dates_ist": [source_date] if source_date else [],
+                                "instrument_master_path": str(im_path) if im_path else None,
+                                "instrument_master_mtime": im_mtime,
+                                "instrument_master_size": im_size,
+                                "instrument_master_date": im_date,
+                                "instrument_master_date_source": im_date_source,
+                                "instrument_master_temporally_valid": im_valid,
+                                "token_index_generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                "lineage_verdict": lineage_verdict,
+                                "lineage_blockers": lineage_blockers,
                                 "resolved_option_tokens_count": option_contracts,
                                 "unresolved_tokens_count": tokens_unresolved_count + len(non_option_tokens_list),
                                 "resolved_option_tokens": resolved_option_tokens_info,
                                 "unresolved_tokens": unresolved_tokens_list + non_option_tokens_list,
-                                "certification_use_rule": "ONLY_ROWS_WITH_RESOLVED_OPTION_TOKENS_ARE_CERTIFIABLE"
+                                "certification_use_rule": "ONLY_ROWS_WITH_RESOLVED_OPTION_TOKENS_ARE_CERTIFIABLE_AFTER_LINEAGE_VALIDATION"
                             }
                             usable_token_index_path = out_dir / "stress_replay_resolved_option_token_index.json"
                             with open(usable_token_index_path, "w") as idx_f:
@@ -338,5 +387,6 @@ def create_report(instrument_master_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--instrument-master", help="Path to instrument master JSON/CSV/Parquet")
+    parser.add_argument("--instrument-master-date", help="Date of instrument master YYYY-MM-DD")
     args = parser.parse_args()
-    create_report(args.instrument_master)
+    create_report(args.instrument_master, args.instrument_master_date)
