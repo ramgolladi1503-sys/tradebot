@@ -110,6 +110,45 @@ def replay_strategy(strategy_id, candidates, ctx, cost_model="stress"):
     else:
         return "CANDIDATE_REPLAY_FAILED", reason
 
+def determine_data_capability(fetched_underlying, fetched_options, data_provider):
+    cap = {
+        "underlying_data_capability": "UNDERLYING_OHLC" if fetched_underlying > 0 else "MISSING",
+        "option_data_capability": "OPTION_DATA_MISSING",
+        "spread_truth_available": False,
+        "tick_truth_available": False,
+        "depth_truth_available": False,
+        "option_ltp_truth_available": False,
+        "stress_replay_supported": False,
+        "candle_replay_supported": False,
+        "certification_blockers": []
+    }
+    
+    if fetched_underlying > 0 and fetched_options == 0:
+        cap["underlying_data_capability"] = "UNDERLYING_OHLC_ONLY"
+        cap["certification_blockers"].append("DATA_BLOCKED_UNDERLYING_ONLY_NO_OPTION_TRUTH")
+        cap["certification_blockers"].append("DATA_BLOCKED_REAL_OPTION_LTP_MISSING")
+    
+    if fetched_options > 0:
+        cap["option_data_capability"] = "OPTION_OHLC"
+        cap["option_ltp_truth_available"] = True
+        cap["candle_replay_supported"] = True
+        cap["certification_blockers"].append("DATA_BLOCKED_OPTION_OHLC_NO_SPREAD_TRUTH")
+        
+    if data_provider == "live_captured":
+        cap["option_data_capability"] = "OPTION_QUOTE_OR_DEPTH_TRUTH"
+        cap["spread_truth_available"] = True
+        cap["tick_truth_available"] = True
+        cap["depth_truth_available"] = True
+        cap["option_ltp_truth_available"] = True
+        cap["stress_replay_supported"] = True
+        cap["candle_replay_supported"] = True
+        cap["certification_blockers"] = []
+
+    if not cap["stress_replay_supported"]:
+        cap["certification_blockers"].append("DATA_BLOCKED_STRESS_REPLAY_UNSUPPORTED_BY_DATA_CAPABILITY")
+        
+    return cap
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", required=False)
@@ -164,8 +203,14 @@ def main():
                 lifecycle_state = status
                 final_reason = reason
                 
+                cap = determine_data_capability(fetched_underlying, fetched_options, args.data_provider)
+                if cap["certification_blockers"]:
+                    for cb in cap["certification_blockers"]:
+                        if cb not in data_fetch_blockers:
+                            data_fetch_blockers.append(cb)
+                            
                 # Only if real usable data was fetched do we set certifiable_data to true and provenance
-                if status == "SUCCESS": # Note: currently our mock only returns blocked reasons
+                if status == "SUCCESS" and cap["stress_replay_supported"]: 
                     certifiable_data = True
                     provenance = ["real_upstox"]
             else:
@@ -174,13 +219,16 @@ def main():
                 data_fetch_blocker_details.append(f"Unsupported provider: {args.data_provider}")
                 lifecycle_state = data_fetch_status
                 final_reason = data_fetch_blocker_details[0]
+                cap = determine_data_capability(0, 0, args.data_provider)
         else:
             lifecycle_state = "DATA_FETCH_PENDING"
             final_reason = "Missing historical tick data to generate candidates"
+            cap = determine_data_capability(0, 0, args.data_provider)
     else:
         candidates = []
         ctx = StrategyContext(symbol="NIFTY", ts_epoch=0, spot_ltp=0)
         lifecycle_state, final_reason = replay_strategy(strategy_id, candidates, ctx, cost_model=cost_model)
+        cap = determine_data_capability(fetched_underlying, fetched_options, args.data_provider)
 
     report = {
         "strategy_id": strategy_id,
@@ -193,6 +241,16 @@ def main():
         "data_fetch_status": data_fetch_status,
         "data_fetch_blockers": data_fetch_blockers,
         "data_fetch_blocker_details": data_fetch_blocker_details,
+        "data_capability": cap,
+        "underlying_data_capability": cap["underlying_data_capability"],
+        "option_data_capability": cap["option_data_capability"],
+        "spread_truth_available": cap["spread_truth_available"],
+        "tick_truth_available": cap["tick_truth_available"],
+        "depth_truth_available": cap["depth_truth_available"],
+        "option_ltp_truth_available": cap["option_ltp_truth_available"],
+        "stress_replay_supported": cap["stress_replay_supported"],
+        "candle_replay_supported": cap["candle_replay_supported"],
+        "certification_blockers": cap["certification_blockers"],
         "certifiable_data": certifiable_data,
         "provenance": provenance,
         "fetched_underlying_candles_count": fetched_underlying,

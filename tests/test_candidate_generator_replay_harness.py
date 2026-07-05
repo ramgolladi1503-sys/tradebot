@@ -247,3 +247,34 @@ def test_missing_token_blocker_format(monkeypatch, tmp_path):
     assert "DATA_BLOCKED_UPSTOX_TOKEN_MISSING" in report["data_fetch_blockers"]
     assert len(report["data_fetch_blocker_details"]) > 0
     assert "UPSTOX_ACCESS_TOKEN" in report["data_fetch_blocker_details"][0]
+
+def test_data_capability_classification_underlying_only():
+    from scripts.replay_candidate_generator_strategy import determine_data_capability
+    cap = determine_data_capability(100, 0, "real_upstox")
+    assert cap["underlying_data_capability"] == "UNDERLYING_OHLC_ONLY"
+    assert cap["option_data_capability"] == "OPTION_DATA_MISSING"
+    assert cap["stress_replay_supported"] is False
+    assert cap["candle_replay_supported"] is False
+    assert "DATA_BLOCKED_UNDERLYING_ONLY_NO_OPTION_TRUTH" in cap["certification_blockers"]
+
+def test_data_capability_classification_option_ohlc():
+    from scripts.replay_candidate_generator_strategy import determine_data_capability
+    cap = determine_data_capability(100, 100, "real_upstox")
+    assert cap["underlying_data_capability"] == "UNDERLYING_OHLC"
+    assert cap["option_data_capability"] == "OPTION_OHLC"
+    assert cap["option_ltp_truth_available"] is True
+    assert cap["stress_replay_supported"] is False
+    assert cap["candle_replay_supported"] is True
+    assert "DATA_BLOCKED_OPTION_OHLC_NO_SPREAD_TRUTH" in cap["certification_blockers"]
+
+def test_data_capability_classification_live_captured():
+    from scripts.replay_candidate_generator_strategy import determine_data_capability
+    cap = determine_data_capability(100, 100, "live_captured")
+    assert cap["option_data_capability"] == "OPTION_QUOTE_OR_DEPTH_TRUTH"
+    assert cap["spread_truth_available"] is True
+    assert cap["tick_truth_available"] is True
+    assert cap["depth_truth_available"] is True
+    assert cap["option_ltp_truth_available"] is True
+    assert cap["stress_replay_supported"] is True
+    assert cap["candle_replay_supported"] is True
+    assert len(cap["certification_blockers"]) == 0
