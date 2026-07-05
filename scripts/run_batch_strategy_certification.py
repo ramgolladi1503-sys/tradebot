@@ -29,6 +29,7 @@ def main(args=None):
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
     reports = []
+    candidate_replay_reports = []
 
     for strategy_id, entry in registry.items():
         if entry.strategy_kind == "test_fixture" or entry.strategy_id == "TEST_STRAT":
@@ -100,6 +101,23 @@ def main(args=None):
                     with open(replay_report) as f:
                         replay_data = json.load(f)
                     state["lifecycle_state"] = replay_data.get("lifecycle_state", state.get("lifecycle_state"))
+                    
+                    candidate_replay_reports.append({
+                        "strategy_id": strategy_id,
+                        "strategy_type": "candidate_generator_strategy",
+                        "lifecycle_state": state["lifecycle_state"],
+                        "contract_audit_status": "CANDIDATE_GENERATOR_CONTRACT_PASSED",
+                        "candidate_replay_status": replay_data.get("lifecycle_state"),
+                        "data_fetch_status": replay_data.get("data_fetch_status"),
+                        "data_fetch_blockers": replay_data.get("data_fetch_blockers", []),
+                        "certification_blockers": replay_data.get("certification_blockers", []),
+                        "certifiable_data": replay_data.get("certifiable_data", False),
+                        "adapter_approved_for_replay": replay_data.get("adapter_approved_for_replay", False),
+                        "paper_live_allowed": replay_data.get("paper_live_allowed", False),
+                        "live_allowed": replay_data.get("live_allowed", False),
+                        "broker_order_allowed": replay_data.get("broker_order_allowed", False),
+                        "execution_allowed": replay_data.get("execution_allowed", False)
+                    })
         else:
             continue
 
@@ -137,6 +155,27 @@ def main(args=None):
         md_content += f"- Lifecycle State: {r.get('lifecycle_state')}\n"
         md_content += f"- Phase 6 Allowed: {r.get('phase_6_allowed', 'False')}\n\n"
     md_file.write_text(md_content)
+
+    if parsed_args.include_candidate_replay and candidate_replay_reports:
+        replay_summary_json = runtime_dir / "candidate_replay_batch_summary.json"
+        replay_summary_json.write_text(json.dumps(candidate_replay_reports, indent=2))
+        
+        replay_summary_md = runtime_dir / "candidate_replay_batch_summary.md"
+        md_str = "# Candidate Replay Batch Summary\n\n"
+        for cr in candidate_replay_reports:
+            md_str += f"## {cr.get('strategy_id')}\n"
+            md_str += f"- Contract Audit Status: {cr.get('contract_audit_status')}\n"
+            md_str += f"- Candidate Replay Status: {cr.get('candidate_replay_status')}\n"
+            md_str += f"- Data Fetch Status: {cr.get('data_fetch_status')}\n"
+            md_str += f"- Certifiable Data: {cr.get('certifiable_data')}\n"
+            md_str += f"- Adapter Approved for Replay: {cr.get('adapter_approved_for_replay')}\n"
+            md_str += f"- Paper/Live Allowed: {cr.get('paper_live_allowed')} / {cr.get('live_allowed')}\n\n"
+            if cr.get("certification_blockers"):
+                md_str += "### Certification Blockers:\n"
+                for b in cr["certification_blockers"]:
+                    md_str += f"- {b}\n"
+                md_str += "\n"
+        replay_summary_md.write_text(md_str)
 
 if __name__ == "__main__":
     main()
