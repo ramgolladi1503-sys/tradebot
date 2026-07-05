@@ -278,3 +278,20 @@ def test_data_capability_classification_live_captured():
     assert cap["stress_replay_supported"] is True
     assert cap["candle_replay_supported"] is True
     assert len(cap["certification_blockers"]) == 0
+
+def test_offline_replay_no_fetch_produces_not_requested(monkeypatch, tmp_path):
+    import scripts.replay_candidate_generator_strategy as replay_mod
+    import sys, json
+    monkeypatch.setattr(sys, "argv", ["prog", "--strategy", "TEST_NO_FETCH"])
+    monkeypatch.chdir(tmp_path)
+    try:
+        replay_mod.main()
+    except SystemExit:
+        pass
+    report = json.load(open("runtime/strategy_validation/TEST_NO_FETCH/candidate_replay_report.json"))
+    assert report["data_fetch_status"] == "DATA_FETCH_NOT_REQUESTED"
+    assert report["data_fetch_attempted"] is False
+    assert "DATA_FETCH_NOT_REQUESTED" in report["data_fetch_blockers"]
+    assert len(report["data_fetch_blocker_details"]) > 0
+    assert "Fetch was not requested" in report["data_fetch_blocker_details"][0]
+

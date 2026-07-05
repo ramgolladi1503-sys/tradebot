@@ -181,13 +181,17 @@ def main():
     
     # Initialize report fields
     data_fetch_attempted = False
-    data_fetch_status = ""
+    data_fetch_status = "DATA_FETCH_NOT_REQUESTED"
     data_fetch_blockers = []
     data_fetch_blocker_details = []
     fetched_underlying = 0
     fetched_options = 0
     provenance = []
     certifiable_data = False
+    
+    if not args.fetch_missing_data:
+        data_fetch_blockers.append("DATA_FETCH_NOT_REQUESTED")
+        data_fetch_blocker_details.append("Fetch was not requested for this offline replay run")
     
     if not data_file.exists():
         if args.fetch_missing_data:
