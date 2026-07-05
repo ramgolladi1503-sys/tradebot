@@ -1,0 +1,37 @@
+{
+  "strategy_id": "MEAN_REVERSION_EXTENSION",
+  "strategy_kind": "candidate_generator_strategy",
+  "vertical_slice_status": "CONTRACT_DISCOVERED",
+  "required_inputs": [
+    "spot_ltp",
+    "vwap",
+    "regime.RANGE",
+    "regime.CHOP",
+    "day_high",
+    "day_low"
+  ],
+  "candidate_output_fields": [
+    "spot_ltp",
+    "vwap",
+    "vwap_extension_abs_pct",
+    "range_chop_score",
+    "option_ltp",
+    "premium_change"
+  ],
+  "missing_contract_fields": [
+    "stop_loss",
+    "target",
+    "time_stop"
+  ],
+  "entry_contract_defined": true,
+  "exit_contract_defined": false,
+  "risk_contract_defined": false,
+  "option_mapping_required": true,
+  "blockers": [
+    "MEAN_REVERSION_RISK_CONTRACT_MISSING"
+  ],
+  "paper_live_allowed": false,
+  "live_allowed": false,
+  "broker_order_allowed": false,
+  "execution_allowed": false
+}

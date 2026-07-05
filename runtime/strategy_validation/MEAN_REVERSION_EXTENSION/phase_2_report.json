@@ -1,11 +1,14 @@
 {
   "strategy_id": "MEAN_REVERSION_EXTENSION",
   "phase": "phase_2",
-  "phase_name": "historical_data_coverage",
+  "phase_name": "historical_data_and_feature_coverage",
   "passed": true,
   "verdict": "PASSED_FOR_RESEARCH",
-  "wfa_mode_allowed": "CANDLE_LEVEL_RESEARCH_WFA",
-  "stress_replay_allowed": false,
+  "data_mode": "CANDLE_LEVEL_RESEARCH",
+  "execution_grade": false,
+  "available_date_ranges": [
+    "20260702"
+  ],
   "required_data": [
     "underlying_candles"
   ],
@@ -13,12 +16,18 @@
     "underlying_candles"
   ],
   "missing_data": [
-    "bid_ask",
-    "depth"
+    "option_depth",
+    "option_bid_ask"
   ],
-  "usable_date_ranges": [],
+  "minimum_days_required_for_backtest": 30,
+  "minimum_wfa_windows_required": 6,
+  "current_usable_trading_days": 1,
+  "stress_replay_allowed": false,
+  "research_backtest_allowed": false,
   "blockers": [
-    "Missing bid/ask and depth"
+    "INSUFFICIENT_HISTORICAL_DAYS_FOR_BACKTEST",
+    "INSUFFICIENT_HISTORICAL_WINDOWS_FOR_WFA",
+    "OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY"
   ],
   "paper_live_allowed": false,
   "live_allowed": false,

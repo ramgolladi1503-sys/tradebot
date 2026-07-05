@@ -1,10 +1,10 @@
 {
   "strategy_id": "MEAN_REVERSION_EXTENSION",
   "phase": "phase_5_wfa",
-  "phase_name": "walk_forward_analysis",
+  "phase_name": "single_strategy_walk_forward_analysis",
   "passed": false,
   "verdict": "BLOCKED",
-  "backtest_mode": "CANDLE_LEVEL_RESEARCH",
+  "phase6_shadow_candidate": false,
   "execution_grade": false,
   "train_windows": [],
   "test_windows": [],
@@ -18,10 +18,9 @@
     "windows_failed": 0,
     "stability_score": 0
   },
-  "phase6_shadow_candidate": false,
   "blockers": [
-    "INSUFFICIENT_HISTORICAL_DATA_FOR_WFA",
-    "MINIMUM_WFA_WINDOWS_NOT_MET"
+    "MINIMUM_WFA_WINDOWS_NOT_MET",
+    "INSUFFICIENT_HISTORICAL_DATA_FOR_WFA"
   ],
   "paper_live_allowed": false,
   "live_allowed": false,
