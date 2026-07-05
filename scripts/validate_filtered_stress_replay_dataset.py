@@ -5,10 +5,9 @@ from pathlib import Path
 import re
 import warnings
 
-# Suppress pandas warning about datetime timezone
 warnings.filterwarnings('ignore', category=FutureWarning)
 
-def validate_dataset(ticks_path, token_index_path):
+def validate_dataset(ticks_path, token_index_path, instrument_master_path=None, instrument_master_date_arg=None):
     out_dir = Path("runtime/strategy_validation")
     out_dir.mkdir(parents=True, exist_ok=True)
     
@@ -33,6 +32,11 @@ def validate_dataset(ticks_path, token_index_path):
         "timestamp_start_ist": None,
         "timestamp_end_ist": None,
         "trading_dates_ist": [],
+        "actual_tick_trading_dates_ist": [],
+        "instrument_master_path": instrument_master_path,
+        "instrument_master_date": None,
+        "instrument_master_date_alignment_ok": False,
+        "metadata_temporally_valid": False,
         "date_alignment_ok": False,
         "session_rows": 0,
         "outside_session_rows": 0,
@@ -57,6 +61,7 @@ def validate_dataset(ticks_path, token_index_path):
             "max": 0
         },
         "blockers": [],
+        "lineage_blockers": [],
         "warnings": [],
         "paper_live_allowed": False,
         "live_allowed": False,
@@ -71,6 +76,17 @@ def validate_dataset(ticks_path, token_index_path):
         if match:
             report["expected_date_from_filename"] = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
             
+        # Instrument master date derivation
+        im_date = None
+        if instrument_master_date_arg:
+            im_date = instrument_master_date_arg
+        elif instrument_master_path:
+            im_match = re.search(r'(\d{4})(\d{2})(\d{2})', Path(instrument_master_path).name)
+            if im_match:
+                im_date = f"{im_match.group(1)}-{im_match.group(2)}-{im_match.group(3)}"
+                
+        report["instrument_master_date"] = im_date
+        
         with open(token_index_path) as f:
             token_index = json.load(f)
             
@@ -204,8 +220,6 @@ def validate_dataset(ticks_path, token_index_path):
                     report["timestamp_start"] = str(ts_sorted.iloc[0])
                     report["timestamp_end"] = str(ts_sorted.iloc[-1])
                     
-                    # Convert to datetime
-                    # Determine unit based on magnitude
                     if ts_sorted.iloc[0] > 1e16:
                         dt = pd.to_datetime(ts_num, unit='ns', utc=True)
                     elif ts_sorted.iloc[0] > 1e12:
@@ -224,6 +238,7 @@ def validate_dataset(ticks_path, token_index_path):
                     
                     dates_ist = dt_ist.dt.strftime('%Y-%m-%d').unique().tolist()
                     report["trading_dates_ist"] = sorted(dates_ist)
+                    report["actual_tick_trading_dates_ist"] = sorted(dates_ist)
                     
                     if report["expected_date_from_filename"] and report["expected_date_from_filename"] not in dates_ist:
                         report["blockers"].append("FILTERED_DATASET_DATE_MISMATCH")
@@ -231,7 +246,6 @@ def validate_dataset(ticks_path, token_index_path):
                     else:
                         report["date_alignment_ok"] = True
                         
-                    # Calculate session rows (09:15 to 15:30 IST)
                     time_ist = dt_ist.dt.time
                     from datetime import time
                     t_start = time(9, 15)
@@ -247,6 +261,18 @@ def validate_dataset(ticks_path, token_index_path):
                     if report["session_coverage_ratio"] < 0.5:
                         report["blockers"].append("FILTERED_DATASET_SESSION_COVERAGE_INVALID")
                         
+                    # Instrument master date alignment
+                    if not im_date:
+                        report["lineage_blockers"].append("FILTERED_DATASET_INSTRUMENT_MASTER_DATE_UNKNOWN")
+                        report["instrument_master_date_alignment_ok"] = False
+                    else:
+                        if all(d == im_date for d in report["actual_tick_trading_dates_ist"]):
+                            report["instrument_master_date_alignment_ok"] = True
+                            report["metadata_temporally_valid"] = True
+                        else:
+                            report["lineage_blockers"].append("FILTERED_DATASET_INSTRUMENT_MASTER_DATE_MISMATCH")
+                            report["instrument_master_date_alignment_ok"] = False
+                            
                 except Exception as e:
                     report["blockers"].append(f"FILTERED_DATASET_INVALID_TIMESTAMPS: {e}")
             else:
@@ -255,6 +281,7 @@ def validate_dataset(ticks_path, token_index_path):
     except Exception as e:
         report["blockers"].append(f"ERROR: {str(e)}")
         
+    report["blockers"].extend(report["lineage_blockers"])
     if not report["blockers"]:
         report["classification"] = "FILTERED_STRESS_REPLAY_DATASET_VALID"
         
@@ -278,6 +305,12 @@ def validate_dataset(ticks_path, token_index_path):
         f"- Actual IST Start/End: {report['timestamp_start_ist']} -> {report['timestamp_end_ist']}",
         f"- Actual Trading Dates (IST): {report['trading_dates_ist']}",
         f"- Date Alignment OK: {report['date_alignment_ok']}",
+        "## Lineage",
+        f"- Instrument Master Path: {report['instrument_master_path']}",
+        f"- Instrument Master Date: {report['instrument_master_date']}",
+        f"- Instrument Master Date Alignment OK: {report['instrument_master_date_alignment_ok']}",
+        f"- Metadata Temporally Valid: {report['metadata_temporally_valid']}",
+        f"- Lineage Blockers: {report['lineage_blockers']}",
         "## Session Coverage",
         f"- Session Rows (09:15-15:30 IST): {report['session_rows']}",
         f"- Outside Session Rows: {report['outside_session_rows']}",
@@ -317,5 +350,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticks", required=True)
     parser.add_argument("--token-index", required=True)
+    parser.add_argument("--instrument-master")
+    parser.add_argument("--instrument-master-date")
     args = parser.parse_args()
-    validate_dataset(args.ticks, args.token_index)
+    validate_dataset(args.ticks, args.token_index, args.instrument_master, args.instrument_master_date)
