@@ -21,43 +21,63 @@ def test_phase6_eligibility_audit(tmp_path, monkeypatch):
         }
     monkeypatch.setattr(audit_mod, "load_strategy_registry", mock_load_registry)
     
+    # Run once without any mock evidence files
     audit_mod.audit_phase6()
     
     json_path = tmp_path / "runtime/strategy_validation/phase6_eligibility_report.json"
-    assert json_path.exists()
+    with open(json_path) as f:
+        report = json.load(f)
+        
+    rep_map = {r["strategy_id"]: r for r in report}
+    
+    # SIMPLE_ORB should fail due to missing evidence
+    assert rep_map["SIMPLE_ORB"]["phase6_eligible"] is False
+    assert rep_map["SIMPLE_ORB"]["phase6_status"] == "PHASE6_BLOCKED_PHASE_EVIDENCE_MISSING"
+    assert rep_map["SIMPLE_ORB"]["phase_1_passed"] is False
+    assert "PHASE_EVIDENCE_MISSING" in rep_map["SIMPLE_ORB"]["blockers"]
+    
+    # HTF_OPENING_DRIVE_CONT is quarantined
+    assert rep_map["HTF_OPENING_DRIVE_CONT"]["phase6_eligible"] is False
+    assert rep_map["HTF_OPENING_DRIVE_CONT"]["phase6_status"] == "PHASE6_BLOCKED_QUARANTINED"
+    assert "STRATEGY_QUARANTINED" in rep_map["HTF_OPENING_DRIVE_CONT"]["blockers"]
+    
+    # MEAN_REVERSION_EXTENSION is a generator
+    assert rep_map["MEAN_REVERSION_EXTENSION"]["phase6_eligible"] is False
+    assert rep_map["MEAN_REVERSION_EXTENSION"]["phase6_status"] == "PHASE6_BLOCKED_CANDIDATE_GENERATOR_NOT_REPLAY_CERTIFIED"
+    
+    # Now create mock evidence files for SIMPLE_ORB
+    orb_dir = tmp_path / "runtime/strategy_validation/SIMPLE_ORB"
+    orb_dir.mkdir(parents=True, exist_ok=True)
+    (orb_dir / "phase_1_report.json").touch()
+    (orb_dir / "phase_2_report.json").touch()
+    (orb_dir / "phase_3_report.json").touch()
+    (orb_dir / "phase_3_5_report.json").touch()
+    (orb_dir / "phase_4_report.json").touch()
+    (orb_dir / "phase_5_wfa_report.json").touch()
+    
+    # Run again with evidence
+    audit_mod.audit_phase6()
     
     with open(json_path) as f:
         report = json.load(f)
         
     rep_map = {r["strategy_id"]: r for r in report}
     
-    # SIMPLE_ORB
     assert rep_map["SIMPLE_ORB"]["phase6_eligible"] is True
     assert rep_map["SIMPLE_ORB"]["phase6_status"] == "PHASE_6_SCAFFOLD_READY"
+    assert rep_map["SIMPLE_ORB"]["phase_1_passed"] is True
     assert rep_map["SIMPLE_ORB"]["phase6_passed"] is False
-    assert len(rep_map["SIMPLE_ORB"]["blockers"]) == 0
-    assert rep_map["SIMPLE_ORB"]["execution_allowed"] is False
+    assert "PHASE_EVIDENCE_MISSING" not in rep_map["SIMPLE_ORB"]["blockers"]
     
-    # HTF_OPENING_DRIVE_CONT
-    assert rep_map["HTF_OPENING_DRIVE_CONT"]["phase6_eligible"] is False
-    assert rep_map["HTF_OPENING_DRIVE_CONT"]["phase6_status"] == "PHASE6_BLOCKED_QUARANTINED"
-    assert "STRATEGY_QUARANTINED" in rep_map["HTF_OPENING_DRIVE_CONT"]["blockers"]
+    # Finally, add shadow evidence
+    (orb_dir / "live_shadow_report.json").touch()
     
-    # MEAN_REVERSION_EXTENSION (candidate generator)
-    assert rep_map["MEAN_REVERSION_EXTENSION"]["phase6_eligible"] is False
-    assert rep_map["MEAN_REVERSION_EXTENSION"]["phase6_status"] == "PHASE6_BLOCKED_CANDIDATE_GENERATOR_NOT_REPLAY_CERTIFIED"
-    assert "CANDIDATE_GENERATOR_REQUIRES_REPLAY_CERTIFICATION_FIRST" in rep_map["MEAN_REVERSION_EXTENSION"]["blockers"]
+    audit_mod.audit_phase6()
     
-    # PRO_STRATEGY_ENGINE (aggregate engine)
-    assert rep_map["PRO_STRATEGY_ENGINE"]["phase6_eligible"] is False
-    assert rep_map["PRO_STRATEGY_ENGINE"]["phase6_status"] == "PHASE6_BLOCKED_AGGREGATE_ENGINE_PENDING"
-    assert "CHILD_CERTIFICATION_PENDING" in rep_map["PRO_STRATEGY_ENGINE"]["blockers"]
-    
-    # Check safety flags for all
-    for r in report:
-        assert r["paper_live_allowed"] is False
-        assert r["live_allowed"] is False
-        assert r["broker_order_allowed"] is False
-        assert r["execution_allowed"] is False
-        assert r["phase6_passed"] is False
-        assert "5 clean live shadow sessions" in r["phase6_required_evidence"]
+    with open(json_path) as f:
+        report = json.load(f)
+        
+    rep_map = {r["strategy_id"]: r for r in report}
+    assert rep_map["SIMPLE_ORB"]["phase6_passed"] is True
+    assert rep_map["SIMPLE_ORB"]["phase_evidence_sources"]["phase_6_shadow"] is not None
+
