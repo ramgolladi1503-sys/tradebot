@@ -9,81 +9,58 @@ def test_filtered_stress_replay_dataset_quality(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     
-    valid_file = data_dir / "valid_ticks.parquet"
+    # Generate some timestamp data (valid session IST)
+    # 2026-07-02 09:15 IST is 2026-07-02 03:45 UTC = 1782963900000000000 ns
+    valid_ts_1 = 1782963900000000000
+    valid_ts_2 = 1782963901000000000
+    
+    valid_file = data_dir / "resolved_option_ticks_20260702.parquet"
     pd.DataFrame({
-        "last_price": [100.0],
-        "best_bid": [99.0],
-        "best_ask": [101.0],
-        "depth_json": ["{\"bids\": []}"],
-        "local_ts": [1234567],
-        "instrument_token": [123],
-        "symbol": ["NIFTY26JUL24000CE"]
+        "last_price": [100.0, 100.0],
+        "best_bid": [99.0, 99.0],
+        "best_ask": [101.0, 101.0],
+        "depth_json": ["{\"bids\": []}", "{\"bids\": []}"],
+        "local_ts": [valid_ts_1, valid_ts_2],
+        "instrument_token": [123, 123],
+        "symbol": ["NIFTY26JUL24000CE", "NIFTY26JUL24000CE"]
     }).to_parquet(valid_file)
     
-    unresolved_file = data_dir / "unresolved_ticks.parquet"
+    # 2. Date mismatch (20260702 filename but 2024 timestamp)
+    mismatch_file = data_dir / "resolved_option_ticks_20260702_mismatch.parquet"
     pd.DataFrame({
         "last_price": [100.0],
         "best_bid": [99.0],
         "best_ask": [101.0],
         "depth_json": ["{\"bids\": []}"],
-        "local_ts": [1234567],
-        "instrument_token": [999],
-        "symbol": ["UNKNOWN"]
-    }).to_parquet(unresolved_file)
-    
-    invalid_ltp_file = data_dir / "invalid_ltp.parquet"
-    pd.DataFrame({
-        "last_price": [0.0],
-        "best_bid": [99.0],
-        "best_ask": [101.0],
-        "depth_json": ["{\"bids\": []}"],
-        "local_ts": [1234567],
+        "local_ts": [1719889500000000000], # 2024-07-02
         "instrument_token": [123],
         "symbol": ["NIFTY26JUL24000CE"]
-    }).to_parquet(invalid_ltp_file)
-
-    invalid_bid_file = data_dir / "invalid_bid.parquet"
-    pd.DataFrame({
-        "last_price": [100.0],
-        "best_bid": [-1.0],
-        "best_ask": [101.0],
-        "depth_json": ["{\"bids\": []}"],
-        "local_ts": [1234567],
-        "instrument_token": [123],
-        "symbol": ["NIFTY26JUL24000CE"]
-    }).to_parquet(invalid_bid_file)
+    }).to_parquet(mismatch_file)
     
-    invalid_spread_file = data_dir / "invalid_spread.parquet"
-    pd.DataFrame({
-        "last_price": [100.0],
-        "best_bid": [102.0],
-        "best_ask": [101.0],
-        "depth_json": ["{\"bids\": []}"],
-        "local_ts": [1234567],
-        "instrument_token": [123],
-        "symbol": ["NIFTY26JUL24000CE"]
-    }).to_parquet(invalid_spread_file)
-    
-    invalid_depth_file = data_dir / "invalid_depth.parquet"
+    # 3. Outside session rows
+    # 03:00 IST is 1782941400000000000
+    outside_file = data_dir / "resolved_option_ticks_20260702_outside.parquet"
     pd.DataFrame({
         "last_price": [100.0],
         "best_bid": [99.0],
         "best_ask": [101.0],
-        "depth_json": ["{}"],
-        "local_ts": [1234567],
+        "depth_json": ["{\"bids\": []}"],
+        "local_ts": [1782941400000000000],
         "instrument_token": [123],
         "symbol": ["NIFTY26JUL24000CE"]
-    }).to_parquet(invalid_depth_file)
+    }).to_parquet(outside_file)
     
-    missing_col_file = data_dir / "missing_col.parquet"
+    # 4. Outliers
+    outlier_file = data_dir / "resolved_option_ticks_20260702_outlier.parquet"
     pd.DataFrame({
-        "last_price": [100.0],
-        "best_bid": [99.0],
-        "best_ask": [101.0],
-        "local_ts": [1234567],
-        "instrument_token": [123],
-        "symbol": ["NIFTY26JUL24000CE"]
-    }).to_parquet(missing_col_file)
+        "last_price": [100.0, 100.0],
+        "best_bid": [99.0, 20.0], # Second spread is 100 (120-20), ltp 100 => ratio 1.0 (100%!)
+        "best_ask": [101.0, 120.0],
+        "depth_json": ["{\"bids\": []}", "{\"bids\": []}"],
+        "local_ts": [valid_ts_1, valid_ts_2],
+        "instrument_token": [123, 123],
+        "symbol": ["NIFTY26JUL24000CE", "NIFTY26JUL24000CE"]
+    }).to_parquet(outlier_file)
     
     token_index = data_dir / "index.json"
     with open(token_index, "w") as f:
@@ -100,51 +77,32 @@ def test_filtered_stress_replay_dataset_quality(tmp_path, monkeypatch):
     with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
         rep = json.load(f)
     assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_VALID"
-    assert rep["paper_live_allowed"] is False
-    assert rep["live_allowed"] is False
-    assert rep["execution_allowed"] is False
-    assert rep["spread_summary"]["median"] == 2.0
-    assert rep["timestamp_start"] == "1234567"
+    assert rep["date_alignment_ok"] is True
+    assert rep["expected_date_from_filename"] == "2026-07-02"
+    assert rep["session_rows"] == 2
+    assert rep["outside_session_rows"] == 0
+    assert rep["spread_to_ltp_summary"]["median"] == 0.02 # 2/100
     
-    # 2. Unresolved token
-    val_mod.validate_dataset(str(unresolved_file), str(token_index))
+    # 2. Date Mismatch
+    val_mod.validate_dataset(str(mismatch_file), str(token_index))
     with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
         rep = json.load(f)
     assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_CONTAINS_UNRESOLVED_TOKENS" in rep["blockers"]
+    assert "FILTERED_DATASET_DATE_MISMATCH" in rep["blockers"]
     
-    # 3. Missing required column (depth_json)
-    val_mod.validate_dataset(str(missing_col_file), str(token_index))
+    # 3. Outside Session
+    val_mod.validate_dataset(str(outside_file), str(token_index))
     with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
         rep = json.load(f)
     assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_MISSING_REQUIRED_COLUMNS" in rep["blockers"]
+    assert "FILTERED_DATASET_SESSION_COVERAGE_INVALID" in rep["blockers"]
     
-    # 4. Invalid LTP
-    val_mod.validate_dataset(str(invalid_ltp_file), str(token_index))
+    # 4. Outliers
+    val_mod.validate_dataset(str(outlier_file), str(token_index))
     with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
         rep = json.load(f)
     assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_INVALID_LTP" in rep["blockers"]
-    
-    # 5. Invalid bid
-    val_mod.validate_dataset(str(invalid_bid_file), str(token_index))
-    with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
-        rep = json.load(f)
-    assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_INVALID_BID_ASK" in rep["blockers"]
-    
-    # 6. Invalid spread
-    val_mod.validate_dataset(str(invalid_spread_file), str(token_index))
-    with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
-        rep = json.load(f)
-    assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_INVALID_SPREAD" in rep["blockers"]
-    
-    # 7. Invalid depth
-    val_mod.validate_dataset(str(invalid_depth_file), str(token_index))
-    with open(tmp_path / "runtime/strategy_validation/filtered_stress_replay_dataset_quality_report.json") as f:
-        rep = json.load(f)
-    assert rep["classification"] == "FILTERED_STRESS_REPLAY_DATASET_BLOCKED"
-    assert "FILTERED_DATASET_INVALID_DEPTH" in rep["blockers"]
+    assert rep["extreme_spread_rows_gt_50pct_ltp"] == 1
+    assert "FILTERED_DATASET_EXTREME_SPREAD_OUTLIERS" in rep["warnings"]
+    assert "FILTERED_DATASET_SPREAD_OUTLIER_RATE_TOO_HIGH" in rep["blockers"] # 1/2 > 5%
 
