@@ -36,7 +36,10 @@ def fetch_upstox_historical(symbol, from_date, to_date):
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         # E.g. https://api.upstox.com/v2/historical-candle/NSE_EQ|INE002A01018/day/2026-07-01/2026-07-05
         # We simulate the fetch here based on the user instructions.
-        res = requests.get("https://api.upstox.com/v2/historical-candle", headers=headers, timeout=5)
+        # Translate common symbols to Upstox instrument keys if needed. NIFTY -> NSE_INDEX|Nifty 50
+        upstox_symbol = "NSE_INDEX|Nifty 50" if symbol == "NIFTY" else symbol
+        url = f"https://api.upstox.com/v2/historical-candle/{upstox_symbol}/1minute/{to_date}/{from_date}"
+        res = requests.get(url, headers=headers, timeout=5)
         
         if res.status_code in (401, 403):
             return "DATA_BLOCKED_UPSTOX_FETCH_FAILED", f"Auth or fetch failed with status {res.status_code}", {}
