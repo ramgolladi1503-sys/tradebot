@@ -1,6 +1,7 @@
 import pytest
 import os
 import json
+import time
 from unittest.mock import patch, MagicMock
 
 def test_subscription_delta_uses_reactor_call_from_thread():
@@ -53,9 +54,12 @@ def test_no_option_ticks_post_connection_can_still_trigger_no_live_option_feed()
     record = registry._records.get(keys[0]) if keys else None
     assert record is not None and record.active
 
-def test_ltp_stale_blocks_candidate_without_global_feed_halt():
+def test_stale_option_ltp_blocks_candidate_execution_without_triggering_no_live_option_feed():
     from core.blocker_lifecycle import evaluate_feed_symbol_blockers, BlockerRegistry
+    from core.opportunity_engine import build_opportunity_score
     registry = BlockerRegistry("test")
+    
+    # 1. Show NO_LIVE_OPTION_FEED does NOT trigger for 10s gap
     evaluate_feed_symbol_blockers(
         registry=registry,
         now_ts=100.0,
@@ -72,21 +76,56 @@ def test_ltp_stale_blocks_candidate_without_global_feed_halt():
     keys = [k for k in registry._records.keys() if k[2] == "NO_LIVE_OPTION_FEED"]
     record_live = registry._records.get(keys[0]) if keys else None
     assert record_live is None or not record_live.active
+    
+    # 2. Show stale quote blocks execution in opportunity engine
+    candidate = {
+        "symbol": "NIFTY",
+        "execution_allowed": True,
+        "tradable": True,
+        "execution_entry": 100.0,
+        "execution_entry_status": "executable",
+        "risk_budget_ok": True,
+        "risk_budget_reason": "ok",
+        "fresh_quote_ok": False, # This makes it stale
+        "primary_blocker": "stale_quote" # Sometimes explicitly passed
+    }
+    score_out = build_opportunity_score(candidate)
+    
+    assert score_out["candidate_class"] != "EXECUTABLE"
+    assert score_out.get("primary_blocker") == "stale_quote"
 
-def test_rest_recovery_forces_advisory_only():
-    candidate = {"symbol": "NIFTY", "execution_allowed": True}
-    source_flags = {"quote_source": "REST_RECOVERY"}
-    if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
-        candidate["execution_allowed"] = False
-        candidate["mode"] = "advisory_only"
+def test_rest_recovery_forces_advisory_only_in_production_engine():
+    from core.opportunity_engine import _base_execution_truth
+    
+    candidate = {
+        "symbol": "NIFTY",
+        "execution_allowed": True,
+        "tradable": True,
+        "execution_entry": 100.0,
+        "execution_entry_status": "executable",
+        "source_flags": {"quote_source": "REST_RECOVERY"}
+    }
+    
+    truth = _base_execution_truth(candidate)
+    
+    assert truth["execution_truth"] is False
     assert candidate["execution_allowed"] is False
     assert candidate["mode"] == "advisory_only"
 
-def test_recovered_fallback_forces_advisory_only():
-    candidate = {"symbol": "NIFTY", "execution_allowed": True}
-    source_flags = {"recovered_fallback": True}
-    if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
-        candidate["execution_allowed"] = False
-        candidate["mode"] = "advisory_only"
+def test_recovered_fallback_forces_advisory_only_in_production_engine():
+    from core.opportunity_engine import _base_execution_truth
+    
+    candidate = {
+        "symbol": "NIFTY",
+        "execution_allowed": True,
+        "tradable": True,
+        "execution_entry": 100.0,
+        "execution_entry_status": "executable",
+        "source_flags": {"recovered_fallback": True}
+    }
+    
+    truth = _base_execution_truth(candidate)
+    
+    assert truth["execution_truth"] is False
     assert candidate["execution_allowed"] is False
     assert candidate["mode"] == "advisory_only"
