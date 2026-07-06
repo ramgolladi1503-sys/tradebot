@@ -9027,6 +9027,8 @@ class TradeBuilder:
             dirty_option_bridge_seen: set[tuple[str, str, str]] = set()
 
             def _preserve_dirty_option_candidate(reason: str) -> None:
+                if exec_mode == "LIVE":
+                    return
                 if reason not in dirty_option_bridge_reasons:
                     return
                 dirty_key = (
@@ -9113,6 +9115,8 @@ class TradeBuilder:
             non_live_relaxed_gate_codes: list[str] = []
 
             def _mark_dirty_option_blocker(reason: str) -> None:
+                if exec_mode == "LIVE":
+                    return
                 if reason not in dirty_option_bridge_reasons:
                     return
                 _preserve_dirty_option_candidate(reason)

@@ -9,10 +9,10 @@
 - Allowed paths: the files above plus docs/agent_reviews/pr637_dirty_option_bridge_ranking.md
 - Forbidden paths: broker code, order code, credentials, live runtime files, risk gate weakening, feed freshness weakening, strategy threshold changes, opening-drive scratch/runtime artifacts
 - Expected tests: dirty option producer preservation tests, dashboard canonical source test, PR 636 proof-pack regression tests, ranked runtime bridge tests, opportunity engine truth guard tests
-- Acceptance proof: dirty no_quote, spread_pct, iv_surface_slope, and iv_term producer states survive into ranked candidates while remaining non-executable; dashboard top opportunities reads canonical ranked output only; legacy TradeBuilder rows cannot bypass canonical ranking
+- Acceptance proof: dirty no_quote, spread_pct, iv_surface_slope, and iv_term producer states survive into ranked candidates in PAPER/SIM while remaining non-executable; dashboard top opportunities reads canonical ranked output only; legacy TradeBuilder rows cannot bypass canonical ranking; LIVE basic-filter hard rejects still return no candidate
 
 ## Scope Guard
-- This PR is read-only candidate evidence and ranking ingress hardening.
+- This PR is read-only candidate evidence and ranking ingress hardening for offline/PAPER/SIM verification paths.
 - It does not place orders, modify orders, cancel orders, or call broker APIs.
 - It does not relax thresholds or change strategy edge logic.
 - It does not change credentials, live configuration, risk gates, kill switches, or feed freshness gates.
@@ -32,7 +32,7 @@
 
 ## GSD Review
 - `core/option_chain.py` annotates absent term-structure evidence explicitly as `iv_term_unavailable` plus `iv_term_unavailable_reason`.
-- `strategies/trade_builder.py` preserves dirty option rows as advisory ranked candidates and adds the same dirty reason to execution blockers so the normal row cannot bypass canonical truth.
+- `strategies/trade_builder.py` preserves dirty option rows as advisory ranked candidates in PAPER/SIM and adds the same dirty reason to execution blockers so the normal row cannot bypass canonical truth.
 - `core/opportunity_engine.py` keeps explicit dirty producer blockers as the primary ranked blocker instead of letting advisory-row risk-budget geometry overwrite them.
 - `tests/test_option_chain_dirty_data_candidate_preservation.py` asserts exact dirty reasons and non-executable ranked state.
 - `tests/test_trade_builder_dirty_option_truth_to_ranking.py` asserts legacy TradeBuilder rows cannot bypass canonical ranking for no-quote and wide-spread cases.
@@ -43,15 +43,16 @@
   `PYTHONPATH=. pytest -q tests/test_option_chain_dirty_data_candidate_preservation.py tests/test_trade_builder_dirty_option_truth_to_ranking.py tests/test_dashboard_canonical_ranked_source.py tests/test_option_data_quality_proof_pack.py tests/test_candidate_ranking_proof_pack.py tests/test_ranked_runtime_bridge.py tests/test_opportunity_engine_truth_guard.py`
 - Evidence gate command:
   `python scripts/validate_agent_review_evidence.py --base-ref origin/main`
-- High-Risk Path Review: `strategies/trade_builder.py` is high risk. The change is limited to candidate evidence preservation and execution-blocker classification for known dirty producer reasons. It does not call broker APIs, place orders, modify order adapters, change credentials, or relax risk/feed/strategy thresholds.
+- High-Risk Path Review: `strategies/trade_builder.py` is high risk. The change is limited to PAPER/SIM candidate evidence preservation and execution-blocker classification for known dirty producer reasons. It keeps LIVE basic-filter hard rejects returning no candidate, and it does not call broker APIs, place orders, modify order adapters, change credentials, or relax risk/feed/strategy thresholds.
 - High-Risk Path Review: `core/option_chain.py` is high risk. The change only annotates missing IV term-structure evidence on existing option-chain rows. It does not fetch new broker data, change quote selection, or alter order eligibility by itself.
 - High-Risk Path Review: `core/opportunity_engine.py` is high risk. The change is limited to primary-blocker display priority for explicit dirty option bridge candidates. It does not upgrade candidates, relax execution checks, or make any candidate executable.
 
 ## Acceptance Proof
-- `no_quote` from the TradeBuilder path is preserved as a dirty advisory candidate.
-- `spread_pct` wide state is preserved and blocks normal TradeBuilder execution bypass.
-- `iv_surface_slope` out-of-range state is preserved and cannot appear executable.
+- `no_quote` from the TradeBuilder path is preserved as a dirty advisory candidate in PAPER/SIM.
+- `spread_pct` wide state is preserved and blocks normal TradeBuilder execution bypass in PAPER/SIM.
+- `iv_surface_slope` out-of-range state is preserved and cannot appear executable in PAPER/SIM.
 - `iv_term` unavailable state is based on explicit producer evidence, not a broad missing-field guess.
+- LIVE basic-filter failures continue to fail closed with no advisory salvage row.
 - Dashboard top opportunities reads canonical ranked output only.
 
 ## Runtime Proof Required After Merge
