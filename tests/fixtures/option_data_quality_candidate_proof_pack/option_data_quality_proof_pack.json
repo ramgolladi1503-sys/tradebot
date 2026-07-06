@@ -1,0 +1,329 @@
+{
+  "scenarios": [
+    {
+      "scenario": "no_quote_preserved",
+      "context": {
+        "symbol": "NIFTY",
+        "spot_ltp": 22550.0,
+        "vwap": 22500.0,
+        "option_ce_ltp": null,
+        "option_pe_ltp": null,
+        "ce_premium_change": 14.0,
+        "pe_premium_change": -2.0,
+        "ce_spread_pct": null,
+        "pe_spread_pct": null,
+        "ce_depth": null,
+        "pe_depth": null,
+        "option_ltp_age_sec": null,
+        "quote_source": "subscription_failed",
+        "fallback_used": false
+      },
+      "regime": {
+        "schema_version": 1,
+        "primary_regime": "TREND_UP",
+        "scores": {
+          "TREND_UP": 0.8,
+          "TREND_DOWN": 0.0,
+          "RANGE": 0.0,
+          "CHOP": 0.0,
+          "COMPRESSION": 0.0,
+          "VOLATILITY_EXPANSION": 0.0,
+          "TRAP_RISK": 0.0,
+          "EXHAUSTION_RISK": 0.0,
+          "EXPIRY_CONTEXT": 0.0,
+          "INCONCLUSIVE": 0.0
+        }
+      },
+      "candidate": {
+        "schema_version": 1,
+        "strategy_id": "no_quote_preserved",
+        "movement_type": "OPENING_DRIVE",
+        "symbol": "NIFTY",
+        "direction": "BUY_CALL",
+        "status": "VALIDATED_CANDIDATE",
+        "raw_score": 0.78,
+        "confidence_score": 0.78,
+        "price_structure_score": 0.76,
+        "option_confirmation_score": 0.40,
+        "liquidity_score": 0.42,
+        "freshness_score": 0.48,
+        "volatility_score": 0.45,
+        "regime_alignment_score": 0.74,
+        "timing_score": 0.70,
+        "trap_risk_score": 0.05,
+        "confluence_score": 0.56,
+        "entry_trigger": "unit",
+        "invalid_if": "unit",
+        "rank_reason": "unit",
+        "lineage": {"promotion_state": "PROMOTED"},
+        "blockers": ["NO_QUOTE"],
+        "warnings": ["quote_source_untrusted"]
+      },
+      "contract_resolution": {
+        "instrument_token": 123456,
+        "execution_grade": true,
+        "fallback_used": false
+      }
+    },
+    {
+      "scenario": "spread_wide_preserved",
+      "context": {
+        "symbol": "NIFTY",
+        "spot_ltp": 22550.0,
+        "vwap": 22500.0,
+        "option_ce_ltp": 120.0,
+        "option_pe_ltp": 90.0,
+        "ce_premium_change": 14.0,
+        "pe_premium_change": -2.0,
+        "ce_spread_pct": 0.08,
+        "pe_spread_pct": 0.09,
+        "ce_depth": 1200.0,
+        "pe_depth": 1000.0,
+        "option_ltp_age_sec": 0.4,
+        "quote_source": "live_option_tick",
+        "fallback_used": false
+      },
+      "regime": {
+        "schema_version": 1,
+        "primary_regime": "TREND_UP",
+        "scores": {
+          "TREND_UP": 0.8,
+          "TREND_DOWN": 0.0,
+          "RANGE": 0.0,
+          "CHOP": 0.0,
+          "COMPRESSION": 0.0,
+          "VOLATILITY_EXPANSION": 0.0,
+          "TRAP_RISK": 0.0,
+          "EXHAUSTION_RISK": 0.0,
+          "EXPIRY_CONTEXT": 0.0,
+          "INCONCLUSIVE": 0.0
+        }
+      },
+      "candidate": {
+        "schema_version": 1,
+        "strategy_id": "spread_wide_preserved",
+        "movement_type": "TREND_PULLBACK",
+        "symbol": "NIFTY",
+        "direction": "BUY_CALL",
+        "status": "VALIDATED_CANDIDATE",
+        "raw_score": 0.82,
+        "confidence_score": 0.82,
+        "price_structure_score": 0.80,
+        "option_confirmation_score": 0.44,
+        "liquidity_score": 0.40,
+        "freshness_score": 0.85,
+        "volatility_score": 0.46,
+        "regime_alignment_score": 0.74,
+        "timing_score": 0.72,
+        "trap_risk_score": 0.05,
+        "confluence_score": 0.60,
+        "entry_trigger": "unit",
+        "invalid_if": "unit",
+        "rank_reason": "unit",
+        "lineage": {"promotion_state": "PROMOTED"},
+        "blockers": ["WIDE_SPREAD"],
+        "warnings": []
+      },
+      "contract_resolution": {
+        "instrument_token": 123456,
+        "execution_grade": true,
+        "fallback_used": false
+      }
+    },
+    {
+      "scenario": "iv_surface_slope_preserved",
+      "context": {
+        "symbol": "NIFTY",
+        "spot_ltp": 22550.0,
+        "vwap": 22500.0,
+        "option_ce_ltp": 120.0,
+        "option_pe_ltp": 90.0,
+        "ce_premium_change": 14.0,
+        "pe_premium_change": -2.0,
+        "ce_spread_pct": 0.008,
+        "pe_spread_pct": 0.009,
+        "ce_depth": 1200.0,
+        "pe_depth": 1000.0,
+        "option_ltp_age_sec": 0.4,
+        "quote_source": "live_option_tick",
+        "fallback_used": false
+      },
+      "regime": {
+        "schema_version": 1,
+        "primary_regime": "TREND_UP",
+        "scores": {
+          "TREND_UP": 0.8,
+          "TREND_DOWN": 0.0,
+          "RANGE": 0.0,
+          "CHOP": 0.0,
+          "COMPRESSION": 0.0,
+          "VOLATILITY_EXPANSION": 0.0,
+          "TRAP_RISK": 0.0,
+          "EXHAUSTION_RISK": 0.0,
+          "EXPIRY_CONTEXT": 0.0,
+          "INCONCLUSIVE": 0.0
+        }
+      },
+      "candidate": {
+        "schema_version": 1,
+        "strategy_id": "iv_surface_slope_preserved",
+        "movement_type": "VWAP_RECLAIM_REJECTION",
+        "symbol": "NIFTY",
+        "direction": "BUY_PUT",
+        "status": "VALIDATED_CANDIDATE",
+        "raw_score": 0.76,
+        "confidence_score": 0.76,
+        "price_structure_score": 0.72,
+        "option_confirmation_score": 0.46,
+        "liquidity_score": 0.73,
+        "freshness_score": 0.88,
+        "volatility_score": 0.43,
+        "regime_alignment_score": 0.71,
+        "timing_score": 0.67,
+        "trap_risk_score": 0.06,
+        "confluence_score": 0.58,
+        "entry_trigger": "unit",
+        "invalid_if": "unit",
+        "rank_reason": "unit",
+        "lineage": {"promotion_state": "PROMOTED"},
+        "blockers": ["IV_SURFACE_SLOPE"],
+        "warnings": ["low_iv_surface_confidence"]
+      },
+      "contract_resolution": {
+        "instrument_token": 123456,
+        "execution_grade": true,
+        "fallback_used": false
+      }
+    },
+    {
+      "scenario": "iv_term_missing_preserved",
+      "context": {
+        "symbol": "NIFTY",
+        "spot_ltp": 22550.0,
+        "vwap": 22500.0,
+        "option_ce_ltp": 120.0,
+        "option_pe_ltp": 90.0,
+        "ce_premium_change": 14.0,
+        "pe_premium_change": -2.0,
+        "ce_spread_pct": 0.008,
+        "pe_spread_pct": 0.009,
+        "ce_depth": 1200.0,
+        "pe_depth": 1000.0,
+        "option_ltp_age_sec": 0.4,
+        "quote_source": "live_option_tick",
+        "fallback_used": false
+      },
+      "regime": {
+        "schema_version": 1,
+        "primary_regime": "TREND_UP",
+        "scores": {
+          "TREND_UP": 0.8,
+          "TREND_DOWN": 0.0,
+          "RANGE": 0.0,
+          "CHOP": 0.0,
+          "COMPRESSION": 0.0,
+          "VOLATILITY_EXPANSION": 0.0,
+          "TRAP_RISK": 0.0,
+          "EXHAUSTION_RISK": 0.0,
+          "EXPIRY_CONTEXT": 0.0,
+          "INCONCLUSIVE": 0.0
+        }
+      },
+      "candidate": {
+        "schema_version": 1,
+        "strategy_id": "iv_term_missing_preserved",
+        "movement_type": "MEAN_REVERSION_EXTENSION",
+        "symbol": "NIFTY",
+        "direction": "BUY_PUT",
+        "status": "BLOCKED_CANDIDATE",
+        "raw_score": 0.74,
+        "confidence_score": 0.74,
+        "price_structure_score": 0.70,
+        "option_confirmation_score": 0.44,
+        "liquidity_score": 0.71,
+        "freshness_score": 0.80,
+        "volatility_score": 0.42,
+        "regime_alignment_score": 0.69,
+        "timing_score": 0.64,
+        "trap_risk_score": 0.05,
+        "confluence_score": 0.54,
+        "entry_trigger": "unit",
+        "invalid_if": "unit",
+        "rank_reason": "unit",
+        "lineage": {"promotion_state": "PROMOTED"},
+        "blockers": ["UNRESOLVED_CONTRACT"],
+        "warnings": ["iv_term_unavailable"]
+      },
+      "contract_resolution": {
+        "instrument_token": null,
+        "execution_grade": false,
+        "fallback_used": false
+      }
+    },
+    {
+      "scenario": "clean_live_quote",
+      "context": {
+        "symbol": "NIFTY",
+        "spot_ltp": 22550.0,
+        "vwap": 22500.0,
+        "option_ce_ltp": 120.0,
+        "option_pe_ltp": 90.0,
+        "ce_premium_change": 14.0,
+        "pe_premium_change": -2.0,
+        "ce_spread_pct": 0.003,
+        "pe_spread_pct": 0.004,
+        "ce_depth": 1200.0,
+        "pe_depth": 1000.0,
+        "option_ltp_age_sec": 0.4,
+        "quote_source": "live_option_tick",
+        "fallback_used": false
+      },
+      "regime": {
+        "schema_version": 1,
+        "primary_regime": "TREND_UP",
+        "scores": {
+          "TREND_UP": 0.8,
+          "TREND_DOWN": 0.0,
+          "RANGE": 0.0,
+          "CHOP": 0.0,
+          "COMPRESSION": 0.0,
+          "VOLATILITY_EXPANSION": 0.0,
+          "TRAP_RISK": 0.0,
+          "EXHAUSTION_RISK": 0.0,
+          "EXPIRY_CONTEXT": 0.0,
+          "INCONCLUSIVE": 0.0
+        }
+      },
+      "candidate": {
+        "schema_version": 1,
+        "strategy_id": "clean_live_quote",
+        "movement_type": "OPENING_DRIVE",
+        "symbol": "NIFTY",
+        "direction": "BUY_CALL",
+        "status": "VALIDATED_CANDIDATE",
+        "raw_score": 0.87,
+        "confidence_score": 0.87,
+        "price_structure_score": 0.86,
+        "option_confirmation_score": 0.88,
+        "liquidity_score": 0.90,
+        "freshness_score": 0.94,
+        "volatility_score": 0.48,
+        "regime_alignment_score": 0.86,
+        "timing_score": 0.83,
+        "trap_risk_score": 0.03,
+        "confluence_score": 0.69,
+        "entry_trigger": "unit",
+        "invalid_if": "unit",
+        "rank_reason": "unit",
+        "lineage": {"promotion_state": "PROMOTED"},
+        "blockers": [],
+        "warnings": []
+      },
+      "contract_resolution": {
+        "instrument_token": 123456,
+        "execution_grade": true,
+        "fallback_used": false
+      }
+    }
+  ]
+}
