@@ -30,7 +30,9 @@ def test_option_data_quality_proof_pack_preserves_and_blocks_unsafe_quote_states
         assert scenario["counts"]["ranked_candidate_count"] >= 1
         assert scenario["execution_grade"]["execution_grade"] is False
         assert scenario["execution_grade"]["state"] in {"BLOCKED", "ADVISORY_ONLY"}
-        assert scenario["report"]["ranking"]["ranks"][0]["executable_candidate"] is False or name == "iv_surface_slope_preserved"
+        assert scenario["report"]["ranking"]["ranks"][0]["executable_candidate"] is False
+
+    assert scenarios["clean_live_quote"]["report"]["ranking"]["ranks"][0]["executable_candidate"] is True
 
 
 def test_option_data_quality_proof_pack_keeps_blockers_visible_in_ranking():
