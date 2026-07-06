@@ -5,7 +5,6 @@ import argparse
 import urllib.parse
 import urllib.request
 import ssl
-from datetime import datetime
 from pathlib import Path
 
 def main():
@@ -19,16 +18,19 @@ def main():
     token = os.environ.get("UPSTOX_ACCESS_TOKEN")
     sym = args.symbols[0]
     
-    # Check for trusted instrument master
-    master_path = Path("configs/upstox_instrument_master.json")
+    # Read instrument resolution
+    res_path = Path("runtime/strategy_validation/MEAN_REVERSION_EXTENSION/upstox_instrument_resolution.json")
     instr_key = None
-    if master_path.exists():
-        with open(master_path, "r") as f:
-            master = json.load(f)
-            for item in master:
-                if item.get("tradingsymbol") == sym:
-                    instr_key = item.get("instrument_key")
-                    break
+    res_blocker = "UPSTOX_INSTRUMENT_KEY_RESOLUTION_MISSING"
+    
+    if res_path.exists():
+        with open(res_path, "r") as f:
+            res_data = json.load(f)
+            if res_data.get("classification") == "UPSTOX_INSTRUMENT_KEYS_RESOLVED":
+                instr_key = res_data.get("resolved", {}).get(sym, {}).get("instrument_key")
+            else:
+                if res_data.get("blockers"):
+                    res_blocker = res_data["blockers"][0]
     
     out_dir = Path("runtime/strategy_validation/MEAN_REVERSION_EXTENSION")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -42,7 +44,7 @@ def main():
             "version": "v2",
             "endpoint_path": None,
             "http_status": None,
-            "classification": "UPSTOX_INSTRUMENT_KEY_RESOLUTION_MISSING",
+            "classification": res_blocker,
             "candles_count": 0,
             "token_logged": False
         })
@@ -50,7 +52,7 @@ def main():
             "version": "v3",
             "endpoint_path": None,
             "http_status": None,
-            "classification": "UPSTOX_INSTRUMENT_KEY_RESOLUTION_MISSING",
+            "classification": res_blocker,
             "candles_count": 0,
             "token_logged": False
         })

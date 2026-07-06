@@ -3,16 +3,26 @@ import os
 import pytest
 from pathlib import Path
 
+def setup_resolution_fixture(classification="UPSTOX_INSTRUMENT_KEYS_RESOLVED", blocker=None):
+    res_path = Path("runtime/strategy_validation/MEAN_REVERSION_EXTENSION/upstox_instrument_resolution.json")
+    res_path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "classification": classification,
+        "resolved": {
+            "NIFTY": {"instrument_key": "NSE_INDEX|Nifty 50"}
+        },
+        "blockers": [blocker] if blocker else []
+    }
+    with open(res_path, "w") as f:
+        json.dump(data, f)
+    return res_path
+
 def test_diagnostics_never_print_token(monkeypatch, tmp_path):
     from scripts import diagnose_upstox_historical_access
     monkeypatch.setattr("sys.argv", ["diagnose", "--start-date", "2026-07-02", "--end-date", "2026-07-02", "--symbols", "NIFTY", "--interval", "1minute"])
     monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "fake_token_123")
     
-    # Needs instrument master to pass the key check
-    master_path = Path("configs/upstox_instrument_master.json")
-    master_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(master_path, "w") as f:
-        json.dump([{"tradingsymbol": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}], f)
+    setup_resolution_fixture()
         
     import urllib.request
     import urllib.error
@@ -38,10 +48,7 @@ def test_diagnostics_classify_missing_token(monkeypatch):
     monkeypatch.setattr("sys.argv", ["diagnose", "--start-date", "2026-07-02", "--end-date", "2026-07-02", "--symbols", "NIFTY", "--interval", "1minute"])
     monkeypatch.delenv("UPSTOX_ACCESS_TOKEN", raising=False)
     
-    master_path = Path("configs/upstox_instrument_master.json")
-    master_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(master_path, "w") as f:
-        json.dump([{"tradingsymbol": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}], f)
+    setup_resolution_fixture()
         
     diagnose_upstox_historical_access.main()
     
@@ -56,9 +63,7 @@ def test_diagnostics_missing_instrument_master_blocks(monkeypatch):
     monkeypatch.setattr("sys.argv", ["diagnose", "--start-date", "2026-07-02", "--end-date", "2026-07-02", "--symbols", "NIFTY", "--interval", "1minute"])
     monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "fake_token_123")
     
-    master_path = Path("configs/upstox_instrument_master.json")
-    if master_path.exists():
-        master_path.unlink()
+    setup_resolution_fixture(classification="UPSTOX_INSTRUMENT_KEYS_BLOCKED", blocker="UPSTOX_NIFTY_KEY_NOT_FOUND")
         
     diagnose_upstox_historical_access.main()
     
@@ -66,17 +71,14 @@ def test_diagnostics_missing_instrument_master_blocks(monkeypatch):
     with open(p, "r") as f:
         data = json.load(f)
         for res in data["endpoint_results"]:
-            assert res["classification"] == "UPSTOX_INSTRUMENT_KEY_RESOLUTION_MISSING"
+            assert res["classification"] == "UPSTOX_NIFTY_KEY_NOT_FOUND"
 
 def test_diagnostics_classify_success(monkeypatch):
     from scripts import diagnose_upstox_historical_access
     monkeypatch.setattr("sys.argv", ["diagnose", "--start-date", "2026-07-02", "--end-date", "2026-07-02", "--symbols", "NIFTY", "--interval", "1minute"])
     monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "fake_token_123")
     
-    master_path = Path("configs/upstox_instrument_master.json")
-    master_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(master_path, "w") as f:
-        json.dump([{"tradingsymbol": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}], f)
+    setup_resolution_fixture()
     
     import urllib.request
     class MockResponse:

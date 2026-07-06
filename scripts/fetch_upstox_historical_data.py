@@ -48,17 +48,21 @@ def main():
         return
         
     # Load trusted keys
-    master_path = Path("configs/upstox_instrument_master.json")
-    if not master_path.exists():
-        print("Instrument master missing.")
+    res_path = Path("runtime/strategy_validation/MEAN_REVERSION_EXTENSION/upstox_instrument_resolution.json")
+    if not res_path.exists():
+        print("Instrument resolution missing.")
         return
         
-    with open(master_path, "r") as f:
-        master = json.load(f)
+    with open(res_path, "r") as f:
+        res_data = json.load(f)
+        
+    if res_data.get("classification") != "UPSTOX_INSTRUMENT_KEYS_RESOLVED":
+        print("Instrument keys not fully resolved. Fetcher aborting.")
+        return
         
     instrument_map = {}
-    for item in master:
-        instrument_map[item["tradingsymbol"]] = item["instrument_key"]
+    for sym, details in res_data.get("resolved", {}).items():
+        instrument_map[sym] = details["instrument_key"]
     
     current = start
     days_fetched = 0
