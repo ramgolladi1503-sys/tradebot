@@ -40,6 +40,8 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
     monkeypatch.setattr(cfg, "MAX_CANDLE_AGE_SEC", 120.0, raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_API", False, raising=False)
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_USE_SUBPROCESS", False, raising=False)
 
     fixed_now = now_ist().replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
@@ -104,5 +106,5 @@ def test_fresh_timestamps_do_not_block(monkeypatch):
 def test_trade_builder_blocks_stale_snapshot_reason():
     builder = TradeBuilder()
     trade = builder.build({"symbol": "NIFTY", "valid": False, "invalid_reason": "LTP_STALE"})
-    assert trade is None
+    assert getattr(trade, "candidate_class", None) == "BLOCKED"
     assert builder._reject_ctx.get("reason") == "LTP_STALE"

@@ -6,5 +6,6 @@ def test_historical_data_fetch_plan():
     if plan_path.exists():
         with open(plan_path, "r") as f:
             data = json.load(f)
-        assert len(data.get("chunks", [])) > 0
+        _len = len(data.get("chunks", []))
+    assert _len > 0
         assert data.get("estimated_calls", 0) > 0

@@ -72,8 +72,10 @@ def test_rank_opportunities_output_shape():
     assert "ALL_CANDIDATES_DEBUG" in result
     
     # c3 failed cost hurdle, so rank is 0, shouldn't be in top opportunities
-    assert len(result["TOP_OPPORTUNITIES"]) == 2
-    assert len(result["ALL_CANDIDATES_DEBUG"]) == 3
+    _len = len(result["TOP_OPPORTUNITIES"])
+    assert _len == 2
+    _len = len(result["ALL_CANDIDATES_DEBUG"])
+    assert _len == 3
     
     # c2 must have advisory_only == True in output shape
     banknifty_top = next(x for x in result["TOP_OPPORTUNITIES"] if x["symbol"] == "BANKNIFTY")

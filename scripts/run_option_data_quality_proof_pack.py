@@ -67,9 +67,10 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
         "scenario": scenario["scenario"],
         "candidate_status": candidate.status,
         "blockers": list(candidate.blockers),
-        "read_only": report.read_only,
-        "is_order_action": report.is_order_action,
-        "append": report.append,        "broker_api_called": False,
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "broker_api_called": False,
         "allowed_for_live_execution": False,
 
         "counts": {

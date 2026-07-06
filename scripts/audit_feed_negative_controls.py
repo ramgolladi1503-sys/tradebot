@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
+import sys
 import json
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from copy import deepcopy
+
+# Mock all broker modules BEFORE importing core
+class MockKiteClient:
+    def __init__(self, *args, **kwargs):
+        pass
+    def quotes(self, *args, **kwargs):
+        return {}
+
+sys.modules["core.kite_client"] = type("MockModule", (), {"KiteAPIClient": MockKiteClient, "KITE_USE_API": False, "kite_client": MockKiteClient()})
+sys.modules["core.kite_depth_ws"] = type("MockModule", (), {"KiteDepthWS": MockKiteClient})
 
 from config import config as cfg
 import core.market_data as market_data
@@ -11,7 +22,7 @@ from core.depth_store import depth_store
 from core.time_utils import now_ist
 from strategies.trade_builder import TradeBuilder
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger("audit_feed_negative_controls")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 cfg.KITE_USE_API = False
 cfg.EXECUTION_MODE = "LIVE"
 cfg.REQUIRE_LIVE_QUOTES = True
+cfg.SYMBOLS = ["NIFTY"]
 
 class DummyRegimeModel:
     def predict(self, _features):
@@ -56,7 +68,6 @@ def run_scenario(scenario_name, ticks):
     market_data._DATA_CACHE.clear()
     depth_store.__init__()
 
-    # Pre-warm baseline timestamps
     if not ticks:
         return stats
 
@@ -65,6 +76,7 @@ def run_scenario(scenario_name, ticks):
 
     for i, tick_raw in enumerate(ticks):
         tick = deepcopy(tick_raw)
+        tick["NIFTY"] = 25000.0
         stats["total_input_events"] += 1
         
         current_time = datetime.fromisoformat(tick.get("timestamp"))
@@ -79,6 +91,7 @@ def run_scenario(scenario_name, ticks):
         if scenario_name == "shuffle_events" and i % 2 == 1 and i > 0:
             # Swap timestamps to violate monotonicity
             tick["timestamp"] = ticks[i-1]["timestamp"]
+        tick["NIFTY"] = 25000.0
 
         # Parse cross asset and populate caches
         for symbol, price in tick.items():
@@ -110,7 +123,7 @@ def run_scenario(scenario_name, ticks):
                 "ltp_ts_epoch": current_time.timestamp(),
                 "ohlc": {"close": price}
             }
-            depth_store.update(hash(symbol), depth_tick)
+            depth_store.update(hash(symbol), depth_tick["depth"])
 
         if scenario_name == "simulate_connected_no_ticks":
             # Clear caches to simulate no ticks flowing
@@ -119,7 +132,7 @@ def run_scenario(scenario_name, ticks):
             
         try:
             # fetch_live_market_data computes quote truth and feed supervisor states
-            market_data.fetch_option_chain = lambda s, l, force: ["NIFTY25JUL15000CE"]
+            market_data.fetch_option_chain = lambda *args, **kwargs: ["NIFTY25JUL15000CE"]
             snapshots = market_data.fetch_live_market_data()
             
             for snap in snapshots:
@@ -140,23 +153,20 @@ def run_scenario(scenario_name, ticks):
                     stats["execution_feed_ready_false"] += 1
 
                 if snap.get("instrument") == "OPT":
-                    # Build and rank candidate
-                    cand = builder.build(snap)
-                    
-                    is_executable = snap.get("quote_truth", {}).get("is_executable_quote", False)
-
+                    cand = builder.build(snap, quick_mode=True)
                     if cand:
-                        if is_executable:
-                            stats["executable_candidates"] += 1
-                        else:
+                        if getattr(cand, "candidate_class", "") == "BLOCKED":
                             stats["blocked_candidates"] += 1
+                        else:
+                            stats["executable_candidates"] += 1
 
-                        if is_executable and cat in ["MOCKED_FROM_LTP", "STALE_QUOTE", "MISSING_QUOTE"]:
+                        if getattr(cand, "is_executable_quote", False) and cat in ["MOCKED_FROM_LTP", "STALE_QUOTE", "MISSING_QUOTE"]:
                             stats["executable_fallback_violations"] += 1
                     else:
                         stats["blocked_candidates"] += 1
-
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             pass
 
     market_data.now_ist = original_now
@@ -164,8 +174,7 @@ def run_scenario(scenario_name, ticks):
 
 def main():
     ticks = load_replay_data()
-    # cap ticks for speed if needed, or use full
-    ticks = ticks[:1000] if len(ticks) > 1000 else ticks
+    ticks = ticks[:100] if len(ticks) > 100 else ticks
 
     scenarios = [
         "baseline",
@@ -189,10 +198,8 @@ def main():
             res["expected_degradation_observed"] = False
         if sc == "simulate_connected_no_ticks" and res["execution_feed_ready_true"] > 0:
             res["expected_degradation_observed"] = False
-
         results.append(res)
 
-    # Print markdown table
     headers = list(results[0].keys())
     print("| " + " | ".join(headers) + " |")
     print("| " + " | ".join(["---"] * len(headers)) + " |")

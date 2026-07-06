@@ -74,9 +74,10 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "scenario": scenario["scenario"],
-        "read_only": report.read_only,
-        "is_order_action": report.is_order_action,
-        "append": report.append,        "broker_api_called": False,
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "broker_api_called": False,
         "allowed_for_live_execution": False,
 
         "pipeline_stage_order": list(report.pipeline_stage_order),

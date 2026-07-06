@@ -121,7 +121,8 @@ def test_probe_success(monkeypatch, tmp_path):
         assert "mock_token" not in json.dumps(data)
         assert "Bearer" not in json.dumps(data)
         
-    assert len(calls) == 2
+    _len = len(calls)
+    assert _len == 2
     
     quoted_aaa = urllib.parse.quote("TEST_INDEX|AAA")
     quoted_bbb = urllib.parse.quote("TEST_INDEX|BBB")
