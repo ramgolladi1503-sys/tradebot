@@ -98,7 +98,8 @@ def test_fresh_timestamps_do_not_block(monkeypatch):
         last_ts=reference_now - timedelta(seconds=30),
     )
     rows = market_data.fetch_live_market_data()
-    assert len(rows) >= 1
+    _len = len(rows)
+    assert _len >= 1
     snap = next(row for row in rows if row.get("instrument") == "OPT")
     assert snap["valid"] is True
     assert snap["invalid_reason"] is None
