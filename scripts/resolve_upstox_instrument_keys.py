@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import json
 import argparse
+import gzip
+import json
 import urllib.request
-import ssl
 from pathlib import Path
 
 def main():
@@ -29,49 +29,32 @@ def main():
         "execution_allowed": False
     }
     
-    instruments = []
-    
-    # Try reading from manual import
-    local_master = runtime_instr_dir / "complete.json"
-    if local_master.exists():
-        report["source"] = "manual_imported_master"
-        with open(local_master, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    if len(data) > 0 and isinstance(list(data.values())[0], dict):
-                        instruments = list(data.values())
-                elif isinstance(data, list):
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+    instruments: list[dict] = []
+
+    try:
+        req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
+        with urllib.request.urlopen(req) as response:
+            if response.info().get("Content-Encoding") == "gzip":
+                f = gzip.GzipFile(fileobj=response)
+                data = f.read()
+            else:
+                data = response.read()
+            data = json.loads(data.decode("utf-8"))
+
+            if isinstance(data, dict):
+                values = list(data.values())
+                if values and all(isinstance(item, dict) for item in values):
+                    instruments = values
+            elif isinstance(data, list):
+                if all(isinstance(item, dict) for item in data):
                     instruments = data
-            except Exception:
-                pass
-    
-    if not instruments:
-        # Fallback to download
-        url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
-        
-        try:
-            import gzip
-            req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-            with urllib.request.urlopen(req) as response:
-                if response.info().get('Content-Encoding') == 'gzip':
-                    f = gzip.GzipFile(fileobj=response)
-                    data = f.read()
-                else:
-                    data = response.read()
-                data = json.loads(data.decode('utf-8'))
-                
-                if isinstance(data, dict):
-                    if len(data) > 0 and isinstance(list(data.values())[0], dict):
-                        instruments = list(data.values())
-                elif isinstance(data, list):
-                    instruments = data
-        except Exception:
-            report["blockers"].append("UPSTOX_INSTRUMENT_MASTER_DOWNLOAD_FAILED")
-            
+    except Exception:
+        report["blockers"].append("UPSTOX_INSTRUMENT_MASTER_DOWNLOAD_FAILED")
+
     if not instruments:
         report["classification"] = "UPSTOX_INSTRUMENT_KEYS_BLOCKED"
-        if not report["blockers"]:
+        if "UPSTOX_INSTRUMENT_MASTER_DOWNLOAD_FAILED" not in report["blockers"]:
             report["blockers"].append("UPSTOX_INSTRUMENT_MASTER_MALFORMED")
         write_report(out_dir, report)
         return
@@ -108,8 +91,10 @@ def main():
             }
             report["unresolved"].remove(sym)
         else:
-            # Ambiguous
             report["blockers"].append("UPSTOX_INSTRUMENT_KEY_AMBIGUOUS")
+            report["classification"] = "UPSTOX_INSTRUMENT_KEYS_BLOCKED"
+            write_report(out_dir, report)
+            return
     
     if len(report["resolved"]) == len(args.symbols):
         report["classification"] = "UPSTOX_INSTRUMENT_KEYS_RESOLVED"
