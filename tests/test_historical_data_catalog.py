@@ -10,3 +10,7 @@ def test_historical_data_catalog():
         dates = data.get("dates_available", [])
         if len(dates) < 30:
             assert data.get("classification") in ["MULTIYEAR_DATA_CATALOG_PARTIAL", "MULTIYEAR_DATA_CATALOG_EMPTY"]
+
+
+def test_dummy():
+    assert 1 != 2

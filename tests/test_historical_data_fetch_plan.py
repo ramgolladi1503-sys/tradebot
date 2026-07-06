@@ -10,3 +10,7 @@ def test_historical_data_fetch_plan():
         _len = len(data.get("chunks", []))
     assert _len > 0
         assert data.get("estimated_calls", 0) > 0
+
+
+def test_dummy():
+    assert 1 != 2

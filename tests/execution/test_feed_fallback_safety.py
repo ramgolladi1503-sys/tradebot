@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from core.candidate_quote_freshness import classify_candidate_quote_freshness
-from core.advisory_schema import normalize_advisory_payload
+from core.advisory_schema import validate_advisory_row
 
 @patch("core.candidate_quote_freshness.cfg")
 def test_quote_older_than_sla_drops_to_advisory(mock_cfg):
@@ -13,6 +13,33 @@ def test_quote_older_than_sla_drops_to_advisory(mock_cfg):
     mock_cfg.CANDIDATE_QUOTE_FRESHNESS_MAX_AGE_SEC = 2.0
     
     candidate = {
+        "trade_id": "test_trade_123",
+        "advisory_id": "test_trade_123",
+        "strategy_id": "test_strat",
+        "symbol": "BANKNIFTY",
+        "strategy_name": "Test Strategy",
+        "timestamp": "2023-01-01T12:00:00Z",
+        "instrument_type": "OPT",
+        "execution_entry": 100.0,
+        "execution_entry_source": "ask",
+        "execution_entry_status": "OK",
+        "display_entry": 100.0,
+        "display_entry_source": "ask",
+        "display_entry_status": "OK",
+        "entry_reason": "test",
+        "entry_clear_reason": "",
+        "entry": 100.0,
+        "entry_status": "OK",
+        "entry_source": "ask",
+        "confidence": 1.0,
+        "readiness": "READY",
+        "blockers": [],
+        "hard_blockers": [],
+        "soft_penalties": [],
+        "warnings": [],
+        "quote_source": "ws",
+        "decision_explain": [],
+        "market_open": True,
         "candidate_class": "EXECUTABLE",
         "option_token": "12345",
         "last_option_tick_epoch": 1000.0,
@@ -35,7 +62,7 @@ def test_quote_older_than_sla_drops_to_advisory(mock_cfg):
     advisory_payload["hard_blockers"] = list(decision.reasons)
     advisory_payload["permission"] = "EXECUTE"
     
-    normalized = normalize_advisory_payload(advisory_payload)
+    normalized = validate_advisory_row(advisory_payload)
     
     # Invariant: execution_status MUST be advisory_only because of hard blockers
     assert normalized["execution_status"] == "advisory_only"
