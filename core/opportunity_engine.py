@@ -907,6 +907,27 @@ def build_opportunity_score(
     if offline_mode and cand_execution_ok is True:
         # In SIM/PAPER, allow upstream "execution_ok" to drive selection for unit candidates.
         execution_ok_effective = True
+    candidate_primary_blocker = _candidate_primary_blocker(
+        candidate,
+        metrics={
+            "fresh_quote_ok": fresh_quote_ok,
+            "liquidity_ok": liquidity_ok,
+            "spread_ok": spread_ok,
+            "executable_truth": executable_truth,
+        },
+    )
+    dirty_option_reason = str(
+        _get_value(candidate, "dirty_option_reason")
+        or source_flags.get("dirty_option_reason")
+        or ""
+    ).strip()
+    dirty_option_primary_blocker = None
+    if (
+        str(_get_value(candidate, "candidate_origin") or source_flags.get("candidate_origin") or "").strip()
+        == "dirty_option_bridge"
+        and dirty_option_reason in {"no_quote", "spread_pct", "iv_term", "iv_surface_slope"}
+    ):
+        dirty_option_primary_blocker = dirty_option_reason
     candidate_class = _derive_candidate_class(
         candidate,
         metrics={
@@ -1085,18 +1106,13 @@ def build_opportunity_score(
             "daily_kill_switch_active"
             if daily_kill_switch_active
             else (
-                f"risk_budget_{risk_budget_reason}"
-                if not risk_budget_ok
-                else (
-                    exposure_blocker
-                    or _candidate_primary_blocker(
-                        candidate,
-                        metrics={
-                            "fresh_quote_ok": fresh_quote_ok,
-                            "liquidity_ok": liquidity_ok,
-                            "spread_ok": spread_ok,
-                            "executable_truth": executable_truth,
-                        },
+                dirty_option_primary_blocker
+                or (
+                    f"risk_budget_{risk_budget_reason}"
+                    if not risk_budget_ok
+                    else (
+                        exposure_blocker
+                        or candidate_primary_blocker
                     )
                 )
             )
