@@ -101,7 +101,7 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
                 {
                     "rank": rank.rank,
                     "strategy_id": rank.strategy_id,
-                    "candidate_id": rank.candidate_id,
+                    "candidate_id": getattr(rank, "candidate_id", rank.strategy_id),
                     "bucket": rank.bucket,
                     "score_eligibility": rank.score_eligibility,
                     "executable_candidate": rank.executable_candidate,
