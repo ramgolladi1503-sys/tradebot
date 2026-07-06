@@ -11,6 +11,7 @@ def main():
     strat_id = "MEAN_REVERSION_EXTENSION"
     base_dir = Path(f"runtime/strategy_validation/{strat_id}")
     catalog_path = base_dir / "historical_data_catalog.json"
+    audit_path = base_dir / "phase_4_trade_ledger_audit.json"
 
     catalog = {}
     if catalog_path.exists():
@@ -29,6 +30,14 @@ def main():
     minimum_wfa_windows = thresholds.get("minimum_wfa_windows", 6)
     min_trades = thresholds.get("min_trades", 30)
     min_expectancy = thresholds.get("min_expectancy", 0.1)
+
+    # Read Audit
+    audit = {}
+    if audit_path.exists():
+        with open(audit_path, "r") as f:
+            audit = json.load(f)
+            
+    audit_classification = audit.get("classification", "TRADE_LEDGER_AUDIT_FAILED")
 
     # Phase 4: Backtest
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
@@ -69,15 +78,26 @@ def main():
         max_drawdown = 0
         realized_rr = 0
 
+    if audit_classification == "TRADE_LEDGER_AUDIT_SUSPICIOUS":
+        blockers_p4.append("TRADE_LEDGER_AUDIT_SUSPICIOUS")
+    if audit_classification == "TRADE_LEDGER_AUDIT_FAILED":
+        blockers_p4.append("TRADE_LEDGER_AUDIT_FAILED")
+        
     if not has_sufficient_backtest:
         blockers_p4.append("INSUFFICIENT_HISTORICAL_DATA_FOR_BACKTEST_OR_WFA")
-    elif not trades:
+    if not trades:
         blockers_p4.append("PHASE4_TRADE_LEDGER_MISSING_OR_EMPTY")
     elif trade_count < min_trades:
         blockers_p4.append("MINIMUM_TRADE_COUNT_NOT_MET")
-    elif expectancy < min_expectancy:
+        
+    if trades and expectancy < min_expectancy:
         blockers_p4.append("MINIMUM_EXPECTANCY_NOT_MET")
-        verdict_p4 = "FAILED"
+        
+    if blockers_p4:
+        passed_p4 = False
+        verdict_p4 = "BLOCKED"
+        if "MINIMUM_EXPECTANCY_NOT_MET" in blockers_p4:
+            verdict_p4 = "FAILED"
     else:
         passed_p4 = True
         verdict_p4 = "PASSED"
