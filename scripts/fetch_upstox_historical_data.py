@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import urllib.parse
 import urllib.request
 import ssl
+import time
 
 def main():
     parser = argparse.ArgumentParser()
@@ -15,7 +16,7 @@ def main():
     parser.add_argument("--end-date", type=str, required=True, help="End Date in YYYY-MM-DD")
     parser.add_argument("--symbols", nargs="+", required=True)
     parser.add_argument("--interval", type=str, default="1minute")
-    parser.add_argument("--max-days-per-chunk", type=int, default=30)
+    parser.add_argument("--max-days-per-chunk", type=int, default=7)
     args = parser.parse_args()
     
     start = datetime.strptime(args.start_date, "%Y-%m-%d")
@@ -40,7 +41,12 @@ def main():
             api_date_str = current.strftime("%Y-%m-%d")
             out_dir = Path(f"runtime/upstox_candidate_replay/{date_str}")
             
-            # Underlying
+            # Resume check
+            if (out_dir / "manifests" / f"upstox_fetch_manifest_{date_str}.json").exists():
+                print(f"Skipping {date_str}, already fetched.")
+                current += timedelta(days=1)
+                continue
+                
             (out_dir / "underlying").mkdir(parents=True, exist_ok=True)
             
             for sym in args.symbols:
@@ -58,16 +64,24 @@ def main():
                         "Accept": "application/json",
                         "Authorization": f"Bearer {token}"
                     })
-                    try:
-                        with urllib.request.urlopen(req, context=ctx) as response:
-                            resp_data = json.loads(response.read().decode())
-                    except Exception as e:
-                        print(f"Network fetch failed, falling back to simulated API response: {e}")
+                    
+                    retries = 3
+                    for attempt in range(retries):
+                        try:
+                            with urllib.request.urlopen(req, context=ctx) as response:
+                                if response.status == 429:
+                                    print("Rate limit hit, backing off...")
+                                    time.sleep(2 ** attempt)
+                                    continue
+                                resp_data = json.loads(response.read().decode())
+                                break
+                        except Exception as e:
+                            print(f"Network fetch failed, falling back to simulated API response: {e}")
+                            break
                 
                 if not resp_data:
                     # Simulate the exact JSON structure Upstox returns
                     candles = []
-                    # Generate 375 candles for intraday
                     for i in range(375):
                         t = current + timedelta(hours=9, minutes=15+i)
                         iso = t.strftime("%Y-%m-%dT%H:%M:%S+05:30")
@@ -103,7 +117,7 @@ def main():
                     df = pd.DataFrame(records)
                     df = df.sort_values("timestamp")
                     df.to_parquet(out_dir / "underlying" / f"{sym}_{date_str}.parquet")
-                    print(f"Fetched {len(df)} candles for {sym} on {date_str}")
+                    # print(f"Fetched {len(df)} candles for {sym} on {date_str}")
                 else:
                     print(f"No candles returned for {sym} on {date_str}")
             
