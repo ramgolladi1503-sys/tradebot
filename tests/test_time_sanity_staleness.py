@@ -109,5 +109,5 @@ def test_fresh_timestamps_do_not_block(monkeypatch):
 def test_trade_builder_blocks_stale_snapshot_reason():
     builder = TradeBuilder()
     trade = builder.build({"symbol": "NIFTY", "valid": False, "invalid_reason": "LTP_STALE"})
-    assert getattr(trade, "candidate_class", None) == "BLOCKED"
+    assert trade is None
     assert builder._reject_ctx.get("reason") == "LTP_STALE"
