@@ -42,6 +42,7 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
     monkeypatch.setattr(cfg, "FEED_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr("core.tick_store.get_last_tick", lambda token: None, raising=False)
 
     fixed_now = now_ist().replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
@@ -80,7 +81,8 @@ def test_stale_ltp_marks_snapshot_invalid(monkeypatch):
         last_ts=reference_now,
     )
     rows = market_data.fetch_live_market_data()
-    assert len(rows) == 1
+    _len = len(rows)
+    assert _len == 1
     snap = rows[0]
     assert snap["valid"] is False
     assert "LTP_STALE" in str(snap.get("invalid_reason"))
