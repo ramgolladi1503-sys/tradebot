@@ -19,6 +19,18 @@ def _field(obj, key, default=None):
     return getattr(obj, key, default)
 
 
+def _source_flags(obj) -> dict:
+    flags = _field(obj, "source_flags", {}) or {}
+    return flags if isinstance(flags, dict) else {}
+
+
+def _list_field(obj, key) -> list[str]:
+    value = _field(obj, key, []) or []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
 def _prepared_builder(monkeypatch) -> TradeBuilder:
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(cfg, "ALPHA_ENSEMBLE_ENABLE", False, raising=False)
@@ -116,14 +128,19 @@ def _option_row(**overrides) -> dict:
 
 
 def _assert_dirty_candidate(candidate, reason: str) -> None:
+    flags = _source_flags(candidate)
     assert candidate is not None
     assert _field(candidate, "candidate_origin") == "dirty_option_bridge"
+    assert (_field(candidate, "dirty_option_reason") or flags.get("dirty_option_reason")) == reason
+    assert _field(candidate, "primary_blocker") == reason
+    assert _field(candidate, "execution_block_reason") == reason
+    assert reason in _list_field(candidate, "gate_reasons")
+    assert reason in _list_field(candidate, "tradable_reasons_blocking")
     assert _field(candidate, "candidate_status") == "advisory_only"
     assert _field(candidate, "execution_status") == "advisory_only"
     assert _field(candidate, "execution_allowed") is False
     assert _field(candidate, "execution_ok") is False
     assert _field(candidate, "tradable") is False
-    assert _field(candidate, "execution_block_reason") is not None
 
 
 def test_dirty_option_rows_are_preserved_into_ranked_advisory_candidates(monkeypatch):
@@ -131,7 +148,11 @@ def test_dirty_option_rows_are_preserved_into_ranked_advisory_candidates(monkeyp
         "no_quote": _option_row(bid=None, ask=None, quote_ok=False),
         "spread_pct": _option_row(bid=10.0, ask=18.0, quote_ok=True),
         "iv_surface_slope": _option_row(iv_surface_slope=0.35),
-        "iv_term": _option_row(iv_term=None, next_expiry=None),
+        "iv_term": _option_row(
+            iv_term=None,
+            iv_term_unavailable=True,
+            iv_term_unavailable_reason="next_expiry_missing",
+        ),
     }
 
     for reason, row in cases.items():
@@ -150,6 +171,46 @@ def test_dirty_option_rows_are_preserved_into_ranked_advisory_candidates(monkeyp
             _field(candidate, "candidate_origin") == "dirty_option_bridge"
             for candidate in ranked
         )
-        dirty_rows = [candidate for candidate in ranked if _field(candidate, "candidate_origin") == "dirty_option_bridge"]
+        dirty_rows = [
+            candidate
+            for candidate in ranked
+            if _field(candidate, "candidate_origin") == "dirty_option_bridge"
+            and (_field(candidate, "dirty_option_reason") or _source_flags(candidate).get("dirty_option_reason")) == reason
+        ]
         assert dirty_rows
         _assert_dirty_candidate(dirty_rows[0], reason)
+
+
+def test_dirty_option_blockers_prevent_normal_trade_builder_bypass(monkeypatch):
+    cases = {
+        "spread_pct": _option_row(bid=10.0, ask=18.0, quote_ok=True),
+        "iv_surface_slope": _option_row(iv_surface_slope=0.35),
+        "iv_term": _option_row(
+            iv_term=None,
+            iv_term_unavailable=True,
+            iv_term_unavailable_reason="next_expiry_missing",
+        ),
+    }
+
+    for reason, row in cases.items():
+        builder = _prepared_builder(monkeypatch)
+        trade = builder.build(
+            _market_data(row),
+            quick_mode=False,
+            allow_fallbacks=False,
+            allow_baseline=False,
+        )
+
+        assert trade is not None
+        ranked = list(getattr(builder, "_last_ranked_candidates", []) or [])
+        assert ranked
+        blocked_rows = [
+            candidate
+            for candidate in ranked
+            if reason in _list_field(candidate, "tradable_reasons_blocking")
+            or reason in _list_field(candidate, "gate_reasons")
+            or reason in _list_field(candidate, "hard_blockers")
+        ]
+        assert blocked_rows
+        assert all(_field(candidate, "execution_allowed", False) is False for candidate in blocked_rows)
+        assert all(_field(candidate, "tradable", False) is False for candidate in blocked_rows)

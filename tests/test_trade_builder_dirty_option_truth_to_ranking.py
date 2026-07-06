@@ -56,6 +56,24 @@ def _prepared_builder(monkeypatch) -> TradeBuilder:
     return builder
 
 
+def _field(obj, key, default=None):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _source_flags(obj) -> dict:
+    flags = _field(obj, "source_flags", {}) or {}
+    return flags if isinstance(flags, dict) else {}
+
+
+def _list_field(obj, key) -> list[str]:
+    value = _field(obj, key, []) or []
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
 def _option_row(**overrides) -> dict:
     base = {
         "type": "CE",
@@ -123,3 +141,54 @@ def test_legacy_trade_builder_row_cannot_bypass_canonical_ranking(monkeypatch):
     assert all(str(row.get("candidate_origin") or "") == "dirty_option_bridge" for row in ranked)
     assert any(str(row.get("execution_block_reason") or "") == "no_quote" for row in ranked)
     assert all(str(row.get("candidate_status") or "") == "advisory_only" for row in ranked)
+
+
+def test_wide_spread_trade_builder_row_is_ranked_but_not_executable(monkeypatch):
+    builder = _prepared_builder(monkeypatch)
+    trade = builder.build(
+        {
+            "symbol": "NIFTY",
+            "market_open": True,
+            "valid": True,
+            "execution_mode": "PAPER",
+            "market_context": {"execution_mode": "PAPER", "market_open": True, "mode": "PAPER"},
+            "ltp": 25000.0,
+            "vwap": 24990.0,
+            "atr": 20.0,
+            "bias": "Bullish",
+            "instrument": "OPT",
+            "chain_source": "live",
+            "quote_ok": True,
+            "bid": 24999.0,
+            "ask": 25001.0,
+            "regime": "TREND",
+            "regime_day": "TREND",
+            "day_type": "TREND_DAY",
+            "htf_dir": "UP",
+            "orb_bias": "UP",
+            "option_chain": [
+                _option_row(bid=10.0, ask=18.0, quote_ok=True),
+            ],
+        },
+        quick_mode=False,
+        allow_fallbacks=False,
+        allow_baseline=False,
+    )
+
+    ranked = list(getattr(builder, "_last_ranked_candidates", []) or [])
+    assert trade is not None
+    assert ranked
+    assert any(
+        (_field(row, "dirty_option_reason") or _source_flags(row).get("dirty_option_reason")) == "spread_pct"
+        for row in ranked
+    )
+    spread_blocked_rows = [
+        row
+        for row in ranked
+        if "spread_pct" in _list_field(row, "tradable_reasons_blocking")
+        or "spread_pct" in _list_field(row, "gate_reasons")
+        or "spread_pct" in _list_field(row, "hard_blockers")
+    ]
+    assert spread_blocked_rows
+    assert all(_field(row, "execution_allowed", False) is False for row in spread_blocked_rows)
+    assert all(_field(row, "tradable", False) is False for row in spread_blocked_rows)

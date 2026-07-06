@@ -41,6 +41,7 @@ def test_dashboard_top_opportunities_reads_canonical_ranked_path_only(tmp_path, 
     monkeypatch.setattr(runtime, "RANKED_PIPELINE_LATEST_PATH", ranked_path)
     monkeypatch.setattr(runtime, "TOP_OPPORTUNITIES_LATEST_PATH", legacy_path)
     monkeypatch.setattr(runtime, "read_snapshot_payload", _read_snapshot)
+    monkeypatch.setattr(runtime.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", False, raising=False)
 
     frames = runtime._load_top_opportunities_frames(limit=10)
 
@@ -48,5 +49,6 @@ def test_dashboard_top_opportunities_reads_canonical_ranked_path_only(tmp_path, 
     assert "top_executable" in frames
     assert "top_advisory" in frames
     assert calls[0] == ranked_path
-    assert frames["top_executable"].empty or "trade_id" in frames["top_executable"].columns
-    assert frames["top_advisory"].empty or "trade_id" in frames["top_advisory"].columns
+    assert frames["top_executable"].empty
+    assert not frames["top_advisory"].empty
+    assert list(frames["top_advisory"]["trade_id"]) == ["DIRTY-1"]

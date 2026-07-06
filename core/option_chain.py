@@ -764,6 +764,12 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                     key = (c["strike"], c["type"])
                     if key in next_iv_map:
                         c["iv_term"] = c.get("iv") - next_iv_map[key]
+            if cfg.ENABLE_TERM_STRUCTURE:
+                iv_term_reason = "next_expiry_quote_missing" if next_candidates else "next_expiry_missing"
+                for c in chain:
+                    if "iv_term" not in c:
+                        c["iv_term_unavailable"] = True
+                        c["iv_term_unavailable_reason"] = iv_term_reason
             for c in chain:
                 c["chain_source"] = "live"
             chain = _annotate_iv_oi(chain)
