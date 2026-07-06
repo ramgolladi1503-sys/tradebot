@@ -24,11 +24,11 @@ Architecture is preserved. Contract verification gates are implemented as standa
 Implemented dataclass validation logic for candidates and pipeline state objects. Resolved merge conflicts with main. Fixed test regressions in `test_decision_dag.py`.
 
 ## QA / Safety Review
-- **read_only=true** where applicable
-- **is_order_action=false**
-- **broker_api_called=false**
-- **allowed_for_live_execution=false** unless explicitly scoped and human-approved
-- **append=false** where evidence/contracts are read-only
+- read_only=true where applicable
+- is_order_action=false
+- broker_api_called=false
+- allowed_for_live_execution=false unless explicitly scoped and human-approved
+- append=false where evidence/contracts are read-only
 
 ## High-Risk Path Review
 `core/decision_dag.py` was modified.
@@ -46,9 +46,9 @@ This PR does not prove that live data consistently adheres to the required `sess
 ## Human Approval
 Manually approved by operator during PR resolution.
 
-- **mode**: PAPER
-- **candidate_id**: N/A
-- **decision**: APPROVED
-- **reason**: Pipeline contract verification checks
-- **timestamp**: 2026-07-06T00:00:00Z
-- **source**: agent_review
+- mode: PAPER
+- candidate_id: N/A
+- decision: APPROVED
+- reason: Pipeline contract verification checks
+- timestamp: 2026-07-06T00:00:00Z
+- source: agent_review
