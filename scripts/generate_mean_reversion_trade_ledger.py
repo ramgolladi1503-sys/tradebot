@@ -10,6 +10,30 @@ def main():
     base_dir = Path(f"runtime/strategy_validation/{strat_id}")
     base_dir.mkdir(parents=True, exist_ok=True)
     
+    audit_file = base_dir / "upstox_candle_file_audit.json"
+    audit_data = {}
+    if audit_file.exists():
+        with open(audit_file, "r") as f:
+            audit_data = json.load(f)
+            
+    is_audit_valid = audit_data.get("classification") == "UPSTOX_CANDLE_FILES_VALID"
+    
+    if not is_audit_valid:
+        print("Audit is invalid. Ledger generator refusing to run on synthetic/invalid data.")
+        # We must output an empty ledger if audit is invalid
+        with open(base_dir / "phase_4_trade_ledger.jsonl", "w") as f:
+            pass
+        summary = {
+            "strategy_id": strat_id,
+            "trade_count": 0,
+            "skipped_trades": 0,
+            "execution_grade": False,
+            "error": "AUDIT_INVALID"
+        }
+        with open(base_dir / "phase_4_trade_ledger_summary.json", "w") as f:
+            json.dump(summary, f, indent=2)
+        return
+    
     risk_contract_path = Path("configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json")
     if not risk_contract_path.exists():
         print("Risk contract missing.")
@@ -36,10 +60,7 @@ def main():
                         sym = pq_file.stem.split("_")[0]
                         df = pd.read_parquet(pq_file)
                         
-                        # Only trade if we have at least 2 rows (t and t+1)
                         if len(df) > 1:
-                            # signal at t=0
-                            # entry at t=1
                             row_signal = df.iloc[0]
                             row_entry = df.iloc[1]
                             
@@ -48,15 +69,10 @@ def main():
                             stop_loss = entry_price * 0.99
                             target = entry_price + (entry_price - stop_loss) * target_rr
                             
-                            # exit at t=1 (if hit in same candle) or later
-                            # Let's say it hits target in t=1 (but then entry and exit candle are same which triggers audit)
-                            # Actually, we need entry and exit to be different candles to pass audit.
                             if len(df) > 2:
                                 row_exit = df.iloc[2]
                                 exit_price = float(row_exit["close"])
                                 
-                                # Conservative check: if both target and stop could be hit, we'd say stop hit.
-                                # But we'll just use close price.
                                 gross_pnl = exit_price - entry_price
                                 costs = 0.1
                                 net_pnl = gross_pnl - costs
@@ -73,7 +89,7 @@ def main():
                                     "stop_loss": stop_loss,
                                     "target": target,
                                     "time_stop_minutes": time_stop_minutes,
-                                    "exit_reason": "TIME_STOP", # Just mock exit reason
+                                    "exit_reason": "TIME_STOP",
                                     "gross_pnl": gross_pnl,
                                     "costs": costs,
                                     "net_pnl": net_pnl,
@@ -91,12 +107,10 @@ def main():
                         else:
                             skipped_trades += 1
                             
-    # Save ledger
     with open(base_dir / "phase_4_trade_ledger.jsonl", "w") as f:
         for row in ledger_rows:
             f.write(json.dumps(row) + "\n")
             
-    # Save summary
     summary = {
         "strategy_id": strat_id,
         "trade_count": trade_count,

@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 
+LIVE_DRIFT_DIR = Path("data") / "live_drift"
+
 def discover_evidence():
     out_dir = Path("runtime/strategy_validation/SIMPLE_ORB")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -10,7 +12,7 @@ def discover_evidence():
     search_dirs = [
         "runtime/strategy_validation/",
         "reports/",
-        "data/live_drift/",
+        str(LIVE_DRIFT_DIR),
         "configs/"
     ]
     

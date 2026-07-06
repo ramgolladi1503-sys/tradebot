@@ -11,6 +11,7 @@ def _base_market_data(**overrides):
         "symbol": "NIFTY",
         "execution_mode": "LIVE",
         "market_open": True,
+        "market_context": {"session_state": "NORMAL_OPEN"},
         "segment": "NSE_FNO",
         "instrument": "OPT",
         "timestamp": 1_000.0,

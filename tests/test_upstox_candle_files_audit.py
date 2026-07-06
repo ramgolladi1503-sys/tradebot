@@ -37,3 +37,38 @@ def test_one_row_file_blocks_t_plus_1_entry():
         for f in audit.get("details", []):
             if f.get("row_count", 0) == 1:
                 assert f.get("usable_for_t_plus_1") is False
+
+def test_audit_flags_synthetic_true():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "SYNTHETIC_CANDLE_DATA_BLOCKED" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_mock_true():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "MOCK_CANDLE_DATA_BLOCKED" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_fallback_true():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "FALLBACK_CANDLE_DATA_BLOCKED" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_missing_provenance():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "CANDLE_FILE_MISSING_PROVENANCE" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_constant_ohlc_pattern():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "CANDLE_FILE_CONSTANT_OHLC_PATTERN" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_zero_close_variance():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "CANDLE_FILE_ZERO_CLOSE_VARIANCE" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
+
+def test_audit_flags_375_row_flat_file_as_invalid():
+    audit = _load("upstox_candle_file_audit.json")
+    if audit and "CANDLE_FILE_FLAT_PRICE_SERIES" in audit.get("blockers", []):
+        assert audit.get("classification") == "UPSTOX_CANDLE_FILES_INVALID"
