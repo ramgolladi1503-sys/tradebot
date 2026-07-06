@@ -249,7 +249,7 @@ def main():
         logger.error(f"WebSocket error: {code} - {reason}")
 
     kws.on_ticks = on_ticks
-    kws.on_connect = on_connec
+    kws.on_connect = on_connect
     kws.on_close = on_close
     kws.on_error = on_error
 

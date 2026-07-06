@@ -43,6 +43,7 @@ ALLOWLIST_EXACT: dict[str, set[int]] = {
     "scripts/run_ohlcv_strategy_evidence.py": {164},
     "scripts/run_mean_reversion_deepdive.py": {163},
     "core/eod_no_trade_evidence.py": {69},
+    "scripts/discover_simple_orb_phase_evidence.py": {6},
 }
 
 

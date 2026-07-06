@@ -120,3 +120,38 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
     assert tokens[100001] == "NIFTY26JUN24000CE"
     assert tokens[100002] == "BANKNIFTY26JUN58000PE"
     assert tokens[100003] == "SENSEX26JUN77000CE"
+
+
+def test_main_initialization(monkeypatch):
+    import signal
+    import builtins
+    from unittest.mock import mock_open
+
+    monkeypatch.setenv("KITE_API_KEY", "dummy_api_key")
+    monkeypatch.setenv("KITE_ACCESS_TOKEN", "dummy_access_token")
+    monkeypatch.setattr(tick_data_collector, "get_target_tokens", lambda: {12345: "NIFTY 50"})
+    monkeypatch.setattr(signal, "signal", lambda sig, handler: None)
+
+    connect_called = []
+    class MockKiteTicker:
+        def __init__(self, api_key, access_token):
+            assert api_key == "dummy_api_key"
+            assert access_token == "dummy_access_token"
+            self.on_ticks = None
+            self.on_connect = None
+            self.on_close = None
+            self.on_error = None
+            self.MODE_FULL = "full"
+
+        def connect(self, threaded=False):
+            connect_called.append(threaded)
+
+    monkeypatch.setattr(tick_data_collector, "KiteTicker", MockKiteTicker)
+
+    m_open = mock_open()
+    monkeypatch.setattr(builtins, "open", m_open)
+
+    tick_data_collector.main()
+
+    assert len(connect_called) == 1
+    assert connect_called[0] is False
