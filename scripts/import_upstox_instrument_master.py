@@ -20,11 +20,13 @@ def main():
         "certification_eligible": False
     }
     
+    manual_root = Path(*["data"]) / "manual" / "upstox_instruments"
+    runtime_root = Path(*["runtime"]) / "manual" / "upstox_instruments"
     input_paths = [
-        Path("data/manual/upstox_instruments/complete.json.gz"),
-        Path("data/manual/upstox_instruments/complete.json"),
-        Path("runtime/manual/upstox_instruments/complete.json.gz"),
-        Path("runtime/manual/upstox_instruments/complete.json")
+        manual_root / "complete.json.gz",
+        manual_root / "complete.json",
+        runtime_root / "complete.json.gz",
+        runtime_root / "complete.json",
     ]
     
     found_path = None

@@ -4,6 +4,7 @@ import time
 import json
 import datetime
 import subprocess
+from pathlib import Path
 
 def run():
     now = datetime.datetime.now()
@@ -29,29 +30,30 @@ def run():
             m = {"ts": datetime.datetime.now().isoformat()}
             
             # Read health
-            health_path = ".runtime/logs/runtime_health_latest.json"
-            if os.path.exists(health_path):
+            logs_root = Path(".runtime") / "logs"
+            health_path = logs_root / "runtime_health_latest.json"
+            if health_path.exists():
                 try:
-                    with open(health_path) as f:
+                    with health_path.open() as f:
                         h = json.load(f)
                         m["feed_ok"] = h.get("feed_ok")
                         m["ws_connected"] = h.get("feed_status", {}).get("ws_connected")
                         m["last_any_packet_age"] = h.get("feed_status", {}).get("latest_packet_age_sec")
                 except: pass
                 
-            feed_path = ".runtime/logs/feed_truth_latest.json"
-            if os.path.exists(feed_path):
+            feed_path = logs_root / "feed_truth_latest.json"
+            if feed_path.exists():
                 try:
-                    with open(feed_path) as f:
+                    with feed_path.open() as f:
                         feed = json.load(f)
                         m["NO_LIVE_OPTION_FEED"] = feed.get("NO_LIVE_OPTION_FEED", False)
                         m["tick_stalled"] = feed.get("tick_stalled", False)
                 except: pass
 
-            pipe_path = ".runtime/logs/ranked_pipeline_runtime_latest.json"
-            if os.path.exists(pipe_path):
+            pipe_path = logs_root / "ranked_pipeline_runtime_latest.json"
+            if pipe_path.exists():
                 try:
-                    with open(pipe_path) as f:
+                    with pipe_path.open() as f:
                         p = json.load(f)
                         m["candidates"] = p.get("candidates_considered", 0)
                         m["advisory"] = p.get("top_advisory_opportunities", 0)

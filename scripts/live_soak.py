@@ -4,6 +4,7 @@ import time
 import json
 import datetime
 import subprocess
+from pathlib import Path
 
 def run():
     now = datetime.datetime.now()
@@ -26,23 +27,24 @@ def run():
             time.sleep(60)
             
             # Read health
-            health_path = ".runtime/logs/runtime_health_latest.json"
-            pipe_path = ".runtime/logs/ranked_pipeline_runtime_latest.json"
-            feed_path = ".runtime/logs/feed_truth_latest.json"
-            depth_ws_path = ".runtime/logs/depth_ws_watchdog.log"
+            logs_root = Path(".runtime") / "logs"
+            health_path = logs_root / "runtime_health_latest.json"
+            pipe_path = logs_root / "ranked_pipeline_runtime_latest.json"
+            feed_path = logs_root / "feed_truth_latest.json"
+            depth_ws_path = logs_root / "depth_ws_watchdog.log"
             
             m = {"ts": datetime.datetime.now().isoformat()}
             try:
-                if os.path.exists(health_path):
-                    with open(health_path) as f:
+                if health_path.exists():
+                    with health_path.open() as f:
                         h = json.load(f)
                         m["feed_ok"] = h.get("feed_ok")
                         m["ws_connected"] = h.get("feed_status", {}).get("ws_connected")
             except: pass
             
             try:
-                if os.path.exists(pipe_path):
-                    with open(pipe_path) as f:
+                if pipe_path.exists():
+                    with pipe_path.open() as f:
                         p = json.load(f)
                         m["candidates"] = p.get("candidates_considered", 0)
                         m["advisory"] = p.get("top_advisory_opportunities", 0)
