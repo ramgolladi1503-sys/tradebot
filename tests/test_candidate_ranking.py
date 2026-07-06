@@ -220,6 +220,40 @@ def test_feed_risky_near_executable_candidate_is_suppressed_before_advisory():
     assert RANKING_FEED_RISK_SUPPRESSION_REASON in report.ranks[1].downgrade_reasons
 
 
+def test_iv_surface_slope_warning_is_treated_as_feed_risk_for_ranking():
+    risky = _score(
+        "iv_surface",
+        final_score=0.88,
+        eligibility=SCORE_ELIGIBLE,
+        warnings=("low_iv_surface_confidence",),
+    )
+
+    report = rank_candidates([risky])
+
+    assert report.suppressed_count == 1
+    assert report.ranks[0].score_eligibility == SUPPRESSED_BY_DOWNGRADE
+    assert report.ranks[0].bucket == "SUPPRESSED_CANDIDATE"
+    assert report.ranks[0].executable_candidate is False
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON in report.ranks[0].downgrade_reasons
+
+
+def test_iv_surface_slope_blocker_is_treated_as_feed_risk_for_ranking():
+    risky = _score(
+        "iv_surface_blocker",
+        final_score=0.88,
+        eligibility=SCORE_ELIGIBLE,
+        blockers=("IV_SURFACE_SLOPE",),
+    )
+
+    report = rank_candidates([risky])
+
+    assert report.suppressed_count == 1
+    assert report.ranks[0].score_eligibility == SUPPRESSED_BY_DOWNGRADE
+    assert report.ranks[0].bucket == "SUPPRESSED_CANDIDATE"
+    assert report.ranks[0].executable_candidate is False
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON in report.ranks[0].downgrade_reasons
+
+
 def test_feed_risk_suppression_does_not_mutate_source_score_record():
     risky = _score(
         "risky_source",
