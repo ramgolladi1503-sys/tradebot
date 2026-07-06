@@ -98,8 +98,12 @@ def apply_feed_hold_to_ranking(
 
     source_scores = _coerce_score_records(scores)
     source_metadata = getattr(scores, "metadata", {}) if isinstance(scores, OpportunityScoreReport) else {}
+    import uuid
+    import time
     return CandidateRankingReport(
         schema_version=RANKING_SCHEMA_VERSION,
+        ranked_report_id=str(uuid.uuid4()),
+        generated_epoch=time.time(),
         read_only=True,
         is_order_action=False,
         append=False,

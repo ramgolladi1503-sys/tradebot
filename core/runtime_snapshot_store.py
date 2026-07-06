@@ -19,6 +19,8 @@ SNAPSHOT_WRAPPER_SCHEMA_VERSION = 1
 MARKET_SNAPSHOT_PATH = runtime_dir() / "market_snapshot.json"
 ADVISORY_LATEST_PATH = runtime_dir() / "advisory_latest.json"
 TOP_OPPORTUNITIES_LATEST_PATH = runtime_dir() / "top_opportunities_latest.json"
+RANKED_PIPELINE_LATEST_PATH = runtime_dir() / "opportunities" / "ranked_pipeline_latest.json"
+RANKED_VS_LEGACY_LATEST_PATH = runtime_dir() / "opportunities" / "ranked_vs_legacy_latest.json"
 FEED_RUNTIME_LATEST_PATH = runtime_dir() / "feed_runtime_latest.json"
 TOKEN_RESOLUTION_LATEST_PATH = runtime_dir() / "token_resolution_latest.json"
 RISK_SNAPSHOT_PATH = runtime_dir() / "risk_snapshot.json"
@@ -88,6 +90,42 @@ def write_top_opportunities_snapshots(
         schema_version=schema_version,
     )
     return runtime_path, logs_path
+
+
+def write_ranked_pipeline_snapshot(
+    *,
+    payload: Any,
+    producer: str,
+    generated_at: str | None = None,
+    schema_version: int = SNAPSHOT_WRAPPER_SCHEMA_VERSION,
+) -> Path:
+    target = RANKED_PIPELINE_LATEST_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return write_snapshot_atomic(
+        target,
+        payload=payload,
+        producer=producer,
+        generated_at=generated_at,
+        schema_version=schema_version,
+    )
+
+
+def write_ranked_vs_legacy_snapshot(
+    *,
+    payload: Any,
+    producer: str,
+    generated_at: str | None = None,
+    schema_version: int = SNAPSHOT_WRAPPER_SCHEMA_VERSION,
+) -> Path:
+    target = RANKED_VS_LEGACY_LATEST_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return write_snapshot_atomic(
+        target,
+        payload=payload,
+        producer=producer,
+        generated_at=generated_at,
+        schema_version=schema_version,
+    )
 
 
 def read_snapshot(path: str | Path) -> dict[str, Any]:
@@ -182,3 +220,9 @@ def _parse_snapshot_epoch(value: Any) -> float | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return float(parsed.timestamp())
+
+def read_ranked_pipeline_snapshot() -> dict:
+    return _read_snapshot_json(RANKED_PIPELINE_LATEST_PATH)
+
+def write_ranked_vs_legacy_snapshot(payload: dict) -> None:
+    _write_snapshot_json(RANKED_VS_LEGACY_LATEST_PATH, payload)

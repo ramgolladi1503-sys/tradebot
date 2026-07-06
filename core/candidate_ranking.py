@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Dict
 
@@ -98,7 +100,7 @@ FEED_RISK_TOKENS: frozenset[str] = frozenset(
 def is_feed_risk_candidate(candidate: dict[str, Any] | OpportunityScoreRecord) -> FeedRiskVerdict:
     """Central helper to detect if a candidate has feed/data quality risks."""
     reasons = []
-    
+
     # Extract lists depending on input type
     if isinstance(candidate, dict):
         flags = tuple(candidate.get("safety_flags", []))
@@ -113,7 +115,7 @@ def is_feed_risk_candidate(candidate: dict[str, Any] | OpportunityScoreRecord) -
         reasons_list = tuple(candidate.downgrade_reasons)
         blockers = tuple(candidate.blockers)
         warnings_list = tuple(candidate.warnings)
-        
+
     for value in flags + reasons_list + blockers + warnings_list:
         normalized = str(value or "").strip().lower()
         normalized = normalized.replace("-", "_").replace(" ", "_")
@@ -123,7 +125,7 @@ def is_feed_risk_candidate(candidate: dict[str, Any] | OpportunityScoreRecord) -
             reasons.append(normalized)
         elif any(token in normalized for token in FEED_RISK_TOKENS):
             reasons.append(normalized)
-            
+
     return FeedRiskVerdict(is_risk=bool(reasons), reasons=sorted(list(set(reasons))))
 
 
@@ -148,6 +150,8 @@ class CandidateRankRecord:
     safety_flags: tuple[str, ...]
     directional_warnings: tuple[str, ...]
     sort_key: tuple[Any, ...]
+    candidate_id: str = ""
+    lineage_id: str = ""
     outcome_contract: Optional[CandidateOutcomeContract] = None
 
     @property
@@ -164,6 +168,8 @@ class CandidateRankRecord:
     def to_dict(self) -> dict[str, Any]:
         return {
             "rank": self.rank,
+            "candidate_id": getattr(self, "candidate_id", self.strategy_id),
+            "lineage_id": getattr(self, "lineage_id", getattr(self, "candidate_id", self.strategy_id)),
             "strategy_id": self.strategy_id,
             "symbol": self.symbol,
             "direction": self.direction,
@@ -205,11 +211,14 @@ class CandidateRankingReport:
     safety_flags: tuple[str, ...]
     directional_imbalance_flags: tuple[str, ...]
     metadata: dict[str, Any] = field(default_factory=dict)
+    ranked_report_id: str = field(default_factory=lambda: f"ranking-{uuid.uuid4()}")
+    generated_epoch: float = field(default_factory=time.time)
     generated_epoch: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
+            "ranked_report_id": getattr(self, "ranked_report_id", "unknown_report_id"),
             "read_only": self.read_only,
             "is_order_action": False,
             "append": self.append,
@@ -245,8 +254,13 @@ def rank_candidates(
         records,
         key=lambda record: _sort_key(record, _directional_warnings(record, directional_flags)),
     )
+    import uuid
+    import time
+    report_id = str(uuid.uuid4())
+    epoch = time.time()
+
     ranks = tuple(
-        _rank_record(index + 1, record, directional_flags)
+        _rank_record(index + 1, record, directional_flags, epoch)
         for index, record in enumerate(ranked_inputs)
     )
 
@@ -259,6 +273,8 @@ def rank_candidates(
 
     return CandidateRankingReport(
         schema_version=RANKING_SCHEMA_VERSION,
+        ranked_report_id=report_id,
+        generated_epoch=epoch,
         read_only=True,
         is_order_action=False,
         append=False,
@@ -294,15 +310,21 @@ def rank_candidates(
     )
 
 
-def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: tuple[str, ...]) -> CandidateRankRecord:
+def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: tuple[str, ...], generated_epoch: float) -> CandidateRankRecord:
     family = direction_family(record.direction)
     directional_warnings = _directional_warnings(record, directional_flags)
     sort_key = _sort_key(record, directional_warnings)
     feed_risk_suppressed = _should_suppress_for_feed_risk(record)
     score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
     bucket = _rank_bucket(record, feed_risk_suppressed)
+
+    candidate_id = getattr(record, "candidate_id", None) or getattr(record.outcome_contract, "candidate_id", None) or f"{record.symbol}-{record.strategy_id}-{record.movement_type}-{record.direction}-{generated_epoch}"
+    lineage_id = getattr(record, "lineage_id", None) or getattr(record.outcome_contract, "lineage_id", None) or candidate_id
+
     return CandidateRankRecord(
         rank=rank,
+        candidate_id=str(candidate_id),
+        lineage_id=str(lineage_id),
         strategy_id=record.strategy_id,
         symbol=record.symbol,
         direction=record.direction,

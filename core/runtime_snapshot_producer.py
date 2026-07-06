@@ -12,6 +12,10 @@ from core.learning_paths import canonical_suggestions_log_path
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
 from core.paths import logs_dir, runtime_dir
 from core.time_utils import is_today_local, now_ist
+
+from core.ranking_orchestrator import build_ranked_opportunity_report
+from core.movement_contract import StrategyContext
+from core.runtime_snapshot_store import write_ranked_pipeline_snapshot, write_ranked_vs_legacy_snapshot
 from core.runtime_snapshot_store import (
     ADVISORY_LATEST_PATH,
     FEED_RUNTIME_LATEST_PATH,
@@ -332,6 +336,110 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
     return serialize_advisory_row(advisory_payload, allow_legacy=True)
 
 
+
+def _build_and_write_canonical_ranked_snapshot(market_payload: dict, producer: str, advisory_payload: dict):
+    from core.canonical_ranked_ui_adapter import adapt_candidate_rank_record_to_ui
+    reports = []
+    top_executable = []
+    top_advisory = []
+    symbols = market_payload.get("symbols") or {}
+
+    canonical_top_strategy_id = None
+    canonical_ranked_count = 0
+    recovered_fallback_in_canonical_executable = False
+    stale_or_untrusted_quote_in_canonical_executable = False
+
+    for sym, data in symbols.items():
+        if not isinstance(data, dict):
+            continue
+        try:
+            ctx_data = dict(data)
+            ctx_data["symbol"] = sym
+            ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
+            ctx = StrategyContext(**ctx_data)
+
+            report = build_ranked_opportunity_report(ctx=ctx)
+            reports.append(report.to_dict())
+
+            if not canonical_top_strategy_id and report.top_rank_strategy_id:
+                canonical_top_strategy_id = report.top_rank_strategy_id
+
+            canonical_ranked_count += report.ranked_candidate_count
+
+            for rank in report.ranking.ranks:
+                rank_dict = rank.to_dict()
+                rank_dict["ranked_report_id"] = getattr(report.ranking, "ranked_report_id", None)
+                rank_dict["generated_epoch"] = report.generated_epoch
+                row = adapt_candidate_rank_record_to_ui(rank_dict)
+
+                # Check for fake entry prices (Point 3)
+                has_entry = rank.outcome_contract and rank.outcome_contract.entry_price
+                if has_entry:
+                    row["entry"] = rank.outcome_contract.entry_price
+                    row["display_entry"] = row["entry"]
+
+                # Executable classification (Point 2)
+                if rank.bucket == "EXECUTABLE_CANDIDATE" and has_entry:
+                    row["execution_status"] = "executable"
+                    row["readiness"] = "READY"
+                    top_executable.append(row)
+
+                    if "FALLBACK" in rank.safety_flags:
+                        recovered_fallback_in_canonical_executable = True
+                    if "STALE" in rank.safety_flags or "UNTRUSTED" in rank.safety_flags:
+                        stale_or_untrusted_quote_in_canonical_executable = True
+                else:
+                    if rank.bucket == "NEAR_EXECUTABLE_CANDIDATE":
+                        row["execution_status"] = "queue_only"
+                        row["readiness"] = "ADVISORY_ONLY"
+                    row["entry_status"] = "displayable" if has_entry else "non_executable"
+                    top_advisory.append(row)
+
+                row["display_ts_epoch"] = report.generated_epoch * 1000.0
+                row["timestamp"] = report.generated_epoch * 1000.0
+                row["confidence"] = rank.outcome_contract.confidence_score if rank.outcome_contract else 0.0
+
+        except Exception as exc:
+            logger.warning(f"canonical_pipeline_failed_for_symbol symbol={sym} error={exc}")
+            continue
+
+    payload = {
+        "top_executable": top_executable,
+        "top_advisory": top_advisory,
+        "reports": reports,
+        "source": "ranked_opportunity_pipeline_v1"
+    }
+    write_ranked_pipeline_snapshot(payload)
+
+    # Ranked vs Legacy Comparison Evidence (Point 4)
+    legacy_rows = advisory_payload.get("rows", [])
+    legacy_top_count = len(legacy_rows)
+    legacy_top_strategy_id = legacy_rows[0].get("strategy_id") if legacy_rows else None
+
+    recovered_fallback_in_legacy_top = any(r.get("recovered_fallback") for r in legacy_rows)
+    mismatch_detected = (legacy_top_strategy_id != canonical_top_strategy_id)
+
+    if recovered_fallback_in_canonical_executable or stale_or_untrusted_quote_in_canonical_executable:
+        verdict = "FAIL"
+    elif mismatch_detected:
+        verdict = "WARN"
+    else:
+        verdict = "PASS"
+
+    comparison_evidence = {
+        "legacy_top_count": legacy_top_count,
+        "canonical_ranked_count": canonical_ranked_count,
+        "legacy_top_strategy_id": legacy_top_strategy_id,
+        "canonical_top_strategy_id": canonical_top_strategy_id,
+        "mismatch_detected": mismatch_detected,
+        "recovered_fallback_in_legacy_top": recovered_fallback_in_legacy_top,
+        "recovered_fallback_in_canonical_executable": recovered_fallback_in_canonical_executable,
+        "stale_or_untrusted_quote_in_canonical_executable": stale_or_untrusted_quote_in_canonical_executable,
+        "verdict": verdict
+    }
+    write_ranked_vs_legacy_snapshot(comparison_evidence)
+
+
 def produce_and_store_runtime_snapshots(
     *,
     market_snapshot: dict[str, Any] | None,
@@ -351,6 +459,13 @@ def produce_and_store_runtime_snapshots(
 
     advisory_payload = _build_advisory_latest_payload()
     outputs["advisory_latest"] = advisory_payload
+
+    try:
+        if isinstance(market_payload, dict):
+            _build_and_write_canonical_ranked_snapshot(market_payload, producer, advisory_payload)
+    except Exception as exc:
+        logger.error(f"failed_to_build_canonical_ranked_snapshot: {exc}")
+
 
     feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
     outputs["feed_runtime_latest"] = feed_payload

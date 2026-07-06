@@ -317,7 +317,7 @@ def test_load_top_opportunities_frames_preserves_executable_and_advisory_lists(t
         ],
     )
 
-    monkeypatch.setattr(runtime, "TOP_OPPORTUNITIES_LATEST_PATH", top_exec_path)
+    monkeypatch.setattr(runtime, "RANKED_PIPELINE_LATEST_PATH", top_exec_path)
 
     frames = runtime._load_top_opportunities_frames(limit=5)
 
@@ -352,7 +352,7 @@ def test_load_top_opportunities_frames_filters_stale_rows_inside_fresh_snapshot(
         generated_at="2026-04-22T06:38:05.130520Z",
     )
 
-    monkeypatch.setattr(runtime, "TOP_OPPORTUNITIES_LATEST_PATH", top_exec_path)
+    monkeypatch.setattr(runtime, "RANKED_PIPELINE_LATEST_PATH", top_exec_path)
     monkeypatch.setattr(runtime, "now_local", lambda: datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc))
     monkeypatch.setattr(runtime.cfg, "UI_LIVE_ROW_REQUIRE_TODAY", True, raising=False)
 

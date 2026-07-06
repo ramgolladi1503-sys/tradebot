@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot`
 - config_path: `/Users/madhuram/tradebot/.gsd-forensics.yaml`
-- changed_paths: `28`
-- total_findings: `30`
+- changed_paths: `29`
+- total_findings: `22`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,82 +20,75 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `1` | `0` |  |
-| `cerberus` | `PASS` | `0` | `28` | `0` |  |
+| `minerva` | `PASS` | `0` | `5` | `0` |  |
+| `cerberus` | `PASS` | `0` | `16` | `0` |  |
 | `evidence` | `PASS` | `0` | `1` | `0` |  |
 
 ## Changed Paths
 
-- `core/live_drift/__init__.py`
-- `core/live_drift/audit_log.py`
-- `core/live_drift/baseline_loader.py`
-- `core/live_drift/certification_lifecycle.py`
-- `core/live_drift/drift_detector.py`
-- `core/live_drift/drift_models.py`
-- `core/live_drift/drift_types.py`
-- `core/live_drift/execution_drift.py`
-- `core/live_drift/freshness_checker.py`
-- `core/live_drift/live_snapshot_loader.py`
-- `core/live_drift/notification_engine.py`
-- `core/live_drift/performance_drift.py`
-- `core/live_drift/regime_drift.py`
-- `core/live_drift/report_generator.py`
-- `core/live_drift/validation.py`
-- `docs/agent_reviews/PR-7_live_drift.md`
-- `docs/live_drift/01_baseline.md`
-- `docs/live_drift/02_current_snapshot.md`
-- `docs/live_drift/03_drift_analysis.md`
-- `docs/live_drift/04_regime_drift.md`
-- `docs/live_drift/05_execution_drift.md`
-- `docs/live_drift/06_certification_status.md`
-- `docs/live_drift/07_notifications.md`
-- `docs/live_drift/08_audit_log.md`
-- `docs/live_drift/09_limitations.md`
-- `docs/live_drift/10_summary.md`
-- `scripts/run_live_drift.py`
-- `tests/live_drift/test_live_drift.py`
+- `core/candidate_ranking.py`
+- `core/canonical_ranked_ui_adapter.py`
+- `core/feed_hold_gate.py`
+- `core/opportunity_engine.py`
+- `core/runtime_snapshot_producer.py`
+- `core/runtime_snapshot_store.py`
+- `dashboard/streamlit_app_runtime.py`
+- `docs/agent_reviews/pr635_canonical_ranked_runtime_bridge.md`
+- `patch_auth.py`
+- `patch_auth_state.py`
+- `patch_kite.py`
+- `patch_kite_depth.py`
+- `patch_telemetry.py`
+- `patch_tests.py`
+- `patch_tests2.py`
+- `patch_tests3.py`
+- `patch_tests4.py`
+- `patch_tests5.py`
+- `patch_tests6.py`
+- `patch_tests7.py`
+- `patch_tests8.py`
+- `runtime/strategy_validation/SIMPLE_ORB/strategy_lifecycle_state.yaml`
+- `scripts/analyze_strategy_live_shadow.py`
+- `scripts/run_strategy_live_shadow.py`
+- `tests/test_dashboard_live_suggestions.py`
+- `tests/test_edge41_fallback_execution_firewall.py`
+- `tests/test_opportunity_engine_truth_guard.py`
+- `tests/test_ranked_runtime_bridge.py`
+- `tests/test_strategy_live_shadow.py`
 
 ## Minerva Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `tests/live_drift/test_live_drift.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_dashboard_live_suggestions.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_edge41_fallback_execution_firewall.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_opportunity_engine_truth_guard.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_ranked_runtime_bridge.py` | `PASS` | `test_reality_accepted` |
+| `tests/test_strategy_live_shadow.py` | `PASS` | `test_reality_accepted` |
 
 ## Cerberus Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `core/live_drift/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/audit_log.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/baseline_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/certification_lifecycle.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/drift_detector.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/drift_models.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/drift_types.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/execution_drift.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/freshness_checker.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/live_snapshot_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/notification_engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/performance_drift.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/regime_drift.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/report_generator.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `core/live_drift/validation.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/agent_reviews/PR-7_live_drift.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/01_baseline.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/02_current_snapshot.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/03_drift_analysis.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/04_regime_drift.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/05_execution_drift.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/06_certification_status.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/07_notifications.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/08_audit_log.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/09_limitations.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `docs/live_drift/10_summary.md` | `PASS` | `no_restricted_boundary_marker_found` |
-| `scripts/run_live_drift.py` | `PASS` | `no_restricted_boundary_marker_found` |
-| `tests/live_drift/test_live_drift.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/candidate_ranking.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/canonical_ranked_ui_adapter.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/feed_hold_gate.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/opportunity_engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/runtime_snapshot_producer.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `core/runtime_snapshot_store.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `dashboard/streamlit_app_runtime.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/pr635_canonical_ranked_runtime_bridge.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `runtime/strategy_validation/SIMPLE_ORB/strategy_lifecycle_state.yaml` | `PASS` | `no_restricted_boundary_marker_found` |
+| `scripts/analyze_strategy_live_shadow.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `scripts/run_strategy_live_shadow.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_dashboard_live_suggestions.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_edge41_fallback_execution_firewall.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_opportunity_engine_truth_guard.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_ranked_runtime_bridge.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/test_strategy_live_shadow.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
 ## Evidence Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
-| `docs/agent_reviews/PR-7_live_drift.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/pr635_canonical_ranked_runtime_bridge.md` | `PASS` | `evidence_contract_satisfied` |
