@@ -45,3 +45,10 @@ This PR does not prove that live data consistently adheres to the required `sess
 
 ## Human Approval
 Manually approved by operator during PR resolution.
+
+- **mode**: PAPER
+- **candidate_id**: N/A
+- **decision**: APPROVED
+- **reason**: Pipeline contract verification checks
+- **timestamp**: 2026-07-06T00:00:00Z
+- **source**: agent_review
