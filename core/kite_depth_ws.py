@@ -1863,8 +1863,13 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         return False
     try:
         if to_subscribe:
-            ws.subscribe(to_subscribe)
-            ws.set_mode(ws.MODE_FULL, to_subscribe)
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(ws.subscribe, to_subscribe)
+                reactor.callFromThread(ws.set_mode, ws.MODE_FULL, to_subscribe)
+            except ImportError:
+                ws.subscribe(to_subscribe)
+                ws.set_mode(ws.MODE_FULL, to_subscribe)
     except Exception as exc:
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
         _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
@@ -1882,7 +1887,11 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
     if to_unsubscribe:
         try:
             if hasattr(ws, "unsubscribe"):
-                ws.unsubscribe(to_unsubscribe)
+                try:
+                    from twisted.internet import reactor
+                    reactor.callFromThread(ws.unsubscribe, to_unsubscribe)
+                except ImportError:
+                    ws.unsubscribe(to_unsubscribe)
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
             _LAST_RUNTIME_ERROR = f"unsubscribe_delta:{exc}"[:1000]
