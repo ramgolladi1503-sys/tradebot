@@ -73,6 +73,8 @@ FEED_RISK_TOKENS: frozenset[str] = frozenset(
         "fallback_data",
         "fallback_quote_data",
         "fallback_quote_only",
+        "iv_surface_slope",
+        "low_iv_surface_confidence",
         "feed_health_hold",
         "no_live_option_feed",
         "price_mismatch",
