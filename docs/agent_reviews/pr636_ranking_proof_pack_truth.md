@@ -16,22 +16,22 @@
 - It does not place orders, call broker APIs, or weaken execution or freshness gates.
 - It does not touch unrelated opening-drive scratch work or runtime artifacts.
 
-## Grill Me
+## Grill Me Review
 - Ranking previously leaked executable truth for an unsafe IV-surface scenario.
 - The proof-pack runner assumed a rank field that was not stable across the branch history.
 - The clean branch was rebuilt to remove unrelated diff noise before CI recheck.
 
-## Hermes
+## Hermes Review
 - The canonical flow is raw candidate -> pool -> normalization -> classification -> hard downgrade -> scoring -> ranking -> execution firewall.
 - IV-surface weakness must be visible before final execution gating, not only after it.
 - The proof pack now asserts that unsafe quote-state scenarios are non-executable in ranking.
 
-## GSD
+## GSD Review
 - Files changed are limited to the proof-pack/ranking truth slice and this review file.
 - The branch was cleaned by cherry-picking only the relevant commits onto a worktree from `origin/main`.
 - A defensive `candidate_id` fallback was added so the proof pack matches the branch rank schema.
 
-## QA / Safety
+## QA / Safety Review
 - `PYTHONPATH=. pytest -q tests/test_candidate_ranking.py tests/test_option_data_quality_proof_pack.py tests/test_candidate_ranking_proof_pack.py tests/test_ranking_orchestrator.py tests/test_opportunity_engine_truth_guard.py`
 - Result on the clean branch: `42 passed`
 - High-risk path review: only ranking-proof and read-only CI compatibility paths were touched; no broker, order, live, or risk-gate code was modified.
