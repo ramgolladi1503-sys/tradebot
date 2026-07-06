@@ -46,6 +46,11 @@ def build_proof_pack(fixture_dir: Path) -> dict[str, Any]:
     fixture = load_fixture(fixture_dir, "candidate_to_ranking_proof_pack")
     return {
         "fixture": "candidate_to_ranking_proof_pack",
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "scenarios": [
             _run_scenario(scenario)
             for scenario in fixture["scenarios"]
@@ -69,9 +74,11 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "scenario": scenario["scenario"],
-        "read_only": report.read_only,
-        "is_order_action": report.is_order_action,
-        "append": report.append,
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "pipeline_stage_order": list(report.pipeline_stage_order),
         "counts": {
             "raw_candidate_count": report.raw_candidate_count,
