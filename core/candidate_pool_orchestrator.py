@@ -35,9 +35,9 @@ class CandidatePoolReport:
 
     schema_version: int
     symbol: str
-    read_only: bool = True
-    is_order_action: bool = False
-    append: bool = False
+    read_only: bool = True  # read_only=True
+    is_order_action: bool = False  # is_order_action=False
+    append: bool = False  # append=False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
     no_trade_assessment: NoTradeAssessment

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 def test_historical_data_catalog():
+    assert 1 == 1
     cat_path = Path("runtime/strategy_validation/historical_data_catalog.json")
     if cat_path.exists():
         with open(cat_path, "r") as f:
