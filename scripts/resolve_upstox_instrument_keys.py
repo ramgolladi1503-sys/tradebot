@@ -81,21 +81,21 @@ def main():
 
     # Filter rules for index
     def is_index(item):
-        return isinstance(item, dict) and item.get("instrument_type") == "INDEX" and item.get("exchange") == "NSE_INDEX"
+        return isinstance(item, dict) and item.get("instrument_type") == "INDEX" and item.get("segment") == "NSE_INDEX"
     
     for sym in args.symbols:
         candidates = []
         for item in instruments:
             # Match rules:
             if is_index(item):
-                tsym = item.get("tradingsymbol", "")
+                tsym = item.get("trading_symbol", "")
                 name = item.get("name", "")
                 
                 if sym == "NIFTY":
-                    if tsym == "NIFTY 50" or name == "Nifty 50":
+                    if tsym == "NIFTY" or name == "Nifty 50":
                         candidates.append(item)
                 elif sym == "BANKNIFTY":
-                    if tsym == "NIFTY BANK" or name == "Nifty Bank":
+                    if tsym == "BANKNIFTY" or name == "Nifty Bank":
                         candidates.append(item)
         
         # Exact match logic
