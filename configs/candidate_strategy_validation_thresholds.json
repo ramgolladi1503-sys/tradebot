@@ -3,5 +3,5 @@
   "min_expectancy": 0.1,
   "max_drawdown_percent": 15.0,
   "min_profit_factor": 1.2,
-  "min_wfa_windows": 3
+  "minimum_wfa_windows": 6
 }
