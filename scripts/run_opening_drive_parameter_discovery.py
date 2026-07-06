@@ -8,16 +8,18 @@ import uuid
 import sys
 from pathlib import Path
 
-def run_audits(strat_id):
+def run_audits(strat_id, is_smoke_test=False):
     scripts = [
         "scripts/audit_phase4_truth.py",
         "scripts/audit_phase4_7_integrity.py",
         "scripts/audit_phase4_8_selection_quality.py",
         "scripts/audit_phase4_10_accounting.py",
-        "scripts/audit_phase4_v2_structural.py"
+        "scripts/audit_opening_drive_structural.py"
     ]
     for s in scripts:
         cmd = ["python", s, "--strategy", strat_id]
+        if s == "scripts/audit_opening_drive_structural.py" and is_smoke_test:
+            cmd.append("--is-smoke-test")
         res = subprocess.run(cmd, capture_output=True, text=True)
 
 def get_metrics(strat_id):
@@ -40,8 +42,28 @@ def get_metrics(strat_id):
         "selected_trades": acc.get("metrics", {}).get("total_trades", 0),
         "proxy_option_net_expectancy": acc.get("metrics", {}).get("proxy_option_net_expectancy", 0.0),
         "cap_saturation_ratio": qual.get("metrics", {}).get("cap_saturation_ratio", 1.0),
+        "percent_symbol_days_at_cap": 1.0,
+        "zero_trade_symbol_days_ratio": 0.0,
         "blockers": []
     }
+    
+    summary_path = base_dir / "phase_4_trade_ledger_summary.json"
+    if summary_path.exists():
+        with open(summary_path, "r") as f:
+            summ = json.load(f).get("metrics", {})
+            metrics["cap_saturation_ratio"] = summ.get("cap_saturation_ratio", 1.0)
+            metrics["percent_symbol_days_at_cap"] = summ.get("percent_symbol_days_at_cap", 1.0)
+            metrics["zero_trade_symbol_days_ratio"] = summ.get("zero_trade_symbol_days_ratio", 0.0)
+            metrics["selected_trades"] = summ.get("total_trades", metrics["selected_trades"])
+            
+    if metrics["cap_saturation_ratio"] > 0.35:
+        metrics["blockers"].append("OPENING_DRIVE_CAP_SATURATION_TOO_HIGH")
+    if metrics["percent_symbol_days_at_cap"] > 0.20:
+        metrics["blockers"].append("OPENING_DRIVE_SYMBOL_DAY_AT_CAP_TOO_HIGH")
+    if metrics["zero_trade_symbol_days_ratio"] < 0.25:
+        metrics["blockers"].append("OPENING_DRIVE_TOO_MANY_DAILY_TRADES")
+    if metrics["selected_trades"] < 50:
+        metrics["blockers"].append("OPENING_DRIVE_SELECTIVITY_NOT_PROVEN")
     
     for p in [base_dir / "phase_4_5_truth_audit.json", base_dir / "phase_4_7_integrity_audit.json", qual_path, acc_path]:
         if p.exists():
@@ -66,7 +88,7 @@ def get_metrics(strat_id):
     metrics["profit_factor"] = abs(win_pnl / loss_pnl) if loss_pnl != 0 else 999.0
     return metrics
 
-def run_pass(strat_id, start_date, end_date, overrides):
+def run_pass(strat_id, start_date, end_date, overrides, is_smoke_test=False):
     override_json = json.dumps(overrides)
     cmd = [
         "python", "scripts/generate_opening_drive_trade_ledger.py",
@@ -75,7 +97,7 @@ def run_pass(strat_id, start_date, end_date, overrides):
         "--config-override", override_json
     ]
     subprocess.run(cmd, capture_output=True, text=True)
-    run_audits(strat_id)
+    run_audits(strat_id, is_smoke_test)
     return get_metrics(strat_id)
 
 def check_region_stability(combo, grid, all_results_dict, keys):
@@ -112,6 +134,23 @@ def check_region_stability(combo, grid, all_results_dict, keys):
         return False
     return True
 
+def build_parameter_grid():
+    grid_def = {
+        "opening_drive_window_minutes": [10, 15, 20, 30],
+        "min_open_move_points": [15, 20, 30, 40, 60],
+        "vwap_alignment_required": [True],
+        "stop_atr": [0.8, 1.0, 1.2, 1.5],
+        "target_rr": [1.5, 2.0, 2.5],
+        "max_trades_per_symbol_day": [1, 2],
+        "orb_confirmation_required": [False, True],
+        "min_orb_break_points": [0]
+    }
+    
+    keys = list(grid_def.keys())
+    values = list(grid_def.values())
+    combinations = list(itertools.product(*values))
+    return grid_def, [dict(zip(keys, combo)) for combo in combinations]
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", type=str, default="OPENING_DRIVE")
@@ -124,19 +163,13 @@ def main():
     parser.add_argument("--max-combinations", type=int, default=None)
     args = parser.parse_args()
 
-    grid = {
-        "opening_range_minutes": [30, 45, 60],
-        "min_wick_rejection_ratio": [0.4, 0.5, 0.6],
-        "htf_period_minutes": [15, 30],
-        "stop_atr": [0.8, 1.0, 1.2],
-        "target_rr": [1.5, 2.0, 2.5],
-        "max_trades_per_symbol_day": [2, 3, 4]
-    }
+    grid_def, full_grid = build_parameter_grid()
+    keys = list(full_grid[0].keys())
     
-    keys = list(grid.keys())
-    values = list(grid.values())
-    combinations = list(itertools.product(*values))
-    
+    combinations = []
+    for params in full_grid:
+        combinations.append(tuple(params[k] for k in keys))
+        
     random.seed(42)
     random.shuffle(combinations)
     
@@ -152,21 +185,21 @@ def main():
     for idx, combo in enumerate(combinations):
         overrides = {
             "entry": {
-                "opening_range_minutes": combo[0],
-                "min_wick_rejection_ratio": combo[1],
-                "max_trades_per_symbol_day": combo[5]
-            },
-            "htf_filter": {
-                "period_minutes": combo[2]
+                "opening_drive_window_minutes": combo[0],
+                "min_open_move_points": combo[1],
+                "vwap_alignment_required": combo[2],
+                "max_trades_per_symbol_day": combo[5],
+                "orb_confirmation_required": combo[6],
+                "min_orb_break_points": combo[7]
             },
             "stop_loss": {"atr_multiple": combo[3]},
             "target": {"minimum_rr": combo[4]}
         }
         
-        t_metrics = run_pass(args.strategy, args.train_start, args.train_end, overrides)
+        t_metrics = run_pass(args.strategy, args.train_start, args.train_end, overrides, is_smoke_test=bool(args.max_combinations))
         all_results_dict[combo] = {"train_metrics": t_metrics, "overrides": overrides}
         
-        if t_metrics["proxy_option_net_expectancy"] > 0:
+        if t_metrics["proxy_option_net_expectancy"] > 0 and not t_metrics.get("blockers"):
             train_survivors.append(combo)
             
     print(f"Train pass complete. {len(train_survivors)} survived.")
@@ -178,7 +211,7 @@ def main():
         v_metrics = run_pass(args.strategy, args.val_start, args.val_end, overrides)
         all_results_dict[combo]["val_metrics"] = v_metrics
         
-        if v_metrics["proxy_option_net_expectancy"] > 0 and v_metrics["profit_factor"] > 1.15:
+        if v_metrics["proxy_option_net_expectancy"] > 0 and v_metrics["profit_factor"] > 1.15 and not v_metrics.get("blockers"):
             val_survivors.append(combo)
             
     print(f"Validation pass complete. {len(val_survivors)} survived.")
@@ -189,7 +222,7 @@ def main():
     # Region Stability
     stable_candidates = []
     for combo in val_survivors:
-        if check_region_stability(combo, grid, all_results_dict, keys):
+        if check_region_stability(combo, grid_def, all_results_dict, keys):
             stable_candidates.append(combo)
             
     print(f"Region stability check complete. {len(stable_candidates)} stable candidates remain.")
@@ -265,11 +298,11 @@ def main():
     
 
     # Create Full Grid Report
-    conclusion = "MRE_V1_HOLDOUT_EVALUATED"
+    conclusion = "OPENING_DRIVE_HOLDOUT_EVALUATED"
     if len(val_survivors) == 0:
-        conclusion = "MRE_V1_PARAMETER_SPACE_FAILED"
+        conclusion = "OPENING_DRIVE_PARAMETER_SPACE_FAILED"
     elif len(stable_candidates) == 0:
-        conclusion = "MRE_V1_OVERFIT_REGION_FAILED"
+        conclusion = "OPENING_DRIVE_OVERFIT_REGION_FAILED"
 
     # Sort train results
     all_train = []

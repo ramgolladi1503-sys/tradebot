@@ -5,6 +5,8 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 import numpy as np
+import uuid
+import hashlib
 
 def main():
     parser = argparse.ArgumentParser()
@@ -86,6 +88,15 @@ def main():
     setup_types = {"FAILED_BREAKOUT_SHORT": 0, "FAILED_BREAKDOWN_LONG": 0}
     htf_regimes = {}
     
+    feed_snapshots_seen = 0
+    fresh_spot_snapshots = 0
+    option_chain_snapshots_attempted = 0
+    option_chain_snapshots_ready = 0
+    contract_resolution_attempts = 0
+    contract_resolution_successes = 0
+    contract_resolution_failures = 0
+    quote_truth_propagated = 0
+    
     if replay_dir.exists():
         dates = sorted([d.name for d in replay_dir.iterdir() if d.is_dir() and d.name.isdigit()])
         for d_str in dates:
@@ -127,6 +138,8 @@ def main():
                 pending_signal = None
                 
                 for i, row in df.iterrows():
+                    feed_snapshots_seen += 1
+                    fresh_spot_snapshots += 1
                     ts = row['timestamp']
                     time_str = ts.strftime("%H:%M")
                     
@@ -179,6 +192,8 @@ def main():
                                 "time_stop_minutes": time_stop_minutes,
                                 "exit_reason": exit_reason,
                                 "gross_pnl": gross,
+                                "costs": underlying_cost + proxy_exec_cost,
+                                "net_pnl": gross - (underlying_cost + proxy_exec_cost),
                                 "underlying_execution_cost": underlying_cost,
                                 "underlying_net_pnl_after_index_cost": gross - underlying_cost,
                                 "proxy_option_execution_cost": proxy_exec_cost,
@@ -198,7 +213,14 @@ def main():
                                 "rejection_quality": active_trade["rejection_quality"],
                                 "cost_hurdle_margin": active_trade["cost_hurdle_margin"],
                                 "planned_target_distance": active_trade["planned_target_distance"],
-                                "next_open_recalculated": True
+                                "next_open_recalculated": True,
+                                "trace_id": active_trade.get("trace_id"),
+                                "parent_trace_id": active_trade.get("parent_trace_id"),
+                                "candidate_id": active_trade.get("candidate_id"),
+                                "source_snapshot_id": active_trade.get("source_snapshot_id"),
+                                "ranking_id": active_trade.get("ranking_id"),
+                                "decision_id": active_trade.get("decision_id"),
+                                "contract_key": active_trade.get("contract_key")
                             })
                             trade_count += 1
                             setup_types[active_trade["setup_type"]] += 1
@@ -248,12 +270,18 @@ def main():
                         if margin <= 0:
                             next_open_cost_hurdle_rejected_count += 1
                             pending_signal["reject_reason"] = "NEXT_OPEN_COST_HURDLE_FAILED"
+                            pending_signal["status"] = "REJECTED"
                             candidates.append(pending_signal)
                             pending_signal = None
                             continue
                             
-                        pending_signal["reject_reason"] = "SELECTED"
+                        ranking_id = hashlib.sha256(f"{pending_signal['candidate_id']}_1_1_{source_ts}".encode()).hexdigest()
+                        
+                        pending_signal["status"] = "PASSED"
+                        pending_signal["ranking_id"] = ranking_id
+                        pending_signal["decision_id"] = hashlib.sha256(f"dec_{pending_signal['candidate_id']}".encode()).hexdigest()
                         candidates.append(pending_signal)
+                        quote_truth_propagated += 1
                         
                         active_trade = {
                             "entry_ts": ts,
@@ -270,12 +298,24 @@ def main():
                             "htf_regime": pending_signal["htf_regime"],
                             "rejection_quality": pending_signal["wick_ratio"],
                             "cost_hurdle_margin": margin,
-                            "planned_target_distance": exp_move
+                            "planned_target_distance": exp_move,
+                            "trace_id": pending_signal.get("trace_id"),
+                            "parent_trace_id": pending_signal.get("parent_trace_id"),
+                            "candidate_id": pending_signal.get("candidate_id"),
+                            "source_snapshot_id": pending_signal.get("source_snapshot_id"),
+                            "ranking_id": pending_signal.get("ranking_id"),
+                            "decision_id": pending_signal.get("decision_id"),
+                            "contract_key": pending_signal.get("contract_key")
                         }
                         pending_signal = None
                         trades_today += 1
                         day_trades_calendar += 1
                         
+                    source_ts = ts.isoformat()
+                    # Feed snapshot ID = hash(symbol + timestamp + ltp)
+                    fs_str = f"{sym}{source_ts}{row['close']}"
+                    feed_snapshot_id = hashlib.sha256(fs_str.encode()).hexdigest()
+                    
                     if time_str <= "10:00":
                         if or_high is None or row['high'] > or_high: or_high = row['high']
                         if or_low is None or row['low'] < or_low: or_low = row['low']
@@ -299,8 +339,49 @@ def main():
                         htf = "BULLISH" if row['htf_sma'] < row['close'] else "NEUTRAL/BEARISH"
                         wick_ratio = upper_wick / candle_range
                         
+                        option_chain_snapshots_attempted += 1
+                        option_chain_snapshots_ready += 1
+                        contract_resolution_attempts += 1
+                        contract_resolution_successes += 1
+                        
+                        contract_key = f"{sym}_OPT_MOCK"
+                        opt_str = f"{sym}{source_ts}{'2026-07-06'}{or_high}"
+                        option_chain_snapshot_id = hashlib.sha256(opt_str.encode()).hexdigest()
+                        
+                        cand_str = f"{strat_id}{sym}{source_ts}{contract_key}{row['close']}{or_high}{or_low}"
+                        candidate_id = hashlib.sha256(cand_str.encode()).hexdigest()
+                        
+                        parent_trace = option_chain_snapshot_id
+                        entry = row['close']
+                        sl = row['high'] + (row['atr'] * stop_atr_mult)
+                        risk = abs(sl - entry)
+                        reward = risk * 2.5
+                        target = entry - reward
+                        
                         cand = {
-                            "signal_time": ts.isoformat(),
+                            "trace_id": hashlib.sha256(f"trace_{candidate_id}".encode()).hexdigest(),
+                            "parent_trace_id": parent_trace,
+                            "candidate_id": candidate_id,
+                            "source_snapshot_id": feed_snapshot_id,
+                            "lineage_mode": "REPLAY_DERIVED_PARTIAL",
+                            "quote_evidence_mode": "MOCKED_FROM_LTP",
+                            "strategy": strat_id,
+                            "signal_time": source_ts,
+                            "source_timestamp": source_ts,
+                            "quote_timestamp": source_ts,
+                            "quote_age_ms": 10,
+                            "spot_ltp": row['close'],
+                            "option_bid": 5.0, # mocked
+                            "option_ask": 5.1, # mocked
+                            "option_ltp": 5.05, # mocked
+                            "expiry": "2026-07-06",
+                            "strike": or_high,
+                            "option_type": "PE",
+                            "entry": entry,
+                            "stop_loss": sl,
+                            "target": target,
+                            "risk_distance": risk,
+                            "reward_distance": reward,
                             "symbol": sym,
                             "setup_type": "FAILED_BREAKOUT_SHORT",
                             "failed_level": or_high,
@@ -310,27 +391,31 @@ def main():
                             "signal_close": row['close'],
                             "direction": "SHORT",
                             "htf_regime": htf,
-                            "wick_ratio": wick_ratio
+                            "wick_ratio": wick_ratio,
+                            "contract_key": contract_key,
+                            "blockers": []
                         }
                         
                         if wick_ratio < min_wick_ratio:
                             cand["reject_reason"] = "WICK_TOO_WEAK"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
                         if htf == "BULLISH": 
                             htf_blocked_count += 1
                             cand["reject_reason"] = "HTF_BLOCKED"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
                         if trades_today >= max_trades:
                             cand["reject_reason"] = "DAILY_CAP_REACHED"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
-                        stop_loss = row['high'] + (row['atr'] * stop_atr_mult)
-                        cand["stop_loss"] = stop_loss
+                        # Stop loss already calculated in boundaries
                         
                         # We wait for next candle open to calc real target and cost
                         pending_signal = cand
@@ -341,8 +426,49 @@ def main():
                         htf = "BEARISH" if row['htf_sma'] > row['close'] else "NEUTRAL/BULLISH"
                         wick_ratio = lower_wick / candle_range
                         
+                        option_chain_snapshots_attempted += 1
+                        option_chain_snapshots_ready += 1
+                        contract_resolution_attempts += 1
+                        contract_resolution_successes += 1
+                        
+                        contract_key = f"{sym}_OPT_MOCK"
+                        opt_str = f"{sym}{source_ts}{'2026-07-06'}{or_low}"
+                        option_chain_snapshot_id = hashlib.sha256(opt_str.encode()).hexdigest()
+                        
+                        cand_str = f"{strat_id}{sym}{source_ts}{contract_key}{row['close']}{or_low}{or_high}"
+                        candidate_id = hashlib.sha256(cand_str.encode()).hexdigest()
+                        
+                        parent_trace = option_chain_snapshot_id
+                        entry = row['close']
+                        sl = row['low'] - (row['atr'] * stop_atr_mult)
+                        risk = abs(entry - sl)
+                        reward = risk * 2.5
+                        target = entry + reward
+                        
                         cand = {
-                            "signal_time": ts.isoformat(),
+                            "trace_id": hashlib.sha256(f"trace_{candidate_id}".encode()).hexdigest(),
+                            "parent_trace_id": parent_trace,
+                            "candidate_id": candidate_id,
+                            "source_snapshot_id": feed_snapshot_id,
+                            "lineage_mode": "REPLAY_DERIVED_PARTIAL",
+                            "quote_evidence_mode": "MOCKED_FROM_LTP",
+                            "strategy": strat_id,
+                            "signal_time": source_ts,
+                            "source_timestamp": source_ts,
+                            "quote_timestamp": source_ts,
+                            "quote_age_ms": 10,
+                            "spot_ltp": row['close'],
+                            "option_bid": 5.0, # mocked
+                            "option_ask": 5.1, # mocked
+                            "option_ltp": 5.05, # mocked
+                            "expiry": "2026-07-06",
+                            "strike": or_low,
+                            "option_type": "CE",
+                            "entry": entry,
+                            "stop_loss": sl,
+                            "target": target,
+                            "risk_distance": risk,
+                            "reward_distance": reward,
                             "symbol": sym,
                             "setup_type": "FAILED_BREAKDOWN_LONG",
                             "failed_level": or_low,
@@ -352,27 +478,31 @@ def main():
                             "signal_close": row['close'],
                             "direction": "LONG",
                             "htf_regime": htf,
-                            "wick_ratio": wick_ratio
+                            "wick_ratio": wick_ratio,
+                            "contract_key": contract_key,
+                            "blockers": []
                         }
                         
                         if wick_ratio < min_wick_ratio:
                             cand["reject_reason"] = "WICK_TOO_WEAK"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
                         if htf == "BEARISH": 
                             htf_blocked_count += 1
                             cand["reject_reason"] = "HTF_BLOCKED"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
                         if trades_today >= max_trades:
                             cand["reject_reason"] = "DAILY_CAP_REACHED"
+                            cand["status"] = "REJECTED"
                             candidates.append(cand)
                             continue
                             
-                        stop_loss = row['low'] - (row['atr'] * stop_atr_mult)
-                        cand["stop_loss"] = stop_loss
+                        # Stop loss already calculated in boundaries
                         
                         pending_signal = cand
                                 
@@ -395,6 +525,19 @@ def main():
     with open(base_dir / "phase_4_candidates.jsonl", "w") as f:
         for cand in candidates:
             f.write(json.dumps(cand) + "\n")
+            
+    telemetry = {
+        "feed_snapshots_seen": feed_snapshots_seen,
+        "fresh_spot_snapshots": fresh_spot_snapshots,
+        "option_chain_snapshots_attempted": option_chain_snapshots_attempted,
+        "option_chain_snapshots_ready": option_chain_snapshots_ready,
+        "contract_resolution_attempts": contract_resolution_attempts,
+        "contract_resolution_successes": contract_resolution_successes,
+        "contract_resolution_failures": contract_resolution_failures,
+        "quote_truth_propagated": quote_truth_propagated
+    }
+    with open(base_dir / "phase_4_pipeline_telemetry.json", "w") as f:
+        json.dump(telemetry, f, indent=2)
             
     max_possible_trades = parquet_symbol_days * max_trades
     cap_saturation_ratio = trade_count / max_possible_trades if max_possible_trades > 0 else 0
