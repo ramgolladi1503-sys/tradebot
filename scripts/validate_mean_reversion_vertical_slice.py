@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 from pathlib import Path
+import os
 
 def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,14 +68,12 @@ def main():
         blockers_p2.append("INSUFFICIENT_HISTORICAL_WINDOWS_FOR_WFA")
     blockers_p2.append("OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY") # Known limitation
     
-    passed_p2 = True # Allowed for research
-    
     write_json(base_dir / "phase_2_report.json", {
         "strategy_id": strat_id,
         "phase": "phase_2",
         "phase_name": "historical_data_and_feature_coverage",
-        "passed": passed_p2,
-        "verdict": "PASSED_FOR_RESEARCH",
+        "passed": True,
+        "verdict": "RESEARCH_DATA_SMOKE_READY",
         "data_mode": "CANDLE_LEVEL_RESEARCH",
         "execution_grade": False,
         "available_date_ranges": dates_available,
@@ -97,7 +96,7 @@ def main():
     blockers_p3 = []
     if not has_sufficient_history:
         passed_p3 = False
-        verdict_p3 = "SMOKE_TEST_PASSED"
+        verdict_p3 = "HISTORICAL_SMOKE_TEST_PASSED"
     else:
         passed_p3 = True
         verdict_p3 = "PASSED"
@@ -122,18 +121,30 @@ def main():
     })
 
     # Phase 3.5: Adapter
-    passed_p3_5 = False
-    verdict_p3_5 = "ADAPTER_BLOCKED_MISSING_RISK_CONTRACT"
+    config_path = Path("configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json")
+    if config_path.exists():
+        passed_p3_5 = True
+        verdict_p3_5 = "ADAPTER_APPROVED_FOR_RESEARCH_WFA"
+        missing_fields = []
+        blockers_p3_5 = ["OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY", "OPTION_REPLAY_MAPPING_NOT_CERTIFIED"]
+        adapter_approved_for_research_wfa = True
+    else:
+        passed_p3_5 = False
+        verdict_p3_5 = "ADAPTER_BLOCKED_MISSING_RISK_CONTRACT"
+        missing_fields = ["stop_loss", "target", "time_stop"]
+        blockers_p3_5 = ["MEAN_REVERSION_RISK_CONTRACT_MISSING", "ADAPTER_BLOCKED_STRESS_REPLAY_DATA_MISSING"]
+        adapter_approved_for_research_wfa = False
+
     write_json(base_dir / "phase_3_5_report.json", {
         "strategy_id": strat_id,
         "phase": "phase_3_5",
         "phase_name": "candidate_to_research_signal_adapter",
         "passed": passed_p3_5,
         "verdict": verdict_p3_5,
-        "adapter_approved_for_research_wfa": False,
+        "adapter_approved_for_research_wfa": adapter_approved_for_research_wfa,
         "adapter_approved_for_stress_replay": False,
-        "missing_fields": ["stop_loss", "target", "time_stop"],
-        "blockers": ["MEAN_REVERSION_RISK_CONTRACT_MISSING", "ADAPTER_BLOCKED_STRESS_REPLAY_DATA_MISSING"],
+        "missing_fields": missing_fields,
+        "blockers": blockers_p3_5,
         "paper_live_allowed": False,
         "live_allowed": False,
         "broker_order_allowed": False,

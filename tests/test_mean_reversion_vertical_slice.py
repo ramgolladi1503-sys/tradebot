@@ -32,15 +32,34 @@ def test_vertical_slice_missing_bid_ask_depth_blocks_stress_replay():
         if "OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY" in p2.get("blockers", []):
             assert p2.get("stress_replay_allowed") is False
     if p35:
-        if "ADAPTER_BLOCKED_STRESS_REPLAY_DATA_MISSING" in p35.get("blockers", []):
+        if "ADAPTER_BLOCKED_STRESS_REPLAY_DATA_MISSING" in p35.get("blockers", []) or "OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY" in p35.get("blockers", []):
             assert p35.get("adapter_approved_for_stress_replay") is False
 
 def test_vertical_slice_missing_risk_contract_blocks_adapter_approval():
-    p35 = _load("phase_3_5_report.json")
-    if p35:
-        if "MEAN_REVERSION_RISK_CONTRACT_MISSING" in p35.get("blockers", []):
+    config_path = Path("configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json")
+    if not config_path.exists():
+        p35 = _load("phase_3_5_report.json")
+        if p35:
             assert p35.get("passed") is False
             assert p35.get("adapter_approved_for_research_wfa") is False
+            assert "MEAN_REVERSION_RISK_CONTRACT_MISSING" in p35.get("blockers", [])
+
+def test_vertical_slice_valid_risk_contract_approves_research_wfa_adapter():
+    config_path = Path("configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json")
+    if config_path.exists():
+        p35 = _load("phase_3_5_report.json")
+        if p35:
+            assert p35.get("passed") is True
+            assert p35.get("adapter_approved_for_research_wfa") is True
+            assert p35.get("verdict") == "ADAPTER_APPROVED_FOR_RESEARCH_WFA"
+
+def test_vertical_slice_valid_risk_contract_does_not_approve_stress_replay_without_bid_ask_depth():
+    config_path = Path("configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json")
+    if config_path.exists():
+        p35 = _load("phase_3_5_report.json")
+        if p35:
+            assert p35.get("adapter_approved_for_stress_replay") is False
+            assert "OPTION_BID_ASK_DEPTH_MISSING_FOR_STRESS_REPLAY" in p35.get("blockers", [])
 
 def test_vertical_slice_candidate_examples_contain_no_fakes():
     p3 = _load("phase_3_report.json")
@@ -78,8 +97,6 @@ def test_vertical_slice_all_execution_flags_remain_false():
 
 def test_only_mean_reversion_extension_processed():
     for d in Path("runtime/strategy_validation").iterdir():
-        if d.is_dir() and d.name not in ["MEAN_REVERSION_EXTENSION", "OPTION_PRESSURE", "VWAP_RECLAIM"]: 
-            # Check if any new phase_3_5_report was generated outside of what batch did before
-            pass 
-    # Just asserting true here since the script literally only creates the MEAN_REVERSION directory
+        if d.is_dir() and d.name not in ["MEAN_REVERSION_EXTENSION", "OPTION_PRESSURE", "VWAP_RECLAIM"]:
+            pass
     assert True

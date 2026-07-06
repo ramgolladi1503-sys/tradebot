@@ -1,0 +1,38 @@
+{
+  "strategy_id": "MEAN_REVERSION_EXTENSION",
+  "contract_type": "CANDLE_LEVEL_RESEARCH_RISK_CONTRACT",
+  "entry": {
+    "trigger": "mean_reversion_extension_candidate",
+    "price_source": "underlying_candle_close_or_next_open",
+    "confirmation_required": true
+  },
+  "stop_loss": {
+    "type": "atr_multiple_or_structure_invalid",
+    "atr_multiple": 1.0,
+    "max_loss_pct": null
+  },
+  "target": {
+    "type": "mean_reversion_to_vwap_or_midline",
+    "minimum_rr": 1.5
+  },
+  "time_stop": {
+    "max_holding_minutes": 30
+  },
+  "invalid_setup": [
+    "trend_acceleration_against_trade",
+    "volatility_expansion_against_trade",
+    "liquidity_missing",
+    "stale_candle_or_quote"
+  ],
+  "option_mapping": {
+    "required_for_stress_replay": true,
+    "required_for_research_backtest": false,
+    "strike_policy": "nearest_atm_or_delta_proxy_blocked_until_defined",
+    "expiry_policy": "nearest_weekly_expiry_blocked_until_defined"
+  },
+  "execution_grade": false,
+  "paper_live_allowed": false,
+  "live_allowed": false,
+  "broker_order_allowed": false,
+  "execution_allowed": false
+}
