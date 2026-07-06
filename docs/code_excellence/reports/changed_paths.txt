@@ -7,3 +7,4 @@ tests/fixtures/ranked_pipeline_contract_proof_pack/candidate_to_ranking_proof_pa
 tests/test_candidate_ranking.py
 tests/test_candidate_ranking_proof_pack.py
 tests/test_option_data_quality_proof_pack.py
+docs/code_excellence/reports/changed_paths.txt
