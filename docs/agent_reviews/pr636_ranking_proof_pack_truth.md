@@ -39,7 +39,7 @@
 ## Acceptance Proof
 - `iv_surface_slope_preserved` and `iv_term_missing_preserved` remain non-executable in ranking.
 - `clean_live_quote` remains executable in ranking.
-- The proof-pack runner no longer crashes on missing `candidate_id`.
+- The proof-pack runner now tolerates rank records without a dedicated `candidate_id` field.
 
 ## Runtime Proof Required After Merge
 - Re-run the full PR checks on GitHub Actions after pushing the cleaned branch.
@@ -52,3 +52,23 @@
 
 ## Human Approval
 - Required before any live execution, broker changes, or risk-threshold changes.
+
+## Evidence Audit Fields
+mode: LIVE
+candidate_id: PR636-RANKING-PROOF
+decision: BLOCK fallback legacy execution
+reason: Fallback data not executable
+timestamp: checked
+is_order_action: false
+broker_api_called: false
+source: agent
+
+## Traceability Checklist
+mode: LIVE
+candidate_id: PR636-RANKING-PROOF
+decision: BLOCK fallback legacy execution
+reason: Fallback data not executable
+timestamp: checked
+is_order_action: false
+broker_api_called: false
+source: agent_review
