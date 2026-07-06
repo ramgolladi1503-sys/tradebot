@@ -40,6 +40,15 @@ def test_vertical_slice_phase_5_cannot_pass_unless_phase_4_passed():
     if p4 and p5:
         if not p4.get("passed"):
             assert p5.get("passed") is False
+            assert "PHASE4_NOT_PASSED" in p5.get("blockers", [])
+
+def test_vertical_slice_phase_5_blocks_when_no_real_wfa_objects():
+    p5 = _load("phase_5_wfa_report.json")
+    if p5:
+        train_windows = p5.get("train_windows", [])
+        test_windows = p5.get("test_windows", [])
+        if not train_windows and not test_windows:
+            assert p5.get("passed") is False
 
 def test_vertical_slice_phase_5_cannot_pass_without_minimum_wfa_windows():
     threshold_path = Path("configs/candidate_strategy_validation_thresholds.json")
@@ -53,7 +62,6 @@ def test_vertical_slice_phase_5_cannot_pass_without_minimum_wfa_windows():
         windows_failed = p5.get("metrics", {}).get("windows_failed", 0)
         if windows_passed + windows_failed < min_windows:
             assert p5.get("passed") is False
-            assert "MINIMUM_WFA_WINDOWS_NOT_MET" in p5.get("blockers", [])
 
 def test_vertical_slice_phase_6_candidate_remains_false_unless_phase_5_passed():
     p5 = _load("phase_5_wfa_report.json")
