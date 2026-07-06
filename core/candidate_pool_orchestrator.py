@@ -90,7 +90,8 @@ def build_candidate_pool_report(
     """
 
     if isinstance(ctx, dict):
-        ctx = StrategyContext(**ctx)
+        from core.movement_contract import context_from_dict
+        ctx = context_from_dict(ctx)
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 

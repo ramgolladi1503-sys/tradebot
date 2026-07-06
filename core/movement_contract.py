@@ -449,7 +449,10 @@ def candidate_from_dict(payload: dict[str, Any]) -> StrategyCandidate:
 def context_from_dict(payload: dict[str, Any]) -> StrategyContext:
     if not isinstance(payload, dict):
         raise MovementContractError("context_payload_not_dict")
-    return StrategyContext(**payload)
+    import dataclasses
+    valid_keys = {f.name for f in dataclasses.fields(StrategyContext)}
+    valid_payload = {k: v for k, v in payload.items() if k in valid_keys}
+    return StrategyContext(**valid_payload)
 
 
 __all__ = [

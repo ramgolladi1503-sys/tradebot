@@ -39,6 +39,13 @@ def main():
             
     audit_classification = audit.get("classification", "TRADE_LEDGER_AUDIT_FAILED")
 
+    v2_audit_path = base_dir / "phase_4_v2_structural_audit.json"
+    v2_audit = {}
+    if v2_audit_path.exists():
+        with open(v2_audit_path, "r") as f:
+            v2_audit = json.load(f)
+    v2_classification = v2_audit.get("classification", "V2_STRUCTURAL_AUDIT_FAILED")
+
     # Phase 4: Backtest
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
     trades = []
@@ -82,6 +89,10 @@ def main():
         blockers_p4.append("TRADE_LEDGER_AUDIT_SUSPICIOUS")
     if audit_classification == "TRADE_LEDGER_AUDIT_FAILED":
         blockers_p4.append("TRADE_LEDGER_AUDIT_FAILED")
+        
+    if v2_classification != "V2_STRUCTURAL_AUDIT_PASSED":
+        for b in v2_audit.get("blockers", ["V2_STRUCTURAL_AUDIT_FAILED"]):
+            blockers_p4.append(b)
         
     if not has_sufficient_backtest:
         blockers_p4.append("INSUFFICIENT_HISTORICAL_DATA_FOR_BACKTEST_OR_WFA")

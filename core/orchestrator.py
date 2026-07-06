@@ -2489,7 +2489,7 @@ class Orchestrator:
     def _start_depth_ws_or_raise(self, *, start_depth_ws_enabled: bool) -> None:
         runtime_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         dry_run_mode = bool(getattr(cfg, "DRY_RUN", False))
-        should_start_depth_ws = bool(start_depth_ws_enabled and runtime_mode == "LIVE" and not dry_run_mode)
+        should_start_depth_ws = bool(start_depth_ws_enabled and runtime_mode in {"LIVE", "PAPER"} and not dry_run_mode)
         if not should_start_depth_ws:
             logger.info(
                 "depth_ws_start_skipped mode=%s dry_run=%s enabled=%s",
@@ -4817,6 +4817,7 @@ class Orchestrator:
     def _legacy_live_monitoring(self, run_once: bool = False):
         """
         Phase E: Live trading loop
+        from config import config as cfg
         Fetch market data, generate trades, risk-check, execute, log, alert
         """
         from config import config as cfg

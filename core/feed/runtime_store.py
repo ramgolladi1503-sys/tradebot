@@ -113,8 +113,8 @@ def canonicalize_feed_runtime_snapshot_truth(payload: dict[str, Any]) -> dict[st
     normalized_active_blockers_by_symbol: dict[str, list[str]] = {}
     for symbol in sorted(sym for sym in tracked_symbols if sym):
         reason_text = str(option_block_reason_by_symbol.get(symbol) or "").strip().upper()
-        if reason_text in {"", "OK", "LIVE", "FRESH", "NONE"}:
-            reason_text = "NO_LIVE_OPTION_FEED"
+        if not reason_text or reason_text in {"NONE"}:
+            reason_text = "OK"
         normalized_block_reason_by_symbol[symbol] = reason_text
         active_reasons = [
             reason
