@@ -9019,6 +9019,73 @@ class TradeBuilder:
                 execution_blockers,
                 warning_codes,
             )
+            dirty_option_bridge_reasons = {"no_quote", "spread_pct", "iv_term", "iv_surface_slope"}
+
+            def _preserve_dirty_option_candidate(reason: str) -> None:
+                if reason not in dirty_option_bridge_reasons:
+                    return
+                base_candidate = {
+                    "symbol": symbol,
+                    "strategy": strategy_tag,
+                    "strategy_name": strategy_tag,
+                    "strategy_family": strategy_tag,
+                    "candidate_type": "directional",
+                    "direction": direction,
+                    "instrument": "OPT",
+                    "instrument_type": "OPT",
+                    "option_type": opt_type,
+                    "right": opt_type,
+                    "strike": opt.get("strike"),
+                    "expiry": opt.get("expiry") or opt.get("expiry_date"),
+                    "expiry_date": opt.get("expiry_date") or opt.get("expiry"),
+                    "tradingsymbol": opt.get("tradingsymbol"),
+                    "instrument_token": opt.get("instrument_token"),
+                    "quote_source": opt.get("quote_source") or opt.get("option_ltp_source") or opt.get("chain_source"),
+                    "option_ltp_source": opt.get("option_ltp_source") or opt.get("quote_source") or opt.get("chain_source"),
+                    "quote_ok": bool(opt.get("quote_ok", True)),
+                    "quote_age_sec": opt.get("quote_age_sec"),
+                    "bid": opt.get("bid"),
+                    "ask": opt.get("ask"),
+                    "ltp": opt.get("ltp"),
+                    "spread_pct": opt.get("spread_pct"),
+                    "iv_term": opt.get("iv_term"),
+                    "iv_surface_slope": opt.get("iv_surface_slope"),
+                    "source_flags": {
+                        "candidate_origin": "dirty_option_bridge",
+                        "dirty_option_reason": reason,
+                    },
+                }
+                dirty_candidate = build_soft_reject_candidate(
+                    market_data,
+                    reject_reason=reason,
+                    reject_source="trade_builder_dirty_option_bridge",
+                    gate_reasons=[reason],
+                    base_candidate=base_candidate,
+                    execution_mode=exec_mode,
+                )
+                if not dirty_candidate:
+                    return
+                dirty_candidate["candidate_origin"] = "dirty_option_bridge"
+                dirty_source_flags = dict(dirty_candidate.get("source_flags") or {})
+                dirty_source_flags["candidate_origin"] = "dirty_option_bridge"
+                dirty_source_flags["dirty_option_reason"] = reason
+                dirty_source_flags["dirty_option_bridge"] = True
+                dirty_source_flags["option_chain_source"] = opt.get("quote_source") or opt.get("option_ltp_source") or opt.get("chain_source")
+                dirty_candidate["source_flags"] = dirty_source_flags
+                dirty_candidate["tradable"] = False
+                dirty_candidate["execution_allowed"] = False
+                dirty_candidate["execution_ok"] = False
+                dirty_candidate["execution_blocked"] = True
+                dirty_candidate["eligible_for_execution"] = False
+                dirty_candidate["permission"] = "ADVISORY_ONLY"
+                dirty_candidate["final_action"] = "ADVISORY_ONLY"
+                dirty_candidate["readiness"] = "ADVISORY_ONLY"
+                dirty_candidate["candidate_status"] = "advisory_only"
+                dirty_candidate["execution_status"] = "advisory_only"
+                dirty_candidate["execution_block_reason"] = reason
+                dirty_candidate["row_kind"] = "advisory_only"
+                candidates.append(dirty_candidate)
+
             non_live_relaxed_gate_codes: list[str] = []
             if bool(opt.get("type_mismatch_soft")):
                 _record_issue("type_mismatch", role=ISSUE_CATEGORY_SOFT)
@@ -9147,6 +9214,7 @@ class TradeBuilder:
                                 atr=atr,
                             )
                         )
+                    _preserve_dirty_option_candidate("no_quote")
                     continue
                 missing_role = ISSUE_CATEGORY_SOFT if (market_ctx.allow_stale_quotes or exec_mode in {"SIM", "PAPER", "PLANNING", "ADVISORY"}) else ISSUE_CATEGORY_HARD
                 _record_issue("option_quote_missing", role=missing_role)
@@ -9336,6 +9404,7 @@ class TradeBuilder:
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=spread_pct spread_pct=%.4f", symbol, opt.get("strike"), opt_type, spread_pct)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "spread_pct", atr=atr))
+                        _preserve_dirty_option_candidate("spread_pct")
                         continue
                     _record_issue("spread_pct", role=ISSUE_CATEGORY_WARNING)
 
@@ -9469,13 +9538,19 @@ class TradeBuilder:
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_term", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_term", atr=atr))
+                        _preserve_dirty_option_candidate("iv_term")
                         continue
+                elif not str(opt.get("next_expiry") or market_data.get("next_expiry") or "").strip():
+                    _record_issue("iv_term", role=ISSUE_CATEGORY_WARNING)
+                    _append_unique(non_live_relaxed_gate_codes, "iv_term")
+                    _preserve_dirty_option_candidate("iv_term")
                 if opt.get("iv_surface_slope") is not None:
                     if abs(opt["iv_surface_slope"]) > getattr(cfg, "IV_SURFACE_SLOPE_MAX", 0.15) and not _relax("iv_surface_slope"):
                         _count_option_reject("iv_surface_slope")
                         if debug_reasons:
                             _log_option_chain_debug("trade_builder_option_reject symbol=%s strike=%s type=%s reason=iv_surface_slope", symbol, opt.get("strike"), opt_type)
                             rejected.append(self._reject_record(symbol, opt, opt_type, "iv_surface_slope", atr=atr))
+                        _preserve_dirty_option_candidate("iv_surface_slope")
                         continue
                 if opt.get("oi_build"):
                     enforce_oi_build_alignment = True
