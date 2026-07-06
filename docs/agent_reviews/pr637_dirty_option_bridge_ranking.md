@@ -31,7 +31,7 @@
 - Dashboard/top-opportunities must read `ranked_pipeline_latest.json` and must not fall back to `top_opportunities_latest.json`.
 
 ## GSD Review
-- `core/option_chain.py` annotates missing term-structure evidence explicitly as `iv_term_unavailable` with a reason.
+- `core/option_chain.py` annotates absent term-structure evidence explicitly as `iv_term_unavailable` plus `iv_term_unavailable_reason`.
 - `strategies/trade_builder.py` preserves dirty option rows as advisory ranked candidates and adds the same dirty reason to execution blockers so the normal row cannot bypass canonical truth.
 - `core/opportunity_engine.py` keeps explicit dirty producer blockers as the primary ranked blocker instead of letting advisory-row risk-budget geometry overwrite them.
 - `tests/test_option_chain_dirty_data_candidate_preservation.py` asserts exact dirty reasons and non-executable ranked state.
