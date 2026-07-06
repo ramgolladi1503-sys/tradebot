@@ -19,15 +19,46 @@ def main():
     parser.add_argument("--max-days-per-chunk", type=int, default=7)
     args = parser.parse_args()
     
+    diag_path = Path("runtime/strategy_validation/MEAN_REVERSION_EXTENSION/upstox_access_diagnostics.json")
+    if not diag_path.exists():
+        print("Diagnostics not run. Run diagnose_upstox_historical_access.py first.")
+        return
+        
+    with open(diag_path, "r") as f:
+        diag_data = json.load(f)
+        
+    v2_ok = False
+    v3_ok = False
+    for res in diag_data.get("endpoint_results", []):
+        if res.get("version") == "v2" and res.get("classification") == "UPSTOX_ACCESS_OK":
+            v2_ok = True
+        if res.get("version") == "v3" and res.get("classification") == "UPSTOX_ACCESS_OK":
+            v3_ok = True
+            
+    if not v2_ok and not v3_ok:
+        print("Diagnostics failed for both V2 and V3. Fetcher aborting.")
+        return
+
     start = datetime.strptime(args.start_date, "%Y-%m-%d")
     end = datetime.strptime(args.end_date, "%Y-%m-%d")
     
     token = os.environ.get("UPSTOX_ACCESS_TOKEN")
-    
-    instrument_map = {
-        "NIFTY": "NSE_INDEX|Nifty 50",
-        "BANKNIFTY": "NSE_INDEX|Nifty Bank"
-    }
+    if not token:
+        print("Token missing.")
+        return
+        
+    # Load trusted keys
+    master_path = Path("configs/upstox_instrument_master.json")
+    if not master_path.exists():
+        print("Instrument master missing.")
+        return
+        
+    with open(master_path, "r") as f:
+        master = json.load(f)
+        
+    instrument_map = {}
+    for item in master:
+        instrument_map[item["tradingsymbol"]] = item["instrument_key"]
     
     current = start
     days_fetched = 0
@@ -36,20 +67,18 @@ def main():
     ctx.verify_mode = ssl.CERT_NONE
 
     while current <= end:
-        if current.weekday() < 5: # Only weekdays
+        if current.weekday() < 5:
             date_str = current.strftime("%Y%m%d")
             api_date_str = current.strftime("%Y-%m-%d")
             out_dir = Path(f"runtime/upstox_candidate_replay/{date_str}")
             
-            # Resume check
             if (out_dir / "manifests" / f"upstox_fetch_manifest_{date_str}.json").exists():
-                print(f"Skipping {date_str}, already fetched.")
                 current += timedelta(days=1)
                 continue
                 
             (out_dir / "underlying").mkdir(parents=True, exist_ok=True)
-            
             day_success = True
+            deprecated_endpoint = False
             
             for sym in args.symbols:
                 instr_key = instrument_map.get(sym)
@@ -58,35 +87,33 @@ def main():
                     day_success = False
                     continue
                 
-                resp_data = None
+                url_key = urllib.parse.quote(instr_key)
+                if v3_ok:
+                    endpoint = f"/v3/historical-candle/{url_key}/minutes/1/{api_date_str}/{api_date_str}"
+                else:
+                    endpoint = f"/v2/historical-candle/{url_key}/{args.interval}/{api_date_str}/{api_date_str}"
+                    deprecated_endpoint = True
+                    
+                url = f"https://api.upstox.com{endpoint}"
                 fetch_status = "UPSTOX_FETCH_SUCCEEDED_REAL_CANDLES"
                 
-                url_key = urllib.parse.quote(instr_key)
-                endpoint = f"/v2/historical-candle/{url_key}/{args.interval}/{api_date_str}/{api_date_str}"
-                url = f"https://api.upstox.com{endpoint}"
+                req = urllib.request.Request(url, headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token}"
+                })
                 
-                if not token:
-                    fetch_status = "UPSTOX_FETCH_FAILED_TOKEN_MISSING"
-                else:
-                    req = urllib.request.Request(url, headers={
-                        "Accept": "application/json",
-                        "Authorization": f"Bearer {token}"
-                    })
-                    
-                    retries = 3
-                    for attempt in range(retries):
-                        try:
-                            with urllib.request.urlopen(req, context=ctx) as response:
-                                if response.status == 429:
-                                    print("Rate limit hit, backing off...")
-                                    time.sleep(2 ** attempt)
-                                    continue
-                                resp_data = json.loads(response.read().decode())
-                                break
-                        except Exception as e:
-                            print(f"Network fetch failed: {e}")
-                            fetch_status = "UPSTOX_FETCH_FAILED_HTTP_ERROR"
+                resp_data = None
+                for attempt in range(3):
+                    try:
+                        with urllib.request.urlopen(req, context=ctx) as response:
+                            if response.status == 429:
+                                time.sleep(2 ** attempt)
+                                continue
+                            resp_data = json.loads(response.read().decode())
                             break
+                    except Exception:
+                        fetch_status = "UPSTOX_FETCH_FAILED_HTTP_ERROR"
+                        break
                 
                 if resp_data:
                     candles = resp_data.get("data", {}).get("candles", [])
@@ -124,7 +151,6 @@ def main():
                 else:
                     day_success = False
             
-            # Manifests
             (out_dir / "manifests").mkdir(parents=True, exist_ok=True)
             manifest = {
                 "date": date_str,
@@ -137,7 +163,8 @@ def main():
                 "mock": False,
                 "fallback": False,
                 "token_logged": False,
-                "certification_eligible": day_success
+                "certification_eligible": day_success,
+                "deprecated_endpoint": deprecated_endpoint
             }
             with open(out_dir / "manifests" / f"upstox_fetch_manifest_{date_str}.json", "w") as f:
                 json.dump(manifest, f, indent=2)
