@@ -74,9 +74,6 @@ def main():
             "token_logged": False
         })
     else:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         
         url_key = urllib.parse.quote(instr_key)
         api_date_str = args.start_date
@@ -94,7 +91,7 @@ def main():
         }
         try:
             req = urllib.request.Request(v2_url, headers={"Accept": "application/json", "Authorization": f"Bearer {token}"})
-            with urllib.request.urlopen(req, context=ctx) as response:
+            with urllib.request.urlopen(req) as response:
                 v2_result["http_status"] = response.status
                 resp_data = json.loads(response.read().decode())
                 candles = resp_data.get("data", {}).get("candles", [])
@@ -129,7 +126,7 @@ def main():
         }
         try:
             req = urllib.request.Request(v3_url, headers={"Accept": "application/json", "Authorization": f"Bearer {token}"})
-            with urllib.request.urlopen(req, context=ctx) as response:
+            with urllib.request.urlopen(req) as response:
                 v3_result["http_status"] = response.status
                 resp_data = json.loads(response.read().decode())
                 candles = resp_data.get("data", {}).get("candles", [])

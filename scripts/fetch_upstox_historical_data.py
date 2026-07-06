@@ -66,9 +66,6 @@ def main():
     
     current = start
     days_fetched = 0
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
 
     while current <= end:
         if current.weekday() < 5:
@@ -109,7 +106,7 @@ def main():
                 resp_data = None
                 for attempt in range(3):
                     try:
-                        with urllib.request.urlopen(req, context=ctx) as response:
+                        with urllib.request.urlopen(req) as response:
                             if response.status == 429:
                                 time.sleep(2 ** attempt)
                                 continue

@@ -1,7 +1,11 @@
 import json
 import os
 import pytest
+import urllib.request
+import urllib.error
+import urllib.parse
 from pathlib import Path
+from unittest.mock import MagicMock
 
 def test_probe_missing_token(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
@@ -45,8 +49,8 @@ def test_probe_api_error_403(monkeypatch, tmp_path):
     res_data = {
         "classification": "UPSTOX_INSTRUMENT_KEYS_RESOLVED",
         "resolved": {
-            "NIFTY": {"instrument_key": "NSE_INDEX|Nifty 50"},
-            "BANKNIFTY": {"instrument_key": "NSE_INDEX|Nifty Bank"}
+            "NIFTY": {"instrument_key": "TEST_INDEX|AAA"},
+            "BANKNIFTY": {"instrument_key": "TEST_INDEX|BBB"}
         }
     }
     with open(out_dir / "upstox_instrument_resolution.json", "w") as f:
@@ -55,10 +59,7 @@ def test_probe_api_error_403(monkeypatch, tmp_path):
     import sys
     monkeypatch.setattr(sys, 'argv', ['probe.py', '--start-date', '2024-07-01', '--end-date', '2026-07-03', '--symbols', 'NIFTY', 'BANKNIFTY', '--interval', '1minute'])
     
-    import urllib.request
-    import urllib.error
-    
-    def mock_urlopen(req, context=None):
+    def mock_urlopen(req, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
         
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
@@ -70,6 +71,8 @@ def test_probe_api_error_403(monkeypatch, tmp_path):
         data = json.load(f)
         assert data["classification"] == "UPSTOX_HISTORY_BLOCKED_API_ERROR"
         assert data["api_status"] == "403_FORBIDDEN"
+        assert "mock_token" not in json.dumps(data)
+        assert "Bearer" not in json.dumps(data)
 
 def test_probe_success(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
@@ -82,8 +85,8 @@ def test_probe_success(monkeypatch, tmp_path):
     res_data = {
         "classification": "UPSTOX_INSTRUMENT_KEYS_RESOLVED",
         "resolved": {
-            "NIFTY": {"instrument_key": "NSE_INDEX|Nifty 50"},
-            "BANKNIFTY": {"instrument_key": "NSE_INDEX|Nifty Bank"}
+            "NIFTY": {"instrument_key": "TEST_INDEX|AAA"},
+            "BANKNIFTY": {"instrument_key": "TEST_INDEX|BBB"}
         }
     }
     with open(out_dir / "upstox_instrument_resolution.json", "w") as f:
@@ -92,13 +95,19 @@ def test_probe_success(monkeypatch, tmp_path):
     import sys
     monkeypatch.setattr(sys, 'argv', ['probe.py', '--start-date', '2024-07-01', '--end-date', '2026-07-03', '--symbols', 'NIFTY', 'BANKNIFTY', '--interval', '1minute'])
     
-    import urllib.request
-    from unittest.mock import MagicMock
+    calls = []
+    headers = []
     
-    def mock_urlopen(req, context=None):
-        mock = MagicMock()
-        mock.read.return_value = b'{}'
-        return mock
+    class MockResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+        
+    def mock_urlopen(req, timeout=None):
+        calls.append(req.full_url)
+        headers.append(req.headers)
+        return MockResponse()
         
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
     
@@ -109,3 +118,15 @@ def test_probe_success(monkeypatch, tmp_path):
         data = json.load(f)
         assert data["classification"] == "UPSTOX_HISTORY_AVAILABLE"
         assert data["api_status"] == "OK"
+        assert "mock_token" not in json.dumps(data)
+        assert "Bearer" not in json.dumps(data)
+        
+    assert len(calls) == 2
+    
+    quoted_aaa = urllib.parse.quote("TEST_INDEX|AAA")
+    quoted_bbb = urllib.parse.quote("TEST_INDEX|BBB")
+    
+    assert any(quoted_aaa in url for url in calls)
+    assert any(quoted_bbb in url for url in calls)
+    
+    assert any("Authorization" in h and h["Authorization"] == "Bearer mock_token" for h in headers)

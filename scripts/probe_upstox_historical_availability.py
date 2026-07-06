@@ -5,7 +5,6 @@ import urllib.request
 import urllib.error
 import urllib.parse
 from pathlib import Path
-import ssl
 
 def main():
     parser = argparse.ArgumentParser()
@@ -39,7 +38,7 @@ def main():
             "failed_chunks": [],
             "api_status": "TOKEN_MISSING"
         }
-    elif not resolved_keys or not all(sym in resolved_keys for sym in args.symbols):
+    elif not resolved_keys or not all(sym in args.symbols for sym in resolved_keys):
         result = {
             "classification": "UPSTOX_HISTORY_BLOCKED_INSTRUMENT_KEY_FAILURE",
             "start_date": args.start_date,
@@ -54,23 +53,22 @@ def main():
         # Loop over all requested symbols and probe one chunk for each
         failed = False
         api_status = "OK"
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         
         for sym in args.symbols:
             inst_key = resolved_keys[sym]["instrument_key"]
             url_key = urllib.parse.quote(inst_key)
             
-            headers = {"Accept": "application/json"}
-            headers["Authoriza" + "tion"] = "Bear" + "er " + token
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
             
             req = urllib.request.Request(
                 f"https://api.upstox.com/v2/historical-candle/{url_key}/1minute/{args.end_date}/{args.start_date}",
                 headers=headers
             )
             try:
-                with urllib.request.urlopen(req, context=ctx) as response:
+                with urllib.request.urlopen(req, timeout=20) as response:
                     pass
             except urllib.error.HTTPError as e:
                 failed = True

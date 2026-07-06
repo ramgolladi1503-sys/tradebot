@@ -49,14 +49,11 @@ def main():
     if not instruments:
         # Fallback to download
         url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         
         try:
             import gzip
             req = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-            with urllib.request.urlopen(req, context=ctx) as response:
+            with urllib.request.urlopen(req) as response:
                 if response.info().get('Content-Encoding') == 'gzip':
                     f = gzip.GzipFile(fileobj=response)
                     data = f.read()

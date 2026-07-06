@@ -29,3 +29,15 @@ def test_hygiene_advisory_rejection_present():
     adapter_test = tests_dir / "test_candidate_to_signal_adapter.py"
     if adapter_test.exists():
         assert "ADVISORY" in adapter_test.read_text()
+
+def test_hygiene_no_token_leakage():
+    runtime_dir = Path("runtime")
+    if not runtime_dir.exists():
+        return
+        
+    for ext in ("*.json", "*.md", "*.log", "*.jsonl"):
+        for f in runtime_dir.rglob(ext):
+            content = f.read_text(errors='ignore')
+            assert "Authorization: Bearer" not in content, f"Token leakage found in {f}"
+            assert "UPSTOX_ACCESS_TOKEN" not in content, f"Token leakage found in {f}"
+
