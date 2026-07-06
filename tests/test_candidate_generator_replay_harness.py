@@ -1,10 +1,10 @@
 import pytest
 import time
 import os
-import yaml
 from unittest.mock import Mock
 from pathlib import Path
 from core.movement_contract import StrategyCandidate, StrategyContext
+from core.yaml_compat import dump as yaml_dump
 from scripts.replay_candidate_generator_strategy import replay_strategy
 from config import config
 
@@ -17,7 +17,7 @@ def _create_state(tmp_path, strategy_id, state):
     runtime_dir = tmp_path / "runtime" / "strategy_validation" / strategy_id
     runtime_dir.mkdir(parents=True, exist_ok=True)
     with open(runtime_dir / "strategy_lifecycle_state.yaml", "w") as f:
-        yaml.dump({"lifecycle_state": state}, f)
+        yaml_dump({"lifecycle_state": state}, f)
         
 def create_mock_candidate(status="VALIDATED_CANDIDATE", evidence=None, confidence=60):
     candidate = Mock(spec=StrategyCandidate)
@@ -294,4 +294,3 @@ def test_offline_replay_no_fetch_produces_not_requested(monkeypatch, tmp_path):
     assert "DATA_FETCH_NOT_REQUESTED" in report["data_fetch_blockers"]
     assert len(report["data_fetch_blocker_details"]) > 0
     assert "Fetch was not requested" in report["data_fetch_blocker_details"]["DATA_FETCH_NOT_REQUESTED"]
-

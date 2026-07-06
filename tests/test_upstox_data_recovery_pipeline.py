@@ -5,9 +5,9 @@ from pathlib import Path
 import subprocess
 import sys
 from unittest.mock import patch, MagicMock
-import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.yaml_compat import dump as yaml_dump
 from scripts.fetch_missing_strategy_data_upstox import fetch_data
 from scripts.run_batch_strategy_certification import check_data_exists
 
@@ -183,11 +183,11 @@ def test_existing_state_preservation_integration(mock_run, mock_registry, tmp_pa
     runtime_dir = tmp_path / "runtime" / "strategy_validation"
     (runtime_dir / "SIMPLE_ORB").mkdir(parents=True)
     with open(runtime_dir / "SIMPLE_ORB" / "strategy_lifecycle_state.yaml", "w") as f:
-        yaml.dump({"lifecycle_state": "PHASE_6_SCAFFOLD_READY", "strategy_id": "SIMPLE_ORB", "phase_6_allowed": True}, f)
+        yaml_dump({"lifecycle_state": "PHASE_6_SCAFFOLD_READY", "strategy_id": "SIMPLE_ORB", "phase_6_allowed": True}, f)
 
     (runtime_dir / "HTF_OPENING_DRIVE_CONT").mkdir(parents=True)
     with open(runtime_dir / "HTF_OPENING_DRIVE_CONT" / "strategy_lifecycle_state.yaml", "w") as f:
-        yaml.dump({"lifecycle_state": "PHASE_5_PASSED", "strategy_id": "HTF_OPENING_DRIVE_CONT", "phase_6_allowed": False}, f)
+        yaml_dump({"lifecycle_state": "PHASE_5_PASSED", "strategy_id": "HTF_OPENING_DRIVE_CONT", "phase_6_allowed": False}, f)
 
     rb.main()
 

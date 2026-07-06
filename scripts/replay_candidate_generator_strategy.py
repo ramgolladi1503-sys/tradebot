@@ -1,7 +1,6 @@
 import sys
 import os
 import json
-import yaml
 import argparse
 import requests
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from core.yaml_compat import safe_load as yaml_safe_load
 from core.candidate_to_signal_adapter import adapt_candidate_to_signals
 from core.movement_contract import StrategyCandidate, StrategyContext
 
@@ -67,7 +67,7 @@ def replay_strategy(strategy_id, candidates, ctx, cost_model="stress"):
     
     if state_file.exists():
         with open(state_file) as f:
-            state = yaml.safe_load(f)
+            state = yaml_safe_load(f)
             
         if state.get("lifecycle_state") != "CANDIDATE_GENERATOR_CONTRACT_PASSED":
             return "CANDIDATE_REPLAY_FAILED", "Strategy has not passed candidate generator contract"
@@ -178,7 +178,7 @@ def main():
     state = {}
     if state_file.exists():
         with open(state_file) as f:
-            state = yaml.safe_load(f)
+            state = yaml_safe_load(f)
             
     data_file = Path(f"runtime/strategy_validation/raw_market_data/{strategy_id}_historical.jsonl")
     

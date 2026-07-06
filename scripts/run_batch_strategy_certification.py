@@ -1,11 +1,12 @@
 import sys
 import json
-import yaml
 import subprocess
 import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.yaml_compat import dump as yaml_dump
+from core.yaml_compat import safe_load as yaml_safe_load
 from strategies.strategy_registry import load_strategy_registry
 
 def run_cmd(cmd):
@@ -54,7 +55,7 @@ def main(args=None):
         state = {}
         if state_file.exists():
             with open(state_file) as f:
-                state = yaml.safe_load(f) or {}
+                state = yaml_safe_load(f) or {}
 
         if entry.certification_track == "phase_1_to_5_execution_replay":
             success = run_cmd(["python", "scripts/run_strategy_certification_pipeline.py", "--strategy", strategy_id, "--cost-model", "stress"])
@@ -62,7 +63,7 @@ def main(args=None):
             # Reload state if it exists
             if state_file.exists():
                 with open(state_file) as f:
-                    state = yaml.safe_load(f) or {}
+                    state = yaml_safe_load(f) or {}
             
             if not state:
                 state = {"lifecycle_state": "CERTIFICATION_FAILED"} if not success else {"lifecycle_state": "CERTIFICATION_PASSED"}

@@ -1,11 +1,10 @@
 import argparse
 import json
-try:
-    import yaml
-except ImportError:
-    yaml = None
 from pathlib import Path
 from datetime import datetime, UTC
+
+from core.yaml_compat import dump as yaml_dump
+from core.yaml_compat import safe_load as yaml_safe_load
 
 def main():
     parser = argparse.ArgumentParser()
@@ -92,16 +91,17 @@ def main():
         json.dump(report, f, indent=4)
 
     lifecycle_path = Path(f"runtime/strategy_validation/{args.strategy_id}/strategy_lifecycle_state.yaml")
-    if lifecycle_path.exists() and yaml is not None:
+    if lifecycle_path.exists():
         with open(lifecycle_path, "r") as f:
-            state = yaml.safe_load(f)
+            state = yaml_safe_load(f)
+        state = state or {}
 
         state["lifecycle_state"] = lifecycle_state
         state["paper_live_allowed"] = lifecycle_state == "PHASE_6_PASSED"
         state["live_allowed"] = False
 
         with open(lifecycle_path, "w") as f:
-            yaml.dump(state, f, sort_keys=False)
+            yaml_dump(state, f, sort_keys=False)
 
 if __name__ == "__main__":
     main()

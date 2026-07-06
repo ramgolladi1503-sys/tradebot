@@ -1,7 +1,6 @@
 import pytest
 from pathlib import Path
 import json
-import yaml
 
 def test_batch_summary_status_mapping(tmp_path, monkeypatch):
     import scripts.run_batch_strategy_certification as batch_mod
@@ -52,4 +51,3 @@ def test_batch_summary_status_mapping(tmp_path, monkeypatch):
     assert summary[0]["lifecycle_state"] == "DATA_FETCH_PENDING"
     assert summary[0]["candidate_replay_status"] == "CANDIDATE_REPLAY_DATA_BLOCKED"
     assert summary[0]["data_fetch_status"] == "DATA_FETCH_NOT_REQUESTED"
-

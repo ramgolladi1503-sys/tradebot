@@ -1,9 +1,9 @@
 import sys
 import json
-import yaml
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.yaml_compat import safe_load as yaml_safe_load
 from strategies.strategy_registry import load_strategy_registry
 
 def parse_phase_evidence(strategy_id, phase_key):
@@ -131,7 +131,7 @@ def audit_phase6():
         state_file = Path(f"runtime/strategy_validation/{strategy_id}/strategy_lifecycle_state.yaml")
         if state_file.exists():
             with open(state_file) as f:
-                config = yaml.safe_load(f)
+                config = yaml_safe_load(f)
                 state = config.get("current_state", state)
                 is_quarantined = config.get("is_quarantined", False)
                 
