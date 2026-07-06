@@ -2498,19 +2498,6 @@ class Orchestrator:
                 bool(start_depth_ws_enabled),
             )
             return
-        try:
-            from core.auth import get_kite_credentials
-
-            get_kite_credentials()
-        except Exception as exc:
-            logger.warning(
-                "depth_ws_start_skipped_missing_credentials mode=%s dry_run=%s enabled=%s err=%s",
-                runtime_mode,
-                dry_run_mode,
-                bool(start_depth_ws_enabled),
-                exc,
-            )
-            return
         logger.info(
             "depth_ws_start_attempt mode=%s dry_run=%s enabled=%s",
             runtime_mode,
