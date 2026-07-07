@@ -275,7 +275,8 @@ def test_augment_ranked_candidates_with_soft_reject_includes_soft_rows_in_ranked
         symbol="NIFTY",
     )
 
-    assert len(ranked) == 1
+    num_ranked = len(ranked)
+    assert num_ranked == 1
     assert ranked[0].get("candidate_class") == "softened"
     soft_len = len(soft)
     assert soft_len == 1
