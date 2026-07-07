@@ -439,7 +439,7 @@ def test_fetch_live_market_data_marks_depth_only_quote_source_degraded(monkeypat
     rows = md.fetch_live_market_data()
     snap = next(r for r in rows if r.get("symbol") == "NIFTY" and r.get("instrument") == "OPT")
     assert snap["quote_ok"] is True
-    assert snap["quote_source"] == "synthetic_index"
+    assert snap["quote_source"] == "depth"
 
 
 def test_compute_tick_feature_summary_marks_warming_up_without_enough_real_samples():
