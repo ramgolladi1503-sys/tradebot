@@ -1,7 +1,10 @@
 import argparse
 import json
+import sys
 from pathlib import Path
 from datetime import datetime, UTC
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.yaml_compat import dump as yaml_dump
 from core.yaml_compat import safe_load as yaml_safe_load

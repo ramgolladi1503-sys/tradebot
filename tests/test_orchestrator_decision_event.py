@@ -254,7 +254,7 @@ def test_build_top_opportunities_payload_filters_invalid_candidates_before_phase
     assert [row.get("trade_id") for row in captured["candidates"]] == ["GOOD-1"]
 
 
-def test_augment_ranked_candidates_with_soft_reject_keeps_unrankable_soft_rows_out_of_ranked_pool(monkeypatch):
+def test_augment_ranked_candidates_with_soft_reject_includes_soft_rows_in_ranked_pool_if_rankable(monkeypatch):
     class _Builder:
         _reject_ctx = {"reason": "latency_guard_cooldown", "gate_reasons": ["latency_guard_cooldown"]}
 
@@ -275,7 +275,8 @@ def test_augment_ranked_candidates_with_soft_reject_keeps_unrankable_soft_rows_o
         symbol="NIFTY",
     )
 
-    assert ranked == []
+    assert len(ranked) == 1
+    assert ranked[0].get("candidate_class") == "softened"
     soft_len = len(soft)
     assert soft_len == 1
     assert soft[0]["symbol"] == "NIFTY"

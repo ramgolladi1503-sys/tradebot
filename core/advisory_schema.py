@@ -63,6 +63,8 @@ QUOTE_SOURCES = {
     "live",
     "depth",
     "depth_ws",
+    "ws",
+    "db",
     "rest_quote",
     "synthetic_index",
     "missing_depth",

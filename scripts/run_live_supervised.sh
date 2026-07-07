@@ -13,6 +13,7 @@ echo "[supervisor] Starting tradebot supervised run. MAX_RESTARTS=$MAX_RESTARTS"
 while [ $RESTART_COUNT -lt $MAX_RESTARTS ]; do
     ATTEMPT=$((RESTART_COUNT+1))
     echo "[supervisor] Attempt $ATTEMPT/$MAX_RESTARTS"
+    rm -f .runtime/locks/*.lock
     python main.py "$@" || EXIT_CODE=$?
     EXIT_CODE=${EXIT_CODE:-0}
     RESTART_COUNT=$((RESTART_COUNT+1))

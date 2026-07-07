@@ -153,7 +153,15 @@ def run_scenario(scenario_name, ticks):
                     stats["execution_feed_ready_false"] += 1
 
                 if snap.get("instrument") == "OPT":
-                    cand = builder.build(snap, quick_mode=True)
+                    import strategies.trade_builder
+                    class DummySignal:
+                        def __init__(self):
+                            self.direction = "BUY_CALL"
+                            self.signal_strength = 1.0
+                            self.reason = "mock_signal"
+                    strategies.trade_builder.ensemble_signal = lambda *args, **kwargs: DummySignal()
+
+                    cand = builder.build(snap, quick_mode=False)
                     if cand:
                         if getattr(cand, "candidate_class", "") == "BLOCKED":
                             stats["blocked_candidates"] += 1

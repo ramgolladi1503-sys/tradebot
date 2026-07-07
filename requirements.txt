@@ -16,3 +16,6 @@ pyarrow
 holidays
 plotly
 statsmodels
+upstox-python-sdk
+protobuf
+websockets

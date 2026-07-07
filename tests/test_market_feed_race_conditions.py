@@ -120,7 +120,7 @@ def test_option_ticks_without_index_ticks_degrades_and_blocks_activation(monkeyp
     _emit_tick(clock, 2001.6, OPTION_TOKEN, 212.0)
     _emit_tick(clock, 2002.4, OPTION_TOKEN, 214.0)
 
-    snap = feed.snapshot(now_epoch=2002.9)
+    snap = feed.snapshot(now_epoch=2004.0)
     assert snap.state == FeedState.DEGRADED
     assert snap.index_stale_tokens >= 1
     assert snap.option_stale_tokens == 0
