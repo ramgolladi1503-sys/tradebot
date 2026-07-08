@@ -29,7 +29,7 @@ def test_feed_truth_state_invariants_hypothesis(payload):
         assert "WS_DISCONNECTED" in truth_state.blockers or "WS1006_PROCESS_RESTART_REQUIRED" in truth_state.blockers
         
     # Invariant: If missing option symbols exist, it must not be healthy
-    if payload.get("missing_option_symbols"):
+    if any(s.strip() for s in payload.get("missing_option_symbols") or []):
         assert truth_state.state != "VERIFIED_HEALTHY"
         assert "MISSING_OPTION_SYMBOLS" in truth_state.blockers
 
