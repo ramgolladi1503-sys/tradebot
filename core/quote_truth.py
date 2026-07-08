@@ -62,6 +62,8 @@ class QuoteTruthDecision:
     rank_eligible: bool
     execution_eligible: bool
     reason_code: str
+    quote_truth: str = "MISSING_QUOTE"
+    is_executable_quote: bool = False
     reasons: tuple[str, ...] = ()
     quote_source: str | None = None
     option_ltp_source: str | None = None
@@ -388,11 +390,30 @@ def classify_quote_truth(
 
     truth_ok = not reasons
     eligibility_ok = truth_ok and source_trust in {"trusted_live", "trusted_cache", "unknown"}
+
+    if validation_status == "OK" and eligibility_ok:
+        if best_bid and best_ask:
+            quote_truth = "REAL_BID_ASK"
+        elif current_ltp:
+            quote_truth = "REAL_LTP_ONLY"
+        else:
+            quote_truth = "MISSING_QUOTE"
+    elif source_trust == "fallback" and current_ltp:
+        quote_truth = "MOCKED_FROM_LTP"
+    elif validation_status == "STALE_OPTION_LTP":
+        quote_truth = "STALE_QUOTE"
+    else:
+        quote_truth = "MISSING_QUOTE"
+
+    is_executable = (quote_truth == "REAL_BID_ASK" and eligibility_ok)
+
     return QuoteTruthDecision(
         truth_ok=truth_ok,
         rank_eligible=eligibility_ok,
         execution_eligible=eligibility_ok,
         reason_code="ok" if truth_ok else QUOTE_TRUTH_BLOCK_REASON,
+        quote_truth=quote_truth,
+        is_executable_quote=is_executable,
         reasons=tuple(reasons),
         quote_source=None if quote_source in (None, "", "None") else _lower(quote_source),
         option_ltp_source=None if option_ltp_source in (None, "", "None") else _lower(option_ltp_source),

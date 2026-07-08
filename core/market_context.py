@@ -230,6 +230,35 @@ def derive_market_context(
             bool(is_market_open),
             exec_mode,
         )
+    try:
+        import time
+        import json
+        from pathlib import Path
+        timeline_path = Path("runtime/strategy_validation/regime_timeline.jsonl")
+        timeline_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        regime = str(
+            normalized.get("primary_regime") or normalized.get("regime") or normalized.get("regime_day") or "NEUTRAL"
+        ).strip().upper() or "NEUTRAL"
+        confidence = float(normalized.get("regime_confidence", 0.0) or 0.0)
+        
+        row = {
+            "market_timestamp": normalized.get("market_timestamp") or str(time.time()),
+            "symbol": extracted_symbol or "UNKNOWN",
+            "open": normalized.get("open", 0.0),
+            "high": normalized.get("high", 0.0),
+            "low": normalized.get("low", 0.0),
+            "close": normalized.get("close", 0.0),
+            "tradebot_regime": regime,
+            "selected_strategy": "Unknown",
+            "source": "replay",
+            "source_file": normalized.get("source_file", "unknown")
+        }
+        with open(timeline_path, "a") as f:
+            f.write(json.dumps(row) + "\n")
+    except Exception:
+        pass
+
     return MarketContext(
         mode=mode,
         is_market_open=bool(is_market_open),

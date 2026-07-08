@@ -187,6 +187,21 @@ class FeedSupervisorSnapshot:
     last_subscription_generation_id: int = 0
     verified_option_symbols: tuple[str, ...] = ()
     missing_option_symbols: tuple[str, ...] = ()
+    
+    # New FeedModule Hardening Fields
+    active_symbols: int = 0
+    missing_critical_symbols: tuple[str, ...] = ()
+    last_underlying_tick_age_seconds: float | None = None
+    last_option_tick_age_seconds: float | None = None
+    last_depth_age_seconds: float | None = None
+    feed_state: str = "DISCONNECTED"
+    execution_feed_ready: bool = False
+    advisory_feed_ready: bool = False
+    reason: str = ""
+
+    @property
+    def subscribed_symbols(self) -> int:
+        return self.subscribed_tokens_count
 
     @property
     def is_order_action(self) -> bool:
@@ -209,6 +224,8 @@ class FeedSupervisorSnapshot:
         payload["blockers"] = list(self.blockers)
         payload["verified_option_symbols"] = list(self.verified_option_symbols)
         payload["missing_option_symbols"] = list(self.missing_option_symbols)
+        payload["missing_critical_symbols"] = list(self.missing_critical_symbols)
+        payload["subscribed_symbols"] = self.subscribed_symbols
         _mark_non_action(payload)
         payload["allowed_for_live_execution"] = False
         return payload
@@ -439,6 +456,60 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
     if state == "CANDIDATE_READY" and blockers:
         blockers = []
 
+    last_underlying_tick_age_seconds = _as_float(source.get("latest_ltp_age_sec"))
+    last_option_tick_age_seconds = _as_float(source.get("latest_option_tick_age_sec"))
+    last_depth_age_seconds = _as_float(source.get("latest_depth_age_sec"))
+
+    feed_state = "DISCONNECTED"
+    if ws_connected:
+        if not option_ticks_verified and not underlying_tick_fresh:
+            feed_state = "CONNECTED_NO_TICKS"
+        elif not option_ticks_verified:
+            feed_state = "UNDERLYING_TICKS_FLOWING"
+        elif not depth_fresh:
+            feed_state = "OPTION_TICKS_FLOWING"
+        else:
+            feed_state = "FULL_FEED_READY"
+    
+    if recovery_in_progress:
+        feed_state = "RECOVERING"
+    
+    # execution_feed_ready requirements
+    # 1. market session NORMAL_OPEN (market_open)
+    # 2. WebSocket connected
+    # 3. underlying ticks fresh
+    # 4. option ticks fresh
+    # 5. bid/ask fresh for required option contracts (not explicitly in snapshot, but depth_fresh is proxy)
+    # 6. no fallback quote truth for executable candidates (handled in pipeline)
+    # 7. missing critical symbols should be empty
+    missing_critical_symbols = tuple(
+        sorted(
+            {str(symbol).strip().upper() for symbol in list(source.get("missing_critical_symbols") or []) if str(symbol).strip()}
+        )
+    )
+    
+    execution_feed_ready = (
+        ws_connected
+        and market_open
+        and underlying_tick_fresh
+        and option_ticks_verified
+        and depth_fresh
+        and not recovery_in_progress
+        and not recovery_blocked
+        and not missing_critical_symbols
+        and state == "CANDIDATE_READY"
+        and feed_state == "FULL_FEED_READY"
+    )
+    advisory_feed_ready = ws_connected and underlying_tick_fresh
+
+    if not execution_feed_ready and ws_connected and underlying_tick_fresh:
+        if not depth_fresh:
+            feed_state = "DEGRADED_LTP_ONLY"
+        else:
+            feed_state = "DEGRADED_STALE"
+
+    reason = reason_code
+
     return FeedSupervisorSnapshot(
         state=state,
         reason_code=reason_code,
@@ -466,6 +537,15 @@ def build_feed_supervisor_snapshot(payload: Mapping[str, Any] | None) -> FeedSup
         last_subscription_generation_id=last_subscription_generation_id,
         verified_option_symbols=verified_option_symbols,
         missing_option_symbols=missing_option_symbols,
+        active_symbols=subscribed_tokens_count,
+        missing_critical_symbols=missing_critical_symbols,
+        last_underlying_tick_age_seconds=last_underlying_tick_age_seconds,
+        last_option_tick_age_seconds=last_option_tick_age_seconds,
+        last_depth_age_seconds=last_depth_age_seconds,
+        feed_state=feed_state,
+        execution_feed_ready=execution_feed_ready,
+        advisory_feed_ready=advisory_feed_ready,
+        reason=reason,
     )
 
 

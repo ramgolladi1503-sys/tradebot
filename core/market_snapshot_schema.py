@@ -54,6 +54,22 @@ def _default_feed_health() -> dict[str, Any]:
     }
 
 
+def _default_quote_truth() -> dict[str, Any]:
+    return {
+        "symbol": None,
+        "ltp": None,
+        "bid": None,
+        "ask": None,
+        "spread": None,
+        "last_tick_ts": None,
+        "tick_age_seconds": None,
+        "quote_truth": None,
+        "is_fresh": False,
+        "is_executable_quote": False,
+        "source": None,
+    }
+
+
 def build_symbol_snapshot_defaults() -> dict[str, Any]:
     return {
         "spot": None,
@@ -64,6 +80,7 @@ def build_symbol_snapshot_defaults() -> dict[str, Any]:
         "cross_asset": _default_cross_asset(),
         "option_chain_summary": _default_option_chain_summary(),
         "feed_health": _default_feed_health(),
+        "quote_truth": _default_quote_truth(),
     }
 
 
@@ -143,6 +160,7 @@ def validate_market_snapshot(snapshot: dict) -> tuple[bool, list[str]]:
         "cross_asset": _default_cross_asset,
         "option_chain_summary": _default_option_chain_summary,
         "feed_health": _default_feed_health,
+        "quote_truth": _default_quote_truth,
     }
     for symbol, payload in list(symbols.items()):
         if str(symbol or "").strip() == "":
@@ -178,7 +196,7 @@ def normalize_symbol_snapshot(payload: dict[str, Any] | None) -> dict[str, Any]:
     for key in ("spot", "ltp", "change_pct"):
         if key in payload:
             out[key] = payload.get(key)
-    for section_name in ("ohlc", "regime", "cross_asset", "option_chain_summary", "feed_health"):
+    for section_name in ("ohlc", "regime", "cross_asset", "option_chain_summary", "feed_health", "quote_truth"):
         section = payload.get(section_name)
         if not isinstance(section, dict):
             continue

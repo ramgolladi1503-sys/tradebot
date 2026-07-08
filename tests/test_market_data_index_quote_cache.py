@@ -408,6 +408,8 @@ def test_fetch_live_market_data_marks_depth_only_quote_source_degraded(monkeypat
     monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "PAPER", raising=False)
     monkeypatch.setattr(md.cfg, "REQUIRE_LIVE_QUOTES", True, raising=False)
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     monkeypatch.setattr(md, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
     monkeypatch.setattr(md, "_NEWS_CAL", _DummyNewsCal(), raising=False)
     monkeypatch.setattr(md, "_NEWS_TEXT", _DummyNewsText(), raising=False)
