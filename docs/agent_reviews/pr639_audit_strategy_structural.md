@@ -1,33 +1,46 @@
-# Agent Work Contract: PR 639 - Structural Audits for Opening Drive and Mean Reversion
+# PR 639 Agent Review
 
-## 1. Scope Guard
-**Allowed Paths:** `tests/test_mean_reversion_vertical_slice.py`, `tests/test_orchestrator_depth_ws_startup.py`
-**Forbidden Paths:** Any `core/` files, live execution logic, etc.
-**Goal:** Implement structural audits for Opening Drive and Mean Reversion and fix related CI failures.
+## Agent Work Contract
+- Source agent: GSD
+- Action: fix tests and resolve conflicts
+- Title: Implement structural audits for Opening Drive and Mean Reversion
+- Scope: structural audits tests, fixing CI failure, and resolving conflicts with main
+- Requested paths: tests/test_mean_reversion_vertical_slice.py, tests/test_orchestrator_depth_ws_startup.py
+- Allowed paths: test files, docs/agent_reviews/pr639_audit_strategy_structural.md
+- Forbidden paths: core/ execution, risk, and runtime files
+- Expected tests: pytest runs successfully on the modified test files
+- Acceptance proof: CI green and local pytest passing
 
-## 2. Grill Me
-Risk is extremely low as this only adds and modifies test code in `tests/`. No live execution paths are modified.
+## Scope Guard
+- This PR is strictly test-only and structural audits.
+- It does not place orders, call broker APIs, or weaken execution or freshness gates.
+- It does not touch runtime execution artifacts.
 
-## 3. Hermes
-The design strictly follows the testing patterns established in the repository. We use standard pytest assertions to prove the behavior of structural audits for mean reversion.
+## Grill Me Review
+- The failing test in `test_orchestrator_depth_ws_startup.py` was failing to raise the expected `RuntimeError("boom")` because `core.auth.get_kite_credentials()` crashed first in the CI environment.
+- The risk of this change is zero, as we are simply mocking `get_kite_credentials` for the scope of the test.
 
-## 4. GSD
-- Fixed `tests/test_orchestrator_depth_ws_startup.py` failure.
-- Resolved merge conflicts by cleanly incorporating `origin/main`'s versions.
+## Hermes Review
+- The architectural flow is intact.
+- The mock safely ensures that the test exercises the depth websocket connection fallback logic rather than the auth module.
 
-## 5. QA/Safety
-- All tests pass locally using `pytest`.
-- No `core/` files were mutated.
-- The `RuntimeError("boom")` in `test_start_depth_ws_or_raise_fail_closed` is now correctly raised by mocking credentials checking.
+## GSD Review
+- Fixed the CI failure by properly mocking auth in the tests.
+- Resolved merge conflicts by bringing `origin/main`'s versions for conflicted test files to maintain consistency.
 
-## 6. Acceptance Proof
-Pytest results show 100% pass rate on the touched test files.
+## QA / Safety Review
+- All tests pass locally.
+- No `core/` files were mutated during this fix phase.
+- The `RuntimeError` fallback condition is now properly tested in `test_start_depth_ws_or_raise_fail_closed`.
 
-## 7. Runtime Proof Required After Merge
-None. This is test-only.
+## Acceptance Proof
+- Pytest results show a 100% pass rate.
 
-## 8. What This PR Does Not Prove
-This PR does not prove profitability or runtime safety of the strategies themselves. It only proves structural consistency of the candidates.
+## Runtime Proof Required After Merge
+- None, this is a test and structural audit PR.
 
-## 9. Human Approval
-Explicitly requested by user.
+## What This PR Does Not Prove
+- This PR does not prove profitability or runtime safety of the Opening Drive and Mean Reversion strategies. It only proves structural consistency of the candidates.
+
+## Human Approval
+- Explicitly requested by user.
