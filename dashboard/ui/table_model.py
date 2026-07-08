@@ -37,7 +37,7 @@ direction_family family_rank family_blocker family_strength family_allowed_in_co
 family_gate_override_applied fallback_candidate fresh_quote_ok liquidity_ok spread_ok primary_blocker selector_outcome
 selection_probability simulation_outcome simulation_fill_status mfe mae simulated_pnl realized_r_multiple
 stop_hit_before_target risk_plan_respected readiness execution_status entry_status entry_source execution_entry_status
-display_entry_status execution_entry_source display_entry_source hard_blockers soft_penalties warnings trade_key tradingsymbol
+display_entry_status execution_entry_source display_entry_source hard_blockers soft_penalties warnings trade_key tradingsymbol advisory_only
 """.split()
 
 NUMERIC_COLUMNS = """

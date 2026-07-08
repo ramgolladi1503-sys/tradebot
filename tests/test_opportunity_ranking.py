@@ -71,14 +71,14 @@ def test_rank_opportunities_output_shape():
     assert "TOP_OPPORTUNITIES" in result
     assert "ALL_CANDIDATES_DEBUG" in result
     
-    # c3 failed cost hurdle, so rank is 0, shouldn't be in top opportunities
+    # c2 is fallback so rank is 0, c3 failed cost hurdle so rank is 0. Only c1 should be in top opportunities.
     _len = len(result["TOP_OPPORTUNITIES"])
-    assert _len == 2
+    assert _len == 1
     _len = len(result["ALL_CANDIDATES_DEBUG"])
     assert _len == 3
     
     # c2 must have advisory_only == True in output shape
-    banknifty_top = next(x for x in result["TOP_OPPORTUNITIES"] if x["symbol"] == "BANKNIFTY")
+    banknifty_top = next(x for x in result["ALL_CANDIDATES_DEBUG"] if x["symbol"] == "BANKNIFTY")
     assert banknifty_top["advisory_only"] is True
 
     nifty_top = next(x for x in result["TOP_OPPORTUNITIES"] if x["symbol"] == "NIFTY")

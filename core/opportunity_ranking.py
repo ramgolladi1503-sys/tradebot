@@ -26,7 +26,7 @@ class CandidateOpportunity:
 
         # Compute rank score based on provided inputs
         # This is a read-only mathematical representation of execution readiness
-        if not self.cost_hurdle_passed:
+        if not self.cost_hurdle_passed or self.advisory_only:
             self.final_rank_score = 0.0
         else:
             self.final_rank_score = (

@@ -1,0 +1,26 @@
+{
+  "schema_summary": {
+    "ts": "float64",
+    "token": "object",
+    "symbol": "object",
+    "ltp": "float64",
+    "bid": "float64",
+    "ask": "float64",
+    "vol": "int64",
+    "oi": "float64"
+  },
+  "quote_truth_counts": {
+    "total_processed": 96871,
+    "live_ticks": 32290,
+    "fallback_ticks": 32291,
+    "missing_bid_ask": 32290
+  },
+  "candidate_contract_counts": {
+    "total_candidates_simulated": 96871,
+    "executable_count": 0,
+    "blocked_count": 96871
+  },
+  "spike_windows": [],
+  "executable_fallback_violations": 0,
+  "final_verdict": "FEED_TRUTH_CERTIFICATION_PARTIAL"
+}

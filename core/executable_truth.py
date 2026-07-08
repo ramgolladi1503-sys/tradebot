@@ -13,6 +13,7 @@ from core.quote_truth import (
     QUOTE_STALE_REASON,
     classify_quote_truth,
 )
+from core.feed.candidate_feed_truth import classify_candidate_feed_truth
 from core.strategy_signal_quality import classify_strategy_signal_quality
 from core.symbol_execution_safety import (
     classify_symbol_execution_safety,
@@ -352,6 +353,13 @@ def classify_executable_truth(
         _append_unique(reasons, spread_truth.reason_code)
         for spread_reason in spread_truth.reasons:
             _append_unique(reasons, spread_reason)
+
+    feed_truth = classify_candidate_feed_truth(candidate)
+    context["candidate_feed_truth"] = dict(feed_truth.context or {})
+    if not feed_truth.executable_feed_ready:
+        _append_unique(reasons, feed_truth.reason_code)
+        for feed_reason in feed_truth.reasons:
+            _append_unique(reasons, feed_reason)
 
     if has_symbol_execution_safety_evidence(candidate):
         symbol_safety = classify_symbol_execution_safety(candidate)

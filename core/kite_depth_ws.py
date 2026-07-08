@@ -90,6 +90,14 @@ _LAST_TOKENS = []
 _PENDING_SUBSCRIBE_TOKENS = set()
 _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
+
+def get_pending_subscribe_tokens() -> set[int]:
+    global _PENDING_SUBSCRIBE_TOKENS
+    return set(_PENDING_SUBSCRIBE_TOKENS)
+
+def get_pending_mode_full_tokens() -> set[int]:
+    global _PENDING_MODE_FULL_TOKENS
+    return set(_PENDING_MODE_FULL_TOKENS)
 _LAST_MUTATION_RESULT = None
 
 _LAST_DESIRED_TOKENS: list[int] | None = None

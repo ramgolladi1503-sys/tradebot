@@ -24,6 +24,7 @@ def adapt_candidate_rank_record_to_ui(record: dict) -> dict:
         "score_eligibility": record.get("score_eligibility"),
         "final_score": record.get("final_score"),
         "executable_candidate": record.get("executable_candidate"),
+        "advisory_only": not record.get("executable_candidate", False) or "fallback_used" in (record.get("safety_flags") or []),
         "rank_reason": record.get("rank_reason"),
         "blockers": list(record.get("blockers") or []),
         "warnings": list(record.get("warnings") or []),
