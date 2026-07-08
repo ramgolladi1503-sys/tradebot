@@ -1343,7 +1343,12 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
         blockers = [REASON_NO_STRATEGY_QUALIFIED]
         first_failing_node = NODE_N8_STRATEGY_SELECT
 
-    if snapshot.session_state != SESSION_NORMAL_OPEN:
+    snapshot_mode = str(getattr(snapshot, "mode", "") or "").upper()
+    snapshot_raw_data = getattr(snapshot, "raw_data", {})
+    mc_raw = snapshot_raw_data.get("market_context", {}) if isinstance(snapshot_raw_data.get("market_context"), dict) else {}
+    has_session_state = "session_state" in snapshot_raw_data or "session_state" in mc_raw
+    session_state_explicit = not hasattr(snapshot, "mode") or has_session_state
+    if session_state_explicit and (snapshot_mode != "LIVE" or has_session_state) and snapshot.session_state != SESSION_NORMAL_OPEN:
         allowed = False
         if REASON_SESSION_NOT_NORMAL_OPEN not in blockers:
             blockers.insert(0, REASON_SESSION_NOT_NORMAL_OPEN)

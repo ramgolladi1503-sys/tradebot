@@ -153,5 +153,6 @@ def test_main_initialization(monkeypatch):
 
     tick_data_collector.main()
 
-    assert len(connect_called) == 1
+    _len = len(connect_called)
+    assert _len == 1
     assert connect_called[0] is False

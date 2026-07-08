@@ -45,5 +45,6 @@ def test_validate_next_day_capture_contract(tmp_path, monkeypatch):
     assert data["classification"] == "NEXT_DAY_CAPTURE_CONTRACT_VALID"
     assert data["data_available"] is True
     assert data["certification_replay_allowed"] is True
-    assert len(data["blockers"]) == 0
+    _len = len(data["blockers"])
+    assert _len == 0
     assert data["execution_allowed"] is False

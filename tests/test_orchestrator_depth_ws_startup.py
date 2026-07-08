@@ -10,6 +10,8 @@ from config import config as cfg
 
 def test_start_depth_ws_or_raise_fail_closed(monkeypatch):
     import core.orchestrator as orchestrator_mod
+    import core.auth as auth_mod
+    monkeypatch.setattr(auth_mod, "get_kite_credentials", lambda: ("api_key", "access_token", "enctoken"))
 
     class _Dummy:
         def _start_depth_ws(self):
@@ -30,6 +32,8 @@ def test_start_depth_ws_or_raise_fail_closed(monkeypatch):
 
 def test_start_depth_ws_or_raise_fail_open(monkeypatch):
     import core.orchestrator as orchestrator_mod
+    import core.auth as auth_mod
+    monkeypatch.setattr(auth_mod, "get_kite_credentials", lambda: ("api_key", "access_token", "enctoken"))
 
     class _Dummy:
         def _start_depth_ws(self):
@@ -49,6 +53,8 @@ def test_start_depth_ws_or_raise_fail_open(monkeypatch):
 
 def test_start_depth_ws_or_raise_recoverable_network_error_degrades(monkeypatch):
     import core.orchestrator as orchestrator_mod
+    import core.auth as auth_mod
+    monkeypatch.setattr(auth_mod, "get_kite_credentials", lambda: ("api_key", "access_token", "enctoken"))
 
     class _Dummy:
         def _start_depth_ws(self):

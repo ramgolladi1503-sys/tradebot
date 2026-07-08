@@ -54,7 +54,9 @@ def test_get_token_for_symbol_resolves_index_aliases(monkeypatch):
     assert md.get_token_for_symbol("SENSEX") == 265
 
 
-def test_index_quote_cache_stores_bid_ask_mid_ts_source():
+def test_index_quote_cache_stores_bid_ask_mid_ts_source(monkeypatch):
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     md._DATA_CACHE.clear()
     md.update_index_quote_snapshot(
         symbol="NIFTY",
@@ -214,11 +216,14 @@ def test_resolve_index_quote_depth_present_prefers_live_tick_source_detail():
 
 
 def test_get_ltp_index_uses_exchange_qualified_mapping(monkeypatch, tmp_path):
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(md.cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(md.cfg, "DRY_RUN", False, raising=False)
     md._DATA_CACHE.clear()
+    monkeypatch.setattr(md, "get_index_quote_snapshot", lambda symbol: {})
     md._LAST_GOOD_LTP.clear()
     md._INDEX_QUOTE_REQUEST_LOG_TS.clear()
     monkeypatch.setattr(md.cfg, "KITE_USE_API", True, raising=False)
@@ -261,6 +266,8 @@ def test_get_ltp_index_uses_exchange_qualified_mapping(monkeypatch, tmp_path):
 
 
 def test_update_index_quote_snapshot_latest_ltp_used(monkeypatch):
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     md._DATA_CACHE.clear()
     md._LAST_GOOD_LTP.clear()
     monkeypatch.setattr(md.cfg, "KITE_USE_API", False, raising=False)
@@ -312,6 +319,8 @@ def test_index_bidask_missing_log_rate_limited(monkeypatch, tmp_path):
 
 
 def test_refresh_index_quote_from_rest_populates_bid_ask(monkeypatch):
+    monkeypatch.setattr(md.cfg, "DEPTH_WS_USE_SUBPROCESS", False, raising=False)
+    monkeypatch.setattr(md.cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     md._DATA_CACHE.clear()
     md._INDEX_REST_QUOTE_REFRESH_TS.clear()
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
