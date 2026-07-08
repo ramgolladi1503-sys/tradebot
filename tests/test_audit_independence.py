@@ -34,7 +34,7 @@ def test_shifted_timestamps_time_window_mismatch():
     
     t_ref, t_tb, aligned, m_ref, m_tb, rm, rmm, rmr, sm, smm, smr, mismatches = align_and_compare(ref_records, tb_records)
     assert aligned == 0
-    verdict = evaluate_verdict(aligned, None, len(tb_records), "none", rmr)
+    verdict = evaluate_verdict(aligned, None, 1, "none", rmr)
     assert verdict == "TIME_WINDOW_MISMATCH"
 
 def test_missing_ohlc_columns():
