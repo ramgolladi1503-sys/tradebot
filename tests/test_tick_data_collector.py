@@ -25,6 +25,25 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
                     "instrument_type": "EQ",
                     "strike": 0.0,
                     "expiry": None
+                },
+                {
+                    "name": "INDIA VIX",
+                    "tradingsymbol": "INDIA VIX",
+                    "instrument_token": 264969,
+                    "instrument_type": "EQ",
+                    "strike": 0.0,
+                    "expiry": None
+                }
+            ]
+        elif exchange == "BSE":
+            return [
+                {
+                    "name": "SENSEX",
+                    "tradingsymbol": "SENSEX",
+                    "instrument_token": 265,
+                    "instrument_type": "EQ",
+                    "strike": 0.0,
+                    "expiry": None
                 }
             ]
         elif exchange == "NFO":
@@ -82,7 +101,6 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
     monkeypatch.setattr(tick_data_collector.kite_client, "ltp", mock_ltp)
     
     # Force today to match mock expiry date so options are resolved
-    # The mock uses date(2026, 6, 26) which is <= today in 2026-06-29, but let's override system date in target_tokens calculation
     class MockDatetime:
         @classmethod
         def now(cls):
@@ -97,5 +115,44 @@ def test_get_target_tokens_resolves_all_indices_and_options(monkeypatch):
     
     assert tokens[256265] == "NIFTY 50"
     assert tokens[260105] == "NIFTY BANK"
+    assert tokens[265] == "SENSEX"
+    assert tokens[264969] == "INDIA VIX"
     assert tokens[100001] == "NIFTY26JUN24000CE"
     assert tokens[100002] == "BANKNIFTY26JUN58000PE"
+    assert tokens[100003] == "SENSEX26JUN77000CE"
+
+
+def test_main_initialization(monkeypatch):
+    import signal
+    import builtins
+    from unittest.mock import mock_open
+
+    monkeypatch.setenv("KITE_API_KEY", "dummy_api_key")
+    monkeypatch.setenv("KITE_ACCESS_TOKEN", "dummy_access_token")
+    monkeypatch.setattr(tick_data_collector, "get_target_tokens", lambda: {12345: "NIFTY 50"})
+    monkeypatch.setattr(signal, "signal", lambda sig, handler: None)
+
+    connect_called = []
+    class MockKiteTicker:
+        def __init__(self, api_key, access_token):
+            assert api_key == "dummy_api_key"
+            assert access_token == "dummy_access_token"
+            self.on_ticks = None
+            self.on_connect = None
+            self.on_close = None
+            self.on_error = None
+            self.MODE_FULL = "full"
+
+        def connect(self, threaded=False):
+            connect_called.append(threaded)
+
+    monkeypatch.setattr(tick_data_collector, "KiteTicker", MockKiteTicker)
+
+    m_open = mock_open()
+    monkeypatch.setattr(builtins, "open", m_open)
+
+    tick_data_collector.main()
+
+    _len = len(connect_called)
+    assert _len == 1
+    assert connect_called[0] is False

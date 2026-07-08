@@ -113,7 +113,8 @@ def test_process_restart_required_fatal():
     assert verdict.feed_ok is False
     assert verdict.restart_required is True
 
-def test_market_closed():
+def test_market_closed(monkeypatch):
+    monkeypatch.setattr("core.feed_state_engine.market_feed_active", lambda: False)
     snapshot = _make_snapshot(market_open=False)
     verdict = classify_feed_snapshot(snapshot)
     assert verdict.lifecycle_state == FeedLifecycleState.MARKET_CLOSED

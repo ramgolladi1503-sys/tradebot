@@ -356,7 +356,8 @@ def _build_and_write_canonical_ranked_snapshot(market_payload: dict, producer: s
             ctx_data = dict(data)
             ctx_data["symbol"] = sym
             ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
-            ctx = StrategyContext(**ctx_data)
+            from core.movement_contract import context_from_dict
+            ctx = context_from_dict(ctx_data)
 
             report = build_ranked_opportunity_report(ctx=ctx)
             reports.append(report.to_dict())
@@ -409,7 +410,7 @@ def _build_and_write_canonical_ranked_snapshot(market_payload: dict, producer: s
         "reports": reports,
         "source": "ranked_opportunity_pipeline_v1"
     }
-    write_ranked_pipeline_snapshot(payload)
+    write_ranked_pipeline_snapshot(payload=payload, producer="orchestrator")
 
     # Ranked vs Legacy Comparison Evidence (Point 4)
     legacy_rows = advisory_payload.get("rows", [])

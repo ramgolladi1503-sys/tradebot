@@ -1345,8 +1345,10 @@ def _node_final_decision(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps:
 
     snapshot_mode = str(getattr(snapshot, "mode", "") or "").upper()
     snapshot_raw_data = getattr(snapshot, "raw_data", {})
-    session_state_explicit = not hasattr(snapshot, "mode") or ("session_state" in snapshot_raw_data)
-    if session_state_explicit and (snapshot_mode != "LIVE" or "session_state" in snapshot_raw_data) and snapshot.session_state != SESSION_NORMAL_OPEN:
+    mc_raw = snapshot_raw_data.get("market_context", {}) if isinstance(snapshot_raw_data.get("market_context"), dict) else {}
+    has_session_state = "session_state" in snapshot_raw_data or "session_state" in mc_raw
+    session_state_explicit = not hasattr(snapshot, "mode") or has_session_state
+    if session_state_explicit and (snapshot_mode != "LIVE" or has_session_state) and snapshot.session_state != SESSION_NORMAL_OPEN:
         allowed = False
         if REASON_SESSION_NOT_NORMAL_OPEN not in blockers:
             blockers.insert(0, REASON_SESSION_NOT_NORMAL_OPEN)

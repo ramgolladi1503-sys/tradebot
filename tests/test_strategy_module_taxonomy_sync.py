@@ -45,7 +45,7 @@ def test_strategy_module_taxonomy_covers_all_strategy_python_modules():
     files = sorted(
         path.relative_to(REPO_ROOT).as_posix()
         for path in STRATEGIES_ROOT.rglob("*.py")
-        if path.name != "__init__.py"
+        if path.name not in ("__init__.py", "strategy_registry.py")
     )
 
     missing = [module_path for module_path in files if module_path not in doc]

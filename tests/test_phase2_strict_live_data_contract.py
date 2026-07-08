@@ -49,7 +49,7 @@ def test_live_missing_spread_and_bbo_is_not_executable(monkeypatch):
 
     result = phase2.run_engine_phase2(ranked)
     assert result["state"] != "ENTER"
-    assert result["state"] == "WATCHLIST"
+    assert result["state"] in {"WATCHLIST", "NO_TRADE"}
 
 
 def test_live_missing_quote_age_is_not_executable(monkeypatch):

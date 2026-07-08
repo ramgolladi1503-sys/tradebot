@@ -1863,8 +1863,13 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         return False
     try:
         if to_subscribe:
-            ws.subscribe(to_subscribe)
-            ws.set_mode(ws.MODE_FULL, to_subscribe)
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(ws.subscribe, to_subscribe)
+                reactor.callFromThread(ws.set_mode, ws.MODE_FULL, to_subscribe)
+            except ImportError:
+                ws.subscribe(to_subscribe)
+                ws.set_mode(ws.MODE_FULL, to_subscribe)
     except Exception as exc:
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
         _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
@@ -1882,7 +1887,11 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
     if to_unsubscribe:
         try:
             if hasattr(ws, "unsubscribe"):
-                ws.unsubscribe(to_unsubscribe)
+                try:
+                    from twisted.internet import reactor
+                    reactor.callFromThread(ws.unsubscribe, to_unsubscribe)
+                except ImportError:
+                    ws.unsubscribe(to_unsubscribe)
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
             _LAST_RUNTIME_ERROR = f"unsubscribe_delta:{exc}"[:1000]
@@ -2834,7 +2843,20 @@ def _option_runtime_state(
         active_codes = [str(record.code) for record in active_records]
         active_blockers_by_symbol[symbol] = active_codes
         blocker_records_by_symbol[symbol] = [record.to_payload() for record in active_records]
-        feed_block_reason_by_symbol[symbol] = top_active_code(active_records) or "OK"
+        top_code = top_active_code(active_records)
+        if top_code:
+            feed_block_reason_by_symbol[symbol] = top_code
+        elif age_sec is None or float(age_sec) > float(option_sla_sec):
+            feed_block_reason_by_symbol[symbol] = "NO_LIVE_OPTION_FEED"
+            if "NO_LIVE_OPTION_FEED" not in active_blockers_by_symbol[symbol]:
+                active_blockers_by_symbol[symbol].append("NO_LIVE_OPTION_FEED")
+        else:
+            feed_block_reason_by_symbol[symbol] = "OK"
+        if age_sec is not None and float(age_sec) > float(option_sla_sec):
+            if "STALE_OPTION_LTP" not in active_blockers_by_symbol[symbol]:
+                active_blockers_by_symbol[symbol].append("STALE_OPTION_LTP")
+            if feed_block_reason_by_symbol[symbol] == "OK":
+                feed_block_reason_by_symbol[symbol] = "STALE_OPTION_LTP"
     registry.prune_invalid_owners(now_ts=float(now_epoch), scope="feed_symbol", valid_owner_keys=valid_owner_keys)
     registry.expire_stale(float(now_epoch), scope="feed_symbol")
     return {
@@ -3181,6 +3203,15 @@ def _persist_runtime_snapshot_row(
         min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
         ws_connected=ws_connected,
     )
+    option_feed_block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
+    option_active_blockers_by_symbol = dict(option_state.get("active_blockers_by_symbol") or {})
+    if effective_state_text == "RECOVERY_BLOCKED" or normalized_blocked_reason == "ws1006_process_restart_required":
+        for symbol in list(option_feed_block_reason_by_symbol.keys()):
+            option_feed_block_reason_by_symbol[symbol] = "NO_LIVE_OPTION_FEED"
+            blockers = list(option_active_blockers_by_symbol.get(symbol) or [])
+            if "NO_LIVE_OPTION_FEED" not in blockers:
+                blockers.insert(0, "NO_LIVE_OPTION_FEED")
+            option_active_blockers_by_symbol[symbol] = blockers
     restart_verify = _restart_verify_overlay_payload()
     disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
     disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
@@ -3210,8 +3241,8 @@ def _persist_runtime_snapshot_row(
         "option_tokens_subscribed_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
         "option_ticks_received_count_by_symbol": dict(option_state.get("ticks_received_count_by_symbol") or {}),
         "last_option_tick_ts_by_symbol": dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        "option_feed_block_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
-        "option_active_blockers_by_symbol": dict(option_state.get("active_blockers_by_symbol") or {}),
+        "option_feed_block_reason_by_symbol": option_feed_block_reason_by_symbol,
+        "option_active_blockers_by_symbol": option_active_blockers_by_symbol,
         "market_open": market_open,
         "last_ws_tick_epoch": last_ws_tick_epoch,
         "last_tick_age_sec": last_tick_age_sec,
@@ -3312,8 +3343,8 @@ def _persist_runtime_snapshot_row(
         option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
         last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        option_feed_block_reason_by_symbol=dict(option_state.get("feed_block_reason_by_symbol") or {}),
-        option_active_blockers_by_symbol=dict(option_state.get("active_blockers_by_symbol") or {}),
+        option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
+        option_active_blockers_by_symbol=option_active_blockers_by_symbol,
         restart_count_1h=_restart_count_1h(ts_epoch),
         stale_strikes=_STALE_STRIKES,
         runtime_state=effective_state_text,

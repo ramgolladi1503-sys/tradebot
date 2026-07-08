@@ -90,3 +90,9 @@ build/
 runtime/live_observation/
 runtime/feed_soak/
 runtime/analytics/
+
+# Upstox Replay Data
+runtime/upstox_candidate_replay/
+runtime/strategy_validation/*.json
+runtime/strategy_validation/*.md
+*.parquet

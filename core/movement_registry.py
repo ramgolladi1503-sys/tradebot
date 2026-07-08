@@ -124,7 +124,8 @@ class MovementStrategyRegistry:
         regime: MovementRegimeResult | None = None,
         fail_fast: bool = False,
     ) -> MovementStrategyRunResult:
-        ctx = context if isinstance(context, StrategyContext) else StrategyContext(**context)
+        from core.movement_contract import context_from_dict
+        ctx = context if isinstance(context, StrategyContext) else context_from_dict(context)
         regime_result = regime or classify_movement_regime(ctx)
         candidates: list[StrategyCandidate] = []
         activated: list[str] = []

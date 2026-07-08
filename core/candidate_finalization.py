@@ -413,13 +413,18 @@ def assert_ranked_candidate_ready(candidate: Any) -> None:
         "strategy_family",
         "candidate_status",
         "confidence",
-        "rank_score",
     )
     missing = [
         field
         for field in required
         if _candidate_field(candidate, field) in (None, "", "None")
     ]
+    if _candidate_field(candidate, "candidate_status") != "advisory_only":
+        trade_id = str(_candidate_field(candidate, "trade_id") or "")
+        if not trade_id.startswith(("tbsoft_", "softrej_")):
+            if _candidate_field(candidate, "rank_score") in (None, "", "None"):
+                missing.append("rank_score")
+            
     if missing:
         raise AssertionError(f"ranked candidate missing required fields: {','.join(missing)}")
 

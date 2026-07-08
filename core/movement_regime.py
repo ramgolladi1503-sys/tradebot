@@ -152,7 +152,8 @@ class MovementRegimeClassifier:
 
     def classify(self, ctx: StrategyContext | dict[str, Any]) -> MovementRegimeResult:
         if isinstance(ctx, dict):
-            ctx = StrategyContext(**ctx)
+            from core.movement_contract import context_from_dict
+            ctx = context_from_dict(ctx)
         if not isinstance(ctx, StrategyContext):
             raise MovementContractError("movement_regime_context_invalid")
 

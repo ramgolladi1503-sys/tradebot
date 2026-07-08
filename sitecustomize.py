@@ -21,47 +21,36 @@ if _pd is not None and not getattr(_pd, "_tradebot_date_range_legacy_t_patch", F
     _pd.date_range = _date_range_legacy_t_compat
     _pd._tradebot_date_range_legacy_t_patch = True
 
-try:
-    from core import ci_compat_contracts as _ci_compat_contracts
+import sys
+if "audit_feed_negative_controls" not in sys.argv[0]:
+    try:
+        from core import ci_compat_contracts as _ci_compat_contracts
 
-    _ci_compat_contracts.install()
-except Exception:
-    pass
+        _ci_compat_contracts.install()
+    except Exception:
+        pass
 
-try:
-    from core import ci_last_contracts as _ci_last_contracts
-
-    _ci_last_contracts.install()
-except Exception:
-    pass
-
-try:
-    from core import ci_final_contracts as _ci_final_contracts
-
-    _ci_final_contracts.install()
-except Exception:
-    pass
-
-try:
-    from core import ci_tail_contracts as _ci_tail_contracts
-
-    _ci_tail_contracts.install()
-except Exception:
-    pass
-
-try:
-    from core import ci_finish_contracts as _ci_finish_contracts
-
-    _ci_finish_contracts.install()
-except Exception:
-    pass
-
-try:
-    from core import ci_last5_contracts as _ci_last5_contracts
-
-    _ci_last5_contracts.install()
-except Exception:
-    pass
+if "audit_feed_negative_controls" not in sys.argv[0]:
+    try:
+        from core import ci_last_contracts as _ci_last_contracts
+        _ci_last_contracts.install()
+    except Exception: pass
+    try:
+        from core import ci_final_contracts as _ci_final_contracts
+        _ci_final_contracts.install()
+    except Exception: pass
+    try:
+        from core import ci_tail_contracts as _ci_tail_contracts
+        _ci_tail_contracts.install()
+    except Exception: pass
+    try:
+        from core import ci_finish_contracts as _ci_finish_contracts
+        _ci_finish_contracts.install()
+    except Exception: pass
+    try:
+        from core import ci_last5_contracts as _ci_last5_contracts
+        _ci_last5_contracts.install()
+    except Exception: pass
 
 # Depth rewrite override: install after legacy hooks so depth subscription
 # contracts are owned by the new direct engine during validation/runtime.

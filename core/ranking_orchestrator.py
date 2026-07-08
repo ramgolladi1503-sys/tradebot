@@ -83,6 +83,14 @@ class RankedOpportunityPipelineReport:
     advisory_rank_count: int
     suppressed_rank_count: int
     no_trade_rank_count: int
+    total_candidates: int
+    rankable_candidates: int
+    feed_blocked_candidates: int
+    fallback_blocked_candidates: int
+    stale_blocked_candidates: int
+    real_bid_ask_candidates: int
+    mocked_from_ltp_candidates: int
+    executable_fallback_violations: int
     blockers: tuple[str, ...]
     warnings: tuple[str, ...]
     safety_flags: tuple[str, ...]
@@ -117,6 +125,14 @@ class RankedOpportunityPipelineReport:
             "advisory_rank_count": self.advisory_rank_count,
             "suppressed_rank_count": self.suppressed_rank_count,
             "no_trade_rank_count": self.no_trade_rank_count,
+            "total_candidates": self.total_candidates,
+            "rankable_candidates": self.rankable_candidates,
+            "feed_blocked_candidates": self.feed_blocked_candidates,
+            "fallback_blocked_candidates": self.fallback_blocked_candidates,
+            "stale_blocked_candidates": self.stale_blocked_candidates,
+            "real_bid_ask_candidates": self.real_bid_ask_candidates,
+            "mocked_from_ltp_candidates": self.mocked_from_ltp_candidates,
+            "executable_fallback_violations": self.executable_fallback_violations,
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
             "safety_flags": list(self.safety_flags),
@@ -199,6 +215,40 @@ def build_ranked_opportunity_report(
         )
     )
 
+    total_candidates = len(candidate_pool.candidates)
+    rankable_candidates = 0
+    feed_blocked_candidates = 0
+    fallback_blocked_candidates = 0
+    stale_blocked_candidates = 0
+    real_bid_ask_candidates = 0
+    mocked_from_ltp_candidates = 0
+    executable_fallback_violations = 0
+
+    for cand in candidate_pool.candidates:
+        if str(getattr(cand, "candidate_class", "")).upper() == "BLOCKED":
+            sf = getattr(cand, "source_flags", {}) or {}
+            reason = str(sf.get("blocked_reason", "")).lower()
+            if "fallback" in reason or "missing_live_bidask" in reason or "invalid_snapshot" in reason:
+                fallback_blocked_candidates += 1
+            if "stale" in reason or "time_sanity" in reason:
+                stale_blocked_candidates += 1
+            feed_blocked_candidates += 1
+            qt = sf.get("quote_truth", {}) or {}
+            if qt.get("category") == "REAL_BID_ASK":
+                real_bid_ask_candidates += 1
+            if qt.get("category") == "MOCKED_FROM_LTP":
+                mocked_from_ltp_candidates += 1
+        else:
+            rankable_candidates += 1
+            sf = getattr(cand, "source_flags", {}) or {}
+            qt = sf.get("quote_truth", {}) or {}
+            if qt.get("category") == "REAL_BID_ASK":
+                real_bid_ask_candidates += 1
+            if qt.get("category") == "MOCKED_FROM_LTP":
+                mocked_from_ltp_candidates += 1
+            if getattr(cand, "is_executable_quote", False) and qt.get("category") in ["MOCKED_FROM_LTP", "STALE_QUOTE", "MISSING_QUOTE"]:
+                executable_fallback_violations += 1
+
     return RankedOpportunityPipelineReport(
         schema_version=RANKING_ORCHESTRATOR_SCHEMA_VERSION,
         symbol=candidate_pool.symbol,
@@ -222,6 +272,14 @@ def build_ranked_opportunity_report(
         advisory_rank_count=ranking.advisory_count,
         suppressed_rank_count=ranking.suppressed_count,
         no_trade_rank_count=ranking.no_trade_count,
+        total_candidates=total_candidates,
+        rankable_candidates=rankable_candidates,
+        feed_blocked_candidates=feed_blocked_candidates,
+        fallback_blocked_candidates=fallback_blocked_candidates,
+        stale_blocked_candidates=stale_blocked_candidates,
+        real_bid_ask_candidates=real_bid_ask_candidates,
+        mocked_from_ltp_candidates=mocked_from_ltp_candidates,
+        executable_fallback_violations=executable_fallback_violations,
         blockers=blockers,
         warnings=warnings,
         safety_flags=safety_flags,

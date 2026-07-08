@@ -28,6 +28,7 @@ freshness logic, feed logic, broker wiring, or execution gates.
 | `strategies/movement/option_pressure.py` | `core/strategy_spec.py` | `MOVEMENT` option-pressure subtype | Order-flow/option-pressure contract; quote freshness and depth sensitive |
 | `strategies/movement/late_day_momentum.py` | `core/strategy_spec.py` | `MOVEMENT` momentum subtype | Session-specialized movement contract |
 | `strategies/movement/no_trade_chop.py` | `core/strategy_spec.py` | `EVENT` / no-trade guard | Defensive no-trade family; should remain read-only and non-executable |
+| `strategies/simple_orb.py` | `core/strategy_spec.py` | `MOVEMENT` opening-drive helper | Movement family entrypoint; candidate boundary before ranking |
 | `strategies/soft_signal.py` | no strategy contract owner | Support utility | Not a strategy family; signal wrapper only |
 | `strategies/movement/_utils.py` | no strategy contract owner | Support utility | Movement helper functions only |
 | `strategies/position_sizer.py` | no strategy contract owner | Support utility | Not a strategy family; sizing support only |

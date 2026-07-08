@@ -36,7 +36,7 @@ def evaluate_feed_state(payload: Dict[str, Any]) -> RecoveryState:
     if ws_state in {"CLOSED", "DISCONNECTED", "DROPPED"}:
         return RecoveryState.WS_LOSS
         
-    if rstate == "RECONNECTING" or ws_state in {"CONNECTING", "RECONNECTING"}:
+    if rstate in {"RECONNECTING", "RESTARTING"} or ws_state in {"CONNECTING", "RECONNECTING"}:
         return RecoveryState.RECONNECTING
         
     if rstate in {"HEALTHY", "RUNNING"} or (rstate == "" and ws_state in {"OPEN", "SUBSCRIBED", "CONNECTED"}):

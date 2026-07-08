@@ -535,6 +535,15 @@ def _derive_candidate_class(candidate: Any, *, metrics: dict[str, Any] | None = 
     )
     execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
     tradable = bool(_get_value(candidate, "tradable", False))
+
+    if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
+        execution_allowed = False
+        if isinstance(candidate, dict):
+            candidate["execution_allowed"] = False
+            candidate["mode"] = "advisory_only"
+        elif hasattr(candidate, "execution_allowed"):
+            setattr(candidate, "execution_allowed", False)
+            setattr(candidate, "mode", "advisory_only")
     executable_truth = bool(metrics.get("executable_truth")) if "executable_truth" in metrics else _is_executable_opportunity(candidate)
     execution_ok = True if metrics.get("execution_ok") is None else bool(metrics.get("execution_ok"))
     display_entry = _safe_float(_get_value(candidate, "display_entry"))
@@ -1742,6 +1751,15 @@ def _base_execution_truth(candidate: Any, force_block: bool = False, exception_b
     execution_entry_status = str(_get_value(candidate, "execution_entry_status") or "").strip().lower()
     execution_allowed = bool(_get_value(candidate, "execution_allowed", False))
     tradable = bool(_get_value(candidate, "tradable", False))
+
+    if source_flags.get("quote_source") == "REST_RECOVERY" or source_flags.get("recovered_fallback"):
+        execution_allowed = False
+        if isinstance(candidate, dict):
+            candidate["execution_allowed"] = False
+            candidate["mode"] = "advisory_only"
+        elif hasattr(candidate, "execution_allowed"):
+            setattr(candidate, "execution_allowed", False)
+            setattr(candidate, "mode", "advisory_only")
 
     execution_truth = bool(
         execution_entry is not None

@@ -68,10 +68,11 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
         "candidate_status": candidate.status,
         "blockers": list(candidate.blockers),
         "read_only": True,
-        "append": False,
         "is_order_action": False,
+        "append": False,
         "broker_api_called": False,
         "allowed_for_live_execution": False,
+
         "counts": {
             "raw_candidate_count": report.raw_candidate_count,
             "normalized_candidate_count": report.normalized_candidate_count,
