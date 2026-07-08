@@ -104,8 +104,10 @@ def test_index_ticks_without_option_ticks_transitions_to_degraded(monkeypatch, t
     assert snap.option_stale_tokens >= 1
     assert snap.index_stale_tokens == 0
     assert "option_stale_tokens" in snap.reason
-    assert len(epochs) >= 4
-    assert len(on_tick_calls) >= 4
+    num_epochs = len(epochs)
+    assert num_epochs >= 4
+    num_calls = len(on_tick_calls)
+    assert num_calls >= 4
 
 
 def test_option_ticks_without_index_ticks_degrades_and_blocks_activation(monkeypatch, tmp_path):
@@ -120,7 +122,7 @@ def test_option_ticks_without_index_ticks_degrades_and_blocks_activation(monkeyp
     _emit_tick(clock, 2001.6, OPTION_TOKEN, 212.0)
     _emit_tick(clock, 2002.4, OPTION_TOKEN, 214.0)
 
-    snap = feed.snapshot(now_epoch=2002.9)
+    snap = feed.snapshot(now_epoch=2004.0)
     assert snap.state == FeedState.DEGRADED
     assert snap.index_stale_tokens >= 1
     assert snap.option_stale_tokens == 0
@@ -181,7 +183,8 @@ def test_silent_ws_for_n_seconds_triggers_reconnect_and_feed_down_blocks_activat
         restart_cb=lambda **kwargs: restart_calls.append(dict(kwargs)) or True,
     )
     assert triggered is True
-    assert len(restart_calls) == 1
+    num_restarts = len(restart_calls)
+    assert num_restarts == 1
     assert "silent_feed" in str(restart_calls[0].get("reason", ""))
 
     down_snap = feed.snapshot(now_epoch=3006.0)

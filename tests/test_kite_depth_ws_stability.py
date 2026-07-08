@@ -85,6 +85,8 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [], raising=False)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 0.0, raising=False)
     monkeypatch.setattr(ws, "_WARMUP_PENDING", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_RESTART_ASYNC_THREAD", None, raising=False)

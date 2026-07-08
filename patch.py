@@ -1,42 +1,35 @@
-with open("scripts/generate_opening_drive_trade_ledger.py", "r") as f:
+import re
+
+with open('core/kite_depth_ws.py', 'r') as f:
     content = f.read()
 
-lines = content.split('\n')
-idx = 0
-for i, line in enumerate(lines):
-    if "cap_saturation_ratio" in line:
-        idx = i - 5
-        break
+# We need to wrap ws.subscribe and ws.set_mode in reactor.callFromThread
+new_content = content.replace(
+"""        if to_subscribe:
+            ws.subscribe(to_subscribe)
+            ws.set_mode(ws.MODE_FULL, to_subscribe)""",
+"""        if to_subscribe:
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(ws.subscribe, to_subscribe)
+                reactor.callFromThread(ws.set_mode, ws.MODE_FULL, to_subscribe)
+            except ImportError:
+                ws.subscribe(to_subscribe)
+                ws.set_mode(ws.MODE_FULL, to_subscribe)"""
+)
 
-lines = lines[:idx]
-lines.extend([
-    '    summary = {',
-    '        "metrics": {',
-    '            "total_trades": total_trades,',
-    '            "buy_call_count": setup_types.get("BUY_CALL", 0),',
-    '            "buy_put_count": setup_types.get("BUY_PUT", 0),',
-    '            "active_symbol_days": active_symbol_days,',
-    '            "max_possible_trades": max_possible_trades,',
-    '            "cap_saturation_ratio": cap_saturation,',
-    '            "symbol_days_at_cap": symbol_days_at_cap,',
-    '            "zero_trade_symbol_days": zero_trade_symbol_days',
-    '        }',
-    '    }',
-    '    with open(out_dir / "phase_4_trade_ledger_summary.json", \'w\') as f:',
-    '        json.dump(summary, f, indent=2)',
-    '',
-    'if __name__ == "__main__":',
-    '    parser = argparse.ArgumentParser()',
-    '    parser.add_argument("--start-date", required=True)',
-    '    parser.add_argument("--end-date", required=True)',
-    '    parser.add_argument("--config-override", default="{}")',
-    '    args = parser.parse_args()',
-    '    ',
-    '    s_date = args.start_date.replace("-", "")',
-    '    e_date = args.end_date.replace("-", "")',
-    '    generate_ledger(s_date, e_date, args.config_override)',
-    ''
-])
+new_content = new_content.replace(
+"""        try:
+            ws.unsubscribe(to_unsubscribe)
+        except Exception as exc:""",
+"""        try:
+            try:
+                from twisted.internet import reactor
+                reactor.callFromThread(ws.unsubscribe, to_unsubscribe)
+            except ImportError:
+                ws.unsubscribe(to_unsubscribe)
+        except Exception as exc:"""
+)
 
-with open("scripts/generate_opening_drive_trade_ledger.py", "w") as f:
-    f.write('\n'.join(lines))
+with open('core/kite_depth_ws.py', 'w') as f:
+    f.write(new_content)

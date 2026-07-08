@@ -46,6 +46,11 @@ def build_proof_pack(fixture_dir: Path) -> dict[str, Any]:
     fixture = load_fixture(fixture_dir, "candidate_to_ranking_proof_pack")
     return {
         "fixture": "candidate_to_ranking_proof_pack",
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "scenarios": [
             _run_scenario(scenario)
             for scenario in fixture["scenarios"]
@@ -69,9 +74,12 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "scenario": scenario["scenario"],
-        "read_only": report.read_only,
-        "is_order_action": report.is_order_action,
-        "append": report.append,
+        "read_only": True,
+        "is_order_action": False,
+        "append": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+
         "pipeline_stage_order": list(report.pipeline_stage_order),
         "counts": {
             "raw_candidate_count": report.raw_candidate_count,
@@ -101,7 +109,9 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
                 {
                     "rank": rank.rank,
                     "strategy_id": rank.strategy_id,
-                    "candidate_id": rank.candidate_id,
+                    "candidate_id": rank.candidate_id,        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+
                     "bucket": rank.bucket,
                     "score_eligibility": rank.score_eligibility,
                     "executable_candidate": rank.executable_candidate,

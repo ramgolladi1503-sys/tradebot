@@ -193,48 +193,78 @@ def main():
         logger.error("Missing Kite API credentials after timeout. Exiting.")
         sys.exit(1)
 
-    date_str = datetime.now().strftime("%Y%m%d")
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = ROOT / ".runtime" / "market_data"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"ticks_{date_str}.jsonl"
+    out_file = out_dir / f"ticks_{date_str}.parquet"
 
-    f_out = open(out_file, "a", buffering=1)  # Line buffered
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import pandas as pd
+
+    schema = pa.schema([
+        ("ts", pa.float64()),
+        ("token", pa.int64()),
+        ("symbol", pa.string()),
+        ("ltp", pa.float64()),
+        ("bid", pa.float64()),
+        ("ask", pa.float64()),
+        ("vol", pa.int64())
+    ])
+
+    writer = pq.ParquetWriter(out_file, schema)
+    tick_buffer = []
+    BUFFER_SIZE = 5000
+
+    def flush_buffer():
+        nonlocal tick_buffer
+        if not tick_buffer:
+            return
+        try:
+            df = pd.DataFrame(tick_buffer)
+            table = pa.Table.from_pandas(df, schema=schema)
+            writer.write_table(table)
+            tick_buffer.clear()
+            logger.info(f"Flushed {len(df)} ticks to parquet.")
+        except Exception as e:
+            logger.error(f"Error flushing parquet: {e}")
 
     kws = KiteTicker(API_KEY, ACCESS_TOKEN)
-
     stop_time = datetime_time(15, 35)
 
     def on_ticks(ws, ticks):
         now = datetime.now()
         if now.time() >= stop_time:
             logger.info("Market close reached. Shutting down tick collector.")
+            flush_buffer()
             try:
+                writer.close()
                 ws.close()
             except:
                 pass
-            f_out.close()
             sys.exit(0)
 
         for t in ticks:
             try:
                 record = {
                     "ts": time.time(),
-                    "token": t.get("instrument_token"),
+                    "token": int(t.get("instrument_token", 0)),
                     "symbol": target_tokens.get(
                         t.get("instrument_token"), str(t.get("instrument_token"))
                     ),
-                    "ltp": t.get("last_price"),
-                    "bid": t.get("depth", {}).get("buy", [{}])[0].get("price")
-                    if "depth" in t and t["depth"].get("buy")
-                    else None,
-                    "ask": t.get("depth", {}).get("sell", [{}])[0].get("price")
-                    if "depth" in t and t["depth"].get("sell")
-                    else None,
-                    "vol": t.get("volume_traded"),
+                    "ltp": float(t.get("last_price", 0.0)),
+                    "bid": float(t.get("depth", {}).get("buy", [{}])[0].get("price", 0.0))
+                    if "depth" in t and t["depth"].get("buy") else None,
+                    "ask": float(t.get("depth", {}).get("sell", [{}])[0].get("price", 0.0))
+                    if "depth" in t and t["depth"].get("sell") else None,
+                    "vol": int(t.get("volume_traded", 0)),
                 }
-                f_out.write(json.dumps(record) + "\n")
+                tick_buffer.append(record)
             except Exception as e:
                 pass
+        
+        if len(tick_buffer) >= BUFFER_SIZE:
+            flush_buffer()
 
     def on_connect(ws, response):
         logger.info("Connected to Kite WebSocket.")
@@ -255,11 +285,12 @@ def main():
 
     def handle_sigint(*args):
         logger.info("Shutting down collector due to signal...")
+        flush_buffer()
         try:
+            writer.close()
             kws.close()
         except:
             pass
-        f_out.close()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, handle_sigint)

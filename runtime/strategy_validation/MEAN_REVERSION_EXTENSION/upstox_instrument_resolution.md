@@ -1,11 +1,11 @@
 # Upstox Instrument Resolution
 
-- **classification**: UPSTOX_INSTRUMENT_KEYS_RESOLVED
-- **source**: manual_imported_master
+- **classification**: UPSTOX_INSTRUMENT_KEYS_BLOCKED
+- **source**: official_upstox_instrument_json
 - **symbols_requested**: ['NIFTY']
-- **resolved**: {'NIFTY': {'instrument_key': 'NSE_INDEX|Nifty 50', 'trading_symbol': None, 'name': 'Nifty 50', 'exchange': 'NSE', 'segment': 'NSE_INDEX'}}
-- **unresolved**: []
-- **blockers**: []
+- **resolved**: {}
+- **unresolved**: ['NIFTY']
+- **blockers**: ['UPSTOX_INSTRUMENT_KEY_AMBIGUOUS']
 - **paper_live_allowed**: False
 - **live_allowed**: False
 - **broker_order_allowed**: False

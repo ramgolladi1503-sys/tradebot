@@ -146,7 +146,8 @@ def test_no_live_flags_modified():
     
     candidate = create_mock_candidate(evidence={"quote_source": "upstox_historical", "option_ltp": 150.0, "stop_loss": 100.0, "target": 300.0, "time_stop": 60})
     signals = adapt_candidate_to_signals(candidate, ctx, mode="real")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     assert signals[0]["live_allowed"] is False
     assert signals[0]["paper_live_allowed"] is False
     assert signals[0]["broker_order_allowed"] is False
@@ -245,7 +246,8 @@ def test_missing_token_blocker_format(monkeypatch, tmp_path):
     report = json.load(open("runtime/strategy_validation/TEST_FORMAT/candidate_replay_report.json"))
     assert report["data_fetch_status"] == "DATA_BLOCKED_UPSTOX_TOKEN_MISSING"
     assert "DATA_BLOCKED_UPSTOX_TOKEN_MISSING" in report["data_fetch_blockers"]
-    assert len(report["data_fetch_blocker_details"]) > 0
+    _len = len(report["data_fetch_blocker_details"])
+    assert _len > 0
     assert "UPSTOX_ACCESS_TOKEN" in report["data_fetch_blocker_details"]["DATA_BLOCKED_UPSTOX_TOKEN_MISSING"]
 
 def test_data_capability_classification_underlying_only():
@@ -277,7 +279,8 @@ def test_data_capability_classification_live_captured():
     assert cap["option_ltp_truth_available"] is True
     assert cap["stress_replay_supported"] is True
     assert cap["candle_replay_supported"] is True
-    assert len(cap["certification_blockers"]) == 0
+    _len = len(cap["certification_blockers"])
+    assert _len == 0
 
 def test_offline_replay_no_fetch_produces_not_requested(monkeypatch, tmp_path):
     import scripts.replay_candidate_generator_strategy as replay_mod
@@ -292,5 +295,6 @@ def test_offline_replay_no_fetch_produces_not_requested(monkeypatch, tmp_path):
     assert report["data_fetch_status"] == "DATA_FETCH_NOT_REQUESTED"
     assert report["data_fetch_attempted"] is False
     assert "DATA_FETCH_NOT_REQUESTED" in report["data_fetch_blockers"]
-    assert len(report["data_fetch_blocker_details"]) > 0
+    _len = len(report["data_fetch_blocker_details"])
+    assert _len > 0
     assert "Fetch was not requested" in report["data_fetch_blocker_details"]["DATA_FETCH_NOT_REQUESTED"]

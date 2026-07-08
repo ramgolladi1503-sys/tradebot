@@ -46,7 +46,8 @@ def test_batch_summary_status_mapping(tmp_path, monkeypatch):
     with open(runtime_dir / "candidate_replay_batch_summary.json") as f:
         summary = json.load(f)
         
-    assert len(summary) == 1
+    _len = len(summary)
+    assert _len == 1
     assert summary[0]["contract_audit_status"] == "CANDIDATE_GENERATOR_CONTRACT_PASSED"
     assert summary[0]["lifecycle_state"] == "DATA_FETCH_PENDING"
     assert summary[0]["candidate_replay_status"] == "CANDIDATE_REPLAY_DATA_BLOCKED"

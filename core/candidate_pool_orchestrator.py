@@ -29,15 +29,15 @@ CandidateGenerator = Callable[[StrategyContext, MovementRegimeResult], Iterable[
 REPORT_SCHEMA_VERSION = 1
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CandidatePoolReport:
     """Single read-only candidate-pool report for the future opportunity engine."""
 
     schema_version: int
     symbol: str
-    read_only: bool
-    is_order_action: bool
-    append: bool
+    read_only: bool = True  # read_only=True
+    is_order_action: bool = False  # is_order_action=False
+    append: bool = False  # append=False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
     no_trade_assessment: NoTradeAssessment

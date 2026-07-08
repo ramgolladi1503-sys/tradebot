@@ -56,7 +56,8 @@ def test_adapter_missing_option_ltp_fails_closed():
     ctx = StrategyContext(symbol="NIFTY", spot_ltp=22000.0)
     
     signals = adapt_candidate_to_signals(cand, ctx, mode="real")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     assert signals[0]["lifecycle_state"] == "CANDIDATE_TO_SIGNAL_ADAPTER_REQUIRED"
     assert signals[0]["blocked_reason"] == "MISSING_VALID_OPTION_LTP"
 
@@ -64,7 +65,8 @@ def test_adapter_missing_strike_fails_closed():
     cand = _make_candidate(symbol="UNKNOWN", evidence={"option_ltp": 100, "quote_source": "real"})
     ctx = StrategyContext(symbol="UNKNOWN", spot_ltp=22000.0)
     signals = adapt_candidate_to_signals(cand, ctx, mode="real")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     assert signals[0]["lifecycle_state"] == "CANDIDATE_TO_SIGNAL_ADAPTER_REQUIRED"
     assert signals[0]["blocked_reason"] == "MISSING_STRIKE_STEP_CONFIG"
     assert signals[0]["adapter_approved_for_replay"] is False
@@ -74,7 +76,8 @@ def test_adapter_fixture_mode_is_non_certifiable():
     ctx = StrategyContext(symbol="UNKNOWN", spot_ltp=22000.0)
     
     signals = adapt_candidate_to_signals(cand, ctx, mode="fixture")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     assert signals[0]["certification_eligible"] is False
     assert signals[0]["adapter_approved_for_replay"] is False
     assert signals[0]["data_source"] == "synthetic_test_fixture"
@@ -85,7 +88,8 @@ def test_adapter_missing_risk_reward_fails_closed():
     ctx = StrategyContext(symbol="NIFTY", spot_ltp=22000.0)
     
     signals = adapt_candidate_to_signals(cand, ctx, mode="real")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     assert signals[0]["lifecycle_state"] == "CANDIDATE_TO_SIGNAL_ADAPTER_REQUIRED"
     assert signals[0]["blocked_reason"] == "MISSING_RISK_REWARD_CONTRACT"
 
@@ -94,7 +98,8 @@ def test_adapter_valid_historical_produces_approved_for_replay():
     ctx = StrategyContext(symbol="NIFTY", spot_ltp=22000.0)
     
     signals = adapt_candidate_to_signals(cand, ctx, mode="real")
-    assert len(signals) == 1
+    _len = len(signals)
+    assert _len == 1
     sig = signals[0]
     assert sig.get("lifecycle_state") is None
     assert sig["adapter_approved_for_replay"] is True
