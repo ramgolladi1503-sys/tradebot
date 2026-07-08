@@ -20,6 +20,8 @@ def test_start_depth_ws_or_raise_fail_closed(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "DRY_RUN", False, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True, raising=False)
+    import core.auth
+    monkeypatch.setattr(core.auth, "get_kite_credentials", lambda: None, raising=False)
 
     with pytest.raises(RuntimeError, match="boom"):
         orchestrator_mod.Orchestrator._start_depth_ws_or_raise(
@@ -40,6 +42,8 @@ def test_start_depth_ws_or_raise_fail_open(monkeypatch):
     monkeypatch.setattr(cfg, "EXECUTION_MODE", "LIVE", raising=False)
     monkeypatch.setattr(cfg, "DRY_RUN", False, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", False, raising=False)
+    import core.auth
+    monkeypatch.setattr(core.auth, "get_kite_credentials", lambda: None, raising=False)
 
     orchestrator_mod.Orchestrator._start_depth_ws_or_raise(
         _Dummy(),
@@ -65,6 +69,8 @@ def test_start_depth_ws_or_raise_recoverable_network_error_degrades(monkeypatch)
     monkeypatch.setattr(cfg, "DRY_RUN", False, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_CLOSED", True, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_STARTUP_FAIL_OPEN_ON_RECOVERABLE_ERRORS", True, raising=False)
+    import core.auth
+    monkeypatch.setattr(core.auth, "get_kite_credentials", lambda: None, raising=False)
 
     orchestrator_mod.Orchestrator._start_depth_ws_or_raise(
         _Dummy(),
