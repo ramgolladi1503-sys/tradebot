@@ -4,15 +4,28 @@ import json
 import time
 from unittest.mock import patch, MagicMock
 
-def test_subscription_delta_uses_reactor_call_from_thread():
+def test_subscription_delta_uses_safe_mutation_interface():
     from core.kite_depth_ws import _apply_subscription_delta
     ws = MagicMock()
-    with patch("twisted.internet.reactor.callFromThread") as mock_call, \
+    with patch("core.feed.ws_mutation_queue.safe_subscribe_full_mode") as mock_sub, \
+         patch("core.feed.ws_mutation_queue.safe_unsubscribe") as mock_unsub, \
          patch("core.kite_depth_ws._can_mutate_ws_subscriptions", return_value=(True, "ok", {})):
+        
+        # mock return values (WsMutationResult mock)
+        mock_res = MagicMock()
+        mock_res.ok = True
+        mock_sub.return_value = (mock_res, mock_res)
+        mock_unsub.return_value = mock_res
+        
         _apply_subscription_delta(ws, [123], [456], "test")
-        assert mock_call.call_count >= 2
-        mock_call.assert_any_call(ws.subscribe, [123])
-        mock_call.assert_any_call(ws.unsubscribe, [456])
+        
+        assert mock_sub.call_count == 1
+        assert mock_sub.call_args[0][0] == ws
+        assert mock_sub.call_args[0][1] == [123]
+        
+        assert mock_unsub.call_count == 1
+        assert mock_unsub.call_args[0][0] == ws
+        assert mock_unsub.call_args[0][1] == [456]
 
 def test_no_live_option_feed_not_triggered_by_single_illiquid_option_gap():
     from core.blocker_lifecycle import evaluate_feed_symbol_blockers, BlockerRegistry
