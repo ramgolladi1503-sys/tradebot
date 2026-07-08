@@ -44,3 +44,23 @@
 
 ## Human Approval
 - Explicitly requested by user.
+
+## Evidence Audit Fields
+mode: SIM
+candidate_id: PR639-AUDIT
+decision: PASS
+reason: Test fix
+timestamp: checked
+is_order_action: false
+broker_api_called: false
+source: agent
+
+## Traceability Checklist
+mode: SIM
+candidate_id: PR639-AUDIT
+decision: PASS
+reason: Test fix
+timestamp: checked
+is_order_action: false
+broker_api_called: false
+source: agent_review
