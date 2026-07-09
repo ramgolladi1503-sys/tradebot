@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from config import config as cfg
-from core.events import write_json_atomic
+from core.events import write_json_atomic_if_changed
 from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
@@ -147,9 +147,16 @@ def write_feed_truth_snapshot_latest(
     runtime_target.parent.mkdir(parents=True, exist_ok=True)
     runtime_logs_target.parent.mkdir(parents=True, exist_ok=True)
     out = dict(payload) if isinstance(payload, Mapping) else {}
-    write_json_atomic(logs_target, out)
-    write_json_atomic(runtime_target, out)
-    write_json_atomic(runtime_logs_target, out)
+    if bool(getattr(cfg, "RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE", True)):
+        write_json_atomic_if_changed(logs_target, out)
+        write_json_atomic_if_changed(runtime_target, out)
+        write_json_atomic_if_changed(runtime_logs_target, out)
+    else:
+        from core.events import write_json_atomic
+
+        write_json_atomic(logs_target, out)
+        write_json_atomic(runtime_target, out)
+        write_json_atomic(runtime_logs_target, out)
     return logs_target, runtime_target
 
 

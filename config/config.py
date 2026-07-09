@@ -2316,6 +2316,10 @@ FEED_FRESHNESS_TTL_SEC = float(os.getenv("FEED_FRESHNESS_TTL_SEC", "5"))
 FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE = (
     os.getenv("FEED_FRESHNESS_RUNTIME_SNAPSHOT_ENABLE", "true").lower() == "true"
 )
+RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES = int(os.getenv("RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES", "65536"))
+RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE = (
+    os.getenv("RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE", "true").lower() == "true"
+)
 # Prefer in-memory tick evidence (WS tick store) for freshness SLA and decision gating.
 # SQLite is used as a best-effort fallback only to avoid lock contention stalls in LIVE.
 FEED_FRESHNESS_PREFER_TICKSTORE_MEMORY = (

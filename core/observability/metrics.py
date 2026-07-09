@@ -16,6 +16,8 @@ DEFAULT_OBSERVABILITY_METRICS = (
     "tradebot_scoring_latency_ms",
     "tradebot_ranking_latency_ms",
     "tradebot_dashboard_write_latency_ms",
+    "tradebot_snapshot_producer_latency_ms",
+    "tradebot_snapshot_stage_latency_ms",
     "tradebot_paper_order_attempt_total",
     "tradebot_live_order_attempt_total",
 )
