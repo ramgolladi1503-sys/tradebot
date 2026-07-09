@@ -3441,7 +3441,8 @@ def _run_db_tick_watchdog_cycle(
             },
         )
     else:
-        ws_stale_limit = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
+        # FIX: Relax the aggressive 5-second staleness threshold to 30 seconds to tolerate paper/illiquid gaps
+        ws_stale_limit = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 30.0))
         is_stale = False
         stale_source = "unknown"
         stale_age = 0.0
