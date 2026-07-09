@@ -166,6 +166,8 @@ def main():
         blockers_p5.append("PHASE4_NOT_PASSED")
         blockers_p5.append("WFA_NOT_EVALUATED_BECAUSE_PHASE4_BLOCKED")
     elif wfa_windows_passed + wfa_windows_failed == 0:
+        # Explicit missing capability
+        blockers_p5.append("CANDIDATE_WFA_ENGINE_MISSING")
         blockers_p5.append("WFA_NOT_EVALUATED")
         blockers_p5.append("MINIMUM_WFA_WINDOWS_NOT_MET")
     elif wfa_windows_passed + wfa_windows_failed < minimum_wfa_windows:

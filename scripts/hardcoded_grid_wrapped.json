@@ -1,0 +1,14 @@
+{
+  "grid": {
+    "entry.opening_drive_window_minutes": [15, 30, 45, 60],
+    "entry.min_open_move_points": [10.0, 20.0, 30.0],
+    "stop_loss.atr_multiple": [0.5, 0.75, 1.0],
+    "target.minimum_rr": [1.0, 1.5, 2.0]
+  },
+  "mapping": {
+    "entry.opening_drive_window_minutes": "entry.opening_drive_window_minutes",
+    "entry.min_open_move_points": "entry.min_open_move_points",
+    "stop_loss.atr_multiple": "stop_loss.atr_multiple",
+    "target.minimum_rr": "target.minimum_rr"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mapping": {
+    "entry.min_vwap_distance_pct": "entry.min_vwap_distance_pct",
+    "entry.max_vwap_entry_distance_pct": "entry.max_vwap_entry_distance_pct",
+    "entry.max_chop_score": "entry.max_chop_score",
+    "stop_loss.atr_multiple": "stop_loss.atr_multiple",
+    "target.minimum_rr": "target.minimum_rr"
+  },
+  "grid": {
+    "entry.min_vwap_distance_pct": [0.0002, 0.00035, 0.0005],
+    "entry.max_vwap_entry_distance_pct": [0.0025, 0.0035, 0.005],
+    "entry.max_chop_score": [0.55],
+    "stop_loss.atr_multiple": [0.5, 1.0, 1.5],
+    "target.minimum_rr": [1.5, 2.0, 3.0]
+  }
+}

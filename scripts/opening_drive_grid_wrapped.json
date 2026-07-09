@@ -1,0 +1,22 @@
+{
+  "grid": {
+    "opening_drive_window_minutes": [10, 15, 20, 30],
+    "min_open_move_points": [15, 20, 30, 40, 60],
+    "vwap_alignment_required": [true],
+    "stop_atr": [0.8, 1.0, 1.2, 1.5],
+    "target_rr": [1.5, 2.0, 2.5],
+    "max_trades_per_symbol_day": [1, 2],
+    "orb_confirmation_required": [false, true],
+    "min_orb_break_points": [0]
+  },
+  "mapping": {
+    "opening_drive_window_minutes": "entry.opening_drive_window_minutes",
+    "min_open_move_points": "entry.min_open_move_points",
+    "vwap_alignment_required": "entry.vwap_alignment_required",
+    "max_trades_per_symbol_day": "entry.max_trades_per_symbol_day",
+    "orb_confirmation_required": "entry.orb_confirmation_required",
+    "min_orb_break_points": "entry.min_orb_break_points",
+    "stop_atr": "stop_loss.atr_multiple",
+    "target_rr": "target.minimum_rr"
+  }
+}

@@ -3,27 +3,28 @@ import json
 import argparse
 import itertools
 import random
-import os
 import subprocess
+import os
 import uuid
-import sys
 from pathlib import Path
 
-def run_audits(strat_id, is_smoke_test=False):
+def run_audits(strat_id, audit_script, is_smoke_test=False):
     scripts = [
         "scripts/audit_phase4_truth.py",
         "scripts/audit_phase4_7_integrity.py",
         "scripts/audit_phase4_8_selection_quality.py",
-        "scripts/audit_phase4_10_accounting.py",
-        "scripts/audit_opening_drive_structural.py"
+        "scripts/audit_phase4_10_accounting.py"
     ]
+    if audit_script:
+        scripts.append(audit_script)
+        
     for s in scripts:
         cmd = ["python", s, "--strategy", strat_id]
-        if s == "scripts/audit_opening_drive_structural.py" and is_smoke_test:
+        if s == audit_script and is_smoke_test:
             cmd.append("--is-smoke-test")
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        subprocess.run(cmd, capture_output=True, text=True)
 
-def get_metrics(strat_id):
+def get_metrics(strat_id, selectivity_limits):
     base_dir = Path(f"runtime/strategy_validation/{strat_id}")
     
     acc_path = base_dir / "phase_4_10_accounting_audit.json"
@@ -57,14 +58,19 @@ def get_metrics(strat_id):
             metrics["zero_trade_symbol_days_ratio"] = summ.get("zero_trade_symbol_days_ratio", 0.0)
             metrics["selected_trades"] = summ.get("total_trades", metrics["selected_trades"])
             
-    if metrics["cap_saturation_ratio"] > 0.35:
-        metrics["blockers"].append("OPENING_DRIVE_CAP_SATURATION_TOO_HIGH")
-    if metrics["percent_symbol_days_at_cap"] > 0.20:
-        metrics["blockers"].append("OPENING_DRIVE_SYMBOL_DAY_AT_CAP_TOO_HIGH")
-    if metrics["zero_trade_symbol_days_ratio"] < 0.25:
-        metrics["blockers"].append("OPENING_DRIVE_TOO_MANY_DAILY_TRADES")
-    if metrics["selected_trades"] < 50:
-        metrics["blockers"].append("OPENING_DRIVE_SELECTIVITY_NOT_PROVEN")
+    max_cap = selectivity_limits.get("max_cap_saturation_ratio", 0.35)
+    max_percent_at_cap = selectivity_limits.get("max_percent_symbol_days_at_cap", 0.20)
+    min_zero_trade_ratio = selectivity_limits.get("min_zero_trade_symbol_days_ratio", 0.25)
+    min_trades = selectivity_limits.get("min_selected_trades", 50)
+            
+    if metrics["cap_saturation_ratio"] > max_cap:
+        metrics["blockers"].append(f"{strat_id}_CAP_SATURATION_TOO_HIGH")
+    if metrics["percent_symbol_days_at_cap"] > max_percent_at_cap:
+        metrics["blockers"].append(f"{strat_id}_SYMBOL_DAY_AT_CAP_TOO_HIGH")
+    if metrics["zero_trade_symbol_days_ratio"] < min_zero_trade_ratio:
+        metrics["blockers"].append(f"{strat_id}_TOO_MANY_DAILY_TRADES")
+    if metrics["selected_trades"] < min_trades:
+        metrics["blockers"].append(f"{strat_id}_SELECTIVITY_NOT_PROVEN")
     
     for p in [base_dir / "phase_4_5_truth_audit.json", base_dir / "phase_4_7_integrity_audit.json", qual_path, acc_path]:
         if p.exists():
@@ -89,34 +95,27 @@ def get_metrics(strat_id):
     metrics["profit_factor"] = abs(win_pnl / loss_pnl) if loss_pnl != 0 else 999.0
     return metrics
 
-def run_pass(strat_id, start_date, end_date, overrides, is_smoke_test=False):
+def run_pass(strat_id, generator_script, start_date, end_date, overrides, audit_script, selectivity_limits, is_smoke_test=False):
     override_json = json.dumps(overrides)
     cmd = [
-        "python", "scripts/generate_opening_drive_trade_ledger.py",
+        "python", generator_script,
         "--start-date", start_date,
         "--end-date", end_date,
         "--config-override", override_json
     ]
     env = dict(os.environ, PYTHONHASHSEED="42")
     subprocess.run(cmd, capture_output=True, text=True, env=env)
-    run_audits(strat_id, is_smoke_test)
-    return get_metrics(strat_id)
+    run_audits(strat_id, audit_script, is_smoke_test)
+    return get_metrics(strat_id, selectivity_limits)
 
-def check_region_stability(combo, grid, all_results_dict, keys):
-    # A simple stability check: find neighbors by wiggling one param
-    # For now, we consider a region stable if at least one neighbor also survived train
-    # or if we only evaluated a small sample, we might not have evaluated neighbors.
-    # To avoid failing entirely when we only sample, we will pass stability if the sample size is small.
-    # But for a proper implementation, we require neighbors to be evaluated and be >0.
-    
+def check_region_stability(combo, grid_def, all_results_dict, keys):
     neighbors_evaluated = 0
     neighbors_positive = 0
     
     for i, key in enumerate(keys):
-        vals = grid[key]
+        vals = grid_def[key]
         idx = vals.index(combo[i])
         
-        # Check left and right neighbor
         neighbors_to_check = []
         if idx > 0: neighbors_to_check.append(vals[idx-1])
         if idx < len(vals) - 1: neighbors_to_check.append(vals[idx+1])
@@ -130,32 +129,34 @@ def check_region_stability(combo, grid, all_results_dict, keys):
                 if all_results_dict[n_combo_tuple]["train_metrics"]["proxy_option_net_expectancy"] > 0:
                     neighbors_positive += 1
                     
-    # If no neighbors were evaluated (due to low sampling), we can't definitively say unstable, but strictly we should.
-    # We will require at least 1 positive neighbor if we evaluated any.
     if neighbors_evaluated > 0 and neighbors_positive == 0:
         return False
     return True
 
-def build_parameter_grid():
-    grid_def = {
-        "opening_drive_window_minutes": [10, 15, 20, 30],
-        "min_open_move_points": [15, 20, 30, 40, 60],
-        "vwap_alignment_required": [True],
-        "stop_atr": [0.8, 1.0, 1.2, 1.5],
-        "target_rr": [1.5, 2.0, 2.5],
-        "max_trades_per_symbol_day": [1, 2],
-        "orb_confirmation_required": [False, True],
-        "min_orb_break_points": [0]
-    }
-    
-    keys = list(grid_def.keys())
-    values = list(grid_def.values())
-    combinations = list(itertools.product(*values))
-    return grid_def, [dict(zip(keys, combo)) for combo in combinations]
+def convert_flat_to_nested_overrides(combo, keys, parameter_mapping):
+    overrides = {}
+    for idx, key in enumerate(keys):
+        val = combo[idx]
+        path = parameter_mapping.get(key, f"entry.{key}")
+        parts = path.split(".")
+        
+        current = overrides
+        for part in parts[:-1]:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+        current[parts[-1]] = val
+        
+    return overrides
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--strategy", type=str, default="OPENING_DRIVE")
+    parser.add_argument("--strategy", type=str, required=True)
+    parser.add_argument("--generator-script", type=str, required=True)
+    parser.add_argument("--audit-script", type=str, default="")
+    parser.add_argument("--report-filename", type=str, default="phase_4_generic_grid_report.json")
+    parser.add_argument("--grid-definition", type=str, required=True)
+    parser.add_argument("--selectivity-limits", type=str, default="")
     parser.add_argument("--train-start", type=str, default="20240701")
     parser.add_argument("--train-end", type=str, default="20250331")
     parser.add_argument("--val-start", type=str, default="20250401")
@@ -165,40 +166,38 @@ def main():
     parser.add_argument("--max-combinations", type=int, default=None)
     args = parser.parse_args()
 
-    grid_def, full_grid = build_parameter_grid()
-    keys = list(full_grid[0].keys())
+    # Load Grid
+    with open(args.grid_definition, "r") as f:
+        grid_config = json.load(f)
     
-    combinations = []
-    for params in full_grid:
-        combinations.append(tuple(params[k] for k in keys))
-        
+    grid_def = grid_config.get("grid", {})
+    parameter_mapping = grid_config.get("mapping", {})
+    
+    # Load Selectivity limits
+    selectivity_limits = {}
+    if args.selectivity_limits:
+        with open(args.selectivity_limits, "r") as f:
+            selectivity_limits = json.load(f)
+    
+    keys = list(grid_def.keys())
+    values = list(grid_def.values())
+    combinations = list(itertools.product(*values))
+    
     random.seed(42)
     random.shuffle(combinations)
     
     if args.max_combinations and args.max_combinations < len(combinations):
         combinations = combinations[:args.max_combinations]
         
-    print(f"Phase 4.11B Nested Discovery. Total combos: {len(combinations)}")
+    print(f"Phase 4.11B Generic Discovery for {args.strategy}. Total combos: {len(combinations)}")
     
-    # --- PHASE 1: TRAIN ---
     all_results_dict = {}
     train_survivors = []
     
     for idx, combo in enumerate(combinations):
-        overrides = {
-            "entry": {
-                "opening_drive_window_minutes": combo[0],
-                "min_open_move_points": combo[1],
-                "vwap_alignment_required": combo[2],
-                "max_trades_per_symbol_day": combo[5],
-                "orb_confirmation_required": combo[6],
-                "min_orb_break_points": combo[7]
-            },
-            "stop_loss": {"atr_multiple": combo[3]},
-            "target": {"minimum_rr": combo[4]}
-        }
+        overrides = convert_flat_to_nested_overrides(combo, keys, parameter_mapping)
         
-        t_metrics = run_pass(args.strategy, args.train_start, args.train_end, overrides, is_smoke_test=bool(args.max_combinations))
+        t_metrics = run_pass(args.strategy, args.generator_script, args.train_start, args.train_end, overrides, args.audit_script, selectivity_limits, is_smoke_test=bool(args.max_combinations))
         all_results_dict[combo] = {"train_metrics": t_metrics, "overrides": overrides}
         
         if t_metrics["proxy_option_net_expectancy"] > 0 and not t_metrics.get("blockers"):
@@ -206,11 +205,10 @@ def main():
             
     print(f"Train pass complete. {len(train_survivors)} survived.")
     
-    # --- PHASE 2: VALIDATION ---
     val_survivors = []
     for combo in train_survivors:
         overrides = all_results_dict[combo]["overrides"]
-        v_metrics = run_pass(args.strategy, args.val_start, args.val_end, overrides)
+        v_metrics = run_pass(args.strategy, args.generator_script, args.val_start, args.val_end, overrides, args.audit_script, selectivity_limits)
         all_results_dict[combo]["val_metrics"] = v_metrics
         
         if v_metrics["proxy_option_net_expectancy"] > 0 and v_metrics["profit_factor"] > 1.15 and not v_metrics.get("blockers"):
@@ -218,10 +216,8 @@ def main():
             
     print(f"Validation pass complete. {len(val_survivors)} survived.")
     
-    # Rank by Validation Profit Factor
     val_survivors.sort(key=lambda c: all_results_dict[c]["val_metrics"]["profit_factor"], reverse=True)
     
-    # Region Stability
     stable_candidates = []
     for combo in val_survivors:
         if check_region_stability(combo, grid_def, all_results_dict, keys):
@@ -229,7 +225,6 @@ def main():
             
     print(f"Region stability check complete. {len(stable_candidates)} stable candidates remain.")
     
-    # --- PHASE 3: FINAL HOLDOUT ---
     top_candidates = stable_candidates[:10]
     final_results = []
     
@@ -246,22 +241,17 @@ def main():
         
         if combo not in train_survivors:
             rec["pass_fail_reason"].append("FAILED_TRAIN")
-            
         elif combo not in val_survivors:
             rec["pass_fail_reason"].append("FAILED_VALIDATION")
-            
         elif combo not in stable_candidates:
             rec["blockers"].append("PARAMETER_REGION_NOT_STABLE")
             rec["pass_fail_reason"].append("FAILED_REGION_STABILITY")
-            
         elif combo not in top_candidates:
             rec["blockers"].append("FINAL_HOLDOUT_NOT_EVALUATED")
             rec["pass_fail_reason"].append("NOT_IN_TOP_CANDIDATES")
-            
         else:
-            # Run Final Holdout
             overrides = all_results_dict[combo]["overrides"]
-            h_metrics = run_pass(args.strategy, args.holdout_start, args.holdout_end, overrides)
+            h_metrics = run_pass(args.strategy, args.generator_script, args.holdout_start, args.holdout_end, overrides, args.audit_script, selectivity_limits)
             rec["final_holdout"] = h_metrics
             
             passed = True
@@ -295,18 +285,12 @@ def main():
                 
         final_results.append(rec)
         
-    # Check for direct holdout execution blockers
-    # In this script structure, holdout is never executed unless they pass train/val.
-    
-
-    # Create Full Grid Report
-    conclusion = "OPENING_DRIVE_HOLDOUT_EVALUATED"
+    conclusion = f"{args.strategy}_HOLDOUT_EVALUATED"
     if len(val_survivors) == 0:
-        conclusion = "OPENING_DRIVE_PARAMETER_SPACE_FAILED"
+        conclusion = f"{args.strategy}_PARAMETER_SPACE_FAILED"
     elif len(stable_candidates) == 0:
-        conclusion = "OPENING_DRIVE_OVERFIT_REGION_FAILED"
+        conclusion = f"{args.strategy}_OVERFIT_REGION_FAILED"
 
-    # Sort train results
     all_train = []
     for k, v in all_results_dict.items():
         if "train_metrics" in v:
@@ -317,7 +301,6 @@ def main():
             })
     all_train.sort(key=lambda x: x["expectancy"], reverse=True)
 
-    # Sort validation results
     all_val = []
     for k, v in all_results_dict.items():
         if "val_metrics" in v:
@@ -345,12 +328,12 @@ def main():
         "final_results": final_results
     }
 
-    out_path = Path(f"runtime/strategy_validation/{args.strategy}/phase_4_11b_v2_full_grid_report.json")
+    out_path = Path(f"runtime/strategy_validation/{args.strategy}/{args.report_filename}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"Phase 4.11B Full Grid run complete. Conclusion: {conclusion}")
-
+    print(f"Generic Grid run complete for {args.strategy}. Conclusion: {conclusion}")
 
 if __name__ == "__main__":
     main()
