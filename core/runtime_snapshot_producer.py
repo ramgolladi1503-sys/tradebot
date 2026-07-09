@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from core.time_utils import is_today_local, now_ist
 
 from core.ranking_orchestrator import build_ranked_opportunity_report
 from core.movement_contract import StrategyContext
+from core.runtime_cycle_context import RuntimeCycleContext, StageTiming
 from core.runtime_snapshot_store import write_ranked_pipeline_snapshot, write_ranked_vs_legacy_snapshot
 from core.runtime_snapshot_store import (
     ADVISORY_LATEST_PATH,
@@ -22,6 +24,11 @@ from core.runtime_snapshot_store import (
     MARKET_SNAPSHOT_PATH,
     TOKEN_RESOLUTION_LATEST_PATH,
     write_snapshot_atomic,
+)
+from core.observability import ObservabilityMetricsRegistry, build_default_metrics_registry
+from core.runtime_snapshot_stages import (
+    build_advisory_latest_payload as stages_build_advisory_latest_payload,
+    build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload,
 )
 
 
@@ -51,10 +58,22 @@ def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
     if not path.exists():
         return []
     try:
-        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if str(line).strip()]
-        if limit <= 0:
+        max_lines = max(1, int(limit))
+        max_bytes = max(4096, int(getattr(cfg, "RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES", 65536) or 65536))
+        size = path.stat().st_size
+        if size <= max_bytes:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        else:
+            with path.open("rb") as handle:
+                handle.seek(max(0, size - max_bytes))
+                chunk = handle.read().decode("utf-8", errors="ignore")
+            if "\n" in chunk:
+                chunk = chunk[chunk.find("\n") + 1 :]
+            lines = chunk.splitlines()
+        lines = [line for line in lines if str(line).strip()]
+        if max_lines <= 0:
             return lines
-        return lines[-int(limit) :]
+        return lines[-max_lines:]
     except Exception:
         return []
 
@@ -123,7 +142,7 @@ def _feed_health_symbols(feed_payload: Any) -> tuple[str, ...]:
     return tuple(sorted(symbols))
 
 
-def _build_feed_health_truth_latest_payload(feed_payload: Any) -> dict[str, Any]:
+def _build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str, Any], Any]:
     source_payload = feed_payload if isinstance(feed_payload, dict) else None
     decision = classify_feed_health_truth(
         source_payload,
@@ -132,7 +151,7 @@ def _build_feed_health_truth_latest_payload(feed_payload: Any) -> dict[str, Any]
         max_ltp_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5)),
         max_depth_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0)),
     )
-    return {
+    payload = {
         "schema_version": FEED_HEALTH_TRUTH_SNAPSHOT_SCHEMA_VERSION,
         "read_only": True,
         "is_order_action": False,
@@ -148,6 +167,7 @@ def _build_feed_health_truth_latest_payload(feed_payload: Any) -> dict[str, Any]
             "symbols_evaluated": list(_feed_health_symbols(source_payload)),
         },
     }
+    return payload, decision
 
 
 def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
@@ -337,7 +357,13 @@ def _candidate_decision_to_advisory_row(payload: dict[str, Any]) -> dict[str, An
 
 
 
-def _build_and_write_canonical_ranked_snapshot(market_payload: dict, producer: str, advisory_payload: dict):
+def _build_and_write_canonical_ranked_snapshot(
+    market_payload: dict,
+    producer: str,
+    advisory_payload: dict,
+    *,
+    cycle_context: RuntimeCycleContext | None = None,
+):
     from core.canonical_ranked_ui_adapter import adapt_candidate_rank_record_to_ui
     reports = []
     top_executable = []
@@ -358,7 +384,11 @@ def _build_and_write_canonical_ranked_snapshot(market_payload: dict, producer: s
             ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
             ctx = StrategyContext(**ctx_data)
 
-            report = build_ranked_opportunity_report(ctx=ctx)
+            report = build_ranked_opportunity_report(
+                ctx=ctx,
+                cycle_context=cycle_context,
+                feed_health=cycle_context.feed_truth if cycle_context else None,
+            )
             reports.append(report.to_dict())
 
             if not canonical_top_strategy_id and report.top_rank_strategy_id:
@@ -445,9 +475,11 @@ def produce_and_store_runtime_snapshots(
     market_snapshot: dict[str, Any] | None,
     producer: str,
     loop_id: str | None = None,
+    metrics_registry: ObservabilityMetricsRegistry | None = None,
 ) -> dict[str, Any]:
-    del loop_id  # reserved for future producer metadata if needed
     outputs: dict[str, Any] = {}
+    timings: list[dict[str, Any]] = []
+    cycle_started = time.perf_counter()
 
     market_payload = market_snapshot
     if not isinstance(market_payload, dict):
@@ -457,22 +489,61 @@ def produce_and_store_runtime_snapshots(
             market_payload = {"missing": True, "error": f"{type(exc).__name__}:{exc}"}
     outputs["market_snapshot"] = market_payload
 
-    advisory_payload = _build_advisory_latest_payload()
+    advisory_payload = stages_build_advisory_latest_payload()
     outputs["advisory_latest"] = advisory_payload
 
+    t1 = time.perf_counter()
+    feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
+    outputs["feed_runtime_latest"] = feed_payload
+    feed_truth_payload, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
+    outputs["feed_health_truth_latest"] = feed_truth_payload
+    timings.append({"stage": "feed_health_truth", "elapsed_ms": round((time.perf_counter() - t1) * 1000.0, 3)})
+    cycle_context = RuntimeCycleContext(
+        cycle_id=str(loop_id or producer or "runtime_snapshot"),
+        feed_truth=feed_truth_decision.to_payload(),
+        stage_timings=(
+            StageTiming(
+                stage="feed_health_truth",
+                elapsed_ms=timings[-1]["elapsed_ms"],
+                metadata={"producer": producer},
+            ),
+        ),
+        metadata={"producer": producer},
+    )
+
     try:
+        t2 = time.perf_counter()
         if isinstance(market_payload, dict):
-            _build_and_write_canonical_ranked_snapshot(market_payload, producer, advisory_payload)
+            _build_and_write_canonical_ranked_snapshot(
+                market_payload,
+                producer,
+                advisory_payload,
+                cycle_context=cycle_context,
+            )
+        timings.append({"stage": "ranked_pipeline_snapshot", "elapsed_ms": round((time.perf_counter() - t2) * 1000.0, 3)})
     except Exception as exc:
         logger.error(f"failed_to_build_canonical_ranked_snapshot: {exc}")
 
-
-    feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
-    outputs["feed_runtime_latest"] = feed_payload
-    outputs["feed_health_truth_latest"] = _build_feed_health_truth_latest_payload(feed_payload)
-
     token_payload, _token_notes = _read_json_payload(logs_dir() / "token_resolution.json")
     outputs["token_resolution_latest"] = token_payload
+    timings.append({"stage": "runtime_snapshot_producer_total", "elapsed_ms": round((time.perf_counter() - cycle_started) * 1000.0, 3)})
+    outputs["runtime_cycle_timings"] = timings
+    outputs["runtime_cycle_context"] = cycle_context.to_dict()
+    registry = metrics_registry or build_default_metrics_registry()
+    try:
+        registry.observe_latency_ms(
+            "tradebot_snapshot_producer_latency_ms",
+            timings[-1]["elapsed_ms"] if timings else (time.perf_counter() - cycle_started) * 1000.0,
+            labels={"producer": producer},
+        )
+        for item in timings:
+            registry.observe_latency_ms(
+                "tradebot_snapshot_stage_latency_ms",
+                item["elapsed_ms"],
+                labels={"producer": producer, "stage": str(item["stage"])},
+            )
+    except Exception as exc:
+        logger.warning("snapshot_producer_metrics_emit_failed err=%s", exc)
 
     paths = {
         "market_snapshot": MARKET_SNAPSHOT_PATH,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 import uuid
@@ -109,3 +110,30 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
         handle.write(data)
     os.replace(tmp, path)
     return path
+
+
+def write_json_atomic_if_changed(path: Path, payload: dict[str, Any]) -> tuple[Path, bool]:
+    """Write JSON atomically only when the serialized payload changed."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
+    digest = sha256(data.encode("utf-8")).hexdigest()
+    sidecar = path.with_suffix(path.suffix + ".sha256")
+    if path.exists():
+        try:
+            if sidecar.exists() and sidecar.read_text(encoding="utf-8").strip() == digest:
+                return path, False
+        except Exception:
+            pass
+    tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
+    with tmp.open("w", encoding="utf-8") as handle:
+        handle.write(data)
+    os.replace(tmp, path)
+    try:
+        sidecar_tmp = sidecar.with_suffix(sidecar.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
+        with sidecar_tmp.open("w", encoding="utf-8") as handle:
+            handle.write(digest)
+        os.replace(sidecar_tmp, sidecar)
+    except Exception:
+        pass
+    return path, True

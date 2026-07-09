@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from config import config as cfg
 from core import events
 from core.runtime_snapshot_store import build_snapshot_envelope, read_snapshot, write_snapshot_atomic
 
@@ -44,7 +45,17 @@ def test_runtime_snapshot_atomic_writer_uses_unique_temp_paths(tmp_path, monkeyp
     write_snapshot_atomic(path, payload={"run": 1}, producer="unit_test")
     write_snapshot_atomic(path, payload={"run": 2}, producer="unit_test")
 
-    assert len(seen_sources) == 2
-    assert seen_sources[0] != seen_sources[1]
+    assert len(seen_sources) == 4
+    assert len({source.name for source in seen_sources}) == 4
     assert seen_sources[0].name.startswith("advisory_latest.json.tmp.")
-    assert seen_sources[1].name.startswith("advisory_latest.json.tmp.")
+    assert any(source.name.startswith("advisory_latest.json.sha256.tmp.") for source in seen_sources)
+
+
+def test_runtime_snapshot_atomic_writer_skips_unchanged_payload_when_dedup_enabled(tmp_path, monkeypatch):
+    path = tmp_path / "runtime" / "advisory_latest.json"
+    monkeypatch.setattr(cfg, "RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE", True, raising=False)
+
+    write_snapshot_atomic(path, payload={"run": 1}, producer="unit_test", generated_at="2026-03-10T12:00:00Z")
+    first_mtime = path.stat().st_mtime
+    write_snapshot_atomic(path, payload={"run": 1}, producer="unit_test", generated_at="2026-03-10T12:00:00Z")
+    assert path.stat().st_mtime == first_mtime

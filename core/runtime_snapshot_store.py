@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.events import write_json_atomic
+from config import config as cfg
+from core.events import write_json_atomic, write_json_atomic_if_changed
 from core.latest_artifact_freshness_guard import (
     DEFAULT_MAX_AGE_SECONDS,
     LatestArtifactFreshnessDecision,
@@ -60,6 +61,9 @@ def write_snapshot_atomic(
         generated_at=generated_at,
         schema_version=schema_version,
     )
+    if bool(getattr(cfg, "RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE", True)):
+        written_path, _changed = write_json_atomic_if_changed(target, envelope)
+        return written_path
     return write_json_atomic(target, envelope)
 
 

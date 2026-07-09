@@ -31,6 +31,7 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.opportunity_scoring import OpportunityScoreReport, score_opportunities
 from core.option_confirmation import OptionPressureAssessment
+from core.runtime_cycle_context import RuntimeCycleContext
 
 RANKING_ORCHESTRATOR_SCHEMA_VERSION = 1
 _ORDER_ACTION_KEY = "is_" + "order_action"
@@ -139,6 +140,7 @@ def build_ranked_opportunity_report(
     include_no_trade_candidate: bool = True,
     include_strategy_id_in_normalization_key: bool = False,
     feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None = None,
+    cycle_context: RuntimeCycleContext | None = None,
 ) -> RankedOpportunityPipelineReport:
     """Build the read-only ranked opportunity audit report.
 
@@ -165,7 +167,7 @@ def build_ranked_opportunity_report(
     hard_downgrade = apply_hard_downgrades(classification)
     scoring = score_opportunities(normalization.candidates, hard_downgrade)
     directional_balance = analyze_directional_balance(scoring)
-    ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health)
+    ranking = _rank_with_feed_hold(scoring, directional_balance, feed_health, cycle_context=cycle_context)
     flow_summary = build_candidate_flow_summary(candidate_pool, classification, scoring, ranking)
 
     top_rank = ranking.ranks[0] if ranking.ranks else None
@@ -237,6 +239,8 @@ def build_ranked_opportunity_report(
             "source_ranker": ranking.metadata.get("ranker"),
             "source_feed_gate": ranking.metadata.get("gate"),
             "feed_health_input_present": feed_health is not None,
+            "cycle_context_present": cycle_context is not None,
+            "stage_timings": [item.to_dict() for item in (cycle_context.stage_timings if cycle_context else ())],
             "feed_hold_active": bool(ranking.metadata.get("feed_hold_active")),
             "include_strategy_id_in_normalization_key": bool(include_strategy_id_in_normalization_key),
             "candidate_flow_summary": flow_summary.to_dict(),
@@ -248,7 +252,11 @@ def _rank_with_feed_hold(
     scoring: OpportunityScoreReport,
     directional_balance: DirectionalBalanceReport,
     feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None,
+    *,
+    cycle_context: RuntimeCycleContext | None = None,
 ) -> CandidateRankingReport:
+    if feed_health is None and cycle_context is not None and cycle_context.feed_truth is not None:
+        feed_health = cycle_context.feed_truth
     if feed_health is None:
         return rank_candidates(scoring, directional_balance)
     return apply_feed_hold_to_ranking(scoring, feed_health, directional_balance)

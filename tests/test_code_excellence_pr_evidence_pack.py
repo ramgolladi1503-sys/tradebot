@@ -155,6 +155,8 @@ def test_pr_evidence_pack_renders_pr_ready_body(tmp_path):
     assert "CE-12 — PR Evidence Pack Generator" in body
     assert "## Files Changed" in body
     assert "tools/code_excellence/pr_evidence_pack.py" in body
+    assert "## Agent Review Gate" in body
+    assert "## Code Excellence Gates" in body
     assert "## Unified CE Gate Summary" in body
     assert "minerva" in body
     assert "cerberus" in body
@@ -186,6 +188,7 @@ def test_pr_evidence_pack_includes_failed_gate_summary(tmp_path):
     body = render_pr_body(pack)
 
     assert pack.exit_code == 1
+    assert "## Agent Review Gate" in body
     assert "## Blocked or Failed Gates" in body
     assert "minerva" in body
     assert "blocked findings present" in body

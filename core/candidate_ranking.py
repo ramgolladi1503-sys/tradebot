@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import time
 import uuid
-import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Dict
 
@@ -250,9 +249,14 @@ def rank_candidates(
     records = _coerce_scores(scores)
     source_metadata = _source_score_metadata(scores)
     directional_flags = _directional_flags(directional_balance)
+    feed_risk_map = {id(record): _should_suppress_for_feed_risk(record) for record in records}
     ranked_inputs = sorted(
         records,
-        key=lambda record: _sort_key(record, _directional_warnings(record, directional_flags)),
+        key=lambda record: _sort_key(
+            record,
+            _directional_warnings(record, directional_flags),
+            feed_risk_suppressed=feed_risk_map.get(id(record), False),
+        ),
     )
     import uuid
     import time
@@ -260,7 +264,7 @@ def rank_candidates(
     epoch = time.time()
 
     ranks = tuple(
-        _rank_record(index + 1, record, directional_flags, epoch)
+        _rank_record(index + 1, record, directional_flags, epoch, feed_risk_suppressed=feed_risk_map.get(id(record), False))
         for index, record in enumerate(ranked_inputs)
     )
 
@@ -310,11 +314,17 @@ def rank_candidates(
     )
 
 
-def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: tuple[str, ...], generated_epoch: float) -> CandidateRankRecord:
+def _rank_record(
+    rank: int,
+    record: OpportunityScoreRecord,
+    directional_flags: tuple[str, ...],
+    generated_epoch: float,
+    *,
+    feed_risk_suppressed: bool = False,
+) -> CandidateRankRecord:
     family = direction_family(record.direction)
     directional_warnings = _directional_warnings(record, directional_flags)
-    sort_key = _sort_key(record, directional_warnings)
-    feed_risk_suppressed = _should_suppress_for_feed_risk(record)
+    sort_key = _sort_key(record, directional_warnings, feed_risk_suppressed=feed_risk_suppressed)
     score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
     bucket = _rank_bucket(record, feed_risk_suppressed)
 
@@ -345,8 +355,12 @@ def _rank_record(rank: int, record: OpportunityScoreRecord, directional_flags: t
     )
 
 
-def _sort_key(record: OpportunityScoreRecord, directional_warnings: tuple[str, ...]) -> tuple[Any, ...]:
-    feed_risk_suppressed = _should_suppress_for_feed_risk(record)
+def _sort_key(
+    record: OpportunityScoreRecord,
+    directional_warnings: tuple[str, ...],
+    *,
+    feed_risk_suppressed: bool = False,
+) -> tuple[Any, ...]:
     score_eligibility = _rank_score_eligibility(record, feed_risk_suppressed)
     bucket = _rank_bucket(record, feed_risk_suppressed)
     safety_flags = _rank_safety_flags(record, feed_risk_suppressed)
