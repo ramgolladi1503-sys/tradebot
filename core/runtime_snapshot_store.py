@@ -224,9 +224,3 @@ def _parse_snapshot_epoch(value: Any) -> float | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return float(parsed.timestamp())
-
-def read_ranked_pipeline_snapshot() -> dict:
-    return _read_snapshot_json(RANKED_PIPELINE_LATEST_PATH)
-
-def write_ranked_vs_legacy_snapshot(payload: dict) -> None:
-    _write_snapshot_json(RANKED_VS_LEGACY_LATEST_PATH, payload)

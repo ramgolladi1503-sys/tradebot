@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +96,33 @@ def _candidate_decisions_log_path() -> Path:
     return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
 
 
+def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> StrategyContext:
+    allowed = {field.name for field in dataclass_fields(StrategyContext)}
+    payload: dict[str, Any] = {"symbol": str(symbol or "").strip().upper() or "UNKNOWN"}
+    payload["spot_ltp"] = data.get("spot_ltp", data.get("ltp", data.get("spot")))
+    payload["vwap"] = (data.get("ohlc") or {}).get("close", data.get("vwap"))
+    payload["day_high"] = (data.get("ohlc") or {}).get("high", data.get("day_high"))
+    payload["day_low"] = (data.get("ohlc") or {}).get("low", data.get("day_low"))
+    payload["open_price"] = (data.get("ohlc") or {}).get("open", data.get("open_price"))
+    payload["regime_hint"] = (data.get("regime") or {}).get("primary_regime", data.get("regime_hint"))
+    payload["regime_scores"] = dict((data.get("regime") or {}).get("scores") or data.get("regime_scores") or {})
+    payload["ce_spread_pct"] = (data.get("option_chain_summary") or {}).get("ce_spread_pct", data.get("ce_spread_pct"))
+    payload["pe_spread_pct"] = (data.get("option_chain_summary") or {}).get("pe_spread_pct", data.get("pe_spread_pct"))
+    payload["ce_depth"] = (data.get("option_chain_summary") or {}).get("ce_depth", data.get("ce_depth"))
+    payload["pe_depth"] = (data.get("option_chain_summary") or {}).get("pe_depth", data.get("pe_depth"))
+    payload["option_ce_ltp"] = (data.get("option_chain_summary") or {}).get("ce_ltp", data.get("option_ce_ltp"))
+    payload["option_pe_ltp"] = (data.get("option_chain_summary") or {}).get("pe_ltp", data.get("option_pe_ltp"))
+    payload["quote_source"] = (data.get("feed_health") or {}).get("quote_source", data.get("quote_source"))
+    payload["fallback_used"] = (data.get("feed_health") or {}).get("fallback_used", data.get("fallback_used"))
+    payload["option_ltp_age_sec"] = (data.get("feed_health") or {}).get("option_ltp_age_sec", data.get("option_ltp_age_sec"))
+    payload["ts_epoch"] = data.get("ts_epoch")
+    payload["metadata"] = dict(data.get("metadata") or {})
+    payload["evidence"] = dict(data.get("evidence") or {})
+    payload["lineage"] = dict(data.get("lineage") or {})
+    filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
+    return StrategyContext(**filtered)
+
+
 def _row_snapshot_timestamp(row: dict[str, Any]) -> Any:
     if not isinstance(row, dict):
         return None
@@ -143,31 +171,8 @@ def _feed_health_symbols(feed_payload: Any) -> tuple[str, ...]:
 
 
 def _build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str, Any], Any]:
-    source_payload = feed_payload if isinstance(feed_payload, dict) else None
-    decision = classify_feed_health_truth(
-        source_payload,
-        symbols=_feed_health_symbols(source_payload),
-        max_option_tick_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_OPTION_TICK_AGE_SEC", 3.0)),
-        max_ltp_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5)),
-        max_depth_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0)),
-    )
-    payload = {
-        "schema_version": FEED_HEALTH_TRUTH_SNAPSHOT_SCHEMA_VERSION,
-        "read_only": True,
-        "is_order_action": False,
-        "append": False,
-        "source_snapshot": "feed_runtime_latest",
-        "source_payload_present": isinstance(feed_payload, dict) and not bool(feed_payload.get("missing")),
-        "feed_health_truth": decision.to_payload(),
-        "feed_ok": bool(decision.feed_ok),
-        "blockers": list(decision.reasons if not decision.feed_ok else ()),
-        "metadata": {
-            "producer": "runtime_snapshot_producer",
-            "derived_from": "feed_runtime_latest",
-            "symbols_evaluated": list(_feed_health_symbols(source_payload)),
-        },
-    }
-    return payload, decision
+    payload, _decision = stages_build_feed_health_truth_latest_payload(feed_payload)
+    return payload
 
 
 def _build_advisory_latest_payload(limit: int = 200) -> dict[str, Any]:
@@ -379,10 +384,7 @@ def _build_and_write_canonical_ranked_snapshot(
         if not isinstance(data, dict):
             continue
         try:
-            ctx_data = dict(data)
-            ctx_data["symbol"] = sym
-            ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
-            ctx = StrategyContext(**ctx_data)
+            ctx = _strategy_context_from_market_symbol(sym, data)
 
             report = build_ranked_opportunity_report(
                 ctx=ctx,
@@ -439,7 +441,7 @@ def _build_and_write_canonical_ranked_snapshot(
         "reports": reports,
         "source": "ranked_opportunity_pipeline_v1"
     }
-    write_ranked_pipeline_snapshot(payload)
+    write_ranked_pipeline_snapshot(payload=payload, producer=producer)
 
     # Ranked vs Legacy Comparison Evidence (Point 4)
     legacy_rows = advisory_payload.get("rows", [])
@@ -467,7 +469,7 @@ def _build_and_write_canonical_ranked_snapshot(
         "stale_or_untrusted_quote_in_canonical_executable": stale_or_untrusted_quote_in_canonical_executable,
         "verdict": verdict
     }
-    write_ranked_vs_legacy_snapshot(comparison_evidence)
+    write_ranked_vs_legacy_snapshot(payload=comparison_evidence, producer=producer)
 
 
 def produce_and_store_runtime_snapshots(
@@ -489,13 +491,14 @@ def produce_and_store_runtime_snapshots(
             market_payload = {"missing": True, "error": f"{type(exc).__name__}:{exc}"}
     outputs["market_snapshot"] = market_payload
 
-    advisory_payload = stages_build_advisory_latest_payload()
+    advisory_payload = _build_advisory_latest_payload()
     outputs["advisory_latest"] = advisory_payload
 
     t1 = time.perf_counter()
     feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
     outputs["feed_runtime_latest"] = feed_payload
-    feed_truth_payload, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
+    feed_truth_payload = _build_feed_health_truth_latest_payload(feed_payload)
+    _, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
     outputs["feed_health_truth_latest"] = feed_truth_payload
     timings.append({"stage": "feed_health_truth", "elapsed_ms": round((time.perf_counter() - t1) * 1000.0, 3)})
     cycle_context = RuntimeCycleContext(
