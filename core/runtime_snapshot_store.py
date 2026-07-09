@@ -225,4 +225,4 @@ def read_ranked_pipeline_snapshot() -> dict:
     return _read_snapshot_json(RANKED_PIPELINE_LATEST_PATH)
 
 def write_ranked_vs_legacy_snapshot(payload: dict) -> None:
-    _write_snapshot_json(RANKED_VS_LEGACY_LATEST_PATH, payload)
+    write_json_atomic(RANKED_VS_LEGACY_LATEST_PATH, payload)

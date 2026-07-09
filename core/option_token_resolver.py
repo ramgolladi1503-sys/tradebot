@@ -110,6 +110,10 @@ def _load_local_instruments_cache(exchange: str) -> list[dict]:
     cache_path = data_root() / "kite_instruments.json"
     if not cache_path.exists():
         return []
+    # FIX: Reject the local cache if it is older than 16 hours (stale from a previous trading day)
+    import time
+    if time.time() - cache_path.stat().st_mtime > 16 * 3600:
+        return []
     try:
         raw = json.loads(cache_path.read_text())
     except Exception:
