@@ -384,7 +384,10 @@ def _build_and_write_canonical_ranked_snapshot(
         if not isinstance(data, dict):
             continue
         try:
-            ctx = _strategy_context_from_market_symbol(sym, data)
+            ctx_data = dict(data)
+            ctx_data["symbol"] = sym
+            ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
+            ctx = _strategy_context_from_market_symbol(sym, ctx_data)
 
             report = build_ranked_opportunity_report(
                 ctx=ctx,
