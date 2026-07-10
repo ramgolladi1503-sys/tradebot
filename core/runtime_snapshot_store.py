@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from core.events import write_json_atomic
+from config import config as cfg
+from core.events import write_json_atomic, write_json_atomic_if_changed
 from core.latest_artifact_freshness_guard import (
     DEFAULT_MAX_AGE_SECONDS,
     LatestArtifactFreshnessDecision,
@@ -60,6 +61,9 @@ def write_snapshot_atomic(
         generated_at=generated_at,
         schema_version=schema_version,
     )
+    if bool(getattr(cfg, "RUNTIME_SNAPSHOT_WRITE_DEDUP_ENABLE", True)):
+        written_path, _changed = write_json_atomic_if_changed(target, envelope)
+        return written_path
     return write_json_atomic(target, envelope)
 
 
@@ -126,6 +130,14 @@ def write_ranked_vs_legacy_snapshot(
         generated_at=generated_at,
         schema_version=schema_version,
     )
+
+
+def read_ranked_pipeline_snapshot() -> dict[str, Any]:
+    return read_snapshot(RANKED_PIPELINE_LATEST_PATH)
+
+
+def read_ranked_vs_legacy_snapshot() -> dict[str, Any]:
+    return read_snapshot(RANKED_VS_LEGACY_LATEST_PATH)
 
 
 def read_snapshot(path: str | Path) -> dict[str, Any]:
@@ -220,9 +232,3 @@ def _parse_snapshot_epoch(value: Any) -> float | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return float(parsed.timestamp())
-
-def read_ranked_pipeline_snapshot() -> dict:
-    return _read_snapshot_json(RANKED_PIPELINE_LATEST_PATH)
-
-def write_ranked_vs_legacy_snapshot(payload: dict) -> None:
-    _write_snapshot_json(RANKED_VS_LEGACY_LATEST_PATH, payload)

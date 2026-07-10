@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from core import events
-from core.runtime_snapshot_store import build_snapshot_envelope, read_snapshot, write_snapshot_atomic
+from config import config as cfg
+from core.runtime_snapshot_store import (
+    build_snapshot_envelope,
+    read_ranked_pipeline_snapshot,
+    read_snapshot,
+    write_snapshot_atomic,
+)
 
 
 def test_runtime_snapshot_store_writes_expected_envelope(tmp_path):
@@ -32,19 +35,27 @@ def test_runtime_snapshot_envelope_preserves_payload_roundtrip():
     }
 
 
-def test_runtime_snapshot_atomic_writer_uses_unique_temp_paths(tmp_path, monkeypatch):
+def test_runtime_snapshot_atomic_writer_updates_sidecar_hash_on_content_change(tmp_path):
     path = tmp_path / "runtime" / "advisory_latest.json"
-    seen_sources: list[Path] = []
+    first_written = write_snapshot_atomic(path, payload={"run": 1}, producer="unit_test")
+    hash_path = path.with_name(f"{path.name}.sha256")
+    first_hash = hash_path.read_text(encoding="utf-8")
 
-    def fake_replace(src, dst):
-        seen_sources.append(Path(src))
+    second_written = write_snapshot_atomic(path, payload={"run": 2}, producer="unit_test")
+    second_hash = hash_path.read_text(encoding="utf-8")
 
-    monkeypatch.setattr(events.os, "replace", fake_replace)
+    assert first_written == path
+    assert second_written == path
+    assert read_snapshot(path)["payload"] == {"run": 2}
+    assert first_hash != second_hash
 
-    write_snapshot_atomic(path, payload={"run": 1}, producer="unit_test")
-    write_snapshot_atomic(path, payload={"run": 2}, producer="unit_test")
 
-    assert len(seen_sources) == 2
-    assert seen_sources[0] != seen_sources[1]
-    assert seen_sources[0].name.startswith("advisory_latest.json.tmp.")
-    assert seen_sources[1].name.startswith("advisory_latest.json.tmp.")
+def test_runtime_snapshot_store_exposes_ranked_pipeline_reader(tmp_path, monkeypatch):
+    path = tmp_path / "runtime" / "opportunities" / "ranked_pipeline_latest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_snapshot_atomic(path, payload={"reports": []}, producer="unit_test")
+    monkeypatch.setattr("core.runtime_snapshot_store.RANKED_PIPELINE_LATEST_PATH", path)
+
+    loaded = read_ranked_pipeline_snapshot()
+
+    assert loaded["payload"] == {"reports": []}

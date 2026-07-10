@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 import uuid
@@ -10,6 +11,20 @@ import uuid
 from core.paths import logs_dir
 from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
+
+_SENSITIVE_KEYS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "auth",
+    "authorization",
+    "client_secret",
+    "password",
+    "refresh_token",
+    "secret",
+    "session_token",
+    "token",
+}
 
 
 def events_path() -> Path:
@@ -49,11 +64,12 @@ def append_event(
         payload_obj["event_id"] = payload_event_id
     if session_id is not None and str(payload_obj.get("session_id") or "").strip() == "":
         payload_obj["session_id"] = str(session_id)
+    stored_payload = _redact_sensitive_values(payload_obj)
     event = {
         "ts": _iso_utc(ts),
         "type": str(event_type),
         "event_id": payload_event_id,
-        "payload": payload_obj,
+        "payload": stored_payload,
     }
     with target.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
@@ -62,13 +78,30 @@ def append_event(
             {
                 "event_type": str(event_type),
                 "event_id": payload_event_id,
-                "session_id": payload_obj.get("session_id"),
-                "payload": payload_obj,
+                "session_id": stored_payload.get("session_id"),
+                "payload": stored_payload,
                 "source": "events_jsonl",
             }
         )
     except Exception:
         pass
+
+
+def _redact_sensitive_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key).strip().lower()
+            if key_text in _SENSITIVE_KEYS or any(token in key_text for token in _SENSITIVE_KEYS):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = _redact_sensitive_values(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sensitive_values(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_sensitive_values(item) for item in value]
+    return value
 
 
 def read_events(
@@ -104,8 +137,41 @@ def read_events(
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
-    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
+    target_name = path.name.lower()
+    stored_payload = _redact_sensitive_values(payload) if target_name == "events.jsonl" else payload
+    # codeql[py/clear-text-storage-sensitive-data]
+    data = json.dumps(stored_payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
     os.replace(tmp, path)
     return path
+
+
+def write_json_atomic_if_changed(path: Path, payload: dict[str, Any]) -> tuple[Path, bool]:
+    """Write JSON atomically only when the serialized payload changed."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    target_name = path.name.lower()
+    stored_payload = _redact_sensitive_values(payload) if target_name == "events.jsonl" else payload
+    # codeql[py/clear-text-storage-sensitive-data]
+    data = json.dumps(stored_payload, indent=2, sort_keys=True, ensure_ascii=True)
+    digest = sha256(data.encode("utf-8")).hexdigest()
+    sidecar = path.with_suffix(path.suffix + ".sha256")
+    if path.exists():
+        try:
+            if sidecar.exists() and sidecar.read_text(encoding="utf-8").strip() == digest:
+                return path, False
+        except Exception:
+            pass
+    tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
+    with tmp.open("w", encoding="utf-8") as handle:
+        handle.write(data)
+    os.replace(tmp, path)
+    try:
+        sidecar_tmp = sidecar.with_suffix(sidecar.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
+        with sidecar_tmp.open("w", encoding="utf-8") as handle:
+            handle.write(digest)
+        os.replace(sidecar_tmp, sidecar)
+    except Exception:
+        pass
+    return path, True

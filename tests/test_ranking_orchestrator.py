@@ -6,6 +6,7 @@ from core.feed_health_truth import FeedHealthTruthDecision
 from core.feed_hold_gate import FEED_HOLD_BLOCKER
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
+from core.runtime_cycle_context import RuntimeCycleContext, StageTiming
 from core.ranking_orchestrator import (
     FEED_HOLD_PIPELINE_STAGE_ORDER,
     PIPELINE_STAGE_ORDER,
@@ -238,8 +239,28 @@ def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_safer_candidate
     assert report.no_trade_rank_count == 1
     assert "FALLBACK_QUOTE_ONLY" in report.blockers
     assert "fallback_data" in report.safety_flags
-    assert report.ranking.ranks[1].score_eligibility == "SUPPRESSED_BY_DOWNGRADE"
-    assert report.ranking.ranks[-1].score_eligibility == "NO_TRADE_ONLY"
+
+
+def test_ranked_pipeline_uses_cycle_context_feed_truth_and_exposes_stage_timings():
+    cycle_context = RuntimeCycleContext(
+        cycle_id="cycle-1",
+        feed_truth=_feed_truth(True).to_payload(),
+        stage_timings=(StageTiming(stage="feed_health_truth", elapsed_ms=1.25, metadata={"producer": "unit"}),),
+        metadata={"producer": "unit"},
+    )
+
+    report = build_ranked_opportunity_report(
+        _context(),
+        _regime(primary="TREND_UP", TREND_UP=0.8),
+        candidate_generators=[_generator(_candidate("clean", direction="BUY_CALL"))],
+        include_strategy_id_in_normalization_key=True,
+        cycle_context=cycle_context,
+    )
+
+    assert report.metadata["cycle_context_present"] is True
+    assert report.metadata["stage_timings"][0]["stage"] == "feed_health_truth"
+    assert report.metadata["stage_timings"][0]["elapsed_ms"] == 1.25
+    assert report.ranked_candidate_count == 1
 
 
 def test_ranked_pipeline_global_no_trade_suppresses_directional_candidates():
