@@ -59,12 +59,11 @@ class _DummyRestClient:
         return {"user_id": "ABCD1234"}
 def _patch_common(monkeypatch):
     import sys
+    import contextlib
     if "twisted.internet.reactor" in sys.modules:
-        try:
+        with contextlib.suppress(Exception):
             monkeypatch.setattr(sys.modules["twisted.internet.reactor"], "running", False, raising=False)
             monkeypatch.setattr(sys.modules["twisted.internet.reactor"], "_started", False, raising=False)
-        except Exception:
-            pass
     from core.feed import ws_mutation_queue
     monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws_mutation_queue, "_check_socket_health", lambda *args: (True, True, None), raising=False)

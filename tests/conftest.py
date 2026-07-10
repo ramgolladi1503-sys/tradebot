@@ -71,16 +71,14 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     except Exception as exc:
         monkeypatch.setenv("PYTEST_FEED_COORDINATOR_RESET_ERROR", type(exc).__name__)
 
-    try:
+    import contextlib
+
+    with contextlib.suppress(Exception):
         import core.strategy_input_evidence as sie
         if getattr(sie, "_default_recorder", None) is not None:
-            try:
+            with contextlib.suppress(Exception):
                 sie._default_recorder.shutdown()
-            except Exception:
-                pass
             sie._default_recorder = None
-    except Exception:
-        pass
 
     import json
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
