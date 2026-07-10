@@ -65,6 +65,21 @@ def _isolate_runtime_state(monkeypatch, tmp_path):
     except Exception as exc:
         monkeypatch.setenv("PYTEST_KITE_COOLDOWN_RESET_ERROR", type(exc).__name__)
 
+    try:
+        from core.feed_recovery_coordinator import get_feed_recovery_coordinator
+        get_feed_recovery_coordinator().reset()
+    except Exception as exc:
+        monkeypatch.setenv("PYTEST_FEED_COORDINATOR_RESET_ERROR", type(exc).__name__)
+
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        import core.strategy_input_evidence as sie
+        if getattr(sie, "_default_recorder", None) is not None:
+            with contextlib.suppress(Exception):
+                sie._default_recorder.shutdown()
+            sie._default_recorder = None
+
     import json
     feed_path = runtime_root / "logs" / "feed_runtime_latest.json"
     feed_path.parent.mkdir(parents=True, exist_ok=True)

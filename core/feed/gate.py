@@ -24,6 +24,14 @@ def check_execution_allowed(
     """
     group_key = classify_group(str(symbol or ""))
 
+    from core.feed.recovery_evaluator import evaluate_recovery_block
+    from core.feed_recovery_coordinator import get_feed_recovery_coordinator
+    
+    coordinator = get_feed_recovery_coordinator()
+    recovery_decision = evaluate_recovery_block(coordinator.get_state_snapshot(), group_key)
+    if recovery_decision is not None:
+        return recovery_decision.as_tuple()
+
     if machine is None or metrics_map is None:
         runtime_machine, runtime_metrics = get_runtime_feed_health()
         if machine is None:

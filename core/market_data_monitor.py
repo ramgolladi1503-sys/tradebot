@@ -10,6 +10,7 @@ from typing import Callable
 from config import config as cfg
 from core.freshness_policy import resolve_freshness_policy
 from core.time_utils import compute_age_sec, now_utc_epoch
+from core.feed_recovery_coordinator import get_feed_recovery_coordinator
 
 
 class FeedState(str, Enum):
@@ -206,8 +207,16 @@ class FeedHealth:
                 if has_index
                 else self.option_down_no_msg_sec
             )
-            state: FeedState
-            if ws_age is None:
+
+            coordinator = get_feed_recovery_coordinator()
+            recovery_state = coordinator.get_state_snapshot()
+            from core.feed.recovery_evaluator import evaluate_recovery_block
+            readiness_decision = evaluate_recovery_block(recovery_state)
+            
+            if readiness_decision is not None:
+                state = FeedState.DOWN
+                reasons.append(readiness_decision.reason)
+            elif ws_age is None:
                 state = FeedState.DOWN
                 reasons.append("no_ws_messages")
             elif ws_age > down_threshold:

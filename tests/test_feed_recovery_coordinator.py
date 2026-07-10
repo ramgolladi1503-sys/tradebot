@@ -219,3 +219,16 @@ def test_terminal_reactor_failure_requires_restart():
     assert result.state.process_restart_required is True
     assert result.state.terminal_failure is True
     assert result.state.recovery_blocked is True
+
+
+def test_public_state_snapshot_is_immutable():
+    import dataclasses
+    import pytest
+    coord = FeedRecoveryCoordinator()
+    
+    snapshot = coord.get_state_snapshot()
+    
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        snapshot.recovery_in_progress = True
+        
+    assert coord.get_state_snapshot().recovery_in_progress is False

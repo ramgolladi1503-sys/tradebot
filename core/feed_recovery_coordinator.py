@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass, replace
 from typing import Callable, Literal
 
@@ -63,6 +64,10 @@ class FeedRecoveryCoordinator:
 
     @property
     def state(self) -> FeedRecoveryState:
+        return self._state
+
+    def get_state_snapshot(self) -> FeedRecoveryState:
+        """Returns an immutable snapshot of the current recovery state."""
         return self._state
 
     def _now_epoch(self) -> float:
@@ -341,3 +346,14 @@ class FeedRecoveryCoordinator:
             events_emitted=["FEED_RECOVERY_BLOCKED"],
             state=state,
         )
+
+_DEFAULT_COORDINATOR: FeedRecoveryCoordinator | None = None
+_DEFAULT_LOCK = threading.Lock()
+
+def get_feed_recovery_coordinator() -> FeedRecoveryCoordinator:
+    global _DEFAULT_COORDINATOR
+    if _DEFAULT_COORDINATOR is None:
+        with _DEFAULT_LOCK:
+            if _DEFAULT_COORDINATOR is None:
+                _DEFAULT_COORDINATOR = FeedRecoveryCoordinator()
+    return _DEFAULT_COORDINATOR
