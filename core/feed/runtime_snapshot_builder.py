@@ -6,6 +6,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.feed.ws_lifecycle_shell import derive_transport_health
+from core.runtime_truth_integrity import build_truth_integrity_payload
+
 
 @dataclass(frozen=True)
 class FeedRuntimeSnapshotInputs:
@@ -37,6 +40,8 @@ class FeedRuntimeSnapshotInputs:
     last_depth_epoch: float | None = None
     last_depth_age_sec: float | None = None
     state_machine: Mapping[str, Any] = field(default_factory=dict)
+    reconnect_pending: bool | None = None
+    reconnect_blocked_reason: str | None = None
     restart_count_1h: int = 0
     stale_strikes: int = 0
 
@@ -111,7 +116,14 @@ def derive_runtime_state_machine(
 
 
 def build_feed_runtime_store_payload(inputs: FeedRuntimeSnapshotInputs) -> dict[str, Any]:
-    return {
+    transport_health = derive_transport_health(
+        ws_connected=inputs.ws_connected,
+        reconnect_pending=bool(inputs.reconnect_pending),
+        runtime_state=inputs.runtime_state,
+        reconnect_blocked_reason=inputs.reconnect_blocked_reason,
+        last_error=inputs.last_error,
+    )
+    payload = {
         "ts_epoch": float(inputs.ts_epoch),
         "ws_connected": inputs.ws_connected,
         "subscribed_tokens_count": int(inputs.subscribed_tokens_count),
@@ -135,10 +147,24 @@ def build_feed_runtime_store_payload(inputs: FeedRuntimeSnapshotInputs) -> dict[
         "last_depth_epoch": coerce_epoch(inputs.last_depth_epoch),
         "last_depth_age_sec": safe_float(inputs.last_depth_age_sec),
         "state_machine": dict_copy(inputs.state_machine),
+        "transport_state": transport_health["state"],
+        "transport_reason": transport_health["reason"],
+        "transport_healthy": bool(transport_health["healthy"]),
+        "transport": dict(transport_health),
         "source": str(inputs.source or ""),
         "runtime_state": normalized_runtime_state(inputs.runtime_state),
         "last_error": trimmed_error(inputs.last_error),
     }
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state=payload.get("transport_state"),
+            feed_truth_state=payload.get("feed_truth_state"),
+            reason_code=payload.get("feed_truth_reason_code"),
+            heartbeat_epoch=inputs.ts_epoch,
+        )
+    )
+    return payload
 
 
 def build_feed_runtime_latest_payload(
@@ -148,6 +174,13 @@ def build_feed_runtime_latest_payload(
     derive_feed_ok: Callable[[dict[str, Any]], bool | None] | None = None,
     stamp_payload: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    transport_health = derive_transport_health(
+        ws_connected=inputs.ws_connected,
+        reconnect_pending=bool(inputs.reconnect_pending),
+        runtime_state=inputs.runtime_state,
+        reconnect_blocked_reason=inputs.reconnect_blocked_reason,
+        last_error=inputs.last_error,
+    )
     payload: dict[str, Any] = {
         "ts_epoch": float(inputs.ts_epoch),
         "ws_connected": inputs.ws_connected,
@@ -177,6 +210,10 @@ def build_feed_runtime_latest_payload(
         "stale_strikes": int(inputs.stale_strikes),
         "runtime_state": normalized_runtime_state(inputs.runtime_state),
         "last_error": trimmed_error(inputs.last_error),
+        "transport_state": transport_health["state"],
+        "transport_reason": transport_health["reason"],
+        "transport_healthy": bool(transport_health["healthy"]),
+        "transport": dict(transport_health),
     }
     if derive_effective_ws_connected is not None:
         payload["effective_ws_connected"] = derive_effective_ws_connected(dict(payload))
@@ -186,6 +223,15 @@ def build_feed_runtime_latest_payload(
         stamped = stamp_payload(dict(payload))
         if isinstance(stamped, dict):
             payload = stamped
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state=payload.get("transport_state"),
+            feed_truth_state=payload.get("feed_truth_state"),
+            reason_code=payload.get("feed_truth_reason_code"),
+            heartbeat_epoch=inputs.ts_epoch,
+        )
+    )
     return payload
 
 

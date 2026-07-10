@@ -277,6 +277,22 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
     )
     snapshot_state = str(snapshot_payload.get("runtime_state") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
     snapshot_error = str(snapshot_payload.get("last_error") or "") if isinstance(snapshot_payload, dict) else ""
+    snapshot_feed_truth_state = str(snapshot_payload.get("feed_truth_state") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
+    snapshot_feed_truth_reason_code = str(snapshot_payload.get("feed_truth_reason_code") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
+    snapshot_feed_truth_strict_live = snapshot_payload.get("feed_truth_strict_live") if isinstance(snapshot_payload, dict) else None
+    snapshot_transport_state = str(snapshot_payload.get("transport_state") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
+    snapshot_transport_reason = str(snapshot_payload.get("transport_reason") or "").strip().lower() if isinstance(snapshot_payload, dict) else ""
+    snapshot_transport_healthy = snapshot_payload.get("transport_healthy") if isinstance(snapshot_payload, dict) else None
+    snapshot_hash = str(snapshot_payload.get("snapshot_hash") or "").strip() if isinstance(snapshot_payload, dict) else ""
+    snapshot_hash_version = snapshot_payload.get("snapshot_hash_version") if isinstance(snapshot_payload, dict) else None
+    snapshot_heartbeat_epoch = _coerce_epoch(snapshot_payload.get("transport_heartbeat_epoch")) if isinstance(snapshot_payload, dict) else None
+    snapshot_heartbeat_age_sec = None
+    if isinstance(snapshot_payload, dict):
+        try:
+            snapshot_heartbeat_age_sec = float(snapshot_payload.get("transport_heartbeat_age_sec"))
+        except Exception:
+            snapshot_heartbeat_age_sec = None
+    snapshot_heartbeat_state = str(snapshot_payload.get("transport_heartbeat_state") or "").strip().upper() if isinstance(snapshot_payload, dict) else ""
     snapshot_reconnect_blocked_reason = (
         str(snapshot_payload.get("reconnect_blocked_reason") or "").strip().lower()
         if isinstance(snapshot_payload, dict)
@@ -322,6 +338,28 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
     runtime_state_final = runtime_state or snapshot_state or None
     runtime_error_final = runtime_error or snapshot_error or None
     reconnect_blocked_reason_final = runtime_reconnect_blocked_reason or snapshot_reconnect_blocked_reason or None
+    transport_state_final = snapshot_transport_state or (
+        "BLOCKED"
+        if reconnect_blocked_reason_final
+        else "CONNECTED"
+        if ws_connected is True
+        else "DISCONNECTED"
+        if ws_connected is False
+        else None
+    )
+    transport_reason_final = snapshot_transport_reason or (
+        f"reconnect_blocked:{reconnect_blocked_reason_final}"
+        if reconnect_blocked_reason_final
+        else "ws_connected"
+        if ws_connected is True
+        else "ws_disconnected"
+        if ws_connected is False
+        else None
+    )
+    if snapshot_transport_healthy in (True, False):
+        transport_healthy_final = bool(snapshot_transport_healthy)
+    else:
+        transport_healthy_final = bool(ws_connected is True and not reconnect_blocked_reason_final)
 
     depth_store_epoch = _latest_depth_epoch_from_store()
     depth_epoch = db_depth_epoch
@@ -381,7 +419,21 @@ def get_feed_debug(now_epoch: Optional[float] = None) -> dict[str, Any]:
         "feed_runtime_source": str(runtime_row.get("source") or "") if runtime_row else "",
         "feed_runtime_state": runtime_state_final,
         "feed_runtime_last_error": runtime_error_final,
+        "feed_truth_state": snapshot_feed_truth_state or None,
+        "feed_truth_reason_code": snapshot_feed_truth_reason_code or None,
+        "feed_truth_strict_live": bool(snapshot_feed_truth_strict_live) if snapshot_feed_truth_strict_live is not None else None,
         "reconnect_blocked_reason": reconnect_blocked_reason_final,
+        "transport_state": transport_state_final,
+        "transport_reason": transport_reason_final,
+        "transport_healthy": transport_healthy_final,
+        "snapshot_hash": snapshot_hash or None,
+        "snapshot_hash_version": snapshot_hash_version,
+        "transport_heartbeat_epoch": snapshot_heartbeat_epoch,
+        "transport_heartbeat_age_sec": snapshot_heartbeat_age_sec,
+        "transport_heartbeat_state": snapshot_heartbeat_state or None,
+        "truth_integrity_status": snapshot_payload.get("truth_integrity_status") if isinstance(snapshot_payload, dict) else None,
+        "truth_integrity_alert_count": snapshot_payload.get("truth_integrity_alert_count") if isinstance(snapshot_payload, dict) else None,
+        "truth_integrity_alerts": snapshot_payload.get("truth_integrity_alerts") if isinstance(snapshot_payload, dict) else [],
         "warmup_clean_cycles": snapshot_payload.get("warmup_clean_cycles") if isinstance(snapshot_payload, dict) else None,
         "warmup_required_clean_cycles": snapshot_payload.get("warmup_required_clean_cycles") if isinstance(snapshot_payload, dict) else None,
         "recovery_generation_id": snapshot_payload.get("recovery_generation_id") if isinstance(snapshot_payload, dict) else None,

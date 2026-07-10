@@ -15,8 +15,11 @@ from core.feed_debug import get_feed_debug
 from core.feed_recovery_runtime import classify_feed_recovery_runtime
 from core.feed_zombie_state import classify_feed_zombie_state
 from core.freshness_sla import get_freshness_status
+from core.runtime_truth_integrity import build_truth_integrity_alerts, truth_hash_from_mapping
 from core.time_utils import is_market_open_ist, now_utc_epoch
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.paths import runtime_dir
+from core.events import append_event
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -26,10 +29,30 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _safe_json_payload(path: Path) -> dict[str, Any]:
+    try:
+        if not path.exists():
+            return {}
+        raw = path.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _first_non_none(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None = None) -> dict[str, Any]:
     ts_epoch = float(now_epoch if now_epoch is not None else now_utc_epoch())
     freshness = dict(get_freshness_status(force=False) or {})
     feed_debug = dict(get_feed_debug(now_epoch=ts_epoch) or {})
+    feed_runtime_path = runtime_dir() / "feed_runtime_latest.json"
+    feed_runtime_payload = _safe_json_payload(feed_runtime_path)
 
     market_open = bool(freshness.get("market_open", is_market_open_ist()))
     mode = str(
@@ -78,10 +101,55 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         "ltp_max_age_sec": ltp_max_age_sec,
         "depth_required": bool(depth_required),
         "depth_max_age_sec": depth_max_age_sec,
+        "transport_state": feed_debug.get("transport_state"),
+        "transport_reason": feed_debug.get("transport_reason"),
+        "transport_healthy": feed_debug.get("transport_healthy"),
+        "feed_truth_state": _first_non_none(feed_debug.get("feed_truth_state"), feed_runtime_payload.get("feed_truth_state")),
+        "feed_truth_reason_code": _first_non_none(feed_debug.get("feed_truth_reason_code"), feed_runtime_payload.get("feed_truth_reason_code")),
+        "snapshot_hash": _first_non_none(feed_debug.get("snapshot_hash"), feed_runtime_payload.get("snapshot_hash")),
+        "snapshot_hash_version": _first_non_none(feed_debug.get("snapshot_hash_version"), feed_runtime_payload.get("snapshot_hash_version")),
+        "transport_heartbeat_epoch": _first_non_none(feed_debug.get("transport_heartbeat_epoch"), feed_runtime_payload.get("transport_heartbeat_epoch")),
+        "transport_heartbeat_age_sec": _first_non_none(feed_debug.get("transport_heartbeat_age_sec"), feed_runtime_payload.get("transport_heartbeat_age_sec")),
+        "transport_heartbeat_state": _first_non_none(feed_debug.get("transport_heartbeat_state"), feed_runtime_payload.get("transport_heartbeat_state")),
         "sla_state": sla_state,
         "sla_status": raw_sla_status or freshness.get("state"),
         "reasons": list(freshness.get("reasons") or []),
     }
+    expected_snapshot_hash = ""
+    integrity_alerts: list[dict[str, Any]] = []
+    has_integrity_evidence = bool(feed_runtime_payload) or bool(feed.get("snapshot_hash")) or bool(feed.get("feed_truth_state"))
+    if has_integrity_evidence:
+        expected_snapshot_hash = truth_hash_from_mapping(
+            feed_runtime_payload,
+            exclude_keys=(
+                "snapshot_hash",
+                "snapshot_hash_version",
+                "transport_heartbeat",
+                "transport_heartbeat_epoch",
+                "transport_heartbeat_age_sec",
+                "transport_heartbeat_source",
+                "transport_heartbeat_state",
+                "transport_heartbeat_reason",
+                "truth_integrity_alerts",
+                "truth_integrity_alert_count",
+                "truth_integrity_status",
+            ),
+        )
+        integrity_alerts = build_truth_integrity_alerts(
+            transport_state=feed.get("transport_state"),
+            feed_truth_state=feed.get("feed_truth_state"),
+            snapshot_hash=feed.get("snapshot_hash"),
+            expected_snapshot_hash=expected_snapshot_hash,
+        )
+    feed["snapshot_hash_expected"] = expected_snapshot_hash or None
+    feed["snapshot_hash_match"] = bool(
+        feed.get("snapshot_hash")
+        and expected_snapshot_hash
+        and str(feed.get("snapshot_hash")) == str(expected_snapshot_hash)
+    )
+    feed["truth_integrity_alerts"] = integrity_alerts
+    feed["truth_integrity_alert_count"] = len(integrity_alerts)
+    feed["truth_integrity_status"] = "ALERT" if integrity_alerts else "OK"
     recovery_runtime = classify_feed_recovery_runtime(feed)
     feed["recovery_runtime"] = recovery_runtime.to_payload()
     feed["full_feed_proof_ready"] = bool(recovery_runtime.context.get("full_feed_proof_ready"))
@@ -92,7 +160,8 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
     feed["underlying_ltp_stale_symbols"] = list(
         symbol
         for symbol, age in dict(feed_debug.get("option_last_tick_age_by_symbol") or {}).items()
-        if age is None or (float(age) if age is not None else 0.0) > float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5))
+        if age is None
+        or (float(age) if age is not None else 0.0) > float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5))
     )
     feed["underlying_ltp_age_by_symbol"] = dict(feed_debug.get("option_last_tick_age_by_symbol") or {})
     feed["underlying_ltp_proof_state"] = "FULL" if bool(recovery_runtime.context.get("full_feed_proof_ready")) else "STALE"
@@ -123,6 +192,28 @@ def get_runtime_health(orchestrator: Any | None = None, now_epoch: float | None 
         for blocker in feed_zombie.blockers:
             if blocker not in blockers:
                 blockers.append(blocker)
+    if integrity_alerts:
+        for alert in integrity_alerts:
+            blocker_code = f"truth_integrity:{str(alert.get('code') or 'ALERT')}"
+            if blocker_code not in blockers:
+                blockers.append(blocker_code)
+        try:
+            append_event(
+                "runtime_truth_integrity_alert",
+                {
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "transport_state": feed.get("transport_state"),
+                    "feed_truth_state": feed.get("feed_truth_state"),
+                    "snapshot_hash": feed.get("snapshot_hash"),
+                    "snapshot_hash_expected": expected_snapshot_hash or None,
+                    "alerts": integrity_alerts,
+                    "alert_count": len(integrity_alerts),
+                },
+            )
+        except Exception:
+            pass
     feed["feed_zombie"] = feed_zombie.to_payload()
     feed["blockers"] = blockers
 
