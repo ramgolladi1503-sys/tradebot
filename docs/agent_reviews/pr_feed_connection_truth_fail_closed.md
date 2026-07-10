@@ -1,5 +1,13 @@
 # Agent Review: Feed Connection Truth Fail Closed Hotfix
 
+mode: offline
+candidate_id: PR-FEED-CONNECTION-TRUTH
+decision: approve
+reason: fix recovery execution race
+timestamp: 2026-07-10T22:21:21+00:00
+is_order_action: false
+broker_api_called: false
+source: GSD
 ## Agent Work Contract
 
 Source Agent: GSD
