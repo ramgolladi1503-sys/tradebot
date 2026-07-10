@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from config import config as cfg
-from core.runtime_snapshot_store import build_snapshot_envelope, read_snapshot, write_snapshot_atomic
+from core.runtime_snapshot_store import (
+    build_snapshot_envelope,
+    read_ranked_pipeline_snapshot,
+    read_snapshot,
+    write_snapshot_atomic,
+)
 
 
 def test_runtime_snapshot_store_writes_expected_envelope(tmp_path):
@@ -43,3 +48,14 @@ def test_runtime_snapshot_atomic_writer_updates_sidecar_hash_on_content_change(t
     assert second_written == path
     assert read_snapshot(path)["payload"] == {"run": 2}
     assert first_hash != second_hash
+
+
+def test_runtime_snapshot_store_exposes_ranked_pipeline_reader(tmp_path, monkeypatch):
+    path = tmp_path / "runtime" / "opportunities" / "ranked_pipeline_latest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_snapshot_atomic(path, payload={"reports": []}, producer="unit_test")
+    monkeypatch.setattr("core.runtime_snapshot_store.RANKED_PIPELINE_LATEST_PATH", path)
+
+    loaded = read_ranked_pipeline_snapshot()
+
+    assert loaded["payload"] == {"reports": []}

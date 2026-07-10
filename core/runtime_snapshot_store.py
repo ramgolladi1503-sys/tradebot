@@ -132,6 +132,14 @@ def write_ranked_vs_legacy_snapshot(
     )
 
 
+def read_ranked_pipeline_snapshot() -> dict[str, Any]:
+    return read_snapshot(RANKED_PIPELINE_LATEST_PATH)
+
+
+def read_ranked_vs_legacy_snapshot() -> dict[str, Any]:
+    return read_snapshot(RANKED_VS_LEGACY_LATEST_PATH)
+
+
 def read_snapshot(path: str | Path) -> dict[str, Any]:
     target = Path(path).expanduser()
     raw = json.loads(target.read_text(encoding="utf-8"))
