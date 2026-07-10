@@ -58,7 +58,15 @@ class _DummyRestClient:
     def profile(self):
         return {"user_id": "ABCD1234"}
 def _patch_common(monkeypatch):
+    import sys
+    if "twisted.internet.reactor" in sys.modules:
+        try:
+            monkeypatch.setattr(sys.modules["twisted.internet.reactor"], "running", False, raising=False)
+            monkeypatch.setattr(sys.modules["twisted.internet.reactor"], "_started", False, raising=False)
+        except Exception:
+            pass
     from core.feed import ws_mutation_queue
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False, raising=False)
     monkeypatch.setattr(ws_mutation_queue, "_check_socket_health", lambda *args: (True, True, None), raising=False)
     monkeypatch.setattr(depth_hook_cleanup, "_maybe_reapply_depth_engine", lambda: None, raising=False)
     monkeypatch.setattr(depth_hook_cleanup, "_reapply_depth_engine", lambda *args, **kwargs: None, raising=False)
@@ -205,7 +213,7 @@ def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
         "_schedule_restart_depth_ws",
         lambda **kwargs: scheduled.append(dict(kwargs)) or True,
     )
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     ticker = captured["ticker"]
     ticker.on_error(
@@ -234,7 +242,7 @@ def test_ws1006_auth_failure_blocks_reconnect_loop(monkeypatch):
         captured["ticker"] = ticker
         return ticker
     monkeypatch.setattr(ws, "KiteTicker", _factory)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     ticker = captured["ticker"]
     ticker.on_error(ticker, 403, "invalid auth token")
@@ -284,7 +292,7 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
         "_schedule_restart_depth_ws",
         lambda **kwargs: scheduled.append(dict(kwargs)) or True,
     )
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
     ws._FEED_RECOVERY_COORDINATOR.clear_recovery(source="unit_test", reason="reconnect_verified")
     ws._sync_ws1006_recovery_state_from_coordinator()
@@ -319,7 +327,7 @@ def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypa
         "_schedule_restart_depth_ws",
         lambda **kwargs: scheduled.append(dict(kwargs)) or True,
     )
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     ticker = captured["ticker"]
     ticker.on_error(ticker, 1006, "main loop terminated after reactor shutdown")
@@ -623,7 +631,7 @@ def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 2, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 200.0, raising=False)
@@ -995,7 +1003,7 @@ def test_ensure_subscribed_tokens_skips_when_ws_disconnected(monkeypatch):
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws.ensure_subscribed_tokens([201, 202], reason="unit_test", symbol="BANKNIFTY") is False
     assert ticker.tokens == [] if hasattr(ticker, "tokens") else True
     assert events[-1][0] == "FEED_SUBSCRIBE_SKIPPED"
@@ -1008,7 +1016,7 @@ def test_ensure_subscribed_tokens_skips_when_recovery_blocked(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws.ensure_subscribed_tokens([201, 202], reason="unit_test", symbol="BANKNIFTY") is False
     assert events[-1][0] == "FEED_SUBSCRIBE_SKIPPED"
     assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
@@ -1022,7 +1030,7 @@ def test_soft_resubscribe_skips_when_recovery_blocked(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws._soft_resubscribe_current(reason="unit_test") is False
     assert events[-1][0] == "FEED_SOFT_RESUBSCRIBE_SKIPPED"
     assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
@@ -1034,7 +1042,7 @@ def test_apply_subscription_delta_skips_when_recovery_blocked(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "ws1006_process_restart_required", raising=False)
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
     assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
     assert events[-1][1]["guard_reason"] == "ws1006_process_restart_required"
@@ -1046,7 +1054,7 @@ def test_apply_subscription_delta_skips_when_ws_disconnected(monkeypatch):
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
     assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
     assert events[-1][1]["guard_reason"] == "ws_disconnected"
@@ -1085,7 +1093,7 @@ def test_apply_subscription_delta_skips_when_runtime_degraded_and_option_feed_st
         },
     )
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is False
     assert events[-1][0] == "FEED_REBALANCE_SKIPPED"
     assert "degraded" in str(events[-1][1]["guard_reason"]).lower() or "stale" in str(events[-1][1]["guard_reason"]).lower()
@@ -1110,13 +1118,16 @@ def test_apply_subscription_delta_allows_healthy_rebalance(monkeypatch):
         },
     )
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
-    assert ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test") is True
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
+    result = ws._apply_subscription_delta(ticker, [301, 302], [101], reason="unit_test")
+    if not result:
+        raise AssertionError(f"Expected True, got False. Events: {events}")
+    assert result is True
     assert any(event == "FEED_MUTATION_APPLIED" for event, _ in events)
 def test_option_feed_verification_logs_begin_and_ok(monkeypatch):
     _patch_common(monkeypatch)
     events: list[tuple[str, dict]] = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_option_feed_verification(reason="unit_test")
     ws._begin_option_feed_verification(
         reason="connect",
@@ -1188,7 +1199,7 @@ def test_persist_runtime_snapshot_row_publishes_restart_required_canonical_feed_
 def test_option_feed_verification_logs_failed_when_ticks_never_arrive(monkeypatch):
     _patch_common(monkeypatch)
     events: list[tuple[str, dict]] = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_option_feed_verification(reason="unit_test")
     ws._begin_option_feed_verification(
         reason="connect",
@@ -1217,7 +1228,7 @@ def test_apply_subscription_delta_queued_mutation_returns_false_and_no_last_toke
         },
     )
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     from core.feed.ws_mutation_queue import WsMutationResult
     def mock_safe(*args, **kwargs):
         res = WsMutationResult(ok=False, action="subscribe", tokens_count=2, socket_present=True, ws_connected=True, scheduled=True, queued=True, applied=False, failure_reason="scheduled", reason="unit_test", ts_epoch=0.0)
@@ -1244,7 +1255,7 @@ def test_refresh_subscription_tokens_queued_returns_false_no_raise(monkeypatch):
         },
     )
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     from core.feed.ws_mutation_queue import WsMutationResult
     def mock_safe(*args, **kwargs):
         res = WsMutationResult(ok=False, action="subscribe", tokens_count=2, socket_present=True, ws_connected=True, scheduled=True, queued=True, applied=False, failure_reason="scheduled", reason="unit_test", ts_epoch=0.0)
@@ -1271,7 +1282,7 @@ def test_apply_subscription_delta_ws_disconnected_skips_broker(monkeypatch):
         },
     )
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     import core.feed.ws_mutation_queue as wmq
     monkeypatch.setattr(wmq, "_check_socket_health", lambda *args: (False, False, "disconnected"))
     assert ws._apply_subscription_delta(ticker, [301], [], reason="unit_test") is False

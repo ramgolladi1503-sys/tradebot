@@ -32,7 +32,7 @@ def test_tick_stale_watchdog_ignores_db_lag_when_ws_ticks_are_fresh(monkeypatch)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 1, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 109.5, raising=False)
     monkeypatch.setattr(ws, "_LAST_FEED_HEALTH_STATE", None, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws, "_latest_db_tick_epoch", lambda: 100.0)
 
     def _restart(reason="unknown", ignore_cooldown=False):

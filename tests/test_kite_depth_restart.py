@@ -773,7 +773,7 @@ def test_restart_depth_ws_does_not_start_duplicate_recovery_when_coordinator_in_
     coordinator = FeedRecoveryCoordinator(max_recoverable_attempts_per_session=2, recoverable_retry_cooldown_sec=0.0)
     coordinator.request_recovery(source="on_error", code=1006, reason="peer dropped")
     monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", coordinator, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws, "stop_depth_ws", lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1))
 
     assert ws.restart_depth_ws(reason="duplicate_recovery_request") is False
@@ -1217,7 +1217,7 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setenv("FEED_USE_DESIRED_TOKENS", "1")
 
     assert ws._soft_resubscribe_current(reason="unit_test") is True
@@ -1256,7 +1256,7 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
     assert ws._soft_resubscribe_current(reason="unit_test_flag_off") is True
@@ -1296,7 +1296,7 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
     assert ws._soft_resubscribe_current(reason="unit_test_auto_recover") is True
@@ -1432,7 +1432,7 @@ def test_restart_returns_false_when_start_fails_after_stop(monkeypatch):
     snapshots = []
     calls = {"stop": 0, "start": 0, "stop_requested_at_start": None}
 
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: snapshots.append(kwargs))
 
     def _stop(reason="manual_stop"):
@@ -1479,7 +1479,7 @@ def test_restart_writes_start_requested_before_ok_when_start_handoff_succeeds(mo
     snapshots = []
     calls = {"stop": 0, "start": 0}
 
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: snapshots.append(kwargs))
 
     def _stop(reason="manual_stop"):
@@ -1517,7 +1517,7 @@ def test_restart_verification_pending_when_start_handoff_succeeds_but_no_connect
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_feed_restart_verification(reason="unit_test_setup")
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
@@ -1586,7 +1586,7 @@ def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_feed_restart_verification(reason="unit_test_setup")
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
@@ -1637,7 +1637,7 @@ def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_p
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_feed_restart_verification(reason="unit_test_setup")
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
@@ -1685,7 +1685,7 @@ def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeyp
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_feed_restart_verification(reason="unit_test_setup")
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
@@ -1735,7 +1735,7 @@ def test_restart_verification_clears_ws1006_recovery_blocked_metadata_on_success
     monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_feed_restart_verification(reason="unit_test_setup")
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
@@ -1870,7 +1870,7 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
     calls = {"stop": 0, "start": 0, "soft": 0}
     monkeypatch.setattr(
@@ -1925,7 +1925,7 @@ def test_hard_feed_dead_depth_stale_ignores_cooldown_and_forces_full_restart(mon
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
     calls = {"stop": 0, "start": 0, "soft": 0}
     monkeypatch.setattr(
@@ -1980,7 +1980,7 @@ def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatc
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
     calls = {"stop": 0, "start": 0}
     monkeypatch.setattr(
@@ -2031,7 +2031,7 @@ def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
     monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws.time, "time", lambda: 902.0)
 
     assert (
@@ -2065,7 +2065,7 @@ def test_auth_required_latch_blocks_hard_restart(monkeypatch):
     )
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
     assert (
         ws.restart_depth_ws(
@@ -2106,7 +2106,7 @@ def test_storm_breaker_trips_on_velocity(monkeypatch):
     monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws.time, "time", lambda: 299.0)
 
     # 5th restart attempt should fail because there are already 4 in the 300s window.
@@ -2141,7 +2141,7 @@ def test_storm_breaker_allows_restarts_over_long_window(monkeypatch):
     monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     
     # Current time is 5010.
     # In the last 300 seconds (4710 to 5010), there is only 1 restart (5000.0).
@@ -2183,7 +2183,7 @@ def test_hourly_cap_rate_limits_safely(monkeypatch):
     monkeypatch.setattr(ws.risk_halt, "set_halt", lambda *_a, **_k: calls.__setitem__("risk", calls["risk"] + 1))
 
     events = []
-    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     
     # Current time is 2510.
     # In the last 300s (2210 to 2510), there is only 1 restart (2500.0), so storm breaker doesn't trip.
@@ -2194,3 +2194,20 @@ def test_hourly_cap_rate_limits_safely(monkeypatch):
     assert "FEED_RESTART_STORM_TRIP" not in [event for event, _payload in events]
     assert calls["breaker"] == 0
     assert "FEED_RESTART_RATE_LIMIT_HOURLY" in [event for event, _payload in events]
+
+def test_feed_recovery_coordinator_singleton_identity_preserved_across_reset():
+    from core.feed_recovery_coordinator import get_feed_recovery_coordinator
+    import core.kite_depth_ws
+    
+    coord1 = get_feed_recovery_coordinator()
+    coord2 = core.kite_depth_ws.get_feed_recovery_coordinator()
+    
+    assert coord1 is coord2
+    
+    coord1.reset()
+    
+    coord3 = get_feed_recovery_coordinator()
+    coord4 = core.kite_depth_ws.get_feed_recovery_coordinator()
+    
+    assert coord1 is coord3
+    assert coord1 is coord4
