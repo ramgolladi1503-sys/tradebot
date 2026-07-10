@@ -254,7 +254,7 @@ def test_write_runtime_snapshot_emits_transport_health_fields(monkeypatch, tmp_p
     assert payload["transport_healthy"] is False
     assert payload["transport"]["state"] == "RECONNECTING"
     assert payload["snapshot_hash_version"] == 1
-    assert len(payload["snapshot_hash"]) == 64
+    assert payload["snapshot_hash"] == payload["transport_heartbeat"]["snapshot_hash"]
     assert payload["transport_heartbeat_state"] == "RECONNECTING"
     assert payload["transport_heartbeat_epoch"] == 123.0
 

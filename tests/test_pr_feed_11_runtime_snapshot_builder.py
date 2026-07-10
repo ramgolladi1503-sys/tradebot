@@ -8,6 +8,7 @@ from core.feed.runtime_snapshot_builder import (
     safe_float,
     trimmed_error,
 )
+from core.runtime_truth_integrity import truth_hash_from_mapping
 
 
 def _sample_inputs(**overrides):
@@ -133,7 +134,22 @@ def test_runtime_latest_payload_shape_supports_derivation_and_stamping_hooks():
     assert payload["transport_healthy"] is True
     assert payload["transport"]["state"] == "CONNECTED"
     assert payload["snapshot_hash_version"] == 1
-    assert len(payload["snapshot_hash"]) == 64
+    assert payload["snapshot_hash"] == truth_hash_from_mapping(
+        payload,
+        exclude_keys=(
+            "snapshot_hash",
+            "snapshot_hash_version",
+            "transport_heartbeat",
+            "transport_heartbeat_epoch",
+            "transport_heartbeat_age_sec",
+            "transport_heartbeat_source",
+            "transport_heartbeat_state",
+            "transport_heartbeat_reason",
+            "truth_integrity_alerts",
+            "truth_integrity_alert_count",
+            "truth_integrity_status",
+        ),
+    )
     assert payload["transport_heartbeat_state"] == "CONNECTED"
     assert payload["transport_heartbeat_epoch"] == 1000.0
     assert payload["runtime_writer"] == "unit_test"
