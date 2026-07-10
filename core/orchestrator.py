@@ -264,6 +264,8 @@ from core.orchestrator_truth import (
     structurally_valid_cycle_candidate as _is_structurally_valid_cycle_candidate,
     trade_attr as _trade_attr,
 )
+
+_perf_ms = _orchestrator_perf_ms
 from core.orchestrator_latency import (
     build_cycle_latency_snapshot as _build_cycle_latency_snapshot,
     build_min_breadth_backfill as _build_min_breadth_backfill,

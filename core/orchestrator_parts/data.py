@@ -1,9 +1,8 @@
 from datetime import datetime
+import threading
 
-from core.orchestrator_reports import (
-    load_truth_dataset_for_reports,
-    write_cycle_reports,
-)
+from core import orchestrator_reports as _orchestrator_reports
+from core.orchestrator_reports import load_truth_dataset_for_reports
 
 
 def update_risk_pct_fields(orch):
@@ -54,3 +53,13 @@ def quote_ts_epoch(quote_ts):
         return datetime.fromisoformat(text).timestamp()
     except Exception:
         return None
+
+
+def _do_write_cycle_reports(*args, **kwargs):
+    return _orchestrator_reports.write_cycle_reports(*args, **kwargs)
+
+
+def write_cycle_reports(*args, **kwargs):
+    thread = threading.Thread(target=_do_write_cycle_reports, args=args, kwargs=kwargs, daemon=True)
+    thread.start()
+    return thread

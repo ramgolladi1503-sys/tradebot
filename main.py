@@ -9,6 +9,8 @@ if hasattr(signal, 'SIGPIPE'):
 
 import core.runtime_guard  # noqa: F401  (import side-effects intentional)
 from config import config as cfg
+from core.audit_log import append_event as audit_append
+from core.events import append_event as append_runtime_event
 
 from core.orchestrator import Orchestrator
 from core.readiness_gate import run_readiness_check
@@ -39,6 +41,22 @@ from core.runtime_bootstrap import (
 )
 
 _ACTION_FLAG_KEY = "is_" + "order_action"
+
+
+def _audit_startup_state(event_name, message="", extra=None):
+    payload = {
+        "event": str(event_name),
+        "message": str(message or ""),
+    }
+    payload.update(dict(extra or {}))
+    try:
+        audit_append(payload)
+    except Exception:
+        pass
+    try:
+        append_runtime_event(str(event_name).lower(), payload)
+    except Exception:
+        pass
 
 
 def _check_env():

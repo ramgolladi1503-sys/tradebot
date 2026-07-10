@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
+from pathlib import Path
 
 from config import config as cfg
 from core.events import write_json_atomic
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def pro_shadow_report_path(loop_id: str) -> str:
-    return str(logs_dir() / f"pro_strategy_shadow_{loop_id or 'latest'}.json")
+    return logs_dir() / f"pro_strategy_shadow_{loop_id or 'latest'}.json"
 
 
 def sanitize_pro_shadow_rows(market_data_list: list[dict] | None) -> list[dict]:
@@ -77,9 +78,29 @@ def run_pro_shadow_pipeline_worker_entry(market_data_list: list[dict] | None, lo
         "errors": [],
     }
     try:
-        report = run_pro_strategy_pipeline(market_data_list, now_ts=started_at)
+        pipeline = run_pro_strategy_pipeline
+        emit_logger = logger
+        emit_writer = write_json_atomic
+        try:
+            import sys
+
+            orch_mod = sys.modules.get("core.orchestrator")
+            if orch_mod is not None:
+                candidate = getattr(orch_mod, "run_pro_strategy_pipeline", None)
+                if callable(candidate):
+                    pipeline = candidate
+                candidate_logger = getattr(orch_mod, "logger", None)
+                if candidate_logger is not None:
+                    emit_logger = candidate_logger
+                candidate_writer = getattr(orch_mod, "write_json_atomic", None)
+                if callable(candidate_writer):
+                    emit_writer = candidate_writer
+        except Exception:
+            pass
+
+        report = pipeline(market_data_list, now_ts=started_at)
     except Exception as exc:
-        logger.exception("pro_shadow_pipeline_failed err=%s", exc)
+        emit_logger.exception("pro_shadow_pipeline_failed err=%s", exc)
         report = {
             "enabled": True,
             "flags": {},
@@ -88,11 +109,11 @@ def run_pro_shadow_pipeline_worker_entry(market_data_list: list[dict] | None, lo
         }
     shadow_report = build_pro_shadow_report(report, loop_id=loop_id, started_at=started_at)
     try:
-        write_json_atomic(pro_shadow_report_path(loop_id), shadow_report)
+        emit_writer(Path(pro_shadow_report_path(loop_id)), shadow_report)
     except Exception as exc:
-        logger.warning("pro_shadow_report_write_failed err=%s", exc)
+        emit_logger.warning("pro_shadow_report_write_failed err=%s", exc)
     finally:
-        logger.info(
+        emit_logger.info(
             "pro_strategy_shadow_summary enabled=%s candidates=%s errors=%s strict_mode=%s loop_id=%s candidate_preview=%s error_preview=%s",
             bool(report.get("enabled", False)),
             len(report.get("candidates") or []),
@@ -114,4 +135,3 @@ def create_pro_shadow_process(market_data_list: list[dict] | None, loop_id: str,
         name=f"pro-shadow-{loop_id or 'cycle'}",
         daemon=True,
     )
-
