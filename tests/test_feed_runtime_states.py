@@ -476,6 +476,7 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     )
 
     assert logs_path / "feed_runtime_latest.json" in captured_paths
+    assert logs_path / "feed_health_duration_latest.json" in captured_paths
     assert captured_payloads[logs_path / "feed_runtime_latest.json"]["ws_connected"] is True
     assert (logs_path / "feed_runtime_latest.json").exists()
 

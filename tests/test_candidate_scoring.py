@@ -46,6 +46,8 @@ def test_score_candidate_strong_inputs_is_high_and_deterministic():
     assert first["opportunity_score"] > 0.65
     assert first["score_breakdown"]["components"]["setup_strength"] > 0.7
     assert first["penalty_reasons"] == []
+    assert first["feed_risk_precomputed"] is True
+    assert first["feed_risk_reasons"] == []
 
 
 def test_score_candidate_degrades_gracefully_when_some_inputs_are_missing():
@@ -80,6 +82,21 @@ def test_score_candidate_degrades_gracefully_when_some_inputs_are_missing():
     assert scored["opportunity_score"] > 0.20
     assert "rr_estimated_context" in scored["penalty_reasons"]
     assert scored["score_breakdown"]["missing_reasons"]
+
+
+def test_score_candidate_emits_precomputed_feed_risk_reasons():
+    candidate = {
+        "trade_id": "T-RISK",
+        "trade_score": 0.82,
+        "entry_price": 100.0,
+        "stop_loss": 97.0,
+        "target": 106.0,
+        "warnings": ["stale_feed"],
+    }
+    scored = score_candidate(candidate, {"regime": "TREND", "market_open": True}, {"market_open": True})
+
+    assert scored["feed_risk_precomputed"] is True
+    assert "stale_feed" in scored["feed_risk_reasons"]
 
 
 def test_score_candidate_missing_entry_still_flags_missing_rr_context():

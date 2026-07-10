@@ -42,6 +42,32 @@ def _tail_loss(pnl: pd.Series, k: int) -> float | None:
     return float(vals.mean())
 
 
+def _profitability_metrics(pnl: pd.Series) -> dict:
+    if pnl is None:
+        return {"expectancy": None, "profit_factor": None, "max_drawdown": None, "net_pnl": None, "win_rate": None}
+    clean = pd.Series(pnl).dropna().astype(float)
+    if clean.empty:
+        return {"expectancy": None, "profit_factor": None, "max_drawdown": None, "net_pnl": None, "win_rate": None}
+
+    wins = clean[clean > 0]
+    losses = clean[clean < 0]
+    net_pnl = float(clean.sum())
+    expectancy = float(clean.mean())
+    profit_factor = None if losses.empty or float(abs(losses.sum())) == 0.0 else float(wins.sum() / abs(losses.sum()))
+    equity = clean.cumsum()
+    running_peak = equity.cummax()
+    drawdown = equity - running_peak
+    max_drawdown = float(drawdown.min()) if not drawdown.empty else None
+    win_rate = float((clean > 0).mean())
+    return {
+        "expectancy": expectancy,
+        "profit_factor": profit_factor,
+        "max_drawdown": max_drawdown,
+        "net_pnl": net_pnl,
+        "win_rate": win_rate,
+    }
+
+
 def evaluate_promotion(df: pd.DataFrame, day: str, gates: dict) -> dict:
     if df is None or df.empty:
         raise ValueError("Truth dataset is empty.")
@@ -57,9 +83,11 @@ def evaluate_promotion(df: pd.DataFrame, day: str, gates: dict) -> dict:
             raise ValueError(f"Missing required column: {col}")
 
     if "pnl_15m" in df.columns and df["pnl_15m"].notna().any():
-        y = (df["pnl_15m"].fillna(0) > 0).astype(float).values
+        pnl_col = "pnl_15m"
+        y = (df[pnl_col].fillna(0) > 0).astype(float).values
     elif "realized_pnl" in df.columns and df["realized_pnl"].notna().any():
-        y = (df["realized_pnl"].fillna(0) > 0).astype(float).values
+        pnl_col = "realized_pnl"
+        y = (df[pnl_col].fillna(0) > 0).astype(float).values
     else:
         raise ValueError("Missing outcome labels (pnl_15m or realized_pnl).")
     champ = df["champion_proba"].astype(float).values
@@ -70,7 +98,7 @@ def evaluate_promotion(df: pd.DataFrame, day: str, gates: dict) -> dict:
     champ_ece = _ece(y, champ, bins=gates.get("ece_bins", 10))
     chall_ece = _ece(y, chall, bins=gates.get("ece_bins", 10))
 
-    pnl_col = "pnl_15m" if "pnl_15m" in df.columns else "realized_pnl"
+    profitability = _profitability_metrics(df[pnl_col]) if pnl_col in df.columns else {}
     tail_k = int(gates.get("tail_k", 20))
     champ_tail = _tail_loss(df[pnl_col], tail_k) if pnl_col in df.columns else None
     chall_tail = champ_tail
@@ -98,6 +126,7 @@ def evaluate_promotion(df: pd.DataFrame, day: str, gates: dict) -> dict:
         "chall_ece": chall_ece,
         "champ_tail": champ_tail,
         "chall_tail": chall_tail,
+        "profitability": profitability,
         "segments": seg,
     }
     return report

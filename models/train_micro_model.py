@@ -197,6 +197,7 @@ def _write_feature_importance(model, feature_names: list[str], out_path: Path) -
 def _train(args) -> tuple[int, dict]:
     start = time.time()
     df, source = _build_dataset(args)
+    split_strategy = "time_ordered_holdout"
     report = {
         "source": source,
         "status": "INIT",
@@ -204,6 +205,10 @@ def _train(args) -> tuple[int, dict]:
         "target_positive_rate": None,
         "model_path": str(args.model_path),
         "feature_importance_path": str(args.feature_importance_path),
+        "split_strategy": split_strategy,
+        "governance_ready": False,
+        "metadata_path": str(Path(args.model_path).with_suffix(".json")),
+        "admission_report": {"admitted": False, "reason_code": "NOT_EVALUATED"},
     }
 
     if df.empty:
@@ -229,6 +234,7 @@ def _train(args) -> tuple[int, dict]:
     if bool(args.dry_run):
         report["status"] = "DRY_RUN_OK"
         report["elapsed_sec"] = round(time.time() - start, 3)
+        report["admission_report"] = {"admitted": False, "reason_code": "DRY_RUN"}
         return 0, report
 
     try:
@@ -355,6 +361,33 @@ def _train(args) -> tuple[int, dict]:
     report["elapsed_sec"] = round(time.time() - start, 3)
     if tf_reason:
         report["tensorflow_reason"] = tf_reason
+
+    admission_min_val_accuracy = 0.55
+    report["governance_ready"] = False
+    report["admission_report"] = {
+        "admitted": False,
+        "reason_code": "VAL_ACCURACY_BELOW_FLOOR" if report["val_accuracy"] is not None else "NO_VALIDATION_RESULT",
+        "min_val_accuracy": admission_min_val_accuracy,
+        "val_accuracy": report["val_accuracy"],
+        "split_strategy": split_strategy,
+    }
+
+    metadata = {
+        "provenance": {"source": source, "backend_used": backend_used},
+        "admission": {
+            "min_val_accuracy": admission_min_val_accuracy,
+            "val_accuracy": report["val_accuracy"],
+            "split_strategy": split_strategy,
+        },
+        "governance": {
+            "train_rows": report["train_rows"],
+            "val_rows": report["val_rows"],
+            "target_positive_rate": report["target_positive_rate"],
+        },
+    }
+    metadata_path = Path(report["metadata_path"])
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(metadata, sort_keys=True, indent=2), encoding="utf-8")
 
     if bool(args.register):
         try:

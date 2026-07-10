@@ -58,6 +58,7 @@ def _reset_ws_runtime_state(monkeypatch):
         "_LAST_RUNTIME_ERROR": "",
         "_LAST_FULL_RESTART_EPOCH": 0.0,
         "_FULL_RESTARTS": [],
+        "_FEED_HEALTH_DURATION_STATE": None,
     }.items():
         monkeypatch.setattr(ws, name, value, raising=False)
     monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: False, raising=False)
@@ -1046,6 +1047,35 @@ def test_silent_reconnect_waits_for_relaxed_live_thresholds(monkeypatch):
     assert calls == {"soft": 0, "start": 0, "stop": 0}
 
 
+def test_silent_reconnect_emits_rca_bucket_for_breaker_blocked_recovery(monkeypatch):
+    monkeypatch.setattr(ws, "feed_breaker_tripped", lambda: True, raising=False)
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload=None, **kwargs: events.append((event, payload)))
+
+    state = {"confirm_hits": 0, "last_reconnect_epoch": 0.0}
+    triggered = ws._maybe_trigger_silent_reconnect(
+        now_epoch=20.0,
+        current_tokens={123, 456},
+        underlying_tokens={123},
+        last_global_msg_epoch=1.0,
+        last_msg_by_token={123: 1.0, 456: 1.0},
+        state=state,
+        index_threshold_sec=5.0,
+        option_threshold_sec=8.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=10.0,
+        force_full_restart_after_sec=100.0,
+        restart_cb=lambda **kwargs: None,
+    )
+
+    assert triggered is True
+    assert any(event == "FEED_SILENCE_RCA" for event, _payload in events)
+    rca_payload = next(payload for event, payload in events if event == "FEED_SILENCE_RCA")
+    assert rca_payload["silence_bucket"] == "breaker_blocked_recovery"
+    assert rca_payload["feed_breaker_open"] is True
+
+
 def test_restart_skips_soft_path_for_hard_feed_repair_reason(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 19.5, raising=False)
@@ -1568,6 +1598,7 @@ def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1001.0}, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1001.0, raising=False)
     monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True, raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
     ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
@@ -1642,6 +1673,56 @@ def test_restart_verification_timeout_emits_failed_and_blocks(monkeypatch, tmp_p
     payload = _read_feed_runtime_latest(tmp_path)
     assert payload["runtime_state"] == "RESTART_VERIFY_FAILED"
     assert "FEED_RESTART_VERIFY_FAILED" in [event for event, _payload in events]
+    ws._reset_feed_restart_verification(reason="unit_test_teardown")
+
+
+def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeypatch, tmp_path):
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(cfg, "FEED_RUNTIME_STATUS_OVERLAY_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "FEED_RESTART_VERIFY_TIMEOUT_SEC", 1.0, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append((event, payload)))
+    ws._reset_feed_restart_verification(reason="unit_test_setup")
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 1003.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 1003.0, raising=False)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(ws, "_ws_connected_state", lambda: True, raising=False)
+    monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
+
+    ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0)
+    monkeypatch.setattr(ws, "_FEED_RESTART_VERIFY_STATE", "FAILED", raising=False)
+    monkeypatch.setattr(ws, "_FEED_RESTART_VERIFY_FAILURE_DETAIL", "timeout", raising=False)
+
+    ws._write_feed_runtime_snapshot(
+        now_epoch=1003.0,
+        ws_connected=True,
+        subscribed_tokens_count=2,
+        intended_tokens_count=2,
+        last_db_tick_epoch=None,
+        last_db_tick_age_sec=None,
+        last_ws_tick_epoch=1003.0,
+        last_tick_age_sec=0.0,
+        last_depth_epoch=None,
+        last_depth_age_sec=None,
+        market_open=True,
+        state_machine={"state": "LIVE", "reason": "ticks_flowing"},
+        runtime_state="RUNNING",
+        last_error="",
+    )
+    recovered_payload = _read_feed_runtime_latest(tmp_path)
+    assert recovered_payload["runtime_state"] == "RUNNING"
+    assert "FEED_RESTART_VERIFIED_OK" in [event for event, _payload in events]
     ws._reset_feed_restart_verification(reason="unit_test_teardown")
 
 

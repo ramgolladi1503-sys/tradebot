@@ -14,6 +14,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Dict
 
+from core.feed_risk_truth import FEED_RISK_TOKENS, classify_feed_risk_reasons
+
 @dataclass
 class FeedRiskVerdict:
     is_risk: bool
@@ -68,64 +70,27 @@ SAFETY_FLAG_PRIORITY: dict[str, int] = {
     "weak_option_confirmation": 2,
 }
 
-FEED_RISK_TOKENS: frozenset[str] = frozenset(
-    {
-        "fallback",
-        "fallback_data",
-        "fallback_quote_data",
-        "fallback_quote_only",
-        "iv_surface_slope",
-        "low_iv_surface_confidence",
-        "feed_health_hold",
-        "no_live_option_feed",
-        "price_mismatch",
-        "recovered",
-        "recovered_fallback",
-        "rest_fallback",
-        "stale_feed",
-        "stale_option_ltp",
-        "subscription_failed",
-        "untrusted_quote_source",
-        "synthetic",
-        "missing_ltp",
-        "missing_depth",
-        "missing_spread",
-        "quote_age_unknown",
-        "advisory_only",
-        "planning_only"
-    }
-)
-
 def is_feed_risk_candidate(candidate: dict[str, Any] | OpportunityScoreRecord) -> FeedRiskVerdict:
     """Central helper to detect if a candidate has feed/data quality risks."""
-    reasons = []
-
-    # Extract lists depending on input type
     if isinstance(candidate, dict):
-        flags = tuple(candidate.get("safety_flags", []))
-        reasons_list = tuple(candidate.get("downgrade_reasons", []))
-        blockers = tuple(candidate.get("blockers", []))
-        warnings_list = tuple(candidate.get("warnings", []))
-        class_val = str(candidate.get("candidate_class", "")).strip().lower()
-        if class_val and class_val != "primary":
-            flags += (class_val,)
+        reasons = classify_feed_risk_reasons(
+            safety_flags=tuple(candidate.get("safety_flags", [])),
+            downgrade_reasons=tuple(candidate.get("downgrade_reasons", [])),
+            blockers=tuple(candidate.get("blockers", [])),
+            warnings=tuple(candidate.get("warnings", [])),
+            candidate_class=str(candidate.get("candidate_class", "")).strip().lower(),
+        )
     else:
-        flags = tuple(candidate.safety_flags)
-        reasons_list = tuple(candidate.downgrade_reasons)
-        blockers = tuple(candidate.blockers)
-        warnings_list = tuple(candidate.warnings)
+        reasons = tuple(getattr(candidate, "feed_risk_reasons", ()) or ())
+        if not reasons:
+            reasons = classify_feed_risk_reasons(
+                safety_flags=tuple(candidate.safety_flags),
+                downgrade_reasons=tuple(candidate.downgrade_reasons),
+                blockers=tuple(candidate.blockers),
+                warnings=tuple(candidate.warnings),
+            )
 
-    for value in flags + reasons_list + blockers + warnings_list:
-        normalized = str(value or "").strip().lower()
-        normalized = normalized.replace("-", "_").replace(" ", "_")
-        if not normalized:
-            continue
-        if normalized in FEED_RISK_TOKENS:
-            reasons.append(normalized)
-        elif any(token in normalized for token in FEED_RISK_TOKENS):
-            reasons.append(normalized)
-
-    return FeedRiskVerdict(is_risk=bool(reasons), reasons=sorted(list(set(reasons))))
+    return FeedRiskVerdict(is_risk=bool(reasons), reasons=list(reasons))
 
 
 @dataclass(frozen=True)
@@ -383,6 +348,9 @@ def _sort_key(
 def _should_suppress_for_feed_risk(record: OpportunityScoreRecord) -> bool:
     if record.score_eligibility not in {SCORE_ELIGIBLE, NEEDS_CONFIRMATION}:
         return False
+    if bool(getattr(record, "feed_risk_precomputed", False)):
+        precomputed = getattr(record, "feed_risk_reasons", ())
+        return bool(tuple(precomputed))
     return _has_feed_risk(record)
 
 

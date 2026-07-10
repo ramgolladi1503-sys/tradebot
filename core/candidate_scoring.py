@@ -5,6 +5,7 @@ from math import log1p
 
 from core.quote_truth import quote_consistency_score as canonical_quote_consistency_score
 from core.regime_canonical import resolve_strategy_regime_label
+from core.feed_risk_truth import classify_feed_risk_reasons
 
 try:
     from config import config as cfg
@@ -84,6 +85,18 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, set):
         return list(value)
     return [value]
+
+
+def _as_tuple(value: Any) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, tuple):
+        return value
+    if isinstance(value, list):
+        return tuple(value)
+    if isinstance(value, set):
+        return tuple(value)
+    return (value,)
 
 
 def _dedupe_texts(values: list[Any]) -> list[str]:
@@ -969,6 +982,15 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "opportunity_score": _round_score(opportunity_score),
         "missing_reasons": list(missing_reasons),
         "candidate_class": candidate_class,
+        "feed_risk_reasons": list(
+            classify_feed_risk_reasons(
+                safety_flags=_as_tuple(row.get("safety_flags")),
+                downgrade_reasons=tuple(penalty_reasons),
+                blockers=_as_tuple(row.get("blockers")),
+                warnings=_as_tuple(row.get("warnings")),
+                candidate_class=candidate_class,
+            )
+        ),
         "regime_profile": {
             "regime_bucket": score_inputs_used.get("regime_bucket"),
             "candidate_archetype": score_inputs_used.get("candidate_archetype"),
@@ -995,6 +1017,8 @@ def score_candidate(candidate: dict, market_data: dict, context: dict) -> dict:
         "score_breakdown": score_breakdown,
         "penalty_reasons": list(penalty_reasons),
         "score_inputs_used": dict(score_inputs_used),
+        "feed_risk_reasons": list(score_breakdown["feed_risk_reasons"]),
+        "feed_risk_precomputed": True,
         "confluence_score": _round_score(confluence_score),
         "regime_profile": {
             "regime_bucket": score_inputs_used.get("regime_bucket"),

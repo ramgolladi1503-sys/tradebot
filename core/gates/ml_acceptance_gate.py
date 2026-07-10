@@ -67,11 +67,10 @@ def validate_ml_acceptance(candidate: Any, thresholds: dict[str, float] | None =
 
     model = _get_xgb_model()
     if model is None:
-        # If model is entirely missing, fail open to avoid breaking CI/Unit tests that don't have the model
         return {
-            "pass": True,
-            "reason_code": None,
-            "ml_probability": 1.0,
+            "pass": False,
+            "reason_code": "MISSING_ML_MODEL",
+            "ml_probability": None,
             "ml_threshold": min_probability,
         }
 

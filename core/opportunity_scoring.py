@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from core.candidate_outcome_contract import CandidateOutcomeContract
 from core.hard_downgrade_engine import HardDowngradeDecision, HardDowngradeReport
+from core.feed_risk_truth import classify_feed_risk_reasons
 from core.movement_contract import StrategyCandidate
 
 SCORING_SCHEMA_VERSION = 1
@@ -110,6 +111,8 @@ class OpportunityScoreRecord:
     warnings: tuple[str, ...]
     breakdown: OpportunityScoreBreakdown
     outcome_contract: Optional[CandidateOutcomeContract] = None
+    feed_risk_reasons: tuple[str, ...] = ()
+    feed_risk_precomputed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -126,6 +129,8 @@ class OpportunityScoreRecord:
             "safety_flags": list(self.safety_flags),
             "blockers": list(self.blockers),
             "warnings": list(self.warnings),
+            "feed_risk_reasons": list(self.feed_risk_reasons),
+            "feed_risk_precomputed": self.feed_risk_precomputed,
             "breakdown": self.breakdown.to_dict(),
             "outcome_contract": self.outcome_contract.to_dict() if self.outcome_contract else None,
         }
@@ -306,6 +311,14 @@ def score_candidate(
             safety_flags.append("paper_executable_only")
     # 4. MANUAL_APPROVAL_ELIGIBLE or PROMOTED -> no downgrade (but doesn't upgrade if truth gates blocked it)
 
+    feed_risk_reasons = classify_feed_risk_reasons(
+        safety_flags=safety_flags,
+        downgrade_reasons=tuple(sorted(decision.downgrade_reasons)),
+        blockers=tuple(sorted(decision.blockers)),
+        warnings=tuple(sorted(decision.warnings)),
+        candidate_class=policy_bucket,
+    )
+
     weights = _component_weights(component_weights)
     component_scores = _component_scores(candidate)
     weighted = {name: _round(component_scores[name] * weights[name]) for name in weights}
@@ -333,6 +346,8 @@ def score_candidate(
         safety_flags=tuple(sorted(safety_flags)),
         blockers=tuple(sorted(decision.blockers)),
         warnings=tuple(sorted(decision.warnings)),
+        feed_risk_reasons=feed_risk_reasons,
+        feed_risk_precomputed=True,
         breakdown=OpportunityScoreBreakdown(
             component_scores=component_scores,
             component_weights=dict(weights),

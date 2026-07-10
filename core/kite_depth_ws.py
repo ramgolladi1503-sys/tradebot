@@ -30,6 +30,7 @@ from core.feed_circuit_breaker import is_tripped as feed_breaker_tripped, trip a
 from core.market_data_monitor import get_feed_health_monitor, record_depth, record_tick
 from core.feed.runtime_store import write_runtime_snapshot as write_feed_runtime_snapshot
 from core.feed.runtime_store import canonicalize_feed_runtime_snapshot_truth
+from core.feed_health_duration import build_feed_health_duration_artifact
 from core.runtime_status_overlay import (
     derive_effective_ws_connected,
     derive_feed_ok,
@@ -159,6 +160,7 @@ _FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH: float | None = None
 _FEED_RESTART_VERIFY_VERIFIED_EPOCH: float | None = None
 _FEED_RESTART_VERIFY_FAILURE_DETAIL: str = ""
 _FEED_RESTART_VERIFY_LAST_STAGE_EVENT: str = ""
+_FEED_HEALTH_DURATION_STATE: dict[str, object] | None = None
 
 _OPTION_FEED_VERIFY_STATE: str = "IDLE"  # IDLE | PENDING | OK | FAILED
 _OPTION_FEED_VERIFY_REASON: str = ""
@@ -2558,6 +2560,86 @@ def _restart_verification_proof(now_epoch: float) -> tuple[bool, str, dict[str, 
     }
 
 
+def _restart_verification_live_recovery_proof(now_epoch: float) -> tuple[bool, str, dict[str, object]]:
+    ws_connected = _ws_connected_state()
+    option_state = _option_runtime_state(
+        now_epoch=float(now_epoch),
+        tokens=_LAST_TOKENS,
+        expected_counts_by_symbol=_LAST_OPTION_COUNTS_BY_SYMBOL,
+        min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
+        ws_connected=ws_connected,
+    )
+    subscribed_by_symbol = dict(option_state.get("subscribed_count_by_symbol") or {})
+    ticks_by_symbol = dict(option_state.get("ticks_received_count_by_symbol") or {})
+    block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
+    total_option_tokens = int(option_state.get("option_count") or 0)
+    last_ws_tick_epoch = float(_LAST_WS_TICK_EPOCH or 0.0)
+    last_ws_tick_age_sec = max(0.0, float(now_epoch) - last_ws_tick_epoch) if last_ws_tick_epoch > 0.0 else None
+    max_ws_tick_age_sec = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", 5.0))
+
+    required_symbols = [
+        str(sym or "").upper()
+        for sym, min_required in dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {}).items()
+        if str(sym or "").strip() and int(min_required or 0) > 0
+    ]
+    required_symbols = sorted(set(sym for sym in required_symbols if sym))
+    if not required_symbols:
+        required_symbols = sorted(set(str(sym or "").upper() for sym in subscribed_by_symbol.keys() if str(sym or "").strip()))
+
+    if not ws_connected:
+        return False, "ws_disconnected", {"required_symbols": required_symbols, "ws_connected": ws_connected}
+    if total_option_tokens <= 0:
+        return False, "no_subscribed_option_tokens", {
+            "required_symbols": required_symbols,
+            "subscribed_option_tokens_count": total_option_tokens,
+        }
+    if last_ws_tick_age_sec is None or last_ws_tick_age_sec > max_ws_tick_age_sec:
+        return False, f"ws_tick_stale:{last_ws_tick_age_sec!s}", {
+            "required_symbols": required_symbols,
+            "last_ws_tick_age_sec": last_ws_tick_age_sec,
+            "max_ws_tick_age_sec": max_ws_tick_age_sec,
+        }
+
+    min_ticks = int(_restart_verification_min_option_ticks_per_symbol())
+    for sym in required_symbols:
+        subscribed_count = int(subscribed_by_symbol.get(sym, 0) or 0)
+        if subscribed_count <= 0:
+            return False, f"missing_option_subscriptions:{sym}", {
+                "required_symbols": required_symbols,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+        ticks_received = int(ticks_by_symbol.get(sym, 0) or 0)
+        if ticks_received < min_ticks:
+            return False, f"insufficient_option_ticks:{sym}", {
+                "required_symbols": required_symbols,
+                "min_ticks_per_symbol": min_ticks,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+        block_reason = str(block_reason_by_symbol.get(sym, "OK") or "OK").strip().upper()
+        if block_reason not in _RESTART_VERIFY_OPTION_OK_CODES:
+            return False, f"feed_blocked:{sym}:{block_reason}", {
+                "required_symbols": required_symbols,
+                "min_ticks_per_symbol": min_ticks,
+                "subscribed_by_symbol": subscribed_by_symbol,
+                "ticks_by_symbol": ticks_by_symbol,
+                "block_reason_by_symbol": block_reason_by_symbol,
+            }
+
+    return True, "live_recovery_ok", {
+        "required_symbols": required_symbols,
+        "min_ticks_per_symbol": min_ticks,
+        "subscribed_by_symbol": subscribed_by_symbol,
+        "ticks_by_symbol": ticks_by_symbol,
+        "block_reason_by_symbol": block_reason_by_symbol,
+        "ws_connected": ws_connected,
+        "last_ws_tick_age_sec": last_ws_tick_age_sec,
+    }
+
+
 def _tick_feed_restart_verification(*, now_epoch: float) -> None:
     global _FEED_RESTART_VERIFY_STATE
     global _FEED_RESTART_VERIFY_FAILURE_DETAIL
@@ -2572,7 +2654,7 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
 
     with _RESTART_VERIFY_LOCK:
         state = str(_FEED_RESTART_VERIFY_STATE or "IDLE").strip().upper()
-        if state != "PENDING":
+        if state not in {"PENDING", "FAILED"}:
             return
         start_epoch = float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0)
         deadline = float(_FEED_RESTART_VERIFY_DEADLINE_EPOCH or 0.0)
@@ -2585,6 +2667,8 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
         stage = "WAITING_SUBSCRIBE"
     if subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
         stage = "WAITING_OPTION_TICKS"
+    if state == "FAILED":
+        stage = f"RECHECK_{stage}"
 
     stage_event = _restart_verify_stage_event(stage)
     with _RESTART_VERIFY_LOCK:
@@ -2605,7 +2689,13 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
     verified = False
     verify_detail = "unknown"
     verify_meta: dict[str, object] = {}
-    if subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
+    if state == "FAILED":
+        try:
+            verified, verify_detail, verify_meta = _restart_verification_live_recovery_proof(now_epoch_f)
+        except Exception as exc:
+            verified = False
+            verify_detail = f"live_recovery_exception:{type(exc).__name__}:{exc}"
+    elif subscribe_epoch is not None and float(subscribe_epoch) >= start_epoch:
         try:
             verified, verify_detail, verify_meta = _restart_verification_proof(now_epoch_f)
         except Exception as exc:
@@ -2614,7 +2704,7 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
 
     if verified:
         with _RESTART_VERIFY_LOCK:
-            if _FEED_RESTART_VERIFY_STATE == "PENDING":
+            if _FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}:
                 _FEED_RESTART_VERIFY_STATE = "OK"
                 _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch_f)
                 _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
@@ -2642,6 +2732,9 @@ def _tick_feed_restart_verification(*, now_epoch: float) -> None:
                 "meta": verify_meta,
             },
         )
+        return
+
+    if state == "FAILED":
         return
 
     if deadline > 0.0 and now_epoch_f >= deadline:
@@ -2682,6 +2775,9 @@ def _restart_verify_overlay_payload() -> dict[str, object]:
 
 def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: float) -> tuple[str, str | None]:
     """Return (effective_runtime_state, failure_detail_override_or_none)."""
+    global _FEED_RESTART_VERIFY_STATE
+    global _FEED_RESTART_VERIFY_VERIFIED_EPOCH
+    global _FEED_RESTART_VERIFY_FAILURE_DETAIL
     runtime_state_text = str(runtime_state or "").strip().upper()
     if runtime_state_text in {"RECOVERY_BLOCKED", "AUTH_BLOCKED", "IMPORT_MISSING"}:
         return runtime_state_text, None
@@ -2694,6 +2790,30 @@ def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: floa
     if state == "PENDING":
         return "RESTART_VERIFY_PENDING", None
     if state == "FAILED":
+        try:
+            recovered, recover_detail, recover_meta = _restart_verification_live_recovery_proof(float(now_epoch))
+        except Exception as exc:
+            recovered = False
+            recover_detail = f"live_recovery_exception:{type(exc).__name__}:{exc}"
+            recover_meta = {}
+        if recovered:
+            with _RESTART_VERIFY_LOCK:
+                if _FEED_RESTART_VERIFY_STATE in {"PENDING", "FAILED"}:
+                    _FEED_RESTART_VERIFY_STATE = "OK"
+                    _FEED_RESTART_VERIFY_VERIFIED_EPOCH = float(now_epoch)
+                    _FEED_RESTART_VERIFY_FAILURE_DETAIL = ""
+            _log_ws(
+                "FEED_RESTART_VERIFIED_OK",
+                {
+                    "reason": "failed_state_live_recovery",
+                    "start_epoch": float(_FEED_RESTART_VERIFY_START_EPOCH or 0.0),
+                    "verified_epoch": float(now_epoch),
+                    "connect_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_CONNECT_EPOCH),
+                    "subscribe_epoch": _coerce_epoch(_FEED_RESTART_VERIFY_SUBSCRIBE_EPOCH),
+                    "meta": recover_meta,
+                },
+            )
+            return runtime_state, None
         return "RESTART_VERIFY_FAILED", (detail or "restart_verification_failed")
     return runtime_state, None
 
@@ -2902,6 +3022,35 @@ def _option_runtime_state(
     }
 
 
+def _feed_health_duration_artifact_path() -> Path:
+    return logs_dir() / "feed_health_duration_latest.json"
+
+
+def _write_feed_health_duration_artifact(snapshot: dict[str, object]) -> dict[str, object] | None:
+    global _FEED_HEALTH_DURATION_STATE
+    if not bool(getattr(cfg, "FEED_HEALTH_DURATION_ARTIFACT_ENABLE", True)):
+        return None
+    target = _feed_health_duration_artifact_path()
+    previous = _FEED_HEALTH_DURATION_STATE
+    if previous is None and target.exists():
+        try:
+            loaded = json.loads(target.read_text(encoding="utf-8"))
+            previous = loaded if isinstance(loaded, dict) else None
+        except Exception:
+            previous = None
+    artifact = build_feed_health_duration_artifact(
+        dict(snapshot or {}),
+        previous=previous,
+        target_window_sec=float(getattr(cfg, "FEED_HEALTH_DURATION_TARGET_SEC", 3600.0)),
+    )
+    try:
+        write_json_atomic(target, artifact)
+        _FEED_HEALTH_DURATION_STATE = artifact
+    except Exception as exc:
+        _log_ws("FEED_HEALTH_DURATION_WRITE_ERROR", {"error": str(exc), "path": str(target)})
+    return artifact
+
+
 def _write_feed_runtime_snapshot(
     *,
     now_epoch: float,
@@ -2945,19 +3094,32 @@ def _write_feed_runtime_snapshot(
     internal_retry_error: str | None = None,
     internal_retry_reason: str | None = None,
 ) -> None:
+    stage_timing_enabled = bool(getattr(cfg, "FEED_RUNTIME_STAGE_TIMING_ENABLE", True))
+    stage_total_start = time.perf_counter()
+    stage_timing_ms: dict[str, float] = {}
+
+    def _mark_stage(name: str, started_at: float) -> float:
+        now_perf = time.perf_counter()
+        if stage_timing_enabled:
+            stage_timing_ms[name] = round(max(0.0, now_perf - float(started_at)) * 1000.0, 3)
+        return now_perf
+
     path = logs_dir() / "feed_runtime_latest.json"
+    stage_started = time.perf_counter()
     raw_state_text = str(runtime_state or _RUNTIME_STATE or "UNKNOWN").strip().upper()
     effective_state_text, restart_verify_failure = _effective_runtime_state_for_snapshot(
         raw_state_text,
         now_epoch=float(now_epoch),
     )
     restart_verify = _restart_verify_overlay_payload()
+    stage_started = _mark_stage("restart_verification_ms", stage_started)
     effective_state_text, normalized_state_machine, ws_connected, normalized_blocked_reason = _normalize_recovery_blocked_snapshot_state(
         runtime_state=effective_state_text,
         state_machine=state_machine,
         reconnect_blocked_reason=reconnect_blocked_reason,
         ws_connected=ws_connected,
     )
+    stage_started = _mark_stage("recovery_state_normalization_ms", stage_started)
     disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
     disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
     if (
@@ -3016,6 +3178,7 @@ def _write_feed_runtime_snapshot(
         "resubscribe_attempted": bool(restart_attempted) if restart_attempted is not None else bool(_RECOVERY_IN_PROGRESS),
         "option_feed_verification_state": str(_option_feed_verification_overlay_payload().get("state") or "IDLE"),
     }
+    stage_started = _mark_stage("payload_assembly_ms", stage_started)
     if (
         internal_retry_disabled is not None
         or stop_retry_called is not None
@@ -3076,25 +3239,32 @@ def _write_feed_runtime_snapshot(
         payload["restart_verification"] = restart_verify
     if restart_verify_failure:
         payload["restart_verification_failure_detail"] = str(restart_verify_failure)
+    stage_started = _mark_stage("restart_overlay_attach_ms", stage_started)
     option_feed_verification = _option_feed_verification_overlay_payload()
     if option_feed_verification:
         payload["option_feed_verification"] = option_feed_verification
         payload["option_ticks_verified"] = bool(str(option_feed_verification.get("state") or "").upper() == "OK")
         payload["verified_option_symbols"] = option_feed_verification.get("verified_symbols") or []
         payload["missing_option_symbols"] = option_feed_verification.get("missing_symbols") or []
+    stage_started = _mark_stage("option_feed_verification_overlay_ms", stage_started)
     payload["effective_ws_connected"] = derive_effective_ws_connected(payload)
     payload["feed_ok"] = derive_feed_ok(payload)
+    stage_started = _mark_stage("derive_feed_ok_ms", stage_started)
+    feed_health_max_depth_age_sec = float(
+        getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 15.0)
+    )
     feed_truth = classify_feed_truth_state(
         payload,
         now_epoch=float(now_epoch),
         max_option_tick_age_sec=float(getattr(cfg, "OPTION_LTP_SLA_SEC", 15.0)),
         max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 15.0)),
-        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 15.0)),
+        max_depth_age_sec=feed_health_max_depth_age_sec,
     )
     payload["feed_truth_state"] = str(feed_truth.state)
     payload["feed_truth_reason_code"] = str(feed_truth.reason_code)
     payload["feed_truth_reasons"] = list(feed_truth.reasons)
     payload["feed_truth_strict_live"] = bool(feed_truth.strict_live)
+    stage_started = _mark_stage("classify_feed_truth_ms", stage_started)
     canonical_feed_truth = build_canonical_feed_truth_state(
         {
             "runtime_state": effective_state_text,
@@ -3125,14 +3295,35 @@ def _write_feed_runtime_snapshot(
     payload["ws_error_code"] = canonical_feed_truth.ws_error_code
     payload["ws_error_reason"] = canonical_feed_truth.ws_error_reason
     payload["ws_fault_class"] = canonical_feed_truth.ws_fault_class
+    stage_started = _mark_stage("canonical_feed_truth_ms", stage_started)
     payload = canonicalize_feed_runtime_snapshot_truth(payload)
     payload = attach_feed_execution_truth(payload)
     payload = stamp_runtime_payload(
         payload,
         writer="kite_depth_ws.feed_runtime",
     )
+    stage_started = _mark_stage("execution_truth_stamp_ms", stage_started)
+    if stage_timing_enabled:
+        stage_timing_ms["total_pre_write_ms"] = round(
+            max(0.0, time.perf_counter() - float(stage_total_start)) * 1000.0,
+            3,
+        )
+        payload["feed_runtime_stage_timing_ms"] = dict(stage_timing_ms)
     try:
+        write_started = time.perf_counter()
         write_json_atomic(path, payload)
+        write_ms = round(max(0.0, time.perf_counter() - float(write_started)) * 1000.0, 3)
+        health_started = time.perf_counter()
+        duration_artifact = _write_feed_health_duration_artifact(payload)
+        health_ms = round(max(0.0, time.perf_counter() - float(health_started)) * 1000.0, 3)
+        if stage_timing_enabled:
+            timing_event = dict(stage_timing_ms)
+            timing_event["write_feed_runtime_latest_ms"] = write_ms
+            timing_event["health_duration_artifact_ms"] = health_ms
+            if isinstance(duration_artifact, dict):
+                timing_event["health_duration_target_met"] = bool(duration_artifact.get("target_met"))
+                timing_event["current_healthy_duration_sec"] = duration_artifact.get("current_healthy_duration_sec")
+            _log_ws("FEED_RUNTIME_STAGE_TIMING", timing_event, throttle_key="FEED_RUNTIME_STAGE_TIMING")
         publish_feed_unhealthy_status_overlay(
             feed_payload=payload,
             logs_root=logs_dir(),
@@ -3222,10 +3413,12 @@ def _persist_runtime_snapshot_row(
         state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
     elif last_tick_age_sec is None:
         state_machine = {"state": "STARTING", "reason": "awaiting_first_tick"}
-    elif last_tick_age_sec <= 10.0:
-        state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
     else:
-        state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
+        feed_health_live_tick_grace_sec = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 10.0))
+        if last_tick_age_sec <= feed_health_live_tick_grace_sec:
+            state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
+        else:
+            state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
     option_state = _option_runtime_state(
         now_epoch=ts_epoch,
         tokens=_LAST_TOKENS,
@@ -4352,6 +4545,24 @@ def _compute_silent_reconnect_action(
     }
 
 
+def _classify_silence_bucket(action: dict[str, object], *, feed_breaker_open: bool) -> str:
+    index_stale = int(action.get("index_stale") or 0)
+    option_stale = int(action.get("option_stale") or 0)
+    stale_tokens = int(action.get("stale_tokens") or 0)
+    tracked_tokens = int(action.get("tracked_tokens") or 0)
+    if feed_breaker_open:
+        return "breaker_blocked_recovery"
+    if stale_tokens <= 0 or tracked_tokens <= 0:
+        return "unknown"
+    if index_stale > 0 and option_stale > 0:
+        return "upstream_ws_silence"
+    if index_stale > 0:
+        return "index_only_silence"
+    if option_stale > 0:
+        return "option_only_silence"
+    return "mixed_activity"
+
+
 def _maybe_trigger_silent_reconnect(
     *,
     now_epoch: float,
@@ -4387,6 +4598,8 @@ def _maybe_trigger_silent_reconnect(
         return False
 
     state["confirm_hits"] = int(action.get("confirm_hits", 0))
+    feed_breaker_open = bool(feed_breaker_tripped())
+    silence_bucket = _classify_silence_bucket(action, feed_breaker_open=feed_breaker_open)
     _log_ws(
         "FEED_SILENT_WARNING",
         {
@@ -4399,6 +4612,21 @@ def _maybe_trigger_silent_reconnect(
             "confirm_hits": state.get("confirm_hits", 0),
             "confirm_needed": int(confirm_needed),
             "backoff_sec": action.get("backoff_sec"),
+        },
+    )
+    _log_ws(
+        "FEED_SILENCE_RCA",
+        {
+            "silence_bucket": silence_bucket,
+            "feed_breaker_open": feed_breaker_open,
+            "reason": action.get("reason"),
+            "global_age_sec": action.get("global_age_sec"),
+            "tracked_tokens": action.get("tracked_tokens"),
+            "stale_tokens": action.get("stale_tokens"),
+            "index_stale": action.get("index_stale"),
+            "option_stale": action.get("option_stale"),
+            "confirm_hits": state.get("confirm_hits", 0),
+            "confirm_needed": int(confirm_needed),
         },
     )
     if not bool(action.get("should_reconnect")):
@@ -5883,6 +6111,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             last_tick_age_sec = max(0.0, float(now_epoch) - float(last_tick_epoch)) if last_tick_epoch is not None else None
             last_depth_epoch = _latest_depth_epoch_from_store()
             last_depth_age_sec = max(0.0, float(now_epoch) - float(last_depth_epoch)) if last_depth_epoch is not None else None
+            feed_health_live_tick_grace_sec = float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 10.0))
             ws_connected = _ws_connected_state()
             if not market_open_now:
                 state_machine = {"state": "MARKET_CLOSED", "reason": "market_closed"}
@@ -5890,7 +6119,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 state_machine = {"state": "DOWN", "reason": "ws_disconnected"}
             elif last_tick_age_sec is None:
                 state_machine = {"state": "STARTING", "reason": "awaiting_first_tick"}
-            elif last_tick_age_sec <= 10.0:
+            elif last_tick_age_sec <= feed_health_live_tick_grace_sec:
                 state_machine = {"state": "LIVE", "reason": "ticks_flowing"}
             else:
                 state_machine = {"state": "DOWN", "reason": "no_ws_messages"}
