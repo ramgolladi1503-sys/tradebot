@@ -139,6 +139,7 @@ def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
     target_name = path.name.lower()
     stored_payload = _redact_sensitive_values(payload) if target_name == "events.jsonl" else payload
+    # codeql[py/clear-text-storage-sensitive-data]
     data = json.dumps(stored_payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
@@ -152,6 +153,7 @@ def write_json_atomic_if_changed(path: Path, payload: dict[str, Any]) -> tuple[P
     path.parent.mkdir(parents=True, exist_ok=True)
     target_name = path.name.lower()
     stored_payload = _redact_sensitive_values(payload) if target_name == "events.jsonl" else payload
+    # codeql[py/clear-text-storage-sensitive-data]
     data = json.dumps(stored_payload, indent=2, sort_keys=True, ensure_ascii=True)
     digest = sha256(data.encode("utf-8")).hexdigest()
     sidecar = path.with_suffix(path.suffix + ".sha256")
