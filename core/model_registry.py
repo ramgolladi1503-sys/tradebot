@@ -52,6 +52,20 @@ def _find_entry(data, model_type, path):
     return None, None
 
 
+def _profitability_payload(metrics: dict | None) -> dict:
+    metrics = metrics if isinstance(metrics, dict) else {}
+    nested = metrics.get("profitability")
+    if isinstance(nested, dict):
+        return nested
+    return {
+        "expectancy": metrics.get("expectancy"),
+        "profit_factor": metrics.get("profit_factor"),
+        "max_drawdown": metrics.get("max_drawdown"),
+        "net_pnl": metrics.get("net_pnl"),
+        "win_rate": metrics.get("win_rate"),
+    }
+
+
 def validate_model_entry(entry):
     if not isinstance(entry, dict):
         return False, "MODEL_ENTRY_INVALID"
@@ -66,6 +80,26 @@ def validate_model_entry(entry):
         return False, "MODEL_ENTRY_MISSING_PROVENANCE"
     if not governance.get("training_window"):
         return False, "MODEL_ENTRY_MISSING_PROVENANCE"
+    profitability = governance.get("profitability") or {}
+    if profitability and not isinstance(profitability, dict):
+        return False, "MODEL_ENTRY_INVALID_PROFITABILITY"
+    if profitability and not any(profitability.get(k) is not None for k in ("expectancy", "profit_factor", "max_drawdown", "net_pnl", "win_rate")):
+        return False, "MODEL_ENTRY_MISSING_PROFITABILITY_EVIDENCE"
+    min_profit_factor = governance.get("min_profit_factor")
+    min_expectancy = governance.get("min_expectancy")
+    max_drawdown = governance.get("max_drawdown")
+    if (min_profit_factor is not None or min_expectancy is not None or max_drawdown is not None) and not profitability:
+        return False, "MODEL_ENTRY_MISSING_PROFITABILITY_EVIDENCE"
+    if profitability:
+        pf = profitability.get("profit_factor")
+        expectancy = profitability.get("expectancy")
+        drawdown = profitability.get("max_drawdown")
+        if min_profit_factor is not None and pf is not None and float(pf) < float(min_profit_factor):
+            return False, "MODEL_ENTRY_PROFITABILITY_FLOOR_NOT_MET"
+        if min_expectancy is not None and expectancy is not None and float(expectancy) < float(min_expectancy):
+            return False, "MODEL_ENTRY_EXPECTANCY_FLOOR_NOT_MET"
+        if max_drawdown is not None and drawdown is not None and float(drawdown) < float(max_drawdown):
+            return False, "MODEL_ENTRY_DRAWDOWN_FLOOR_NOT_MET"
     regime_coverage = governance.get("regime_coverage") or {}
     if regime_coverage:
         family = str(entry.get("type") or "").strip().lower()
@@ -124,12 +158,26 @@ def build_admission_report(
     ok, reason_code = validate_model_entry(entry)
     walk_forward = governance.get("walk_forward") or {}
     selection = walk_forward.get("selection") if isinstance(walk_forward, dict) else None
+    profitability = _profitability_payload(metrics)
     if ok and isinstance(walk_forward, dict) and walk_forward.get("status") in {"NO_ADMISSIBLE_MODEL", "ERROR", "FAILED"}:
         ok = False
         reason_code = f"WALK_FORWARD_{str(walk_forward.get('status')).upper()}"
     if ok and isinstance(selection, dict) and selection.get("status") != "SELECTED":
         ok = False
         reason_code = "WALK_FORWARD_NO_SELECTION"
+    if ok:
+        floor_pf = governance.get("min_profit_factor")
+        floor_exp = governance.get("min_expectancy")
+        floor_dd = governance.get("max_drawdown")
+        if floor_pf is not None and profitability.get("profit_factor") is not None and float(profitability["profit_factor"]) < float(floor_pf):
+            ok = False
+            reason_code = "MODEL_ENTRY_PROFITABILITY_FLOOR_NOT_MET"
+        if ok and floor_exp is not None and profitability.get("expectancy") is not None and float(profitability["expectancy"]) < float(floor_exp):
+            ok = False
+            reason_code = "MODEL_ENTRY_EXPECTANCY_FLOOR_NOT_MET"
+        if ok and floor_dd is not None and profitability.get("max_drawdown") is not None and float(profitability["max_drawdown"]) < float(floor_dd):
+            ok = False
+            reason_code = "MODEL_ENTRY_DRAWDOWN_FLOOR_NOT_MET"
     report = {
         "schema_version": 1,
         "timestamp": _now_iso(),
@@ -140,6 +188,7 @@ def build_admission_report(
         "admitted": bool(ok),
         "reason": reason or reason_code,
         "metrics": metrics or {},
+        "profitability": profitability,
         "governance": governance,
         "checks": checks or {},
         "selection": selection if selection is not None else (walk_forward.get("selected") if isinstance(walk_forward, dict) else None),
@@ -175,13 +224,19 @@ def append_rejection_ledger(report: dict, output_path: str | Path | None = None)
 
 
 def register_model(model_type, path, metrics=None, governance=None, status="candidate"):
+    metrics = metrics or {}
+    governance = dict(governance or {})
+    profitability = _profitability_payload(metrics)
+    if profitability and "profitability" not in governance:
+        if any(v is not None for v in profitability.values()):
+            governance["profitability"] = profitability
     data = _load()
     entry = {
         "type": model_type,
         "path": str(path),
         "hash": _hash_file(path),
-        "metrics": metrics or {},
-        "governance": governance or {},
+        "metrics": metrics,
+        "governance": governance,
         "status": status,
         "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -191,7 +246,7 @@ def register_model(model_type, path, metrics=None, governance=None, status="cand
         path=path,
         status=status,
         governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
-        metrics=metrics or {},
+        metrics=metrics,
         checks={"registry_write": True},
     )
     ok, reason = verify_admission_report(report)
@@ -227,12 +282,18 @@ def update_model_metrics(model_type, path, metrics=None, governance=None):
 
 
 def activate_model(model_type, path, metrics=None, governance=None):
+    metrics = metrics or {}
+    governance = dict(governance or {})
+    profitability = _profitability_payload(metrics)
+    if profitability and "profitability" not in governance:
+        if any(v is not None for v in profitability.values()):
+            governance["profitability"] = profitability
     entry = {
         "type": model_type,
         "path": str(path),
         "hash": _hash_file(path),
-        "metrics": metrics or {},
-        "governance": governance or {},
+        "metrics": metrics,
+        "governance": governance,
     }
     admit_model_entry(entry)
     report = build_admission_report(
@@ -240,7 +301,7 @@ def activate_model(model_type, path, metrics=None, governance=None):
         path=path,
         status="active",
         governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
-        metrics=metrics or {},
+        metrics=metrics,
         checks={"registry_write": True},
     )
     ok, reason = verify_admission_report(report)
@@ -264,12 +325,18 @@ def activate_model(model_type, path, metrics=None, governance=None):
 
 
 def set_shadow(model_type, path, metrics=None, governance=None):
+    metrics = metrics or {}
+    governance = dict(governance or {})
+    profitability = _profitability_payload(metrics)
+    if profitability and "profitability" not in governance:
+        if any(v is not None for v in profitability.values()):
+            governance["profitability"] = profitability
     entry = {
         "type": model_type,
         "path": str(path),
         "hash": _hash_file(path),
-        "metrics": metrics or {},
-        "governance": governance or {},
+        "metrics": metrics,
+        "governance": governance,
     }
     admit_model_entry(entry)
     report = build_admission_report(
@@ -277,7 +344,7 @@ def set_shadow(model_type, path, metrics=None, governance=None):
         path=path,
         status="shadow",
         governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
-        metrics=metrics or {},
+        metrics=metrics,
         checks={"registry_write": True},
     )
     ok, reason = verify_admission_report(report)

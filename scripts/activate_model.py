@@ -19,10 +19,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--type", required=True, help="xgb/deep/micro")
     parser.add_argument("--path", required=True)
+    parser.add_argument("--min-profit-factor", type=float, default=None)
+    parser.add_argument("--min-expectancy", type=float, default=None)
+    parser.add_argument("--max-drawdown", type=float, default=None, help="Negative floor for max drawdown")
     args = parser.parse_args()
 
     entry = get_active_entry(args.type) or {}
     governance = entry.get("governance") or {"features": ["manual_metric_only"], "training_window": {"rows": 0}, "walk_forward": {"status": "SELECTED", "selection": {"status": "SELECTED"}}}
+    governance = dict(governance)
+    if args.min_profit_factor is not None:
+        governance["min_profit_factor"] = args.min_profit_factor
+    if args.min_expectancy is not None:
+        governance["min_expectancy"] = args.min_expectancy
+    if args.max_drawdown is not None:
+        governance["max_drawdown"] = args.max_drawdown
+    profitability = {
+        "expectancy": (entry.get("metrics") or {}).get("expectancy"),
+        "profit_factor": (entry.get("metrics") or {}).get("profit_factor"),
+        "max_drawdown": (entry.get("metrics") or {}).get("max_drawdown"),
+        "net_pnl": (entry.get("metrics") or {}).get("net_pnl"),
+        "win_rate": (entry.get("metrics") or {}).get("win_rate"),
+    }
+    profitability = {k: v for k, v in profitability.items() if v is not None}
+    if profitability:
+        governance["profitability"] = profitability
     admission = build_admission_report(
         model_type=args.type,
         path=args.path,

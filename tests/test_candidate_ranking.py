@@ -46,6 +46,8 @@ def _score(
     blockers=(),
     warnings=(),
     safety_flags=(),
+    feed_risk_reasons=(),
+    feed_risk_precomputed=False,
 ):
     if bucket is None:
         bucket = {
@@ -71,6 +73,8 @@ def _score(
         safety_flags=safety_flags,
         blockers=blockers,
         warnings=warnings,
+        feed_risk_reasons=feed_risk_reasons,
+        feed_risk_precomputed=feed_risk_precomputed,
         breakdown=_breakdown(final_score),
     )
 
@@ -286,6 +290,27 @@ def test_advisory_feed_risk_stays_advisory_not_double_suppressed():
     assert report.suppressed_count == 0
     assert report.ranks[0].score_eligibility == ADVISORY_ONLY
     assert RANKING_FEED_RISK_SUPPRESSION_REASON not in report.ranks[0].downgrade_reasons
+
+
+def test_ranker_uses_precomputed_feed_risk_verdict_without_rescanning(monkeypatch):
+    record = _score(
+        "precomputed_risk",
+        final_score=0.88,
+        eligibility=SCORE_ELIGIBLE,
+        feed_risk_reasons=("stale_feed",),
+        feed_risk_precomputed=True,
+    )
+
+    def _should_not_run(*args, **kwargs):
+        raise AssertionError("feed-risk rescanning should not run when verdict is already on the score record")
+
+    monkeypatch.setattr("core.candidate_ranking.is_feed_risk_candidate", _should_not_run)
+
+    report = rank_candidates([record])
+
+    assert report.ranks[0].bucket == "SUPPRESSED_CANDIDATE"
+    assert RANKING_FEED_RISK_SUPPRESSION_REASON in report.ranks[0].downgrade_reasons
+    assert RANKING_FEED_RISK_SAFETY_FLAG in report.ranks[0].safety_flags
 
 
 def test_deterministic_tie_breakers_do_not_depend_on_input_order():

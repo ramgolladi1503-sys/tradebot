@@ -103,6 +103,9 @@ def select_walk_forward_model(
     secondary_metric: str = "val_accuracy",
     min_regime_coverage: float = 0.2,
     min_regime_rows: int = 25,
+    min_profit_factor: float | None = None,
+    min_expectancy: float | None = None,
+    max_drawdown: float | None = None,
 ) -> dict:
     admissible = []
     for report in candidate_reports or []:
@@ -120,6 +123,17 @@ def select_walk_forward_model(
             counts = [int(row.get("rows") or 0) for row in regime_splits if isinstance(row, dict)]
             if counts and min(counts) < int(min_regime_rows):
                 continue
+        metrics = report.get("metrics", {}) if isinstance(report.get("metrics"), dict) else {}
+        profitability = metrics.get("profitability") if isinstance(metrics.get("profitability"), dict) else {}
+        pf = metrics.get("profit_factor", profitability.get("profit_factor"))
+        expectancy = metrics.get("expectancy", profitability.get("expectancy"))
+        drawdown = metrics.get("max_drawdown", profitability.get("max_drawdown"))
+        if min_profit_factor is not None and pf is not None and float(pf) < float(min_profit_factor):
+            continue
+        if min_expectancy is not None and expectancy is not None and float(expectancy) < float(min_expectancy):
+            continue
+        if max_drawdown is not None and drawdown is not None and float(drawdown) > float(max_drawdown):
+            continue
         admissible.append(report)
     if not admissible:
         return {"status": "NO_ADMISSIBLE_MODEL", "selected": None, "reason": "no_admissible_candidate", "admissible_count": 0}
@@ -132,6 +146,7 @@ def select_walk_forward_model(
         return primary_score, secondary_score
 
     selected = sorted(admissible, key=_score)[0]
+    selected.setdefault("selection_reason", "profitability_range_and_walk_forward")
     return {"status": "SELECTED", "selected": selected, "reason": "best_walk_forward_candidate", "admissible_count": len(admissible)}
 
 

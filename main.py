@@ -5,7 +5,7 @@ import signal
 from pathlib import Path
 
 if hasattr(signal, 'SIGPIPE'):
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    signal.signal(signal.SIGPIPE, signal.SIG_IGN)
 
 import core.runtime_guard  # noqa: F401  (import side-effects intentional)
 from config import config as cfg
@@ -13,9 +13,6 @@ from config import config as cfg
 from core.orchestrator import Orchestrator
 from core.readiness_gate import run_readiness_check
 from core.feed_debug import get_feed_debug
-from core.audit_log import append_event as audit_append
-from core.events import append_event as append_runtime_event, events_path
-from core.event_integrity import repair_events_file, validate_events_file
 from core import risk_halt
 from core.security_guard import enforce_startup_security
 from core.instance_lock import InstanceLock
@@ -24,9 +21,22 @@ from core.db_guard import ensure_db_ready
 from core.trade_log_paths import ensure_trade_log_exists
 from core.broker_truth_reconciler import BrokerTruthReconciler
 from core.kite_client import kite_client
-from core.observability.pipeline import observability_dir
 from core.auth import validate_kite_startup_credentials
 from core.runtime_safety_boot_guard import enforce_runtime_boot_safety
+from core.runtime_bootstrap import (
+    audit_startup_state as _audit_startup_state,
+    classify_readiness_abort as _classify_readiness_abort,
+    ensure_runtime_dirs as _ensure_runtime_dirs,
+    normalize_readiness_blocker as _normalize_readiness_blocker,
+    normalize_runtime_mode as _normalize_runtime_mode,
+    order_reconciliation_enabled as _order_reconciliation_enabled,
+    repair_events_log_if_needed as _repair_events_log_if_needed,
+    resolve_orchestrator_poll_interval as _resolve_orchestrator_poll_interval,
+    startup_monitor_only_readiness_blockers as _startup_monitor_only_readiness_blockers,
+    truthy_env as _truthy_env,
+    global_readiness_blocker_sets as _global_readiness_blocker_sets,
+    is_global_readiness_blocker as _is_global_readiness_blocker,
+)
 
 _ACTION_FLAG_KEY = "is_" + "order_action"
 
@@ -44,50 +54,6 @@ def _check_env():
 
     if missing:
         print("[Config Warning] Missing env vars: " + ", ".join(missing))
-
-
-def _normalize_runtime_mode(value: str | None) -> str | None:
-    if value is None:
-        return None
-    mode = str(value).strip().upper()
-    if mode not in {"LIVE", "PAPER", "SIM"}:
-        return None
-    return mode
-
-
-def _truthy_env(value: str | None, *, default: bool = False) -> bool:
-    if value is None or str(value).strip() == "":
-        return bool(default)
-    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _order_reconciliation_enabled(config=cfg) -> bool:
-    """Return whether runtime order reconciliation should start.
-
-    Safety default is false. Live observation must not start reconciliation unless
-    the operator explicitly enables it through env/config.
-    """
-
-    env_value = os.getenv("ORDER_RECON_ENABLED")
-    if env_value is not None and str(env_value).strip() != "":
-        return _truthy_env(env_value, default=False)
-    return bool(getattr(config, "ORDER_RECON_ENABLED", False))
-
-
-def _resolve_orchestrator_poll_interval(exec_mode: str) -> float:
-    mode = _normalize_runtime_mode(exec_mode) or "SIM"
-    configured = getattr(cfg, "ORCHESTRATOR_POLL_INTERVAL_SEC", None)
-    if configured not in (None, "", 0, 0.0):
-        try:
-            return max(0.05, float(configured))
-        except Exception:
-            pass
-    mode_defaults = {
-        "LIVE": 0.25,
-        "PAPER": 0.50,
-        "SIM": 1.00,
-    }
-    return float(mode_defaults.get(mode, 1.00))
 
 
 def _validate_runtime_mode_config_alignment(exec_mode: str) -> None:
@@ -120,124 +86,6 @@ def _validate_runtime_mode_config_alignment(exec_mode: str) -> None:
     )
     print(f"[BOOT_MODE_ERROR] {message}")
     raise SystemExit(2)
-
-
-def _normalize_readiness_blocker(value: str) -> str:
-    return str(value or "").strip().lower()
-
-
-def _global_readiness_blocker_sets():
-    explicit = set()
-    prefixes = []
-    try:
-        explicit = {str(item).strip().lower() for item in (getattr(cfg, "READINESS_GLOBAL_ABORT_BLOCKERS", []) or []) if str(item).strip()}
-    except Exception:
-        explicit = set()
-    try:
-        prefixes = [str(item).strip().lower() for item in (getattr(cfg, "READINESS_GLOBAL_ABORT_PREFIXES", []) or []) if str(item).strip()]
-    except Exception:
-        prefixes = []
-    return explicit, prefixes
-
-
-def _startup_monitor_only_readiness_blockers():
-    allowed = set()
-    if bool(getattr(cfg, "READINESS_ALLOW_RISK_HALT_MONITORING_STARTUP", True)):
-        allowed.add("risk_halt_active")
-    return allowed
-
-
-def _is_global_readiness_blocker(blocker: str) -> bool:
-    text = _normalize_readiness_blocker(blocker)
-    if not text:
-        return False
-    explicit, prefixes = _global_readiness_blocker_sets()
-    if text in explicit:
-        return True
-    for prefix in prefixes:
-        if prefix and text.startswith(prefix):
-            return True
-    return False
-
-
-def _classify_readiness_abort(readiness: dict) -> tuple[bool, list[str]]:
-    market_open = readiness.get("market_open")
-    state = str(readiness.get("state") or "").strip().upper()
-    blockers = list(readiness.get("blockers") or readiness.get("reasons") or [])
-    if market_open is False or state == "MARKET_CLOSED":
-        return True, ["market_closed"]
-    if state != "BLOCKED":
-        return False, []
-    global_blockers = [b for b in blockers if _is_global_readiness_blocker(b)]
-    startup_monitor_only = _startup_monitor_only_readiness_blockers()
-    abort_blockers = [
-        blocker
-        for blocker in global_blockers
-        if _normalize_readiness_blocker(blocker) not in startup_monitor_only
-    ]
-    return bool(abort_blockers), abort_blockers
-
-
-def _ensure_runtime_dirs(repo_root: Path) -> None:
-    """
-    Best-effort creation of runtime directories that many subsystems expect.
-    Keeps startup deterministic and avoids scattered mkdirs.
-    """
-    try:
-        runtime_dir = repo_root / ".runtime"
-        logs_dir = runtime_dir / "logs"
-        runtime_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        observability_dir()
-        # Optional: ensure a common trade log exists even if caller forgets
-        (logs_dir / "trade_log.jsonl").touch(exist_ok=True)
-    except Exception as exc:
-        print(f"[STARTUP_WARN] runtime dir init failed: {exc}")
-
-
-def _repair_events_log_if_needed() -> None:
-    try:
-        target = events_path()
-        validation = validate_events_file(target)
-        if bool(validation.get("truncated_tail")):
-            repair = repair_events_file(target)
-            bytes_trimmed = int(repair.get("bytes_trimmed") or 0)
-            append_runtime_event(
-                "events_repaired",
-                {
-                    "bytes_trimmed": bytes_trimmed,
-                    "last_good_offset": int(validation.get("last_good_offset") or 0),
-                    "bad_lines": int(validation.get("bad_lines") or 0),
-                    "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
-                },
-            )
-            print(f"[EVENTS] repaired truncated tail bytes_trimmed={bytes_trimmed} path={target}")
-        elif not bool(validation.get("ok", True)):
-            print(
-                "[EVENTS] integrity warning bad_lines="
-                f"{int(validation.get('bad_lines') or 0)} path={target}"
-            )
-    except Exception as exc:
-        print(f"[EVENTS] integrity check failed: {exc}")
-
-
-def _audit_startup_state(event_name: str, *, message: str, extra: dict | None = None) -> None:
-    payload = {
-        "event": str(event_name),
-        "message": str(message),
-        "exec_mode": str(getattr(cfg, "EXECUTION_MODE", "SIM")).upper(),
-        "desk_id": getattr(cfg, "DESK_ID", "DEFAULT"),
-    }
-    if extra:
-        payload.update(dict(extra))
-    try:
-        audit_append(dict(payload))
-    except Exception as exc:
-        print(f"[AUDIT_ERROR] {event_name.lower()} err={exc}")
-    try:
-        append_runtime_event(str(event_name).lower(), dict(payload))
-    except Exception as exc:
-        print(f"[EVENTS_ERROR] {event_name.lower()} err={exc}")
 
 
 def _record_startup_lifecycle(event_name: str, *, details: dict | None = None, error: str | None = None) -> None:

@@ -17,6 +17,9 @@ def main() -> int:
     parser.add_argument("--train-rows", type=int, default=0)
     parser.add_argument("--regime-coverage", action="append", default=[], help="regime=share; repeatable.")
     parser.add_argument("--min-regime-coverage", type=float, default=0.2)
+    parser.add_argument("--min-profit-factor", type=float, default=None)
+    parser.add_argument("--min-expectancy", type=float, default=None)
+    parser.add_argument("--max-drawdown", type=float, default=None, help="Negative floor for max drawdown")
     parser.add_argument("--reject-on-fail", action="store_true")
     args = parser.parse_args()
 
@@ -35,6 +38,9 @@ def main() -> int:
         "training_window": {"rows": int(args.train_rows), "start": None, "end": None},
         "regime_coverage": regime_coverage,
         "min_regime_coverage": float(args.min_regime_coverage),
+        "min_profit_factor": args.min_profit_factor,
+        "min_expectancy": args.min_expectancy,
+        "max_drawdown": args.max_drawdown,
         "walk_forward": {"status": "SELECTED", "selection": {"status": "SELECTED"}},
     }
     report = build_admission_report(

@@ -25,6 +25,12 @@ def test_write_model_admission_report_script_writes_report(tmp_path, monkeypatch
             "RANGE=0.4",
             "--min-regime-coverage",
             "0.2",
+            "--min-profit-factor",
+            "1.1",
+            "--min-expectancy",
+            "0.05",
+            "--max-drawdown",
+            "-0.2",
         ],
     )
 

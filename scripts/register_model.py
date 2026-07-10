@@ -20,6 +20,9 @@ if __name__ == "__main__":
     parser.add_argument("--type", required=True, help="xgb/deep/micro")
     parser.add_argument("--path", required=True)
     parser.add_argument("--metric", action="append", default=[], help="key=value pairs")
+    parser.add_argument("--min-profit-factor", type=float, default=None)
+    parser.add_argument("--min-expectancy", type=float, default=None)
+    parser.add_argument("--max-drawdown", type=float, default=None, help="Negative floor for max drawdown")
     args = parser.parse_args()
 
     metrics = {}
@@ -31,13 +34,26 @@ if __name__ == "__main__":
             except Exception:
                 pass
             metrics[k] = v
+    profitability = {
+        "expectancy": metrics.get("expectancy"),
+        "profit_factor": metrics.get("profit_factor"),
+        "max_drawdown": metrics.get("max_drawdown"),
+        "net_pnl": metrics.get("net_pnl"),
+        "win_rate": metrics.get("win_rate"),
+    }
+    profitability = {k: v for k, v in profitability.items() if v is not None}
     governance = {
         "features": list(metrics.keys()) or ["manual_metric_only"],
         "training_window": {"rows": int(metrics.get("train_rows", 0) or 0), "start": None, "end": None},
         "regime_coverage": metrics.get("regime_coverage") if isinstance(metrics.get("regime_coverage"), dict) else {},
         "min_regime_coverage": 0.2,
+        "min_profit_factor": args.min_profit_factor,
+        "min_expectancy": args.min_expectancy,
+        "max_drawdown": args.max_drawdown,
         "walk_forward": {"status": "SELECTED", "selection": {"status": "SELECTED"}},
     }
+    if profitability:
+        governance["profitability"] = profitability
     admission = build_admission_report(
         model_type=args.type,
         path=args.path,

@@ -50,14 +50,12 @@ from core.heartbeat_status import derive_cycle_semantics
 from core.ml_governance import log_ab_trial
 from rl.size_agent import SizeRLAgent, build_features
 from core.runtime_boot_identity import stamp_runtime_payload
+from core.orchestrator_helpers import (
+    _perf_ms as _orchestrator_perf_ms,
+    freeze_cycle_feed_truth_payload as _freeze_cycle_feed_truth_payload,
+)
 
 
-def _perf_ms(start_perf: float) -> float:
-    """Best-effort monotonic elapsed time in milliseconds."""
-    try:
-        return (time.perf_counter() - float(start_perf)) * 1000.0
-    except Exception:
-        return 0.0
 from config import config as cfg
 from core.strategy_tracker import StrategyTracker
 from ml.strategy_decay_predictor import generate_decay_report, telegram_summary
@@ -236,6 +234,59 @@ from core.learning_paths import (
     suggestion_eval_log_paths,
     suggestion_log_paths,
 )
+from core.orchestrator_helpers import _perf_ms as _orchestrator_perf_ms
+from core.orchestrator_pro_shadow import (
+    build_pro_shadow_report as _build_pro_shadow_report,
+    create_pro_shadow_process as _create_pro_shadow_process,
+    pro_shadow_report_path as _pro_shadow_report_path,
+    run_pro_shadow_pipeline_worker_entry as _run_pro_shadow_pipeline_worker_entry,
+    sanitize_pro_shadow_rows as _sanitize_pro_shadow_rows,
+)
+from core.orchestrator_truth import (
+    build_snapshot_numbers as _build_snapshot_numbers,
+    canonical_feed_truth_state_payload as _canonical_feed_truth_state_payload,
+    candidate_origin as _candidate_origin,
+    candidate_runtime_truth_summary as _candidate_runtime_truth_summary,
+    candidate_trace_payload as _candidate_trace_payload,
+    candidate_visibility_bucket as _candidate_visibility_bucket,
+    coerce_trade_dict_to_schema as _coerce_trade_dict_to_schema,
+    feed_truth_cycle_gate as _feed_truth_cycle_gate,
+    filter_invalid_cycle_candidates as _filter_invalid_cycle_candidates,
+    is_reportable_executable_candidate as _is_reportable_executable_candidate,
+    is_synthetic_candidate as _is_synthetic_candidate,
+    normalize_feed_runtime_payload as _normalize_feed_runtime_payload,
+    read_json_dict as _read_json_dict,
+    read_latest_feed_runtime_payload as _read_latest_feed_runtime_payload,
+    regime_unstable_diagnostic_payload as _regime_unstable_diagnostic_payload,
+    replace_trade_fields as _replace_trade_fields,
+    safe_float as _safe_float,
+    snapshot_atm_strike as _snapshot_atm_strike,
+    structurally_valid_cycle_candidate as _is_structurally_valid_cycle_candidate,
+    trade_attr as _trade_attr,
+)
+from core.orchestrator_latency import (
+    build_cycle_latency_snapshot as _build_cycle_latency_snapshot,
+    build_min_breadth_backfill as _build_min_breadth_backfill,
+    count_jsonl_rows as _count_jsonl_rows,
+    is_recoverable_depth_ws_startup_error as _is_recoverable_depth_ws_startup_error,
+    latency_budget_config as _latency_budget_config,
+    latency_guard_metric_context as _latency_guard_metric_context,
+    min_breadth_target as _min_breadth_target,
+    should_skip_background_maintenance_for_latency_guard as _should_skip_background_maintenance_for_latency_guard,
+    should_skip_trade_builder_for_latency_guard as _should_skip_trade_builder_for_latency_guard,
+    top_blockers_payload as _top_blockers_payload,
+)
+from core.orchestrator_reports import (
+    build_pipeline_funnel_payload as _build_pipeline_funnel_payload,
+    build_ranked_pipeline_runtime_report as _build_ranked_pipeline_runtime_report,
+    build_top_opportunities_payload as _build_top_opportunities_payload,
+    load_truth_dataset_for_reports,
+    scan_visible_suggestions as _scan_visible_suggestions,
+    snapshot_symbol_payload as _snapshot_symbol_payload,
+    write_cycle_reports,
+    write_ranked_pipeline_runtime_evidence as _write_ranked_pipeline_runtime_evidence,
+    zero_visible_counts as _zero_visible_counts,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -258,108 +309,6 @@ def _log_freshness_debug(message: str, *args) -> None:
 def _log_advisory_debug(message: str, *args) -> None:
     if _env_debug_enabled("TRADEBOT_DEBUG_ADVISORY"):
         logger.debug(message, *args)
-
-
-def _pro_shadow_report_path(loop_id: str) -> Path:
-    return logs_dir() / f"pro_strategy_shadow_{loop_id or 'latest'}.json"
-
-
-def _sanitize_pro_shadow_rows(market_data_list: list[dict] | None) -> list[dict]:
-    safe_rows: list[dict] = []
-    for raw in list(market_data_list or []):
-        try:
-            if isinstance(raw, Mapping):
-                safe_rows.append(dict(raw))
-            elif isinstance(raw, dict):
-                safe_rows.append(dict(raw))
-            else:
-                safe_rows.append({"value": str(raw)})
-        except Exception:
-            if isinstance(raw, Mapping):
-                safe_rows.append(dict(raw))
-            elif isinstance(raw, dict):
-                safe_rows.append(dict(raw))
-            else:
-                safe_rows.append({"value": str(raw)})
-    return safe_rows
-
-
-def _build_pro_shadow_report(report: dict, *, loop_id: str, started_at: float) -> dict:
-    candidate_preview = []
-    for candidate in list(report.get("candidates") or [])[:3]:
-        if not isinstance(candidate, dict):
-            continue
-        candidate_preview.append(
-            {
-                "symbol": str(candidate.get("symbol") or "UNKNOWN").upper(),
-                "family": str(
-                    candidate.get("strategy_family")
-                    or candidate.get("signal_family")
-                    or candidate.get("family")
-                    or candidate.get("strategy")
-                    or candidate.get("source")
-                    or ""
-                ).strip()[:24],
-                "score": candidate.get("final_score"),
-            }
-        )
-    error_preview = [str(err)[:120] for err in list(report.get("errors") or [])[:3]]
-    return {
-        "loop_id": loop_id,
-        "started_at": started_at,
-        "enabled": bool(report.get("enabled", False)),
-        "strict_mode": bool(getattr(cfg, "PRO_STRATEGY_LAYER_STRICT_MODE", True)),
-        "candidate_count": len(report.get("candidates") or []),
-        "error_count": len(report.get("errors") or []),
-        "candidate_preview": candidate_preview,
-        "error_preview": error_preview,
-        "report": report,
-    }
-
-
-def _run_pro_shadow_pipeline_worker_entry(market_data_list: list[dict] | None, loop_id: str, started_at: float) -> None:
-    report: dict[str, object] = {
-        "enabled": True,
-        "flags": {},
-        "candidates": [],
-        "errors": [],
-    }
-    try:
-        report = run_pro_strategy_pipeline(market_data_list, now_ts=started_at)
-    except Exception as exc:
-        logger.exception("pro_shadow_pipeline_failed err=%s", exc)
-        report = {
-            "enabled": True,
-            "flags": {},
-            "candidates": [],
-            "errors": [f"pro_shadow_pipeline_failed:{type(exc).__name__}:{exc}"],
-        }
-    shadow_report = _build_pro_shadow_report(report, loop_id=loop_id, started_at=started_at)
-    try:
-        write_json_atomic(_pro_shadow_report_path(loop_id), shadow_report)
-    except Exception as exc:
-        logger.warning("pro_shadow_report_write_failed err=%s", exc)
-    finally:
-        logger.info(
-            "pro_strategy_shadow_summary enabled=%s candidates=%s errors=%s strict_mode=%s loop_id=%s candidate_preview=%s error_preview=%s",
-            bool(report.get("enabled", False)),
-            len(report.get("candidates") or []),
-            len(report.get("errors") or []),
-            bool(getattr(cfg, "PRO_STRATEGY_LAYER_STRICT_MODE", True)),
-            loop_id,
-            shadow_report.get("candidate_preview"),
-            shadow_report.get("error_preview"),
-        )
-
-
-def _create_pro_shadow_process(market_data_list: list[dict] | None, loop_id: str, started_at: float):
-    ctx = multiprocessing.get_context("spawn")
-    return ctx.Process(
-        target=_run_pro_shadow_pipeline_worker_entry,
-        args=(market_data_list, loop_id, started_at),
-        name=f"pro-shadow-{loop_id or 'cycle'}",
-        daemon=True,
-    )
 
 
 def resolve_global_halt_reason(circuit_breaker) -> str | None:
@@ -846,6 +795,11 @@ def _read_json_dict(path: Path) -> dict:
         return dict(res)
     except Exception:
         return {}
+
+
+def _load_cycle_feed_truth_payload(path: Path | None = None) -> Mapping[str, Any]:
+    target = path or (logs_dir() / "feed_truth_latest.json")
+    return _freeze_cycle_feed_truth_payload(_read_json_dict(target))
 
 
 def _safe_float(value):
@@ -3987,12 +3941,19 @@ class Orchestrator:
         if not market_open:
             return True, []
 
+        feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
+        feed_runtime_payload = {}
+        if feed_runtime_path.exists():
+            try:
+                feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
+            except Exception:
+                feed_runtime_payload = {}
+
         def _runtime_health_feed_reasons() -> tuple[bool, list[str], bool]:
             now_epoch = float(now_utc_epoch())
             stale_reasons: list[str] = []
             health_evidence_found = False
             runtime_health_path = logs_dir() / "runtime_health_latest.json"
-            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
             runtime_health_max_age_sec = float(getattr(cfg, "RUNTIME_HEALTH_MAX_AGE_SEC", 30.0))
             feed_runtime_max_age_sec = float(getattr(cfg, "FEED_RUNTIME_MAX_AGE_SEC", 15.0))
 
@@ -4045,13 +4006,7 @@ class Orchestrator:
                 blockers = [str(x).strip() for x in (feed_payload.get("blockers") or []) if str(x).strip()]
                 stale_reasons.extend([f"feed_stale:{reason}" for reason in blockers])
 
-            feed_runtime_payload = {}
             feed_runtime_age = None
-            if feed_runtime_path.exists():
-                try:
-                    feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
-                except Exception:
-                    feed_runtime_payload = {}
             if feed_runtime_payload:
                 health_evidence_found = True
                 feed_runtime_ts = _safe_float(feed_runtime_payload.get("ts_epoch"))
@@ -4088,16 +4043,10 @@ class Orchestrator:
 
         if not decision_rows:
             runtime_health_path = logs_dir() / "runtime_health_latest.json"
-            feed_runtime_path = logs_dir() / "feed_runtime_latest.json"
             feed_tick_stale_sec = float(getattr(cfg, "FEED_TICK_STALE_RESTART_SEC", 5.0))
 
-            if (not stale_reasons) and feed_runtime_path.exists():
-                try:
-                    feed_runtime_payload = json.loads(feed_runtime_path.read_text(encoding="utf-8"))
-                except Exception:
-                    feed_runtime_payload = {}
-                if feed_runtime_payload:
-                    health_evidence_found = True
+            if (not stale_reasons) and feed_runtime_payload:
+                health_evidence_found = True
                 ws_connected = feed_runtime_payload.get("ws_connected")
                 db_tick_age = _safe_float(feed_runtime_payload.get("last_db_tick_age_sec"))
                 if ws_connected is False:
@@ -4879,7 +4828,7 @@ class Orchestrator:
             self._gate_status_cycle_id = f"{int(now_utc_epoch() * 1000)}"
             market_data_list = []
             feature_timing: dict[str, float] = {}
-            feed_truth_payload: dict = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+            feed_truth_payload = _load_cycle_feed_truth_payload()
             feed_runtime_payload, _feed_runtime_path = _read_latest_feed_runtime_payload()
             try:
                 if getattr(globals().get("cfg"), "FEED_USE_SUBPROCESS", False):
@@ -5721,7 +5670,7 @@ class Orchestrator:
                         )
                     execution_truth_context = build_execution_truth_context(
                         market_data=market_data,
-                        feed_truth=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
+                        feed_truth=dict(feed_truth_payload),
                         latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                     )
                     truth_candidate_rows = [
@@ -7406,11 +7355,10 @@ class Orchestrator:
                     logger.warning("pipeline_funnel_write_failed err=%s", funnel_exc)
                 try:
                     t_truth = time.perf_counter()
-                    feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
-                    if isinstance(feed_truth_payload, dict):
-                        for big_key in ("missing_option_symbols", "option_last_tick_age_by_symbol", "option_tokens_resolved_count_by_symbol", "option_tokens_subscribed_count_by_symbol", "option_ticks_received_count_by_symbol", "last_option_tick_ts_by_symbol", "option_feed_block_reason_by_symbol", "option_active_blockers_by_symbol", "missing_option_tokens_count_by_symbol", "subscribed_tokens_count_by_symbol"):
-                            feed_truth_payload.pop(big_key, None)
-                    feature_timing["GAP_read_truth_ms"] = _perf_ms(t_truth)
+                    feed_truth_payload_for_top = dict(feed_truth_payload)
+                    for big_key in ("missing_option_symbols", "option_last_tick_age_by_symbol", "option_tokens_resolved_count_by_symbol", "option_tokens_subscribed_count_by_symbol", "option_ticks_received_count_by_symbol", "last_option_tick_ts_by_symbol", "option_feed_block_reason_by_symbol", "option_active_blockers_by_symbol", "missing_option_tokens_count_by_symbol", "subscribed_tokens_count_by_symbol"):
+                        feed_truth_payload_for_top.pop(big_key, None)
+                    feature_timing["GAP_feed_truth_copy_ms"] = _perf_ms(t_truth)
 
                     t_top = time.perf_counter()
                     top_payload = _build_top_opportunities_payload(
@@ -7419,7 +7367,7 @@ class Orchestrator:
                         advisory_top_n=int(getattr(cfg, "TOP_ADVISORY_OPPORTUNITIES_N", 5)),
                         active_trade=self._phase2_active_trade if isinstance(self._phase2_active_trade, dict) else None,
                         execution_truth_context=build_execution_truth_context(
-                            feed_truth=feed_truth_payload if isinstance(feed_truth_payload, dict) else {},
+                            feed_truth=feed_truth_payload_for_top,
                             latency_guard=dict(getattr(self, "_latency_guard_state", {}) or {}),
                         ),
                     )
@@ -7442,7 +7390,7 @@ class Orchestrator:
                         t_heavy_io = time.perf_counter()
                         # Evidence-only: summarize why no-trade/no-executable is happening without mutating decisions.
                         phase2_rejection_payload = _read_json_dict(logs_dir() / "phase2_rejection_latest.json")
-                        feed_truth_payload = _read_json_dict(logs_dir() / "feed_truth_latest.json")
+                        feed_truth_payload_for_notrade = dict(feed_truth_payload)
                         indicator_payload = _read_json_dict(runtime_dir() / "live_indicator_readiness_latest.json")
                         try:
                             # Refresh indicator readiness artifact from current cycle market snapshots so
@@ -7482,7 +7430,7 @@ class Orchestrator:
                         notrade_payload = build_notrade_reason_truth_payload(
                             candidate_handoff=root_cause_payload if isinstance(root_cause_payload, dict) else {},
                             phase2_rejection=phase2_rejection_payload,
-                            feed_truth=feed_truth_payload,
+                            feed_truth=feed_truth_payload_for_notrade,
                             top_opportunities=top_payload,
                             cycle_blockers=dict(cycle_blockers),
                             indicator_readiness=indicator_payload,
@@ -7708,6 +7656,7 @@ class Orchestrator:
                         market_snapshot=dashboard_market_snapshot,
                         producer="orchestrator_cycle",
                         loop_id=str(getattr(self, "_gate_status_cycle_id", "") or ""),
+                        cycle_feed_truth_payload=feed_truth_payload,
                     )
                     feature_timing["produce_runtime_snapshots_ms"] = _perf_ms(t0)
                 except Exception as exc:

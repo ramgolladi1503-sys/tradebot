@@ -81,3 +81,41 @@ def test_select_walk_forward_model_rejects_tiny_regime_shards():
     result = gov.select_walk_forward_model(candidates, min_regime_coverage=0.2, min_regime_rows=5)
 
     assert result["status"] == "NO_ADMISSIBLE_MODEL"
+
+
+def test_select_walk_forward_model_rejects_low_profitability_even_if_loss_is_good():
+    candidates = [
+        {
+            "admitted": True,
+            "governance": {"regime_coverage": {"TREND": 0.5, "RANGE": 0.5}},
+            "metrics": {
+                "val_loss": 0.1,
+                "val_accuracy": 0.9,
+                "profit_factor": 0.92,
+                "expectancy": -0.01,
+                "max_drawdown": -0.25,
+            },
+        },
+        {
+            "admitted": True,
+            "governance": {"regime_coverage": {"TREND": 0.5, "RANGE": 0.5}},
+            "metrics": {
+                "val_loss": 0.2,
+                "val_accuracy": 0.8,
+                "profit_factor": 1.18,
+                "expectancy": 0.03,
+                "max_drawdown": -0.1,
+            },
+        },
+    ]
+
+    result = gov.select_walk_forward_model(
+        candidates,
+        min_regime_coverage=0.2,
+        min_profit_factor=1.05,
+        min_expectancy=0.0,
+        max_drawdown=-0.05,
+    )
+
+    assert result["status"] == "SELECTED"
+    assert result["selected"]["metrics"]["profit_factor"] == 1.18

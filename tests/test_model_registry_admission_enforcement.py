@@ -36,6 +36,29 @@ def test_build_admission_report_uses_shared_schema(tmp_path):
     assert report["schema_version"] == 1
     assert report["admitted"] is True
     assert report["checks"]["walk_forward"]["status"] == "ok"
+    assert "profitability" in report
+
+
+def test_build_admission_report_rejects_when_profitability_floor_not_met(tmp_path):
+    model_path = tmp_path / "model.pkl"
+    model_path.write_bytes(b"model-bytes")
+    report = reg.build_admission_report(
+        model_type="xgb",
+        path=model_path,
+        status="shadow",
+        governance={
+            "features": ["x", "y"],
+            "training_window": {"rows": 2, "start": "2026-01-01", "end": "2026-01-02"},
+            "walk_forward": {"status": "SELECTED", "selection": {"status": "SELECTED"}},
+            "min_profit_factor": 1.1,
+            "profitability": {"profit_factor": 0.95, "expectancy": 0.02, "max_drawdown": -0.1},
+        },
+        metrics={"profit_factor": 0.95, "expectancy": 0.02, "max_drawdown": -0.1},
+        checks={"walk_forward": {"status": "ok"}},
+    )
+
+    assert report["admitted"] is False
+    assert report["reason"] == "MODEL_ENTRY_PROFITABILITY_FLOOR_NOT_MET"
 
 
 def test_write_rejection_artifact_persists_report(tmp_path):
