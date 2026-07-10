@@ -17,7 +17,7 @@ from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_t
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed_runtime import build_canonical_feed_truth_state
-from core.feed_recovery_coordinator import FeedRecoveryCoordinator
+from core.feed_recovery_coordinator import FeedRecoveryCoordinator, get_feed_recovery_coordinator
 from core.auth_manager import (
     clear_auth_required_state,
     invalidate_cache,
@@ -146,7 +146,7 @@ _RECOVERY_IN_PROGRESS: bool = False
 _WS1006_RECOVERABLE_ATTEMPTS: int = 0
 _WS1006_RECOVERABLE_LAST_ATTEMPT_EPOCH: float = 0.0
 _WS1006_RECOVERABLE_LAST_REASON: str = ""
-_FEED_RECOVERY_COORDINATOR = FeedRecoveryCoordinator()
+_FEED_RECOVERY_COORDINATOR = get_feed_recovery_coordinator()
 
 # LIVE-TRUTH-23: Verified post-start feed recovery gate.
 # Prevents treating a full restart as recovered unless connect + subscribe + fresh option ticks are observed.
