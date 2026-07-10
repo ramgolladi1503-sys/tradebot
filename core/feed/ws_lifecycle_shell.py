@@ -176,6 +176,68 @@ def derive_phase_from_runtime(
     return "STARTING"
 
 
+def derive_transport_health(
+    *,
+    ws_connected: bool | None,
+    reconnect_pending: bool = False,
+    runtime_state: Any = None,
+    reconnect_blocked_reason: Any = None,
+    last_error: Any = None,
+) -> dict[str, Any]:
+    state_text = normalize_phase(runtime_state)
+    blocked_reason = str(reconnect_blocked_reason or "").strip().lower()
+    error_text = str(last_error or "").strip()
+    if blocked_reason:
+        return {
+            "state": "BLOCKED",
+            "reason": f"reconnect_blocked:{blocked_reason}",
+            "healthy": False,
+            "ws_connected": ws_connected,
+            "reconnect_pending": bool(reconnect_pending),
+            "runtime_state": state_text,
+            "last_error": error_text,
+        }
+    if bool(reconnect_pending) or state_text in {"RECOVERING", "CONNECTING", "SUBSCRIBING"}:
+        return {
+            "state": "RECONNECTING",
+            "reason": state_text.lower() if state_text in {"RECOVERING", "CONNECTING", "SUBSCRIBING"} else "reconnect_pending",
+            "healthy": False,
+            "ws_connected": ws_connected,
+            "reconnect_pending": True,
+            "runtime_state": state_text,
+            "last_error": error_text,
+        }
+    if ws_connected is True:
+        return {
+            "state": "CONNECTED",
+            "reason": "ws_connected",
+            "healthy": True,
+            "ws_connected": True,
+            "reconnect_pending": bool(reconnect_pending),
+            "runtime_state": state_text,
+            "last_error": error_text,
+        }
+    if ws_connected is False:
+        return {
+            "state": "DISCONNECTED",
+            "reason": "ws_disconnected",
+            "healthy": False,
+            "ws_connected": False,
+            "reconnect_pending": bool(reconnect_pending),
+            "runtime_state": state_text,
+            "last_error": error_text,
+        }
+    return {
+        "state": "UNKNOWN",
+        "reason": "transport_state_unavailable",
+        "healthy": False,
+        "ws_connected": ws_connected,
+        "reconnect_pending": bool(reconnect_pending),
+        "runtime_state": state_text,
+        "last_error": error_text,
+    }
+
+
 def transition_for_connect_request(state: WsLifecycleState) -> WsLifecycleTransition:
     phase = normalize_phase(state.phase)
     if state.auth_required:
@@ -359,6 +421,7 @@ __all__ = [
     "build_lifecycle_evidence",
     "build_lifecycle_state",
     "derive_phase_from_runtime",
+    "derive_transport_health",
     "is_active_phase",
     "is_terminal_stop_phase",
     "normalize_action",

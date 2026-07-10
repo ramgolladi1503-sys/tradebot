@@ -6,11 +6,13 @@ import time
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
+from collections.abc import Mapping
 
 from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
 from core.feed_health_truth import classify_feed_health_truth
 from core.learning_paths import canonical_suggestions_log_path
+from core.jsonl_tail_cache import tail_jsonl_rows as cached_tail_jsonl_rows
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
 from core.paths import logs_dir, runtime_dir
 from core.time_utils import is_today_local, now_ist
@@ -56,27 +58,7 @@ def _read_json_payload(path: Path) -> tuple[Any, list[str]]:
 
 
 def _tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
-    if not path.exists():
-        return []
-    try:
-        max_lines = max(1, int(limit))
-        max_bytes = max(4096, int(getattr(cfg, "RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES", 65536) or 65536))
-        size = path.stat().st_size
-        if size <= max_bytes:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        else:
-            with path.open("rb") as handle:
-                handle.seek(max(0, size - max_bytes))
-                chunk = handle.read().decode("utf-8", errors="ignore")
-            if "\n" in chunk:
-                chunk = chunk[chunk.find("\n") + 1 :]
-            lines = chunk.splitlines()
-        lines = [line for line in lines if str(line).strip()]
-        if max_lines <= 0:
-            return lines
-        return lines[-max_lines:]
-    except Exception:
-        return []
+    return cached_tail_jsonl_rows(path, limit=limit, namespace="runtime_snapshot_producer")
 
 
 def _safe_float(value: Any, default: float | None = None) -> float | None:
@@ -476,6 +458,7 @@ def produce_and_store_runtime_snapshots(
     producer: str,
     loop_id: str | None = None,
     metrics_registry: ObservabilityMetricsRegistry | None = None,
+    cycle_feed_truth_payload: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     outputs: dict[str, Any] = {}
     timings: list[dict[str, Any]] = []
@@ -495,13 +478,22 @@ def produce_and_store_runtime_snapshots(
     t1 = time.perf_counter()
     feed_payload, _feed_notes = _read_json_payload(logs_dir() / "feed_runtime_latest.json")
     outputs["feed_runtime_latest"] = feed_payload
-    feed_truth_payload = _build_feed_health_truth_latest_payload(feed_payload)
-    _, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
+    shared_cycle_feed_truth = dict(cycle_feed_truth_payload or {})
+    if shared_cycle_feed_truth:
+        outputs["cycle_feed_truth_latest"] = dict(shared_cycle_feed_truth)
+        feed_truth_payload = dict(shared_cycle_feed_truth)
+        feed_truth_decision = type(
+            "_SharedFeedTruthDecision",
+            (),
+            {"to_payload": lambda self: dict(shared_cycle_feed_truth)},
+        )()
+    else:
+        feed_truth_payload, feed_truth_decision = stages_build_feed_health_truth_latest_payload(feed_payload)
     outputs["feed_health_truth_latest"] = feed_truth_payload
     timings.append({"stage": "feed_health_truth", "elapsed_ms": round((time.perf_counter() - t1) * 1000.0, 3)})
     cycle_context = RuntimeCycleContext(
         cycle_id=str(loop_id or producer or "runtime_snapshot"),
-        feed_truth=feed_truth_decision.to_payload(),
+        feed_truth=shared_cycle_feed_truth or feed_truth_decision.to_payload(),
         stage_timings=(
             StageTiming(
                 stage="feed_health_truth",
@@ -509,7 +501,7 @@ def produce_and_store_runtime_snapshots(
                 metadata={"producer": producer},
             ),
         ),
-        metadata={"producer": producer},
+        metadata={"producer": producer, "shared_cycle_feed_truth": bool(shared_cycle_feed_truth)},
     )
 
     try:

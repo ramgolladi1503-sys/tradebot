@@ -10,7 +10,9 @@ from core.events import write_json_atomic
 from core.feed_execution_truth import attach_feed_execution_truth
 from core.feed_startup_lifecycle import record_feed_startup_event
 from core.feed_truth_state import classify_feed_truth_state
+from core.feed.ws_lifecycle_shell import derive_transport_health
 from core.fs_utils import ensure_parent_dir
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.paths import repo_root, trade_db_path
 from core.time_utils import now_utc_epoch
 
@@ -190,6 +192,17 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["restart_failure_reason"] = restart_failure_reason
     if reconnect_blocked_reason and reconnect_blocked_reason.startswith("reactor_not_restartable"):
         out["reactor_not_restartable_detected"] = True
+    transport_health = derive_transport_health(
+        ws_connected=out.get("ws_connected"),
+        reconnect_pending=bool(out.get("reconnect_pending")),
+        runtime_state=out.get("runtime_state"),
+        reconnect_blocked_reason=reconnect_blocked_reason,
+        last_error=out.get("last_error"),
+    )
+    out.setdefault("transport_state", transport_health["state"])
+    out.setdefault("transport_reason", transport_health["reason"])
+    out.setdefault("transport_healthy", bool(transport_health["healthy"]))
+    out.setdefault("transport", dict(transport_health))
     if "feed_truth_state" not in out:
         feed_truth = classify_feed_truth_state(out, now_epoch=float(ts_epoch))
         out["feed_truth_state"] = str(feed_truth.state)
@@ -198,6 +211,15 @@ def _canonical_runtime_artifact_payload(payload: dict[str, Any], *, ts_epoch: fl
         out["feed_truth_strict_live"] = bool(feed_truth.strict_live)
     out = canonicalize_feed_runtime_snapshot_truth(out)
     out = attach_feed_execution_truth(out)
+    out.update(
+        build_truth_integrity_payload(
+            source_payload=out,
+            transport_state=out.get("transport_state"),
+            feed_truth_state=out.get("feed_truth_state"),
+            reason_code=out.get("feed_truth_reason_code"),
+            heartbeat_epoch=ts_epoch,
+        )
+    )
     out["read_only"] = True
     out["append"] = False
     out["is_order_action"] = False
