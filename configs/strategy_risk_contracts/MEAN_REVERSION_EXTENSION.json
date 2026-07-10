@@ -1,0 +1,51 @@
+{
+  "strategy_id": "MEAN_REVERSION_EXTENSION",
+  "contract_type": "CANDLE_LEVEL_RESEARCH_RISK_CONTRACT",
+  "v2_signal_version": "1.0",
+  "entry": {
+    "trigger": "failed_breakout_or_breakdown",
+    "price_source": "underlying_candle_close_or_next_open",
+    "opening_range_minutes": 45,
+    "min_wick_rejection_ratio": 0.5,
+    "confirmation_required": true
+  },
+  "htf_filter": {
+    "period_minutes": 15,
+    "block_bullish_shorts": true,
+    "block_bearish_longs": true
+  },
+  "cost_model": {
+    "proxy_option_delta": 0.50,
+    "proxy_option_execution_cost": 1.5,
+    "underlying_cost_proxy": 8.5
+  },
+  "stop_loss": {
+    "type": "atr_multiple_or_structure_invalid",
+    "atr_multiple": 1.0,
+    "max_loss_pct": null
+  },
+  "target": {
+    "type": "mean_reversion_to_vwap_or_midline",
+    "minimum_rr": 1.5
+  },
+  "time_stop": {
+    "max_holding_minutes": 30
+  },
+  "invalid_setup": [
+    "trend_acceleration_against_trade",
+    "volatility_expansion_against_trade",
+    "liquidity_missing",
+    "stale_candle_or_quote"
+  ],
+  "option_mapping": {
+    "required_for_stress_replay": true,
+    "required_for_research_backtest": false,
+    "strike_policy": "nearest_atm_or_delta_proxy_blocked_until_defined",
+    "expiry_policy": "nearest_weekly_expiry_blocked_until_defined"
+  },
+  "execution_grade": false,
+  "paper_live_allowed": false,
+  "live_allowed": false,
+  "broker_order_allowed": false,
+  "execution_allowed": false
+}

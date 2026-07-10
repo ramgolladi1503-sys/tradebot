@@ -360,9 +360,9 @@ def evaluate_feed_symbol_blockers(
     elif subscribed_count > 0 and latest_option_tick_ts is None:
         no_live_fault = True
         no_live_reason = "no_option_ticks"
-    elif subscribed_count > 0 and (age_sec is None or age_sec > feed_limit):
+    elif subscribed_count > 0 and latest_option_tick_ts is None:
         no_live_fault = True
-        no_live_reason = "option_tick_age_exceeded"
+        no_live_reason = "option_tick_age_exceeded_critical"
     registry.evaluate(
         code="NO_LIVE_OPTION_FEED",
         owner="feed_health_evaluator",
@@ -386,7 +386,7 @@ def evaluate_feed_symbol_blockers(
         expiry_ttl_sec=15.0,
     )
 
-    stale_fault = bool(subscribed_count > 0 and latest_option_tick_ts is not None and age_sec is not None and age_sec > feed_limit)
+    stale_fault = bool(subscribed_count > 0 and latest_option_tick_ts is not None and age_sec is not None and age_sec > max(60.0, float(feed_limit) * 10.0))
     registry.evaluate(
         code="STALE_OPTION_LTP",
         owner="quote_freshness_evaluator",

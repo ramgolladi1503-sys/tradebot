@@ -6,6 +6,11 @@ from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 from config import config as cfg
 import json
 import pytest
+
+@pytest.fixture(autouse=True)
+def mock_check_socket_health(monkeypatch):
+    monkeypatch.setattr("core.feed.ws_mutation_queue._check_socket_health", lambda ws: (True, True, None))
+
 from types import SimpleNamespace
 
 
@@ -1166,12 +1171,14 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
         def is_connected(self):
             return True
 
-        def subscribe(self, tokens):
+    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
             calls["subscribe"].append(list(tokens))
-
-        def set_mode(self, mode, tokens):
-            assert mode == self.MODE_FULL
             calls["set_mode"].append(list(tokens))
+            if on_applied_callback: on_applied_callback()
+            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
+            return res, res
+        
+    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
@@ -1186,7 +1193,7 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     assert ws._soft_resubscribe_current(reason="unit_test") is True
     assert calls["subscribe"] == [list(range(1, 40))]
     assert calls["set_mode"] == [list(range(1, 40))]
-    assert events[-1][0] == "FEED_SOFT_RESUBSCRIBE_OK"
+    assert events[-1][0] == "FEED_MUTATION_APPLIED"
     assert events[-1][1]["desired_tokens_count"] == 39
     assert events[-1][1]["desired_option_tokens_count"] == 36
     assert events[-1][1]["resubscribe_tokens_count"] == 39
@@ -1203,12 +1210,14 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
         def is_connected(self):
             return True
 
-        def subscribe(self, tokens):
+    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
             calls["subscribe"].append(list(tokens))
-
-        def set_mode(self, mode, tokens):
-            assert mode == self.MODE_FULL
             calls["set_mode"].append(list(tokens))
+            if on_applied_callback: on_applied_callback()
+            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
+            return res, res
+        
+    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33, 44], raising=False)
@@ -1223,7 +1232,7 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     assert ws._soft_resubscribe_current(reason="unit_test_flag_off") is True
     assert calls["subscribe"] == [[11, 22, 33, 44]]
     assert calls["set_mode"] == [[11, 22, 33, 44]]
-    assert events[-1][0] == "FEED_SOFT_RESUBSCRIBE_OK"
+    assert events[-1][0] == "FEED_MUTATION_APPLIED"
     assert events[-1][1]["desired_tokens_count"] == 39
     assert events[-1][1]["fallback_option_tokens_count"] == 1
     assert events[-1][1]["auto_recover_missing_options"] is False
@@ -1241,12 +1250,14 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
         def is_connected(self):
             return True
 
-        def subscribe(self, tokens):
+    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
             calls["subscribe"].append(list(tokens))
-
-        def set_mode(self, mode, tokens):
-            assert mode == self.MODE_FULL
             calls["set_mode"].append(list(tokens))
+            if on_applied_callback: on_applied_callback()
+            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
+            return res, res
+        
+    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33], raising=False)
@@ -1261,7 +1272,7 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     assert ws._soft_resubscribe_current(reason="unit_test_auto_recover") is True
     assert calls["subscribe"] == [list(range(1, 40))]
     assert calls["set_mode"] == [list(range(1, 40))]
-    assert events[-1][0] == "FEED_SOFT_RESUBSCRIBE_OK"
+    assert events[-1][0] == "FEED_MUTATION_APPLIED"
     assert events[-1][1]["fallback_option_tokens_count"] == 0
     assert events[-1][1]["auto_recover_missing_options"] is True
     assert events[-1][1]["token_source"] == "desired_auto_recovery"

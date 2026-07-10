@@ -707,11 +707,17 @@ def _is_structurally_valid_cycle_candidate(candidate) -> bool:
         "symbol",
         "strategy_family",
         "candidate_status",
-        "rank_score",
     )
     for field in required_fields:
         if _trade_attr(candidate, field) in (None, "", "None"):
             return False
+            
+    if _trade_attr(candidate, "candidate_status") != "advisory_only":
+        trade_id = str(_trade_attr(candidate, "trade_id") or "")
+        if not trade_id.startswith(("tbsoft_", "softrej_")):
+            if _trade_attr(candidate, "rank_score") in (None, "", "None"):
+                return False
+            
     return True
 
 
@@ -862,7 +868,6 @@ def _normalize_feed_runtime_payload(raw: dict) -> dict:
 
 def _read_latest_feed_runtime_payload() -> tuple[dict, Path | None]:
     candidates = [
-        Path(getattr(cfg, "DATA_ROOT", ".runtime")).expanduser() / "feed_runtime_latest.json",
         logs_dir() / "feed_runtime_latest.json",
     ]
     newest: tuple[dict, Path | None, float] = ({}, None, 0.0)
@@ -2489,13 +2494,26 @@ class Orchestrator:
     def _start_depth_ws_or_raise(self, *, start_depth_ws_enabled: bool) -> None:
         runtime_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         dry_run_mode = bool(getattr(cfg, "DRY_RUN", False))
-        should_start_depth_ws = bool(start_depth_ws_enabled and runtime_mode == "LIVE" and not dry_run_mode)
+        should_start_depth_ws = bool(start_depth_ws_enabled and runtime_mode in {"LIVE", "PAPER"} and not dry_run_mode)
         if not should_start_depth_ws:
             logger.info(
                 "depth_ws_start_skipped mode=%s dry_run=%s enabled=%s",
                 runtime_mode,
                 dry_run_mode,
                 bool(start_depth_ws_enabled),
+            )
+            return
+        try:
+            from core.auth import get_kite_credentials
+
+            get_kite_credentials()
+        except Exception as exc:
+            logger.warning(
+                "depth_ws_start_skipped_missing_credentials mode=%s dry_run=%s enabled=%s err=%s",
+                runtime_mode,
+                dry_run_mode,
+                bool(start_depth_ws_enabled),
+                exc,
             )
             return
         logger.info(
@@ -4817,6 +4835,7 @@ class Orchestrator:
     def _legacy_live_monitoring(self, run_once: bool = False):
         """
         Phase E: Live trading loop
+        from config import config as cfg
         Fetch market data, generate trades, risk-check, execute, log, alert
         """
         from config import config as cfg

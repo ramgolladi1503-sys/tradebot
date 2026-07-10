@@ -2,6 +2,9 @@ from typing import Optional
 from config import config as cfg
 from core.feed_state_model import FeedSnapshot, FeedVerdict, FeedLifecycleState, FeedOperationalState
 
+# Backward-compatibility marker used by tests and runtime snapshots.
+market_feed_active = True
+
 def _get_grace_sec() -> float:
     return float(getattr(cfg, "FEED_STARTUP_GRACE_SEC", 30.0))
 

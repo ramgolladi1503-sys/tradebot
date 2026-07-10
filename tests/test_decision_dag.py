@@ -32,6 +32,7 @@ def _base_market_data(now_epoch: float) -> dict:
         "symbol": "NIFTY",
         "instrument": "OPT",
         "market_open": True,
+        "market_context": {"session_state": "NORMAL_OPEN"},
         "timestamp": now_epoch,
         "ltp": 25000.0,
         "ltp_source": "live",
@@ -84,7 +85,7 @@ def test_feed_fresh_uses_latest_option_tick_when_ltp_timestamp_missing(monkeypat
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "market_context": {"execution_mode": "LIVE", "market_open": True, "session_state": "NORMAL_OPEN"},
             "ltp_ts_epoch": None,
             "latest_option_tick_ts": now_epoch - 0.4,
             "latest_option_tick_age_sec": 0.4,
@@ -104,7 +105,7 @@ def test_feed_stale_emits_symbol_evidence_log(monkeypatch, caplog):
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "market_context": {"execution_mode": "LIVE", "market_open": True, "session_state": "NORMAL_OPEN"},
             "ltp_ts_epoch": now_epoch - 30.0,
             "latest_option_tick_ts": now_epoch - 45.0,
             "latest_option_tick_age_sec": 45.0,
@@ -125,7 +126,7 @@ def test_paper_stale_feed_is_allowed_without_offhours_relabel(monkeypatch):
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_context": {"execution_mode": "PAPER", "market_open": True, "session_state": "NORMAL_OPEN"},
             "market_open": True,
             "ltp_ts_epoch": now_epoch - 500.0,
         }
@@ -145,7 +146,7 @@ def test_paper_feed_dropout_missing_ltp_timestamp_does_not_block_feed(monkeypatc
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_context": {"execution_mode": "PAPER", "market_open": True, "session_state": "NORMAL_OPEN"},
             "market_open": True,
             "ltp": None,
             "ltp_source": "none",
@@ -168,7 +169,7 @@ def test_paper_hist_fetch_failed_is_degraded_not_blocking(monkeypatch):
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "PAPER", "market_open": True},
+            "market_context": {"execution_mode": "PAPER", "market_open": True, "session_state": "NORMAL_OPEN"},
             "market_open": True,
             "system_state": "DEGRADED",
             "warmup_reasons": ["HIST_FETCH_FAILED"],
@@ -197,7 +198,7 @@ def test_paper_market_closed_with_hist_fetch_failed_and_missing_depth_is_degrade
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "PAPER", "market_open": False},
+            "market_context": {"execution_mode": "PAPER", "market_open": False, "session_state": "NORMAL_OPEN"},
             "market_open": False,
             "system_state": "DEGRADED",
             "warmup_reasons": ["HIST_FETCH_FAILED"],
@@ -248,7 +249,7 @@ def test_live_future_ltp_timestamp_clock_skew_does_not_false_block_feed(monkeypa
     md = _base_market_data(now_epoch)
     md.update(
         {
-            "market_context": {"execution_mode": "LIVE", "market_open": True},
+            "market_context": {"execution_mode": "LIVE", "market_open": True, "session_state": "NORMAL_OPEN"},
             "ltp_ts_epoch": now_epoch + 300.0,
         }
     )
@@ -530,3 +531,21 @@ def test_strategy_select_returns_precondition_reason_codes_and_facts(monkeypatch
     # Reasons are propagated to final blockers and stage points to strategy node.
     assert "WARMUP_INCOMPLETE" in decision.blockers
     assert n3["ok"] is False
+
+
+def test_pre_open_blocks_execution():
+    now_epoch = 1_100.0
+    md = _base_market_data(now_epoch)
+    md["market_context"]["session_state"] = "PRE_OPEN"
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is False
+    assert "SESSION_NOT_NORMAL_OPEN" in decision.blockers
+
+
+def test_open_warmup_blocks_execution():
+    now_epoch = 1_100.0
+    md = _base_market_data(now_epoch)
+    md["market_context"]["session_state"] = "OPEN_WARMUP"
+    decision = evaluate_decision(md, strategy_candidates=_default_candidates(), now_epoch=now_epoch)
+    assert decision.allowed is False
+    assert "SESSION_NOT_NORMAL_OPEN" in decision.blockers

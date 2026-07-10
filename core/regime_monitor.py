@@ -186,6 +186,30 @@ class RegimeMonitor:
                     "ts_epoch": ts_val,
                 }
                 self._append_log({"event": "regime_outcome", **latest_outcome})
+                
+                try:
+                    import time
+                    from pathlib import Path
+                    import json
+                    timeline_path = Path("runtime/strategy_validation/regime_timeline.jsonl")
+                    timeline_path.parent.mkdir(parents=True, exist_ok=True)
+                    row = {
+                        "market_timestamp": str(ts_val) if ts_val else str(time.time()),
+                        "symbol": sym,
+                        "open": 0.0,
+                        "high": 0.0,
+                        "low": 0.0,
+                        "close": 0.0,
+                        "tradebot_regime": prev_regime,
+                        "selected_strategy": "Unknown",
+                        "source": "replay",
+                        "source_file": "unknown"
+                    }
+                    with open(timeline_path, "a") as f:
+                        f.write(json.dumps(row) + "\n")
+                except Exception:
+                    pass
+
 
             self._pending_by_symbol[sym] = {
                 "predicted_regime": regime,

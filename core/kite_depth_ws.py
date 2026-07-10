@@ -87,6 +87,11 @@ _KITE_TICKER_LOCK = threading.Lock()
 _WATCHDOG_THREAD = None
 _WATCHDOG_STOP = None
 _LAST_TOKENS = []
+_PENDING_SUBSCRIBE_TOKENS = set()
+_PENDING_UNSUBSCRIBE_TOKENS = set()
+_PENDING_MODE_FULL_TOKENS = set()
+_LAST_MUTATION_RESULT = None
+
 _LAST_DESIRED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
@@ -854,6 +859,7 @@ def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | st
 
 
 def _soft_resubscribe_current(reason: str) -> bool:
+    global _PENDING_SUBSCRIBE_TOKENS, _LAST_TOKENS
     can_mutate, guard_reason, guard_payload = _can_mutate_ws_subscriptions(reason=reason)
     if not can_mutate:
         _log_ws("FEED_SOFT_RESUBSCRIBE_SKIPPED", {**guard_payload, "guard_reason": guard_reason})
@@ -863,24 +869,40 @@ def _soft_resubscribe_current(reason: str) -> bool:
         tokens, selection_payload = _resubscribe_token_selection()
         log_payload = {"reason": reason, **selection_payload}
         if ws_obj is None or not tokens:
-            _log_ws(
-                "FEED_SOFT_RESUBSCRIBE_SKIPPED",
-                {**log_payload, "detail": "ws_or_tokens_missing", "token_count": len(tokens)},
-            )
+            _PENDING_SUBSCRIBE_TOKENS = set(tokens)
+            _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "detail": "ws_missing_queued", "token_count": len(tokens)})
             return False
+
+        from core.feed.ws_mutation_queue import _check_socket_health
+        present, connected, fail_reason = _check_socket_health(ws_obj)
+        if not present or connected is False:
+            _PENDING_SUBSCRIBE_TOKENS = set(tokens)
+            _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "detail": "ws_disconnected_queued", "token_count": len(tokens)})
+            return False
+
         try:
-            ws_obj.subscribe(tokens)
-            ws_obj.set_mode(ws_obj.MODE_FULL, tokens)
-            _log_ws("FEED_SOFT_RESUBSCRIBE_OK", log_payload)
-            return True
+            from core.feed.ws_mutation_queue import safe_subscribe_full_mode
+            now_epoch = now_utc_epoch()
+
+            def on_applied():
+                global _LAST_TOKENS
+                _LAST_TOKENS = list(sorted(set(tokens)))
+                _log_ws("FEED_MUTATION_APPLIED", log_payload)
+
+            res_sub, res_mode = safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=on_applied)
+
+            if res_sub.applied and res_mode.applied:
+                return True
+            elif res_sub.queued or res_mode.queued:
+                _PENDING_SUBSCRIBE_TOKENS = set(tokens)
+                _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "token_count": len(tokens)})
+                return False
+            else:
+                _log_ws("FEED_MUTATION_FAILED", {**log_payload, "error": res_sub.failure_reason or res_mode.failure_reason})
+                return False
         except Exception as exc:
-            _log_ws(
-                "FEED_SOFT_RESUBSCRIBE_ERROR",
-                {**log_payload, "tokens": len(tokens), "error": str(exc)},
-            )
+            _log_ws("FEED_MUTATION_FAILED", {**log_payload, "error": str(exc)})
             return False
-
-
 def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
     refresh_tokens = _normalize_positive_tokens(tokens)
     if not refresh_tokens:
@@ -897,35 +919,61 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 {"reason": reason, "detail": "ws_or_tokens_missing", "token_count": len(refresh_tokens)},
             )
             return False
-        try:
-            if hasattr(ws_obj, "unsubscribe"):
-                ws_obj.unsubscribe(refresh_tokens)
-        except Exception as exc:
+
+        from core.feed.ws_mutation_queue import _check_socket_health
+        present, connected, fail_reason = _check_socket_health(ws_obj)
+        if not present or connected is False:
             _log_ws(
-                "FEED_REFRESH_UNSUBSCRIBE_ERROR",
-                {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)},
-            )
-            return False
-        try:
-            ws_obj.subscribe(refresh_tokens)
-            ws_obj.set_mode(ws_obj.MODE_FULL, refresh_tokens)
-            _log_ws(
-                "FEED_REFRESH_OK",
-                {
-                    "reason": reason,
-                    "tokens": len(refresh_tokens),
-                    "sample_tokens": list(refresh_tokens[:10]),
-                },
-            )
-            return True
-        except Exception as exc:
-            _log_ws(
-                "FEED_REFRESH_ERROR",
-                {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)},
+                "FEED_REFRESH_SKIPPED",
+                {"reason": reason, "detail": "ws_disconnected", "token_count": len(refresh_tokens)},
             )
             return False
 
+        try:
+            from core.feed.ws_mutation_queue import safe_unsubscribe
+            now_epoch = now_utc_epoch()
+            res_unsub = safe_unsubscribe(ws_obj, refresh_tokens, reason, now_epoch)
+            if not res_unsub.applied and res_unsub.failure_reason != "ws_method_missing":
+                if res_unsub.queued:
+                    # just log queued
+                    _log_ws("FEED_REFRESH_UNSUBSCRIBE_QUEUED", {"reason": reason, "tokens": len(refresh_tokens)})
+                else:
+                    _log_ws("FEED_REFRESH_UNSUBSCRIBE_ERROR", {"reason": reason, "tokens": len(refresh_tokens), "error": res_unsub.failure_reason})
+                    return False
+        except Exception as exc:
+            _log_ws("FEED_REFRESH_UNSUBSCRIBE_ERROR", {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)})
+            return False
 
+        try:
+            from core.feed.ws_mutation_queue import safe_subscribe_full_mode
+            now_epoch = now_utc_epoch()
+
+            def on_refresh_applied():
+                global _LAST_TOKENS
+                _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(refresh_tokens))))
+
+            res_sub, res_mode = safe_subscribe_full_mode(ws_obj, refresh_tokens, reason, now_epoch, on_applied_callback=on_refresh_applied)
+
+            if res_sub.queued or res_mode.queued:
+                global _PENDING_SUBSCRIBE_TOKENS
+                _PENDING_SUBSCRIBE_TOKENS.update(refresh_tokens)
+                _log_ws("FEED_MUTATION_QUEUED", {"action": "refresh", "count": len(refresh_tokens), "reason": reason})
+                return False
+            elif not res_sub.applied or not res_mode.applied:
+                _log_ws("FEED_REFRESH_SUBSCRIBE_ERROR", {"reason": reason, "count": len(refresh_tokens), "error": res_sub.failure_reason or res_mode.failure_reason})
+                return False
+
+            _log_ws("FEED_REFRESH_OK", {"reason": reason, "count": len(refresh_tokens)})
+            _persist_runtime_snapshot_row(ws_connected=True, source=f"rebalance_refresh:{reason}", runtime_state="RUNNING", last_error="")
+        except Exception as exc:
+            global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = f"refresh_error:{exc}"[:1000]
+            _log_ws("FEED_REFRESH_SUBSCRIBE_ERROR", {"reason": reason, "count": len(refresh_tokens), "error": str(exc)})
+            _persist_runtime_snapshot_row(ws_connected=False, source=f"rebalance_refresh_error:{reason}", runtime_state="SUBSCRIBE_FAILED", last_error=_LAST_RUNTIME_ERROR)
+            return False
+
+    return True
 def _soft_resubscribe_hard_block_markers() -> tuple[str, ...]:
     raw = str(getattr(cfg, "FEED_SOFT_RESUBSCRIBE_HARD_BLOCK_MARKERS", "") or "")
     markers = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
@@ -1851,9 +1899,10 @@ def _can_mutate_ws_subscriptions(reason: str, now_epoch: float | None = None) ->
 
 
 def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
-    global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
     to_subscribe = sorted(set(int(t) for t in (subscribe_tokens or []) if int(t) > 0))
     to_unsubscribe = sorted(set(int(t) for t in (unsubscribe_tokens or []) if int(t) > 0))
+
     can_mutate, guard_reason, guard_payload = _can_mutate_ws_subscriptions(reason=reason)
     if not can_mutate:
         _log_ws(
@@ -1861,16 +1910,59 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             {**guard_payload, "guard_reason": guard_reason, "subscribe_count": len(to_subscribe), "unsubscribe_count": len(to_unsubscribe)},
         )
         return False
+
+    from core.feed.ws_mutation_queue import _check_socket_health
+    present, connected, fail_reason = _check_socket_health(ws)
+    if not present or connected is False:
+        _log_ws(
+            "FEED_REBALANCE_SKIPPED",
+            {"reason": reason, "detail": "ws_disconnected"},
+        )
+        return False
+
+    all_applied = True
+
     try:
+        from core.feed.ws_mutation_queue import safe_subscribe_full_mode, safe_unsubscribe
+        now_epoch = now_utc_epoch()
+
         if to_subscribe:
-            ws.subscribe(to_subscribe)
-            ws.set_mode(ws.MODE_FULL, to_subscribe)
+            def on_sub_applied():
+                global _LAST_TOKENS
+                _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(to_subscribe))))
+                _log_ws("FEED_MUTATION_APPLIED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
+
+            res_sub, res_mode = safe_subscribe_full_mode(ws, to_subscribe, reason, now_epoch, on_applied_callback=on_sub_applied)
+
+            if res_sub.queued or res_mode.queued:
+                _PENDING_SUBSCRIBE_TOKENS.update(to_subscribe)
+                _log_ws("FEED_MUTATION_QUEUED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
+                all_applied = False
+            elif not res_sub.applied or not res_mode.applied:
+                _log_ws("FEED_MUTATION_FAILED", {"action": "subscribe", "reason": res_sub.failure_reason or res_mode.failure_reason})
+                all_applied = False
+
+        if to_unsubscribe:
+            def on_unsub_applied():
+                global _LAST_TOKENS
+                _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []) - set(to_unsubscribe)))
+                _log_ws("FEED_MUTATION_APPLIED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
+
+            res_unsub = safe_unsubscribe(ws, to_unsubscribe, reason, now_epoch, on_applied_callback=on_unsub_applied)
+            if res_unsub.queued:
+                _PENDING_UNSUBSCRIBE_TOKENS.update(to_unsubscribe)
+                _log_ws("FEED_MUTATION_QUEUED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
+                all_applied = False
+            elif not res_unsub.applied:
+                _log_ws("FEED_MUTATION_FAILED", {"action": "unsubscribe", "reason": res_unsub.failure_reason})
+                all_applied = False
+
     except Exception as exc:
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
         _LAST_RUNTIME_ERROR = f"subscribe_delta:{exc}"[:1000]
         _log_ws(
-            "FEED_REBALANCE_SUBSCRIBE_ERROR",
-            {"reason": reason, "count": len(to_subscribe), "error": str(exc)},
+            "FEED_MUTATION_FAILED",
+            {"reason": reason, "error": str(exc)},
         )
         _persist_runtime_snapshot_row(
             ws_connected=False,
@@ -1879,61 +1971,8 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             last_error=_LAST_RUNTIME_ERROR,
         )
         return False
-    if to_unsubscribe:
-        try:
-            if hasattr(ws, "unsubscribe"):
-                ws.unsubscribe(to_unsubscribe)
-        except Exception as exc:
-            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
-            _LAST_RUNTIME_ERROR = f"unsubscribe_delta:{exc}"[:1000]
-            _log_ws(
-                "FEED_REBALANCE_UNSUBSCRIBE_ERROR",
-                {"reason": reason, "count": len(to_unsubscribe), "error": str(exc)},
-            )
-            _persist_runtime_snapshot_row(
-                ws_connected=False,
-                source=f"rebalance_unsubscribe_error:{reason}",
-                runtime_state="SUBSCRIBE_FAILED",
-                last_error=_LAST_RUNTIME_ERROR,
-            )
-            return False
-    final_set = set(int(t) for t in (_LAST_TOKENS or []))
-    final_set.update(to_subscribe)
-    final_set.difference_update(to_unsubscribe)
-    _LAST_TOKENS = sorted(final_set)
-    logger.info(
-        "depth_ws_subscribe_apply subscribe_count=%d unsubscribe_count=%d final_count=%d",
-        len(to_subscribe),
-        len(to_unsubscribe),
-        len(_LAST_TOKENS or []),
-    )
-    logger.info(
-        "depth_ws_subscribe_tokens sample=%s",
-        list((_LAST_TOKENS or [])[:10]),
-    )
-    if _LAST_TOKENS:
-        try:
-            ws.set_mode(ws.MODE_FULL, _LAST_TOKENS)
-        except Exception:
-            pass
-    _log_ws(
-        "FEED_REBALANCE_APPLIED",
-        {
-            "reason": reason,
-            "subscribe_count": len(to_subscribe),
-            "unsubscribe_count": len(to_unsubscribe),
-            "total_tokens": len(_LAST_TOKENS),
-        },
-    )
-    _RUNTIME_STATE = "RUNNING"
-    _LAST_RUNTIME_ERROR = ""
-    _persist_runtime_snapshot_row(
-        ws_connected=True,
-        source=f"rebalance_applied:{reason}",
-        runtime_state="RUNNING",
-        last_error="",
-    )
-    return True
+
+    return all_applied
 
 
 def _normalize_recovery_blocked_snapshot_state(
@@ -2834,7 +2873,20 @@ def _option_runtime_state(
         active_codes = [str(record.code) for record in active_records]
         active_blockers_by_symbol[symbol] = active_codes
         blocker_records_by_symbol[symbol] = [record.to_payload() for record in active_records]
-        feed_block_reason_by_symbol[symbol] = top_active_code(active_records) or "OK"
+        top_code = top_active_code(active_records)
+        if top_code:
+            feed_block_reason_by_symbol[symbol] = top_code
+        elif age_sec is None or float(age_sec) > float(option_sla_sec):
+            feed_block_reason_by_symbol[symbol] = "NO_LIVE_OPTION_FEED"
+            if "NO_LIVE_OPTION_FEED" not in active_blockers_by_symbol[symbol]:
+                active_blockers_by_symbol[symbol].append("NO_LIVE_OPTION_FEED")
+        else:
+            feed_block_reason_by_symbol[symbol] = "OK"
+        if age_sec is not None and float(age_sec) > float(option_sla_sec):
+            if "STALE_OPTION_LTP" not in active_blockers_by_symbol[symbol]:
+                active_blockers_by_symbol[symbol].append("STALE_OPTION_LTP")
+            if feed_block_reason_by_symbol[symbol] == "OK":
+                feed_block_reason_by_symbol[symbol] = "STALE_OPTION_LTP"
     registry.prune_invalid_owners(now_ts=float(now_epoch), scope="feed_symbol", valid_owner_keys=valid_owner_keys)
     registry.expire_stale(float(now_epoch), scope="feed_symbol")
     return {
@@ -3181,6 +3233,15 @@ def _persist_runtime_snapshot_row(
         min_required_by_symbol=_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL,
         ws_connected=ws_connected,
     )
+    option_feed_block_reason_by_symbol = dict(option_state.get("feed_block_reason_by_symbol") or {})
+    option_active_blockers_by_symbol = dict(option_state.get("active_blockers_by_symbol") or {})
+    if effective_state_text == "RECOVERY_BLOCKED" or normalized_blocked_reason == "ws1006_process_restart_required":
+        for symbol in list(option_feed_block_reason_by_symbol.keys()):
+            option_feed_block_reason_by_symbol[symbol] = "NO_LIVE_OPTION_FEED"
+            blockers = list(option_active_blockers_by_symbol.get(symbol) or [])
+            if "NO_LIVE_OPTION_FEED" not in blockers:
+                blockers.insert(0, "NO_LIVE_OPTION_FEED")
+            option_active_blockers_by_symbol[symbol] = blockers
     restart_verify = _restart_verify_overlay_payload()
     disconnected_code_value = disconnected_code if disconnected_code is not None else _LAST_DISCONNECTED_CODE
     disconnected_reason_value = disconnected_reason if disconnected_reason is not None else _LAST_DISCONNECTED_REASON
@@ -3210,8 +3271,8 @@ def _persist_runtime_snapshot_row(
         "option_tokens_subscribed_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
         "option_ticks_received_count_by_symbol": dict(option_state.get("ticks_received_count_by_symbol") or {}),
         "last_option_tick_ts_by_symbol": dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        "option_feed_block_reason_by_symbol": dict(option_state.get("feed_block_reason_by_symbol") or {}),
-        "option_active_blockers_by_symbol": dict(option_state.get("active_blockers_by_symbol") or {}),
+        "option_feed_block_reason_by_symbol": option_feed_block_reason_by_symbol,
+        "option_active_blockers_by_symbol": option_active_blockers_by_symbol,
         "market_open": market_open,
         "last_ws_tick_epoch": last_ws_tick_epoch,
         "last_tick_age_sec": last_tick_age_sec,
@@ -3312,8 +3373,8 @@ def _persist_runtime_snapshot_row(
         option_tokens_subscribed_count_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         option_ticks_received_count_by_symbol=dict(option_state.get("ticks_received_count_by_symbol") or {}),
         last_option_tick_ts_by_symbol=dict(option_state.get("last_tick_ts_by_symbol") or {}),
-        option_feed_block_reason_by_symbol=dict(option_state.get("feed_block_reason_by_symbol") or {}),
-        option_active_blockers_by_symbol=dict(option_state.get("active_blockers_by_symbol") or {}),
+        option_feed_block_reason_by_symbol=option_feed_block_reason_by_symbol,
+        option_active_blockers_by_symbol=option_active_blockers_by_symbol,
         restart_count_1h=_restart_count_1h(ts_epoch),
         stale_strikes=_STALE_STRIKES,
         runtime_state=effective_state_text,
@@ -4993,7 +5054,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
         _LAST_RUNTIME_ERROR = str(reason)
         import multiprocessing
         in_child_process = multiprocessing.current_process().name != "MainProcess"
-        
+
         if getattr(cfg, "FEED_USE_SUBPROCESS", False) and in_child_process:
             _persist_runtime_snapshot_row(
                 ws_connected=False,

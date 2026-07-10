@@ -2,6 +2,10 @@ import argparse
 import sys
 import logging
 from datetime import date
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 
 from core.strategy_certification.certification_types import CertificationState
 from core.strategy_certification.certification_engine import CertificationEngine
