@@ -12,6 +12,20 @@ from core.paths import logs_dir
 from core.telemetry_streams import append_execution_stream_event
 from core.time_utils import utc_now
 
+_SENSITIVE_KEYS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "auth",
+    "authorization",
+    "client_secret",
+    "password",
+    "refresh_token",
+    "secret",
+    "session_token",
+    "token",
+}
+
 
 def events_path() -> Path:
     path = logs_dir() / "events.jsonl"
@@ -72,6 +86,23 @@ def append_event(
         pass
 
 
+def _redact_sensitive_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key).strip().lower()
+            if key_text in _SENSITIVE_KEYS or any(token in key_text for token in _SENSITIVE_KEYS):
+                redacted[key] = "[REDACTED]"
+            else:
+                redacted[key] = _redact_sensitive_values(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sensitive_values(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_sensitive_values(item) for item in value]
+    return value
+
+
 def read_events(
     *,
     path: Path | None = None,
@@ -105,7 +136,7 @@ def read_events(
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
-    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
+    data = json.dumps(_redact_sensitive_values(payload), indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
     os.replace(tmp, path)
@@ -116,7 +147,7 @@ def write_json_atomic_if_changed(path: Path, payload: dict[str, Any]) -> tuple[P
     """Write JSON atomically only when the serialized payload changed."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
+    data = json.dumps(_redact_sensitive_values(payload), indent=2, sort_keys=True, ensure_ascii=True)
     digest = sha256(data.encode("utf-8")).hexdigest()
     sidecar = path.with_suffix(path.suffix + ".sha256")
     if path.exists():
