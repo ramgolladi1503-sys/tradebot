@@ -388,12 +388,7 @@ def _build_and_write_canonical_ranked_snapshot(
             ctx_data["symbol"] = sym
             ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
             ctx = _strategy_context_from_market_symbol(sym, ctx_data)
-
-            report = build_ranked_opportunity_report(
-                ctx=ctx,
-                cycle_context=cycle_context,
-                feed_health=cycle_context.feed_truth if cycle_context else None,
-            )
+            report = build_ranked_opportunity_report(ctx=ctx, cycle_context=cycle_context, feed_health=cycle_context.feed_truth if cycle_context else None)
             reports.append(report.to_dict())
 
             if not canonical_top_strategy_id and report.top_rank_strategy_id:
