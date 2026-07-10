@@ -46,6 +46,14 @@ The implementation has the right narrow structure without expanding into unvalid
 
 The `test_gate_recovery_parity.py` parity test proves that both paths evaluate the recovery state identically, and all execution paths fail closed.
 
+## High-Risk Path Review
+
+High-risk paths modified:
+- `core/kite_depth_ws.py`
+- `core/market_data_monitor.py`
+- `core/feed/gate.py`
+These files were only modified to ensure that execution fails closed when the connection or feed recovery state is unhealthy. No changes were made to broker APIs, live execution rules, or strategy thresholds.
+
 ## Runtime Proof Required After Merge
 
 After merging, we must verify in paper/live environments that WebSocket disconnects correctly halt execution, even if ticks appear fresh.
