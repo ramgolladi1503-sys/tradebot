@@ -51,6 +51,7 @@ def _reset_depth_ws_test_state(monkeypatch):
         "_LAST_RUNTIME_ERROR": "",
         "_LAST_FULL_RESTART_EPOCH": 0.0,
         "_FULL_RESTARTS": [],
+        "_FEED_HEALTH_DURATION_STATE": None,
     }.items():
         monkeypatch.setattr(depth_ws, name, value, raising=False)
     depth_ws._reset_feed_restart_verification(reason="unit_test_reset")
@@ -175,6 +176,87 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     assert payload["option_tokens_subscribed_count_by_symbol"] == {"NIFTY": 1}
     assert payload["option_feed_block_reason_by_symbol"] == {"NIFTY": "OK"}
     assert payload["feed_truth_state"] in {"LIVE", "DEGRADED", "STARTING", "DEAD", "MARKET_CLOSED"}
+
+
+def test_persist_runtime_snapshot_row_writes_timing_and_health_duration(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    logs_path = tmp_path / "logs"
+    logs_path.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(cfg, "FEED_HEALTH_DURATION_ARTIFACT_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_HEALTH_DURATION_TARGET_SEC", 60.0, raising=False)
+    monkeypatch.setattr(depth_ws, "logs_dir", lambda: logs_path)
+    monkeypatch.setattr(depth_ws, "_FEED_HEALTH_DURATION_STATE", None, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_TOKENS", [1, 101], raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 100.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 100.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 100.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 2, raising=False)
+    monkeypatch.setattr(depth_ws, "is_market_open_ist", lambda: True)
+
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test",
+        now_epoch=100.0,
+        runtime_state="RUNNING",
+        last_error="",
+        intended_tokens_count=2,
+    )
+    monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 165.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 165.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 165.0, raising=False)
+    monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 165.0, raising=False)
+    depth_ws._persist_runtime_snapshot_row(
+        ws_connected=True,
+        source="unit_test",
+        now_epoch=165.0,
+        runtime_state="RUNNING",
+        last_error="",
+        intended_tokens_count=2,
+    )
+
+
+def test_write_runtime_snapshot_emits_transport_health_fields(monkeypatch, tmp_path):
+    db_path = tmp_path / "runtime.sqlite"
+    logs_path = tmp_path / "logs"
+    repo_root = tmp_path / "repo"
+    logs_path.mkdir(parents=True, exist_ok=True)
+    repo_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(runtime_store, "repo_root", lambda: repo_root)
+    monkeypatch.setattr("core.paths.logs_dir", lambda: logs_path)
+
+    ok = runtime_store.write_runtime_snapshot(
+        {
+            "ts_epoch": 123.0,
+            "ws_connected": False,
+            "subscribed_tokens_count": 0,
+            "intended_tokens_count": 1,
+            "subscribed_tokens_sample": [],
+            "runtime_state": "RECOVERING",
+            "reconnect_pending": True,
+            "last_error": "",
+            "source": "unit-test",
+        }
+    )
+
+    assert ok is True
+    payload = json.loads((logs_path / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+    assert payload["transport_state"] == "RECONNECTING"
+    assert payload["transport_healthy"] is False
+    assert payload["transport"]["state"] == "RECONNECTING"
+    assert payload["snapshot_hash_version"] == 1
+    assert len(payload["snapshot_hash"]) == 64
+    assert payload["transport_heartbeat_state"] == "RECONNECTING"
+    assert payload["transport_heartbeat_epoch"] == 123.0
 
 
 def test_persist_runtime_snapshot_row_normalizes_ws1006_recovery_blocked_state(monkeypatch, tmp_path):
@@ -354,11 +436,12 @@ def test_feed_truth_state_degraded_coverage_with_fresh_ticks_is_degraded(monkeyp
 def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     logs_path = tmp_path / "logs"
     logs_path.mkdir(parents=True, exist_ok=True)
-    captured = {}
+    captured_paths: list[Path] = []
+    captured_payloads: dict[Path, dict] = {}
 
     def fake_write_json_atomic(path, payload):
-        captured["path"] = path
-        captured["payload"] = payload
+        captured_paths.append(path)
+        captured_payloads[path] = payload
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({"payload": payload}), encoding="utf-8")
         return path
@@ -392,8 +475,9 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
         last_error="",
     )
 
-    assert captured["path"] == logs_path / "feed_runtime_latest.json"
-    assert captured["payload"]["ws_connected"] is True
+    assert logs_path / "feed_runtime_latest.json" in captured_paths
+    assert logs_path / "feed_health_duration_latest.json" in captured_paths
+    assert captured_payloads[logs_path / "feed_runtime_latest.json"]["ws_connected"] is True
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 

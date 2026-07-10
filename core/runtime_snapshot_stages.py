@@ -9,36 +9,13 @@ from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
 from core.feed_health_truth import classify_feed_health_truth
 from core.learning_paths import canonical_suggestions_log_path
+from core.jsonl_tail_cache import tail_jsonl_rows
 from core.paths import logs_dir
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.time_utils import is_today_local, now_ist
 
 
 logger = logging.getLogger(__name__)
-
-
-def tail_jsonl_rows(path: Path, limit: int = 200) -> list[str]:
-    if not path.exists():
-        return []
-    try:
-        max_lines = max(1, int(limit))
-        max_bytes = max(4096, int(getattr(cfg, "RUNTIME_SNAPSHOT_JSONL_TAIL_BYTES", 65536) or 65536))
-        size = path.stat().st_size
-        if size <= max_bytes:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        else:
-            with path.open("rb") as handle:
-                handle.seek(max(0, size - max_bytes))
-                chunk = handle.read().decode("utf-8", errors="ignore")
-            if "\n" in chunk:
-                chunk = chunk[chunk.find("\n") + 1 :]
-            lines = chunk.splitlines()
-        lines = [line for line in lines if str(line).strip()]
-        if max_lines <= 0:
-            return lines
-        return lines[-max_lines:]
-    except Exception:
-        return []
-
 
 def build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str, Any], Any]:
     source_payload = feed_payload if isinstance(feed_payload, dict) else None
@@ -46,9 +23,9 @@ def build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str,
     decision = classify_feed_health_truth(
         source_payload,
         symbols=symbols,
-        max_option_tick_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_OPTION_TICK_AGE_SEC", 3.0)),
-        max_ltp_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_LTP_AGE_SEC", 2.5)),
-        max_depth_age_sec=float(getattr(cfg, "FEED_HEALTH_MAX_DEPTH_AGE_SEC", 6.0)),
+        max_option_tick_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        max_ltp_age_sec=float(getattr(cfg, "SLA_MAX_LTP_AGE_SEC", 2.5)),
+        max_depth_age_sec=float(getattr(cfg, "SLA_MAX_DEPTH_AGE_SEC", 6.0)),
     )
     payload = {
         "schema_version": 1,
@@ -59,6 +36,8 @@ def build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str,
         "source_payload_present": isinstance(feed_payload, dict) and not bool(feed_payload.get("missing")),
         "feed_health_truth": decision.to_payload(),
         "feed_ok": bool(decision.feed_ok),
+        "feed_truth_state": "LIVE" if bool(decision.feed_ok) else "DEGRADED",
+        "feed_truth_reason_code": str(decision.reason_code or "").strip().upper() or None,
         "blockers": list(decision.reasons if not decision.feed_ok else ()),
         "metadata": {
             "producer": "runtime_snapshot_producer",
@@ -66,6 +45,15 @@ def build_feed_health_truth_latest_payload(feed_payload: Any) -> tuple[dict[str,
             "symbols_evaluated": list(symbols),
         },
     }
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state=source_payload.get("transport_state") if isinstance(source_payload, dict) else None,
+            feed_truth_state=payload.get("feed_truth_state"),
+            reason_code=decision.reason_code,
+            heartbeat_epoch=source_payload.get("ts_epoch") if isinstance(source_payload, dict) else None,
+        )
+    )
     return payload, decision
 
 

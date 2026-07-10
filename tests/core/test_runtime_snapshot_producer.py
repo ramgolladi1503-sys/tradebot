@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from core.advisory_schema import deserialize_advisory_row, serialize_advisory_row
 from core.market_snapshot_builder import build_market_snapshot, build_symbol_market_snapshot
@@ -65,6 +66,122 @@ def _sample_advisory(*, trade_id: str = "ADV-1", timestamp: str = "2026-04-22T06
             "execution_max_age_sec": None,
         }
     )
+
+
+def test_runtime_snapshot_producer_classifies_feed_truth_once_per_cycle(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    market_snapshot = build_market_snapshot(
+        generated_at="2026-03-10T12:00:00Z",
+        market_open=True,
+        symbols_payload={"NIFTY": build_symbol_market_snapshot(spot=22500.0, ltp=22510.0)},
+        warnings=[],
+        compute_ms=3.0,
+        loop_id="loop-1",
+    )
+    (logs_root / "suggestions.jsonl").write_text(json.dumps(_sample_advisory()) + "\n", encoding="utf-8")
+    (logs_root / "feed_runtime_latest.json").write_text(json.dumps({"ws_connected": True}), encoding="utf-8")
+    (logs_root / "token_resolution.json").write_text(json.dumps({"NIFTY": {"instrument_token": 123}}), encoding="utf-8")
+
+    calls = {"truth": 0}
+
+    def _build_truth(feed_payload):
+        calls["truth"] += 1
+        payload = {"feed_ok": True, "feed_truth_state": "OK", "feed_truth_strict_live": True}
+        return payload, SimpleNamespace(to_payload=lambda: dict(payload))
+
+    monkeypatch.setattr(producer, "logs_dir", lambda: logs_root)
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: logs_root / "suggestions.jsonl")
+    monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", runtime_root / "market_snapshot.json")
+    monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
+    monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
+    monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer, "_build_advisory_latest_payload", lambda limit=200: {"rows": [], "row_count": 0, "source_path": "", "notes": []})
+    monkeypatch.setattr(producer, "_build_and_write_canonical_ranked_snapshot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(producer, "stages_build_feed_health_truth_latest_payload", _build_truth)
+
+    outputs = producer.produce_and_store_runtime_snapshots(
+        market_snapshot=market_snapshot,
+        producer="unit_test",
+        loop_id="loop-1",
+    )
+
+    assert calls["truth"] == 1
+    assert outputs["feed_health_truth_latest"]["feed_truth_state"] == "OK"
+
+
+def test_tail_jsonl_rows_uses_cache_when_file_is_unchanged(tmp_path, monkeypatch):
+    import core.jsonl_tail_cache as tail_cache
+
+    path = tmp_path / "events.jsonl"
+    path.write_text('{"id": 1}\n{"id": 2}\n', encoding="utf-8")
+    tail_cache._TAIL_CACHE.clear()
+    reads = {"count": 0}
+    real_read_text = producer.Path.read_text
+
+    def _read_text(self, *args, **kwargs):
+        reads["count"] += 1
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(producer.Path, "read_text", _read_text, raising=False)
+
+    first = producer._tail_jsonl_rows(path, limit=10)
+    second = producer._tail_jsonl_rows(path, limit=10)
+
+    assert first == second
+    assert reads["count"] == 1
+
+
+def test_tail_jsonl_rows_uses_sidecar_cache_after_memory_cache_clear(tmp_path, monkeypatch):
+    import core.jsonl_tail_cache as tail_cache
+
+    path = tmp_path / "events.jsonl"
+    path.write_text('{"id": 1}\n{"id": 2}\n', encoding="utf-8")
+    monkeypatch.setattr(tail_cache, "runtime_dir", lambda: tmp_path / "runtime")
+    tail_cache._TAIL_CACHE.clear()
+    producer._tail_jsonl_rows(path, limit=10)
+    tail_cache._TAIL_CACHE.clear()
+    reads = {"count": 0}
+    real_read_text = producer.Path.read_text
+
+    def _read_text(self, *args, **kwargs):
+        if self == path:
+            reads["count"] += 1
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(producer.Path, "read_text", _read_text, raising=False)
+
+    second = producer._tail_jsonl_rows(path, limit=10)
+
+    assert second == ['{"id": 1}', '{"id": 2}']
+    assert reads["count"] == 0
+
+
+def test_runtime_snapshot_producer_accepts_shared_cycle_feed_truth(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "runtime"
+    logs_root = runtime_root / "logs"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    (logs_root / "suggestions.jsonl").write_text(json.dumps(_sample_advisory()) + "\n", encoding="utf-8")
+    (logs_root / "feed_runtime_latest.json").write_text(json.dumps({"ws_connected": True}), encoding="utf-8")
+    (logs_root / "token_resolution.json").write_text(json.dumps({"NIFTY": {"instrument_token": 123}}), encoding="utf-8")
+
+    monkeypatch.setattr(producer, "logs_dir", lambda: logs_root)
+    monkeypatch.setattr(producer, "canonical_suggestions_log_path", lambda: logs_root / "suggestions.jsonl")
+    monkeypatch.setattr(producer, "MARKET_SNAPSHOT_PATH", runtime_root / "market_snapshot.json")
+    monkeypatch.setattr(producer, "ADVISORY_LATEST_PATH", runtime_root / "advisory_latest.json")
+    monkeypatch.setattr(producer, "FEED_RUNTIME_LATEST_PATH", runtime_root / "feed_runtime_latest.json")
+    monkeypatch.setattr(producer, "TOKEN_RESOLUTION_LATEST_PATH", runtime_root / "token_resolution_latest.json")
+    monkeypatch.setattr(producer, "stages_build_feed_health_truth_latest_payload", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not derive shared truth")))
+
+    outputs = producer.produce_and_store_runtime_snapshots(
+        market_snapshot={"source": "engine"},
+        producer="unit_test",
+        cycle_feed_truth_payload={"feed_truth_state": "OK", "feed_ok": True},
+    )
+
+    assert outputs["cycle_feed_truth_latest"]["feed_truth_state"] == "OK"
+    assert outputs["runtime_cycle_context"]["feed_truth"]["feed_truth_state"] == "OK"
 
 
 def test_runtime_snapshot_producer_writes_expected_structure(tmp_path, monkeypatch):

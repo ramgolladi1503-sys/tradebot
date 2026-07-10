@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from config import config as cfg
 from core.events import write_json_atomic_if_changed
+from core.runtime_truth_integrity import build_truth_integrity_payload
 from core.paths import logs_dir, repo_logs_dir, runtime_dir
 
 
@@ -128,6 +129,15 @@ def build_feed_truth_snapshot(
         "is_order_action": False,
         "broker_api_called": False,
     }
+    payload.update(
+        build_truth_integrity_payload(
+            source_payload=payload,
+            transport_state="CONNECTED" if ws_connected is True else "DISCONNECTED" if ws_connected is False else "UNKNOWN",
+            feed_truth_state="LIVE" if feed_fresh else "DEGRADED" if ws_connected is True else "DEAD",
+            reason_code="feed_fresh" if feed_fresh else "feed_stale",
+            heartbeat_epoch=payload["generated_epoch"],
+        )
+    )
     # Ensure json-serializable primitives only.
     return json.loads(json.dumps(payload, ensure_ascii=True, default=str))
 
