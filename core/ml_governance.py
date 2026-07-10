@@ -96,6 +96,45 @@ def build_governance(train_df: pd.DataFrame,
     return gov
 
 
+def select_walk_forward_model(
+    candidate_reports: list[dict],
+    *,
+    primary_metric: str = "val_loss",
+    secondary_metric: str = "val_accuracy",
+    min_regime_coverage: float = 0.2,
+    min_regime_rows: int = 25,
+) -> dict:
+    admissible = []
+    for report in candidate_reports or []:
+        if not isinstance(report, dict) or not report.get("admitted", False):
+            continue
+        gov = report.get("governance") or {}
+        regime_cov = gov.get("regime_coverage") or {}
+        walk_forward = gov.get("walk_forward") or {}
+        regime_splits = walk_forward.get("regime_splits") if isinstance(walk_forward, dict) else None
+        if regime_cov:
+            values = [float(v) for v in regime_cov.values() if v is not None]
+            if values and min(values) < min_regime_coverage:
+                continue
+        if isinstance(regime_splits, list) and regime_splits:
+            counts = [int(row.get("rows") or 0) for row in regime_splits if isinstance(row, dict)]
+            if counts and min(counts) < int(min_regime_rows):
+                continue
+        admissible.append(report)
+    if not admissible:
+        return {"status": "NO_ADMISSIBLE_MODEL", "selected": None, "reason": "no_admissible_candidate", "admissible_count": 0}
+
+    def _score(report: dict) -> tuple[float, float]:
+        primary = report.get("metrics", {}).get(primary_metric)
+        secondary = report.get("metrics", {}).get(secondary_metric)
+        primary_score = float(primary) if primary is not None else float("inf")
+        secondary_score = -float(secondary) if secondary is not None else float("inf")
+        return primary_score, secondary_score
+
+    selected = sorted(admissible, key=_score)[0]
+    return {"status": "SELECTED", "selected": selected, "reason": "best_walk_forward_candidate", "admissible_count": len(admissible)}
+
+
 def log_ab_trial(trade_id: str,
                  symbol: str,
                  timestamp: str,

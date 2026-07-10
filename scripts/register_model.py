@@ -3,9 +3,17 @@ import runpy
 
 runpy.run_path(Path(__file__).with_name("bootstrap.py"))
 
-
 import argparse
-from core.model_registry import register_model
+
+from core.model_registry import (
+    admit_model_entry,
+    append_rejection_ledger,
+    build_admission_report,
+    register_model,
+    write_admission_report,
+    write_rejection_artifact,
+)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -23,5 +31,34 @@ if __name__ == "__main__":
             except Exception:
                 pass
             metrics[k] = v
-    entry = register_model(args.type, args.path, metrics=metrics)
-    print(entry)
+    governance = {
+        "features": list(metrics.keys()) or ["manual_metric_only"],
+        "training_window": {"rows": int(metrics.get("train_rows", 0) or 0), "start": None, "end": None},
+        "regime_coverage": metrics.get("regime_coverage") if isinstance(metrics.get("regime_coverage"), dict) else {},
+        "min_regime_coverage": 0.2,
+        "walk_forward": {"status": "SELECTED", "selection": {"status": "SELECTED"}},
+    }
+    admission = build_admission_report(
+        model_type=args.type,
+        path=args.path,
+        status="candidate",
+        governance=governance,
+        metrics=metrics,
+        checks={"cli": True},
+    )
+    if not admission["admitted"]:
+        out = write_rejection_artifact(admission)
+        append_rejection_ledger(admission)
+        print({"rejected": True, "report_path": str(out), "report": admission})
+        raise SystemExit(2)
+    admit_model_entry(
+        {
+            "type": args.type,
+            "path": args.path,
+            "hash": admission["hash"],
+            "governance": governance,
+        }
+    )
+    entry = register_model(args.type, args.path, metrics=metrics, governance=governance)
+    out = write_admission_report(admission)
+    print({"entry": entry, "admission_report_path": str(out), "admission_report": admission})

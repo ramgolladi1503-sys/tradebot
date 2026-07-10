@@ -1,10 +1,13 @@
 import json
 import time
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
+
 from core.paths import logs_dir
 
 REG_PATH = logs_dir() / "model_registry.json"
+REJECTION_LEDGER_PATH = logs_dir() / "model_admission_rejections.jsonl"
 
 
 def _hash_file(path: str | Path | None) -> str | None:
@@ -16,18 +19,18 @@ def _hash_file(path: str | Path | None) -> str | None:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _load():
     if REG_PATH.exists():
         try:
             data = json.loads(REG_PATH.read_text())
-            if "active" not in data:
-                data["active"] = {}
-            if "shadow" not in data:
-                data["shadow"] = {}
-            if "history" not in data:
-                data["history"] = {}
-            if "models" not in data:
-                data["models"] = []
+            data.setdefault("active", {})
+            data.setdefault("shadow", {})
+            data.setdefault("history", {})
+            data.setdefault("models", [])
             return data
         except Exception:
             pass
@@ -49,6 +52,128 @@ def _find_entry(data, model_type, path):
     return None, None
 
 
+def validate_model_entry(entry):
+    if not isinstance(entry, dict):
+        return False, "MODEL_ENTRY_INVALID"
+    if not entry.get("type") or not entry.get("path"):
+        return False, "MODEL_ENTRY_MISSING_REQUIRED_FIELDS"
+    if not entry.get("hash"):
+        return False, "MODEL_ENTRY_MISSING_PROVENANCE"
+    governance = entry.get("governance") or {}
+    if not isinstance(governance, dict):
+        return False, "MODEL_ENTRY_INVALID_GOVERNANCE"
+    if not governance.get("features") and not governance.get("feature_list"):
+        return False, "MODEL_ENTRY_MISSING_PROVENANCE"
+    if not governance.get("training_window"):
+        return False, "MODEL_ENTRY_MISSING_PROVENANCE"
+    regime_coverage = governance.get("regime_coverage") or {}
+    if regime_coverage:
+        family = str(entry.get("type") or "").strip().lower()
+        family_thresholds = governance.get("min_regime_coverage_by_family") or {}
+        default_min = float(governance.get("min_regime_coverage", 0.2))
+        min_coverage = float(family_thresholds.get(family, default_min)) if isinstance(family_thresholds, dict) else default_min
+        if not isinstance(regime_coverage, dict):
+            return False, "MODEL_ENTRY_INVALID_REGIME_COVERAGE"
+        values = [float(v) for v in regime_coverage.values() if v is not None]
+        if values and min(values) < min_coverage:
+            return False, "MODEL_ENTRY_INSUFFICIENT_REGIME_COVERAGE"
+    return True, "ok"
+
+
+def admit_model_entry(entry):
+    ok, reason = validate_model_entry(entry)
+    if not ok:
+        raise ValueError(reason)
+    return entry
+
+
+def verify_admission_report(report: dict) -> tuple[bool, str]:
+    if not isinstance(report, dict):
+        return False, "REPORT_INVALID"
+    report_hash = report.get("report_hash")
+    if not report_hash:
+        return False, "REPORT_MISSING_HASH"
+    check = hashlib.sha256(
+        json.dumps({k: v for k, v in report.items() if k != "report_hash"}, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    if check != report_hash:
+        return False, "REPORT_HASH_MISMATCH"
+    path_hash = _hash_file(report.get("path"))
+    if path_hash and report.get("hash") and path_hash != report.get("hash"):
+        return False, "ARTIFACT_HASH_MISMATCH"
+    return True, "ok"
+
+
+def build_admission_report(
+    *,
+    model_type: str,
+    path: str | Path,
+    status: str,
+    governance: dict | None,
+    metrics: dict | None = None,
+    checks: dict | None = None,
+    reason: str | None = None,
+) -> dict:
+    governance = governance or {}
+    entry = {
+        "type": str(model_type),
+        "path": str(path),
+        "hash": _hash_file(path),
+        "governance": governance,
+    }
+    ok, reason_code = validate_model_entry(entry)
+    walk_forward = governance.get("walk_forward") or {}
+    selection = walk_forward.get("selection") if isinstance(walk_forward, dict) else None
+    if ok and isinstance(walk_forward, dict) and walk_forward.get("status") in {"NO_ADMISSIBLE_MODEL", "ERROR", "FAILED"}:
+        ok = False
+        reason_code = f"WALK_FORWARD_{str(walk_forward.get('status')).upper()}"
+    if ok and isinstance(selection, dict) and selection.get("status") != "SELECTED":
+        ok = False
+        reason_code = "WALK_FORWARD_NO_SELECTION"
+    report = {
+        "schema_version": 1,
+        "timestamp": _now_iso(),
+        "model_type": str(model_type),
+        "path": str(path),
+        "hash": entry["hash"],
+        "status": str(status),
+        "admitted": bool(ok),
+        "reason": reason or reason_code,
+        "metrics": metrics or {},
+        "governance": governance,
+        "checks": checks or {},
+        "selection": selection if selection is not None else (walk_forward.get("selected") if isinstance(walk_forward, dict) else None),
+    }
+    report["report_hash"] = hashlib.sha256(
+        json.dumps({k: v for k, v in report.items() if k != "report_hash"}, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    if not ok and not reason:
+        report["reason"] = reason_code
+    return report
+
+
+def write_admission_report(report: dict, output_path: str | Path | None = None) -> Path:
+    out = Path(output_path) if output_path else logs_dir() / "model_admission_report.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, sort_keys=True))
+    return out
+
+
+def write_rejection_artifact(report: dict, output_path: str | Path | None = None) -> Path:
+    out = Path(output_path) if output_path else logs_dir() / "model_admission_rejection.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, sort_keys=True))
+    return out
+
+
+def append_rejection_ledger(report: dict, output_path: str | Path | None = None) -> Path:
+    out = Path(output_path) if output_path else REJECTION_LEDGER_PATH
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("a") as fh:
+        fh.write(json.dumps(report, sort_keys=True) + "\n")
+    return out
+
+
 def register_model(model_type, path, metrics=None, governance=None, status="candidate"):
     data = _load()
     entry = {
@@ -60,6 +185,22 @@ def register_model(model_type, path, metrics=None, governance=None, status="cand
         "status": status,
         "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    admit_model_entry(entry)
+    report = build_admission_report(
+        model_type=model_type,
+        path=path,
+        status=status,
+        governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
+        metrics=metrics or {},
+        checks={"registry_write": True},
+    )
+    ok, reason = verify_admission_report(report)
+    if not ok:
+        raise ValueError(reason)
+    if status in {"active", "shadow"}:
+        walk_forward = (governance or {}).get("walk_forward") if isinstance(governance, dict) else None
+        if not isinstance(walk_forward, dict) or walk_forward.get("status") != "SELECTED":
+            raise ValueError("WALK_FORWARD_NO_SELECTION")
     idx, _ = _find_entry(data, model_type, path)
     if idx is None:
         data["models"].append(entry)
@@ -79,19 +220,41 @@ def update_model_metrics(model_type, path, metrics=None, governance=None):
         entry.setdefault("metrics", {}).update(metrics)
     if governance:
         entry.setdefault("governance", {}).update(governance)
+    admit_model_entry(entry)
     data["models"][idx] = entry
     _save(data)
     return entry
 
 
 def activate_model(model_type, path, metrics=None, governance=None):
+    entry = {
+        "type": model_type,
+        "path": str(path),
+        "hash": _hash_file(path),
+        "metrics": metrics or {},
+        "governance": governance or {},
+    }
+    admit_model_entry(entry)
+    report = build_admission_report(
+        model_type=model_type,
+        path=path,
+        status="active",
+        governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
+        metrics=metrics or {},
+        checks={"registry_write": True},
+    )
+    ok, reason = verify_admission_report(report)
+    if not ok:
+        raise ValueError(reason)
+    walk_forward = (governance or {}).get("walk_forward") if isinstance(governance, dict) else None
+    if not isinstance(walk_forward, dict) or walk_forward.get("status") != "SELECTED":
+        raise ValueError("WALK_FORWARD_NO_SELECTION")
     data = _load()
     prev = data.get("active", {}).get(model_type)
     if prev and prev != str(path):
         data.setdefault("history", {}).setdefault(model_type, []).append(prev)
     data["active"][model_type] = str(path)
     update_model_metrics(model_type, path, metrics=metrics, governance=governance)
-    # mark status
     idx, entry = _find_entry(data, model_type, path)
     if idx is not None:
         entry["status"] = "active"
@@ -101,6 +264,28 @@ def activate_model(model_type, path, metrics=None, governance=None):
 
 
 def set_shadow(model_type, path, metrics=None, governance=None):
+    entry = {
+        "type": model_type,
+        "path": str(path),
+        "hash": _hash_file(path),
+        "metrics": metrics or {},
+        "governance": governance or {},
+    }
+    admit_model_entry(entry)
+    report = build_admission_report(
+        model_type=model_type,
+        path=path,
+        status="shadow",
+        governance=governance or {"features": ["registry"], "training_window": {"rows": int((metrics or {}).get("train_rows", 0) or 0)}},
+        metrics=metrics or {},
+        checks={"registry_write": True},
+    )
+    ok, reason = verify_admission_report(report)
+    if not ok:
+        raise ValueError(reason)
+    walk_forward = (governance or {}).get("walk_forward") if isinstance(governance, dict) else None
+    if not isinstance(walk_forward, dict) or walk_forward.get("status") != "SELECTED":
+        raise ValueError("WALK_FORWARD_NO_SELECTION")
     data = _load()
     data["shadow"][model_type] = str(path)
     update_model_metrics(model_type, path, metrics=metrics, governance=governance)
@@ -118,7 +303,6 @@ def rollback_model(model_type, steps=1):
     if not history or steps <= 0 or len(history) < steps:
         return None
     new_path = history[-steps]
-    # trim history
     data["history"][model_type] = history[:-steps]
     data["active"][model_type] = new_path
     idx, entry = _find_entry(data, model_type, new_path)
