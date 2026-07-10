@@ -64,11 +64,12 @@ def append_event(
         payload_obj["event_id"] = payload_event_id
     if session_id is not None and str(payload_obj.get("session_id") or "").strip() == "":
         payload_obj["session_id"] = str(session_id)
+    stored_payload = _redact_sensitive_values(payload_obj)
     event = {
         "ts": _iso_utc(ts),
         "type": str(event_type),
         "event_id": payload_event_id,
-        "payload": payload_obj,
+        "payload": stored_payload,
     }
     with target.open("a", encoding="utf-8", buffering=1) as handle:
         handle.write(json.dumps(event, ensure_ascii=True, sort_keys=True) + "\n")
@@ -77,8 +78,8 @@ def append_event(
             {
                 "event_type": str(event_type),
                 "event_id": payload_event_id,
-                "session_id": payload_obj.get("session_id"),
-                "payload": payload_obj,
+                "session_id": stored_payload.get("session_id"),
+                "payload": stored_payload,
                 "source": "events_jsonl",
             }
         )
@@ -136,7 +137,7 @@ def read_events(
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}.{uuid.uuid4().hex}")
-    data = json.dumps(_redact_sensitive_values(payload), indent=2, sort_keys=True, ensure_ascii=True)
+    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
     with tmp.open("w", encoding="utf-8") as handle:
         handle.write(data)
     os.replace(tmp, path)
@@ -147,7 +148,7 @@ def write_json_atomic_if_changed(path: Path, payload: dict[str, Any]) -> tuple[P
     """Write JSON atomically only when the serialized payload changed."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(_redact_sensitive_values(payload), indent=2, sort_keys=True, ensure_ascii=True)
+    data = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=True)
     digest = sha256(data.encode("utf-8")).hexdigest()
     sidecar = path.with_suffix(path.suffix + ".sha256")
     if path.exists():

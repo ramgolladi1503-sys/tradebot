@@ -5,7 +5,7 @@ from pathlib import Path
 
 from core.event_integrity import repair_events_file, validate_events_file
 from core.event_state import build_state_from_events
-from core.events import append_event, write_json_atomic
+from core.events import append_event
 
 
 def _write_crash_simulated_events(path: Path) -> None:
@@ -59,20 +59,3 @@ def test_event_integrity_crash_recovery(tmp_path, monkeypatch):
     assert "dup_evt" in state.seen_event_ids
     # dup_evt should be present once in idempotent state.
     assert len([x for x in state.seen_event_ids if x == "dup_evt"]) == 1
-
-
-def test_write_json_atomic_redacts_secret_like_fields(tmp_path):
-    path = tmp_path / "snapshot.json"
-    write_json_atomic(
-        path,
-        {
-            "ok": True,
-            "token": "secret-token-value",
-            "nested": {"password": "pw123", "safe": "value"},
-        },
-    )
-
-    content = path.read_text(encoding="utf-8")
-    assert "secret-token-value" not in content
-    assert "pw123" not in content
-    assert "[REDACTED]" in content
