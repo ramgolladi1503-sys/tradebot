@@ -192,4 +192,3 @@ The smallest viable implementation is a thin replay runner script plus one narro
 
 The runner should reuse existing normalization, context creation, strategy, ranking, handoff, and journal functions as-is.
 It should not invent candidates, and it should not relax any gates.
-

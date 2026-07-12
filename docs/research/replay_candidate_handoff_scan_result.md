@@ -59,4 +59,3 @@ No candidate reached handoff persistence, so no isolated handoff artifact or can
 This scan proves the replay-only entrypoint is wired correctly and fails closed on real replay rows, but the sampled events did not naturally emit a candidate.
 
 The current replay source still needs a broader or different slice if the goal is to find a naturally emitted candidate through the isolated proof runner.
-

@@ -67,4 +67,3 @@ Important change relative to the previous readiness report:
 This proves the journal writer now preserves strict-replay metadata when the runtime provides it, and that missing fields are surfaced explicitly as null plus blocker labels rather than being invented.
 
 It does not prove the old `.runtime/candidates/candidate_journal.jsonl` artifact is certifiable. That file still needs regeneration from a runtime path that emits explicit feature-cutoff, earliest-entry, and OOS provenance.
-

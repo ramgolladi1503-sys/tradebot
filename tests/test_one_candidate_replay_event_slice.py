@@ -31,4 +31,3 @@ def test_one_replay_event_naturally_reaches_candidate_emission():
     assert report["candidate_pool"]["candidates"][0]["strategy_id"] == "no_trade_engine_v1"
     assert report["ranking"]["rank_count"] == 0
     assert "global_feed_unhealthy" in report["ranking"]["blockers"]
-

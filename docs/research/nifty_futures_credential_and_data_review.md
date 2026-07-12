@@ -89,4 +89,3 @@ Move the validated NIFTY futures source into a durable, reproducible ingestion p
 - whether the artifact is committed, cached, or ephemeral
 
 That would make the validation auditable without depending on a hidden session.
-

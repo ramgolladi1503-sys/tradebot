@@ -15,7 +15,6 @@ from core.market_snapshot_builder import build_market_snapshot_from_raw_tick
 from core.ranking_orchestrator import build_ranked_opportunity_report
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
-from core.vwap_accumulator import SessionVwapAccumulator
 
 REPLAY_ONLY_TRUE = True
 BROKER_API_CALLED_FALSE = False
@@ -294,7 +293,6 @@ def run_replay_candidate_handoff(
     if strategy_generators is None:
         strategy_generators = _strategy_generators_for_id(strategy_id)
 
-    vwap_acc = SessionVwapAccumulator()
     stage_evidence: list[dict[str, Any]] = []
     selected_result: ReplayCandidateHandoffResult | None = None
     last_ranked_blocker: dict[str, Any] | None = None
@@ -306,13 +304,8 @@ def run_replay_candidate_handoff(
     for idx, row in enumerate(_row_stream()):
         raw_tick = _row_raw_tick(row)
         ts_epoch = _row_ts_epoch(raw_tick) or _row_ts_epoch(row)
-        if ts_epoch is not None:
-            ltp = raw_tick.get("ltp")
-            volume = _row_volume(raw_tick)
-            if ltp is not None and volume is not None:
-                vwap_acc.observe_tick(float(ts_epoch), float(ltp), float(volume))
         try:
-            normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick}, vwap=vwap_acc.get_snapshot("replay_only"))
+            normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick})
         except Exception as exc:
             stage_evidence.append(_stage("normalized_snapshot", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
             continue

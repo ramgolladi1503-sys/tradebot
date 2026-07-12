@@ -199,4 +199,3 @@ Do not merge this with strategy logic, replay logic, or trade execution logic.
 `SAFE_INGESTION_DESIGN_READY`
 
 The workflow is defined as a reproducible, credential-safe ingestion contract. It still needs an implementation that obeys the artifact policy and fail-closed rules.
-

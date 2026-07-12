@@ -155,4 +155,3 @@ def test_candidate_and_journal_persistence_use_isolated_output(tmp_path, monkeyp
     assert result.journal_path.endswith("run-004/candidate_journal.jsonl")
     assert Path(result.handoff_path).exists()
     assert Path(result.journal_path).exists()
-
