@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import pandas as pd
+
 from core.execution.execution_guard import evaluate_execution_guard
 
-from .models import OptionBacktestConfig
+from .models import OptionBacktestConfig, ResearchMode
 
 
 def _safe_float(value: Any) -> float | None:
@@ -35,7 +37,7 @@ def _safe_bool(value: Any) -> bool | None:
 def _text(row: dict[str, Any], *keys: str) -> str:
     for key in keys:
         value = row.get(key)
-        if value not in (None, "", "None"):
+        if value not in (None, "", "None") and not pd.isna(value):
             return str(value)
     return ""
 
@@ -74,6 +76,40 @@ def _resolve_levels(
     return target, stop, "derived"
 
 
+def _derive_timing_fields(row: dict[str, Any], cfg: OptionBacktestConfig) -> tuple[str | None, str | None, str | None, float | None]:
+    timestamp = row["timestamp"]
+    feature_cutoff = _text(row, "feature_cutoff_ts")
+    signal_ts = _text(row, "signal_ts")
+    earliest_entry = _text(row, "earliest_entry_ts")
+    if not (feature_cutoff and signal_ts and earliest_entry):
+        if cfg.require_signal_timing_provenance:
+            return None, None, None, None
+        feature_cutoff = feature_cutoff or timestamp.isoformat()
+        signal_ts = signal_ts or timestamp.isoformat()
+        earliest_entry_dt = timestamp + pd.Timedelta(minutes=int(cfg.bar_interval_minutes))
+        earliest_entry = earliest_entry or earliest_entry_dt.isoformat()
+
+    def _normalize_text_ts(value: str | None) -> tuple[str | None, pd.Timestamp | None]:
+        if not value:
+            return None, None
+        parsed = pd.Timestamp(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.tz_localize(cfg.timezone)
+        else:
+            parsed = parsed.tz_convert(cfg.timezone)
+        return parsed.isoformat(), parsed
+
+    feature_cutoff, _ = _normalize_text_ts(feature_cutoff)
+    signal_ts, _ = _normalize_text_ts(signal_ts)
+    earliest_entry, earliest_entry_parsed = _normalize_text_ts(earliest_entry)
+    earliest_entry_epoch = (
+        float(earliest_entry_parsed.timestamp())
+        if earliest_entry_parsed is not None and not pd.isna(earliest_entry_parsed)
+        else None
+    )
+    return feature_cutoff or None, signal_ts or None, earliest_entry or None, earliest_entry_epoch
+
+
 def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) -> dict[str, Any]:
     symbol = str(row.get("symbol") or cfg.symbol)
     timestamp = row["timestamp"]
@@ -83,12 +119,7 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
     ask = _safe_float(row.get("ask"))
     has_bid_ask = bool(row.get("has_bid_ask"))
     ts_epoch = float(timestamp.timestamp())
-    snapshot = {
-        "ts": ts_epoch,
-        "timestamp": ts_epoch,
-        "bid": bid,
-        "ask": ask,
-    }
+    snapshot = {"ts": ts_epoch, "timestamp": ts_epoch, "bid": bid, "ask": ask}
     guard = evaluate_execution_guard(
         side=side,
         bid=bid,
@@ -98,38 +129,19 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
         reference_price=close_price,
     )
     execution_entry = guard.execution_entry if has_bid_ask else close_price
-    target, stop, geometry_source = _resolve_levels(
-        row,
-        execution_entry=execution_entry,
-        side=side,
-        cfg=cfg,
-    )
-
-    confidence_raw = _safe_float(
-        row.get("confidence_raw")
-        if row.get("confidence_raw") is not None
-        else row.get("signal_score")
-    )
-    confidence_final = _safe_float(
-        row.get("confidence_final")
-        if row.get("confidence_final") is not None
-        else row.get("signal_score")
-    )
-    raw_rank_score = _safe_float(
-        row.get("raw_rank_score")
-        if row.get("raw_rank_score") is not None
-        else row.get("signal_score")
-    )
+    target, stop, geometry_source = _resolve_levels(row, execution_entry=execution_entry, side=side, cfg=cfg)
+    confidence_raw = _safe_float(row.get("confidence_raw") if row.get("confidence_raw") is not None else row.get("signal_score"))
+    confidence_final = _safe_float(row.get("confidence_final") if row.get("confidence_final") is not None else row.get("signal_score"))
+    raw_rank_score = _safe_float(row.get("raw_rank_score") if row.get("raw_rank_score") is not None else row.get("signal_score"))
     selected_for_execution = _safe_bool(row.get("selected_for_execution"))
     if selected_for_execution is None:
         selected_for_execution = raw_rank_score is not None and raw_rank_score >= 0.5
-
     spread_pct = None
     if bid is not None and ask is not None:
         mid = (bid + ask) / 2.0
         if mid > 0:
             spread_pct = max(0.0, ask - bid) / mid
-
+    feature_cutoff_ts, signal_ts, earliest_entry_ts, earliest_entry_epoch = _derive_timing_fields(row, cfg)
     source_flags = {
         "runtime_mode": "SIM",
         "candidate_origin": "historical_option_replay",
@@ -139,15 +151,15 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
         "liquidity_ok": has_bid_ask,
         "backtest_symbol": symbol,
         "backtest_geometry_source": geometry_source,
+        "backtest_timing_source": "csv" if _text(row, "feature_cutoff_ts") else "derived",
         "backtest_require_bid_ask": bool(cfg.require_bid_ask),
         "fallback_candidate": not has_bid_ask,
     }
-
     candidate_class = _text(row, "candidate_class").lower() or "real"
     truth_quality = _text(row, "truth_quality").upper() or ("REAL" if has_bid_ask else "FALLBACK")
-
     candidate = {
         "symbol": symbol,
+        "source_symbol": symbol,
         "side": side,
         "direction": side,
         "timestamp": timestamp.isoformat(),
@@ -184,10 +196,22 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
         "truth_quality": truth_quality,
         "source_flags": source_flags,
         "data_state": "DATA_OK" if has_bid_ask else "DATA_MISSING",
+        "feature_cutoff_ts": feature_cutoff_ts,
+        "signal_ts": signal_ts,
+        "earliest_entry_ts": earliest_entry_ts,
+        "earliest_entry_ts_epoch": earliest_entry_epoch,
+        "setup_id": _text(row, "setup_id") or "unknown",
+        "regime": _text(row, "regime") or "unknown",
+        "is_oos": _safe_bool(row.get("is_oos")) if _safe_bool(row.get("is_oos")) is not None else False,
+        "underlying": _text(row, "underlying", "underlying_symbol"),
+        "option_type": _text(row, "option_type", "instrument_type", "type").upper(),
+        "strike": _safe_float(row.get("strike") if row.get("strike") is not None else row.get("strike_price")),
+        "expiry": _text(row, "expiry", "expiry_date"),
+        "provider": _text(row, "provider", "source_provider"),
+        "dataset_hash": _text(row, "dataset_hash", "source_dataset_hash", "dataset_version"),
+        "bar_interval": _text(row, "bar_interval", "interval", "bar_size"),
     }
-
-    # Fail closed if REAL_EXECUTABLE_RESEARCH and real bid/ask option data is absent
-    require_real_quotes = cfg.require_bid_ask or getattr(cfg, "research_mode", None) == "REAL_EXECUTABLE_RESEARCH"
+    require_real_quotes = cfg.require_bid_ask or cfg.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH
     if not has_bid_ask and require_real_quotes:
         candidate["planning_only"] = True
         candidate["execution_blocked"] = True
@@ -195,4 +219,10 @@ def build_candidate_from_candle(row: dict[str, Any], cfg: OptionBacktestConfig) 
     if geometry_source == "missing":
         candidate["execution_blocked"] = True
         candidate["execution_block_reason"] = "missing_trade_geometry"
+    if cfg.require_signal_timing_provenance and (feature_cutoff_ts is None or signal_ts is None or earliest_entry_ts is None):
+        candidate["execution_blocked"] = True
+        candidate["execution_block_reason"] = "missing_signal_timing_provenance"
+    if cfg.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH and earliest_entry_ts == timestamp.isoformat():
+        candidate["execution_blocked"] = True
+        candidate["execution_block_reason"] = "ambiguous_signal_timing"
     return candidate

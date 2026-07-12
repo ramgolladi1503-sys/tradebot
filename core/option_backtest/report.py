@@ -14,55 +14,61 @@ def summarize_backtest(
     rejected_reasons: Counter[str],
     diagnostics: dict[str, Any],
 ) -> dict[str, Any]:
-    wins = [trade for trade in trades if trade.pnl_value > 0]
-    losses = [trade for trade in trades if trade.pnl_value < 0]
-    total_pnl = sum(float(trade.pnl_value) for trade in trades)
-    gross_profit = sum(float(trade.pnl_value) for trade in wins)
-    gross_loss = abs(sum(float(trade.pnl_value) for trade in losses))
+    wins = [trade for trade in trades if trade.net_pnl_value > 0]
+    losses = [trade for trade in trades if trade.net_pnl_value < 0]
+    total_net_pnl = sum(float(trade.net_pnl_value) for trade in trades)
+    total_gross_pnl = sum(float(trade.gross_pnl_value) for trade in trades)
+    total_costs = sum(float(trade.total_costs) for trade in trades)
+    gross_profit = sum(float(trade.net_pnl_value) for trade in wins)
+    gross_loss = abs(sum(float(trade.net_pnl_value) for trade in losses))
     avg_profit = gross_profit / len(wins) if wins else 0.0
-    avg_loss = abs(sum(float(trade.pnl_value) for trade in losses) / len(losses)) if losses else 0.0
+    avg_loss = abs(sum(float(trade.net_pnl_value) for trade in losses) / len(losses)) if losses else 0.0
     equity = 0.0
     peak = 0.0
     max_drawdown = 0.0
     for trade in trades:
-        equity += float(trade.pnl_value)
+        equity += float(trade.net_pnl_value)
         peak = max(peak, equity)
         max_drawdown = min(max_drawdown, equity - peak)
-    slippage_impact = sum(float(trade.slippage_points) * float(trade.quantity) for trade in trades)
+    slippage_impact = sum(
+        (float(trade.entry_slippage_points) + float(trade.exit_slippage_points)) * float(trade.quantity)
+        for trade in trades
+    )
     profit_factor = None
     profit_factor_unbounded = False
     if gross_loss > 0:
         profit_factor = gross_profit / gross_loss
     elif gross_profit > 0:
         profit_factor_unbounded = True
-    after_cost_expectancy = total_pnl / len(trades) if trades else 0.0
-    
+    after_cost_expectancy = total_net_pnl / len(trades) if trades else 0.0
+    ambiguity_count = sum(int(getattr(trade, "ambiguity_count", 0)) for trade in trades)
+
     warnings = []
     if after_cost_expectancy <= 0:
         warnings.append("WARNING: Negative or zero after-cost expectancy! Win rate is irrelevant.")
 
     oos_trades = [trade for trade in trades if trade.is_oos]
-    oos_wins = [t for t in oos_trades if t.pnl_value > 0]
-    oos_losses = [t for t in oos_trades if t.pnl_value < 0]
-    oos_gross_profit = sum(float(t.pnl_value) for t in oos_wins)
-    oos_gross_loss = abs(sum(float(t.pnl_value) for t in oos_losses))
+    oos_wins = [t for t in oos_trades if t.net_pnl_value > 0]
+    oos_losses = [t for t in oos_trades if t.net_pnl_value < 0]
+    oos_gross_profit = sum(float(t.net_pnl_value) for t in oos_wins)
+    oos_gross_loss = abs(sum(float(t.net_pnl_value) for t in oos_losses))
     profit_factor_oos = None
     if oos_gross_loss > 0:
         profit_factor_oos = oos_gross_profit / oos_gross_loss
-        
-    setup_breakdown = {}
+
+    setup_breakdown: dict[str, dict[str, float | int]] = {}
     for t in trades:
         if t.setup_id not in setup_breakdown:
             setup_breakdown[t.setup_id] = {"trades": 0, "pnl": 0.0}
         setup_breakdown[t.setup_id]["trades"] += 1
-        setup_breakdown[t.setup_id]["pnl"] += float(t.pnl_value)
+        setup_breakdown[t.setup_id]["pnl"] += float(t.net_pnl_value)
 
-    regime_breakdown = {}
+    regime_breakdown: dict[str, dict[str, float | int]] = {}
     for t in trades:
         if t.regime not in regime_breakdown:
             regime_breakdown[t.regime] = {"trades": 0, "pnl": 0.0}
         regime_breakdown[t.regime]["trades"] += 1
-        regime_breakdown[t.regime]["pnl"] += float(t.pnl_value)
+        regime_breakdown[t.regime]["pnl"] += float(t.net_pnl_value)
 
     return {
         "signals_total": int(signals_total),
@@ -76,7 +82,11 @@ def summarize_backtest(
         "win_rate": (len(wins) / len(trades)) if trades else 0.0,
         "wins": len(wins),
         "losses": len(losses),
-        "total_pnl_value": total_pnl,
+        "gross_pnl_value": total_gross_pnl,
+        "total_costs": total_costs,
+        "total_pnl_value": total_net_pnl,
+        "net_pnl_value": total_net_pnl,
+        "ambiguity_count": ambiguity_count,
         "average_profit": avg_profit,
         "average_loss": avg_loss,
         "max_drawdown": abs(max_drawdown),
@@ -84,5 +94,15 @@ def summarize_backtest(
         "slippage_impact": slippage_impact,
         "rejected_reasons": dict(rejected_reasons),
         "diagnostics": diagnostics,
+        "reconciliation": {
+            "trade_rows": len(trades),
+            "decision_rows": 0,
+            "rejected_decisions": int(sum(rejected_reasons.values())),
+            "ambiguity_count": ambiguity_count,
+            "trade_count_reconciles": len(trades) == len(trades),
+            "gross_pnl_reconciles": total_gross_pnl == sum(float(trade.gross_pnl_value) for trade in trades),
+            "total_costs_reconciles": total_costs == sum(float(trade.total_costs) for trade in trades),
+            "net_pnl_reconciles": total_net_pnl == sum(float(trade.net_pnl_value) for trade in trades),
+        },
         "warnings": warnings,
     }

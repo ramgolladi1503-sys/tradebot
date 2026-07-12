@@ -177,6 +177,7 @@ def build_option_backtest_frame(
     bars = (
         ticks.groupby("minute", as_index=False)
         .agg(
+            timestamp_epoch=("timestamp_epoch", "last"),
             open=("last_price", "first"),
             high=("last_price", "max"),
             low=("last_price", "min"),
@@ -206,7 +207,7 @@ def build_option_backtest_frame(
 
     bars["symbol"] = str(tradingsymbol)
     bars["timestamp"] = bars["minute"].dt.tz_convert("Asia/Kolkata").dt.strftime("%Y-%m-%d %H:%M:%S")
-    return bars[["timestamp", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]]
+    return bars[["timestamp", "timestamp_epoch", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]]
 
 
 def export_option_backtest_csv(

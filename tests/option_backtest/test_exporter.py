@@ -88,8 +88,8 @@ def test_build_option_backtest_frame_merges_ticks_and_depth(tmp_path: Path):
         tradingsymbol="NIFTY2650524200CE",
     )
 
-    assert list(frame.columns) == ["timestamp", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]
-    assert len(frame) == 2
+    assert list(frame.columns) == ["timestamp", "timestamp_epoch", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]
+    assert frame.shape[0] == 2
     first = frame.iloc[0].to_dict()
     second = frame.iloc[1].to_dict()
     assert first["symbol"] == "NIFTY2650524200CE"
@@ -99,8 +99,10 @@ def test_build_option_backtest_frame_merges_ticks_and_depth(tmp_path: Path):
     assert first["close"] == 101.0
     assert first["volume"] == 14
     assert first["oi"] == 1003
+    assert first["timestamp_epoch"] == 1777530350.0
     assert first["bid"] == 99.9
     assert first["ask"] == 100.2
     assert second["close"] == 103.0
+    assert second["timestamp_epoch"] == 1777530370.0
     assert second["bid"] == 102.8
     assert second["ask"] == 103.1
