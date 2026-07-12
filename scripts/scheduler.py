@@ -44,6 +44,7 @@ PREMARKET_SCRIPTS = [
 # Background scripts that are spawned and detached
 BACKGROUND_SCRIPTS = [
     "scripts/tick_data_collector.py",
+    "scripts/capture_upstox_market_daily.py",
 ]
 
 
