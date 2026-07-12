@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from core.expectancy.setup_fingerprint import attach_setup_fingerprint
 from core.log_writer import get_jsonl_writer
 from core.paths import runtime_dir
 
@@ -109,6 +108,60 @@ def _list(value: Any) -> list[Any]:
     if value in (None, "", "None"):
         return []
     return [value]
+
+
+def _iso_utc_from_epoch(value: Any) -> str | None:
+    if value in (None, "", "None"):
+        return None
+    try:
+        raw = float(value)
+    except Exception:
+        return None
+    if raw > 1_000_000_000_000:
+        raw = raw / 1000.0
+    return datetime.fromtimestamp(raw, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _normalise_oos_label(value: Any) -> str | None:
+    text = _text(value).upper()
+    if text in {"OOS", "OUT_OF_SAMPLE"}:
+        return "OOS"
+    if text in {"IS", "IN_SAMPLE"}:
+        return "IS"
+    return None
+
+
+def _derive_signal_ts(row: Mapping[str, Any], created_at_text: str) -> tuple[str | None, str]:
+    for key in ("signal_ts", "decision_ts_utc", "decision_ts_iso", "created_ts_utc", "created_at"):
+        value = row.get(key)
+        if value not in (None, "", "None"):
+            return _text(value), f"preserved:{key}"
+    generated_epoch = row.get("generated_epoch")
+    if generated_epoch not in (None, "", "None"):
+        return _iso_utc_from_epoch(generated_epoch), "derived:generated_epoch"
+    if created_at_text:
+        return created_at_text, "derived:created_at"
+    return None, "missing"
+
+
+def _derive_feature_cutoff_ts(row: Mapping[str, Any]) -> tuple[str | None, str]:
+    for key in ("feature_cutoff_ts", "snapshot_ts_utc", "snapshot_ts_iso", "snapshot_ts"):
+        value = row.get(key)
+        if value not in (None, "", "None"):
+            return _text(value), f"preserved:{key}"
+    for key in ("snapshot_ts_epoch", "snapshot_epoch"):
+        value = row.get(key)
+        if value not in (None, "", "None"):
+            return _iso_utc_from_epoch(value), f"derived:{key}"
+    return None, "missing"
+
+
+def _derive_earliest_entry_ts(row: Mapping[str, Any]) -> tuple[str | None, str]:
+    for key in ("earliest_entry_ts", "entry_ts", "execution_ts", "entry_timestamp", "entry_time"):
+        value = row.get(key)
+        if value not in (None, "", "None"):
+            return _text(value), f"preserved:{key}"
+    return None, "missing"
 
 
 def _first_present(payload: Mapping[str, Any], *keys: str) -> Any:
@@ -235,6 +288,36 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
     row["candidate_origin"] = _text(row.get("candidate_origin"))
     row["candidate_class"] = _text(row.get("candidate_class"))
 
+    feature_cutoff_ts, feature_cutoff_source = _derive_feature_cutoff_ts(row)
+    signal_ts, signal_ts_source = _derive_signal_ts(row, created_at_text)
+    earliest_entry_ts, earliest_entry_source = _derive_earliest_entry_ts(row)
+    row["feature_cutoff_ts"] = feature_cutoff_ts
+    row["signal_ts"] = signal_ts
+    row["earliest_entry_ts"] = earliest_entry_ts
+    row["feature_cutoff_ts_source"] = feature_cutoff_source
+    row["signal_ts_source"] = signal_ts_source
+    row["earliest_entry_ts_source"] = earliest_entry_source
+
+    is_oos_value = row.get("is_oos")
+    oos_label_value = row.get("oos_label")
+    if is_oos_value in (None, "", "None"):
+        row["is_oos"] = None
+        if _normalise_oos_label(oos_label_value) is None:
+            row["oos_label"] = None
+            row["oos_source"] = "unknown_runtime_context"
+        else:
+            row["oos_label"] = _normalise_oos_label(oos_label_value)
+            row["oos_source"] = "preserved:oos_label"
+    else:
+        row["is_oos"] = _bool(is_oos_value)
+        derived_oos_label = _normalise_oos_label(oos_label_value)
+        if derived_oos_label is None:
+            row["oos_label"] = "OOS" if row["is_oos"] else "IS"
+            row["oos_source"] = "derived:is_oos"
+        else:
+            row["oos_label"] = derived_oos_label
+            row["oos_source"] = "preserved:oos_label"
+
     row["reportable_executable"] = _bool(row.get("reportable_executable"))
     row["execution_allowed"] = _bool(row.get("execution_allowed"))
     row["eligible_for_execution"] = _bool(row.get("eligible_for_execution"))
@@ -252,6 +335,22 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
     row["final_emit_block_reason"] = row.get("final_emit_block_reason")
     row["reject_reason"] = row.get("reject_reason")
     row["reason"] = row.get("reason")
+
+    strict_replay_blockers = []
+    if feature_cutoff_ts is None:
+        strict_replay_blockers.append("missing_feature_cutoff_ts")
+    if signal_ts is None:
+        strict_replay_blockers.append("missing_signal_ts")
+    if earliest_entry_ts is None:
+        strict_replay_blockers.append("missing_earliest_entry_ts")
+    if row.get("is_oos") is None:
+        strict_replay_blockers.append("missing_is_oos")
+    if row.get("oos_label") is None:
+        strict_replay_blockers.append("missing_oos_label")
+    row["strict_replay_export_ready"] = not strict_replay_blockers
+    row["strict_replay_export_blockers"] = strict_replay_blockers
+
+    from core.expectancy.setup_fingerprint import attach_setup_fingerprint
 
     row = attach_setup_fingerprint(row)
 
