@@ -277,6 +277,7 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
         row[field] = _number(row.get(field))
 
     row["quote_source"] = _text(row.get("quote_source"))
+    row["oos_source"] = _text(row.get("oos_source"))
     row["quote_validation_status"] = _text(row.get("quote_validation_status"))
     row["feed_truth_state"] = _text(row.get("feed_truth_state"))
     row["feed_truth_reason_code"] = _text(row.get("feed_truth_reason_code"))
@@ -305,19 +306,19 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
         row["is_oos"] = None
         if _normalise_oos_label(oos_label_value) is None:
             row["oos_label"] = None
-            row["oos_source"] = "unknown_runtime_context"
+            row["oos_source"] = _text(row.get("oos_source")) or "unknown_runtime_context"
         else:
             row["oos_label"] = _normalise_oos_label(oos_label_value)
-            row["oos_source"] = "preserved:oos_label"
+            row["oos_source"] = _text(row.get("oos_source")) or "preserved:oos_label"
     else:
         row["is_oos"] = _bool(is_oos_value)
         derived_oos_label = _normalise_oos_label(oos_label_value)
         if derived_oos_label is None:
             row["oos_label"] = "OOS" if row["is_oos"] else "IS"
-            row["oos_source"] = "derived:is_oos"
+            row["oos_source"] = _text(row.get("oos_source")) or "derived:is_oos"
         else:
             row["oos_label"] = derived_oos_label
-            row["oos_source"] = "preserved:oos_label"
+            row["oos_source"] = _text(row.get("oos_source")) or "preserved:oos_label"
 
     row["reportable_executable"] = _bool(row.get("reportable_executable"))
     row["execution_allowed"] = _bool(row.get("execution_allowed"))

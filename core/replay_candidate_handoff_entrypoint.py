@@ -127,6 +127,131 @@ def _top_candidate_payload(report: Any) -> dict[str, Any] | None:
     return payload
 
 
+def _parse_bool_text(value: Any) -> bool | None:
+    if value in (None, "", "None"):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _normalize_explicit_oos_context(
+    *,
+    is_oos: Any = None,
+    oos_label: Any = None,
+    oos_source: Any = None,
+    partition_id: Any = None,
+    split_name: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(value not in (None, "", "None") for value in (is_oos, oos_label, oos_source, partition_id, split_name))
+    if not supplied:
+        return None, []
+
+    blockers: list[str] = []
+    parsed_is_oos = _parse_bool_text(is_oos)
+    parsed_label = str(oos_label or "").strip().upper() or None
+    parsed_source = str(oos_source or "").strip() or None
+    parsed_partition_id = str(partition_id or "").strip() or None
+    parsed_split_name = str(split_name or "").strip() or None
+
+    if parsed_is_oos is None:
+        blockers.append("missing_is_oos")
+    if parsed_label is None:
+        blockers.append("missing_oos_label")
+    if parsed_source is None:
+        blockers.append("missing_oos_source")
+    if parsed_partition_id is None and parsed_split_name is None:
+        blockers.append("missing_partition_context")
+    if parsed_label not in {None, "IS", "OOS"}:
+        blockers.append("invalid_oos_label")
+    if parsed_is_oos is True and parsed_label != "OOS":
+        blockers.append("inconsistent_oos_context")
+    if parsed_is_oos is False and parsed_label != "IS":
+        blockers.append("inconsistent_oos_context")
+
+    blockers = list(dict.fromkeys(blockers))
+    if blockers:
+        return None, blockers
+
+    context = {
+        "is_oos": parsed_is_oos,
+        "oos_label": parsed_label,
+        "oos_source": parsed_source,
+    }
+    if parsed_partition_id is not None:
+        context["partition_id"] = parsed_partition_id
+    if parsed_split_name is not None:
+        context["split_name"] = parsed_split_name
+    return context, []
+
+
+def _parse_bool_text(value: Any) -> bool | None:
+    if value in (None, "", "None"):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _normalize_explicit_oos_context(
+    *,
+    is_oos: Any = None,
+    oos_label: Any = None,
+    oos_source: Any = None,
+    partition_id: Any = None,
+    split_name: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(value not in (None, "", "None") for value in (is_oos, oos_label, oos_source, partition_id, split_name))
+    if not supplied:
+        return None, []
+    blockers: list[str] = []
+    parsed_is_oos = _parse_bool_text(is_oos)
+    parsed_label = str(oos_label or "").strip().upper() or None
+    parsed_source = str(oos_source or "").strip() or None
+    parsed_partition_id = str(partition_id or "").strip() or None
+    parsed_split_name = str(split_name or "").strip() or None
+
+    if parsed_is_oos is None:
+        blockers.append("missing_is_oos")
+    if parsed_label is None:
+        blockers.append("missing_oos_label")
+    if parsed_source is None:
+        blockers.append("missing_oos_source")
+    if parsed_partition_id is None and parsed_split_name is None:
+        blockers.append("missing_partition_context")
+
+    if parsed_is_oos is True and parsed_label not in {"OOS"}:
+        blockers.append("inconsistent_oos_context")
+    if parsed_is_oos is False and parsed_label not in {"IS"}:
+        blockers.append("inconsistent_oos_context")
+    if parsed_label not in {None, "IS", "OOS"}:
+        blockers.append("invalid_oos_label")
+
+    if blockers:
+        return None, list(dict.fromkeys(blockers))
+
+    context = {
+        "is_oos": parsed_is_oos,
+        "oos_label": parsed_label,
+        "oos_source": parsed_source,
+    }
+    if parsed_partition_id is not None:
+        context["partition_id"] = parsed_partition_id
+    if parsed_split_name is not None:
+        context["split_name"] = parsed_split_name
+    return context, []
+
+
 def _strategy_generators_for_id(strategy_id: str | None) -> tuple[Any, ...]:
     if not strategy_id:
         from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates  # noqa: PLC0415
@@ -179,6 +304,9 @@ def _report_to_handoff_payload(report: Any, top_candidate: Mapping[str, Any]) ->
     }
     payload["source"] = "replay_candidate_handoff_entrypoint"
     payload["top_reportable_executable"] = top_candidate
+    for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name"):
+        if top_candidate.get(key) not in (None, "", "None"):
+            payload[key] = top_candidate.get(key)
     return payload
 
 
@@ -301,6 +429,7 @@ def run_replay_candidate_handoff(
     strategy_generators: Iterable[Any] | None = None,
     strategy_id: str | None = None,
     write_production_artifacts: bool = False,
+    oos_context: Mapping[str, Any] | None = None,
 ) -> ReplayCandidateHandoffResult:
     if write_production_artifacts and os.getenv("PYTEST_CURRENT_TEST"):
         raise RuntimeError("write_production_artifacts_forbidden_in_tests")
@@ -336,6 +465,23 @@ def run_replay_candidate_handoff(
     run_dir = output_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    explicit_oos_context, oos_context_blockers = _normalize_explicit_oos_context(
+        is_oos=(oos_context or {}).get("is_oos") if isinstance(oos_context, Mapping) else None,
+        oos_label=(oos_context or {}).get("oos_label") if isinstance(oos_context, Mapping) else None,
+        oos_source=(oos_context or {}).get("oos_source") if isinstance(oos_context, Mapping) else None,
+        partition_id=(oos_context or {}).get("partition_id") if isinstance(oos_context, Mapping) else None,
+        split_name=(oos_context or {}).get("split_name") if isinstance(oos_context, Mapping) else None,
+    )
+    if oos_context_blockers:
+        return _blocked_result(
+            verdict="BLOCKED_INVALID_OOS_CONTEXT",
+            blocker="BLOCKED_INVALID_OOS_CONTEXT",
+            stage_evidence=[_stage("oos_context", False, source_path.name, None, ",".join(oos_context_blockers))],
+            output_root=output_root,
+            run_id=run_id,
+            write_production_artifacts=write_production_artifacts,
+        )
+
     handoff_path = run_dir / "runtime_candidate_handoff_latest.json"
     journal_path = run_dir / "candidate_journal.jsonl"
     audit_json_path = run_dir / "replay_candidate_handoff_audit.json"
@@ -356,6 +502,13 @@ def run_replay_candidate_handoff(
         raw_tick = _row_raw_tick(row)
         ts_epoch = _row_ts_epoch(raw_tick) or _row_ts_epoch(row)
         replay_event_id = str(row.get("event_id") or row.get("replay_event_id") or row.get("ts") or idx)
+        row_oos_context = {
+            key: row.get(key)
+            for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name")
+            if row.get(key) not in (None, "", "None")
+        }
+        if explicit_oos_context is not None:
+            row_oos_context.update(explicit_oos_context)
         try:
             normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick})
         except Exception as exc:
@@ -400,7 +553,7 @@ def run_replay_candidate_handoff(
                 source_path=source_path,
                 source_row_index=idx,
                 source_timestamp_epoch=ts_epoch,
-                raw_row=row,
+                raw_row={**row, **row_oos_context},
                 normalized_snapshot=normalized_snapshot,
                 strategy_context=ctx,
                 report=report,
@@ -444,10 +597,16 @@ def run_replay_candidate_handoff(
             top_candidate.setdefault("feature_cutoff_ts", row.get("feature_cutoff_ts"))
         if row.get("earliest_entry_ts") not in (None, "", "None"):
             top_candidate.setdefault("earliest_entry_ts", row.get("earliest_entry_ts"))
-        if row.get("is_oos") not in (None, "", "None"):
-            top_candidate.setdefault("is_oos", row.get("is_oos"))
-        if row.get("oos_label") not in (None, "", "None"):
-            top_candidate.setdefault("oos_label", row.get("oos_label"))
+        if row_oos_context.get("is_oos") not in (None, "", "None"):
+            top_candidate.setdefault("is_oos", row_oos_context.get("is_oos"))
+        if row_oos_context.get("oos_label") not in (None, "", "None"):
+            top_candidate.setdefault("oos_label", row_oos_context.get("oos_label"))
+        if row_oos_context.get("oos_source") not in (None, "", "None"):
+            top_candidate.setdefault("oos_source", row_oos_context.get("oos_source"))
+        if row_oos_context.get("partition_id") not in (None, "", "None"):
+            top_candidate.setdefault("partition_id", row_oos_context.get("partition_id"))
+        if row_oos_context.get("split_name") not in (None, "", "None"):
+            top_candidate.setdefault("split_name", row_oos_context.get("split_name"))
         top_candidate.setdefault("created_at", _iso_utc_from_epoch(ts_epoch))
         top_candidate.setdefault("trade_id", top_candidate.get("candidate_id") or top_candidate.get("strategy_id"))
         top_candidate.setdefault("candidate_id", top_candidate.get("trade_id"))
@@ -468,6 +627,9 @@ def run_replay_candidate_handoff(
             handoff_payload["earliest_entry_ts"] = top_candidate.get("earliest_entry_ts")
             handoff_payload["is_oos"] = top_candidate.get("is_oos")
             handoff_payload["oos_label"] = top_candidate.get("oos_label")
+            handoff_payload["oos_source"] = top_candidate.get("oos_source")
+            handoff_payload["partition_id"] = top_candidate.get("partition_id")
+            handoff_payload["split_name"] = top_candidate.get("split_name")
             handoff_payload["replay_only"] = True
             handoff_payload["broker_api_called"] = False
             handoff_payload["order_action"] = False
@@ -497,10 +659,13 @@ def run_replay_candidate_handoff(
                 },
                 generated_epoch=float(ts_epoch if ts_epoch is not None else getattr(report, "generated_epoch", 0.0) or 0.0),
             )
+            journal_row = dict(top_candidate)
+            if row_oos_context:
+                journal_row.update(row_oos_context)
             write_candidate_journal_row(
-                top_candidate,
+                journal_row,
                 journal_event="candidate_reported",
-                created_at=top_candidate.get("created_at"),
+                created_at=journal_row.get("created_at"),
                 path=journal_path if not write_production_artifacts else Path(".runtime") / "candidates" / "candidate_journal.jsonl",
             )
         except Exception as exc:
@@ -572,6 +737,8 @@ def run_replay_candidate_handoff(
         )
 
     payload = selected_result.to_dict()
+    if explicit_oos_context is not None:
+        payload["oos_context"] = dict(explicit_oos_context)
     _write_audit_report(audit_json_path, payload)
     audit_md_path.write_text(_render_markdown(payload), encoding="utf-8")
     return selected_result

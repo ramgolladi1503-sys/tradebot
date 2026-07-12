@@ -21,12 +21,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--strategy-id", default=None, help="Optional strategy id filter.")
     parser.add_argument("--run-id", default=None, help="Optional isolated run id.")
     parser.add_argument("--output-root", default=None, help="Optional isolated output root.")
+    parser.add_argument("--is-oos", default=None, help="Explicit OOS flag (true/false) from replay or WFA context.")
+    parser.add_argument("--oos-label", default=None, help="Explicit OOS label (IS/OOS).")
+    parser.add_argument("--oos-source", default=None, help="Explicit OOS provenance source.")
+    parser.add_argument("--partition-id", default=None, help="Explicit replay/WFA partition id.")
+    parser.add_argument("--split-name", default=None, help="Explicit replay/WFA split name.")
     parser.add_argument(
         "--write-production-artifacts",
         action="store_true",
         help="Write production-style artifact names outside the isolated output tree.",
     )
     return parser.parse_args(argv)
+
+
+def _parse_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    raise SystemExit(f"invalid --is-oos value: {value}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,6 +55,13 @@ def main(argv: list[str] | None = None) -> int:
         row_index=args.row_index,
         strategy_id=args.strategy_id,
         write_production_artifacts=bool(args.write_production_artifacts),
+        oos_context={
+            "is_oos": _parse_bool(args.is_oos),
+            "oos_label": args.oos_label,
+            "oos_source": args.oos_source,
+            "partition_id": args.partition_id,
+            "split_name": args.split_name,
+        },
     )
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str))
     return 0 if not result.verdict.startswith("BLOCKED_") else 2

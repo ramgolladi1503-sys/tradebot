@@ -142,6 +142,25 @@ def test_missing_candidate_and_ranking_rejection_are_explicit(tmp_path, monkeypa
     assert any(item["stage"] == "ranking" and item["verdict"] == "BLOCKED" for item in rejected_result.stage_evidence)
 
 
+def test_inconsistent_oos_context_fails_closed(tmp_path):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-invalid-oos",
+        oos_context={
+            "is_oos": True,
+            "oos_label": "IS",
+            "oos_source": "explicit_replay_run_context",
+            "partition_id": "holdout",
+        },
+    )
+    assert result.verdict == "BLOCKED_INVALID_OOS_CONTEXT"
+    assert result.blocker == "BLOCKED_INVALID_OOS_CONTEXT"
+    assert any(item["stage"] == "oos_context" and item["verdict"] == "BLOCKED" for item in result.stage_evidence)
+
+
 def test_candidate_and_journal_persistence_use_isolated_output(tmp_path, monkeypatch):
     source = tmp_path / "replay.jsonl"
     _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
@@ -158,3 +177,43 @@ def test_candidate_and_journal_persistence_use_isolated_output(tmp_path, monkeyp
     bundle_root = tmp_path / ".runtime" / "replay_context_bundles"
     assert (bundle_root / "run-004" / "replay_context_bundle_evt-001.json").exists()
     assert (bundle_root / "run-004" / "replay_context_bundle_latest.json").exists()
+
+
+def test_explicit_oos_context_is_preserved(tmp_path, monkeypatch):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    monkeypatch.setattr(replay_handoff, "build_market_snapshot_from_raw_tick", lambda *args, **kwargs: {"snapshot": True})
+    monkeypatch.setattr(replay_handoff, "_strategy_context_from_market_symbol", lambda *args, **kwargs: SimpleNamespace(symbol="NIFTY"))
+    monkeypatch.setattr(replay_handoff, "build_ranked_opportunity_report", lambda *args, **kwargs: _fake_success_report())
+
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-oos",
+        oos_context={
+            "is_oos": True,
+            "oos_label": "OOS",
+            "oos_source": "explicit_replay_run_context",
+            "partition_id": "holdout",
+            "split_name": "holdout",
+        },
+    )
+
+    audit = json.loads(Path(result.audit_json_path).read_text(encoding="utf-8"))
+    handoff = json.loads(Path(result.handoff_path).read_text(encoding="utf-8"))
+    journal = Path(result.journal_path).read_text(encoding="utf-8").strip().splitlines()[-1]
+    journal_row = json.loads(journal)
+    bundle = json.loads((tmp_path / ".runtime" / "replay_context_bundles" / "run-oos" / "replay_context_bundle_evt-001.json").read_text(encoding="utf-8"))
+
+    assert result.verdict == "FULLY_PROVEN_FROM_REPLAY_INPUT"
+    assert audit["oos_context"]["is_oos"] is True
+    assert audit["oos_context"]["oos_label"] == "OOS"
+    assert audit["oos_context"]["oos_source"] == "explicit_replay_run_context"
+    assert handoff["is_oos"] is True
+    assert handoff["oos_label"] == "OOS"
+    assert handoff["oos_source"] == "explicit_replay_run_context"
+    assert journal_row["is_oos"] is True
+    assert journal_row["oos_label"] == "OOS"
+    assert journal_row["oos_source"] == "explicit_replay_run_context"
+    assert bundle["replay_context"]["is_oos"] is True
+    assert bundle["replay_context"]["oos_label"] == "OOS"

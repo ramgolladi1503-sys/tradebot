@@ -113,6 +113,7 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
             "earliest_entry_ts": "2026-06-07T09:16:30+05:30",
             "is_oos": True,
             "oos_label": "OOS",
+            "oos_source": "wfa_partition_context",
             "feed_truth_state": "LIVE",
             "feed_truth_reason_code": "OK",
         }
@@ -125,10 +126,11 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
     assert journal_row["earliest_entry_ts"] == "2026-06-07T09:16:30+05:30"
     assert journal_row["is_oos"] is True
     assert journal_row["oos_label"] == "OOS"
+    assert journal_row["oos_source"] == "wfa_partition_context"
     assert journal_row["feature_cutoff_ts_source"] == "preserved:feature_cutoff_ts"
     assert journal_row["signal_ts_source"] == "preserved:signal_ts"
     assert journal_row["earliest_entry_ts_source"] == "preserved:earliest_entry_ts"
-    assert journal_row["oos_source"] == "preserved:oos_label"
+    assert journal_row["oos_source"] == "wfa_partition_context"
     assert journal_row["strict_replay_export_ready"] is True
     assert journal_row["strict_replay_export_blockers"] == []
     assert journal_row["replay_context_ready"] is True
