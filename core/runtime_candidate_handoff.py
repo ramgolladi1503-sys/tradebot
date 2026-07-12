@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from core.events import write_json_atomic
 from core.paths import data_root
+from core.replay_context_recorder import build_replay_context_record
 
 RUNTIME_CANDIDATE_HANDOFF_SCHEMA_VERSION = 1
 RUNTIME_CANDIDATE_HANDOFF_SOURCE = "runtime_candidate_handoff_evidence_v1"
@@ -112,6 +113,8 @@ def build_runtime_candidate_handoff_payload(
             "does_not_call_broker": True,
         },
     }
+    replay_context = build_replay_context_record(payload, source=RUNTIME_CANDIDATE_HANDOFF_SOURCE, require_candidate_pool_inputs=True)
+    payload.update(replay_context)
     return payload
 
 

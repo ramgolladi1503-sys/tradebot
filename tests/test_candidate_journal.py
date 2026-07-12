@@ -107,11 +107,14 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
     row = _base_row()
     row.update(
         {
+            "snapshot_ts_utc": "2026-06-07T09:15:00+05:30",
             "feature_cutoff_ts": "2026-06-07T09:15:00+05:30",
             "signal_ts": "2026-06-07T09:16:00+05:30",
             "earliest_entry_ts": "2026-06-07T09:16:30+05:30",
             "is_oos": True,
             "oos_label": "OOS",
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "OK",
         }
     )
 
@@ -128,12 +131,19 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
     assert journal_row["oos_source"] == "preserved:oos_label"
     assert journal_row["strict_replay_export_ready"] is True
     assert journal_row["strict_replay_export_blockers"] == []
+    assert journal_row["replay_context_ready"] is True
+    assert journal_row["replay_context_blockers"] == []
+    assert journal_row["replay_context"]["feature_cutoff_ts"] == "2026-06-07T09:15:00+05:30"
+    assert journal_row["replay_context"]["signal_ts"] == "2026-06-07T09:16:00+05:30"
+    assert journal_row["replay_context"]["is_oos"] is True
+    assert journal_row["replay_context"]["oos_label"] == "OOS"
     assert journal_row["rank_score"] == 91.2
     assert journal_row["confidence_final"] == 0.74
 
 
 def test_candidate_journal_marks_missing_timing_and_oos_as_blocked():
     row = _base_row()
+    row.pop("snapshot_ts_utc", None)
     row.pop("feature_cutoff_ts", None)
     row.pop("signal_ts", None)
     row.pop("earliest_entry_ts", None)
@@ -148,7 +158,7 @@ def test_candidate_journal_marks_missing_timing_and_oos_as_blocked():
     assert journal_row["is_oos"] is None
     assert journal_row["oos_label"] is None
     assert journal_row["feature_cutoff_ts_source"] == "missing"
-    assert journal_row["signal_ts_source"] == "preserved:created_at"
+    assert journal_row["signal_ts_source"] == "preserved:signal_ts"
     assert journal_row["earliest_entry_ts_source"] == "missing"
     assert journal_row["oos_source"] == "unknown_runtime_context"
     assert journal_row["strict_replay_export_ready"] is False
@@ -158,6 +168,29 @@ def test_candidate_journal_marks_missing_timing_and_oos_as_blocked():
         "missing_is_oos",
         "missing_oos_label",
     ]
+    assert journal_row["replay_context_ready"] is False
+    assert "missing_feature_cutoff_ts" in journal_row["replay_context_blockers"]
+    assert "missing_earliest_entry_ts" in journal_row["replay_context_blockers"]
+    assert "missing_is_oos" in journal_row["replay_context_blockers"]
+    assert "missing_oos_label" in journal_row["replay_context_blockers"]
+
+
+def test_candidate_journal_does_not_guess_feature_cutoff_from_created_timestamp():
+    row = _base_row()
+    row.pop("snapshot_ts_utc", None)
+    row.pop("feature_cutoff_ts", None)
+    row.pop("signal_ts", None)
+    row.pop("earliest_entry_ts", None)
+    row.pop("is_oos", None)
+    row.pop("oos_label", None)
+    row["created_ts_utc"] = "2026-06-07T09:17:00+05:30"
+
+    journal_row = candidate_journal.build_candidate_journal_row(row, created_at="2026-06-07T09:17:00+05:30")
+
+    assert journal_row["feature_cutoff_ts"] is None
+    assert journal_row["feature_cutoff_ts_source"] == "missing"
+    assert journal_row["replay_context"]["feature_cutoff_ts"] is None
+    assert "missing_feature_cutoff_ts" in journal_row["replay_context_blockers"]
 
 
 def test_blocked_candidate_row_preserves_blockers_and_truth():

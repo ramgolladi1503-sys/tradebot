@@ -9,6 +9,7 @@ from typing import Any, Mapping
 
 from core.log_writer import get_jsonl_writer
 from core.paths import runtime_dir
+from core.replay_context_recorder import build_replay_context_record
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +350,8 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
         strict_replay_blockers.append("missing_oos_label")
     row["strict_replay_export_ready"] = not strict_replay_blockers
     row["strict_replay_export_blockers"] = strict_replay_blockers
+    replay_context = build_replay_context_record(row, source="candidate_journal", require_candidate_pool_inputs=False)
+    row.update(replay_context)
 
     from core.expectancy.setup_fingerprint import attach_setup_fingerprint
 

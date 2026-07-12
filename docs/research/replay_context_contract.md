@@ -510,6 +510,11 @@ The replay contract does not require new strategy logic. It requires recording t
 
 This can be done by a replay-only recorder that writes a single replay bundle artifact plus the existing runtime-style latest files inside an isolated directory.
 
+Implementation note:
+
+- the recorder now persists `replay_context_ready`, `replay_context_blockers`, `replay_context_source`, and field-source metadata in the candidate journal and runtime handoff evidence
+- readiness remains false when required replay context is absent; missing fields are recorded explicitly rather than inferred
+
 ## What must not be synthesized
 
 The replay recorder must not invent the following:
