@@ -32,6 +32,7 @@ class FillModel:
         limit_price = float(order.get("limit_price", 0.0) or 0.0)
         bid = float(market_snapshot.get("bid", 0.0) or 0.0)
         ask = float(market_snapshot.get("ask", 0.0) or 0.0)
+        allow_fallback_liquidity = bool(market_snapshot.get("allow_fallback_liquidity", True))
 
         latency_ms = self._latency_ms(run_id, symbol, side)
         result = {
@@ -41,6 +42,7 @@ class FillModel:
             "slippage_bp": None,
             "latency_ms": latency_ms,
             "reason": "cross_not_met",
+            "used_fallback_liquidity": False,
         }
 
         if side not in ("BUY", "SELL"):
@@ -82,8 +84,12 @@ class FillModel:
         volume = float(market_snapshot.get("volume", 0.0) or 0.0)
         oi = float(market_snapshot.get("oi", 0.0) or 0.0)
         if book_qty <= 0:
+            if not allow_fallback_liquidity:
+                result["reason"] = "missing_book_qty"
+                return result
             # Conservative fallback liquidity proxy.
             book_qty = max(volume * 0.01, oi * 0.002, 1.0)
+            result["used_fallback_liquidity"] = True
 
         size_ratio = qty / max(book_qty, 1.0)
         spread_penalty = 1.0 + min(2.0, spread_pct * 25.0)

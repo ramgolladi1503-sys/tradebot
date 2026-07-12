@@ -12,7 +12,7 @@ from core.fill_model import FillModel
 
 from .adapter import build_candidate_from_candle
 from .loader import load_option_symbol_csv
-from .models import OptionBacktestConfig, OptionBacktestResult, OptionBacktestTrade
+from .models import OptionBacktestConfig, OptionBacktestResult, OptionBacktestTrade, ResearchMode
 from .report import summarize_backtest
 
 
@@ -33,71 +33,154 @@ class OptionBacktestEngine:
         self.cfg = cfg
         self.fill_model = FillModel()
 
+    def _strict_certification_mode(self) -> bool:
+        return self.cfg.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH
+
     def _simulate_entry(self, candidate: dict[str, Any], row: pd.Series, row_index: int) -> dict[str, Any]:
         side = str(candidate.get("side") or "BUY").upper()
         symbol = str(candidate.get("symbol") or self.cfg.symbol)
         entry_ref = _safe_float(candidate.get("execution_entry"))
         if entry_ref is None:
             return {"status": "SKIPPED", "reason": "missing_execution_entry"}
-        order = {
-            "side": side,
-            "symbol": symbol,
-            "qty": int(self.cfg.quantity),
-            "limit_price": float(entry_ref),
-        }
+        order = {"side": side, "symbol": symbol, "qty": int(self.cfg.quantity), "limit_price": float(entry_ref)}
         market_snapshot = {
             "bid": _safe_float(row.get("bid")),
             "ask": _safe_float(row.get("ask")),
+            "bid_qty": _safe_float(row.get("bid_qty")) or 0.0,
+            "ask_qty": _safe_float(row.get("ask_qty")) or 0.0,
             "volume": _safe_float(row.get("volume")) or 0.0,
             "oi": _safe_float(row.get("oi")) or 0.0,
+            "allow_fallback_liquidity": not self._strict_certification_mode(),
         }
         return self.fill_model.simulate(order, market_snapshot, f"{self.cfg.fill_model_run_id}:{row_index}")
+
+    def _compute_side_costs(self, quantity: int) -> float:
+        return (
+            float(self.cfg.cost_config.brokerage_per_order)
+            + float(self.cfg.cost_config.other_fee_per_order)
+            + float(self.cfg.cost_config.exchange_fee_per_contract) * float(quantity)
+            + float(self.cfg.cost_config.tax_per_contract) * float(quantity)
+        )
+
+    def _exit_side_and_reference(
+        self, entry_side: str, row: pd.Series, exit_reason: str, target_price: float, stop_price: float
+    ) -> tuple[str, float | None]:
+        if entry_side == "SELL":
+            exit_side = "BUY"
+            executable_quote = _safe_float(row.get("ask"))
+        else:
+            exit_side = "SELL"
+            executable_quote = _safe_float(row.get("bid"))
+        if exit_reason == "TARGET_HIT":
+            trigger_reference = float(target_price)
+        elif exit_reason == "STOP_HIT":
+            trigger_reference = float(stop_price)
+        else:
+            trigger_reference = _safe_float(row.get("close"))
+        return exit_side, executable_quote if executable_quote is not None else trigger_reference
+
+    def _simulate_exit_fill(
+        self,
+        *,
+        entry_side: str,
+        quantity: int,
+        row: pd.Series,
+        row_index: int,
+        exit_reason: str,
+        target_price: float,
+        stop_price: float,
+    ) -> dict[str, Any]:
+        exit_side, exit_reference = self._exit_side_and_reference(entry_side, row, exit_reason, target_price, stop_price)
+        bid = _safe_float(row.get("bid"))
+        ask = _safe_float(row.get("ask"))
+        if self._strict_certification_mode() and (bid is None or ask is None or bid <= 0 or ask <= 0):
+            return {"status": "NOFILL", "reason": "missing_exit_bid_ask", "fill_qty": 0, "fill_price": None, "used_mark_fallback": False}
+        if bid is None or ask is None or bid <= 0 or ask <= 0:
+            fill_price = exit_reference if exit_reference is not None else _safe_float(row.get("close"))
+            if fill_price is None:
+                return {"status": "NOFILL", "reason": "missing_exit_reference", "fill_qty": 0, "fill_price": None, "used_mark_fallback": True}
+            return {
+                "status": "FILLED",
+                "reason": None,
+                "fill_qty": int(quantity),
+                "fill_price": float(fill_price),
+                "slippage_bp": 0.0,
+                "used_mark_fallback": True,
+                "used_fallback_liquidity": False,
+            }
+        order = {
+            "side": exit_side,
+            "symbol": self.cfg.symbol,
+            "qty": int(quantity),
+            "limit_price": float(bid if exit_side == "SELL" else ask),
+        }
+        market_snapshot = {
+            "bid": bid,
+            "ask": ask,
+            "bid_qty": _safe_float(row.get("bid_qty")) or 0.0,
+            "ask_qty": _safe_float(row.get("ask_qty")) or 0.0,
+            "volume": _safe_float(row.get("volume")) or 0.0,
+            "oi": _safe_float(row.get("oi")) or 0.0,
+            "allow_fallback_liquidity": not self._strict_certification_mode(),
+        }
+        result = self.fill_model.simulate(order, market_snapshot, f"{self.cfg.fill_model_run_id}:exit:{row_index}")
+        result["used_mark_fallback"] = False
+        return result
 
     def _simulate_exit(
         self,
         *,
         side: str,
-        entry_fill_price: float,
         target_price: float,
         stop_price: float,
         entry_index: int,
+        entry_ts: pd.Timestamp,
         candles: pd.DataFrame,
-    ) -> tuple[float, pd.Timestamp, str]:
-        max_index = min(len(candles) - 1, entry_index + int(self.cfg.max_hold_minutes))
-        for idx in range(entry_index, max_index + 1):
-            candle = candles.iloc[idx]
+    ) -> tuple[pd.Series, str, bool]:
+        max_exit_ts = entry_ts + pd.Timedelta(minutes=int(self.cfg.max_hold_minutes))
+
+        def _hit_target_or_stop(candle: pd.Series) -> tuple[bool, bool]:
             high = float(candle["high"])
             low = float(candle["low"])
-            
             if side == "SELL":
-                tgt_hit = low <= target_price
-                stp_hit = high >= stop_price
-            else:
-                tgt_hit = high >= target_price
-                stp_hit = low <= stop_price
-                
+                return low <= target_price, high >= stop_price
+            return high >= target_price, low <= stop_price
+
+        entry_candle = candles.iloc[entry_index]
+        entry_tgt_hit, entry_stp_hit = _hit_target_or_stop(entry_candle)
+        if entry_tgt_hit and entry_stp_hit:
+            return entry_candle, "STOP_HIT", True
+        if entry_stp_hit:
+            return entry_candle, "STOP_HIT", True
+
+        last_observed = entry_candle
+        entry_candle_ambiguous = entry_tgt_hit
+        for idx in range(entry_index + 1, len(candles)):
+            candle = candles.iloc[idx]
+            candle_ts = candle["timestamp"]
+            if candle_ts > max_exit_ts:
+                break
+            last_observed = candle
+            tgt_hit, stp_hit = _hit_target_or_stop(candle)
             if tgt_hit and stp_hit:
-                return float(stop_price), candle["timestamp"], "STOP_HIT"
-            elif stp_hit:
-                return float(stop_price), candle["timestamp"], "STOP_HIT"
-            elif tgt_hit:
-                return float(target_price), candle["timestamp"], "TARGET_HIT"
-                
-        last_candle = candles.iloc[max_index]
-        return float(last_candle["close"]), last_candle["timestamp"], "TIME_EXIT"
+                return candle, "STOP_HIT", True
+            if stp_hit:
+                return candle, "STOP_HIT", False
+            if tgt_hit:
+                return candle, "TARGET_HIT", entry_candle_ambiguous
+
+        timeout_candle = last_observed.copy()
+        timeout_candle["timestamp"] = max_exit_ts
+        return timeout_candle, "TIME_EXIT", entry_candle_ambiguous
 
     def _write_artifacts(self, result: OptionBacktestResult) -> None:
         if self.cfg.output_dir is None:
             return
         output_dir = Path(self.cfg.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        summary_path = output_dir / "summary.json"
-        trades_path = output_dir / "trade_journal.json"
-        sample_path = output_dir / "decision_samples.json"
-        summary_path.write_text(json.dumps(result.summary, indent=2, sort_keys=True), encoding="utf-8")
-        trades_payload = [trade.__dict__ for trade in result.trades]
-        trades_path.write_text(json.dumps(trades_payload, indent=2), encoding="utf-8")
-        sample_path.write_text(json.dumps(result.sampled_decisions, indent=2), encoding="utf-8")
+        (output_dir / "summary.json").write_text(json.dumps(result.summary, indent=2, sort_keys=True), encoding="utf-8")
+        (output_dir / "trade_journal.json").write_text(json.dumps([trade.__dict__ for trade in result.trades], indent=2), encoding="utf-8")
+        (output_dir / "decision_samples.json").write_text(json.dumps(result.sampled_decisions, indent=2), encoding="utf-8")
 
     def run(self) -> OptionBacktestResult:
         candles = load_option_symbol_csv(
@@ -106,6 +189,7 @@ class OptionBacktestEngine:
             date_from=self.cfg.date_from,
             date_to=self.cfg.date_to,
             timezone=self.cfg.timezone,
+            config=self.cfg,
         )
         signals_total = 0
         executable_signals = 0
@@ -113,8 +197,13 @@ class OptionBacktestEngine:
         diagnostics = {
             "fallback_rows": 0,
             "derived_geometry_rows": 0,
+            "derived_timing_rows": 0,
             "missing_signal_rows": 0,
             "missing_bid_ask_rows": int((~candles["has_bid_ask"]).sum()),
+            "missing_timing_rows": 0,
+            "timing_ambiguity_count": 0,
+            "proxy_exit_mark_rows": 0,
+            "strict_exit_quote_rejections": 0,
             "late_entries": 0,
             "chop_losses": 0,
             "confidence_buckets": {"high": {"wins": 0, "losses": 0}, "low": {"wins": 0, "losses": 0}},
@@ -122,17 +211,22 @@ class OptionBacktestEngine:
         trades: list[OptionBacktestTrade] = []
         sampled_decisions: list[dict[str, Any]] = []
         open_until_index = -1
+        candle_epochs = candles["timestamp"].map(lambda ts: float(ts.timestamp()))
+        replay_contract = candles.attrs.get("replay_contract", {})
 
         for row_index, row in candles.iterrows():
-            row_map = row.to_dict()
-            candidate = build_candidate_from_candle(row_map, self.cfg)
+            candidate = build_candidate_from_candle(row.to_dict(), self.cfg)
             signals_total += 1
             if candidate.get("truth_quality") == "FALLBACK":
                 diagnostics["fallback_rows"] += 1
             if candidate.get("source_flags", {}).get("backtest_geometry_source") == "derived":
                 diagnostics["derived_geometry_rows"] += 1
+            if candidate.get("source_flags", {}).get("backtest_timing_source") == "derived":
+                diagnostics["derived_timing_rows"] += 1
             if candidate.get("confidence_raw") is None and candidate.get("confidence_final") is None:
                 diagnostics["missing_signal_rows"] += 1
+            if candidate.get("feature_cutoff_ts") is None or candidate.get("signal_ts") is None or candidate.get("earliest_entry_ts") is None:
+                diagnostics["missing_timing_rows"] += 1
 
             decision = evaluate_candidate_decision(candidate)
             sampled_decisions.append(
@@ -141,16 +235,23 @@ class OptionBacktestEngine:
                     "symbol": candidate["symbol"],
                     "truth_quality": decision.get("truth_quality"),
                     "decision_reason": decision.get("decision_reason"),
+                    "execution_block_reason": candidate.get("execution_block_reason"),
                     "permission": decision.get("permission"),
                     "execution_status": decision.get("execution_status"),
                     "confidence_raw": candidate.get("confidence_raw"),
                     "confidence_final": candidate.get("confidence_final"),
+                    "feature_cutoff_ts": candidate.get("feature_cutoff_ts"),
+                    "signal_ts": candidate.get("signal_ts"),
+                    "earliest_entry_ts": candidate.get("earliest_entry_ts"),
                 }
             )
             if decision.get("execution_status") == "executable":
                 executable_signals += 1
             else:
-                rejected_reasons[str(decision.get("decision_reason") or "unknown")] += 1
+                decision_reason = str(decision.get("decision_reason") or "").strip()
+                execution_block_reason = str(candidate.get("execution_block_reason") or "").strip()
+                reject_reason = execution_block_reason if decision_reason in {"execution_not_ready", "execution_blocked"} and execution_block_reason else (decision_reason or "unknown")
+                rejected_reasons[reject_reason] += 1
 
             if row_index <= open_until_index:
                 continue
@@ -166,8 +267,23 @@ class OptionBacktestEngine:
             if target_price is None or stop_price is None:
                 rejected_reasons["missing_trade_geometry"] += 1
                 continue
+            earliest_entry_epoch = _safe_float(candidate.get("earliest_entry_ts_epoch"))
+            if earliest_entry_epoch is None:
+                rejected_reasons["missing_signal_timing_provenance"] += 1
+                continue
+            eligible_indexes = candle_epochs[candle_epochs >= float(earliest_entry_epoch)].index
+            if len(eligible_indexes) == 0:
+                rejected_reasons["no_eligible_entry_candle"] += 1
+                continue
+            entry_index = int(eligible_indexes[0])
+            if entry_index <= row_index:
+                rejected_reasons["ambiguous_signal_timing"] += 1
+                continue
+            if entry_index <= open_until_index:
+                continue
+            entry_row = candles.iloc[entry_index]
 
-            fill = self._simulate_entry(candidate, row, row_index)
+            fill = self._simulate_entry(candidate, entry_row, entry_index)
             if fill.get("status") not in {"FILLED", "PARTIAL"}:
                 rejected_reasons[str(fill.get("reason") or "entry_not_filled")] += 1
                 continue
@@ -175,55 +291,116 @@ class OptionBacktestEngine:
             side = str(candidate.get("side") or "BUY").upper()
             entry_fill_price = float(fill["fill_price"])
             entry_ref = float(candidate["execution_entry"])
-            exit_price, exit_ts, exit_reason = self._simulate_exit(
+            entry_fill_qty = int(fill.get("fill_qty", self.cfg.quantity))
+            exit_row, exit_reason, timing_ambiguity = self._simulate_exit(
                 side=side,
-                entry_fill_price=entry_fill_price,
                 target_price=target_price,
                 stop_price=stop_price,
-                entry_index=row_index,
+                entry_index=entry_index,
+                entry_ts=entry_row["timestamp"],
                 candles=candles,
             )
-            if side == "SELL":
-                pnl_points = entry_fill_price - exit_price
-            else:
-                pnl_points = exit_price - entry_fill_price
-            hold_minutes = max((exit_ts - row["timestamp"]).total_seconds() / 60.0, 0.0)
-            slippage_points = abs(entry_fill_price - entry_ref)
-            fill_qty = int(fill.get("fill_qty", self.cfg.quantity))
+            exit_fill = self._simulate_exit_fill(
+                entry_side=side,
+                quantity=entry_fill_qty,
+                row=exit_row,
+                row_index=int(getattr(exit_row, "name", entry_index)),
+                exit_reason=exit_reason,
+                target_price=target_price,
+                stop_price=stop_price,
+            )
+            if exit_fill.get("status") not in {"FILLED", "PARTIAL"}:
+                rejected_reasons[str(exit_fill.get("reason") or "exit_not_filled")] += 1
+                if str(exit_fill.get("reason") or "") == "missing_exit_bid_ask":
+                    diagnostics["strict_exit_quote_rejections"] += 1
+                continue
+            exit_fill_qty = int(exit_fill.get("fill_qty", entry_fill_qty))
+            closed_qty = int(min(entry_fill_qty, exit_fill_qty))
+            if closed_qty <= 0:
+                rejected_reasons["exit_zero_fill_qty"] += 1
+                continue
+            exit_price = float(exit_fill["fill_price"])
+            exit_ref = _safe_float(exit_row.get("bid")) if side != "SELL" else _safe_float(exit_row.get("ask"))
+            exit_ts = exit_row["timestamp"]
+            pnl_points = entry_fill_price - exit_price if side == "SELL" else exit_price - entry_fill_price
+            hold_minutes = max((exit_ts - entry_row["timestamp"]).total_seconds() / 60.0, 0.0)
+            entry_slippage_points = abs(entry_fill_price - entry_ref)
+            exit_slippage_points = abs(exit_price - (exit_ref if exit_ref is not None else exit_price))
+            gross_pnl_value = float(pnl_points) * float(closed_qty)
+            entry_costs = self._compute_side_costs(closed_qty)
+            exit_costs = self._compute_side_costs(closed_qty)
+            total_costs = entry_costs + exit_costs
+            net_pnl_value = gross_pnl_value - total_costs
             trade = OptionBacktestTrade(
                 symbol=str(candidate["symbol"]),
+                source_symbol=str(candidate.get("source_symbol") or candidate["symbol"]),
+                underlying=str(candidate.get("underlying") or replay_contract.get("underlying") or ""),
+                option_type=str(candidate.get("option_type") or replay_contract.get("option_type") or ""),
+                strike=float(candidate.get("strike") or replay_contract.get("strike") or 0.0),
+                expiry=str(candidate.get("expiry") or replay_contract.get("expiry") or ""),
+                provider=str(candidate.get("provider") or replay_contract.get("provider") or ""),
+                dataset_hash=str(candidate.get("dataset_hash") or replay_contract.get("dataset_hash") or ""),
+                bar_interval=str(candidate.get("bar_interval") or replay_contract.get("bar_interval") or ""),
                 side=side,
-                entry_ts=row["timestamp"].isoformat(),
+                entry_ts=entry_row["timestamp"].isoformat(),
                 exit_ts=exit_ts.isoformat(),
                 entry_reference_price=entry_ref,
                 entry_fill_price=entry_fill_price,
+                exit_reference_price=float(exit_ref if exit_ref is not None else exit_price),
                 exit_price=float(exit_price),
-                quantity=fill_qty,
+                entry_bid=_safe_float(entry_row.get("bid")),
+                entry_ask=_safe_float(entry_row.get("ask")),
+                exit_bid=_safe_float(exit_row.get("bid")),
+                exit_ask=_safe_float(exit_row.get("ask")),
+                entry_quote_side="ask" if side == "BUY" else "bid",
+                exit_quote_side="ask" if side == "SELL" else "bid",
+                quantity=closed_qty,
+                entry_fill_qty=entry_fill_qty,
+                exit_fill_qty=exit_fill_qty,
                 target_price=float(target_price),
                 stop_price=float(stop_price),
                 exit_reason=exit_reason,
                 pnl_points=float(pnl_points),
-                pnl_value=float(pnl_points) * float(fill_qty),
-                slippage_points=float(slippage_points),
+                gross_pnl_value=float(gross_pnl_value),
+                total_costs=float(total_costs),
+                net_pnl_value=float(net_pnl_value),
+                entry_costs=float(entry_costs),
+                exit_costs=float(exit_costs),
+                entry_slippage_points=float(entry_slippage_points),
+                exit_slippage_points=float(exit_slippage_points),
                 hold_minutes=float(hold_minutes),
                 truth_quality=str(candidate.get("truth_quality") or ""),
                 geometry_source=str(candidate.get("source_flags", {}).get("backtest_geometry_source") or ""),
                 confidence_raw=_safe_float(candidate.get("confidence_raw")),
                 confidence_final=_safe_float(candidate.get("confidence_final")),
                 decision_reason=str(decision.get("decision_reason") or ""),
+                feature_cutoff_ts=str(candidate.get("feature_cutoff_ts") or ""),
+                signal_ts=str(candidate.get("signal_ts") or ""),
+                earliest_entry_ts=str(candidate.get("earliest_entry_ts") or ""),
+                timing_ambiguity=bool(timing_ambiguity),
+                exit_fill_source="mark_fallback" if exit_fill.get("used_mark_fallback") else "quote_side",
+                cost_model_version=self.cfg.cost_config.version,
+                fill_model_run_id=self.cfg.fill_model_run_id,
+                setup_id=str(candidate.get("setup_id") or "unknown"),
+                regime=str(candidate.get("regime") or "unknown"),
+                is_oos=bool(candidate.get("is_oos")),
             )
             if exit_reason == "TIME_EXIT":
                 diagnostics["late_entries"] += 1
             if exit_reason == "STOP_HIT":
                 diagnostics["chop_losses"] += 1
+            if timing_ambiguity:
+                diagnostics["timing_ambiguity_count"] += 1
+            if exit_fill.get("used_mark_fallback"):
+                diagnostics["proxy_exit_mark_rows"] += 1
             confidence_key = "high" if (trade.confidence_final or 0.0) >= 0.7 else "low"
-            if trade.pnl_value > 0:
+            if trade.net_pnl_value > 0:
                 diagnostics["confidence_buckets"][confidence_key]["wins"] += 1
-            elif trade.pnl_value < 0:
+            elif trade.net_pnl_value < 0:
                 diagnostics["confidence_buckets"][confidence_key]["losses"] += 1
             trades.append(trade)
-            exit_idx = int(candles.index[candles["timestamp"] == exit_ts][0])
-            open_until_index = exit_idx
+            consumed_indexes = candles.index[candles["timestamp"] <= exit_ts]
+            open_until_index = int(consumed_indexes[-1]) if len(consumed_indexes) else entry_index
 
         summary = summarize_backtest(
             signals_total=signals_total,
@@ -237,7 +414,7 @@ class OptionBacktestEngine:
             summary=summary,
             trades=trades,
             diagnostics=diagnostics,
-            sampled_decisions=sampled_decisions[:200],
+            sampled_decisions=sampled_decisions,
         )
         self._write_artifacts(result)
         return result
