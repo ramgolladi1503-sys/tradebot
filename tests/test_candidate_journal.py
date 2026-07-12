@@ -116,6 +116,7 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
             "oos_source": "wfa_partition_context",
             "feed_truth_state": "LIVE",
             "feed_truth_reason_code": "OK",
+            "feed_truth_source": "joined_feed_truth_artifact",
         }
     )
 
@@ -127,6 +128,7 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
     assert journal_row["is_oos"] is True
     assert journal_row["oos_label"] == "OOS"
     assert journal_row["oos_source"] == "wfa_partition_context"
+    assert journal_row["feed_truth_source"] == "joined_feed_truth_artifact"
     assert journal_row["feature_cutoff_ts_source"] == "preserved:feature_cutoff_ts"
     assert journal_row["signal_ts_source"] == "preserved:signal_ts"
     assert journal_row["earliest_entry_ts_source"] == "preserved:earliest_entry_ts"
@@ -139,6 +141,7 @@ def test_candidate_journal_preserves_timing_and_oos_when_present():
     assert journal_row["replay_context"]["signal_ts"] == "2026-06-07T09:16:00+05:30"
     assert journal_row["replay_context"]["is_oos"] is True
     assert journal_row["replay_context"]["oos_label"] == "OOS"
+    assert journal_row["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
     assert journal_row["rank_score"] == 91.2
     assert journal_row["confidence_final"] == 0.74
 

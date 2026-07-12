@@ -72,6 +72,11 @@ def build_runtime_candidate_handoff_payload(
     ) or None
     explicit_oos_keys = {key: top_exec.get(key) for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name") if top_exec.get(key) not in (None, "", "None")}
     explicit_quote_keys = {key: top_exec.get(key) for key in ("quote_source", "quote_age_sec") if top_exec.get(key) not in (None, "", "None")}
+    explicit_policy_keys = {
+        key: top_exec.get(key)
+        for key in ("feature_cutoff_ts", "earliest_entry_ts", "feed_truth_state", "feed_truth_reason_code", "feed_truth_source")
+        if top_exec.get(key) not in (None, "", "None")
+    }
     has_reportable_executable = bool(top_exec) or ranked_exec_count > 0
     handoff_mismatch = bool(
         has_reportable_executable
@@ -98,6 +103,7 @@ def build_runtime_candidate_handoff_payload(
         "top_reportable_executable_snapshot": top_exec,
         **explicit_oos_keys,
         **explicit_quote_keys,
+        **explicit_policy_keys,
         "cycle_ranked_candidates_count_before_append": _optional_non_negative_int(cycle_ranked_candidates_count_before_append),
         "cycle_ranked_candidates_count_after_append": _optional_non_negative_int(cycle_ranked_candidates_count_after_append),
         "phase2_input_count": phase2_input,

@@ -119,6 +119,7 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
             "oos_label": "IS",
             "feed_truth_state": "LIVE",
             "feed_truth_reason_code": "OK",
+            "feed_truth_source": "joined_feed_truth_artifact",
             "regime": "TREND_UP",
             "option_type": "CE",
             "strike": 58400,
@@ -154,6 +155,7 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
     assert bundle["source_row_sha256"] == "def456"
     assert bundle["replay_context"]["quote_source"] == "replay_source:replay.jsonl"
     assert bundle["replay_context"]["quote_age_sec"] == 0.0
+    assert bundle["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
 
     out = write_replay_context_bundle_evidence(
         output_root=tmp_path / ".runtime" / "replay_context_bundles",
@@ -174,6 +176,7 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
             "oos_label": "IS",
             "feed_truth_state": "LIVE",
             "feed_truth_reason_code": "OK",
+            "feed_truth_source": "joined_feed_truth_artifact",
             "regime": "TREND_UP",
             "option_type": "CE",
             "strike": 58400,

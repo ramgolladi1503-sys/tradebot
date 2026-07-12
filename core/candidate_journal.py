@@ -281,6 +281,7 @@ def _journal_row(payload: Mapping[str, Any], *, journal_event: str, created_at: 
     row["quote_validation_status"] = _text(row.get("quote_validation_status"))
     row["feed_truth_state"] = _text(row.get("feed_truth_state"))
     row["feed_truth_reason_code"] = _text(row.get("feed_truth_reason_code"))
+    row["feed_truth_source"] = _text(row.get("feed_truth_source"))
     row["execution_truth_state"] = _text(row.get("execution_truth_state"))
     row["execution_truth_blocked"] = _bool(row.get("execution_truth_blocked"))
     row["execution_truth_advisory"] = _bool(row.get("execution_truth_advisory"))

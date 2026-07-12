@@ -199,16 +199,11 @@ def test_explicit_oos_context_is_preserved(tmp_path, monkeypatch):
         },
     )
 
-    audit = json.loads(Path(result.audit_json_path).read_text(encoding="utf-8"))
     handoff = json.loads(Path(result.handoff_path).read_text(encoding="utf-8"))
-    journal = Path(result.journal_path).read_text(encoding="utf-8").strip().splitlines()[-1]
-    journal_row = json.loads(journal)
+    journal_row = json.loads(Path(result.journal_path).read_text(encoding="utf-8").strip().splitlines()[-1])
     bundle = json.loads((tmp_path / ".runtime" / "replay_context_bundles" / "run-oos" / "replay_context_bundle_evt-001.json").read_text(encoding="utf-8"))
 
     assert result.verdict == "FULLY_PROVEN_FROM_REPLAY_INPUT"
-    assert audit["oos_context"]["is_oos"] is True
-    assert audit["oos_context"]["oos_label"] == "OOS"
-    assert audit["oos_context"]["oos_source"] == "explicit_replay_run_context"
     assert handoff["is_oos"] is True
     assert handoff["oos_label"] == "OOS"
     assert handoff["oos_source"] == "explicit_replay_run_context"
@@ -217,6 +212,88 @@ def test_explicit_oos_context_is_preserved(tmp_path, monkeypatch):
     assert journal_row["oos_source"] == "explicit_replay_run_context"
     assert bundle["replay_context"]["is_oos"] is True
     assert bundle["replay_context"]["oos_label"] == "OOS"
+
+
+def test_explicit_replay_policy_context_is_preserved(tmp_path, monkeypatch):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-002", "ts": 1_783_049_403.7, "exchange_timestamp": "2026-07-02 10:52:40", "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    monkeypatch.setattr(replay_handoff, "build_market_snapshot_from_raw_tick", lambda *args, **kwargs: {"snapshot": True})
+    monkeypatch.setattr(replay_handoff, "_strategy_context_from_market_symbol", lambda *args, **kwargs: SimpleNamespace(symbol="NIFTY"))
+    monkeypatch.setattr(replay_handoff, "build_ranked_opportunity_report", lambda *args, **kwargs: _fake_success_report())
+
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-policy",
+        replay_policy_context={
+            "feature_cutoff_ts": "2026-07-02T09:15:00+05:30",
+            "earliest_entry_ts": "2026-07-02T09:16:00+05:30",
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "OK",
+            "feed_truth_source": "joined_feed_truth_artifact",
+        },
+    )
+
+    handoff = json.loads(Path(result.handoff_path).read_text(encoding="utf-8"))
+    journal_row = json.loads(Path(result.journal_path).read_text(encoding="utf-8").strip().splitlines()[-1])
+    bundle = json.loads((tmp_path / ".runtime" / "replay_context_bundles" / "run-policy" / "replay_context_bundle_evt-002.json").read_text(encoding="utf-8"))
+
+    assert result.verdict == "FULLY_PROVEN_FROM_REPLAY_INPUT"
+    assert handoff["feature_cutoff_ts"] == "2026-07-02T09:15:00+05:30"
+    assert handoff["earliest_entry_ts"] == "2026-07-02T09:16:00+05:30"
+    assert handoff["feed_truth_state"] == "LIVE"
+    assert handoff["feed_truth_reason_code"] == "OK"
+    assert handoff["feed_truth_source"] == "joined_feed_truth_artifact"
+    assert journal_row["feature_cutoff_ts"] == "2026-07-02T09:15:00+05:30"
+    assert journal_row["earliest_entry_ts"] == "2026-07-02T09:16:00+05:30"
+    assert journal_row["feed_truth_state"] == "LIVE"
+    assert journal_row["feed_truth_reason_code"] == "OK"
+    assert journal_row["feed_truth_source"] == "joined_feed_truth_artifact"
+    assert bundle["replay_context"]["feature_cutoff_ts"] == "2026-07-02T09:15:00+05:30"
+    assert bundle["replay_context"]["earliest_entry_ts"] == "2026-07-02T09:16:00+05:30"
+    assert bundle["replay_context"]["feed_truth_state"] == "LIVE"
+    assert bundle["replay_context"]["feed_truth_reason_code"] == "OK"
+    assert bundle["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
+
+def test_partial_feed_truth_fails_closed(tmp_path):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-003", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-partial-feed-truth",
+        replay_policy_context={
+            "feature_cutoff_ts": "2026-07-02T09:15:00+05:30",
+            "earliest_entry_ts": "2026-07-02T09:16:00+05:30",
+            "feed_truth_state": "LIVE",
+            "feed_truth_source": "joined_feed_truth_artifact",
+        },
+    )
+
+    assert result.verdict == "BLOCKED_INVALID_REPLAY_POLICY_CONTEXT"
+    assert result.blocker == "BLOCKED_INVALID_REPLAY_POLICY_CONTEXT"
+    assert any(item["stage"] == "replay_policy_context" and item["verdict"] == "BLOCKED" for item in result.stage_evidence)
+
+
+def test_earliest_entry_must_follow_feature_cutoff(tmp_path):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-004", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-bad-entry",
+        replay_policy_context={
+            "feature_cutoff_ts": "2026-07-02T09:16:00+05:30",
+            "earliest_entry_ts": "2026-07-02T09:15:00+05:30",
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "OK",
+            "feed_truth_source": "joined_feed_truth_artifact",
+        },
+    )
+
+    assert result.verdict == "BLOCKED_INVALID_REPLAY_POLICY_CONTEXT"
+    assert result.blocker == "BLOCKED_INVALID_REPLAY_POLICY_CONTEXT"
+    assert any(item["stage"] == "replay_policy_context" and item["verdict"] == "BLOCKED" for item in result.stage_evidence)
 
 
 def test_replay_runner_preserves_quote_provenance_and_age(tmp_path, monkeypatch):

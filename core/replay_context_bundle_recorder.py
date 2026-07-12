@@ -68,7 +68,7 @@ def build_replay_context_bundle_record(
         **strategy_context_dict,
         **report_dict,
     }
-    for key in ("quote_source", "quote_age_sec"):
+    for key in ("quote_source", "quote_age_sec", "feature_cutoff_ts", "earliest_entry_ts", "feed_truth_state", "feed_truth_reason_code", "feed_truth_source"):
         value = raw_row_dict.get(key)
         if value not in (None, "", "None"):
             bundle_context[key] = value

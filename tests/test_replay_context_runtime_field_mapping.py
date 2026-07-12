@@ -11,6 +11,7 @@ def test_replay_context_record_preserves_available_runtime_fields():
         "entry_ts": "2026-07-02T10:53:00Z",
         "feed_truth_state": "LIVE",
         "feed_health_reason_code": "OK",
+        "feed_truth_source": "joined_feed_truth_artifact",
         "regime": "TREND_UP",
         "is_oos": False,
         "oos_label": "IS",
@@ -32,6 +33,7 @@ def test_replay_context_record_preserves_available_runtime_fields():
     assert record["earliest_entry_ts_source"] == "preserved:entry_ts"
     assert record["feed_truth_state_source"] == "preserved:feed_truth_state"
     assert record["feed_truth_reason_code_source"] == "preserved:feed_health_reason_code"
+    assert record["feed_truth_source_source"] == "preserved:feed_truth_source"
     assert record["quote_source_source"] == "preserved:quote_source"
     assert record["quote_age_sec_source"] == "preserved:quote_age_sec"
     assert record["replay_context"]["feature_cutoff_ts"] == "2026-07-03T03:30:03.700000Z"
@@ -39,6 +41,7 @@ def test_replay_context_record_preserves_available_runtime_fields():
     assert record["replay_context"]["earliest_entry_ts"] == "2026-07-02T10:53:00Z"
     assert record["replay_context"]["feed_truth_state"] == "LIVE"
     assert record["replay_context"]["feed_truth_reason_code"] == "OK"
+    assert record["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
     assert record["replay_context"]["quote_source"] == "tick_store"
     assert record["replay_context"]["quote_age_sec"] == 1.25
 

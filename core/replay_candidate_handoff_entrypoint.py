@@ -202,6 +202,79 @@ def _normalize_explicit_oos_context(
     return context, []
 
 
+def _normalize_explicit_replay_policy_context(
+    *,
+    feature_cutoff_ts: Any = None,
+    earliest_entry_ts: Any = None,
+    feed_truth_state: Any = None,
+    feed_truth_reason_code: Any = None,
+    feed_truth_source: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(
+        value not in (None, "", "None")
+        for value in (feature_cutoff_ts, earliest_entry_ts, feed_truth_state, feed_truth_reason_code, feed_truth_source)
+    )
+    if not supplied:
+        return None, []
+
+    blockers: list[str] = []
+    feature_cutoff_text = str(feature_cutoff_ts or "").strip() or None
+    earliest_entry_text = str(earliest_entry_ts or "").strip() or None
+    feed_truth_state_text = str(feed_truth_state or "").strip().upper() or None
+    feed_truth_reason_text = str(feed_truth_reason_code or "").strip() or None
+    feed_truth_source_text = str(feed_truth_source or "").strip() or None
+
+    if feature_cutoff_text is None:
+        blockers.append("missing_feature_cutoff_ts")
+    if earliest_entry_text is None:
+        blockers.append("missing_earliest_entry_ts")
+    feed_truth_supplied = any(value is not None for value in (feed_truth_state_text, feed_truth_reason_text, feed_truth_source_text))
+    if feed_truth_supplied and feed_truth_state_text is None:
+        blockers.append("missing_feed_truth_state")
+    if feed_truth_supplied and feed_truth_reason_text is None:
+        blockers.append("missing_feed_truth_reason_code")
+    if feed_truth_supplied and feed_truth_source_text is None:
+        blockers.append("missing_feed_truth_source")
+
+    feature_cutoff_epoch = _iso_utc_order(feature_cutoff_text) if feature_cutoff_text is not None else None
+    earliest_entry_epoch = _iso_utc_order(earliest_entry_text) if earliest_entry_text is not None else None
+    if feature_cutoff_text is not None and feature_cutoff_epoch is None:
+        blockers.append("invalid_feature_cutoff_ts")
+    if earliest_entry_text is not None and earliest_entry_epoch is None:
+        blockers.append("invalid_earliest_entry_ts")
+    if (
+        feature_cutoff_epoch is not None
+        and earliest_entry_epoch is not None
+        and earliest_entry_epoch <= feature_cutoff_epoch
+    ):
+        blockers.append("invalid_earliest_entry_ts")
+
+    blockers = list(dict.fromkeys(blockers))
+    if blockers:
+        return None, blockers
+
+    context = {
+        "feature_cutoff_ts": feature_cutoff_text,
+        "earliest_entry_ts": earliest_entry_text,
+        "feed_truth_state": feed_truth_state_text,
+        "feed_truth_reason_code": feed_truth_reason_text,
+        "feed_truth_source": feed_truth_source_text,
+    }
+    return context, []
+
+
+def _iso_utc_order(value: str) -> float | None:
+    try:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text).timestamp()
+    except Exception:
+        return None
+
+
 def _parse_bool_text(value: Any) -> bool | None:
     if value in (None, "", "None"):
         return None
@@ -316,7 +389,20 @@ def _report_to_handoff_payload(report: Any, top_candidate: Mapping[str, Any]) ->
     }
     payload["source"] = "replay_candidate_handoff_entrypoint"
     payload["top_reportable_executable"] = top_candidate
-    for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name", "quote_source", "quote_age_sec"):
+    for key in (
+        "is_oos",
+        "oos_label",
+        "oos_source",
+        "partition_id",
+        "split_name",
+        "quote_source",
+        "quote_age_sec",
+        "feature_cutoff_ts",
+        "earliest_entry_ts",
+        "feed_truth_state",
+        "feed_truth_reason_code",
+        "feed_truth_source",
+    ):
         if top_candidate.get(key) not in (None, "", "None"):
             payload[key] = top_candidate.get(key)
     return payload
@@ -442,6 +528,7 @@ def run_replay_candidate_handoff(
     strategy_id: str | None = None,
     write_production_artifacts: bool = False,
     oos_context: Mapping[str, Any] | None = None,
+    replay_policy_context: Mapping[str, Any] | None = None,
 ) -> ReplayCandidateHandoffResult:
     if write_production_artifacts and os.getenv("PYTEST_CURRENT_TEST"):
         raise RuntimeError("write_production_artifacts_forbidden_in_tests")
@@ -494,6 +581,23 @@ def run_replay_candidate_handoff(
             write_production_artifacts=write_production_artifacts,
         )
 
+    explicit_policy_context, policy_context_blockers = _normalize_explicit_replay_policy_context(
+        feature_cutoff_ts=(replay_policy_context or {}).get("feature_cutoff_ts") if isinstance(replay_policy_context, Mapping) else None,
+        earliest_entry_ts=(replay_policy_context or {}).get("earliest_entry_ts") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_state=(replay_policy_context or {}).get("feed_truth_state") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_reason_code=(replay_policy_context or {}).get("feed_truth_reason_code") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_source=(replay_policy_context or {}).get("feed_truth_source") if isinstance(replay_policy_context, Mapping) else None,
+    )
+    if policy_context_blockers:
+        return _blocked_result(
+            verdict="BLOCKED_INVALID_REPLAY_POLICY_CONTEXT",
+            blocker="BLOCKED_INVALID_REPLAY_POLICY_CONTEXT",
+            stage_evidence=[_stage("replay_policy_context", False, source_path.name, None, ",".join(policy_context_blockers))],
+            output_root=output_root,
+            run_id=run_id,
+            write_production_artifacts=write_production_artifacts,
+        )
+
     handoff_path = run_dir / "runtime_candidate_handoff_latest.json"
     journal_path = run_dir / "candidate_journal.jsonl"
     audit_json_path = run_dir / "replay_candidate_handoff_audit.json"
@@ -521,6 +625,8 @@ def run_replay_candidate_handoff(
         }
         if explicit_oos_context is not None:
             row_oos_context.update(explicit_oos_context)
+        if explicit_policy_context is not None:
+            row_oos_context.update(explicit_policy_context)
         try:
             normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick})
         except Exception as exc:
@@ -618,6 +724,23 @@ def run_replay_candidate_handoff(
             top_candidate.setdefault("feature_cutoff_ts", row.get("feature_cutoff_ts"))
         if row.get("earliest_entry_ts") not in (None, "", "None"):
             top_candidate.setdefault("earliest_entry_ts", row.get("earliest_entry_ts"))
+        if explicit_policy_context is not None:
+            if explicit_policy_context.get("feature_cutoff_ts") not in (None, "", "None"):
+                top_candidate.setdefault("feature_cutoff_ts", explicit_policy_context.get("feature_cutoff_ts"))
+            if explicit_policy_context.get("earliest_entry_ts") not in (None, "", "None"):
+                top_candidate.setdefault("earliest_entry_ts", explicit_policy_context.get("earliest_entry_ts"))
+            if explicit_policy_context.get("feed_truth_state") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_state", explicit_policy_context.get("feed_truth_state"))
+            if explicit_policy_context.get("feed_truth_reason_code") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_reason_code", explicit_policy_context.get("feed_truth_reason_code"))
+            if explicit_policy_context.get("feed_truth_source") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_source", explicit_policy_context.get("feed_truth_source"))
+        if row.get("feed_truth_state") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_state", row.get("feed_truth_state"))
+        if row.get("feed_truth_reason_code") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_reason_code", row.get("feed_truth_reason_code"))
+        if row.get("feed_truth_source") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_source", row.get("feed_truth_source"))
         if row_oos_context.get("is_oos") not in (None, "", "None"):
             top_candidate.setdefault("is_oos", row_oos_context.get("is_oos"))
         if row_oos_context.get("oos_label") not in (None, "", "None"):

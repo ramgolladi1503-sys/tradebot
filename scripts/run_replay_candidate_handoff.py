@@ -26,6 +26,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--oos-source", default=None, help="Explicit OOS provenance source.")
     parser.add_argument("--partition-id", default=None, help="Explicit replay/WFA partition id.")
     parser.add_argument("--split-name", default=None, help="Explicit replay/WFA split name.")
+    parser.add_argument("--feature-cutoff-ts", default=None, help="Explicit replay feature cutoff timestamp.")
+    parser.add_argument("--earliest-entry-ts", default=None, help="Explicit earliest eligible entry timestamp.")
+    parser.add_argument("--feed-truth-state", default=None, help="Explicit feed truth state.")
+    parser.add_argument("--feed-truth-reason-code", default=None, help="Explicit feed truth reason code.")
+    parser.add_argument("--feed-truth-source", default=None, help="Explicit feed truth provenance source.")
     parser.add_argument(
         "--write-production-artifacts",
         action="store_true",
@@ -61,6 +66,11 @@ def main(argv: list[str] | None = None) -> int:
             "oos_source": args.oos_source,
             "partition_id": args.partition_id,
             "split_name": args.split_name,
+            "feature_cutoff_ts": args.feature_cutoff_ts,
+            "earliest_entry_ts": args.earliest_entry_ts,
+            "feed_truth_state": args.feed_truth_state,
+            "feed_truth_reason_code": args.feed_truth_reason_code,
+            "feed_truth_source": args.feed_truth_source,
         },
     )
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str))
