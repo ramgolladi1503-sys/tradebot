@@ -1,0 +1,21 @@
+Source Name,Instrument Authenticity,Volume Authenticity,Timestamp Quality,Granularity,Coverage,Licence Clarity,Reproducibility,Download Accessibility,Documentation,Data Cleanliness,Penalty,Total Score
+NSE Contract-wise Data,5,5,5,1,1,5,5,0,5,5,-5,27
+NSE Archives,5,5,5,5,5,5,5,0,5,5,-5,35
+TrueData,5,5,5,5,5,5,5,1,5,5,-5,36
+Global Datafeeds,5,5,5,5,5,5,5,1,5,5,-5,36
+Investing.com,4,4,4,1,5,2,4,2,3,4,-5,24
+Financial-analysis,4,4,4,1,1,5,5,5,3,4,-5,31
+python-tvdatafeed,0,0,0,0,0,5,5,1,4,0,-15,0
+Stock-Predictor-LSTM,0,0,0,1,1,5,2,5,1,2,-10,7
+Bank-Nifty-Intraday,0,0,0,5,1,0,3,5,1,2,-15,2
+Nifty-iv-event-study,0,0,0,0,1,0,3,5,2,2,-15, -2
+nifty-indices-datasets,0,0,0,1,5,5,5,5,4,4,-15,14
+nifty_indices_prediction,0,0,0,1,1,0,4,5,2,2,-15,0
+nifty-indices-web-scrapping,0,0,0,1,5,0,5,5,4,0,-15,5
+nifty-indices-investment,0,0,0,0,5,0,4,5,3,0,-15,2
+BankNifty-Forecasting,0,0,0,1,5,0,4,5,3,2,-15,5
+SOC_AlgorithmicIntraday,0,0,0,0,0,0,0,5,1,0,-10,-4
+Nifty50-Minute-Data,0,0,5,5,5,5,5,5,4,5,-10,29
+Kaggle Nifty 50 Futures,3,3,3,3,3,3,3,0,3,3,-10,17
+Kaggle NSE Minute Data,3,3,3,5,3,3,3,0,3,3,-10,19
+Zenodo Nifty Datasets,0,0,0,0,0,0,0,0,0,0,0,0
