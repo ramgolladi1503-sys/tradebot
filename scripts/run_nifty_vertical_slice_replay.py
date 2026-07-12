@@ -46,6 +46,13 @@ def main():
         "replay_event_id": replay_event_id,
         "instrument": "NIFTY",
         "strategy": args.strategy_id,
+        "replay_only": True,
+        "broker_api_called": False,
+        "order_action": False,
+        "live_feed_used": False,
+        "append": False,
+        "output_isolated": True,
+        "production_artifacts_written": False,
     }
 
     # 2. Normalize

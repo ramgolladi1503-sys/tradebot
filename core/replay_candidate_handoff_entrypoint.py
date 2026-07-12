@@ -161,6 +161,10 @@ def _report_to_handoff_payload(report: Any, top_candidate: Mapping[str, Any]) ->
         "read_only": True,
         "is_order_action": False,
         "broker_api_called": False,
+        "live_order_action": False,
+        "broker_order_action": False,
+        "no_action": False,
+        "client_called": False,
     }
     payload["source"] = "replay_candidate_handoff_entrypoint"
     payload["top_reportable_executable"] = top_candidate
