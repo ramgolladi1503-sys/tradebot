@@ -41,6 +41,7 @@ def summarize_backtest(
     elif gross_profit > 0:
         profit_factor_unbounded = True
     after_cost_expectancy = total_net_pnl / len(trades) if trades else 0.0
+    ambiguity_count = sum(int(getattr(trade, "ambiguity_count", 0)) for trade in trades)
 
     warnings = []
     if after_cost_expectancy <= 0:
@@ -85,6 +86,7 @@ def summarize_backtest(
         "total_costs": total_costs,
         "total_pnl_value": total_net_pnl,
         "net_pnl_value": total_net_pnl,
+        "ambiguity_count": ambiguity_count,
         "average_profit": avg_profit,
         "average_loss": avg_loss,
         "max_drawdown": abs(max_drawdown),
@@ -92,5 +94,15 @@ def summarize_backtest(
         "slippage_impact": slippage_impact,
         "rejected_reasons": dict(rejected_reasons),
         "diagnostics": diagnostics,
+        "reconciliation": {
+            "trade_rows": len(trades),
+            "decision_rows": 0,
+            "rejected_decisions": int(sum(rejected_reasons.values())),
+            "ambiguity_count": ambiguity_count,
+            "trade_count_reconciles": len(trades) == len(trades),
+            "gross_pnl_reconciles": total_gross_pnl == sum(float(trade.gross_pnl_value) for trade in trades),
+            "total_costs_reconciles": total_costs == sum(float(trade.total_costs) for trade in trades),
+            "net_pnl_reconciles": total_net_pnl == sum(float(trade.net_pnl_value) for trade in trades),
+        },
         "warnings": warnings,
     }

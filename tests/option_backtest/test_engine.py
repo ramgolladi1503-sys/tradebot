@@ -170,6 +170,7 @@ def test_proxy_mode_derives_timing_but_remains_proxy_research(tmp_path: Path):
     assert result.config.research_mode == ResearchMode.PROXY_RESEARCH
     assert result.summary["trades_taken"] == 1
     assert result.summary["diagnostics"]["derived_timing_rows"] >= 1
+    assert result.summary["result_label"] == "PROXY_RESEARCH_ONLY"
 
 
 def test_strict_mode_loader_rejects_missing_exit_bid_ask_rows(tmp_path: Path):
@@ -266,3 +267,399 @@ def test_proxy_mode_marks_weaker_exit_assumption_explicitly(tmp_path: Path):
     trade = result.trades[0]
     assert trade.exit_fill_source == "mark_fallback"
     assert result.summary["diagnostics"]["proxy_exit_mark_rows"] == 1
+
+
+def test_certification_mode_retains_all_decisions_without_truncation(tmp_path: Path):
+    data_path = tmp_path / "strict_decisions.csv"
+    rows = []
+    for idx in range(250):
+        ts = pd.Timestamp("2026-04-01 09:15:00") + pd.Timedelta(minutes=idx)
+        quote_ts = ts - pd.Timedelta(seconds=20)
+        rows.append(
+            _base_row(
+                timestamp=ts.strftime("%Y-%m-%d %H:%M:%S"),
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp=quote_ts.strftime("%Y-%m-%d %H:%M:%S"),
+                feature_cutoff_ts=ts.strftime("%Y-%m-%d %H:%M:%S"),
+                signal_ts=ts.strftime("%Y-%m-%d %H:%M:%S"),
+                earliest_entry_ts=(ts + pd.Timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S"),
+                selected_for_execution=False,
+                signal_score=0.1,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            )
+        )
+    pd.DataFrame(rows).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    assert result.summary["signals_total"] == 250
+    assert result.summary["decision_rows"] == 250
+    assert result.summary["reconciliation"]["decision_rows"] == 250
+    assert len(result.sampled_decisions) == 250
+
+
+def test_rejected_candidates_preserve_reason_and_reconcile_counts(tmp_path: Path):
+    data_path = tmp_path / "strict_rejections.csv"
+    pd.DataFrame(
+        [
+            _base_row(
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:14:40",
+                feature_cutoff_ts="2026-04-01 09:15:00",
+                signal_ts="2026-04-01 09:15:00",
+                earliest_entry_ts="2026-04-01 09:15:00",
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:16:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:15:40",
+                feature_cutoff_ts="2026-04-01 09:16:00",
+                signal_ts="2026-04-01 09:16:00",
+                earliest_entry_ts="2026-04-01 09:16:00",
+                selected_for_execution=False,
+                signal_score=0.2,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+        ]
+    ).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    rejected = [row for row in result.sampled_decisions if row["execution_status"] != "executable"]
+    assert rejected
+    assert all(row["rejection_reason"] for row in rejected)
+    assert result.summary["reconciliation"]["rejected_decisions"] == sum(result.summary["rejected_reasons"].values())
+
+
+def test_summary_and_journal_reconcile_trade_and_pnl_fields(tmp_path: Path):
+    data_path = tmp_path / "strict_reconcile_trade.csv"
+    pd.DataFrame(
+        [
+            _base_row(
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:14:40",
+                feature_cutoff_ts="2026-04-01 09:15:00",
+                signal_ts="2026-04-01 09:15:00",
+                earliest_entry_ts="2026-04-01 09:16:00",
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:16:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:15:40",
+                bid=100.2,
+                ask=100.5,
+                bid_qty=50,
+                ask_qty=50,
+                close=100.4,
+                selected_for_execution=False,
+                signal_score=0.2,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:17:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:16:40",
+                open=101.8,
+                high=103.5,
+                low=101.6,
+                close=103.0,
+                bid=102.8,
+                ask=103.1,
+                bid_qty=50,
+                ask_qty=50,
+                selected_for_execution=False,
+                signal_score=0.1,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+        ]
+    ).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    trade = result.trades[0]
+    assert result.summary["trade_rows"] == 1
+    assert result.summary["reconciliation"]["trade_rows"] == 1
+    assert result.summary["gross_pnl_value"] == trade.gross_pnl_value
+    assert result.summary["total_costs"] == trade.total_costs
+    assert result.summary["net_pnl_value"] == trade.net_pnl_value
+    assert result.summary["reconciliation"]["trade_count_reconciles"] is True
+
+
+def test_ambiguity_count_reconciles_with_trade_rows(tmp_path: Path):
+    data_path = tmp_path / "strict_ambiguity_reconcile.csv"
+    pd.DataFrame(
+        [
+            _base_row(
+                feature_cutoff_ts="2026-04-01 09:15:00",
+                signal_ts="2026-04-01 09:15:00",
+                earliest_entry_ts="2026-04-01 09:16:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:14:40",
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:16:00",
+                open=100.5,
+                high=103.5,
+                low=97.5,
+                close=100.4,
+                bid=100.2,
+                ask=100.5,
+                selected_for_execution=False,
+                signal_score=0.2,
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:15:40",
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+        ]
+    ).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    assert result.trades[0].ambiguity_count == 1
+    assert result.summary["ambiguity_count"] == 1
+    assert result.summary["reconciliation"]["ambiguity_count"] == 1
+    assert result.summary["diagnostics"]["timing_ambiguity_count"] == 1
+
+
+def test_unknown_setup_regime_oos_blocks_certification_candidate(tmp_path: Path):
+    data_path = tmp_path / "strict_missing_metadata.csv"
+    pd.DataFrame(
+        [
+            _base_row(
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:14:40",
+                feature_cutoff_ts="2026-04-01 09:15:00",
+                signal_ts="2026-04-01 09:15:00",
+                earliest_entry_ts="2026-04-01 09:16:00",
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:16:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:15:40",
+                bid=100.2,
+                ask=100.5,
+                bid_qty=50,
+                ask_qty=50,
+                close=100.4,
+                selected_for_execution=False,
+                signal_score=0.2,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:17:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:16:40",
+                open=101.8,
+                high=103.5,
+                low=101.6,
+                close=103.0,
+                bid=102.8,
+                ask=103.1,
+                bid_qty=50,
+                ask_qty=50,
+                selected_for_execution=False,
+                signal_score=0.1,
+            ),
+        ]
+    ).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    assert result.summary["certifiable"] is False
+    assert result.summary["result_label"] == "OPTION_REPLAY_RESEARCH"
+    blockers = set(result.summary["certification_blockers"])
+    assert "missing_setup_id_column" in blockers
+    assert "missing_regime_column" in blockers
+    assert "missing_oos_label_column" in blockers
+
+
+def test_strict_result_label_can_be_certification_candidate(tmp_path: Path):
+    data_path = tmp_path / "strict_cert_candidate.csv"
+    pd.DataFrame(
+        [
+            _base_row(
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:14:40",
+                feature_cutoff_ts="2026-04-01 09:15:00",
+                signal_ts="2026-04-01 09:15:00",
+                earliest_entry_ts="2026-04-01 09:16:00",
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:16:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:15:40",
+                bid=100.2,
+                ask=100.5,
+                bid_qty=50,
+                ask_qty=50,
+                close=100.4,
+                selected_for_execution=False,
+                signal_score=0.2,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+            _base_row(
+                timestamp="2026-04-01 09:17:00",
+                underlying="NIFTY",
+                option_type="CE",
+                strike=25500,
+                expiry="2026-04-30",
+                provider="upstox",
+                dataset_hash="hash-1",
+                bar_interval="1m",
+                quote_timestamp="2026-04-01 09:16:40",
+                open=101.8,
+                high=103.5,
+                low=101.6,
+                close=103.0,
+                bid=102.8,
+                ask=103.1,
+                bid_qty=50,
+                ask_qty=50,
+                selected_for_execution=False,
+                signal_score=0.1,
+                setup_id="breakout",
+                regime="trend",
+                is_oos=False,
+            ),
+        ]
+    ).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    assert result.summary["certifiable"] is True
+    assert result.summary["result_label"] == "CERTIFICATION_CANDIDATE"
+    assert result.summary["certification_blockers"] == []
+    assert result.trades[0].setup_id == "breakout"
+    assert result.trades[0].regime == "trend"
+    assert result.trades[0].oos_label_known is True

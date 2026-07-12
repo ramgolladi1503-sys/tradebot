@@ -36,6 +36,89 @@ class OptionBacktestEngine:
     def _strict_certification_mode(self) -> bool:
         return self.cfg.research_mode == ResearchMode.REAL_EXECUTABLE_RESEARCH
 
+    def _decision_rejection_reason(self, decision: dict[str, Any], candidate: dict[str, Any]) -> str:
+        decision_reason = str(decision.get("decision_reason") or "").strip()
+        execution_block_reason = str(candidate.get("execution_block_reason") or "").strip()
+        if decision_reason in {"execution_not_ready", "execution_blocked"} and execution_block_reason:
+            return execution_block_reason
+        return decision_reason or "unknown"
+
+    def _certification_blockers(
+        self,
+        *,
+        candles: pd.DataFrame,
+        trades: list[OptionBacktestTrade],
+        summary: dict[str, Any],
+        sampled_decisions: list[dict[str, Any]],
+    ) -> list[str]:
+        blockers: list[str] = []
+        if not self._strict_certification_mode():
+            return blockers
+        if not trades:
+            blockers.append("no_certifiable_trades")
+        if len(sampled_decisions) != int(summary.get("signals_total", 0)):
+            blockers.append("incomplete_decision_retention")
+        if "setup_id" not in candles.columns:
+            blockers.append("missing_setup_id_column")
+        if "regime" not in candles.columns:
+            blockers.append("missing_regime_column")
+        if "is_oos" not in candles.columns:
+            blockers.append("missing_oos_label_column")
+        if any(str(trade.setup_id or "").strip().lower() in {"", "unknown"} for trade in trades):
+            blockers.append("unknown_setup_id")
+        if any(str(trade.regime or "").strip().lower() in {"", "unknown"} for trade in trades):
+            blockers.append("unknown_regime")
+        if any(not bool(getattr(trade, "oos_label_known", False)) for trade in trades):
+            blockers.append("unknown_oos_label")
+        required_trade_fields = (
+            "source_symbol",
+            "provider",
+            "dataset_hash",
+            "bar_interval",
+            "feature_cutoff_ts",
+            "signal_ts",
+            "earliest_entry_ts",
+            "entry_ts",
+            "exit_ts",
+            "entry_quote_side",
+            "exit_quote_side",
+            "entry_fill_price",
+            "exit_price",
+            "quantity",
+            "gross_pnl_value",
+            "entry_costs",
+            "exit_costs",
+            "total_costs",
+            "net_pnl_value",
+            "cost_model_version",
+        )
+        for trade in trades:
+            for field_name in required_trade_fields:
+                value = getattr(trade, field_name, None)
+                if value is None or value == "":
+                    blockers.append(f"missing_trade_field:{field_name}")
+        if int(summary.get("ambiguity_count", 0)) != int(summary.get("diagnostics", {}).get("timing_ambiguity_count", 0)):
+            blockers.append("ambiguity_summary_mismatch")
+        return sorted(set(blockers))
+
+    def _result_label(
+        self,
+        *,
+        summary: dict[str, Any],
+        trades: list[OptionBacktestTrade],
+        certification_blockers: list[str],
+    ) -> str:
+        if not self._strict_certification_mode():
+            return "PROXY_RESEARCH_ONLY"
+        traded_path_proxy = bool(summary.get("diagnostics", {}).get("proxy_exit_mark_rows", 0)) or any(
+            trade.exit_fill_source == "mark_fallback" or trade.geometry_source == "derived" for trade in trades
+        )
+        if traded_path_proxy:
+            return "PROXY_RESEARCH_ONLY"
+        if certification_blockers:
+            return "OPTION_REPLAY_RESEARCH"
+        return "CERTIFICATION_CANDIDATE"
+
     def _simulate_entry(self, candidate: dict[str, Any], row: pd.Series, row_index: int) -> dict[str, Any]:
         side = str(candidate.get("side") or "BUY").upper()
         symbol = str(candidate.get("symbol") or self.cfg.symbol)
@@ -229,15 +312,19 @@ class OptionBacktestEngine:
                 diagnostics["missing_timing_rows"] += 1
 
             decision = evaluate_candidate_decision(candidate)
+            rejection_reason = self._decision_rejection_reason(decision, candidate)
             sampled_decisions.append(
                 {
+                    "decision_index": int(row_index),
                     "timestamp": candidate["timestamp"],
                     "symbol": candidate["symbol"],
                     "truth_quality": decision.get("truth_quality"),
                     "decision_reason": decision.get("decision_reason"),
+                    "rejection_reason": rejection_reason if decision.get("execution_status") != "executable" else None,
                     "execution_block_reason": candidate.get("execution_block_reason"),
                     "permission": decision.get("permission"),
                     "execution_status": decision.get("execution_status"),
+                    "selected_for_execution": bool(candidate.get("selected_for_execution")),
                     "confidence_raw": candidate.get("confidence_raw"),
                     "confidence_final": candidate.get("confidence_final"),
                     "feature_cutoff_ts": candidate.get("feature_cutoff_ts"),
@@ -248,10 +335,7 @@ class OptionBacktestEngine:
             if decision.get("execution_status") == "executable":
                 executable_signals += 1
             else:
-                decision_reason = str(decision.get("decision_reason") or "").strip()
-                execution_block_reason = str(candidate.get("execution_block_reason") or "").strip()
-                reject_reason = execution_block_reason if decision_reason in {"execution_not_ready", "execution_blocked"} and execution_block_reason else (decision_reason or "unknown")
-                rejected_reasons[reject_reason] += 1
+                rejected_reasons[rejection_reason] += 1
 
             if row_index <= open_until_index:
                 continue
@@ -378,12 +462,14 @@ class OptionBacktestEngine:
                 signal_ts=str(candidate.get("signal_ts") or ""),
                 earliest_entry_ts=str(candidate.get("earliest_entry_ts") or ""),
                 timing_ambiguity=bool(timing_ambiguity),
+                ambiguity_count=1 if timing_ambiguity else 0,
                 exit_fill_source="mark_fallback" if exit_fill.get("used_mark_fallback") else "quote_side",
                 cost_model_version=self.cfg.cost_config.version,
                 fill_model_run_id=self.cfg.fill_model_run_id,
                 setup_id=str(candidate.get("setup_id") or "unknown"),
                 regime=str(candidate.get("regime") or "unknown"),
                 is_oos=bool(candidate.get("is_oos")),
+                oos_label_known="is_oos" in candles.columns,
             )
             if exit_reason == "TIME_EXIT":
                 diagnostics["late_entries"] += 1
@@ -408,6 +494,28 @@ class OptionBacktestEngine:
             trades=trades,
             rejected_reasons=rejected_reasons,
             diagnostics=diagnostics,
+        )
+        summary["reconciliation"]["decision_rows"] = len(sampled_decisions)
+        summary["decision_rows"] = len(sampled_decisions)
+        summary["trade_rows"] = len(trades)
+        summary["decision_artifact"] = "decision_samples.json" if self.cfg.output_dir is not None else None
+        summary["append"] = False
+        summary["read_only"] = True
+        summary["is_order_action"] = False
+        summary["broker_api_called"] = False
+        summary["allowed_for_live_execution"] = False
+        certification_blockers = self._certification_blockers(
+            candles=candles,
+            trades=trades,
+            summary=summary,
+            sampled_decisions=sampled_decisions,
+        )
+        summary["certification_blockers"] = certification_blockers
+        summary["certifiable"] = not certification_blockers
+        summary["result_label"] = self._result_label(
+            summary=summary,
+            trades=trades,
+            certification_blockers=certification_blockers,
         )
         result = OptionBacktestResult(
             config=self.cfg,

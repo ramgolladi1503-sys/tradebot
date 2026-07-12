@@ -124,12 +124,14 @@ class OptionBacktestTrade:
     signal_ts: str | None = None
     earliest_entry_ts: str | None = None
     timing_ambiguity: bool = False
+    ambiguity_count: int = 0
     exit_fill_source: str = "unknown"
     cost_model_version: str = "unknown"
     fill_model_run_id: str = "unknown"
     setup_id: str = "unknown"
     regime: str = "unknown"
     is_oos: bool = False
+    oos_label_known: bool = False
 
 
 @dataclass(frozen=True)
