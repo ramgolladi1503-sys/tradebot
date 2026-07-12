@@ -110,6 +110,8 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
             "event_id": "evt-001",
             "ts": 1_783_049_403.7,
             "symbol": "NIFTY26JUL58400CE",
+            "quote_source": "replay_source:replay.jsonl",
+            "quote_age_sec": 0.0,
             "feature_cutoff_ts": "2026-06-07T09:15:00+05:30",
             "signal_ts": "2026-06-07T09:16:00+05:30",
             "earliest_entry_ts": "2026-06-07T09:16:30+05:30",
@@ -123,8 +125,8 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
             "expiry": "2026-07-07",
             "bid": 112.0,
             "ask": 112.5,
-            "quote_source": "tick_store",
-            "quote_age_sec": 1.2,
+            "quote_source": "replay_source:replay.jsonl",
+            "quote_age_sec": 0.0,
             "trade_builder_raw_count": 1,
             "top_opportunities_source_candidate_count": 1,
             "top_opportunities_executable_count": 1,
@@ -150,6 +152,8 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
     assert bundle["ranking_summary"]["ranked_report_id"] == "rank-1"
     assert bundle["source_file_sha256"] == "abc123"
     assert bundle["source_row_sha256"] == "def456"
+    assert bundle["replay_context"]["quote_source"] == "replay_source:replay.jsonl"
+    assert bundle["replay_context"]["quote_age_sec"] == 0.0
 
     out = write_replay_context_bundle_evidence(
         output_root=tmp_path / ".runtime" / "replay_context_bundles",
@@ -176,8 +180,8 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
             "expiry": "2026-07-07",
             "bid": 112.0,
             "ask": 112.5,
-            "quote_source": "tick_store",
-            "quote_age_sec": 1.2,
+            "quote_source": "replay_source:replay.jsonl",
+            "quote_age_sec": 0.0,
             "trade_builder_raw_count": 1,
             "top_opportunities_source_candidate_count": 1,
             "top_opportunities_executable_count": 1,
@@ -223,4 +227,3 @@ def test_bundle_writer_blocks_missing_required_context(tmp_path):
     assert "missing_feature_cutoff_ts" in saved["replay_context_blockers"]
     assert "missing_signal_ts" in saved["replay_context_blockers"]
     assert "missing_earliest_entry_ts" in saved["replay_context_blockers"]
-
