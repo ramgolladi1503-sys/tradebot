@@ -231,6 +231,34 @@ class ReplayCandidateHandoffResult:
     audit_json_path: str
     audit_md_path: str
 
+    @property
+    def replay_only(self) -> bool:
+        return self.replay_only_flag
+
+    @property
+    def broker_api_called(self) -> bool:
+        return self.broker_api_called_flag
+
+    @property
+    def order_action(self) -> bool:
+        return self.order_action_flag
+
+    @property
+    def live_feed_used(self) -> bool:
+        return self.live_feed_used_flag
+
+    @property
+    def append(self) -> bool:
+        return self.append_flag
+
+    @property
+    def output_isolated(self) -> bool:
+        return self.output_isolated_flag
+
+    @property
+    def production_artifacts_written(self) -> bool:
+        return self.production_artifacts_written_flag
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "verdict": self.verdict,

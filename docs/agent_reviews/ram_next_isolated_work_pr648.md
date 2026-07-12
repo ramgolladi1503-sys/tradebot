@@ -30,6 +30,8 @@ The branch adds isolated replay handoff and NIFTY ingestion validation scaffoldi
 
 - mode: AGENT_REVIEW
 - item_id: PR-648
+- candidate_id: N/A
+- decision: BASELINE
 - result: reviewed
 - reason: replay evidence and safe ingestion scaffolding only
 - timestamp: 2026-07-12T17:00:00Z
