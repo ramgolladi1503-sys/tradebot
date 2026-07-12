@@ -71,6 +71,11 @@ def test_handoff_payload_has_read_only_non_action_flags():
     assert payload["metadata"]["does_not_change_candidate_state"] is True
     assert payload["metadata"]["does_not_run_phase2"] is True
     assert payload["metadata"]["does_not_call_broker"] is True
+    assert payload["replay_context_ready"] is False
+    assert "missing_feature_cutoff_ts" in payload["replay_context_blockers"]
+    assert "missing_earliest_entry_ts" in payload["replay_context_blockers"]
+    assert "missing_is_oos" in payload["replay_context_blockers"]
+    assert "missing_oos_label" in payload["replay_context_blockers"]
 
 
 def test_handoff_payload_marks_no_mismatch_when_phase2_and_top_opportunities_received_candidates():
@@ -92,6 +97,53 @@ def test_handoff_payload_marks_no_mismatch_when_phase2_and_top_opportunities_rec
     assert payload["mismatch_reason"] == ""
     assert payload["top_opportunities_phase2_state"] == "ENTER"
     assert payload["top_opportunities_selector_outcome"] == "EXECUTE_TOP"
+
+
+def test_handoff_payload_records_replay_context_when_available():
+    payload = build_runtime_candidate_handoff_payload(
+        symbol="NIFTY",
+        trade_builder_raw_count=3,
+        post_scan_survivor_count=2,
+        post_soft_reject_count=1,
+        post_real_filter_count=2,
+        post_executable_filter_count=1,
+        ranked_total_count=2,
+        ranked_executable_count=1,
+        top_reportable_executable={
+            "trade_id": "NIFTY-1",
+            "feature_cutoff_ts": "2026-06-07T09:15:00+05:30",
+            "signal_ts": "2026-06-07T09:16:00+05:30",
+            "earliest_entry_ts": "2026-06-07T09:16:30+05:30",
+            "is_oos": False,
+            "oos_label": "IS",
+            "feed_truth_state": "LIVE",
+            "feed_truth_reason_code": "OK",
+            "regime": "TREND",
+            "option_type": "PE",
+            "strike": 23250,
+            "expiry": "2026-07-07",
+            "bid": 8.55,
+            "ask": 8.6,
+            "quote_source": "tick_store",
+            "quote_age_sec": 1.1,
+        },
+        phase2_input_count=2,
+        top_opportunities_payload={
+            "source_candidate_count": 2,
+            "top_executable_count": 1,
+            "phase2_state": "ENTER",
+            "selector_outcome": "EXECUTE_TOP",
+        },
+        generated_epoch=1_000.0,
+    )
+
+    assert payload["replay_context_ready"] is True
+    assert payload["replay_context_blockers"] == []
+    assert payload["replay_context"]["feature_cutoff_ts"] == "2026-06-07T09:15:00+05:30"
+    assert payload["replay_context"]["signal_ts"] == "2026-06-07T09:16:00+05:30"
+    assert payload["replay_context"]["top_opportunities_source_candidate_count"] == 2
+    assert payload["replay_context"]["ranked_executable_count"] == 1
+    assert payload["replay_context"]["candidate_pool_inputs"]["phase2_input_count"] == 2
 
 
 def test_handoff_writer_creates_latest_json(tmp_path):
