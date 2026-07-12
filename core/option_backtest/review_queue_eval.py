@@ -51,7 +51,11 @@ def _bar_ts_epoch_series(bars: pd.DataFrame) -> pd.Series:
             parsed = pd.to_numeric(bars[col], errors="coerce")
             if parsed.notna().any():
                 return parsed.astype(float)
-    parsed_ts = pd.to_datetime(bars.get("timestamp"), errors="coerce", utc=True)
+    parsed_ts = pd.to_datetime(bars.get("timestamp"), errors="coerce")
+    if getattr(parsed_ts.dt, "tz", None) is None:
+        parsed_ts = parsed_ts.dt.tz_localize("Asia/Kolkata")
+    else:
+        parsed_ts = parsed_ts.dt.tz_convert("Asia/Kolkata")
     return parsed_ts.astype("int64") / 1e9
 
 
