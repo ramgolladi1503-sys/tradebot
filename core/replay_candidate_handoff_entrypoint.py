@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from typing import Any, Iterable, Mapping
 from core.candidate_journal import write_candidate_journal_row
 from core.market_snapshot_builder import build_market_snapshot_from_raw_tick
 from core.ranking_orchestrator import build_ranked_opportunity_report
+from core.replay_context_bundle_recorder import sha256_file, write_replay_context_bundle_evidence
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 
@@ -111,6 +113,18 @@ def _row_volume(row: Mapping[str, Any]) -> float | None:
     return None
 
 
+def _replay_quote_provenance(source_path: Path, raw_tick: Mapping[str, Any], source_timestamp: Any | None) -> tuple[str | None, float | None]:
+    quote_source = f"replay_source:{source_path.name}"
+    quote_age_sec = None
+    source_ts_text = raw_tick.get("source_timestamp")
+    exchange_ts_text = raw_tick.get("exchange_timestamp")
+    if source_ts_text not in (None, "", "None") and exchange_ts_text not in (None, "", "None"):
+        quote_age_sec = 0.0
+    elif source_timestamp not in (None, "", "None") and exchange_ts_text not in (None, "", "None"):
+        quote_age_sec = 0.0
+    return quote_source, quote_age_sec
+
+
 def _top_candidate_payload(report: Any) -> dict[str, Any] | None:
     ranking = getattr(report, "ranking", None)
     ranks = list(getattr(ranking, "ranks", []) or [])
@@ -123,6 +137,204 @@ def _top_candidate_payload(report: Any) -> dict[str, Any] | None:
     payload.setdefault("symbol", getattr(report, "symbol", None))
     payload.setdefault("strategy_id", payload.get("strategy_id") or payload.get("trade_id"))
     return payload
+
+
+def _parse_bool_text(value: Any) -> bool | None:
+    if value in (None, "", "None"):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _normalize_explicit_oos_context(
+    *,
+    is_oos: Any = None,
+    oos_label: Any = None,
+    oos_source: Any = None,
+    partition_id: Any = None,
+    split_name: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(value not in (None, "", "None") for value in (is_oos, oos_label, oos_source, partition_id, split_name))
+    if not supplied:
+        return None, []
+
+    blockers: list[str] = []
+    parsed_is_oos = _parse_bool_text(is_oos)
+    parsed_label = str(oos_label or "").strip().upper() or None
+    parsed_source = str(oos_source or "").strip() or None
+    parsed_partition_id = str(partition_id or "").strip() or None
+    parsed_split_name = str(split_name or "").strip() or None
+
+    if parsed_is_oos is None:
+        blockers.append("missing_is_oos")
+    if parsed_label is None:
+        blockers.append("missing_oos_label")
+    if parsed_source is None:
+        blockers.append("missing_oos_source")
+    if parsed_partition_id is None and parsed_split_name is None:
+        blockers.append("missing_partition_context")
+    if parsed_label not in {None, "IS", "OOS"}:
+        blockers.append("invalid_oos_label")
+    if parsed_is_oos is True and parsed_label != "OOS":
+        blockers.append("inconsistent_oos_context")
+    if parsed_is_oos is False and parsed_label != "IS":
+        blockers.append("inconsistent_oos_context")
+
+    blockers = list(dict.fromkeys(blockers))
+    if blockers:
+        return None, blockers
+
+    context = {
+        "is_oos": parsed_is_oos,
+        "oos_label": parsed_label,
+        "oos_source": parsed_source,
+    }
+    if parsed_partition_id is not None:
+        context["partition_id"] = parsed_partition_id
+    if parsed_split_name is not None:
+        context["split_name"] = parsed_split_name
+    return context, []
+
+
+def _normalize_explicit_replay_policy_context(
+    *,
+    feature_cutoff_ts: Any = None,
+    earliest_entry_ts: Any = None,
+    feed_truth_state: Any = None,
+    feed_truth_reason_code: Any = None,
+    feed_truth_source: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(
+        value not in (None, "", "None")
+        for value in (feature_cutoff_ts, earliest_entry_ts, feed_truth_state, feed_truth_reason_code, feed_truth_source)
+    )
+    if not supplied:
+        return None, []
+
+    blockers: list[str] = []
+    feature_cutoff_text = str(feature_cutoff_ts or "").strip() or None
+    earliest_entry_text = str(earliest_entry_ts or "").strip() or None
+    feed_truth_state_text = str(feed_truth_state or "").strip().upper() or None
+    feed_truth_reason_text = str(feed_truth_reason_code or "").strip() or None
+    feed_truth_source_text = str(feed_truth_source or "").strip() or None
+
+    if feature_cutoff_text is None:
+        blockers.append("missing_feature_cutoff_ts")
+    if earliest_entry_text is None:
+        blockers.append("missing_earliest_entry_ts")
+    feed_truth_supplied = any(value is not None for value in (feed_truth_state_text, feed_truth_reason_text, feed_truth_source_text))
+    if feed_truth_supplied and feed_truth_state_text is None:
+        blockers.append("missing_feed_truth_state")
+    if feed_truth_supplied and feed_truth_reason_text is None:
+        blockers.append("missing_feed_truth_reason_code")
+    if feed_truth_supplied and feed_truth_source_text is None:
+        blockers.append("missing_feed_truth_source")
+
+    feature_cutoff_epoch = _iso_utc_order(feature_cutoff_text) if feature_cutoff_text is not None else None
+    earliest_entry_epoch = _iso_utc_order(earliest_entry_text) if earliest_entry_text is not None else None
+    if feature_cutoff_text is not None and feature_cutoff_epoch is None:
+        blockers.append("invalid_feature_cutoff_ts")
+    if earliest_entry_text is not None and earliest_entry_epoch is None:
+        blockers.append("invalid_earliest_entry_ts")
+    if (
+        feature_cutoff_epoch is not None
+        and earliest_entry_epoch is not None
+        and earliest_entry_epoch <= feature_cutoff_epoch
+    ):
+        blockers.append("invalid_earliest_entry_ts")
+
+    blockers = list(dict.fromkeys(blockers))
+    if blockers:
+        return None, blockers
+
+    context = {
+        "feature_cutoff_ts": feature_cutoff_text,
+        "earliest_entry_ts": earliest_entry_text,
+        "feed_truth_state": feed_truth_state_text,
+        "feed_truth_reason_code": feed_truth_reason_text,
+        "feed_truth_source": feed_truth_source_text,
+    }
+    return context, []
+
+
+def _iso_utc_order(value: str) -> float | None:
+    try:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text).timestamp()
+    except Exception:
+        return None
+
+
+def _parse_bool_text(value: Any) -> bool | None:
+    if value in (None, "", "None"):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
+def _normalize_explicit_oos_context(
+    *,
+    is_oos: Any = None,
+    oos_label: Any = None,
+    oos_source: Any = None,
+    partition_id: Any = None,
+    split_name: Any = None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    supplied = any(value not in (None, "", "None") for value in (is_oos, oos_label, oos_source, partition_id, split_name))
+    if not supplied:
+        return None, []
+    blockers: list[str] = []
+    parsed_is_oos = _parse_bool_text(is_oos)
+    parsed_label = str(oos_label or "").strip().upper() or None
+    parsed_source = str(oos_source or "").strip() or None
+    parsed_partition_id = str(partition_id or "").strip() or None
+    parsed_split_name = str(split_name or "").strip() or None
+
+    if parsed_is_oos is None:
+        blockers.append("missing_is_oos")
+    if parsed_label is None:
+        blockers.append("missing_oos_label")
+    if parsed_source is None:
+        blockers.append("missing_oos_source")
+    if parsed_partition_id is None and parsed_split_name is None:
+        blockers.append("missing_partition_context")
+
+    if parsed_is_oos is True and parsed_label not in {"OOS"}:
+        blockers.append("inconsistent_oos_context")
+    if parsed_is_oos is False and parsed_label not in {"IS"}:
+        blockers.append("inconsistent_oos_context")
+    if parsed_label not in {None, "IS", "OOS"}:
+        blockers.append("invalid_oos_label")
+
+    if blockers:
+        return None, list(dict.fromkeys(blockers))
+
+    context = {
+        "is_oos": parsed_is_oos,
+        "oos_label": parsed_label,
+        "oos_source": parsed_source,
+    }
+    if parsed_partition_id is not None:
+        context["partition_id"] = parsed_partition_id
+    if parsed_split_name is not None:
+        context["split_name"] = parsed_split_name
+    return context, []
 
 
 def _strategy_generators_for_id(strategy_id: str | None) -> tuple[Any, ...]:
@@ -177,6 +389,22 @@ def _report_to_handoff_payload(report: Any, top_candidate: Mapping[str, Any]) ->
     }
     payload["source"] = "replay_candidate_handoff_entrypoint"
     payload["top_reportable_executable"] = top_candidate
+    for key in (
+        "is_oos",
+        "oos_label",
+        "oos_source",
+        "partition_id",
+        "split_name",
+        "quote_source",
+        "quote_age_sec",
+        "feature_cutoff_ts",
+        "earliest_entry_ts",
+        "feed_truth_state",
+        "feed_truth_reason_code",
+        "feed_truth_source",
+    ):
+        if top_candidate.get(key) not in (None, "", "None"):
+            payload[key] = top_candidate.get(key)
     return payload
 
 
@@ -185,6 +413,14 @@ def _write_audit_report(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
 
 
+
+
+def _replay_bundle_root(output_root: Path | None) -> Path:
+    if output_root is None:
+        return Path(".runtime") / "replay_context_bundles"
+    if output_root.name == ".runtime":
+        return output_root / "replay_context_bundles"
+    return output_root.parent / "replay_context_bundles"
 def _render_markdown(payload: dict[str, Any]) -> str:
     lines = [
         "# Replay candidate handoff audit",
@@ -291,6 +527,8 @@ def run_replay_candidate_handoff(
     strategy_generators: Iterable[Any] | None = None,
     strategy_id: str | None = None,
     write_production_artifacts: bool = False,
+    oos_context: Mapping[str, Any] | None = None,
+    replay_policy_context: Mapping[str, Any] | None = None,
 ) -> ReplayCandidateHandoffResult:
     if write_production_artifacts and os.getenv("PYTEST_CURRENT_TEST"):
         raise RuntimeError("write_production_artifacts_forbidden_in_tests")
@@ -326,6 +564,40 @@ def run_replay_candidate_handoff(
     run_dir = output_root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    explicit_oos_context, oos_context_blockers = _normalize_explicit_oos_context(
+        is_oos=(oos_context or {}).get("is_oos") if isinstance(oos_context, Mapping) else None,
+        oos_label=(oos_context or {}).get("oos_label") if isinstance(oos_context, Mapping) else None,
+        oos_source=(oos_context or {}).get("oos_source") if isinstance(oos_context, Mapping) else None,
+        partition_id=(oos_context or {}).get("partition_id") if isinstance(oos_context, Mapping) else None,
+        split_name=(oos_context or {}).get("split_name") if isinstance(oos_context, Mapping) else None,
+    )
+    if oos_context_blockers:
+        return _blocked_result(
+            verdict="BLOCKED_INVALID_OOS_CONTEXT",
+            blocker="BLOCKED_INVALID_OOS_CONTEXT",
+            stage_evidence=[_stage("oos_context", False, source_path.name, None, ",".join(oos_context_blockers))],
+            output_root=output_root,
+            run_id=run_id,
+            write_production_artifacts=write_production_artifacts,
+        )
+
+    explicit_policy_context, policy_context_blockers = _normalize_explicit_replay_policy_context(
+        feature_cutoff_ts=(replay_policy_context or {}).get("feature_cutoff_ts") if isinstance(replay_policy_context, Mapping) else None,
+        earliest_entry_ts=(replay_policy_context or {}).get("earliest_entry_ts") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_state=(replay_policy_context or {}).get("feed_truth_state") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_reason_code=(replay_policy_context or {}).get("feed_truth_reason_code") if isinstance(replay_policy_context, Mapping) else None,
+        feed_truth_source=(replay_policy_context or {}).get("feed_truth_source") if isinstance(replay_policy_context, Mapping) else None,
+    )
+    if policy_context_blockers:
+        return _blocked_result(
+            verdict="BLOCKED_INVALID_REPLAY_POLICY_CONTEXT",
+            blocker="BLOCKED_INVALID_REPLAY_POLICY_CONTEXT",
+            stage_evidence=[_stage("replay_policy_context", False, source_path.name, None, ",".join(policy_context_blockers))],
+            output_root=output_root,
+            run_id=run_id,
+            write_production_artifacts=write_production_artifacts,
+        )
+
     handoff_path = run_dir / "runtime_candidate_handoff_latest.json"
     journal_path = run_dir / "candidate_journal.jsonl"
     audit_json_path = run_dir / "replay_candidate_handoff_audit.json"
@@ -345,20 +617,36 @@ def run_replay_candidate_handoff(
     for idx, row in enumerate(_row_stream()):
         raw_tick = _row_raw_tick(row)
         ts_epoch = _row_ts_epoch(raw_tick) or _row_ts_epoch(row)
+        replay_event_id = str(row.get("event_id") or row.get("replay_event_id") or row.get("ts") or idx)
+        row_oos_context = {
+            key: row.get(key)
+            for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name")
+            if row.get(key) not in (None, "", "None")
+        }
+        if explicit_oos_context is not None:
+            row_oos_context.update(explicit_oos_context)
+        if explicit_policy_context is not None:
+            row_oos_context.update(explicit_policy_context)
         try:
             normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick})
         except Exception as exc:
-            stage_evidence.append(_stage("normalized_snapshot", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("normalized_snapshot", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
-        stage_evidence.append(_stage("normalized_snapshot", True, source_path.name, row.get("event_id") or row.get("ts") or idx, "ok"))
+        stage_evidence.append(_stage("normalized_snapshot", True, source_path.name, replay_event_id, "ok"))
+
+        quote_source, quote_age_sec = _replay_quote_provenance(source_path, raw_tick, raw_tick.get("source_timestamp") or raw_tick.get("exchange_timestamp"))
+        raw_tick = dict(raw_tick)
+        raw_tick["quote_source"] = quote_source
+        if quote_age_sec is not None:
+            raw_tick["quote_age_sec"] = quote_age_sec
 
         symbol = _infer_symbol(row, fallback=strategy_id)
         try:
             ctx = _strategy_context_from_market_symbol(symbol, normalized_snapshot)
         except Exception as exc:
-            stage_evidence.append(_stage("strategy_context", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("strategy_context", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
-        stage_evidence.append(_stage("strategy_context", True, source_path.name, row.get("event_id") or row.get("ts") or idx, "ok"))
+        stage_evidence.append(_stage("strategy_context", True, source_path.name, replay_event_id, "ok"))
 
         try:
             report = build_ranked_opportunity_report(
@@ -368,8 +656,42 @@ def run_replay_candidate_handoff(
                 include_strategy_id_in_normalization_key=True,
             )
         except Exception as exc:
-            stage_evidence.append(_stage("strategy_ranking", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("strategy_ranking", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
+
+        try:
+            source_file_sha256 = sha256_file(source_path)
+        except Exception:
+            source_file_sha256 = None
+        try:
+            source_row_sha256 = hashlib.sha256(json.dumps(row, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        except Exception:
+            source_row_sha256 = None
+        bundle_id = replay_event_id.replace("/", "_").replace(" ", "_")
+        try:
+            bundle_raw_row = {**row, **raw_tick, **row_oos_context}
+            if explicit_policy_context is not None:
+                bundle_raw_row.update(explicit_policy_context)
+            write_replay_context_bundle_evidence(
+                output_root=_replay_bundle_root(output_root),
+                run_id=run_id,
+                bundle_id=bundle_id,
+                replay_event_id=replay_event_id,
+                source_path=source_path,
+                source_row_index=idx,
+                source_timestamp_epoch=ts_epoch,
+                raw_row=bundle_raw_row,
+                normalized_snapshot=normalized_snapshot,
+                strategy_context=ctx,
+                report=report,
+                strategy_id=strategy_id or getattr(report, "top_rank_strategy_id", None),
+                source_file_sha256=source_file_sha256,
+                source_row_sha256=source_row_sha256,
+            )
+        except Exception as exc:
+            stage_evidence.append(_stage("bundle_recorder", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
+        else:
+            stage_evidence.append(_stage("bundle_recorder", True, source_path.name, replay_event_id, "ok"))
 
         top_candidate = _top_candidate_payload(report)
         if not top_candidate:
@@ -377,10 +699,10 @@ def run_replay_candidate_handoff(
                 "stage": "strategy_ranking",
                 "verdict": "BLOCKED_NO_CANDIDATE",
                 "evidence_source": source_path.name,
-                "object_id": row.get("event_id") or row.get("ts") or idx,
+                "object_id": replay_event_id,
                 "notes": "no_ranked_candidates",
             }
-            stage_evidence.append(_stage("candidate", False, source_path.name, row.get("event_id") or row.get("ts") or idx, "no_ranked_candidates"))
+            stage_evidence.append(_stage("candidate", False, source_path.name, replay_event_id, "no_ranked_candidates"))
             continue
 
         top_rank = getattr(report.ranking, "ranks", ())[0]
@@ -390,22 +712,48 @@ def run_replay_candidate_handoff(
                 "stage": "ranking",
                 "verdict": "BLOCKED_RANKING_REJECTED",
                 "evidence_source": source_path.name,
-                "object_id": getattr(top_rank, "candidate_id", None) or getattr(top_rank, "strategy_id", None) or row.get("event_id") or row.get("ts") or idx,
+                "object_id": getattr(top_rank, "candidate_id", None) or getattr(top_rank, "strategy_id", None) or replay_event_id,
                 "notes": getattr(top_rank, "rank_reason", "ranking_rejected"),
             }
-            stage_evidence.append(_stage("ranking", False, source_path.name, getattr(top_rank, "candidate_id", None) or idx, getattr(top_rank, "rank_reason", "ranking_rejected")))
+            stage_evidence.append(_stage("ranking", False, source_path.name, getattr(top_rank, "candidate_id", None) or replay_event_id, getattr(top_rank, "rank_reason", "ranking_rejected")))
             continue
 
         top_candidate = dict(top_candidate)
         top_candidate.setdefault("signal_ts", _iso_utc_from_epoch(ts_epoch))
+        top_candidate.setdefault("quote_source", quote_source)
+        if quote_age_sec is not None:
+            top_candidate.setdefault("quote_age_sec", quote_age_sec)
         if row.get("feature_cutoff_ts") not in (None, "", "None"):
             top_candidate.setdefault("feature_cutoff_ts", row.get("feature_cutoff_ts"))
         if row.get("earliest_entry_ts") not in (None, "", "None"):
             top_candidate.setdefault("earliest_entry_ts", row.get("earliest_entry_ts"))
-        if row.get("is_oos") not in (None, "", "None"):
-            top_candidate.setdefault("is_oos", row.get("is_oos"))
-        if row.get("oos_label") not in (None, "", "None"):
-            top_candidate.setdefault("oos_label", row.get("oos_label"))
+        if explicit_policy_context is not None:
+            if explicit_policy_context.get("feature_cutoff_ts") not in (None, "", "None"):
+                top_candidate.setdefault("feature_cutoff_ts", explicit_policy_context.get("feature_cutoff_ts"))
+            if explicit_policy_context.get("earliest_entry_ts") not in (None, "", "None"):
+                top_candidate.setdefault("earliest_entry_ts", explicit_policy_context.get("earliest_entry_ts"))
+            if explicit_policy_context.get("feed_truth_state") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_state", explicit_policy_context.get("feed_truth_state"))
+            if explicit_policy_context.get("feed_truth_reason_code") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_reason_code", explicit_policy_context.get("feed_truth_reason_code"))
+            if explicit_policy_context.get("feed_truth_source") not in (None, "", "None"):
+                top_candidate.setdefault("feed_truth_source", explicit_policy_context.get("feed_truth_source"))
+        if row.get("feed_truth_state") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_state", row.get("feed_truth_state"))
+        if row.get("feed_truth_reason_code") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_reason_code", row.get("feed_truth_reason_code"))
+        if row.get("feed_truth_source") not in (None, "", "None"):
+            top_candidate.setdefault("feed_truth_source", row.get("feed_truth_source"))
+        if row_oos_context.get("is_oos") not in (None, "", "None"):
+            top_candidate.setdefault("is_oos", row_oos_context.get("is_oos"))
+        if row_oos_context.get("oos_label") not in (None, "", "None"):
+            top_candidate.setdefault("oos_label", row_oos_context.get("oos_label"))
+        if row_oos_context.get("oos_source") not in (None, "", "None"):
+            top_candidate.setdefault("oos_source", row_oos_context.get("oos_source"))
+        if row_oos_context.get("partition_id") not in (None, "", "None"):
+            top_candidate.setdefault("partition_id", row_oos_context.get("partition_id"))
+        if row_oos_context.get("split_name") not in (None, "", "None"):
+            top_candidate.setdefault("split_name", row_oos_context.get("split_name"))
         top_candidate.setdefault("created_at", _iso_utc_from_epoch(ts_epoch))
         top_candidate.setdefault("trade_id", top_candidate.get("candidate_id") or top_candidate.get("strategy_id"))
         top_candidate.setdefault("candidate_id", top_candidate.get("trade_id"))
@@ -422,10 +770,15 @@ def run_replay_candidate_handoff(
         try:
             handoff_payload = _report_to_handoff_payload(report, top_candidate)
             handoff_payload["signal_ts"] = top_candidate.get("signal_ts")
+            handoff_payload["quote_source"] = top_candidate.get("quote_source")
+            handoff_payload["quote_age_sec"] = top_candidate.get("quote_age_sec")
             handoff_payload["feature_cutoff_ts"] = top_candidate.get("feature_cutoff_ts")
             handoff_payload["earliest_entry_ts"] = top_candidate.get("earliest_entry_ts")
             handoff_payload["is_oos"] = top_candidate.get("is_oos")
             handoff_payload["oos_label"] = top_candidate.get("oos_label")
+            handoff_payload["oos_source"] = top_candidate.get("oos_source")
+            handoff_payload["partition_id"] = top_candidate.get("partition_id")
+            handoff_payload["split_name"] = top_candidate.get("split_name")
             handoff_payload["replay_only"] = True
             handoff_payload["broker_api_called"] = False
             handoff_payload["order_action"] = False
@@ -455,10 +808,13 @@ def run_replay_candidate_handoff(
                 },
                 generated_epoch=float(ts_epoch if ts_epoch is not None else getattr(report, "generated_epoch", 0.0) or 0.0),
             )
+            journal_row = dict(top_candidate)
+            if row_oos_context:
+                journal_row.update(row_oos_context)
             write_candidate_journal_row(
-                top_candidate,
+                journal_row,
                 journal_event="candidate_reported",
-                created_at=top_candidate.get("created_at"),
+                created_at=journal_row.get("created_at"),
                 path=journal_path if not write_production_artifacts else Path(".runtime") / "candidates" / "candidate_journal.jsonl",
             )
         except Exception as exc:
@@ -470,7 +826,7 @@ def run_replay_candidate_handoff(
                 output_root=output_root,
                 run_id=run_id,
                 write_production_artifacts=write_production_artifacts,
-                replay_event_id=str(row.get("event_id") or row.get("ts") or idx),
+                replay_event_id=replay_event_id,
                 handoff_path=handoff_path,
                 journal_path=journal_path,
                 audit_json_path=audit_json_path,
@@ -480,7 +836,7 @@ def run_replay_candidate_handoff(
         stage_evidence.append(_stage("persistence", True, str(handoff_path), top_candidate.get("trade_id"), "ok"))
         selected_result = ReplayCandidateHandoffResult(
             verdict="FULLY_PROVEN_FROM_REPLAY_INPUT",
-            replay_event_id=str(row.get("event_id") or row.get("ts") or idx),
+            replay_event_id=replay_event_id,
             blocker=None,
             blockers=(),
             stage_evidence=tuple(stage_evidence),
@@ -511,7 +867,7 @@ def run_replay_candidate_handoff(
             blocker = "BLOCKED_NO_CANDIDATE"
         selected_result = ReplayCandidateHandoffResult(
             verdict=verdict,
-            replay_event_id=str((row or {}).get("event_id") or (row or {}).get("ts") or idx),
+            replay_event_id=replay_event_id,
             blocker=blocker,
             blockers=tuple(dict.fromkeys([stage.get("verdict") for stage in stage_evidence if stage.get("verdict") and stage.get("verdict").startswith("BLOCKED_")])) or (blocker,),
             stage_evidence=tuple(stage_evidence),
@@ -530,6 +886,8 @@ def run_replay_candidate_handoff(
         )
 
     payload = selected_result.to_dict()
+    if explicit_oos_context is not None:
+        payload["oos_context"] = dict(explicit_oos_context)
     _write_audit_report(audit_json_path, payload)
     audit_md_path.write_text(_render_markdown(payload), encoding="utf-8")
     return selected_result
