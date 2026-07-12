@@ -13,8 +13,6 @@ import pyarrow.parquet as pq
 import pandas as pd
 import requests
 
-from config import config as cfg
-
 # We try to import Upstox SDK
 try:
     import upstox_client
@@ -32,7 +30,7 @@ logger = logging.getLogger("capture_upstox_daily")
 
 
 def fetch_bod_master():
-    """Refresh Upstox’s BOD JSON instrument master after approximately 06:00 IST."""
+    """Refresh Upstox’s BOD JSON instrument master after approximately 06:00 IST."""  # noqa: E501
     now = datetime.now()
     cutoff = now.replace(hour=6, minute=0, second=0, microsecond=0)
 
@@ -49,7 +47,7 @@ def fetch_bod_master():
             return True
 
     logger.info("Refreshing Upstox BOD JSON instrument master...")
-    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"  # noqa: E501
     try:
         import urllib.request
         import gzip
@@ -76,8 +74,7 @@ def fetch_bod_master():
             json.dump(jdata, f)
 
         logger.info(
-            f"Successfully refreshed BOD JSON. Saved {
-                len(jdata)} instruments."
+            f"Successfully refreshed BOD JSON. Saved {len(jdata)} instruments."
         )
         return True
     except Exception as e:
@@ -86,7 +83,7 @@ def fetch_bod_master():
 
 
 def preflight_auth(token):
-    """Generate a fresh access token before the session and perform a harmless authorization preflight."""
+    """Generate a fresh access token before the session and perform a harmless authorization preflight."""  # noqa: E501
     url = "https://api.upstox.com/v2/user/profile"
     headers = {
         "accept": "application/json",
@@ -101,13 +98,14 @@ def preflight_auth(token):
             return True
         else:
             logger.error(
-                f"Preflight auth failed. Status: {
-                    resp.status_code}, Response: {
-                    resp.text}"
+                f"Preflight auth failed. Status: {resp.status_code}, "
+                f"Response: {resp.text}"
             )
             if "UDAPI1221" in resp.text:
                 logger.error(
-                    "=> UPSTOX IP WHITELIST ERROR: The API key does not allow this machine's IP. Please whitelist this VPS/machine IP in the Upstox Developer Console."
+                    "=> UPSTOX IP WHITELIST ERROR: The API key does not allow "
+                    "this machine's IP. Please whitelist this VPS/machine IP in "  # noqa: E501
+                    "the Upstox Developer Console."
                 )
             return False
     except Exception as e:
@@ -326,9 +324,6 @@ class DataCollector:
         pq_path = self.out_dir / f"ticks_{now_ts}.parquet"
         pq.write_table(table, pq_path)
 
-        # Raw protobuf evidence can be saved if needed, here we simulate the write
-        # (upstox sdk handles decoding natively in V3)
-
         logger.info(f"Flushed {len(self.buffer)} records to {pq_path}")
         self.buffer.clear()
         self.last_flush = time.time()
@@ -413,7 +408,7 @@ class DataCollector:
                     )
 
                     self.buffer.append(rec)
-        except Exception as e:
+        except Exception:
             self.parse_failures += 1
 
     def on_error(self, error):
@@ -480,7 +475,7 @@ def main():
 
     if not UPSTOX_AVAILABLE:
         logger.error(
-            "Upstox client not available (pip install upstox-python-sdk). Exiting."
+            "Upstox client not available (pip install upstox-python-sdk). Exiting."  # noqa: E501
         )
         sys.exit(1)
 
