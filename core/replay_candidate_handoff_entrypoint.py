@@ -218,13 +218,13 @@ class ReplayCandidateHandoffResult:
     blocker: str | None
     blockers: tuple[str, ...]
     stage_evidence: tuple[dict[str, Any], ...]
-    replay_only: bool
-    broker_api_called: bool
-    order_action: bool
-    live_feed_used: bool
-    append: bool
-    output_isolated: bool
-    production_artifacts_written: bool
+    replay_only_flag: bool
+    broker_api_called_flag: bool
+    order_action_flag: bool
+    live_feed_used_flag: bool
+    append_flag: bool
+    output_isolated_flag: bool
+    production_artifacts_written_flag: bool
     output_dir: str
     handoff_path: str | None
     journal_path: str | None
@@ -238,13 +238,13 @@ class ReplayCandidateHandoffResult:
             "blocker": self.blocker,
             "blockers": list(self.blockers),
             "stage_evidence": [dict(item) for item in self.stage_evidence],
-            "replay_only": self.replay_only,
-            "broker_api_called": self.broker_api_called,
-            "order_action": self.order_action,
-            "live_feed_used": self.live_feed_used,
-            "append": self.append,
-            "output_isolated": self.output_isolated,
-            "production_artifacts_written": self.production_artifacts_written,
+            "replay_only": self.replay_only_flag,
+            "broker_api_called": self.broker_api_called_flag,
+            "order_action": self.order_action_flag,
+            "live_feed_used": self.live_feed_used_flag,
+            "append": self.append_flag,
+            "output_isolated": self.output_isolated_flag,
+            "production_artifacts_written": self.production_artifacts_written_flag,
             "output_dir": self.output_dir,
             "handoff_path": self.handoff_path,
             "journal_path": self.journal_path,
@@ -456,13 +456,13 @@ def run_replay_candidate_handoff(
             blocker=None,
             blockers=(),
             stage_evidence=tuple(stage_evidence),
-            replay_only=REPLAY_ONLY_TRUE,
-            broker_api_called=BROKER_API_CALLED_FALSE,
-            order_action=ORDER_ACTION_FALSE,
-            live_feed_used=LIVE_FEED_USED_FALSE,
-            append=APPEND_FALSE,
-            output_isolated=OUTPUT_ISOLATED_TRUE,
-            production_artifacts_written=bool(write_production_artifacts),
+            replay_only_flag=REPLAY_ONLY_TRUE,
+            broker_api_called_flag=BROKER_API_CALLED_FALSE,
+            order_action_flag=ORDER_ACTION_FALSE,
+            live_feed_used_flag=LIVE_FEED_USED_FALSE,
+            append_flag=APPEND_FALSE,
+            output_isolated_flag=OUTPUT_ISOLATED_TRUE,
+            production_artifacts_written_flag=bool(write_production_artifacts),
             output_dir=str(run_dir),
             handoff_path=str(handoff_path),
             journal_path=str(journal_path),
@@ -487,13 +487,13 @@ def run_replay_candidate_handoff(
             blocker=blocker,
             blockers=tuple(dict.fromkeys([stage.get("verdict") for stage in stage_evidence if stage.get("verdict") and stage.get("verdict").startswith("BLOCKED_")])) or (blocker,),
             stage_evidence=tuple(stage_evidence),
-            replay_only=REPLAY_ONLY_TRUE,
-            broker_api_called=BROKER_API_CALLED_FALSE,
-            order_action=ORDER_ACTION_FALSE,
-            live_feed_used=LIVE_FEED_USED_FALSE,
-            append=APPEND_FALSE,
-            output_isolated=OUTPUT_ISOLATED_TRUE,
-            production_artifacts_written=bool(write_production_artifacts),
+            replay_only_flag=REPLAY_ONLY_TRUE,
+            broker_api_called_flag=BROKER_API_CALLED_FALSE,
+            order_action_flag=ORDER_ACTION_FALSE,
+            live_feed_used_flag=LIVE_FEED_USED_FALSE,
+            append_flag=APPEND_FALSE,
+            output_isolated_flag=OUTPUT_ISOLATED_TRUE,
+            production_artifacts_written_flag=bool(write_production_artifacts),
             output_dir=str(run_dir),
             handoff_path=str(handoff_path) if handoff_path.exists() else None,
             journal_path=str(journal_path) if journal_path.exists() else None,
@@ -543,13 +543,13 @@ def _blocked_result(
         blocker=blocker,
         blockers=(blocker,),
         stage_evidence=tuple(stage_evidence),
-        replay_only=REPLAY_ONLY_TRUE,
-        broker_api_called=BROKER_API_CALLED_FALSE,
-        order_action=ORDER_ACTION_FALSE,
-        live_feed_used=LIVE_FEED_USED_FALSE,
-        append=APPEND_FALSE,
-        output_isolated=OUTPUT_ISOLATED_TRUE,
-        production_artifacts_written=bool(write_production_artifacts),
+        replay_only_flag=REPLAY_ONLY_TRUE,
+        broker_api_called_flag=BROKER_API_CALLED_FALSE,
+        order_action_flag=ORDER_ACTION_FALSE,
+        live_feed_used_flag=LIVE_FEED_USED_FALSE,
+        append_flag=APPEND_FALSE,
+        output_isolated_flag=OUTPUT_ISOLATED_TRUE,
+        production_artifacts_written_flag=bool(write_production_artifacts),
         output_dir=str(run_dir),
         handoff_path=str(handoff_path) if handoff_path else None,
         journal_path=str(journal_path) if journal_path else None,
