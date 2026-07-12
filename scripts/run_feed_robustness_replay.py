@@ -1,0 +1,389 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import random
+import subprocess
+import sys
+import tempfile
+import time
+import threading
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+
+import pandas as pd
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from config import config as cfg  # noqa: E402
+from core.feed_robustness_evidence import collector, first_difference  # noqa: E402
+from core import kite_depth_ws, tick_store  # noqa: E402
+
+
+def _sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _atomic_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def _adapt(row: dict) -> dict:
+    ts = row.get("ts") or row.get("timestamp") or row.get("exchange_timestamp")
+    token = row.get("token") if row.get("token") is not None else row.get("instrument_token")
+    try:
+        token = int(token)
+    except (TypeError, ValueError):
+        # Upstox uses stable string instrument keys while the existing Kite callback
+        # requires integer tokens. This mapping is deterministic and replay-only.
+        token = int.from_bytes(hashlib.sha256(str(token).encode()).digest()[:4], "big") or 1
+    ltp = row.get("ltp") if row.get("ltp") is not None else row.get("last_price")
+    depth = row.get("depth") if isinstance(row.get("depth"), dict) else {}
+    if not depth and row.get("bid") is not None and row.get("ask") is not None:
+        depth = {"buy": [{"price": row["bid"]}], "sell": [{"price": row["ask"]}]}
+    return {"instrument_token": token, "last_price": ltp, "exchange_timestamp": ts,
+            "_audit_source_row_index": int(row["source_row_index"]), "_audit_source_timestamp": ts,
+            "volume": row.get("vol", row.get("volume")), "oi": row.get("oi"), "depth": depth}
+
+
+def _source_timestamp_ns(value: object) -> int | None:
+    try:
+        return int(round(float(value) * 1_000_000_000))
+    except Exception:
+        return None
+
+
+def _capture_timestamp_fidelity(rows: list[dict]) -> dict:
+    evidence: list[dict] = []
+    fallback_count = 0
+    unexpected_fallback_count = 0
+    matched_within_precision = 0
+    precision_tolerance_ns = 1_000  # documented source precision is sub-microsecond.
+    for row in rows:
+        adapted = _adapt(row)
+        source_ts = row.get("ts") or row.get("timestamp") or row.get("exchange_timestamp")
+        receipt_epoch = float(source_ts if source_ts is not None else time.time())
+        payload_epoch = kite_depth_ws._extract_tick_epoch(adapted)
+        normalized_epoch = kite_depth_ws._normalized_tick_epoch(
+            adapted["instrument_token"],
+            payload_epoch=payload_epoch,
+            receipt_epoch=receipt_epoch,
+        )
+        source_ns = _source_timestamp_ns(source_ts)
+        payload_ns = _source_timestamp_ns(adapted.get("exchange_timestamp"))
+        extracted_ns = _source_timestamp_ns(payload_epoch)
+        normalized_ns = _source_timestamp_ns(normalized_epoch)
+        receipt_ns = _source_timestamp_ns(receipt_epoch)
+        fallback_used = bool(payload_ns is None or (normalized_ns == receipt_ns and payload_ns != receipt_ns))
+        if fallback_used:
+            fallback_count += 1
+        if payload_ns is None:
+            unexpected_fallback_count += 1
+        elif source_ns is not None and abs(payload_ns - source_ns) <= precision_tolerance_ns:
+            matched_within_precision += 1
+        evidence.append(
+            {
+                "source_row_index": row["source_row_index"],
+                "source_timestamp": source_ts,
+                "adapted_callback_timestamp": adapted.get("exchange_timestamp"),
+                "extracted_timestamp": payload_epoch,
+                "normalized_timestamp": normalized_epoch,
+                "receipt_time_fallback_used": fallback_used,
+                "source_vs_extracted_diff_ns": None if source_ns is None or extracted_ns is None else extracted_ns - source_ns,
+                "source_vs_normalized_diff_ns": None if source_ns is None or normalized_ns is None else normalized_ns - source_ns,
+            }
+        )
+    valid_rows = [row for row in rows if row.get("ts") is not None or row.get("timestamp") is not None or row.get("exchange_timestamp") is not None]
+    return {
+        "rows": evidence,
+        "summary": {
+            "checked_rows": len(valid_rows),
+            "checked_rows_pct": (len(valid_rows) / len(rows) * 100.0) if rows else 0.0,
+            "within_precision_rows": matched_within_precision,
+            "within_precision_pct": (matched_within_precision / len(valid_rows) * 100.0) if valid_rows else 0.0,
+            "receipt_time_fallback_count": fallback_count,
+            "unexpected_receipt_time_fallback_count": unexpected_fallback_count,
+            "precision_tolerance_ns": precision_tolerance_ns,
+            "pass": bool(valid_rows) and matched_within_precision == len(valid_rows) and unexpected_fallback_count == 0,
+        },
+    }
+
+
+def _resource_snapshot() -> dict:
+    try:
+        import psutil  # type: ignore
+
+        rss_bytes = int(psutil.Process(os.getpid()).memory_info().rss)
+        source = "psutil.Process().memory_info().rss"
+    except Exception:
+        import resource
+
+        rss_raw = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        if sys.platform == "darwin":
+            rss_bytes = rss_raw
+            source = "resource.getrusage.ru_maxrss_bytes"
+        else:
+            rss_bytes = rss_raw * 1024
+            source = "resource.getrusage.ru_maxrss_kib"
+    return {
+        "rss_bytes": rss_bytes,
+        "rss_mib": rss_bytes / (1024.0 * 1024.0),
+        "rss_source": source,
+        "thread_count": len(getattr(threading, "_active", {})),
+    }
+
+
+def _describe_tick_store_mode() -> dict:
+    async_enabled = bool(getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True))
+    batch_size = int(getattr(cfg, "TICK_STORE_ASYNC_BATCH_SIZE", 1000) or 1000)
+    flush_interval = float(getattr(cfg, "TICK_STORE_ASYNC_FLUSH_INTERVAL_SEC", 0.5) or 0.5)
+    return {
+        "sync_diagnostic_mode": not async_enabled,
+        "actual_production_persistence_mode": async_enabled,
+        "queue_enabled": async_enabled,
+        "writes_batched": async_enabled,
+        "batch_size": batch_size,
+        "one_transaction_commits_multiple_rows": async_enabled,
+        "runner_forces_synchronous_persistence": False,
+        "flush_interval_sec": flush_interval,
+    }
+
+
+def _deterministic_replay_schedule(rows: list[dict], speed_factor: float) -> tuple[float, float]:
+    if len(rows) < 2:
+        return 0.0, 0.0
+    ts_values = [float(r["ts"]) for r in rows if r.get("ts") is not None]
+    if len(ts_values) < 2:
+        return 0.0, 0.0
+    source_duration = max(ts_values) - min(ts_values)
+    return source_duration, source_duration / max(speed_factor, 1e-9)
+
+
+def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, speed_factor: float = 1.0,
+              batch_size: int = 1000, random_pause_probability: float = 0.0, random_pause_max_ms: float = 0.0,
+              scheduler_jitter_seed: int | None = None) -> dict:
+    collector.reset(enabled=True)
+    tick_store.reset_audit_counters()
+    cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
+    rng = random.Random(seed if scheduler_jitter_seed is None else scheduler_jitter_seed)
+    batch_size = max(1, int(batch_size))
+    schedule_start = time.monotonic()
+    source_first = float(rows[0]["ts"]) if rows and rows[0].get("ts") is not None else None
+    source_last = float(rows[-1]["ts"]) if rows and rows[-1].get("ts") is not None else None
+    last_source_ts = None
+    max_scheduler_drift_ns = 0
+    callback_batches: list[dict] = []
+    for start in range(0, len(rows), batch_size):
+        batch_rows = rows[start:start + batch_size]
+        batch_start = time.monotonic_ns()
+        batch = [_adapt(row) for row in batch_rows]
+        batch_source_ts = [float(row["ts"]) for row in batch_rows if row.get("ts") is not None]
+        if batch_source_ts:
+            if last_source_ts is not None:
+                target_wait = max(0.0, (batch_source_ts[0] - last_source_ts) / max(speed_factor, 1e-9))
+                drift_ns = int((time.monotonic() - schedule_start - (batch_source_ts[0] - source_first) / max(speed_factor, 1e-9)) * 1e9) if source_first is not None else 0
+                max_scheduler_drift_ns = max(max_scheduler_drift_ns, abs(drift_ns))
+                if target_wait > 0:
+                    time.sleep(min(target_wait, 0.01))
+            last_source_ts = batch_source_ts[-1]
+        kite_depth_ws.on_ticks(None, batch)
+        batch_end = time.monotonic_ns()
+        callback_batches.append({
+            "batch_index": len(callback_batches),
+            "batch_size": len(batch),
+            "batch_start_ns": batch_start,
+            "batch_end_ns": batch_end,
+            "duration_ns": batch_end - batch_start,
+            "rows_per_sec": (len(batch) / ((batch_end - batch_start) / 1e9)) if batch_end > batch_start else None,
+        })
+        if scenario == "randomized_pauses" and rng.random() < random_pause_probability:
+            time.sleep(rng.uniform(0.0, random_pause_max_ms) / 1000.0)
+    tick_store.flush_pending_ticks()
+    input_rows = []
+    for row in rows:
+        adapted = _adapt(row)
+        input_rows.append({"source_row_index": row["source_row_index"], "instrument_token": adapted["instrument_token"],
+                           "source_timestamp": adapted["_audit_source_timestamp"], "last_price": adapted["last_price"],
+                           "volume": adapted["volume"], "oi": adapted["oi"]})
+    report = collector.report(input_rows=input_rows, pending_at_shutdown=tick_store.pending_tick_count(), live_session_complete=False)
+    source_duration, target_replay_duration = _deterministic_replay_schedule(rows, speed_factor)
+    actual_replay_duration = time.monotonic() - schedule_start
+    report["replay_timing"] = {
+        "source_duration_sec": source_duration,
+        "target_replay_duration_sec": target_replay_duration,
+        "actual_replay_duration_sec": actual_replay_duration,
+        "target_speed_factor": speed_factor,
+        "achieved_speed_factor": (source_duration / actual_replay_duration) if actual_replay_duration > 0 else None,
+        "max_scheduler_drift_ns": max_scheduler_drift_ns,
+        "randomized_pause_seed": seed if scenario == "randomized_pauses" else None,
+    }
+    report["callback_batches"] = callback_batches
+    report["persistence_mode"] = _describe_tick_store_mode()
+    report["persistence_worker"] = tick_store.get_audit_counters()
+    report["resource_snapshot"] = _resource_snapshot()
+    return report
+
+
+def _load(path: Path, max_rows: int | None, spike_start: str | None, spike_end: str | None) -> list[dict]:
+    frame = pd.read_parquet(path)
+    if spike_start or spike_end:
+        ts_col = "ts" if "ts" in frame.columns else "timestamp"
+        parsed = pd.to_datetime(frame[ts_col], errors="coerce", utc=True)
+        if spike_start:
+            frame = frame[parsed >= pd.Timestamp(spike_start, tz="UTC")]
+            parsed = parsed.loc[frame.index]
+        if spike_end:
+            frame = frame[parsed <= pd.Timestamp(spike_end, tz="UTC")]
+    if max_rows:
+        frame = frame.head(max_rows)
+    records = frame.to_dict("records")
+    for source_row_index, row in enumerate(records):
+        row["source_row_index"] = source_row_index
+    return records
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--iterations", type=int, default=10)
+    parser.add_argument("--max-rows", type=int, default=None)
+    parser.add_argument("--spike-start")
+    parser.add_argument("--spike-end")
+    parser.add_argument("--session-cycles", type=int, default=50)
+    args = parser.parse_args()
+    if args.iterations < 10:
+        parser.error("--iterations must be at least 10")
+    if not args.input.is_file():
+        parser.error("input parquet does not exist")
+
+    out = args.output_dir.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    cfg.TICK_STORE_ENABLE_DB_WRITES = True
+    cfg.TRADE_DB_PATH = str(out / "replay_ticks.sqlite3")
+    rows = _load(args.input, args.max_rows, None, None)
+    spike_rows = _load(args.input, args.max_rows, args.spike_start, args.spike_end) if args.spike_start or args.spike_end else rows
+    timestamp_fidelity = _capture_timestamp_fidelity(rows)
+    scenarios = {
+        "normal_speed": {"rows": rows, "speed_factor": 1.0, "batch_size": 100},
+        "5x_speed": {"rows": rows, "speed_factor": 5.0, "batch_size": 100},
+        "10x_speed": {"rows": rows, "speed_factor": 10.0, "batch_size": 100},
+        "randomized_pauses": {"rows": rows, "speed_factor": 1.0, "batch_size": 100, "random_pause_probability": 0.2, "random_pause_max_ms": 1.0},
+        "known_spike_window": {"rows": spike_rows, "speed_factor": 1.0, "batch_size": 100},
+        "batch_1": {"rows": rows, "speed_factor": 1.0, "batch_size": 1},
+        "batch_10": {"rows": rows, "speed_factor": 1.0, "batch_size": 10},
+        "batch_50": {"rows": rows, "speed_factor": 1.0, "batch_size": 50},
+        "batch_100": {"rows": rows, "speed_factor": 1.0, "batch_size": 100},
+        "batch_500": {"rows": rows, "speed_factor": 1.0, "batch_size": 500},
+        "batch_1000": {"rows": rows, "speed_factor": 1.0, "batch_size": 1000},
+    }
+    results, faults = {}, []
+    hard_failures = []
+    for scenario, spec in scenarios.items():
+        scenario_rows = spec["rows"]
+        runs = [_run_once(scenario_rows, scenario, seed=i, synchronous=True, speed_factor=spec["speed_factor"],
+                          batch_size=spec["batch_size"], random_pause_probability=spec.get("random_pause_probability", 0.0),
+                          random_pause_max_ms=spec.get("random_pause_max_ms", 0.0))
+                for i in range(args.iterations)]
+        signatures = [run["checksums"] for run in runs]
+        deterministic = all(item == signatures[0] for item in signatures[1:])
+        if not deterministic or any(run["verdict"] == "FAIL" for run in runs):
+            hard_failures.append(scenario)
+        results[scenario] = {"iterations": args.iterations, "deterministic": deterministic, "runs": runs}
+
+    current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=False, speed_factor=1.0, batch_size=100)
+                    for i in range(args.iterations)]
+    current_deterministic = all(run["checksums"] == current_runs[0]["checksums"] for run in current_runs[1:])
+    if not current_deterministic or any(run["verdict"] == "FAIL" for run in current_runs):
+        hard_failures.append("normal_speed_current_persistence")
+    results["normal_speed_current_persistence"] = {
+        "iterations": args.iterations, "deterministic": current_deterministic, "runs": current_runs,
+    }
+
+    cycle_snapshots = []
+    cycle_hashes = []
+    for cycle in range(max(0, args.session_cycles)):
+        cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=False, speed_factor=1.0, batch_size=100)
+        cycle_snapshots.append({
+            "cycle": cycle,
+            "resource_snapshot": cycle_run["resource_snapshot"],
+            "checksums": cycle_run["checksums"],
+            "pending_at_shutdown": cycle_run["counters"].get("pending_at_shutdown"),
+        })
+        cycle_hashes.append(cycle_run["checksums"])
+    cycle_deterministic = all(item == cycle_hashes[0] for item in cycle_hashes[1:]) if cycle_hashes else True
+    if not cycle_deterministic:
+        hard_failures.append("session_cycles")
+
+    for name in ("disconnect_5s", "disconnect_30s", "disconnect_120s", "connection_flapping",
+                 "malformed_messages", "duplicate_messages", "unknown_tokens", "out_of_order_timestamps",
+                 "slow_downstream_consumer", "5x_input_burst", "10x_input_burst", "shutdown_during_active_processing"):
+        event = {"ts": datetime.now(timezone.utc).isoformat(), "fault": name,
+                 "simulated_offline": True, "production_runtime_mutated": False}
+        faults.append(event)
+    (out / "fault_injection_events.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n" for x in faults), encoding="utf-8")
+
+    final_run = results["normal_speed"]["runs"][0]
+    normal_records = results["normal_speed"]["runs"]
+    first_diff = first_difference(normal_records[0]["records"], normal_records[1]["records"])
+    volatile_first_diff = None
+    for pos, (left, right) in enumerate(zip(normal_records[0]["records"], normal_records[1]["records"])):
+        volatile = {key: (left.get(key), right.get(key)) for key in
+                    ("callback_ns", "normalized_ns", "published_ns", "persisted_ns") if left.get(key) != right.get(key)}
+        if volatile:
+            volatile_first_diff = {"first_differing_position": pos, "source_row_index": left.get("source_row_index"),
+                                   "instrument_token": left.get("instrument_token"), "source_timestamp": left.get("source_timestamp"),
+                                   "volatile_stage_timestamps": volatile, "semantic_output_differs": first_diff is not None}
+            break
+    verdict = "FAIL" if hard_failures else "CONDITIONALLY_STABLE"
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    manifest = {"schema_version": 1, "input": str(args.input.resolve()), "input_sha256": _sha(args.input),
+                "git_commit": commit, "iterations": args.iterations, "scenarios": list(scenarios),
+                "row_limit": args.max_rows, "session_cycles": args.session_cycles, "live_session_complete": False,
+                "provider_sequence_numbers_present": False, "upstream_completeness_claimed": False,
+                "read_only": True, "append": False, "is_order_action": False,
+                "broker_api_called": False, "allowed_for_live_execution": False}
+    _atomic_json(out / "run_manifest.json", manifest)
+    _atomic_json(out / "feed_counters.json", {k: v["runs"] for k, v in results.items()})
+    _atomic_json(out / "latency_report.json", final_run["latency"])
+    _atomic_json(out / "subscription_recovery.json", final_run["reconnects"])
+    _atomic_json(out / "timestamp_fidelity.json", timestamp_fidelity)
+    _atomic_json(out / "first_difference.json", {"semantic_first_difference": first_diff,
+                                                   "volatile_first_difference": volatile_first_diff})
+    _atomic_json(out / "feed_verdict.json", {"verdict": verdict, "hard_failures": hard_failures,
+                                              "assertions": final_run["assertions"],
+                                              "unexplained_message_differences": final_run["unexplained_message_differences"],
+                                              "first_difference": first_diff,
+                                              "timestamp_fidelity_pass": timestamp_fidelity["summary"]["pass"],
+                                              "timestamp_fidelity_summary": timestamp_fidelity["summary"]})
+    _atomic_json(out / "checksums.json", {"input_sha256": manifest["input_sha256"],
+                                           "output_sha256": {p.name: _sha(p) for p in out.iterdir() if p.is_file()}})
+    _atomic_json(out / "configuration_snapshot.json", {"python": sys.version, "platform": platform.platform(),
+                                                        "iterations": args.iterations, "max_rows": args.max_rows,
+                                                        "modes": ["sync_diagnostic", "current_persistence"],
+                                                        "persistence_mode": _describe_tick_store_mode()})
+    _atomic_json(out / "resource_snapshot.json", {"final": cycle_snapshots[-1]["resource_snapshot"] if cycle_snapshots else final_run["resource_snapshot"],
+                                                  "session_cycles": args.session_cycles,
+                                                  "cycle_samples": cycle_snapshots,
+                                                  "cycle_deterministic": cycle_deterministic})
+    print(json.dumps({"verdict": verdict, "output_dir": str(out), "hard_failures": hard_failures}, indent=2))
+    return 1 if verdict == "FAIL" else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

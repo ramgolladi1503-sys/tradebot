@@ -26,6 +26,13 @@ _WRITE_QUEUE_LOCK = threading.Lock()
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_THREAD_STOP = threading.Event()
 _FLUSH_LOCK = threading.Lock()
+_AUDIT_COUNTERS = {
+    "worker_started": 0,
+    "rows_enqueued": 0,
+    "rows_dequeued": 0,
+    "committed_batches": 0,
+    "worker_failures": 0,
+}
 
 
 def _normalize_token(token: int | str | None) -> int | None:
@@ -505,8 +512,16 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
                 rows,
             )
             conn.commit()
+        _AUDIT_COUNTERS["committed_batches"] += 1
+        try:
+            from core.feed_robustness_evidence import collector
+            for row in rows:
+                collector.persisted_row(row[1], row[5], row[2], row[3], row[4])
+        except Exception:
+            pass
         return True
     except Exception as exc:
+        _AUDIT_COUNTERS["worker_failures"] += 1
         try:
             _ERROR_LOGGER.write(
                 {
@@ -529,6 +544,7 @@ def _flush_pending_ticks(max_rows: int | None = None) -> int:
             rows.append(_WRITE_QUEUE.popleft())
     if not rows:
         return 0
+    _AUDIT_COUNTERS["rows_dequeued"] += len(rows)
     if _write_rows(rows):
         return len(rows)
     with _WRITE_QUEUE_LOCK:
@@ -539,6 +555,20 @@ def _flush_pending_ticks(max_rows: int | None = None) -> int:
 
 def flush_pending_ticks(max_rows: int | None = None) -> int:
     return _flush_pending_ticks(max_rows=max_rows)
+
+
+def pending_tick_count() -> int:
+    with _WRITE_QUEUE_LOCK:
+        return len(_WRITE_QUEUE)
+
+
+def get_audit_counters() -> dict[str, int]:
+    return dict(_AUDIT_COUNTERS)
+
+
+def reset_audit_counters() -> None:
+    for key in _AUDIT_COUNTERS:
+        _AUDIT_COUNTERS[key] = 0
 
 
 def _flush_loop() -> None:
@@ -568,12 +598,14 @@ def _ensure_flush_thread() -> None:
         _FLUSH_THREAD_STOP.clear()
         _FLUSH_THREAD = threading.Thread(target=_flush_loop, name="tick-store-flush", daemon=True)
         _FLUSH_THREAD.start()
+        _AUDIT_COUNTERS["worker_started"] += 1
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
     init_ticks()
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.append(row)
+        _AUDIT_COUNTERS["rows_enqueued"] += 1
     _ensure_flush_thread()
     return True
 
