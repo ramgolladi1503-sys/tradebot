@@ -113,6 +113,18 @@ def _row_volume(row: Mapping[str, Any]) -> float | None:
     return None
 
 
+def _replay_quote_provenance(source_path: Path, raw_tick: Mapping[str, Any], source_timestamp: Any | None) -> tuple[str | None, float | None]:
+    quote_source = f"replay_source:{source_path.name}"
+    quote_age_sec = None
+    source_ts_text = raw_tick.get("source_timestamp")
+    exchange_ts_text = raw_tick.get("exchange_timestamp")
+    if source_ts_text not in (None, "", "None") and exchange_ts_text not in (None, "", "None"):
+        quote_age_sec = 0.0
+    elif source_timestamp not in (None, "", "None") and exchange_ts_text not in (None, "", "None"):
+        quote_age_sec = 0.0
+    return quote_source, quote_age_sec
+
+
 def _top_candidate_payload(report: Any) -> dict[str, Any] | None:
     ranking = getattr(report, "ranking", None)
     ranks = list(getattr(ranking, "ranks", []) or [])
@@ -304,7 +316,7 @@ def _report_to_handoff_payload(report: Any, top_candidate: Mapping[str, Any]) ->
     }
     payload["source"] = "replay_candidate_handoff_entrypoint"
     payload["top_reportable_executable"] = top_candidate
-    for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name"):
+    for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name", "quote_source", "quote_age_sec"):
         if top_candidate.get(key) not in (None, "", "None"):
             payload[key] = top_candidate.get(key)
     return payload
@@ -516,6 +528,12 @@ def run_replay_candidate_handoff(
             continue
         stage_evidence.append(_stage("normalized_snapshot", True, source_path.name, replay_event_id, "ok"))
 
+        quote_source, quote_age_sec = _replay_quote_provenance(source_path, raw_tick, raw_tick.get("source_timestamp") or raw_tick.get("exchange_timestamp"))
+        raw_tick = dict(raw_tick)
+        raw_tick["quote_source"] = quote_source
+        if quote_age_sec is not None:
+            raw_tick["quote_age_sec"] = quote_age_sec
+
         symbol = _infer_symbol(row, fallback=strategy_id)
         try:
             ctx = _strategy_context_from_market_symbol(symbol, normalized_snapshot)
@@ -553,7 +571,7 @@ def run_replay_candidate_handoff(
                 source_path=source_path,
                 source_row_index=idx,
                 source_timestamp_epoch=ts_epoch,
-                raw_row={**row, **row_oos_context},
+                raw_row={**row, **raw_tick, **row_oos_context},
                 normalized_snapshot=normalized_snapshot,
                 strategy_context=ctx,
                 report=report,
@@ -593,6 +611,9 @@ def run_replay_candidate_handoff(
 
         top_candidate = dict(top_candidate)
         top_candidate.setdefault("signal_ts", _iso_utc_from_epoch(ts_epoch))
+        top_candidate.setdefault("quote_source", quote_source)
+        if quote_age_sec is not None:
+            top_candidate.setdefault("quote_age_sec", quote_age_sec)
         if row.get("feature_cutoff_ts") not in (None, "", "None"):
             top_candidate.setdefault("feature_cutoff_ts", row.get("feature_cutoff_ts"))
         if row.get("earliest_entry_ts") not in (None, "", "None"):
@@ -623,6 +644,8 @@ def run_replay_candidate_handoff(
         try:
             handoff_payload = _report_to_handoff_payload(report, top_candidate)
             handoff_payload["signal_ts"] = top_candidate.get("signal_ts")
+            handoff_payload["quote_source"] = top_candidate.get("quote_source")
+            handoff_payload["quote_age_sec"] = top_candidate.get("quote_age_sec")
             handoff_payload["feature_cutoff_ts"] = top_candidate.get("feature_cutoff_ts")
             handoff_payload["earliest_entry_ts"] = top_candidate.get("earliest_entry_ts")
             handoff_payload["is_oos"] = top_candidate.get("is_oos")

@@ -217,3 +217,33 @@ def test_explicit_oos_context_is_preserved(tmp_path, monkeypatch):
     assert journal_row["oos_source"] == "explicit_replay_run_context"
     assert bundle["replay_context"]["is_oos"] is True
     assert bundle["replay_context"]["oos_label"] == "OOS"
+
+
+def test_replay_runner_preserves_quote_provenance_and_age(tmp_path, monkeypatch):
+    source = tmp_path / "replay.jsonl"
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "exchange_timestamp": "2026-07-02 10:52:40", "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    monkeypatch.setattr(replay_handoff, "build_market_snapshot_from_raw_tick", lambda *args, **kwargs: {"snapshot": True})
+    monkeypatch.setattr(replay_handoff, "_strategy_context_from_market_symbol", lambda *args, **kwargs: SimpleNamespace(symbol="NIFTY"))
+    monkeypatch.setattr(replay_handoff, "build_ranked_opportunity_report", lambda *args, **kwargs: _fake_success_report())
+
+    result = replay_handoff.run_replay_candidate_handoff(
+        source_path=source,
+        output_root=tmp_path / ".runtime",
+        run_id="run-quote",
+    )
+
+    assert result.verdict == "FULLY_PROVEN_FROM_REPLAY_INPUT"
+    audit = json.loads(Path(result.audit_json_path).read_text(encoding="utf-8"))
+    handoff = json.loads(Path(result.handoff_path).read_text(encoding="utf-8"))
+    journal_row = json.loads(Path(result.journal_path).read_text(encoding="utf-8").strip().splitlines()[-1])
+    bundle = json.loads((tmp_path / ".runtime" / "replay_context_bundles" / "run-quote" / "replay_context_bundle_evt-001.json").read_text(encoding="utf-8"))
+
+    assert audit["replay_event_id"] == "evt-001"
+    assert handoff["quote_source"] == "replay_source:replay.jsonl"
+    assert handoff["quote_age_sec"] == 0.0
+    assert handoff["top_reportable_executable_snapshot"]["quote_source"] == "replay_source:replay.jsonl"
+    assert handoff["top_reportable_executable_snapshot"]["quote_age_sec"] == 0.0
+    assert journal_row["quote_source"] == "replay_source:replay.jsonl"
+    assert journal_row["quote_age_sec"] == 0.0
+    assert bundle["replay_context"]["quote_source"] == "replay_source:replay.jsonl"
+    assert bundle["replay_context"]["quote_age_sec"] == 0.0
