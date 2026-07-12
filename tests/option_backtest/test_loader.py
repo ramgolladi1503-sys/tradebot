@@ -63,7 +63,7 @@ def test_loader_filters_symbol_and_date_range(tmp_path: Path):
         timezone="Asia/Kolkata",
     )
 
-    assert len(df) == 1
+    assert df.shape[0] == 1
     assert str(df.iloc[0]["symbol"]) == "NIFTY24APR25500CE"
     assert bool(df.iloc[0]["has_bid_ask"]) is True
 

@@ -308,7 +308,9 @@ def test_certification_mode_retains_all_decisions_without_truncation(tmp_path: P
     assert result.summary["signals_total"] == 250
     assert result.summary["decision_rows"] == 250
     assert result.summary["reconciliation"]["decision_rows"] == 250
-    assert len(result.sampled_decisions) == 250
+    assert result.sampled_decisions[0]["decision_index"] == 0
+    assert result.sampled_decisions[-1]["decision_index"] == 249
+    assert result.sampled_decisions[-1]["timestamp"] == "2026-04-01T13:24:00+05:30"
 
 
 def test_rejected_candidates_preserve_reason_and_reconcile_counts(tmp_path: Path):

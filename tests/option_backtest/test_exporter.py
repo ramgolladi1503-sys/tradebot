@@ -89,7 +89,7 @@ def test_build_option_backtest_frame_merges_ticks_and_depth(tmp_path: Path):
     )
 
     assert list(frame.columns) == ["timestamp", "timestamp_epoch", "symbol", "open", "high", "low", "close", "volume", "oi", "bid", "ask"]
-    assert len(frame) == 2
+    assert frame.shape[0] == 2
     first = frame.iloc[0].to_dict()
     second = frame.iloc[1].to_dict()
     assert first["symbol"] == "NIFTY2650524200CE"

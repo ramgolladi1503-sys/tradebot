@@ -168,7 +168,11 @@ def test_wfa_uses_option_backtest_engine_only(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(wfa_module, "OptionBacktestEngine", FakeEngine)
     report = run_option_replay_wfa(_wfa_cfg(data_path, tmp_path / "out"))
-    assert len(calls) == 3
+    assert calls == [
+        "2026-04-01T09:15:00+05:30|2026-04-01T09:17:00+05:30",
+        "2026-04-02T09:15:00+05:30|2026-04-02T09:17:00+05:30",
+        "2026-04-03T09:15:00+05:30|2026-04-03T09:17:00+05:30",
+    ]
     assert report["engine"] == "OptionBacktestEngine"
     assert report["engine_module"] == "core.option_backtest.engine.OptionBacktestEngine"
 
@@ -257,7 +261,10 @@ def test_wfa_failed_validation_prevents_holdout_certification(monkeypatch, tmp_p
 
     monkeypatch.setattr(wfa_module, "OptionBacktestEngine", FakeEngine)
     report = run_option_replay_wfa(_wfa_cfg(data_path, tmp_path / "out"))
-    assert len(calls) == 2
+    assert calls == [
+        "2026-04-01T09:15:00+05:30",
+        "2026-04-02T09:15:00+05:30",
+    ]
     assert report["partitions"]["holdout"]["status"] == "skipped_validation_failed"
     assert report["verdict"] == "FAILED"
 
