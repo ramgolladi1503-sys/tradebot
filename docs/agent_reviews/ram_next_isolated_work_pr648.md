@@ -28,6 +28,14 @@ The branch adds isolated replay handoff and NIFTY ingestion validation scaffoldi
 
 ## QA / Safety Review
 
+- mode: AGENT_REVIEW
+- item_id: PR-648
+- result: reviewed
+- reason: replay evidence and safe ingestion scaffolding only
+- timestamp: 2026-07-12T17:00:00Z
+- flag_value: false
+- call_value: false
+- source: static_review
 - read_only=true where applicable
 - is_order_action=false
 - broker_api_called=false

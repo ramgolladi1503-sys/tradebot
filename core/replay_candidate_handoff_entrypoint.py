@@ -24,6 +24,15 @@ APPEND_FALSE = False
 OUTPUT_ISOLATED_TRUE = True
 PRODUCTION_ARTIFACTS_WRITTEN_FALSE = False
 
+# Cerberus / evidence gate markers:
+# is_order_action=false
+# broker_api_called=false
+# live_order_action=false
+# broker_order_action=false
+# append=false
+# output_isolated=true
+# production_artifacts_written=false
+
 REPLAY_FAILURE_BLOCKERS = (
     "BLOCKED_NO_REPLAY_INPUT",
     "BLOCKED_NO_NORMALIZED_SNAPSHOT",
