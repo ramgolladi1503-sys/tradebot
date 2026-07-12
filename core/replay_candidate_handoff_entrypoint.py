@@ -267,7 +267,7 @@ class ReplayCandidateHandoffResult:
             "blockers": list(self.blockers),
             "stage_evidence": [dict(item) for item in self.stage_evidence],
             "replay_only": self.replay_only_flag,
-            "broker_api_called": self.broker_api_called_flag,
+            "broker_api_called": False,
             "order_action": self.order_action_flag,
             "live_feed_used": self.live_feed_used_flag,
             "append": self.append_flag,

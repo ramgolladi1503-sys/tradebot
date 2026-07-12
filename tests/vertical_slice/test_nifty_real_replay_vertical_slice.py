@@ -87,7 +87,5 @@ def test_nifty_real_replay_determinism(tmp_path):
             "--output", str(out)
         ], capture_output=True, text=True)
 
-    lines = out.read_text().strip().split("\n")
-    assert len(lines) == 3
-    t1, t2, t3 = [json.loads(line) for line in lines]
+    t1, t2, t3 = [json.loads(line) for line in out.read_text().strip().split("\n")]
     assert t1 == t2 == t3
