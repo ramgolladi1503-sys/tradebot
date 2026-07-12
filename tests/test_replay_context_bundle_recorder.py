@@ -98,6 +98,11 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
         "quote_source": "tick_store",
         "fallback_used": False,
         "metadata": {"vwap_reclaim_up_confirmed": True},
+        "feature_cutoff_ts": None,
+        "earliest_entry_ts": None,
+        "feed_truth_state": None,
+        "feed_truth_reason_code": None,
+        "feed_truth_source": None,
     }
 
     bundle = build_replay_context_bundle_record(
@@ -156,6 +161,15 @@ def test_bundle_writer_records_available_context_and_isolated_paths(tmp_path):
     assert bundle["replay_context"]["quote_source"] == "replay_source:replay.jsonl"
     assert bundle["replay_context"]["quote_age_sec"] == 0.0
     assert bundle["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
+    assert bundle["replay_context"]["feature_cutoff_ts"] == "2026-06-07T09:15:00+05:30"
+    assert bundle["replay_context"]["earliest_entry_ts"] == "2026-06-07T09:16:30+05:30"
+    assert bundle["replay_context"]["feed_truth_state"] == "LIVE"
+    assert bundle["replay_context"]["feed_truth_reason_code"] == "OK"
+    assert bundle["replay_context"]["field_sources"]["feature_cutoff_ts_source"] == "preserved:feature_cutoff_ts"
+    assert bundle["replay_context"]["field_sources"]["earliest_entry_ts_source"] == "preserved:earliest_entry_ts"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_state_source"] == "preserved:feed_truth_state"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_reason_code_source"] == "preserved:feed_truth_reason_code"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_source_source"] == "preserved:feed_truth_source"
 
     out = write_replay_context_bundle_evidence(
         output_root=tmp_path / ".runtime" / "replay_context_bundles",

@@ -63,10 +63,10 @@ def build_replay_context_bundle_record(
         )
 
     bundle_context = {
-        **raw_row_dict,
         **normalized_snapshot_dict,
         **strategy_context_dict,
         **report_dict,
+        **raw_row_dict,
     }
     for key in ("quote_source", "quote_age_sec", "feature_cutoff_ts", "earliest_entry_ts", "feed_truth_state", "feed_truth_reason_code", "feed_truth_source"):
         value = raw_row_dict.get(key)

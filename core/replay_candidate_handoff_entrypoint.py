@@ -669,6 +669,9 @@ def run_replay_candidate_handoff(
             source_row_sha256 = None
         bundle_id = replay_event_id.replace("/", "_").replace(" ", "_")
         try:
+            bundle_raw_row = {**row, **raw_tick, **row_oos_context}
+            if explicit_policy_context is not None:
+                bundle_raw_row.update(explicit_policy_context)
             write_replay_context_bundle_evidence(
                 output_root=_replay_bundle_root(output_root),
                 run_id=run_id,
@@ -677,7 +680,7 @@ def run_replay_candidate_handoff(
                 source_path=source_path,
                 source_row_index=idx,
                 source_timestamp_epoch=ts_epoch,
-                raw_row={**row, **raw_tick, **row_oos_context},
+                raw_row=bundle_raw_row,
                 normalized_snapshot=normalized_snapshot,
                 strategy_context=ctx,
                 report=report,

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import scripts.run_replay_candidate_handoff as replay_cli
 import core.replay_candidate_handoff_entrypoint as replay_handoff
 
 
@@ -254,6 +255,11 @@ def test_explicit_replay_policy_context_is_preserved(tmp_path, monkeypatch):
     assert bundle["replay_context"]["feed_truth_state"] == "LIVE"
     assert bundle["replay_context"]["feed_truth_reason_code"] == "OK"
     assert bundle["replay_context"]["feed_truth_source"] == "joined_feed_truth_artifact"
+    assert bundle["replay_context"]["field_sources"]["feature_cutoff_ts_source"] == "preserved:feature_cutoff_ts"
+    assert bundle["replay_context"]["field_sources"]["earliest_entry_ts_source"] == "preserved:earliest_entry_ts"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_state_source"] == "preserved:feed_truth_state"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_reason_code_source"] == "preserved:feed_truth_reason_code"
+    assert bundle["replay_context"]["field_sources"]["feed_truth_source_source"] == "preserved:feed_truth_source"
 
 def test_partial_feed_truth_fails_closed(tmp_path):
     source = tmp_path / "replay.jsonl"
@@ -324,3 +330,41 @@ def test_replay_runner_preserves_quote_provenance_and_age(tmp_path, monkeypatch)
     assert journal_row["quote_age_sec"] == 0.0
     assert bundle["replay_context"]["quote_source"] == "replay_source:replay.jsonl"
     assert bundle["replay_context"]["quote_age_sec"] == 0.0
+
+
+def test_cli_routes_policy_fields_to_replay_policy_context(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run_replay_candidate_handoff(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(verdict="BLOCKED_NO_CANDIDATE", to_dict=lambda: {"verdict": "BLOCKED_NO_CANDIDATE"})
+
+    monkeypatch.setattr(replay_cli, "run_replay_candidate_handoff", fake_run_replay_candidate_handoff)
+
+    rc = replay_cli.main(
+        [
+            "--source",
+            str(tmp_path / "replay.jsonl"),
+            "--feature-cutoff-ts",
+            "2026-07-02T09:15:00+05:30",
+            "--earliest-entry-ts",
+            "2026-07-02T09:16:00+05:30",
+            "--feed-truth-state",
+            "LIVE",
+            "--feed-truth-reason-code",
+            "OK",
+            "--feed-truth-source",
+            "joined_feed_truth_artifact",
+        ]
+    )
+
+    assert rc == 2
+    assert captured["oos_context"]["is_oos"] is None
+    assert captured["oos_context"]["oos_label"] is None
+    assert captured["replay_policy_context"] == {
+        "feature_cutoff_ts": "2026-07-02T09:15:00+05:30",
+        "earliest_entry_ts": "2026-07-02T09:16:00+05:30",
+        "feed_truth_state": "LIVE",
+        "feed_truth_reason_code": "OK",
+        "feed_truth_source": "joined_feed_truth_artifact",
+    }

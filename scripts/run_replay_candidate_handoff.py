@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
             "oos_source": args.oos_source,
             "partition_id": args.partition_id,
             "split_name": args.split_name,
+        },
+        replay_policy_context={
             "feature_cutoff_ts": args.feature_cutoff_ts,
             "earliest_entry_ts": args.earliest_entry_ts,
             "feed_truth_state": args.feed_truth_state,
