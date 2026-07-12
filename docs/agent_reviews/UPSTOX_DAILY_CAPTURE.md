@@ -37,3 +37,12 @@ Does not prove prolonged WebSocket stability over a 6-hour live market session, 
 
 ## Human Approval
 Approved by Madhuram.
+
+- mode: PAPER
+- candidate_id: N/A
+- decision: APPROVED
+- reason: Upstox daily capture implementation
+- timestamp: 2026-07-13T04:30:00Z
+- source: agent_review
+- is_order_action: false
+- broker_api_called: false
