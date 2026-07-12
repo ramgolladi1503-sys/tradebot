@@ -35,7 +35,7 @@ def main():
             if args.row_index is not None and idx == args.row_index:
                 raw_event = payload
                 break
-    
+
     if not raw_event:
         print(f"Error: Event not found in {args.source}")
         sys.exit(1)
@@ -46,6 +46,13 @@ def main():
         "replay_event_id": replay_event_id,
         "instrument": "NIFTY",
         "strategy": args.strategy_id,
+        "replay_only": True,
+        "broker_api_called": False,
+        "order_action": False,
+        "live_feed_used": False,
+        "append": False,
+        "output_isolated": True,
+        "production_artifacts_written": False,
     }
 
     # 2. Normalize
@@ -80,7 +87,7 @@ def main():
             include_no_trade_candidate=False,
             include_strategy_id_in_normalization_key=True
         )
-        
+
         candidates = getattr(report, "ranked_candidates", [])
         if not candidates:
             trace["decision"] = "EXPLICIT_REJECTION"
@@ -91,7 +98,7 @@ def main():
             trace["decision"] = "CANDIDATE"
             trace["ranking_status"] = "SUPPRESSED" if getattr(top, "suppressed", False) else "PROMOTED"
             trace["reason"] = getattr(top, "suppress_reason", "") if getattr(top, "suppressed", False) else "Valid candidate"
-            
+
         trace["read_only"] = True
     except Exception as e:
         trace["decision"] = "FAILED"

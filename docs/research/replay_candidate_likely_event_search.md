@@ -109,4 +109,3 @@ python scripts/run_replay_candidate_handoff.py --source /tmp/replay_candidate_ha
 `BLOCKED_NO_CANDIDATE_EVENT_FOUND`
 
 The repo contains real persisted candidate artifacts, but the available replay rows I sampled do not yet recreate the candidate naturally through the isolated replay handoff entrypoint.
-

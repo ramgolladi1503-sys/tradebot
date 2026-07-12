@@ -117,3 +117,78 @@ def test_inventory_report_logic(tmp_path, monkeypatch):
     assert idx["instrument_master_date"] == "2026-07-02"
     assert idx["instrument_master_date_source"] == "cli_arg"
     assert idx["lineage_verdict"] == "TOKEN_INDEX_LINEAGE_VALID"
+
+
+def test_resolved_option_ticks_preserves_available_replay_context(tmp_path, monkeypatch):
+    import scripts.report_stress_replay_data_inventory as rep_mod
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+
+    source_file = data_dir / "index_ticks_20260702.parquet"
+    pd.DataFrame(
+        {
+            "last_price": [100.0, 101.0],
+            "best_bid": [99.0, 100.0],
+            "best_ask": [101.0, 102.0],
+            "depth_json": ["{}", "{}"],
+            "local_ts": [1782970000.0, 1782970060.0],
+            "exchange_timestamp": ["2026-07-02 10:52:40", "2026-07-02 10:53:40"],
+            "instrument_token": [123, 999],
+            "volume": [1000.0, 2000.0],
+        }
+    ).to_parquet(source_file)
+
+    master_file = data_dir / "kite_instruments.json"
+    with open(master_file, "w") as f:
+        json.dump(
+            [
+                {
+                    "instrument_token": 123,
+                    "expiry": "2026-07-30",
+                    "strike": 24000,
+                    "instrument_type": "CE",
+                    "segment": "NFO-OPT",
+                    "tradingsymbol": "NIFTY26JUL24000CE",
+                }
+            ],
+            f,
+        )
+
+    monkeypatch.setattr(
+        rep_mod,
+        "Path",
+        lambda p_str: tmp_path / p_str if p_str in ["runtime", ".runtime", "data", "configs", "reports", "."] else (tmp_path / p_str if p_str == "runtime/strategy_validation" else Path(p_str)),
+    )
+
+    rep_mod.create_report(str(master_file), instrument_master_date_arg="2026-07-02")
+
+    exported = tmp_path / "runtime/strategy_validation/resolved_option_ticks_20260702.parquet"
+    assert exported.exists()
+    exported_df = pd.read_parquet(exported)
+    assert "source_timestamp" in exported_df.columns
+    assert "option_type" in exported_df.columns
+    assert "strike" in exported_df.columns
+    assert "expiry" in exported_df.columns
+    assert "feature_cutoff_ts" not in exported_df.columns
+    assert "earliest_entry_ts" not in exported_df.columns
+    assert "is_oos" not in exported_df.columns
+    assert "oos_label" not in exported_df.columns
+
+    row = exported_df.iloc[0].to_dict()
+    assert row["source_timestamp"] == "2026-07-02 10:52:40"
+    assert row["option_type"] == "CE"
+    assert row["strike"] == 24000
+    assert row["expiry"] == "2026-07-30"
+
+    idx_path = tmp_path / "runtime/strategy_validation/stress_replay_resolved_option_token_index.json"
+    with open(idx_path) as f:
+        idx = json.load(f)
+
+    assert idx["replay_context_ready"] is False
+    assert "source_timestamp" in idx["replay_context_available_fields"]
+    assert "option_type" in idx["replay_context_available_fields"]
+    assert "feature_cutoff_ts" in idx["replay_context_missing_fields"]
+    assert "earliest_entry_ts" in idx["replay_context_missing_fields"]
+    assert "MISSING_FEATURE_CUTOFF_TS" in idx["replay_context_blockers"]
+    assert "MISSING_EARLIEST_ENTRY_TS" in idx["replay_context_blockers"]

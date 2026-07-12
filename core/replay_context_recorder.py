@@ -10,8 +10,12 @@ _FIELD_SOURCES: dict[str, tuple[str, ...]] = {
     "earliest_entry_ts": ("earliest_entry_ts", "entry_ts", "execution_ts", "entry_timestamp", "entry_time"),
     "is_oos": ("is_oos",),
     "oos_label": ("oos_label",),
+    "oos_source": ("oos_source",),
+    "partition_id": ("partition_id",),
+    "split_name": ("split_name",),
     "feed_truth_state": ("feed_truth_state", "feed_health_state"),
     "feed_truth_reason_code": ("feed_truth_reason_code", "feed_health_reason_code"),
+    "feed_truth_source": ("feed_truth_source",),
     "regime": ("regime", "regime_hint", "primary_regime"),
     "regime_source": ("regime_source",),
     "global_cue_state": ("global_cue_state", "market_context", "confluence_input"),
@@ -109,7 +113,7 @@ def _extract_field(row: Mapping[str, Any], field: str, source_keys: tuple[str, .
             return _number(value), f"preserved:{key}"
         if field in {"bid", "ask"}:
             return _number(value), f"preserved:{key}"
-        if field in {"option_type", "oos_label", "quote_source", "feed_truth_state", "feed_truth_reason_code", "regime", "regime_source"}:
+        if field in {"option_type", "oos_label", "oos_source", "partition_id", "split_name", "quote_source", "feed_truth_state", "feed_truth_reason_code", "feed_truth_source", "regime", "regime_source"}:
             return _text(value), f"preserved:{key}"
         if field == "global_cue_state":
             return _global_cue_state(value), f"preserved:{key}"

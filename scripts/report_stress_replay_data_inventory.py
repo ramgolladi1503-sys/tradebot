@@ -7,6 +7,18 @@ import csv
 import re
 import datetime
 
+REPLAY_CONTEXT_AVAILABLE_FIELDS = ["source_timestamp", "option_type", "strike", "expiry"]
+REPLAY_CONTEXT_MISSING_FIELDS = [
+    "feature_cutoff_ts",
+    "earliest_entry_ts",
+    "is_oos",
+    "oos_label",
+    "feed_truth_state",
+    "feed_truth_reason_code",
+    "quote_source",
+    "quote_age_sec",
+]
+
 def load_instrument_master(file_path):
     p = Path(file_path)
     if not p.exists():
@@ -291,7 +303,13 @@ def create_report(instrument_master_path=None, instrument_master_date_arg=None):
                                 "unresolved_tokens_count": tokens_unresolved_count + len(non_option_tokens_list),
                                 "resolved_option_tokens": resolved_option_tokens_info,
                                 "unresolved_tokens": unresolved_tokens_list + non_option_tokens_list,
-                                "certification_use_rule": "ONLY_ROWS_WITH_RESOLVED_OPTION_TOKENS_ARE_CERTIFIABLE_AFTER_LINEAGE_VALIDATION"
+                                "certification_use_rule": "ONLY_ROWS_WITH_RESOLVED_OPTION_TOKENS_ARE_CERTIFIABLE_AFTER_LINEAGE_VALIDATION",
+                                "replay_context_ready": False,
+                                "replay_context_available_fields": REPLAY_CONTEXT_AVAILABLE_FIELDS,
+                                "replay_context_missing_fields": REPLAY_CONTEXT_MISSING_FIELDS,
+                                "replay_context_blockers": [
+                                    f"MISSING_{field.upper()}" for field in REPLAY_CONTEXT_MISSING_FIELDS
+                                ],
                             }
                             usable_token_index_path = out_dir / "stress_replay_resolved_option_token_index.json"
                             with open(usable_token_index_path, "w") as idx_f:
@@ -304,6 +322,21 @@ def create_report(instrument_master_path=None, instrument_master_date_arg=None):
                                 
                             try:
                                 filtered_df = df[df["instrument_token"].isin(resolved_option_token_ids)]
+                                if "exchange_timestamp" in filtered_df.columns:
+                                    filtered_df["source_timestamp"] = filtered_df["exchange_timestamp"]
+                                elif "local_ts" in filtered_df.columns:
+                                    filtered_df["source_timestamp"] = filtered_df["local_ts"]
+
+                                token_meta_by_token = {
+                                    str(token): item
+                                    for token, item in im_map.items()
+                                    if token in {str(t) for t in resolved_option_token_ids}
+                                }
+                                if "instrument_token" in filtered_df.columns:
+                                    token_strs = filtered_df["instrument_token"].astype(str)
+                                    filtered_df["option_type"] = token_strs.map(lambda t: token_meta_by_token.get(t, {}).get("instrument_type"))
+                                    filtered_df["strike"] = token_strs.map(lambda t: token_meta_by_token.get(t, {}).get("strike"))
+                                    filtered_df["expiry"] = token_strs.map(lambda t: token_meta_by_token.get(t, {}).get("expiry"))
                                 usable_rows_count = len(filtered_df)
                                 excluded_rows_count = rows_inspected - usable_rows_count
                                 filtered_df.to_parquet(usable_dataset_path)
@@ -350,6 +383,12 @@ def create_report(instrument_master_path=None, instrument_master_date_arg=None):
                     "resolved_underlying_symbols": list(underlying_symbols),
                     "resolved_option_contracts_sample": option_contracts_sample,
                     "metadata_blockers": metadata_blockers,
+                    "replay_context_ready": False,
+                    "replay_context_available_fields": REPLAY_CONTEXT_AVAILABLE_FIELDS,
+                    "replay_context_missing_fields": REPLAY_CONTEXT_MISSING_FIELDS,
+                    "replay_context_blockers": [
+                        f"MISSING_{field.upper()}" for field in REPLAY_CONTEXT_MISSING_FIELDS
+                    ],
                     "notes": "",
                     "stress_replay_capable": stress_replay_capable,
                     "partial_stress_replay_capable": partial_stress_replay_capable,
