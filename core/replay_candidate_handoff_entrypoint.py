@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from typing import Any, Iterable, Mapping
 from core.candidate_journal import write_candidate_journal_row
 from core.market_snapshot_builder import build_market_snapshot_from_raw_tick
 from core.ranking_orchestrator import build_ranked_opportunity_report
+from core.replay_context_bundle_recorder import sha256_file, write_replay_context_bundle_evidence
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 
@@ -185,6 +187,14 @@ def _write_audit_report(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
 
 
+
+
+def _replay_bundle_root(output_root: Path | None) -> Path:
+    if output_root is None:
+        return Path(".runtime") / "replay_context_bundles"
+    if output_root.name == ".runtime":
+        return output_root / "replay_context_bundles"
+    return output_root.parent / "replay_context_bundles"
 def _render_markdown(payload: dict[str, Any]) -> str:
     lines = [
         "# Replay candidate handoff audit",
@@ -345,20 +355,21 @@ def run_replay_candidate_handoff(
     for idx, row in enumerate(_row_stream()):
         raw_tick = _row_raw_tick(row)
         ts_epoch = _row_ts_epoch(raw_tick) or _row_ts_epoch(row)
+        replay_event_id = str(row.get("event_id") or row.get("replay_event_id") or row.get("ts") or idx)
         try:
             normalized_snapshot = build_market_snapshot_from_raw_tick({"raw_tick": raw_tick})
         except Exception as exc:
-            stage_evidence.append(_stage("normalized_snapshot", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("normalized_snapshot", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
-        stage_evidence.append(_stage("normalized_snapshot", True, source_path.name, row.get("event_id") or row.get("ts") or idx, "ok"))
+        stage_evidence.append(_stage("normalized_snapshot", True, source_path.name, replay_event_id, "ok"))
 
         symbol = _infer_symbol(row, fallback=strategy_id)
         try:
             ctx = _strategy_context_from_market_symbol(symbol, normalized_snapshot)
         except Exception as exc:
-            stage_evidence.append(_stage("strategy_context", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("strategy_context", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
-        stage_evidence.append(_stage("strategy_context", True, source_path.name, row.get("event_id") or row.get("ts") or idx, "ok"))
+        stage_evidence.append(_stage("strategy_context", True, source_path.name, replay_event_id, "ok"))
 
         try:
             report = build_ranked_opportunity_report(
@@ -368,8 +379,39 @@ def run_replay_candidate_handoff(
                 include_strategy_id_in_normalization_key=True,
             )
         except Exception as exc:
-            stage_evidence.append(_stage("strategy_ranking", False, source_path.name, row.get("event_id") or row.get("ts") or idx, f"{type(exc).__name__}:{exc}"))
+            stage_evidence.append(_stage("strategy_ranking", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
             continue
+
+        try:
+            source_file_sha256 = sha256_file(source_path)
+        except Exception:
+            source_file_sha256 = None
+        try:
+            source_row_sha256 = hashlib.sha256(json.dumps(row, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        except Exception:
+            source_row_sha256 = None
+        bundle_id = replay_event_id.replace("/", "_").replace(" ", "_")
+        try:
+            write_replay_context_bundle_evidence(
+                output_root=_replay_bundle_root(output_root),
+                run_id=run_id,
+                bundle_id=bundle_id,
+                replay_event_id=replay_event_id,
+                source_path=source_path,
+                source_row_index=idx,
+                source_timestamp_epoch=ts_epoch,
+                raw_row=row,
+                normalized_snapshot=normalized_snapshot,
+                strategy_context=ctx,
+                report=report,
+                strategy_id=strategy_id or getattr(report, "top_rank_strategy_id", None),
+                source_file_sha256=source_file_sha256,
+                source_row_sha256=source_row_sha256,
+            )
+        except Exception as exc:
+            stage_evidence.append(_stage("bundle_recorder", False, source_path.name, replay_event_id, f"{type(exc).__name__}:{exc}"))
+        else:
+            stage_evidence.append(_stage("bundle_recorder", True, source_path.name, replay_event_id, "ok"))
 
         top_candidate = _top_candidate_payload(report)
         if not top_candidate:
@@ -377,10 +419,10 @@ def run_replay_candidate_handoff(
                 "stage": "strategy_ranking",
                 "verdict": "BLOCKED_NO_CANDIDATE",
                 "evidence_source": source_path.name,
-                "object_id": row.get("event_id") or row.get("ts") or idx,
+                "object_id": replay_event_id,
                 "notes": "no_ranked_candidates",
             }
-            stage_evidence.append(_stage("candidate", False, source_path.name, row.get("event_id") or row.get("ts") or idx, "no_ranked_candidates"))
+            stage_evidence.append(_stage("candidate", False, source_path.name, replay_event_id, "no_ranked_candidates"))
             continue
 
         top_rank = getattr(report.ranking, "ranks", ())[0]
@@ -390,10 +432,10 @@ def run_replay_candidate_handoff(
                 "stage": "ranking",
                 "verdict": "BLOCKED_RANKING_REJECTED",
                 "evidence_source": source_path.name,
-                "object_id": getattr(top_rank, "candidate_id", None) or getattr(top_rank, "strategy_id", None) or row.get("event_id") or row.get("ts") or idx,
+                "object_id": getattr(top_rank, "candidate_id", None) or getattr(top_rank, "strategy_id", None) or replay_event_id,
                 "notes": getattr(top_rank, "rank_reason", "ranking_rejected"),
             }
-            stage_evidence.append(_stage("ranking", False, source_path.name, getattr(top_rank, "candidate_id", None) or idx, getattr(top_rank, "rank_reason", "ranking_rejected")))
+            stage_evidence.append(_stage("ranking", False, source_path.name, getattr(top_rank, "candidate_id", None) or replay_event_id, getattr(top_rank, "rank_reason", "ranking_rejected")))
             continue
 
         top_candidate = dict(top_candidate)
@@ -470,7 +512,7 @@ def run_replay_candidate_handoff(
                 output_root=output_root,
                 run_id=run_id,
                 write_production_artifacts=write_production_artifacts,
-                replay_event_id=str(row.get("event_id") or row.get("ts") or idx),
+                replay_event_id=replay_event_id,
                 handoff_path=handoff_path,
                 journal_path=journal_path,
                 audit_json_path=audit_json_path,
@@ -480,7 +522,7 @@ def run_replay_candidate_handoff(
         stage_evidence.append(_stage("persistence", True, str(handoff_path), top_candidate.get("trade_id"), "ok"))
         selected_result = ReplayCandidateHandoffResult(
             verdict="FULLY_PROVEN_FROM_REPLAY_INPUT",
-            replay_event_id=str(row.get("event_id") or row.get("ts") or idx),
+            replay_event_id=replay_event_id,
             blocker=None,
             blockers=(),
             stage_evidence=tuple(stage_evidence),
@@ -511,7 +553,7 @@ def run_replay_candidate_handoff(
             blocker = "BLOCKED_NO_CANDIDATE"
         selected_result = ReplayCandidateHandoffResult(
             verdict=verdict,
-            replay_event_id=str((row or {}).get("event_id") or (row or {}).get("ts") or idx),
+            replay_event_id=replay_event_id,
             blocker=blocker,
             blockers=tuple(dict.fromkeys([stage.get("verdict") for stage in stage_evidence if stage.get("verdict") and stage.get("verdict").startswith("BLOCKED_")])) or (blocker,),
             stage_evidence=tuple(stage_evidence),

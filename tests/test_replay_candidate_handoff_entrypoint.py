@@ -50,7 +50,7 @@ def _fake_success_report() -> SimpleNamespace:
 
 def test_isolated_output_is_used_by_default(tmp_path, monkeypatch):
     source = tmp_path / "replay.jsonl"
-    _write_jsonl(source, [{"ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
     output_root = tmp_path / ".runtime" / "replay_candidate_handoff"
     prod_handoff = tmp_path / ".runtime" / "runtime_candidate_handoff_latest.json"
     prod_journal = tmp_path / ".runtime" / "candidates" / "candidate_journal.jsonl"
@@ -92,7 +92,7 @@ def test_missing_replay_input_fails_closed(tmp_path):
 
 def test_write_production_artifacts_is_forbidden_in_tests(tmp_path):
     source = tmp_path / "replay.jsonl"
-    _write_jsonl(source, [{"ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
     with pytest.raises(RuntimeError, match="write_production_artifacts_forbidden_in_tests"):
         replay_handoff.run_replay_candidate_handoff(
             source_path=source,
@@ -103,7 +103,7 @@ def test_write_production_artifacts_is_forbidden_in_tests(tmp_path):
 
 def test_missing_candidate_and_ranking_rejection_are_explicit(tmp_path, monkeypatch):
     source = tmp_path / "replay.jsonl"
-    _write_jsonl(source, [{"ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
     monkeypatch.setattr(replay_handoff, "build_market_snapshot_from_raw_tick", lambda *args, **kwargs: {"snapshot": True})
     monkeypatch.setattr(replay_handoff, "_strategy_context_from_market_symbol", lambda *args, **kwargs: SimpleNamespace(symbol="NIFTY"))
 
@@ -144,7 +144,7 @@ def test_missing_candidate_and_ranking_rejection_are_explicit(tmp_path, monkeypa
 
 def test_candidate_and_journal_persistence_use_isolated_output(tmp_path, monkeypatch):
     source = tmp_path / "replay.jsonl"
-    _write_jsonl(source, [{"ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
+    _write_jsonl(source, [{"event_id": "evt-001", "ts": 1_783_049_403.7, "symbol": "NIFTY26JUL58400CE", "ltp": 855.85, "vol": 10}])
     monkeypatch.setattr(replay_handoff, "build_market_snapshot_from_raw_tick", lambda *args, **kwargs: {"snapshot": True})
     monkeypatch.setattr(replay_handoff, "_strategy_context_from_market_symbol", lambda *args, **kwargs: SimpleNamespace(symbol="NIFTY"))
     monkeypatch.setattr(replay_handoff, "build_ranked_opportunity_report", lambda *args, **kwargs: _fake_success_report())
@@ -155,3 +155,6 @@ def test_candidate_and_journal_persistence_use_isolated_output(tmp_path, monkeyp
     assert result.journal_path.endswith("run-004/candidate_journal.jsonl")
     assert Path(result.handoff_path).exists()
     assert Path(result.journal_path).exists()
+    bundle_root = tmp_path / ".runtime" / "replay_context_bundles"
+    assert (bundle_root / "run-004" / "replay_context_bundle_evt-001.json").exists()
+    assert (bundle_root / "run-004" / "replay_context_bundle_latest.json").exists()
