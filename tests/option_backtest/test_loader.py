@@ -68,6 +68,27 @@ def test_loader_filters_symbol_and_date_range(tmp_path: Path):
     assert bool(df.iloc[0]["has_bid_ask"]) is True
 
 
+def test_loader_honors_precise_date_to_timestamp(tmp_path: Path):
+    data_path = tmp_path / "precise_end.csv"
+    pd.DataFrame(
+        [
+            _base_row(timestamp="2026-04-01 09:15:00"),
+            _base_row(timestamp="2026-04-01 09:16:00"),
+            _base_row(timestamp="2026-04-01 09:17:00"),
+        ]
+    ).to_csv(data_path, index=False)
+
+    df = load_option_symbol_csv(
+        data_path=data_path,
+        symbol="NIFTY24APR25500CE",
+        date_from="2026-04-01 09:15:00",
+        date_to="2026-04-01 09:16:00",
+        timezone="Asia/Kolkata",
+    )
+
+    assert list(df["timestamp"].dt.strftime("%H:%M:%S")) == ["09:15:00", "09:16:00"]
+
+
 def test_loader_rejects_missing_required_columns(tmp_path: Path):
     data_path = tmp_path / "bad.csv"
     pd.DataFrame([{"timestamp": "2026-04-01 09:15:00", "close": 10}]).to_csv(data_path, index=False)

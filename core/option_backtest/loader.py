@@ -37,6 +37,11 @@ def _normalize_timestamp(series: pd.Series, timezone: str) -> pd.Series:
     return ts.dt.tz_convert(timezone)
 
 
+def _has_explicit_time_component(value: str) -> bool:
+    text = str(value or "").strip()
+    return any(token in text for token in ("T", ":", "+"))
+
+
 def _first_present_column(df: pd.DataFrame, names: tuple[str, ...]) -> str | None:
     for name in names:
         if name in df.columns:
@@ -226,7 +231,8 @@ def load_option_symbol_csv(
     if date_to:
         end_ts = pd.Timestamp(date_to)
         end_ts = end_ts.tz_localize(timezone) if end_ts.tzinfo is None else end_ts.tz_convert(timezone)
-        end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+        if not _has_explicit_time_component(str(date_to)):
+            end_ts = end_ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
         df = df.loc[df["timestamp"] <= end_ts]
 
     df = df.loc[df["symbol"].astype(str) == str(symbol)].copy()
