@@ -34,6 +34,7 @@ _FLUSH_THREAD_TERMINATED = False
 _QUEUE_HIGH_WATER = 0
 _FLUSH_COUNT = 0
 _REPLAY_PRESSURE_HOOK: Callable[[dict[str, Any]], None] | None = None
+_REPLAY_PRESSURE_POST_COMMIT_HOOK: Callable[[dict[str, Any]], None] | None = None
 _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH = False
 _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES = False
 _AUDIT_COUNTERS = {
@@ -82,8 +83,14 @@ def set_replay_pressure_hook(hook: Callable[[dict[str, Any]], None] | None) -> N
     _REPLAY_PRESSURE_HOOK = hook
 
 
+def set_replay_pressure_post_commit_hook(hook: Callable[[dict[str, Any]], None] | None) -> None:
+    global _REPLAY_PRESSURE_POST_COMMIT_HOOK
+    _REPLAY_PRESSURE_POST_COMMIT_HOOK = hook
+
+
 def clear_replay_pressure_hook() -> None:
     set_replay_pressure_hook(None)
+    set_replay_pressure_post_commit_hook(None)
 
 
 def set_replay_pressure_immediate_flush_enabled(enabled: bool) -> None:
@@ -572,6 +579,26 @@ def _write_rows(
             )
             conn.commit()
         _AUDIT_COUNTERS["committed_batches"] += 1
+        if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_POST_COMMIT_HOOK is not None:
+            try:
+                _REPLAY_PRESSURE_POST_COMMIT_HOOK(
+                    {
+                        "batch_rows": len(rows),
+                        "batch_size": len(rows),
+                        "queue_depth": write_queue_depth(),
+                        "pending_writes": max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
+                        "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
+                        "rows_dequeued": _AUDIT_COUNTERS["rows_dequeued"],
+                        "committed_rows": _WRITE_FLUSH_COUNT,
+                        "committed_batches": _AUDIT_COUNTERS["committed_batches"],
+                        "worker_started": _AUDIT_COUNTERS["worker_started"],
+                        "worker_thread_name": _FLUSH_THREAD_NAME,
+                        "stage": "after_commit",
+                        "monotonic_ns": time.monotonic_ns(),
+                    }
+                )
+            except Exception:
+                pass
         try:
             from core.feed_robustness_evidence import collector
             for row in rows:

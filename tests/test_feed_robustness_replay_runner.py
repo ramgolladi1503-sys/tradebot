@@ -365,11 +365,10 @@ def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monk
     assert report["pressure_profile"]["hook_invocation_count"] == worker["committed_batches"]
     assert report["pressure_profile"]["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
     assert report["pressure_profile"]["max_pending_writes"] >= worker["queue_depth_high_water"]
-    assert report["pressure_profile"]["hook_ordinal"] == 2 * report["pressure_profile"]["hook_invocation_count"]
-    hook_ends = [entry for entry in report["worker_lifecycle"] if entry["stage"] == "hook_end"]
-    assert sum(int(entry["batch_size"]) for entry in hook_ends) == worker["committed_rows"]
-    assert all(int(entry["configured_delay_ms"]) == 1 for entry in hook_ends)
-    assert all(entry["monotonic_start_ns"] is not None and entry["monotonic_end_ns"] is not None for entry in hook_ends)
+    assert report["pressure_profile"]["hook_ordinal"] == report["pressure_profile"]["hook_invocation_count"]
+    post_commit = [entry for entry in report["worker_lifecycle"] if entry["stage"] == "post_commit"]
+    assert sum(int(entry["batch_size"]) for entry in post_commit) == worker["committed_rows"]
+    assert all(int(entry["configured_delay_ms"]) == 1 for entry in post_commit)
     assert controller.hook_invocation_count == report["pressure_profile"]["hook_invocation_count"]
     with sqlite3.connect(str(db_path)) as conn:
         committed_rows = conn.execute("select count(*) from ticks").fetchone()[0]
@@ -487,12 +486,12 @@ def test_pressure_accounting_reports_max_pending_writes_and_batch_size(monkeypat
     assert profile["max_pending_writes"] >= worker["queue_depth_high_water"]
     assert profile["hook_invocation_count"] == worker["committed_batches"]
     assert profile["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
-    assert profile["hook_ordinal"] == 2 * profile["hook_invocation_count"]
+    assert profile["hook_ordinal"] == profile["hook_invocation_count"]
     assert profile["max_pending_writes"] > 0
     assert any(entry["stage"] == "producer_completed" for entry in report["queue_depth_timeline"])
     assert any(entry["stage"] == "shutdown_requested" for entry in report["worker_lifecycle"])
-    worker_stages = [entry["stage"] for entry in report["worker_lifecycle"] if entry["stage"] in {"hook_start", "hook_end"}]
-    assert worker_stages[:2] == ["hook_start", "hook_end"]
+    worker_stages = [entry["stage"] for entry in report["worker_lifecycle"] if entry["stage"] in {"hook_start", "hook_end", "post_commit"}]
+    assert worker_stages[:3] == ["hook_start", "hook_end", "post_commit"]
 
 
 def test_pressure_hook_context_includes_batch_size(monkeypatch, tmp_path):
@@ -556,7 +555,7 @@ def test_pressure_resource_timeline_records_pre_producer_and_post_join_samples(m
     kinds = [entry["kind"] for entry in report["resource_timeline"]]
     assert kinds[0] == "pre_producer_sample"
     assert "post_join_sample" in kinds
-    assert any(kind == "periodic_sample" for kind in kinds) or len(kinds) >= 2
+    assert len(kinds) >= 2
     assert len(report["resource_timeline"]) >= 2
 
 

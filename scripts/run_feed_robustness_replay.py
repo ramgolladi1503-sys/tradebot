@@ -282,7 +282,7 @@ class _ReplayPressureController:
             self._last_queue_high_water = hw
             self.resource_timeline.append({"kind": "queue_high_water_change", **_resource_timeline_sample()})
         pending_writes = int(payload["pending_writes"])
-        queue_high_water = int(payload.get("queue_depth_high_water") or 0)
+        queue_high_water = int(worker_state.get("queue_depth_high_water") or 0)
         self._max_pending_writes = max(self._max_pending_writes, pending_writes, queue_high_water)
 
     def record_worker_event(self, stage: str, **extra: object) -> None:
@@ -305,11 +305,24 @@ class _ReplayPressureController:
             "observed_delay_ms": observed_delay_ms,
             "rows_dequeued_total": int(context.get("rows_dequeued") or 0),
             "rows_committed_before_hook": int(context.get("committed_rows") or 0),
-            "rows_committed_after_commit": None,
             "monotonic_start_ns": start_ns,
             "monotonic_end_ns": end_ns,
         }
         self.worker_lifecycle.append(entry)
+
+    def record_post_commit(self, context: dict[str, object]) -> None:
+        self.worker_lifecycle.append({
+            "stage": "post_commit",
+            "hook_ordinal": int(context.get("committed_batches") or 0),
+            "batch_size": int(context.get("batch_size") or context.get("batch_rows") or 0),
+            "configured_delay_ms": self.delay_before_each_commit_ms if self.profile == "constant_delay" else self.stall_duration_ms,
+            "observed_delay_ms": None,
+            "rows_dequeued_total": int(context.get("rows_dequeued") or 0),
+            "rows_committed_before_hook": int(context.get("committed_rows") or 0),
+            "rows_committed_after_commit": int(context.get("committed_rows") or 0),
+            "monotonic_start_ns": None,
+            "monotonic_end_ns": None,
+        })
 
     def maybe_pause_before_commit(self, context: dict[str, object]) -> None:
         if not self.enabled:
@@ -334,13 +347,18 @@ class _ReplayPressureController:
                 time.sleep(self.delay_before_each_commit_ms / 1000.0)
                 end_ns = time.monotonic_ns()
                 self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
-                self._record_hook_event(
-                    "hook_end",
-                    context_payload,
-                    observed_delay_ms=(end_ns - start_ns) / 1e6,
-                    start_ns=start_ns,
-                    end_ns=end_ns,
-                )
+                self.worker_lifecycle.append({
+                    "stage": "hook_end",
+                    "hook_ordinal": self._hook_ordinal,
+                    "batch_size": int(context_payload.get("batch_size") or context_payload.get("batch_rows") or 0),
+                    "configured_delay_ms": self.delay_before_each_commit_ms,
+                    "observed_delay_ms": (end_ns - start_ns) / 1e6,
+                    "rows_dequeued_total": int(context_payload.get("rows_dequeued") or 0),
+                    "rows_committed_before_hook": int(context_payload.get("committed_rows") or 0),
+                    "rows_committed_after_commit": None,
+                    "monotonic_start_ns": start_ns,
+                    "monotonic_end_ns": end_ns,
+                })
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -371,13 +389,18 @@ class _ReplayPressureController:
                 time.sleep(self.stall_duration_ms / 1000.0)
                 end_ns = time.monotonic_ns()
                 self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
-                self._record_hook_event(
-                    "hook_end",
-                    context_payload,
-                    observed_delay_ms=(end_ns - start_ns) / 1e6,
-                    start_ns=start_ns,
-                    end_ns=end_ns,
-                )
+                self.worker_lifecycle.append({
+                    "stage": "hook_end",
+                    "hook_ordinal": self._hook_ordinal,
+                    "batch_size": int(context_payload.get("batch_size") or context_payload.get("batch_rows") or 0),
+                    "configured_delay_ms": self.stall_duration_ms,
+                    "observed_delay_ms": (end_ns - start_ns) / 1e6,
+                    "rows_dequeued_total": dequeued_rows,
+                    "rows_committed_before_hook": int(context_payload.get("committed_rows") or 0),
+                    "rows_committed_after_commit": None,
+                    "monotonic_start_ns": start_ns,
+                    "monotonic_end_ns": end_ns,
+                })
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -471,6 +494,7 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     callback_batches: list[dict] = []
     if pressure_controller is not None and pressure_controller.enabled:
         tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
+        tick_store.set_replay_pressure_post_commit_hook(lambda context: pressure_controller.record_post_commit(context))
         tick_store.set_replay_pressure_immediate_flush_enabled(False)
         tick_store.set_replay_pressure_read_flush_enabled(False)
         pressure_controller.record_worker_event("hook_registered", scenario=scenario)
