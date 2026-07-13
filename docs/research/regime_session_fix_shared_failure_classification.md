@@ -265,4 +265,3 @@ Probability / entropy invariance:
 ## 9. Final verdict at classification time
 
 - `PASS_SESSION_FIX_REGRESSION_CLEAN_WITH_SHARED_BLOCKERS`
-
