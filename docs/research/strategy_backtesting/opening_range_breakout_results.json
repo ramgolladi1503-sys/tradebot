@@ -305,5 +305,135 @@
     "invalidated_reason": "Exit rows could cross sampled sessions in the proxy harness.",
     "correction_pending": true,
     "correction_status": "pending rerun"
+  },
+  "corrected_candle_validation": {
+    "verdict": "CONDITIONALLY_SUPPORTED",
+    "volume_classification": "VOLUME_GATE_BYPASSED",
+    "volume_note": "The candle harness computes a volatility proxy vol_z from ATR statistics, not from raw traded volume.",
+    "dataset_manifest_sha256": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
+    "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
+    "candidate_hash": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
+    "trade_hash": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38",
+    "repeatability": {
+      "candidate_hash_repeat": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
+      "trade_hash_repeat": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38",
+      "deterministic": true
+    },
+    "data": {
+      "selected_sessions": 60,
+      "source_files": 60,
+      "rows": 22500,
+      "raw_manifest_hash": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
+      "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
+      "rejection_count": 20872,
+      "candidate_count": 1628,
+      "trade_count": 1628,
+      "sessions_with_zero_candidates": 3,
+      "sessions_with_zero_trades": 3,
+      "max_concurrent_positions": 15,
+      "overlapping_trade_count": 621,
+      "cross_session_trade_count": 0,
+      "maximum_trade_duration_minutes": 15,
+      "maximum_trade_bars": 15
+    },
+    "direction_counts": {
+      "BUY_CALL": 573,
+      "BUY_PUT": 1055
+    },
+    "friction": {
+      "baseline": {
+        "trade_count": 1628,
+        "wins": 809,
+        "losses": 819,
+        "net_bps_sum": 655.5181373146523,
+        "avg_net_bps": 0.4026524184979437,
+        "max_drawdown_bps": -636.2554489661983,
+        "cost_bps_roundtrip": 2.0
+      },
+      "adverse": {
+        "trade_count": 1628,
+        "wins": 588,
+        "losses": 1040,
+        "net_bps_sum": -4228.481862685348,
+        "avg_net_bps": -2.5973475815020564,
+        "max_drawdown_bps": -4327.364022385104,
+        "cost_bps_roundtrip": 5.0
+      },
+      "severe": {
+        "trade_count": 1628,
+        "wins": 317,
+        "losses": 1311,
+        "net_bps_sum": -12368.481862685348,
+        "avg_net_bps": -7.597347581502056,
+        "max_drawdown_bps": -12368.481862685368,
+        "cost_bps_roundtrip": 10.0
+      }
+    },
+    "regime_segmentation": {
+      "RANGE": {
+        "trades": 1468,
+        "net_bps_sum": 751.2148215652089
+      },
+      "TREND": {
+        "trades": 160,
+        "net_bps_sum": -95.69668425055772
+      }
+    },
+    "manual_reconciliation": {
+      "winning_trade": {
+        "session": "2024-05-30",
+        "signal_ts": "2024-05-30T09:37:00",
+        "direction": "BUY_PUT",
+        "entry_ts": "2024-05-30T09:37:00",
+        "exit_ts": "2024-05-30T09:52:00",
+        "entry_price": 22613.45,
+        "exit_price": 22591.35,
+        "gross_bps": 9.772944862460609,
+        "net_bps": 7.772944862460609
+      },
+      "losing_trade": {
+        "session": "2024-05-30",
+        "signal_ts": "2024-05-30T09:41:00",
+        "direction": "BUY_PUT",
+        "entry_ts": "2024-05-30T09:41:00",
+        "exit_ts": "2024-05-30T09:56:00",
+        "entry_price": 22597.15,
+        "exit_price": 22600.25,
+        "gross_bps": -1.3718544152685475,
+        "net_bps": -3.3718544152685475
+      },
+      "repeated_breakout": {
+        "session": "2024-05-30",
+        "first_candidate_ts": "2024-05-30T09:37:00",
+        "second_candidate_ts": "2024-05-30T09:38:00"
+      },
+      "no_trade_session": "2025-01-17",
+      "late_session_case": "none_observed",
+      "rejected_candidate_case": "no_explicit_rejected_candidate_object_is_emitted_by_this_strategy"
+    },
+    "negative_control": {
+      "broken_opening_range": {
+        "signals": 0,
+        "trades": 0
+      }
+    },
+    "wfa": {
+      "status": "CANDLE_WFA_PATH_ACCEPTABLE",
+      "window_count": 4,
+      "avg_return": 0.0010220000000000001,
+      "avg_max_drawdown": -0.0036710000000000007,
+      "avg_win_rate": 0.4958755,
+      "avg_r": 0.0037942500000000003,
+      "avg_sharpe_proxy": 0.5569149999999999,
+      "total_trades": 1126,
+      "window_hash": "64b34d6c25523d2d79981fc79b282062983ff9b2df38238c82706c426c38368a",
+      "trade_hash": "06c7eb1849bb08c1c2cba8dada73787ea4fe2ef3970753dca5c589c75eae5e18"
+    },
+    "final_verdict": "CONDITIONALLY_SUPPORTED",
+    "unresolved_limitations": [
+      "The candle lane relies on a documented volume-proxy fallback, not true traded-volume proof.",
+      "The strategy does not emit an explicit rejected-candidate object; no-trade rows are the observable blocker surface.",
+      "No late-session candidate was observed in the corrected sample window."
+    ]
   }
 }
