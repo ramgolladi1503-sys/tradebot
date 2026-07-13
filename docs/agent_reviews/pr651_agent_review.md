@@ -15,7 +15,7 @@ source: docs/agent_reviews/pr651_agent_review.md
 source_agent: Codex (GPT-5)
 action: GENERATE_PATCH
 title: Fix canonical regime session-context propagation
-scope: propagate canonical timestamp-derived session context through market-data, regime probability, decision DAG, gate-status logging, and orchestrator consumers; add regression tests and evidence docs; do not change thresholds, coefficients, strategy eligibility, risk rules, broker/order behavior, or live execution behavior
+scope: propagate canonical timestamp-derived session context through market-data, regime probability, decision DAG, decision logging, and orchestrator consumers; add regression tests and evidence docs; do not change thresholds, coefficients, strategy eligibility, risk rules, broker/order behavior, or live execution behavior
 requested_paths:
   - core/regime_session_context.py
   - core/regime_prob_model.py
