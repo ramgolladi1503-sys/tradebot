@@ -370,9 +370,11 @@ The walk-forward path is not supportive.
 
 ## Final verdict
 
-`CONDITIONALLY_SUPPORTED`
+`INVALID_DUE_TO_BACKTEST_HARNESS`
 
-The historical candle run remains invalidated because the original harness crossed sampled sessions. The corrected rerun is now the operative candle result and supports the strategy only conditionally because it depends on a documented volume-proxy fallback and does not surface explicit rejected-candidate objects.
+The historical candle run remains invalidated because the original harness crossed sampled sessions. The corrected rerun is retained only as withdrawn trace evidence; it is not an operative validation result because it depends on a documented volume-proxy fallback, does not surface explicit rejected-candidate objects, and does not represent executable option fills.
+
+Historical note: the previous `CONDITIONALLY_SUPPORTED` wording is withdrawn and retained only as non-operative trace history.
 
 ## Exact unresolved limitations
 
