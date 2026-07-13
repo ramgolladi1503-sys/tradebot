@@ -556,6 +556,13 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
                 monotonic_ns=shutdown_result.get("shutdown_started_monotonic_ns"),
                 shutdown_result=shutdown_result,
             )
+            if shutdown_result.get("deadline_expired"):
+                pressure_controller.record_worker_event(
+                    "deadline_expired",
+                    scenario=scenario,
+                    monotonic_ns=shutdown_result.get("shutdown_finished_monotonic_ns"),
+                    shutdown_result=shutdown_result,
+                )
             pressure_controller.record_worker_event(
                 "drain_completed",
                 scenario=scenario,
@@ -658,24 +665,31 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
                     else max(0, int(shutdown_result["drain_duration_ns"]) - int(shutdown_result["join_duration_ns"]))
                 ),
                 "total_shutdown_path_duration_ns": shutdown_result.get("drain_duration_ns"),
-                "producer_completion_monotonic_ns": callback_batches[-1]["batch_end_ns"] if callback_batches else schedule_start,
+                "producer_completion_monotonic_ns": (
+                    producer_completion_event.get("monotonic_ns")
+                    if producer_completion_event and producer_completion_event.get("monotonic_ns") is not None
+                    else (callback_batches[-1]["batch_end_ns"] if callback_batches else schedule_start)
+                ),
                 "producer_completion_queue_depth": producer_completion_queue_depth,
                 "producer_completion_pending_writes": producer_completion_pending_writes,
-                "queue_depth_at_shutdown": worker_state.get("queue_depth_at_shutdown"),
-                "pending_writes_at_shutdown": worker_state.get("pending_writes_at_shutdown"),
-                "in_flight_rows_at_shutdown": max(0, int(worker_state.get("rows_dequeued") or 0) - int(worker_state.get("committed_rows") or 0)),
-                "rows_enqueued": worker_state.get("rows_enqueued"),
-                "rows_dequeued": worker_state.get("rows_dequeued"),
-                "rows_committed": worker_state.get("committed_rows"),
-                "committed_batches": worker_state.get("committed_batches"),
-                "writes_rejected_after_shutdown": worker_state.get("writes_rejected_after_shutdown"),
+                "queue_depth_at_shutdown": shutdown_result.get("queue_depth"),
+                "pending_writes_at_shutdown": shutdown_result.get("pending_writes"),
+                "in_flight_rows_at_shutdown": shutdown_result.get("in_flight_rows"),
+                "rows_enqueued": shutdown_result.get("rows_enqueued"),
+                "rows_dequeued": shutdown_result.get("rows_dequeued"),
+                "rows_committed": shutdown_result.get("rows_committed"),
+                "committed_batches": shutdown_result.get("committed_batches"),
+                "writes_rejected_after_shutdown": shutdown_result.get("writes_rejected_after_shutdown"),
                 "worker_alive": shutdown_result.get("worker_alive"),
-                "worker_join_completed": worker_state.get("worker_join_completed"),
-                "worker_terminated": worker_state.get("worker_terminated"),
-                "worker_failures": worker_state.get("worker_failures"),
+                "worker_daemon": worker_state.get("worker_daemon"),
+                "worker_join_completed": shutdown_result.get("worker_join_completed"),
+                "worker_terminated": shutdown_result.get("worker_terminated"),
+                "worker_failures": shutdown_result.get("worker_failures"),
                 "final_flush_attempted": shutdown_result.get("final_flush_attempted"),
                 "final_flush_completed": shutdown_result.get("final_flush_completed"),
                 "worker_completion_monotonic_ns": shutdown_result.get("shutdown_finished_monotonic_ns"),
+                "initial_shutdown_result": worker_state.get("initial_shutdown_result"),
+                "cleanup_shutdown_result": worker_state.get("cleanup_shutdown_result"),
             }
         tick_store.clear_replay_pressure_hook()
         tick_store.set_replay_pressure_immediate_flush_enabled(True)

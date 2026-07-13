@@ -39,6 +39,8 @@ _SHUTDOWN_STARTED_MONOTONIC_NS: int | None = None
 _SHUTDOWN_FINISHED_MONOTONIC_NS: int | None = None
 _SHUTDOWN_STATE: str | None = None
 _SHUTDOWN_RESULT: dict[str, Any] | None = None
+_INITIAL_SHUTDOWN_RESULT: dict[str, Any] | None = None
+_CLEANUP_SHUTDOWN_RESULT: dict[str, Any] | None = None
 _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS: int | None = None
 _REPLAY_PRESSURE_HOOK: Callable[[dict[str, Any]], None] | None = None
 _REPLAY_PRESSURE_POST_COMMIT_HOOK: Callable[[dict[str, Any]], None] | None = None
@@ -74,6 +76,7 @@ class ShutdownResult:
     pending_writes: int
     writes_rejected_after_shutdown: int
     worker_alive: bool
+    worker_daemon: bool
     worker_join_completed: bool
     worker_terminated: bool
     worker_failures: int
@@ -695,7 +698,8 @@ def get_audit_counters() -> dict[str, int]:
 
 def reset_audit_counters() -> None:
     global _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS, _SHUTDOWN_FINISHED_MONOTONIC_NS
-    global _SHUTDOWN_STATE, _SHUTDOWN_RESULT, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
+    global _SHUTDOWN_STATE, _SHUTDOWN_RESULT, _INITIAL_SHUTDOWN_RESULT, _CLEANUP_SHUTDOWN_RESULT
+    global _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
     global _WRITE_ENQUEUE_COUNT, _WRITE_FLUSH_COUNT, _QUEUE_HIGH_WATER, _FLUSH_COUNT
     global _FLUSH_THREAD_JOIN_COMPLETED, _FLUSH_THREAD_TERMINATED
     for key in _AUDIT_COUNTERS:
@@ -705,6 +709,8 @@ def reset_audit_counters() -> None:
     _SHUTDOWN_FINISHED_MONOTONIC_NS = None
     _SHUTDOWN_STATE = None
     _SHUTDOWN_RESULT = None
+    _INITIAL_SHUTDOWN_RESULT = None
+    _CLEANUP_SHUTDOWN_RESULT = None
     _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS = None
     _WRITE_ENQUEUE_COUNT = 0
     _WRITE_FLUSH_COUNT = 0
@@ -800,6 +806,7 @@ def _snapshot_shutdown_result(
         pending_writes=max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
         writes_rejected_after_shutdown=_AUDIT_COUNTERS["writes_rejected_after_shutdown"],
         worker_alive=worker_alive,
+        worker_daemon=bool(thread.daemon) if thread is not None else False,
         worker_join_completed=not worker_alive,
         worker_terminated=not worker_alive,
         worker_failures=_AUDIT_COUNTERS["worker_failures"],
@@ -813,8 +820,13 @@ def _snapshot_shutdown_result(
 def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str, Any]:
     global _FLUSH_THREAD_JOIN_COMPLETED, _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS
     global _SHUTDOWN_FINISHED_MONOTONIC_NS, _SHUTDOWN_STATE, _SHUTDOWN_RESULT
+    global _INITIAL_SHUTDOWN_RESULT, _CLEANUP_SHUTDOWN_RESULT
     thread = _FLUSH_THREAD
-    if thread is not None and not thread.is_alive() and _SHUTDOWN_RESULT is not None:
+    if (
+        _SHUTDOWN_RESULT is not None
+        and _SHUTDOWN_RESULT.get("status") in {"COMPLETE_DRAIN", "WORKER_FAILURE"}
+        and (thread is None or not thread.is_alive())
+    ):
         return dict(_SHUTDOWN_RESULT)
 
     shutdown_started_monotonic_ns = time.monotonic_ns()
@@ -899,6 +911,10 @@ def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str
         thread=thread,
     )
     _SHUTDOWN_RESULT = result
+    if status == "INCOMPLETE_DRAIN_TIMEOUT" and _INITIAL_SHUTDOWN_RESULT is None:
+        _INITIAL_SHUTDOWN_RESULT = dict(result)
+    if status == "COMPLETE_DRAIN" and _INITIAL_SHUTDOWN_RESULT is not None:
+        _CLEANUP_SHUTDOWN_RESULT = dict(result)
     return dict(result)
 
 
@@ -915,18 +931,21 @@ def write_flush_count() -> int:
     return _WRITE_FLUSH_COUNT
 
 
-def get_persistence_worker_state() -> dict[str, int | bool | str | None]:
+def get_persistence_worker_state() -> dict[str, Any]:
     return {
         "worker_started": _AUDIT_COUNTERS["worker_started"],
         "worker_start_count": _AUDIT_COUNTERS["worker_started"],
         "worker_thread_id": _FLUSH_THREAD_IDENT,
         "worker_thread_name": _FLUSH_THREAD_NAME,
+        "worker_daemon": bool(_FLUSH_THREAD.daemon) if _FLUSH_THREAD is not None else None,
         "worker_terminated": _FLUSH_THREAD_TERMINATED,
         "worker_join_completed": _FLUSH_THREAD_JOIN_COMPLETED,
         "worker_failures": _AUDIT_COUNTERS["worker_failures"],
         "shutdown_state": _SHUTDOWN_STATE,
         "shutdown_started_monotonic_ns": _SHUTDOWN_STARTED_MONOTONIC_NS,
         "shutdown_finished_monotonic_ns": _SHUTDOWN_FINISHED_MONOTONIC_NS,
+        "initial_shutdown_result": _INITIAL_SHUTDOWN_RESULT,
+        "cleanup_shutdown_result": _CLEANUP_SHUTDOWN_RESULT,
         "writes_rejected_after_shutdown": _AUDIT_COUNTERS["writes_rejected_after_shutdown"],
         "last_accepted_enqueue_monotonic_ns": _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS,
         "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],

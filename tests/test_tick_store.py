@@ -118,6 +118,7 @@ def test_shutdown_completes_and_rejects_writes_after_shutdown(monkeypatch, tmp_p
         assert result["deadline_expired"] is False
         assert result["worker_join_completed"] is True
         assert result["worker_terminated"] is True
+        assert result["worker_daemon"] is True
         assert result["rows_enqueued"] == 4
         assert result["rows_dequeued"] == 4
         assert result["rows_committed"] == 4
@@ -157,6 +158,7 @@ def test_shutdown_times_out_then_completes_on_retry(monkeypatch, tmp_path):
         assert timeout_result["worker_terminated"] is False
         assert timeout_result["queue_depth"] >= 0
         assert timeout_result["pending_writes"] >= timeout_result["queue_depth"]
+        assert tick_store.get_persistence_worker_state()["initial_shutdown_result"] == timeout_result
 
         monkeypatch.setattr(tick_store, "_write_rows", original_write_rows)
         complete_result = tick_store.shutdown_persistence_worker(deadline_seconds=2.0)
@@ -165,6 +167,10 @@ def test_shutdown_times_out_then_completes_on_retry(monkeypatch, tmp_path):
         assert complete_result["worker_terminated"] is True
         assert complete_result["queue_depth"] == 0
         assert complete_result["pending_writes"] == 0
+        state = tick_store.get_persistence_worker_state()
+        assert state["initial_shutdown_result"] == timeout_result
+        assert state["cleanup_shutdown_result"] == complete_result
+        assert timeout_result["status"] == "INCOMPLETE_DRAIN_TIMEOUT"
     finally:
         tick_store.reset_audit_counters()
         tick_store.set_replay_pressure_immediate_flush_enabled(True)
@@ -193,6 +199,7 @@ def test_shutdown_worker_failure_is_reported(monkeypatch, tmp_path):
         result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
         assert result["status"] == "WORKER_FAILURE"
         assert result["worker_failures"] >= 1
+        assert result["worker_daemon"] is True
     finally:
         tick_store.reset_audit_counters()
         tick_store.set_replay_pressure_immediate_flush_enabled(True)

@@ -376,6 +376,11 @@ def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monk
     assert drain["deadline_expired"] is False
     assert drain["actual_thread_join_duration_ns"] is not None
     assert drain["final_accounting_duration_ns"] is not None
+    assert drain["rows_enqueued"] == len(rows)
+    assert drain["rows_dequeued"] == len(rows)
+    assert drain["rows_committed"] == len(rows)
+    assert drain["pending_writes_at_shutdown"] == 0
+    assert drain["worker_daemon"] is True
     assert report["pressure_profile"]["hook_invocation_count"] == worker["committed_batches"]
     assert report["pressure_profile"]["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
     assert report["pressure_profile"]["max_pending_writes"] >= worker["queue_depth_high_water"]
