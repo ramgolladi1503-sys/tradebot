@@ -4983,6 +4983,12 @@ def on_ticks(ws, ticks):
             token_int = int(t.get("instrument_token"))
         except Exception:
             token_int = None
+            
+        if token_int is not None and payload_tick_epoch is not None:
+            prev = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int))
+            if prev is not None and payload_tick_epoch < prev:
+                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev})
+                continue
         freshness_tick_epoch = _normalized_tick_epoch(
             token_int,
             payload_epoch=payload_tick_epoch,
@@ -5962,6 +5968,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             # watchdog waits for fresh post-connect ticks.
             _STALE_STRIKES = 0
             _WARMUP_PENDING = True
+            global _LAST_WS_TICK_EPOCH
+            _LAST_WS_TICK_EPOCH = 0.0
             for book in list(depth_store.books.values()):
                 if isinstance(book, dict):
                     book["ts_epoch"] = None

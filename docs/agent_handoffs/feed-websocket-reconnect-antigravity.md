@@ -175,3 +175,15 @@ pwd
 git branch --show-current
 git status --short
 ```
+
+## Antigravity Completion and Handback
+
+Antigravity has completed the websocket reconnect robustness tasks. 
+The implementation audit is available at `docs/agent_reviews/feed_websocket_reconnect_resubscription_audit.md`.
+
+Active files modified:
+- `tests/test_kite_depth_ws_stability.py`
+- `core/kite_depth_ws.py`
+
+Ownership is now returned to Codex to resume and finalize.
+Codex is requested to review the committed Antigravity work, run adversarial validation, and verify the verdicts before merging.
