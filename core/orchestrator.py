@@ -3492,6 +3492,19 @@ class Orchestrator:
 
         regime_entropy = market_data.get("regime_entropy")
         from core.regime_entropy_gate import evaluate_regime_entropy_gate
+        session_bucket = str(market_data.get("session_bucket") or "").strip().upper()
+        if not session_bucket:
+            session_bucket = resolve_canonical_session_context(
+                market_data.get("timestamp_ist")
+                or market_data.get("timestamp")
+                or market_data.get("quote_ts")
+                or market_data.get("quote_ts_epoch")
+                or market_data.get("ltp_ts_epoch")
+                or market_data.get("candle_ts_epoch"),
+                segment=str(market_data.get("segment") or "NSE_FNO"),
+                is_expiry_day=bool(market_data.get("is_expiry_day")),
+                is_event_mode=bool(market_data.get("is_event_mode")),
+            ).canonical_session_bucket
         entropy_gate = evaluate_regime_entropy_gate(
             raw_entropy=_safe_float(regime_entropy),
             probabilities=regime_probs if isinstance(regime_probs, dict) else None,

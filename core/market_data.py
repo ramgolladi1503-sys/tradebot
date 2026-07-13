@@ -32,6 +32,7 @@ from core.time_utils import (
     compute_age_sec,
     is_market_open_ist,
     normalize_epoch_seconds,
+    parse_ts_ist,
     now_ist,
     now_utc_epoch,
 )
@@ -147,6 +148,49 @@ def _resolve_market_session_bucket(*, segment: str | None, **row: object) -> str
         )
         return context.canonical_session_bucket
     return "DEFAULT"
+
+
+def _coerce_event_timestamp(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    epoch = normalize_epoch_seconds(value)
+    if epoch is not None:
+        try:
+            return datetime.fromtimestamp(float(epoch), tz=timezone.utc).isoformat()
+        except Exception:
+            return None
+    dt = parse_ts_ist(value)
+    if dt is not None:
+        try:
+            return dt.astimezone(timezone.utc).isoformat()
+        except Exception:
+            return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    return None
+
+
+def resolve_regime_event_timestamp(
+    *,
+    explicit_timestamp: object | None = None,
+    source_timestamp: object | None = None,
+    last_bar_timestamp: object | None = None,
+    replay_timestamp: object | None = None,
+) -> tuple[str | None, str]:
+    candidates = (
+        ("CANONICAL_EVENT_TIME", explicit_timestamp),
+        ("SOURCE_TICK_TIME", source_timestamp),
+        ("LAST_BAR_TIME", last_bar_timestamp),
+        ("REPLAY_TIMESTAMP", replay_timestamp),
+    )
+    for source, candidate in candidates:
+        ts = _coerce_event_timestamp(candidate)
+        if ts is not None:
+            return ts, source
+    return None, "MISSING_TIMESTAMP"
 
 # -------------------------------
 # Market Data Functions
@@ -3299,6 +3343,12 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "x_index_ret1": cross_feat.get("x_index_ret1"),
             "x_index_ret5": cross_feat.get("x_index_ret5"),
         }
+        regime_ts, regime_ts_source = resolve_regime_event_timestamp(
+            explicit_timestamp=quote_ts if quote_ts is not None else ltp_ts_epoch,
+            source_timestamp=ltp_ts_epoch,
+            last_bar_timestamp=candle_ts_epoch if candle_ts_epoch is not None else ohlc_last_bar_epoch,
+            replay_timestamp=fallback_snapshot.get("regime_ts") if isinstance(fallback_snapshot, dict) else None,
+        )
         regime_probs = {}
         primary_regime = None
         regime_entropy = 0.0
@@ -3621,7 +3671,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         except Exception:
             conf_hist = []
 
-        regime_ts = now_ist().isoformat()
         try:
             _LAST_REGIME_SNAPSHOT[str(symbol).upper()] = {
                 "regime": regime,
@@ -3633,6 +3682,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_ts": regime_ts,
+                "regime_ts_source": regime_ts_source,
             }
         except Exception:
             pass
@@ -3659,6 +3709,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "regime_probs": regime_probs,
             "regime_entropy": regime_entropy,
             "session_bucket": session_bucket,
+            "regime_ts_source": regime_ts_source,
             "unstable_regime_flag": unstable_regime_flag,
             "unstable_reasons": list(unstable_reasons),
             "regime_transition_rate": regime_transition_rate,
@@ -3778,6 +3829,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "session_bucket": session_bucket,
+                "regime_ts_source": regime_ts_source,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_transition_rate": regime_transition_rate,
@@ -3871,6 +3923,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
                 "session_bucket": session_bucket,
+                "regime_ts_source": regime_ts_source,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_transition_rate": regime_transition_rate,
