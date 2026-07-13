@@ -26,11 +26,13 @@ from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
 from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
+from core.regime_session_context import resolve_canonical_session_context
 from core.paths import logs_dir
 from core.time_utils import (
     compute_age_sec,
     is_market_open_ist,
     normalize_epoch_seconds,
+    parse_ts_ist,
     now_ist,
     now_utc_epoch,
 )
@@ -130,6 +132,65 @@ def _index_rest_quote_executor() -> ThreadPoolExecutor:
         # Keep this tiny. Purpose is to avoid blocking LIVE decision loop on REST.
         _INDEX_REST_QUOTE_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, min(4, max_workers)))
     return _INDEX_REST_QUOTE_EXECUTOR
+
+
+def _resolve_market_session_bucket(*, segment: str | None, **row: object) -> str:
+    timestamp_keys = ("timestamp_ist", "timestamp", "regime_ts", "quote_ts", "quote_ts_epoch", "ltp_ts_epoch", "candle_ts_epoch")
+    for key in timestamp_keys:
+        value = row.get(key)
+        if value is None or value == "":
+            continue
+        context = resolve_canonical_session_context(
+            value,
+            segment=segment,
+            is_expiry_day=bool(row.get("is_expiry_day")),
+            is_event_mode=bool(row.get("is_event_mode")),
+        )
+        return context.canonical_session_bucket
+    return "DEFAULT"
+
+
+def _coerce_event_timestamp(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    epoch = normalize_epoch_seconds(value)
+    if epoch is not None:
+        try:
+            return datetime.fromtimestamp(float(epoch), tz=timezone.utc).isoformat()
+        except Exception:
+            return None
+    dt = parse_ts_ist(value)
+    if dt is not None:
+        try:
+            return dt.astimezone(timezone.utc).isoformat()
+        except Exception:
+            return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    return None
+
+
+def resolve_regime_event_timestamp(
+    *,
+    explicit_timestamp: object | None = None,
+    source_timestamp: object | None = None,
+    last_bar_timestamp: object | None = None,
+    replay_timestamp: object | None = None,
+) -> tuple[str | None, str]:
+    candidates = (
+        ("CANONICAL_EVENT_TIME", explicit_timestamp),
+        ("SOURCE_TICK_TIME", source_timestamp),
+        ("LAST_BAR_TIME", last_bar_timestamp),
+        ("REPLAY_TIMESTAMP", replay_timestamp),
+    )
+    for source, candidate in candidates:
+        ts = _coerce_event_timestamp(candidate)
+        if ts is not None:
+            return ts, source
+    return None, "MISSING_TIMESTAMP"
 
 # -------------------------------
 # Market Data Functions
@@ -1107,6 +1168,11 @@ def _derive_unstable_reasons(
     model_unstable_flag: bool = False,
     primary_regime: str = "",
     symbol: str = "",
+    session_bucket: str | None = None,
+    timestamp_ist: str | None = None,
+    segment: str | None = None,
+    is_expiry_day: bool = False,
+    is_event_mode: bool = False,
 ):
     """
     Build explicit reasons for regime instability.
@@ -1149,15 +1215,23 @@ def _derive_unstable_reasons(
 
     prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
     from core.regime_entropy_gate import evaluate_regime_entropy_gate
-    # Since we are deep in market_data, we assume DEFAULT session bucket
-    # unless passed in via kwargs. Market data handles core indicators.
+    resolved_session_bucket = str(session_bucket or "").strip().upper()
+    if not resolved_session_bucket:
+        resolved_session_bucket = _resolve_market_session_bucket(
+            segment=segment,
+            timestamp_ist=timestamp_ist,
+            is_expiry_day=is_expiry_day,
+            is_event_mode=is_event_mode,
+        )
     entropy_gate = evaluate_regime_entropy_gate(
         raw_entropy=entropy if entropy > 0 else None,
         probabilities=probs if probs else None,
-        session_bucket="DEFAULT",
+        session_bucket=resolved_session_bucket,
+        expiry_day=is_expiry_day,
+        event_mode=is_event_mode,
         regime_prob_max=max_prob,
         primary_regime=primary_regime,
-        market_data={"symbol": symbol},
+        market_data={"symbol": symbol, "segment": segment, "timestamp_ist": timestamp_ist},
     )
 
     if entropy_gate.get("gate_passed") is False or entropy_gate.get("uncertain"):
@@ -3269,6 +3343,12 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "x_index_ret1": cross_feat.get("x_index_ret1"),
             "x_index_ret5": cross_feat.get("x_index_ret5"),
         }
+        regime_ts, regime_ts_source = resolve_regime_event_timestamp(
+            explicit_timestamp=quote_ts if quote_ts is not None else ltp_ts_epoch,
+            source_timestamp=ltp_ts_epoch,
+            last_bar_timestamp=candle_ts_epoch if candle_ts_epoch is not None else ohlc_last_bar_epoch,
+            replay_timestamp=fallback_snapshot.get("regime_ts") if isinstance(fallback_snapshot, dict) else None,
+        )
         regime_probs = {}
         primary_regime = None
         regime_entropy = 0.0
@@ -3385,8 +3465,11 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             model_unstable_flag=model_unstable_flag,
             primary_regime=primary_regime,
             symbol=symbol,
+            segment=segment,
+            timestamp_ist=regime_ts,
         )
         unstable_regime_flag = bool(unstable_reasons)
+        session_bucket = _resolve_market_session_bucket(segment=segment, timestamp_ist=regime_ts)
 
         warmup_min_bars = int(getattr(cfg, "SYSTEM_WARMUP_MIN_BARS", min_bars))
         warmup_bars_by_timeframe = {"1m": int(ohlc_bars_count)}
@@ -3588,7 +3671,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         except Exception:
             conf_hist = []
 
-        regime_ts = now_ist().isoformat()
         try:
             _LAST_REGIME_SNAPSHOT[str(symbol).upper()] = {
                 "regime": regime,
@@ -3600,6 +3682,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_ts": regime_ts,
+                "regime_ts_source": regime_ts_source,
             }
         except Exception:
             pass
@@ -3625,6 +3708,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "regime_reasons": list(regime_reasons),
             "regime_probs": regime_probs,
             "regime_entropy": regime_entropy,
+            "session_bucket": session_bucket,
+            "regime_ts_source": regime_ts_source,
             "unstable_regime_flag": unstable_regime_flag,
             "unstable_reasons": list(unstable_reasons),
             "regime_transition_rate": regime_transition_rate,
@@ -3743,6 +3828,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "regime_reasons": list(regime_reasons),
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
+                "session_bucket": session_bucket,
+                "regime_ts_source": regime_ts_source,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_transition_rate": regime_transition_rate,
@@ -3835,6 +3922,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "regime_reasons": list(regime_reasons),
                 "regime_probs": regime_probs,
                 "regime_entropy": regime_entropy,
+                "session_bucket": session_bucket,
+                "regime_ts_source": regime_ts_source,
                 "unstable_regime_flag": unstable_regime_flag,
                 "unstable_reasons": list(unstable_reasons),
                 "regime_transition_rate": regime_transition_rate,

@@ -147,6 +147,8 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap.get("ema") == pytest.approx(expected.get("ema"), rel=1e-9, abs=1e-9)
     assert isinstance(snap.get("indicator_last_update_epoch"), (int, float))
     assert isinstance(snap.get("indicators_age_sec"), (int, float))
+    assert snap.get("regime_ts_source") == "CANONICAL_EVENT_TIME"
+    assert snap.get("regime_ts")
 
 
 def test_fetch_live_market_data_preserves_unknown_volume_as_none(tmp_path, monkeypatch):
@@ -921,3 +923,30 @@ def test_fetch_live_market_data_indicator_compute_error_does_not_fake_rsi_ema(tm
     assert "RuntimeError" in str(snap.get("compute_indicators_error") or "")
     assert snap.get("rsi") is None
     assert snap.get("ema") is None
+
+
+def test_resolve_regime_event_timestamp_prefers_explicit_event_time():
+    explicit = "2026-07-02T09:20:00+05:30"
+    resolved_ts, source = market_data.resolve_regime_event_timestamp(
+        explicit_timestamp=explicit,
+        source_timestamp="2026-07-02T09:21:00+05:30",
+        last_bar_timestamp="2026-07-02T09:15:00+05:30",
+    )
+    assert source == "CANONICAL_EVENT_TIME"
+    assert resolved_ts is not None
+
+
+def test_resolve_regime_event_timestamp_missing_is_explicit():
+    resolved_ts, source = market_data.resolve_regime_event_timestamp()
+    assert resolved_ts is None
+    assert source == "MISSING_TIMESTAMP"
+
+
+def test_resolve_regime_event_timestamp_skips_invalid_explicit_timestamp():
+    resolved_ts, source = market_data.resolve_regime_event_timestamp(
+        explicit_timestamp="not-a-timestamp",
+        source_timestamp=1721982000.0,
+        last_bar_timestamp=None,
+    )
+    assert source == "SOURCE_TICK_TIME"
+    assert resolved_ts is not None

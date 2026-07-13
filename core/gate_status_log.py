@@ -6,6 +6,7 @@ import base64
 from core.paths import logs_dir
 
 from config import config as cfg
+from core.regime_session_context import resolve_canonical_session_context
 from core.time_utils import now_ist, now_utc_epoch
 
 
@@ -87,7 +88,20 @@ def build_gate_status_record(
     regime_reasons = list(data.get("regime_reasons") or data.get("unstable_reasons") or [])
     if not regime_reasons and bool(data.get("unstable_regime_flag", False)):
         regime_reasons.append("legacy_unstable_flag")
+    session_bucket = str(data.get("session_bucket") or "").strip().upper()
     try:
+        if not session_bucket:
+            session_bucket = resolve_canonical_session_context(
+                data.get("timestamp_ist")
+                or data.get("timestamp")
+                or data.get("quote_ts")
+                or data.get("quote_ts_epoch")
+                or data.get("ltp_ts_epoch")
+                or data.get("candle_ts_epoch"),
+                segment=str(data.get("segment") or "NSE_FNO"),
+                is_expiry_day=bool(data.get("is_expiry_day")),
+                is_event_mode=bool(data.get("is_event_mode")),
+            ).canonical_session_bucket
         prob_min = float(getattr(cfg, "REGIME_PROB_MIN", 0.45))
         if max_prob is not None and float(max_prob) < prob_min and "prob_too_low" not in regime_reasons:
             regime_reasons.append("prob_too_low")
@@ -98,7 +112,7 @@ def build_gate_status_record(
         entropy_gate = evaluate_regime_entropy_gate(
             raw_entropy=float(regime_entropy) if regime_entropy is not None else None,
             probabilities=data.get("regime_probs") if isinstance(data.get("regime_probs"), dict) else None,
-            session_bucket=str(data.get("session_bucket", "DEFAULT")),
+            session_bucket=session_bucket,
             market_data=data,
             primary_regime=data.get("primary_regime") or data.get("regime") or "",
             regime_prob_max=max_prob,
