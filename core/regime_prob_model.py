@@ -2,6 +2,8 @@ import json
 import math
 from pathlib import Path
 
+from core.regime_session_context import resolve_canonical_session_context
+
 
 REGIMES = ["TREND", "RANGE", "RANGE_VOLATILE", "EVENT", "PANIC"]
 
@@ -93,6 +95,24 @@ class RegimeProbModel:
         scores["RANGE"] -= 0.4 * shock_n
         return _softmax(scores)
 
+    def _resolve_session_bucket(self, features: dict) -> str:
+        session_bucket = str(features.get("session_bucket") or "").strip().upper()
+        if session_bucket:
+            return session_bucket
+        timestamp_keys = ("timestamp_ist", "timestamp", "ltp_ts_epoch", "quote_ts_epoch", "quote_ts", "candle_ts_epoch", "regime_ts")
+        for key in timestamp_keys:
+            value = features.get(key)
+            if value is None or value == "":
+                continue
+            context = resolve_canonical_session_context(
+                value,
+                segment=str(features.get("segment") or "NSE_FNO"),
+                is_expiry_day=bool(features.get("is_expiry_day")),
+                is_event_mode=bool(features.get("is_event_mode")),
+            )
+            return context.canonical_session_bucket
+        return "DEFAULT"
+
     def predict(self, features: dict) -> dict:
         if self.model:
             probs = self._gaussian_nb_proba(features)
@@ -105,8 +125,8 @@ class RegimeProbModel:
         entropy = diag["entropy"]
         entropy_normalized = diag["normalized_entropy"]
         
-        # Use session-aware threshold if passed in features, else default
-        session_bucket = str(features.get("session_bucket", "DEFAULT")).upper()
+        # Use session-aware threshold if passed in features, else derive canonically.
+        session_bucket = self._resolve_session_bucket(features)
         
         # Import config inline to avoid circular imports if any, or rely on features
         try:

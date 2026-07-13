@@ -124,6 +124,7 @@ from core.signal_engine import evaluate as evaluate_signal
 from core.gates.quote_age_gate import validate_quote_age
 from core.review_packet import build_review_packet, format_review_packet
 from core.gate_status_log import append_gate_status, build_gate_status_record
+from core.regime_session_context import resolve_canonical_session_context
 from core.telemetry_streams import (
     append_candidate_stream_event,
     append_decision_stream_event,
@@ -617,7 +618,19 @@ def _regime_unstable_diagnostic_payload(market_data: dict, gate_reasons: list[st
         regime_prob_min = float(getattr(cfg, "PAPER_REGIME_PROB_MIN", regime_prob_min))
 
     from core.regime_entropy_gate import evaluate_regime_entropy_gate
-    session_bucket = str(row.get("session_bucket", "DEFAULT"))
+    session_bucket = str(row.get("session_bucket") or "").strip().upper()
+    if not session_bucket:
+        session_bucket = resolve_canonical_session_context(
+            row.get("timestamp_ist")
+            or row.get("timestamp")
+            or row.get("quote_ts")
+            or row.get("quote_ts_epoch")
+            or row.get("ltp_ts_epoch")
+            or row.get("candle_ts_epoch"),
+            segment=str(row.get("segment") or "NSE_FNO"),
+            is_expiry_day=bool(row.get("is_expiry_day")),
+            is_event_mode=bool(row.get("is_event_mode")),
+        ).canonical_session_bucket
     entropy_gate = evaluate_regime_entropy_gate(
         raw_entropy=_safe_float(row.get("regime_entropy")),
         probabilities=regime_probs,
@@ -3482,7 +3495,7 @@ class Orchestrator:
         entropy_gate = evaluate_regime_entropy_gate(
             raw_entropy=_safe_float(regime_entropy),
             probabilities=regime_probs if isinstance(regime_probs, dict) else None,
-            session_bucket=str(market_data.get("session_bucket", "DEFAULT")),
+            session_bucket=session_bucket,
             market_data=market_data,
             primary_regime=market_data.get("primary_regime") or market_data.get("regime") or "",
             regime_prob_max=market_data.get("regime_prob_max") or market_data.get("regime_probs_max"),

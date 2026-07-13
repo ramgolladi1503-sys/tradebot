@@ -163,8 +163,8 @@ def test_gate_status_includes_explicit_regime_reasons():
         "primary_regime": "RANGE",
         "regime_probs": {
             "RANGE": 0.40,
-            "TREND": 0.30,
-            "EVENT": 0.30,
+            "TREND": 0.55,
+            "EVENT": 0.05,
             "PANIC": 0.0,
             "RANGE_VOLATILE": 0.0,
         },
@@ -179,6 +179,35 @@ def test_gate_status_includes_explicit_regime_reasons():
         stage="strategy_gate",
     )
     assert row["regime_reasons"] == ["prob_too_low", "entropy_too_high"]
+
+
+def test_gate_status_derives_session_bucket_from_timestamp():
+    md = {
+        "symbol": "NIFTY",
+        "ltp": 25000.0,
+        "ltp_source": "live",
+        "timestamp_ist": "2026-07-02T09:20:00+05:30",
+        "indicators_ok": True,
+        "indicators_age_sec": 1.0,
+        "primary_regime": "RANGE",
+        "regime_probs": {
+            "RANGE": 0.40,
+            "TREND": 0.55,
+            "EVENT": 0.05,
+            "PANIC": 0.0,
+            "RANGE_VOLATILE": 0.0,
+        },
+        "regime_entropy": 0.85,
+        "unstable_reasons": [],
+    }
+    row = build_gate_status_record(
+        market_data=md,
+        gate_allowed=True,
+        gate_family="DEFINED_RISK",
+        gate_reasons=[],
+        stage="strategy_gate",
+    )
+    assert row["regime_reasons"] == []
 
 
 def test_append_gate_status_serializes_numpy_datetime_path(tmp_path, monkeypatch):

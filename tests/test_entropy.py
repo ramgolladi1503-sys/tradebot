@@ -1,6 +1,8 @@
 import pytest
 from core.regime_entropy_gate import evaluate_regime_entropy_gate
 from core.market_data import _derive_unstable_reasons
+from core.regime_prob_model import RegimeProbModel
+from core.regime_session_context import resolve_canonical_session_context
 
 def test_entropy_range_override():
     result = evaluate_regime_entropy_gate(
@@ -86,3 +88,40 @@ def test_derive_unstable_reasons_nifty_trend():
         symbol="NIFTY"
     )
     assert "entropy_too_high" in reasons
+
+
+def test_canonical_session_context_boundaries():
+    assert resolve_canonical_session_context("2026-07-02T09:20:00+05:30").canonical_session_bucket == "OPEN_DISCOVERY"
+    assert resolve_canonical_session_context("2026-07-02T11:00:00+05:30").canonical_session_bucket == "MID_SESSION"
+    assert resolve_canonical_session_context("2026-07-02T15:10:00+05:30").canonical_session_bucket == "CLOSING_VOL"
+
+
+def test_regime_prob_model_derives_session_bucket_from_timestamp(monkeypatch):
+    from config import config as config_module
+
+    monkeypatch.setattr(config_module, "REGIME_ENTROPY_NORMALIZED_MAX_OPEN_DISCOVERY", 0.6, raising=False)
+    monkeypatch.setattr(config_module, "REGIME_ENTROPY_NORMALIZED_MAX_DEFAULT", 0.2, raising=False)
+    model = RegimeProbModel()
+    model.model = None
+    out = model.predict(
+        {
+            "timestamp_ist": "2026-07-02T09:20:00+05:30",
+            "adx": 0.0,
+            "vwap_slope": 0.0,
+            "vol_z": 0.0,
+            "atr_pct": 0.0,
+            "iv_mean": 0.0,
+            "ltp_acceleration": 0.0,
+            "option_chain_skew": 0.0,
+            "oi_delta": 0.0,
+            "depth_imbalance": 0.0,
+            "regime_transition_rate": 0.0,
+            "shock_score": 0.0,
+            "uncertainty_index": 0.0,
+            "macro_direction_bias": 0.0,
+            "x_regime_align": 0.0,
+            "x_vol_spillover": 0.0,
+            "x_lead_lag": 0.0,
+        }
+    )
+    assert out["regime_entropy_threshold"] == 0.6
