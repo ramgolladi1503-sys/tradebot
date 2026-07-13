@@ -114,6 +114,10 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    tick_store.reset_audit_counters()
+    tick_store.clear_replay_pressure_hook()
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
     rest = _DummyRestClient()
@@ -626,6 +630,7 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True, raising=False)
     monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True, raising=False)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: receipt_epoch)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {555: "NIFTY"}, raising=False)
@@ -635,38 +640,44 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     tick_store.set_replay_pressure_read_flush_enabled(True)
     tick_store._LAST_TICK_EPOCH = None
     tick_store._LAST_TICK_BY_TOKEN.clear()
-    ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_ticks(
-        ticker,
-        [
-            {
-                "instrument_token": 555,
-                "last_price": 25123.5,
-                "exchange_timestamp": stale_payload_ts,
-            }
-        ],
-    )
-    assert ws._LAST_MSG_TS_BY_TOKEN[555] == receipt_epoch
-    assert ws._LAST_WS_TICK_EPOCH == receipt_epoch
-    option_state = ws._option_runtime_state(
-        now_epoch=receipt_epoch,
-        tokens=[555],
-        expected_counts_by_symbol={"NIFTY": 1},
-        min_required_by_symbol={"NIFTY": 1},
-    )
-    assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == receipt_epoch
-    assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
-    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
-    ltp, tick_epoch = tick_store.get_ltp(555)
-    assert ltp == 25123.5
-    assert tick_epoch == receipt_epoch
-    shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
-    assert shutdown_result["status"] == "COMPLETE_DRAIN"
-    with sqlite3.connect(str(db_path)) as conn:
-        row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
-    assert row is not None
-    assert row[0] == receipt_epoch
+    try:
+        ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
+        ticker = captured["ticker"]
+        ticker.on_ticks(
+            ticker,
+            [
+                {
+                    "instrument_token": 555,
+                    "last_price": 25123.5,
+                    "exchange_timestamp": stale_payload_ts,
+                }
+            ],
+        )
+        assert ws._LAST_MSG_TS_BY_TOKEN[555] == receipt_epoch
+        assert ws._LAST_WS_TICK_EPOCH == receipt_epoch
+        option_state = ws._option_runtime_state(
+            now_epoch=receipt_epoch,
+            tokens=[555],
+            expected_counts_by_symbol={"NIFTY": 1},
+            min_required_by_symbol={"NIFTY": 1},
+        )
+        assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == receipt_epoch
+        assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
+        assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+        ltp, tick_epoch = tick_store.get_ltp(555)
+        assert ltp == 25123.5
+        assert tick_epoch == receipt_epoch
+        shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+        assert shutdown_result["status"] == "COMPLETE_DRAIN"
+        with sqlite3.connect(str(db_path)) as conn:
+            row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
+        assert row is not None
+        assert row[0] == receipt_epoch
+    finally:
+        tick_store.reset_audit_counters()
+        tick_store.clear_replay_pressure_hook()
+        tick_store.set_replay_pressure_immediate_flush_enabled(True)
+        tick_store.set_replay_pressure_read_flush_enabled(True)
 def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}

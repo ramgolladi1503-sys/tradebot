@@ -10,6 +10,7 @@ import core.tick_store as tick_store
 def test_ws_tick_ingestion_updates_tick_store(monkeypatch, tmp_path):
     db_path = tmp_path / "ticks.sqlite"
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     tick_store._LAST_TICK_EPOCH = None
     tick_store._LAST_TICK_BY_TOKEN.clear()
 
