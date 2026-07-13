@@ -623,12 +623,16 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     stale_payload_ts = datetime(2026, 2, 19, 9, 35, tzinfo=timezone.utc)
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True, raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True, raising=False)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: receipt_epoch)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {555: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     tick_store._LAST_TICK_EPOCH = None
     tick_store._LAST_TICK_BY_TOKEN.clear()
     ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
@@ -657,6 +661,8 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     ltp, tick_epoch = tick_store.get_ltp(555)
     assert ltp == 25123.5
     assert tick_epoch == receipt_epoch
+    shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+    assert shutdown_result["status"] == "COMPLETE_DRAIN"
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
     assert row is not None

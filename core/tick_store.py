@@ -3,6 +3,7 @@ import sqlite3
 import time
 import json
 import threading
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
@@ -33,6 +34,12 @@ _FLUSH_THREAD_JOIN_COMPLETED = False
 _FLUSH_THREAD_TERMINATED = False
 _QUEUE_HIGH_WATER = 0
 _FLUSH_COUNT = 0
+_ACCEPTING_WRITES = True
+_SHUTDOWN_STARTED_MONOTONIC_NS: int | None = None
+_SHUTDOWN_FINISHED_MONOTONIC_NS: int | None = None
+_SHUTDOWN_STATE: str | None = None
+_SHUTDOWN_RESULT: dict[str, Any] | None = None
+_LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS: int | None = None
 _REPLAY_PRESSURE_HOOK: Callable[[dict[str, Any]], None] | None = None
 _REPLAY_PRESSURE_POST_COMMIT_HOOK: Callable[[dict[str, Any]], None] | None = None
 _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH = False
@@ -43,9 +50,39 @@ _AUDIT_COUNTERS = {
     "rows_dequeued": 0,
     "committed_batches": 0,
     "worker_failures": 0,
+    "writes_rejected_after_shutdown": 0,
 }
 _WRITE_ENQUEUE_COUNT = 0
 _WRITE_FLUSH_COUNT = 0
+
+
+@dataclass(frozen=True)
+class ShutdownResult:
+    status: str
+    deadline_seconds: float | None
+    deadline_expired: bool
+    shutdown_started_monotonic_ns: int | None
+    shutdown_finished_monotonic_ns: int | None
+    drain_duration_ns: int | None
+    join_duration_ns: int | None
+    rows_enqueued: int
+    rows_dequeued: int
+    rows_committed: int
+    committed_batches: int
+    queue_depth: int
+    in_flight_rows: int
+    pending_writes: int
+    writes_rejected_after_shutdown: int
+    worker_alive: bool
+    worker_join_completed: bool
+    worker_terminated: bool
+    worker_failures: int
+    final_flush_attempted: bool
+    final_flush_completed: bool
+    shutdown_state: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 def _normalize_token(token: int | str | None) -> int | None:
@@ -657,8 +694,26 @@ def get_audit_counters() -> dict[str, int]:
 
 
 def reset_audit_counters() -> None:
+    global _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS, _SHUTDOWN_FINISHED_MONOTONIC_NS
+    global _SHUTDOWN_STATE, _SHUTDOWN_RESULT, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
+    global _WRITE_ENQUEUE_COUNT, _WRITE_FLUSH_COUNT, _QUEUE_HIGH_WATER, _FLUSH_COUNT
+    global _FLUSH_THREAD_JOIN_COMPLETED, _FLUSH_THREAD_TERMINATED
     for key in _AUDIT_COUNTERS:
         _AUDIT_COUNTERS[key] = 0
+    _ACCEPTING_WRITES = True
+    _SHUTDOWN_STARTED_MONOTONIC_NS = None
+    _SHUTDOWN_FINISHED_MONOTONIC_NS = None
+    _SHUTDOWN_STATE = None
+    _SHUTDOWN_RESULT = None
+    _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS = None
+    _WRITE_ENQUEUE_COUNT = 0
+    _WRITE_FLUSH_COUNT = 0
+    _QUEUE_HIGH_WATER = 0
+    _FLUSH_COUNT = 0
+    _FLUSH_THREAD_JOIN_COMPLETED = False
+    _FLUSH_THREAD_TERMINATED = False
+    with _WRITE_QUEUE_LOCK:
+        _WRITE_QUEUE.clear()
 
 
 def _flush_loop() -> None:
@@ -698,35 +753,153 @@ def _ensure_flush_thread() -> None:
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
-    global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER
+    global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER, _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS
     init_ticks()
     with _WRITE_QUEUE_LOCK:
+        if not _ACCEPTING_WRITES:
+            _AUDIT_COUNTERS["writes_rejected_after_shutdown"] += 1
+            return False
         _WRITE_QUEUE.append(row)
         _AUDIT_COUNTERS["rows_enqueued"] += 1
         _WRITE_ENQUEUE_COUNT += 1
         _QUEUE_HIGH_WATER = max(_QUEUE_HIGH_WATER, len(_WRITE_QUEUE))
+        _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS = time.monotonic_ns()
     _ensure_flush_thread()
     return True
 
 
-def _shutdown_flush_thread() -> None:
-    global _FLUSH_THREAD_JOIN_COMPLETED
-    _FLUSH_THREAD_STOP.set()
+def _snapshot_shutdown_result(
+    *,
+    status: str,
+    shutdown_state: str | None,
+    deadline_seconds: float | None,
+    deadline_expired: bool,
+    shutdown_started_monotonic_ns: int | None,
+    shutdown_finished_monotonic_ns: int | None,
+    drain_duration_ns: int | None,
+    join_duration_ns: int | None,
+    final_flush_attempted: bool,
+    final_flush_completed: bool,
+    thread: threading.Thread | None,
+) -> dict[str, Any]:
+    worker_alive = bool(thread is not None and thread.is_alive())
+    result = ShutdownResult(
+        status=status,
+        deadline_seconds=deadline_seconds,
+        deadline_expired=deadline_expired,
+        shutdown_started_monotonic_ns=shutdown_started_monotonic_ns,
+        shutdown_finished_monotonic_ns=shutdown_finished_monotonic_ns,
+        drain_duration_ns=drain_duration_ns,
+        join_duration_ns=join_duration_ns,
+        rows_enqueued=_AUDIT_COUNTERS["rows_enqueued"],
+        rows_dequeued=_AUDIT_COUNTERS["rows_dequeued"],
+        rows_committed=_WRITE_FLUSH_COUNT,
+        committed_batches=_AUDIT_COUNTERS["committed_batches"],
+        queue_depth=write_queue_depth(),
+        in_flight_rows=max(0, _AUDIT_COUNTERS["rows_dequeued"] - _WRITE_FLUSH_COUNT),
+        pending_writes=max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
+        writes_rejected_after_shutdown=_AUDIT_COUNTERS["writes_rejected_after_shutdown"],
+        worker_alive=worker_alive,
+        worker_join_completed=not worker_alive,
+        worker_terminated=not worker_alive,
+        worker_failures=_AUDIT_COUNTERS["worker_failures"],
+        final_flush_attempted=final_flush_attempted,
+        final_flush_completed=final_flush_completed,
+        shutdown_state=shutdown_state or status,
+    ).to_dict()
+    return result
+
+
+def _shutdown_flush_thread(*, deadline_seconds: float | None = None) -> dict[str, Any]:
+    global _FLUSH_THREAD_JOIN_COMPLETED, _ACCEPTING_WRITES, _SHUTDOWN_STARTED_MONOTONIC_NS
+    global _SHUTDOWN_FINISHED_MONOTONIC_NS, _SHUTDOWN_STATE, _SHUTDOWN_RESULT
     thread = _FLUSH_THREAD
+    if thread is not None and not thread.is_alive() and _SHUTDOWN_RESULT is not None:
+        return dict(_SHUTDOWN_RESULT)
+
+    shutdown_started_monotonic_ns = time.monotonic_ns()
+    _SHUTDOWN_STARTED_MONOTONIC_NS = shutdown_started_monotonic_ns
+    _SHUTDOWN_STATE = "STOP_ACCEPTING_WRITES"
+    with _WRITE_QUEUE_LOCK:
+        _ACCEPTING_WRITES = False
+    _SHUTDOWN_STATE = "DRAINING"
+    _FLUSH_THREAD_STOP.set()
+
+    deadline_seconds = 2.0 if deadline_seconds is None else float(deadline_seconds)
+    deadline_ns = None if deadline_seconds is None else shutdown_started_monotonic_ns + max(0, int(deadline_seconds * 1_000_000_000))
+
+    join_started_ns = time.monotonic_ns()
+    join_duration_ns: int | None = None
     if thread is not None and thread.is_alive():
         try:
-            thread.join(timeout=2.0)
-            _FLUSH_THREAD_JOIN_COMPLETED = not thread.is_alive()
-        except Exception:
-            pass
-    if _FLUSH_LOCK.acquire(blocking=False):
-        try:
-            while _flush_pending_ticks(worker_owned=True) > 0:
-                pass
+            remaining_ns = None if deadline_ns is None else max(0, deadline_ns - join_started_ns)
+            timeout = None if remaining_ns is None else remaining_ns / 1_000_000_000
+            thread.join(timeout=timeout)
         finally:
-            _FLUSH_LOCK.release()
+            join_duration_ns = time.monotonic_ns() - join_started_ns
+    else:
+        join_duration_ns = 0
+
+    worker_alive_after_join = bool(thread is not None and thread.is_alive())
+    deadline_expired = bool(deadline_ns is not None and time.monotonic_ns() >= deadline_ns and worker_alive_after_join)
+    final_flush_attempted = False
+    final_flush_completed = False
+    status = "COMPLETE_DRAIN"
+    if _AUDIT_COUNTERS["worker_failures"] > 0:
+        status = "WORKER_FAILURE"
+        _SHUTDOWN_STATE = status
+    elif worker_alive_after_join and deadline_expired:
+        status = "INCOMPLETE_DRAIN_TIMEOUT"
+        _SHUTDOWN_STATE = status
+    else:
+        if not worker_alive_after_join and pending_tick_count() > 0:
+            final_flush_attempted = True
+            if _FLUSH_LOCK.acquire(blocking=False):
+                try:
+                    while _flush_pending_ticks(worker_owned=True) > 0:
+                        pass
+                    final_flush_completed = pending_tick_count() == 0
+                finally:
+                    _FLUSH_LOCK.release()
+        queue_depth = pending_tick_count()
+        in_flight_rows = max(0, _AUDIT_COUNTERS["rows_dequeued"] - _WRITE_FLUSH_COUNT)
+        pending_writes = max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT)
+        if (
+            _AUDIT_COUNTERS["worker_failures"] > 0
+            or queue_depth > 0
+            or in_flight_rows > 0
+            or pending_writes > 0
+            or worker_alive_after_join
+        ):
+            status = "WORKER_FAILURE" if _AUDIT_COUNTERS["worker_failures"] > 0 else "INCOMPLETE_DRAIN_TIMEOUT"
+            if status == "INCOMPLETE_DRAIN_TIMEOUT":
+                deadline_expired = True
+        _SHUTDOWN_STATE = status
+
+    shutdown_finished_monotonic_ns = time.monotonic_ns()
+    _SHUTDOWN_FINISHED_MONOTONIC_NS = shutdown_finished_monotonic_ns
     if thread is None:
         _FLUSH_THREAD_JOIN_COMPLETED = True
+    else:
+        _FLUSH_THREAD_JOIN_COMPLETED = not thread.is_alive()
+
+    if status == "COMPLETE_DRAIN":
+        _SHUTDOWN_STATE = "DRAIN_COMPLETE"
+    result = _snapshot_shutdown_result(
+        status=status,
+        shutdown_state=_SHUTDOWN_STATE,
+        deadline_seconds=deadline_seconds,
+        deadline_expired=deadline_expired,
+        shutdown_started_monotonic_ns=shutdown_started_monotonic_ns,
+        shutdown_finished_monotonic_ns=shutdown_finished_monotonic_ns,
+        drain_duration_ns=shutdown_finished_monotonic_ns - shutdown_started_monotonic_ns,
+        join_duration_ns=join_duration_ns,
+        final_flush_attempted=final_flush_attempted,
+        final_flush_completed=final_flush_completed,
+        thread=thread,
+    )
+    _SHUTDOWN_RESULT = result
+    return dict(result)
 
 
 def write_queue_depth() -> int:
@@ -751,6 +924,11 @@ def get_persistence_worker_state() -> dict[str, int | bool | str | None]:
         "worker_terminated": _FLUSH_THREAD_TERMINATED,
         "worker_join_completed": _FLUSH_THREAD_JOIN_COMPLETED,
         "worker_failures": _AUDIT_COUNTERS["worker_failures"],
+        "shutdown_state": _SHUTDOWN_STATE,
+        "shutdown_started_monotonic_ns": _SHUTDOWN_STARTED_MONOTONIC_NS,
+        "shutdown_finished_monotonic_ns": _SHUTDOWN_FINISHED_MONOTONIC_NS,
+        "writes_rejected_after_shutdown": _AUDIT_COUNTERS["writes_rejected_after_shutdown"],
+        "last_accepted_enqueue_monotonic_ns": _LAST_ACCEPTED_ENQUEUE_MONOTONIC_NS,
         "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
         "rows_dequeued": _AUDIT_COUNTERS["rows_dequeued"],
         "committed_batches": _AUDIT_COUNTERS["committed_batches"],
@@ -765,8 +943,8 @@ def get_persistence_worker_state() -> dict[str, int | bool | str | None]:
     }
 
 
-def shutdown_persistence_worker() -> None:
-    _shutdown_flush_thread()
+def shutdown_persistence_worker(*, deadline_seconds: float | None = None) -> dict[str, Any]:
+    return _shutdown_flush_thread(deadline_seconds=deadline_seconds)
 
 
 aexit_registered = False

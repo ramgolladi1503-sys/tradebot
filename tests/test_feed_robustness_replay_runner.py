@@ -103,6 +103,8 @@ def test_tick_store_worker_state_is_explicit(monkeypatch, tmp_path):
     state = replay.tick_store.get_persistence_worker_state()
     assert {"worker_started", "worker_start_count", "worker_thread_id", "worker_terminated",
             "worker_join_completed", "worker_failures", "rows_enqueued", "rows_dequeued",
+            "shutdown_state", "shutdown_started_monotonic_ns", "shutdown_finished_monotonic_ns",
+            "writes_rejected_after_shutdown", "last_accepted_enqueue_monotonic_ns",
             "committed_batches", "committed_rows", "queue_depth_initial",
             "queue_depth_high_water", "queue_depth_at_shutdown", "pending_writes_at_shutdown",
             "flush_count", "batch_size", "flush_interval"} <= set(state)
@@ -188,7 +190,7 @@ def test_runner_main_records_persistence_mode(monkeypatch, tmp_path):
     monkeypatch.setattr(replay, "_run_once", _fake_run_once)
     monkeypatch.setattr(replay.tick_store, "reset_audit_counters", lambda: None)
     monkeypatch.setattr(replay.tick_store, "flush_pending_ticks", lambda *args, **kwargs: 0)
-    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda **kwargs: None)
     monkeypatch.setattr(replay.tick_store, "pending_tick_count", lambda: 0)
     monkeypatch.setattr(replay.collector, "reset", lambda enabled=True: None)
     monkeypatch.setattr(replay, "_sha", lambda path: "sha")
@@ -301,7 +303,7 @@ def test_pressure_profile_cannot_be_enabled_from_env(monkeypatch, tmp_path):
     })
     monkeypatch.setattr(replay.tick_store, "reset_audit_counters", lambda: None)
     monkeypatch.setattr(replay.tick_store, "flush_pending_ticks", lambda *args, **kwargs: 0)
-    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda **kwargs: None)
     monkeypatch.setattr(replay.tick_store, "pending_tick_count", lambda: 0)
     monkeypatch.setattr(replay.collector, "reset", lambda enabled=True: None)
     monkeypatch.setattr(replay, "_sha", lambda path: "sha")
@@ -353,6 +355,8 @@ def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monk
     )
 
     worker = report["persistence_worker"]
+    shutdown = report["shutdown_result"]
+    drain = report["drain_report"]
     assert worker["worker_started"] == 1
     assert worker["worker_failures"] == 0
     assert worker["rows_enqueued"] == len(rows)
@@ -362,13 +366,31 @@ def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monk
     assert worker["queue_depth_high_water"] > 1
     assert worker["queue_depth_at_shutdown"] == 0
     assert worker["pending_writes_at_shutdown"] == 0
+    assert shutdown["status"] == "COMPLETE_DRAIN"
+    assert shutdown["deadline_expired"] is False
+    assert shutdown["worker_join_completed"] is True
+    assert shutdown["worker_terminated"] is True
+    assert shutdown["queue_depth"] == 0
+    assert shutdown["pending_writes"] == 0
+    assert drain["shutdown_status"] == "COMPLETE_DRAIN"
+    assert drain["deadline_expired"] is False
+    assert drain["actual_thread_join_duration_ns"] is not None
+    assert drain["final_accounting_duration_ns"] is not None
     assert report["pressure_profile"]["hook_invocation_count"] == worker["committed_batches"]
     assert report["pressure_profile"]["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
     assert report["pressure_profile"]["max_pending_writes"] >= worker["queue_depth_high_water"]
     assert report["pressure_profile"]["hook_ordinal"] == report["pressure_profile"]["hook_invocation_count"]
+    assert report["pressure_profile"]["worker_commit_hook_count"] == worker["committed_batches"]
+    assert report["pressure_profile"]["committed_batch_count"] == worker["committed_batches"]
     post_commit = [entry for entry in report["worker_lifecycle"] if entry["stage"] == "post_commit"]
     assert sum(int(entry["batch_size"]) for entry in post_commit) == worker["committed_rows"]
     assert all(int(entry["configured_delay_ms"]) == 1 for entry in post_commit)
+    stages = [entry["stage"] for entry in report["worker_lifecycle"]]
+    for stage in ["shutdown_started", "stop_accepting_writes", "drain_started", "drain_completed", "worker_join_started", "worker_join_completed", "shutdown_completed"]:
+        assert stage in stages
+    timeline_stages = [entry["stage"] for entry in report["queue_depth_timeline"]]
+    assert "producer_completed" in timeline_stages
+    assert stages.index("shutdown_started") < stages.index("shutdown_completed")
     assert controller.hook_invocation_count == report["pressure_profile"]["hook_invocation_count"]
     with sqlite3.connect(str(db_path)) as conn:
         committed_rows = conn.execute("select count(*) from ticks").fetchone()[0]
@@ -489,7 +511,7 @@ def test_pressure_accounting_reports_max_pending_writes_and_batch_size(monkeypat
     assert profile["hook_ordinal"] == profile["hook_invocation_count"]
     assert profile["max_pending_writes"] > 0
     assert any(entry["stage"] == "producer_completed" for entry in report["queue_depth_timeline"])
-    assert any(entry["stage"] == "shutdown_requested" for entry in report["worker_lifecycle"])
+    assert any(entry["stage"] == "shutdown_started" for entry in report["worker_lifecycle"])
     worker_stages = [entry["stage"] for entry in report["worker_lifecycle"] if entry["stage"] in {"hook_start", "hook_end", "post_commit"}]
     assert worker_stages[:3] == ["hook_start", "hook_end", "post_commit"]
 
@@ -582,7 +604,7 @@ def test_pressure_producer_completion_precedes_shutdown_and_join(monkeypatch, tm
     )
 
     producer_completed = next(entry["monotonic_ns"] for entry in controller.timeline if entry["stage"] == "producer_completed")
-    shutdown_requested = next(entry["monotonic_ns"] for entry in controller.worker_lifecycle if entry["stage"] == "shutdown_requested")
+    shutdown_requested = next(entry["monotonic_ns"] for entry in controller.worker_lifecycle if entry["stage"] == "shutdown_started")
     worker_join_completed = next(entry["monotonic_ns"] for entry in controller.worker_lifecycle if entry["stage"] == "worker_join_completed")
     assert producer_completed < shutdown_requested < worker_join_completed
 

@@ -286,9 +286,10 @@ class _ReplayPressureController:
         self._max_pending_writes = max(self._max_pending_writes, pending_writes, queue_high_water)
 
     def record_worker_event(self, stage: str, **extra: object) -> None:
+        monotonic_ns = extra.pop("monotonic_ns", None)
         self.worker_lifecycle.append({
             "stage": stage,
-            "monotonic_ns": time.monotonic_ns(),
+            "monotonic_ns": int(monotonic_ns) if monotonic_ns is not None else time.monotonic_ns(),
             "queue_depth": tick_store.write_queue_depth(),
             "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
             **extra,
@@ -472,133 +473,219 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
               batch_size: int = 1000, random_pause_probability: float = 0.0, random_pause_max_ms: float = 0.0,
               scheduler_jitter_seed: int | None = None, trace_path: Path | None = None,
               selected_persistence_mode: str | None = None,
-              pressure_controller: _ReplayPressureController | None = None) -> dict:
+              pressure_controller: _ReplayPressureController | None = None,
+              shutdown_deadline_seconds: float | None = 2.0) -> dict:
+    previous_async_db_writes = getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True)
+    previous_enable_db_writes = getattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True)
+    previous_trade_db_path = getattr(cfg, "TRADE_DB_PATH", None)
     collector.reset(enabled=True)
     tick_store.reset_audit_counters()
     tick_store.clear_replay_pressure_hook()
     tick_store.set_replay_pressure_immediate_flush_enabled(True)
     tick_store.set_replay_pressure_read_flush_enabled(True)
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
-    if trace_path is not None:
-        try:
-            reset_fd_trace(baseline_fd=process_fd_count(), path=trace_path)
-        except Exception:
-            pass
-    rng = random.Random(seed if scheduler_jitter_seed is None else scheduler_jitter_seed)
-    batch_size = max(1, int(batch_size))
-    schedule_start = time.monotonic()
-    source_first = float(rows[0]["ts"]) if rows and rows[0].get("ts") is not None else None
-    source_last = float(rows[-1]["ts"]) if rows and rows[-1].get("ts") is not None else None
-    last_source_ts = None
-    max_scheduler_drift_ns = 0
-    callback_batches: list[dict] = []
-    if pressure_controller is not None and pressure_controller.enabled:
-        tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
-        tick_store.set_replay_pressure_post_commit_hook(lambda context: pressure_controller.record_post_commit(context))
-        tick_store.set_replay_pressure_immediate_flush_enabled(False)
-        tick_store.set_replay_pressure_read_flush_enabled(False)
-        pressure_controller.record_worker_event("hook_registered", scenario=scenario)
-    for start in range(0, len(rows), batch_size):
-        batch_rows = rows[start:start + batch_size]
-        batch_start = time.monotonic_ns()
-        batch = [_adapt(row) for row in batch_rows]
-        batch_source_ts = [float(row["ts"]) for row in batch_rows if row.get("ts") is not None]
-        if batch_source_ts:
-            if last_source_ts is not None:
-                target_wait = max(0.0, (batch_source_ts[0] - last_source_ts) / max(speed_factor, 1e-9))
-                drift_ns = int((time.monotonic() - schedule_start - (batch_source_ts[0] - source_first) / max(speed_factor, 1e-9)) * 1e9) if source_first is not None else 0
-                max_scheduler_drift_ns = max(max_scheduler_drift_ns, abs(drift_ns))
-                if target_wait > 0:
-                    time.sleep(min(target_wait, 0.01))
-            last_source_ts = batch_source_ts[-1]
-        kite_depth_ws.on_ticks(None, batch)
-        batch_end = time.monotonic_ns()
-        callback_batches.append({
-            "batch_index": len(callback_batches),
-            "batch_size": len(batch),
-            "batch_start_ns": batch_start,
-            "batch_end_ns": batch_end,
-            "duration_ns": batch_end - batch_start,
-            "rows_per_sec": (len(batch) / ((batch_end - batch_start) / 1e9)) if batch_end > batch_start else None,
-        })
-        if scenario == "randomized_pauses" and rng.random() < random_pause_probability:
-            time.sleep(rng.uniform(0.0, random_pause_max_ms) / 1000.0)
+    try:
+        if trace_path is not None:
+            try:
+                reset_fd_trace(baseline_fd=process_fd_count(), path=trace_path)
+            except Exception:
+                pass
+        rng = random.Random(seed if scheduler_jitter_seed is None else scheduler_jitter_seed)
+        batch_size = max(1, int(batch_size))
+        schedule_start = time.monotonic()
+        source_first = float(rows[0]["ts"]) if rows and rows[0].get("ts") is not None else None
+        source_last = float(rows[-1]["ts"]) if rows and rows[-1].get("ts") is not None else None
+        last_source_ts = None
+        max_scheduler_drift_ns = 0
+        callback_batches: list[dict] = []
         if pressure_controller is not None and pressure_controller.enabled:
-            pressure_controller._record_queue_event(
-                "callback_batch_complete",
+            tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
+            tick_store.set_replay_pressure_post_commit_hook(lambda context: pressure_controller.record_post_commit(context))
+            tick_store.set_replay_pressure_immediate_flush_enabled(False)
+            tick_store.set_replay_pressure_read_flush_enabled(False)
+            pressure_controller.record_worker_event("hook_registered", scenario=scenario)
+        for start in range(0, len(rows), batch_size):
+            batch_rows = rows[start:start + batch_size]
+            batch_start = time.monotonic_ns()
+            batch = [_adapt(row) for row in batch_rows]
+            batch_source_ts = [float(row["ts"]) for row in batch_rows if row.get("ts") is not None]
+            if batch_source_ts:
+                if last_source_ts is not None:
+                    target_wait = max(0.0, (batch_source_ts[0] - last_source_ts) / max(speed_factor, 1e-9))
+                    drift_ns = int((time.monotonic() - schedule_start - (batch_source_ts[0] - source_first) / max(speed_factor, 1e-9)) * 1e9) if source_first is not None else 0
+                    max_scheduler_drift_ns = max(max_scheduler_drift_ns, abs(drift_ns))
+                    if target_wait > 0:
+                        time.sleep(min(target_wait, 0.01))
+                last_source_ts = batch_source_ts[-1]
+            kite_depth_ws.on_ticks(None, batch)
+            batch_end = time.monotonic_ns()
+            callback_batches.append({
+                "batch_index": len(callback_batches),
+                "batch_size": len(batch),
+                "batch_start_ns": batch_start,
+                "batch_end_ns": batch_end,
+                "duration_ns": batch_end - batch_start,
+                "rows_per_sec": (len(batch) / ((batch_end - batch_start) / 1e9)) if batch_end > batch_start else None,
+            })
+            if scenario == "randomized_pauses" and rng.random() < random_pause_probability:
+                time.sleep(rng.uniform(0.0, random_pause_max_ms) / 1000.0)
+            if pressure_controller is not None and pressure_controller.enabled:
+                pressure_controller._record_queue_event(
+                    "callback_batch_complete",
+                    scenario=scenario,
+                    batch_index=len(callback_batches) - 1,
+                    rows_produced=min(len(rows), start + len(batch)),
+                )
+                pressure_controller.resource_timeline.append({"kind": "periodic_sample", **_resource_timeline_sample()})
+        if pressure_controller is not None and pressure_controller.enabled:
+            pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
+            pressure_controller.record_worker_event("shutdown_started", scenario=scenario)
+        else:
+            tick_store.flush_pending_ticks()
+        shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=shutdown_deadline_seconds)
+        if pressure_controller is not None and pressure_controller.enabled:
+            pressure_controller.record_worker_event(
+                "stop_accepting_writes",
                 scenario=scenario,
-                batch_index=len(callback_batches) - 1,
-                rows_produced=min(len(rows), start + len(batch)),
+                monotonic_ns=shutdown_result.get("shutdown_started_monotonic_ns"),
+                shutdown_result=shutdown_result,
             )
-            pressure_controller.resource_timeline.append({"kind": "periodic_sample", **_resource_timeline_sample()})
-    if pressure_controller is not None and pressure_controller.enabled:
-        pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
-        pressure_controller.record_worker_event("shutdown_requested", scenario=scenario)
-    else:
-        tick_store.flush_pending_ticks()
-    tick_store.shutdown_persistence_worker()
-    if pressure_controller is not None and pressure_controller.enabled:
-        pressure_controller.resource_timeline.append({"kind": "post_join_sample", **_resource_timeline_sample()})
-        pressure_controller.record_worker_event("worker_join_completed", scenario=scenario, worker_state=tick_store.get_persistence_worker_state())
-    input_rows = []
-    for row in rows:
-        adapted = _adapt(row)
-        input_rows.append({"source_row_index": row["source_row_index"], "instrument_token": adapted["instrument_token"],
-                           "source_timestamp": adapted["_audit_source_timestamp"], "last_price": adapted["last_price"],
-                           "volume": adapted["volume"], "oi": adapted["oi"]})
-    report = collector.report(input_rows=input_rows, pending_at_shutdown=tick_store.pending_tick_count(), live_session_complete=False)
-    source_duration, target_replay_duration = _deterministic_replay_schedule(rows, speed_factor)
-    actual_replay_duration = time.monotonic() - schedule_start
-    report["replay_timing"] = {
-        "source_duration_sec": source_duration,
-        "target_replay_duration_sec": target_replay_duration,
-        "actual_replay_duration_sec": actual_replay_duration,
-        "target_speed_factor": speed_factor,
-        "achieved_speed_factor": (source_duration / actual_replay_duration) if actual_replay_duration > 0 else None,
-        "max_scheduler_drift_ns": max_scheduler_drift_ns,
-        "randomized_pause_seed": seed if scenario == "randomized_pauses" else None,
-    }
-    report["callback_batches"] = callback_batches
-    report["persistence_mode"] = _describe_tick_store_mode()
-    report["persistence_mode"]["selected_persistence_mode"] = selected_persistence_mode or "default"
-    report["persistence_worker"] = tick_store.get_persistence_worker_state()
-    report["resource_snapshot"] = _resource_snapshot()
-    report["fd_trace_summary"] = _fd_trace_summary(
-        trace_path,
-        baseline_fd=process_fd_count(),
-        post_worker_shutdown_fd=process_fd_count(),
-    )
-    if pressure_controller is not None and pressure_controller.enabled:
-        pressure_controller.record_worker_event("final_state", scenario=scenario, worker_state=report["persistence_worker"])
-        report["pressure_profile"] = {
-            "profile": pressure_controller.profile,
-            "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
-            "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
-            "stall_duration_ms": pressure_controller.stall_duration_ms,
-            "expected_total_rows": pressure_controller.expected_total_rows,
-            "queue_high_water_threshold": _pressure_queue_threshold(),
-            "hook_invocation_count": pressure_controller.hook_invocation_count,
-            "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
-            "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
-            "max_pending_writes": pressure_controller._max_pending_writes,
-            "hook_ordinal": pressure_controller._hook_ordinal,
+            pressure_controller.record_worker_event(
+                "drain_started",
+                scenario=scenario,
+                monotonic_ns=shutdown_result.get("shutdown_started_monotonic_ns"),
+                shutdown_result=shutdown_result,
+            )
+            pressure_controller.record_worker_event(
+                "drain_completed",
+                scenario=scenario,
+                monotonic_ns=shutdown_result.get("shutdown_finished_monotonic_ns"),
+                shutdown_result=shutdown_result,
+            )
+            pressure_controller.record_worker_event(
+                "worker_join_started",
+                scenario=scenario,
+                monotonic_ns=shutdown_result.get("shutdown_started_monotonic_ns"),
+                shutdown_result=shutdown_result,
+            )
+            pressure_controller.record_worker_event(
+                "worker_join_completed",
+                scenario=scenario,
+                monotonic_ns=shutdown_result.get("shutdown_finished_monotonic_ns"),
+                worker_state=tick_store.get_persistence_worker_state(),
+                shutdown_result=shutdown_result,
+            )
+            pressure_controller.record_worker_event(
+                "shutdown_completed",
+                scenario=scenario,
+                monotonic_ns=shutdown_result.get("shutdown_finished_monotonic_ns"),
+                shutdown_result=shutdown_result,
+            )
+            pressure_controller.resource_timeline.append({"kind": "post_join_sample", **_resource_timeline_sample()})
+        input_rows = []
+        for row in rows:
+            adapted = _adapt(row)
+            input_rows.append({"source_row_index": row["source_row_index"], "instrument_token": adapted["instrument_token"],
+                               "source_timestamp": adapted["_audit_source_timestamp"], "last_price": adapted["last_price"],
+                               "volume": adapted["volume"], "oi": adapted["oi"]})
+        report = collector.report(input_rows=input_rows, pending_at_shutdown=tick_store.pending_tick_count(), live_session_complete=False)
+        source_duration, target_replay_duration = _deterministic_replay_schedule(rows, speed_factor)
+        actual_replay_duration = time.monotonic() - schedule_start
+        report["replay_timing"] = {
+            "source_duration_sec": source_duration,
+            "target_replay_duration_sec": target_replay_duration,
+            "actual_replay_duration_sec": actual_replay_duration,
+            "target_speed_factor": speed_factor,
+            "achieved_speed_factor": (source_duration / actual_replay_duration) if actual_replay_duration > 0 else None,
+            "max_scheduler_drift_ns": max_scheduler_drift_ns,
+            "randomized_pause_seed": seed if scenario == "randomized_pauses" else None,
         }
-        report["worker_lifecycle"] = pressure_controller.worker_lifecycle
-        report["queue_depth_timeline"] = pressure_controller.timeline
-        report["resource_timeline"] = pressure_controller.resource_timeline
-        report["drain_report"] = pressure_controller.capture_drain_report(
-            producer_completion_ns=callback_batches[-1]["batch_end_ns"] if callback_batches else schedule_start,
-            producer_completion_queue_depth=tick_store.write_queue_depth(),
-            producer_completion_pending_writes=max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
-            worker_completion_ns=time.monotonic_ns(),
-            worker_join_ns=time.monotonic_ns(),
-            worker_terminated=tick_store.get_persistence_worker_state().get("worker_terminated"),
-            worker_failures=tick_store.get_persistence_worker_state().get("worker_failures"),
+        report["callback_batches"] = callback_batches
+        report["persistence_mode"] = _describe_tick_store_mode()
+        report["persistence_mode"]["selected_persistence_mode"] = selected_persistence_mode or "default"
+        report["persistence_worker"] = tick_store.get_persistence_worker_state()
+        report["shutdown_result"] = shutdown_result
+        report["resource_snapshot"] = _resource_snapshot()
+        report["fd_trace_summary"] = _fd_trace_summary(
+            trace_path,
+            baseline_fd=process_fd_count(),
+            post_worker_shutdown_fd=process_fd_count(),
         )
-    tick_store.clear_replay_pressure_hook()
-    tick_store.set_replay_pressure_immediate_flush_enabled(True)
-    tick_store.set_replay_pressure_read_flush_enabled(True)
-    return report
+        if pressure_controller is not None and pressure_controller.enabled:
+            pressure_controller.record_worker_event("final_state", scenario=scenario, worker_state=report["persistence_worker"])
+            producer_completion_event = next((entry for entry in reversed(pressure_controller.timeline) if entry.get("stage") == "producer_completed"), None)
+            producer_completion_queue_depth = (
+                int(producer_completion_event.get("queue_depth"))
+                if producer_completion_event and producer_completion_event.get("queue_depth") is not None
+                else tick_store.write_queue_depth()
+            )
+            producer_completion_pending_writes = (
+                int(producer_completion_event.get("pending_writes"))
+                if producer_completion_event and producer_completion_event.get("pending_writes") is not None
+                else max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count())
+            )
+            report["pressure_profile"] = {
+                "profile": pressure_controller.profile,
+                "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
+                "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
+                "stall_duration_ms": pressure_controller.stall_duration_ms,
+                "expected_total_rows": pressure_controller.expected_total_rows,
+                "queue_high_water_threshold": _pressure_queue_threshold(),
+                "hook_invocation_count": pressure_controller.hook_invocation_count,
+                "stall_activation_count": pressure_controller._stall_index,
+                "worker_commit_hook_count": tick_store.get_persistence_worker_state().get("committed_batches"),
+                "committed_batch_count": tick_store.get_persistence_worker_state().get("committed_batches"),
+                "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
+                "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
+                "max_pending_writes": pressure_controller._max_pending_writes,
+                "hook_ordinal": pressure_controller._hook_ordinal,
+            }
+            report["worker_lifecycle"] = pressure_controller.worker_lifecycle
+            report["queue_depth_timeline"] = pressure_controller.timeline
+            report["resource_timeline"] = pressure_controller.resource_timeline
+            worker_state = tick_store.get_persistence_worker_state()
+            report["drain_report"] = {
+                "shutdown_status": shutdown_result.get("status"),
+                "deadline_seconds": shutdown_result.get("deadline_seconds"),
+                "deadline_expired": shutdown_result.get("deadline_expired"),
+                "shutdown_started_monotonic_ns": shutdown_result.get("shutdown_started_monotonic_ns"),
+                "shutdown_finished_monotonic_ns": shutdown_result.get("shutdown_finished_monotonic_ns"),
+                "drain_duration_ns": shutdown_result.get("drain_duration_ns"),
+                "actual_thread_join_duration_ns": shutdown_result.get("join_duration_ns"),
+                "final_accounting_duration_ns": (
+                    None
+                    if shutdown_result.get("drain_duration_ns") is None or shutdown_result.get("join_duration_ns") is None
+                    else max(0, int(shutdown_result["drain_duration_ns"]) - int(shutdown_result["join_duration_ns"]))
+                ),
+                "total_shutdown_path_duration_ns": shutdown_result.get("drain_duration_ns"),
+                "producer_completion_monotonic_ns": callback_batches[-1]["batch_end_ns"] if callback_batches else schedule_start,
+                "producer_completion_queue_depth": producer_completion_queue_depth,
+                "producer_completion_pending_writes": producer_completion_pending_writes,
+                "queue_depth_at_shutdown": worker_state.get("queue_depth_at_shutdown"),
+                "pending_writes_at_shutdown": worker_state.get("pending_writes_at_shutdown"),
+                "in_flight_rows_at_shutdown": max(0, int(worker_state.get("rows_dequeued") or 0) - int(worker_state.get("committed_rows") or 0)),
+                "rows_enqueued": worker_state.get("rows_enqueued"),
+                "rows_dequeued": worker_state.get("rows_dequeued"),
+                "rows_committed": worker_state.get("committed_rows"),
+                "committed_batches": worker_state.get("committed_batches"),
+                "writes_rejected_after_shutdown": worker_state.get("writes_rejected_after_shutdown"),
+                "worker_alive": shutdown_result.get("worker_alive"),
+                "worker_join_completed": worker_state.get("worker_join_completed"),
+                "worker_terminated": worker_state.get("worker_terminated"),
+                "worker_failures": worker_state.get("worker_failures"),
+                "final_flush_attempted": shutdown_result.get("final_flush_attempted"),
+                "final_flush_completed": shutdown_result.get("final_flush_completed"),
+                "worker_completion_monotonic_ns": shutdown_result.get("shutdown_finished_monotonic_ns"),
+            }
+        tick_store.clear_replay_pressure_hook()
+        tick_store.set_replay_pressure_immediate_flush_enabled(True)
+        tick_store.set_replay_pressure_read_flush_enabled(True)
+        return report
+    finally:
+        cfg.TICK_STORE_ASYNC_DB_WRITES = previous_async_db_writes
+        cfg.TICK_STORE_ENABLE_DB_WRITES = previous_enable_db_writes
+        if previous_trade_db_path is not None:
+            cfg.TRADE_DB_PATH = previous_trade_db_path
 
 
 def _load(path: Path, max_rows: int | None, spike_start: str | None, spike_end: str | None) -> list[dict]:
@@ -657,6 +744,12 @@ def main() -> int:
     parser.add_argument("--pressure-stall-after-each-dequeued-rows", type=int, default=0)
     parser.add_argument("--pressure-stall-duration-ms", type=int, default=0)
     parser.add_argument(
+        "--persistence-shutdown-deadline-seconds",
+        type=float,
+        default=2.0,
+        help="Replay-only shutdown deadline used for the persistence worker join and drain.",
+    )
+    parser.add_argument(
         "--scenario",
         action="append",
         dest="scenarios",
@@ -714,7 +807,8 @@ def main() -> int:
                           batch_size=spec["batch_size"], random_pause_probability=spec.get("random_pause_probability", 0.0),
                           random_pause_max_ms=spec.get("random_pause_max_ms", 0.0), trace_path=trace_path,
                           selected_persistence_mode=selected_persistence_mode,
-                          pressure_controller=pressure_controller if pressure_controller.enabled else None)
+                          pressure_controller=pressure_controller if pressure_controller.enabled else None,
+                          shutdown_deadline_seconds=args.persistence_shutdown_deadline_seconds)
                 for i in range(args.iterations)]
         signatures = [run["checksums"] for run in runs]
         deterministic = all(item == signatures[0] for item in signatures[1:])
@@ -725,7 +819,7 @@ def main() -> int:
     current_runs = []
     current_deterministic = True
     if not selected_scenarios or "normal_speed_current_persistence" in selected_scenarios:
-        current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=_resolve_persistence_mode("normal_speed_current_persistence", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode)
+        current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=_resolve_persistence_mode("normal_speed_current_persistence", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode, shutdown_deadline_seconds=args.persistence_shutdown_deadline_seconds)
                         for i in range(args.iterations)]
         current_deterministic = all(run["checksums"] == current_runs[0]["checksums"] for run in current_runs[1:])
         if not current_deterministic or any(run["verdict"] == "FAIL" for run in current_runs):
@@ -738,7 +832,7 @@ def main() -> int:
     cycle_hashes = []
     if not selected_scenarios or "session_cycles" in selected_scenarios:
         for cycle in range(max(0, args.session_cycles)):
-            cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=_resolve_persistence_mode("session_cycle", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode)
+            cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=_resolve_persistence_mode("session_cycle", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode, shutdown_deadline_seconds=args.persistence_shutdown_deadline_seconds)
             cycle_snapshots.append({
                 "cycle": cycle,
                 "resource_snapshot": cycle_run["resource_snapshot"],
@@ -792,6 +886,7 @@ def main() -> int:
                 "dirty_diff_sha256": diff_sha256,
                 "fd_trace_enabled": bool(os.environ.get("TRADEBOT_FEED_FD_TRACE")),
                 "persistence_mode": selected_persistence_mode,
+                "persistence_shutdown_deadline_seconds": args.persistence_shutdown_deadline_seconds,
                 "trace_path": str(trace_path),
                 "max_rows": args.max_rows,
                }
@@ -812,6 +907,7 @@ def main() -> int:
                                            "output_sha256": {p.name: _sha(p) for p in out.iterdir() if p.is_file()}})
     _atomic_json(out / "configuration_snapshot.json", {"python": sys.version, "platform": platform.platform(),
                                                         "iterations": args.iterations, "max_rows": args.max_rows,
+                                                        "persistence_shutdown_deadline_seconds": args.persistence_shutdown_deadline_seconds,
                                                         "modes": ["sync_diagnostic", "current_persistence"],
                                                         "persistence_mode": _describe_tick_store_mode(),
                                                         "pressure_profile": {
