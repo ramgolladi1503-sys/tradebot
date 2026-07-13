@@ -175,6 +175,53 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     assert ticker.access_token == "TOKEN123"
     assert ticker.auto_reconnect is True
     assert ticker.connected is True
+
+
+def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
+    _patch_common(monkeypatch)
+    callbacks = []
+    monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "callback", lambda count, **kwargs: callbacks.append((count, kwargs.get("rows"))))
+    monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "published", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "publication_failed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "inc", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_tick", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_depth", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "write_queue_depth", lambda: 0)
+    monkeypatch.setattr(ws, "write_enqueue_count", lambda: 0)
+    monkeypatch.setattr(ws, "write_flush_count", lambda: 0)
+    monkeypatch.setattr(ws, "_should_throttle_ws_event", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ws, "_extract_tick_epoch", lambda tick: tick.get("exchange_timestamp"))
+    monkeypatch.setattr(ws, "_normalized_tick_epoch", lambda *args, **kwargs: 1234.5)
+    monkeypatch.setattr(ws, "_depth_has_bid_ask", lambda depth: False)
+    monkeypatch.setattr(ws, "_best_price", lambda rows: None)
+    monkeypatch.setattr(ws, "_update_symbol_freshness", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_update_index_quote_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_is_index_symbol", lambda symbol: False)
+    monkeypatch.setattr(ws, "_is_underlying_token", lambda token: True)
+    monkeypatch.setattr(ws, "_log_tick_ingest_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "insert_tick", lambda **kwargs: True)
+    monkeypatch.setattr(ws, "record_tick_epoch", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_should_throttle_ws_event", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
+    monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+
+    ws.on_ticks(None, [{
+        "instrument_token": 101,
+        "last_price": 10.0,
+        "exchange_timestamp": 1234.5,
+        "volume": 1.0,
+        "oi": 2.0,
+        "_audit_source_row_index": 7,
+        "_audit_source_timestamp": 1234.5,
+    }])
+
+    assert callbacks and callbacks[0][0] == 1
+    assert callbacks[0][1][0]["_audit_source_row_index"] == 7
+
 def test_on_close_does_not_restart_after_stop(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -1340,4 +1387,3 @@ def test_soft_resubscribe_current_does_not_have_duplicate_block():
     with_blocks = [n for n in ast.walk(soft_func) if isinstance(n, ast.With)]
     count = len(with_blocks)
     assert count == 1, "Duplicate _KITE_TICKER_LOCK block found"
-

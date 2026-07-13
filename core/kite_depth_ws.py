@@ -4933,6 +4933,10 @@ def on_ticks(ws, ticks):
         extra={"tick_count": len(ticks or [])},
     )
     try:
+        feed_evidence.callback(len(ticks or []), callback_epoch=float(time.time()), rows=ticks)
+    except Exception:
+        pass
+    try:
         if not _should_throttle_ws_event("depth_ws_ticks", now_epoch=float(time.time()), cooldown_sec=5.0):
             logger.info(
                 "depth_ws_ticks count=%d sample_tokens=%s",

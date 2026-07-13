@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from scripts import run_feed_robustness_replay as replay
 
 
@@ -48,3 +49,101 @@ def test_resource_snapshot_reports_bytes_and_mib():
 def test_tick_store_worker_counters_are_explicit():
     counters = replay.tick_store.get_audit_counters()
     assert {"worker_started", "rows_enqueued", "rows_dequeued", "committed_batches", "worker_failures"} <= set(counters)
+
+
+def test_callback_boundary_accepts_audit_row_fields():
+    replay.collector.reset(enabled=True)
+    replay.collector.callback(1, rows=[{
+        "_audit_source_row_index": 9,
+        "_audit_source_timestamp": 12.34,
+        "instrument_token": 101,
+        "last_price": 100.5,
+        "volume": 2.0,
+        "oi": 3.0,
+    }])
+    report = replay.collector.report()
+    assert report["counters"]["decoded"] == 1
+    assert report["checksums"]["callback_order_sha256"] != "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+
+
+def test_fd_trace_summary_emits_terminal_fields(tmp_path):
+    trace_path = tmp_path / "fd_trace.jsonl"
+    trace_path.write_text(
+        "\n".join([
+            '{"stage":"on_ticks.callback_entry","fd_count":10}',
+            '{"stage":"on_ticks.callback_exit","fd_count":12}',
+            '{"stage":"on_ticks.callback_exit","fd_count":15}',
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    summary = replay._fd_trace_summary(trace_path, baseline_fd=9, post_worker_shutdown_fd=11)
+    assert summary["baseline_fd"] == 9
+    assert summary["high_water_fd"] == 15
+    assert summary["callback_exit_fd_min"] == 12
+    assert summary["callback_exit_fd_max"] == 15
+    assert summary["callback_exit_fd_count"] == 2
+    assert summary["post_worker_shutdown_fd"] == 11
+    assert summary["final_fd"] == 11
+
+
+def test_runner_scenario_filter_selects_only_requested_scenario(monkeypatch, tmp_path):
+    all_scenarios = {
+        "normal_speed": {"rows": [], "speed_factor": 1.0},
+        "5x_speed": {"rows": [], "speed_factor": 5.0},
+        "normal_speed_current_persistence": {"rows": [], "speed_factor": 1.0},
+    }
+    parser = replay.argparse.ArgumentParser()
+    selected = replay._select_scenarios(all_scenarios, ["normal_speed"], parser)
+    assert list(selected) == ["normal_speed"]
+    assert selected["normal_speed"]["speed_factor"] == 1.0
+
+
+def test_runner_main_runs_filtered_normal_speed_once(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(replay, "_load", lambda *args, **kwargs: [
+        {"source_row_index": 0, "ts": 1.0, "token": "A", "ltp": 100.0, "vol": 1.0, "oi": 2.0},
+        {"source_row_index": 1, "ts": 2.0, "token": "A", "ltp": 101.0, "vol": 1.0, "oi": 2.0},
+    ])
+    monkeypatch.setattr(replay, "_capture_timestamp_fidelity", lambda rows: {"summary": {"pass": True}, "rows": []})
+    monkeypatch.setattr(replay, "_run_once", lambda rows, scenario, seed, **kwargs: calls.append((scenario, seed, kwargs)) or {
+        "checksums": {"scenario": scenario, "seed": seed},
+        "verdict": "PASS",
+        "assertions": [],
+        "unexplained_message_differences": [],
+        "records": [],
+        "latency": {},
+        "reconnects": {},
+        "resource_snapshot": {},
+        "counters": {"pending_at_shutdown": 0},
+    })
+    monkeypatch.setattr(replay.tick_store, "reset_audit_counters", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "flush_pending_ticks", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(replay.tick_store, "pending_tick_count", lambda: 0)
+    monkeypatch.setattr(replay.collector, "reset", lambda enabled=True: None)
+    monkeypatch.setattr(replay, "_sha", lambda path: "sha")
+    monkeypatch.setattr(replay, "_atomic_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(replay.subprocess, "check_output", lambda *args, **kwargs: "deadbeef\n")
+    monkeypatch.setattr(replay.platform, "platform", lambda: "test-platform")
+    monkeypatch.setattr(replay.Path, "is_file", lambda self: True)
+    monkeypatch.setattr(replay.Path, "resolve", lambda self: self)
+    monkeypatch.setattr(replay.sys, "argv", [
+        "run_feed_robustness_replay.py",
+        "--input", str(tmp_path / "input.parquet"),
+        "--output-dir", str(tmp_path / "out"),
+        "--iterations", "1",
+        "--max-rows", "10",
+        "--session-cycles", "0",
+        "--scenario", "normal_speed",
+    ])
+
+    exit_code = replay.main()
+    assert exit_code == 0
+    assert [name for name, _, _ in calls] == ["normal_speed"]
+    assert calls[0][1] == 0
+
+
+def test_runner_rejects_unknown_scenario():
+    parser = replay.argparse.ArgumentParser()
+    with pytest.raises(SystemExit):
+        replay._select_scenarios({}, ["unknown"], parser)

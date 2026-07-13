@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from config import config as cfg  # noqa: E402
 from core.feed_robustness_evidence import collector, first_difference  # noqa: E402
+from core.feed_fd_trace import process_fd_count, reset_trace as reset_fd_trace  # noqa: E402
 from core import kite_depth_ws, tick_store  # noqa: E402
 
 
@@ -41,6 +42,50 @@ def _atomic_json(path: Path, payload: object) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def _git_diff_sha256() -> str:
+    diff = subprocess.check_output(["git", "diff"], cwd=ROOT)
+    if isinstance(diff, str):
+        diff = diff.encode("utf-8")
+    return hashlib.sha256(diff).hexdigest()
+
+
+def _fd_trace_summary(trace_path: Path | None, *, baseline_fd: int | None, post_worker_shutdown_fd: int | None) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "baseline_fd": baseline_fd,
+        "high_water_fd": None,
+        "callback_exit_fd_min": None,
+        "callback_exit_fd_max": None,
+        "callback_exit_fd_count": 0,
+        "post_worker_shutdown_fd": post_worker_shutdown_fd,
+        "post_replay_shutdown_fd": post_worker_shutdown_fd,
+        "final_fd": post_worker_shutdown_fd,
+        "trace_path": str(trace_path) if trace_path is not None else None,
+    }
+    if trace_path is None or not trace_path.exists():
+        return summary
+    high_water_fd = None
+    callback_exit_values: list[int] = []
+    for line in trace_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except Exception:
+            continue
+        fd_count = event.get("fd_count")
+        if not isinstance(fd_count, int):
+            continue
+        high_water_fd = fd_count if high_water_fd is None else max(high_water_fd, fd_count)
+        if event.get("stage") == "on_ticks.callback_exit":
+            callback_exit_values.append(fd_count)
+    summary["high_water_fd"] = high_water_fd
+    if callback_exit_values:
+        summary["callback_exit_fd_min"] = min(callback_exit_values)
+        summary["callback_exit_fd_max"] = max(callback_exit_values)
+        summary["callback_exit_fd_count"] = len(callback_exit_values)
+    return summary
 
 
 def _adapt(row: dict) -> dict:
@@ -176,10 +221,15 @@ def _deterministic_replay_schedule(rows: list[dict], speed_factor: float) -> tup
 
 def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, speed_factor: float = 1.0,
               batch_size: int = 1000, random_pause_probability: float = 0.0, random_pause_max_ms: float = 0.0,
-              scheduler_jitter_seed: int | None = None) -> dict:
+              scheduler_jitter_seed: int | None = None, trace_path: Path | None = None) -> dict:
     collector.reset(enabled=True)
     tick_store.reset_audit_counters()
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
+    if trace_path is not None:
+        try:
+            reset_fd_trace(baseline_fd=process_fd_count(), path=trace_path)
+        except Exception:
+            pass
     rng = random.Random(seed if scheduler_jitter_seed is None else scheduler_jitter_seed)
     batch_size = max(1, int(batch_size))
     schedule_start = time.monotonic()
@@ -236,6 +286,11 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     report["persistence_mode"] = _describe_tick_store_mode()
     report["persistence_worker"] = tick_store.get_audit_counters()
     report["resource_snapshot"] = _resource_snapshot()
+    report["fd_trace_summary"] = _fd_trace_summary(
+        trace_path,
+        baseline_fd=process_fd_count(),
+        post_worker_shutdown_fd=process_fd_count(),
+    )
     return report
 
 
@@ -257,6 +312,19 @@ def _load(path: Path, max_rows: int | None, spike_start: str | None, spike_end: 
     return records
 
 
+def _select_scenarios(all_scenarios: dict[str, dict], selected: list[str] | None, parser: argparse.ArgumentParser) -> dict[str, dict]:
+    selected_scenarios = list(selected or [])
+    if not selected_scenarios:
+        return dict(all_scenarios)
+    unknown = [name for name in selected_scenarios if name not in all_scenarios]
+    if unknown:
+        parser.error(f"unknown scenario(s): {', '.join(sorted(set(unknown)))}")
+    filtered = {name: all_scenarios[name] for name in selected_scenarios if name in all_scenarios}
+    if not filtered:
+        parser.error("no valid scenarios selected")
+    return filtered
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True, type=Path)
@@ -266,14 +334,26 @@ def main() -> int:
     parser.add_argument("--spike-start")
     parser.add_argument("--spike-end")
     parser.add_argument("--session-cycles", type=int, default=50)
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        dest="scenarios",
+        default=None,
+        help="Run only the named replay scenario. May be repeated.",
+    )
     args = parser.parse_args()
-    if args.iterations < 10:
-        parser.error("--iterations must be at least 10")
+    if args.iterations < 1:
+        parser.error("--iterations must be at least 1")
     if not args.input.is_file():
         parser.error("input parquet does not exist")
 
     out = args.output_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
+    trace_path = out / "fd_trace.jsonl"
+    if os.environ.get("TRADEBOT_FEED_FD_TRACE"):
+        os.environ.setdefault("TRADEBOT_FEED_FD_TRACE_PATH", str(trace_path))
+    branch_name = subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
+    dirty_files = subprocess.check_output(["git", "diff", "--name-only"], cwd=ROOT, text=True).splitlines()
     cfg.TICK_STORE_ENABLE_DB_WRITES = True
     cfg.TRADE_DB_PATH = str(out / "replay_ticks.sqlite3")
     rows = _load(args.input, args.max_rows, None, None)
@@ -292,13 +372,15 @@ def main() -> int:
         "batch_500": {"rows": rows, "speed_factor": 1.0, "batch_size": 500},
         "batch_1000": {"rows": rows, "speed_factor": 1.0, "batch_size": 1000},
     }
+    selected_scenarios = list(args.scenarios or [])
+    scenarios = _select_scenarios(scenarios, selected_scenarios, parser)
     results, faults = {}, []
     hard_failures = []
     for scenario, spec in scenarios.items():
         scenario_rows = spec["rows"]
         runs = [_run_once(scenario_rows, scenario, seed=i, synchronous=True, speed_factor=spec["speed_factor"],
                           batch_size=spec["batch_size"], random_pause_probability=spec.get("random_pause_probability", 0.0),
-                          random_pause_max_ms=spec.get("random_pause_max_ms", 0.0))
+                          random_pause_max_ms=spec.get("random_pause_max_ms", 0.0), trace_path=trace_path)
                 for i in range(args.iterations)]
         signatures = [run["checksums"] for run in runs]
         deterministic = all(item == signatures[0] for item in signatures[1:])
@@ -306,29 +388,35 @@ def main() -> int:
             hard_failures.append(scenario)
         results[scenario] = {"iterations": args.iterations, "deterministic": deterministic, "runs": runs}
 
-    current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=False, speed_factor=1.0, batch_size=100)
-                    for i in range(args.iterations)]
-    current_deterministic = all(run["checksums"] == current_runs[0]["checksums"] for run in current_runs[1:])
-    if not current_deterministic or any(run["verdict"] == "FAIL" for run in current_runs):
-        hard_failures.append("normal_speed_current_persistence")
-    results["normal_speed_current_persistence"] = {
-        "iterations": args.iterations, "deterministic": current_deterministic, "runs": current_runs,
-    }
+    current_runs = []
+    current_deterministic = True
+    if not selected_scenarios or "normal_speed_current_persistence" in selected_scenarios:
+        current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=False, speed_factor=1.0, batch_size=100, trace_path=trace_path)
+                        for i in range(args.iterations)]
+        current_deterministic = all(run["checksums"] == current_runs[0]["checksums"] for run in current_runs[1:])
+        if not current_deterministic or any(run["verdict"] == "FAIL" for run in current_runs):
+            hard_failures.append("normal_speed_current_persistence")
+        results["normal_speed_current_persistence"] = {
+            "iterations": args.iterations, "deterministic": current_deterministic, "runs": current_runs,
+        }
 
     cycle_snapshots = []
     cycle_hashes = []
-    for cycle in range(max(0, args.session_cycles)):
-        cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=False, speed_factor=1.0, batch_size=100)
-        cycle_snapshots.append({
-            "cycle": cycle,
-            "resource_snapshot": cycle_run["resource_snapshot"],
-            "checksums": cycle_run["checksums"],
-            "pending_at_shutdown": cycle_run["counters"].get("pending_at_shutdown"),
-        })
-        cycle_hashes.append(cycle_run["checksums"])
-    cycle_deterministic = all(item == cycle_hashes[0] for item in cycle_hashes[1:]) if cycle_hashes else True
-    if not cycle_deterministic:
-        hard_failures.append("session_cycles")
+    if not selected_scenarios or "session_cycles" in selected_scenarios:
+        for cycle in range(max(0, args.session_cycles)):
+            cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=False, speed_factor=1.0, batch_size=100, trace_path=trace_path)
+            cycle_snapshots.append({
+                "cycle": cycle,
+                "resource_snapshot": cycle_run["resource_snapshot"],
+                "checksums": cycle_run["checksums"],
+                "pending_at_shutdown": cycle_run["counters"].get("pending_at_shutdown"),
+            })
+            cycle_hashes.append(cycle_run["checksums"])
+        cycle_deterministic = all(item == cycle_hashes[0] for item in cycle_hashes[1:]) if cycle_hashes else True
+        if not cycle_deterministic:
+            hard_failures.append("session_cycles")
+    else:
+        cycle_deterministic = True
 
     for name in ("disconnect_5s", "disconnect_30s", "disconnect_120s", "connection_flapping",
                  "malformed_messages", "duplicate_messages", "unknown_tokens", "out_of_order_timestamps",
@@ -340,24 +428,38 @@ def main() -> int:
 
     final_run = results["normal_speed"]["runs"][0]
     normal_records = results["normal_speed"]["runs"]
-    first_diff = first_difference(normal_records[0]["records"], normal_records[1]["records"])
+    first_diff = None
+    if len(normal_records) >= 2:
+        first_diff = first_difference(normal_records[0]["records"], normal_records[1]["records"])
     volatile_first_diff = None
-    for pos, (left, right) in enumerate(zip(normal_records[0]["records"], normal_records[1]["records"])):
-        volatile = {key: (left.get(key), right.get(key)) for key in
-                    ("callback_ns", "normalized_ns", "published_ns", "persisted_ns") if left.get(key) != right.get(key)}
-        if volatile:
-            volatile_first_diff = {"first_differing_position": pos, "source_row_index": left.get("source_row_index"),
-                                   "instrument_token": left.get("instrument_token"), "source_timestamp": left.get("source_timestamp"),
-                                   "volatile_stage_timestamps": volatile, "semantic_output_differs": first_diff is not None}
-            break
+    if len(normal_records) >= 2:
+        for pos, (left, right) in enumerate(zip(normal_records[0]["records"], normal_records[1]["records"])):
+            volatile = {key: (left.get(key), right.get(key)) for key in
+                        ("callback_ns", "normalized_ns", "published_ns", "persisted_ns") if left.get(key) != right.get(key)}
+            if volatile:
+                volatile_first_diff = {"first_differing_position": pos, "source_row_index": left.get("source_row_index"),
+                                       "instrument_token": left.get("instrument_token"), "source_timestamp": left.get("source_timestamp"),
+                                       "volatile_stage_timestamps": volatile, "semantic_output_differs": first_diff is not None}
+                break
     verdict = "FAIL" if hard_failures else "CONDITIONALLY_STABLE"
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    diff_sha256 = _git_diff_sha256()
     manifest = {"schema_version": 1, "input": str(args.input.resolve()), "input_sha256": _sha(args.input),
                 "git_commit": commit, "iterations": args.iterations, "scenarios": list(scenarios),
+                "selected_scenarios": selected_scenarios,
                 "row_limit": args.max_rows, "session_cycles": args.session_cycles, "live_session_complete": False,
                 "provider_sequence_numbers_present": False, "upstream_completeness_claimed": False,
                 "read_only": True, "append": False, "is_order_action": False,
-                "broker_api_called": False, "allowed_for_live_execution": False}
+                "broker_api_called": False, "allowed_for_live_execution": False,
+                "output_dir": str(out),
+                "worktree_path": str(ROOT),
+                "branch_name": branch_name,
+                "dirty_files": dirty_files,
+                "dirty_diff_sha256": diff_sha256,
+                "fd_trace_enabled": bool(os.environ.get("TRADEBOT_FEED_FD_TRACE")),
+                "trace_path": str(trace_path),
+                "max_rows": args.max_rows,
+               }
     _atomic_json(out / "run_manifest.json", manifest)
     _atomic_json(out / "feed_counters.json", {k: v["runs"] for k, v in results.items()})
     _atomic_json(out / "latency_report.json", final_run["latency"])
@@ -380,7 +482,8 @@ def main() -> int:
     _atomic_json(out / "resource_snapshot.json", {"final": cycle_snapshots[-1]["resource_snapshot"] if cycle_snapshots else final_run["resource_snapshot"],
                                                   "session_cycles": args.session_cycles,
                                                   "cycle_samples": cycle_snapshots,
-                                                  "cycle_deterministic": cycle_deterministic})
+                                                  "cycle_deterministic": cycle_deterministic,
+                                                  "fd_trace": final_run.get("fd_trace_summary")})
     print(json.dumps({"verdict": verdict, "output_dir": str(out), "hard_failures": hard_failures}, indent=2))
     return 1 if verdict == "FAIL" else 0
 

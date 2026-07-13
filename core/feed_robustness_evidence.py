@@ -94,9 +94,12 @@ class FeedEvidenceCollector:
             self.last_callback_monotonic_ns = now_ns
             if self.last_progress_monotonic_ns is None: self.last_progress_monotonic_ns = now_ns
             for row in rows or ():
-                idx = int(row["source_row_index"]); self._callback_sequence += 1; self.callback_order.append(idx)
+                idx_value = row.get("source_row_index", row.get("_audit_source_row_index"))
+                idx = int(idx_value)
+                source_ts = row.get("source_timestamp", row.get("_audit_source_timestamp"))
+                self._callback_sequence += 1; self.callback_order.append(idx)
                 self.records[idx] = {"source_row_index": idx, "instrument_token": int(row["instrument_token"]),
-                    "source_timestamp": row.get("source_timestamp"), "last_price": row.get("last_price"),
+                    "source_timestamp": source_ts, "last_price": row.get("last_price"),
                     "volume": row.get("volume"), "oi": row.get("oi"), "callback_sequence": self._callback_sequence,
                     "callback_ns": now_ns}
 
