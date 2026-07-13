@@ -33,6 +33,8 @@ _AUDIT_COUNTERS = {
     "committed_batches": 0,
     "worker_failures": 0,
 }
+_WRITE_ENQUEUE_COUNT = 0
+_WRITE_FLUSH_COUNT = 0
 
 
 def _normalize_token(token: int | str | None) -> int | None:
@@ -499,6 +501,7 @@ def record_tick_epoch(ts_epoch):
 
 
 def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]]) -> bool:
+    global _WRITE_FLUSH_COUNT
     if not rows:
         return True
     try:
@@ -519,6 +522,7 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
                 collector.persisted_row(row[1], row[5], row[2], row[3], row[4])
         except Exception:
             pass
+        _WRITE_FLUSH_COUNT += len(rows)
         return True
     except Exception as exc:
         _AUDIT_COUNTERS["worker_failures"] += 1
@@ -602,10 +606,12 @@ def _ensure_flush_thread() -> None:
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
+    global _WRITE_ENQUEUE_COUNT
     init_ticks()
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.append(row)
         _AUDIT_COUNTERS["rows_enqueued"] += 1
+        _WRITE_ENQUEUE_COUNT += 1
     _ensure_flush_thread()
     return True
 
@@ -624,6 +630,19 @@ def _shutdown_flush_thread() -> None:
                 pass
         finally:
             _FLUSH_LOCK.release()
+
+
+def write_queue_depth() -> int:
+    with _WRITE_QUEUE_LOCK:
+        return len(_WRITE_QUEUE)
+
+
+def write_enqueue_count() -> int:
+    return _WRITE_ENQUEUE_COUNT
+
+
+def write_flush_count() -> int:
+    return _WRITE_FLUSH_COUNT
 
 
 aexit_registered = False
