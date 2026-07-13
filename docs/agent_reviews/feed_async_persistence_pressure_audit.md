@@ -209,3 +209,183 @@ Not claimed:
 - full-capture soak
 - production readiness
 - strategy/ranking freshness
+
+## Shutdown-contract remediation refresh
+
+Implementation checkpoint:
+- commit: `c3c2e888a57e0a12588c1e25687943290ac4b072`
+- message: `fix: make tick persistence shutdown drain-aware`
+- isolation commit for the evidence tree: `81246ff1a8271f6c8f6e4b0d0f9a4bfdf3c1a8a5`
+- note: the 100k evidence was generated from the same tree contents before the isolation-only diff was committed
+
+Daemon policy:
+- retained daemon worker temporarily
+- rationale: the worker is still shut down explicitly and must never be reported as complete while alive
+- observed on the committed implementation: `worker_daemon = true`
+
+Explicit shutdown lifecycle:
+- `RUNNING`
+- `STOP_ACCEPTING_WRITES`
+- `DRAINING`
+- `INCOMPLETE_DRAIN_TIMEOUT`
+- `COMPLETE_DRAIN`
+- `WORKER_FAILURE`
+
+Retryable timeout behavior:
+- initial timeout is preserved in `initial_shutdown_result`
+- cleanup completion is preserved in `cleanup_shutdown_result`
+- retry uses the same worker and queue
+- writes remain closed after shutdown begins
+
+Exact implementation flags and fields:
+- shutdown deadline flag: `--persistence-shutdown-deadline-seconds`
+- shutdown status fields: `shutdown_status`, `deadline_seconds`, `deadline_expired`
+- immutable timeout snapshot fields: `timeout_monotonic_ns`, `lifecycle_state`, `rows_enqueued`, `rows_dequeued`, `rows_committed`, `committed_batches`, `queue_depth`, `in_flight_rows`, `pending_writes`, `writes_rejected_after_shutdown`, `worker_alive`, `worker_failures`
+- worker identity fields: `worker_daemon`, `worker_join_completed`, `worker_terminated`
+
+Verified input envelope refresh:
+- file SHA-256: `62410f680b0621c836e3b18e8a509126e3dfbcf40c61e3cc23d5c2bc30b95139`
+- total rows: `2,778,666`
+- first 100k raw timestamp range: `1783569405.7407` .. `1783569979.745924`
+- first 100k UTC range: `2026-07-09 03:56:45.740700006+00:00` .. `2026-07-09 04:06:19.745923996+00:00`
+- distinct tokens in first 100k rows: `129`
+- missing timestamp count: `0`
+- malformed timestamp count: `0`
+
+Control evidence refresh:
+
+```bash
+PYTHONUNBUFFERED=1 /Users/madhuram/tradebot/.venv/bin/python -u scripts/run_feed_robustness_replay.py \
+  --input /Users/madhuram/tradebot/.runtime/market_data/upstox_full_ticks_20260709.parquet \
+  --output-dir .runtime/feed_robustness_audit/async-100k-shutdown-control \
+  --iterations 1 \
+  --max-rows 100000 \
+  --session-cycles 0 \
+  --persistence-mode async_queue \
+  --pressure-profile none \
+  --scenario normal_speed
+```
+
+No-pressure result:
+- verdict: `CONDITIONALLY_STABLE`
+- hard failures: `[]`
+- rows requested / processed: `100000`
+- rows enqueued / dequeued / committed: `100000 / 100000 / 100000`
+- queue depth / in-flight / pending at shutdown: `0 / 0 / 0`
+- worker start count: `1`
+- worker join completed: `true`
+- worker terminated: `true`
+- worker alive: `false`
+- worker failures: `0`
+- writes rejected after shutdown: `0`
+- deadline expired: `false`
+- shutdown status: `COMPLETE_DRAIN`
+- timestamp fidelity: passed
+- unexpected timestamp fallbacks: `0`
+- reconciliation deltas: `0 / 0 / 0`
+- first semantic difference: `null`
+- canonical semantic hash: `9eefbd54d8a88201c4398b9d43b2e8c07f01c77947c7bed5ceb3a6aff8d7cf9d`
+- final-state hash: `f103a7d35c540fd19ce74f422cd409f4305c0042acfcf038927fff4bd931b5b5`
+- queue-depth high-water: `1`
+- pressure hooks: none
+- stalls: none
+- baseline FD / final FD: `64 / 64`
+- RSS: `714571776` bytes (`681.46875` MiB)
+
+No-pressure artifact checksums:
+- `run_manifest.json`: `188d8fb2e5c88140da334570f0eaaa2449a69ed00c080d60a577ed613fef0a02`
+- `feed_counters.json`: `dce91ef15789c50959d6668e84aebe38a1d7c88b8ac69c386ab5dcd3d5369233`
+- `feed_verdict.json`: `b6eac8c00f7211946c6824e8fd40d277c058ced04daf2fcc8ea5cec37c52c7ad`
+- `latency_report.json`: `6146263a119bf678f007faab0847a7c2fb69e3dce69f805bb88cff281fd6577d`
+- `resource_snapshot.json`: `c587860e7763ccd544da728cacc9f8b00431fb469611563808a3196569a0dd39`
+- `timestamp_fidelity.json`: `c8971b794ddf0aa07fd57e157428bf95023ceae961033471db1890b3973847a6`
+
+Short-deadline intermittent negative control:
+
+```bash
+# same runner inputs as the control, but with pressure_profile=intermittent_stall
+# and an initial 2.0 second shutdown deadline; cleanup used a second shutdown call
+# in-process with a longer deadline to preserve the same worker.
+```
+
+Short-deadline result:
+- initial shutdown status: `INCOMPLETE_DRAIN_TIMEOUT`
+- cleanup shutdown status: `COMPLETE_DRAIN`
+- negative-control classification: `INTERMITTENT_STALL_EXPECTED_TIMEOUT_CLASSIFIED`
+- initial timeout preserved in `initial_shutdown_result`: yes
+- cleanup preserved in `cleanup_shutdown_result`: yes
+- initial rows enqueued / dequeued / committed: `100000 / 50667 / 49667`
+- initial queue depth / in-flight / pending: `49333 / 1000 / 50333`
+- initial worker alive / terminated: `true / false`
+- initial worker failures: `0`
+- initial writes rejected after shutdown: `0`
+- cleanup rows enqueued / dequeued / committed: `100000 / 100000 / 100000`
+- cleanup queue depth / in-flight / pending: `0 / 0 / 0`
+- cleanup worker alive / terminated: `false / true`
+- cleanup worker failures: `0`
+- cleanup writes rejected after shutdown: `0`
+- immutable timeout snapshot scope:
+  - state at deadline expiry only: `rows_enqueued=100000`, `rows_dequeued=50667`, `rows_committed=49667`, `queue_depth=49333`, `in_flight_rows=1000`, `pending_writes=50333`
+  - `committed_batches` at deadline expiry: `51`
+  - `stall_activation_count` at deadline expiry: `6`
+  - `worker_commit_hook_count` at deadline expiry: `51`
+  - `hook_batch_size_total` at deadline expiry: `49667`
+- historical archived run values kept separate for comparison only:
+  - `committed_batches=62`
+  - `hook_batch_size_total=60953`
+  - `stall_activation_count=6`
+  - `requested injected delay=12000 ms`
+  - `observed injected delay=12079.432252 ms`
+- queue high-water at deadline expiry: `49333`
+- max pending writes at deadline expiry: `50333`
+- FD note: the current evidence captures `final FD=13` before the post-cleanup descriptor-close sample was recorded; this does not prove recovery and remains a reporting gap until a post-cleanup sample is added.
+- initial RSS: `724418560` bytes (`690.859375` MiB)
+
+Sufficient-deadline intermittent result:
+- verdict: `CONDITIONALLY_STABLE`
+- shutdown status: `COMPLETE_DRAIN`
+- deadline expired: `false`
+- rows enqueued / dequeued / committed: `100000 / 100000 / 100000`
+- queue depth / in-flight / pending at shutdown: `0 / 0 / 0`
+- worker alive / terminated: `false / true`
+- worker failures: `0`
+- writes rejected after shutdown: `0`
+- stall activation count: `9`
+- pressure hook invocation count: `101`
+- committed batches: `101`
+- hook batch-size total: `100000`
+- queue high-water: `69987`
+- maximum pending writes: `69987`
+- timestamp fidelity: passed
+- unexpected timestamp fallbacks: `0`
+- reconciliation deltas: `0 / 0 / 0`
+- first semantic difference: `null`
+- canonical semantic hash: matched control
+- final-state hash: matched control
+- baseline FD / final FD: `8 / 8`
+- RSS: `685735936` bytes (`653.96875` MiB)
+
+Sufficient-deadline artifact checksums:
+- `run_manifest.json`: `ccc3e0ab75aabc8b67009c65992de43f087d4e24c3e76bfb67efc40c3ad44eb9`
+- `feed_counters.json`: `ab4932a43619a304b6a6a330f4d8349291f5125a74fe52199f1cd1c5873ada7e`
+- `feed_verdict.json`: `b6eac8c00f7211946c6824e8fd40d277c058ced04daf2fcc8ea5cec37c52c7ad`
+- `latency_report.json`: `b28c0311279e7fe4c47f6e5c8bcab2fedf2e8f11ea329c2b598a7f7215e06175`
+- `resource_snapshot.json`: `1054cb41420c0af51078fdab6b3fe3abc1f25bbed387863826709d73c15094f7`
+- `pressure_profile.json`: `02d460ef8df50808f25ef575e4c8ae055f8043ededeb1b6157c32c75ec99559d`
+- `timestamp_fidelity.json`: `c8971b794ddf0aa07fd57e157428bf95023ceae961033471db1890b3973847a6`
+
+Strict final pressure-recovery verdict:
+- `100K_ASYNC_PERSISTENCE_PRESSURE_RECOVERY_PASS`
+
+Maximum claim supported by the refreshed evidence:
+
+> Under the tested 100,000-row intermittent-stall profile, the async persistence worker explicitly reports insufficient shutdown deadlines, preserves immutable timeout evidence, continues draining the same worker under a longer cleanup deadline, and—with a sufficient deadline—drains all queued and in-flight writes, preserves ordering and semantic output, and terminates cleanly within the measured memory and descriptor bounds.
+
+Remaining limitations:
+- this evidence does not prove live websocket recovery
+- this evidence does not prove provider completeness
+- this evidence does not prove full-session soak
+- this evidence does not prove full-capture scale
+- this evidence does not prove ranking freshness
+- this evidence does not prove execution freshness
+- this evidence does not prove overall production readiness
