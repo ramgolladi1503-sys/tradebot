@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import threading
+import math
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -193,6 +194,170 @@ def _resource_snapshot() -> dict:
     }
 
 
+def _resource_timeline_sample() -> dict:
+    sample = _resource_snapshot()
+    sample.update(
+        {
+            "monotonic_ns": time.monotonic_ns(),
+            "queue_depth": tick_store.write_queue_depth(),
+            "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+            "fd_count": process_fd_count(),
+        }
+    )
+    return sample
+
+
+def _pressure_queue_threshold() -> int:
+    queue = getattr(tick_store, "_WRITE_QUEUE", None)
+    queue_capacity = getattr(queue, "maxlen", None) if queue is not None else None
+    if queue_capacity is None:
+        return 100
+    return max(2, int(math.ceil(float(queue_capacity) * 0.8)))
+
+
+class _ReplayPressureController:
+    def __init__(
+        self,
+        *,
+        profile: str = "none",
+        delay_before_each_commit_ms: int = 0,
+        stall_after_each_dequeued_rows: int = 0,
+        stall_duration_ms: int = 0,
+    ) -> None:
+        self.profile = str(profile or "none")
+        self.delay_before_each_commit_ms = max(0, int(delay_before_each_commit_ms or 0))
+        self.stall_after_each_dequeued_rows = max(0, int(stall_after_each_dequeued_rows or 0))
+        self.stall_duration_ms = max(0, int(stall_duration_ms or 0))
+        self.timeline: list[dict[str, object]] = []
+        self.resource_timeline: list[dict[str, object]] = []
+        self.worker_lifecycle: list[dict[str, object]] = []
+        self._stall_index = 0
+        self._next_stall_at = self.stall_after_each_dequeued_rows if self.stall_after_each_dequeued_rows else None
+        self._started_ns = time.monotonic_ns()
+        self._last_queue_high_water: int | None = None
+        self._record_queue_event("replay_start")
+
+    @property
+    def enabled(self) -> bool:
+        return self.profile != "none"
+
+    def _record_queue_event(self, stage: str, **extra: object) -> None:
+        worker_state = tick_store.get_persistence_worker_state()
+        payload = {
+            "stage": stage,
+            "monotonic_ns": time.monotonic_ns(),
+            "elapsed_ns": time.monotonic_ns() - self._started_ns,
+            "rows_produced": int(extra.get("rows_produced") or extra.get("produced_rows") or 0),
+            "rows_enqueued": tick_store.write_enqueue_count(),
+            "rows_dequeued": worker_state.get("rows_dequeued"),
+            "rows_committed": tick_store.write_flush_count(),
+            "queue_depth": tick_store.write_queue_depth(),
+            "queue_depth_high_water": worker_state.get("queue_depth_high_water"),
+            "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+            "worker_state": {
+                "worker_started": worker_state.get("worker_started"),
+                "worker_join_completed": worker_state.get("worker_join_completed"),
+                "worker_terminated": worker_state.get("worker_terminated"),
+                "worker_failures": worker_state.get("worker_failures"),
+            },
+            "pressure_state": {
+                "profile": self.profile,
+                "stall_index": self._stall_index,
+                "next_stall_at": self._next_stall_at,
+            },
+        }
+        payload.update(extra)
+        self.timeline.append(payload)
+        hw = payload["queue_depth_high_water"]
+        if isinstance(hw, int) and hw != self._last_queue_high_water:
+            self._last_queue_high_water = hw
+            self.resource_timeline.append({"kind": "queue_high_water_change", **_resource_timeline_sample()})
+
+    def record_worker_event(self, stage: str, **extra: object) -> None:
+        self.worker_lifecycle.append({
+            "stage": stage,
+            "monotonic_ns": time.monotonic_ns(),
+            "queue_depth": tick_store.write_queue_depth(),
+            "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+            **extra,
+        })
+
+    def maybe_pause_before_commit(self, context: dict[str, object]) -> None:
+        if not self.enabled:
+            return
+        self._record_queue_event("pressure_activation" if self._stall_index == 0 else "pressure_continue", **context)
+        if self.profile == "constant_delay":
+            if self.delay_before_each_commit_ms > 0:
+                start_ns = time.monotonic_ns()
+                self.worker_lifecycle.append({
+                    "stage": "stall_start",
+                    "monotonic_ns": start_ns,
+                    "stall_index": self._stall_index,
+                    "delay_before_each_commit_ms": self.delay_before_each_commit_ms,
+                    "queue_depth": tick_store.write_queue_depth(),
+                    "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+                })
+                time.sleep(self.delay_before_each_commit_ms / 1000.0)
+                end_ns = time.monotonic_ns()
+                self.worker_lifecycle.append({
+                    "stage": "stall_end",
+                    "monotonic_ns": end_ns,
+                    "stall_index": self._stall_index,
+                    "duration_ns": end_ns - start_ns,
+                    "queue_depth": tick_store.write_queue_depth(),
+                    "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+                })
+            self._record_queue_event("commit_delay_applied", **context)
+            return
+        if self.profile == "intermittent_stall" and self._next_stall_at is not None:
+            dequeued_rows = int(context.get("rows_dequeued") or 0)
+            if dequeued_rows >= self._next_stall_at:
+                start_ns = time.monotonic_ns()
+                self.worker_lifecycle.append({
+                    "stage": "stall_start",
+                    "monotonic_ns": start_ns,
+                    "stall_index": self._stall_index,
+                    "stall_after_each_dequeued_rows": self.stall_after_each_dequeued_rows,
+                    "stall_duration_ms": self.stall_duration_ms,
+                    "dequeued_rows": dequeued_rows,
+                    "queue_depth": tick_store.write_queue_depth(),
+                    "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+                })
+                time.sleep(self.stall_duration_ms / 1000.0)
+                end_ns = time.monotonic_ns()
+                self.worker_lifecycle.append({
+                    "stage": "stall_end",
+                    "monotonic_ns": end_ns,
+                    "stall_index": self._stall_index,
+                    "duration_ns": end_ns - start_ns,
+                    "dequeued_rows": dequeued_rows,
+                    "queue_depth": tick_store.write_queue_depth(),
+                    "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+                })
+                self._stall_index += 1
+                self._next_stall_at += self.stall_after_each_dequeued_rows
+                self._record_queue_event("stall_released", **context)
+
+    def capture_drain_report(self, *, producer_completion_ns: int, producer_completion_queue_depth: int,
+                             producer_completion_pending_writes: int, worker_completion_ns: int | None,
+                             worker_join_ns: int | None, worker_terminated: bool | None,
+                             worker_failures: int | None) -> dict[str, object]:
+        queue_depth_at_shutdown = tick_store.write_queue_depth()
+        pending_writes_at_shutdown = max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count())
+        return {
+            "producer_completion_monotonic_ns": producer_completion_ns,
+            "producer_completion_queue_depth": producer_completion_queue_depth,
+            "producer_completion_pending_writes": producer_completion_pending_writes,
+            "worker_completion_monotonic_ns": worker_completion_ns,
+            "backlog_drain_duration_ns": None if worker_completion_ns is None else worker_completion_ns - producer_completion_ns,
+            "queue_depth_at_shutdown": queue_depth_at_shutdown,
+            "pending_writes_at_shutdown": pending_writes_at_shutdown,
+            "worker_join_duration_ns": None if worker_join_ns is None else worker_join_ns - producer_completion_ns,
+            "worker_terminated": worker_terminated,
+            "worker_failures": worker_failures,
+        }
+
+
 def _describe_tick_store_mode() -> dict:
     async_enabled = bool(getattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True))
     batch_size = int(getattr(cfg, "TICK_STORE_ASYNC_BATCH_SIZE", 1000) or 1000)
@@ -230,9 +395,11 @@ def _deterministic_replay_schedule(rows: list[dict], speed_factor: float) -> tup
 def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, speed_factor: float = 1.0,
               batch_size: int = 1000, random_pause_probability: float = 0.0, random_pause_max_ms: float = 0.0,
               scheduler_jitter_seed: int | None = None, trace_path: Path | None = None,
-              selected_persistence_mode: str | None = None) -> dict:
+              selected_persistence_mode: str | None = None,
+              pressure_controller: _ReplayPressureController | None = None) -> dict:
     collector.reset(enabled=True)
     tick_store.reset_audit_counters()
+    tick_store.clear_replay_pressure_hook()
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
     if trace_path is not None:
         try:
@@ -247,6 +414,9 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     last_source_ts = None
     max_scheduler_drift_ns = 0
     callback_batches: list[dict] = []
+    if pressure_controller is not None and pressure_controller.enabled:
+        tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
+        pressure_controller.record_worker_event("hook_registered", scenario=scenario)
     for start in range(0, len(rows), batch_size):
         batch_rows = rows[start:start + batch_size]
         batch_start = time.monotonic_ns()
@@ -272,8 +442,21 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
         })
         if scenario == "randomized_pauses" and rng.random() < random_pause_probability:
             time.sleep(rng.uniform(0.0, random_pause_max_ms) / 1000.0)
+        if pressure_controller is not None and pressure_controller.enabled:
+            pressure_controller._record_queue_event(
+                "callback_batch_complete",
+                scenario=scenario,
+                batch_index=len(callback_batches) - 1,
+                rows_produced=min(len(rows), start + len(batch)),
+            )
+            pressure_controller.resource_timeline.append({"kind": "periodic_sample", **_resource_timeline_sample()})
     tick_store.flush_pending_ticks()
+    if pressure_controller is not None and pressure_controller.enabled:
+        pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
+        pressure_controller.record_worker_event("shutdown_requested", scenario=scenario)
     tick_store.shutdown_persistence_worker()
+    if pressure_controller is not None and pressure_controller.enabled:
+        pressure_controller.record_worker_event("worker_join_completed", scenario=scenario, worker_state=tick_store.get_persistence_worker_state())
     input_rows = []
     for row in rows:
         adapted = _adapt(row)
@@ -302,6 +485,28 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
         baseline_fd=process_fd_count(),
         post_worker_shutdown_fd=process_fd_count(),
     )
+    if pressure_controller is not None and pressure_controller.enabled:
+        pressure_controller.record_worker_event("final_state", scenario=scenario, worker_state=report["persistence_worker"])
+        report["pressure_profile"] = {
+            "profile": pressure_controller.profile,
+            "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
+            "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
+            "stall_duration_ms": pressure_controller.stall_duration_ms,
+            "queue_high_water_threshold": _pressure_queue_threshold(),
+        }
+        report["worker_lifecycle"] = pressure_controller.worker_lifecycle
+        report["queue_depth_timeline"] = pressure_controller.timeline
+        report["resource_timeline"] = pressure_controller.resource_timeline
+        report["drain_report"] = pressure_controller.capture_drain_report(
+            producer_completion_ns=callback_batches[-1]["batch_end_ns"] if callback_batches else schedule_start,
+            producer_completion_queue_depth=tick_store.write_queue_depth(),
+            producer_completion_pending_writes=max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+            worker_completion_ns=time.monotonic_ns(),
+            worker_join_ns=time.monotonic_ns(),
+            worker_terminated=tick_store.get_persistence_worker_state().get("worker_terminated"),
+            worker_failures=tick_store.get_persistence_worker_state().get("worker_failures"),
+        )
+    tick_store.clear_replay_pressure_hook()
     return report
 
 
@@ -352,6 +557,15 @@ def main() -> int:
         help="Diagnostic-only persistence mode selector.",
     )
     parser.add_argument(
+        "--pressure-profile",
+        choices=["none", "constant_delay", "intermittent_stall"],
+        default="none",
+        help="Replay-only persistence pressure profile. Disabled by default.",
+    )
+    parser.add_argument("--pressure-delay-before-each-commit-ms", type=int, default=0)
+    parser.add_argument("--pressure-stall-after-each-dequeued-rows", type=int, default=0)
+    parser.add_argument("--pressure-stall-duration-ms", type=int, default=0)
+    parser.add_argument(
         "--scenario",
         action="append",
         dest="scenarios",
@@ -391,6 +605,14 @@ def main() -> int:
     }
     selected_scenarios = list(args.scenarios or [])
     scenarios = _select_scenarios(scenarios, selected_scenarios, parser)
+    pressure_controller = _ReplayPressureController(
+        profile=args.pressure_profile,
+        delay_before_each_commit_ms=args.pressure_delay_before_each_commit_ms,
+        stall_after_each_dequeued_rows=args.pressure_stall_after_each_dequeued_rows,
+        stall_duration_ms=args.pressure_stall_duration_ms,
+    )
+    if pressure_controller.enabled and not any(True for _ in scenarios):
+        parser.error("pressure profile requires at least one replay scenario")
     results, faults = {}, []
     hard_failures = []
     selected_persistence_mode = args.persistence_mode
@@ -400,7 +622,8 @@ def main() -> int:
         runs = [_run_once(scenario_rows, scenario, seed=i, synchronous=scenario_sync, speed_factor=spec["speed_factor"],
                           batch_size=spec["batch_size"], random_pause_probability=spec.get("random_pause_probability", 0.0),
                           random_pause_max_ms=spec.get("random_pause_max_ms", 0.0), trace_path=trace_path,
-                          selected_persistence_mode=selected_persistence_mode)
+                          selected_persistence_mode=selected_persistence_mode,
+                          pressure_controller=pressure_controller if pressure_controller.enabled else None)
                 for i in range(args.iterations)]
         signatures = [run["checksums"] for run in runs]
         deterministic = all(item == signatures[0] for item in signatures[1:])
@@ -499,12 +722,38 @@ def main() -> int:
     _atomic_json(out / "configuration_snapshot.json", {"python": sys.version, "platform": platform.platform(),
                                                         "iterations": args.iterations, "max_rows": args.max_rows,
                                                         "modes": ["sync_diagnostic", "current_persistence"],
-                                                        "persistence_mode": _describe_tick_store_mode()})
+                                                        "persistence_mode": _describe_tick_store_mode(),
+                                                        "pressure_profile": {
+                                                            "profile": pressure_controller.profile,
+                                                            "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
+                                                            "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
+                                                            "stall_duration_ms": pressure_controller.stall_duration_ms,
+                                                            "enabled": pressure_controller.enabled,
+                                                            "queue_high_water_threshold": _pressure_queue_threshold(),
+                                                        }})
     _atomic_json(out / "resource_snapshot.json", {"final": cycle_snapshots[-1]["resource_snapshot"] if cycle_snapshots else final_run["resource_snapshot"],
                                                   "session_cycles": args.session_cycles,
                                                   "cycle_samples": cycle_snapshots,
                                                   "cycle_deterministic": cycle_deterministic,
                                                   "fd_trace": final_run.get("fd_trace_summary")})
+    if pressure_controller.enabled:
+        _atomic_json(out / "pressure_profile.json", {
+            "profile": pressure_controller.profile,
+            "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
+            "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
+            "stall_duration_ms": pressure_controller.stall_duration_ms,
+            "queue_high_water_threshold": _pressure_queue_threshold(),
+        })
+        (out / "queue_depth_timeline.jsonl").write_text(
+            "\n".join(json.dumps(row, sort_keys=True) for row in pressure_controller.timeline) + "\n",
+            encoding="utf-8",
+        )
+        (out / "resource_timeline.jsonl").write_text(
+            "\n".join(json.dumps(row, sort_keys=True) for row in pressure_controller.resource_timeline) + "\n",
+            encoding="utf-8",
+        )
+        _atomic_json(out / "worker_lifecycle.json", pressure_controller.worker_lifecycle)
+        _atomic_json(out / "drain_report.json", final_run.get("drain_report", {}))
     print(json.dumps({"verdict": verdict, "output_dir": str(out), "hard_failures": hard_failures}, indent=2))
     return 1 if verdict == "FAIL" else 0
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 from scripts import run_feed_robustness_replay as replay
 
@@ -225,3 +227,46 @@ def test_runner_rejects_unknown_persistence_mode(monkeypatch, tmp_path):
     ])
     with pytest.raises(SystemExit):
         replay.main()
+
+
+def test_pressure_controller_is_disabled_by_default():
+    controller = replay._ReplayPressureController(profile="none")
+    assert controller.enabled is False
+    assert controller.profile == "none"
+
+
+def test_pressure_queue_threshold_treats_unbounded_queue_as_backlog_100():
+    assert replay._pressure_queue_threshold() == 100
+
+
+def test_constant_delay_pressure_hook_records_worker_side_delay(monkeypatch):
+    controller = replay._ReplayPressureController(profile="constant_delay", delay_before_each_commit_ms=1)
+    slept = []
+    monkeypatch.setattr(replay.time, "sleep", lambda seconds: slept.append(seconds))
+
+    before = time.monotonic_ns()
+    controller.maybe_pause_before_commit({"rows_dequeued": 1, "rows_enqueued": 1})
+    after = time.monotonic_ns()
+
+    assert slept == [pytest.approx(0.001)]
+    assert controller.worker_lifecycle[0]["stage"] == "stall_start"
+    assert controller.worker_lifecycle[1]["stage"] == "stall_end"
+    assert after >= before
+
+
+def test_intermittent_stall_triggers_only_on_configured_dequeue_boundary(monkeypatch):
+    controller = replay._ReplayPressureController(
+        profile="intermittent_stall",
+        stall_after_each_dequeued_rows=10,
+        stall_duration_ms=2,
+    )
+    slept = []
+    monkeypatch.setattr(replay.time, "sleep", lambda seconds: slept.append(seconds))
+
+    controller.maybe_pause_before_commit({"rows_dequeued": 9, "rows_enqueued": 9})
+    assert slept == []
+    controller.maybe_pause_before_commit({"rows_dequeued": 10, "rows_enqueued": 10})
+
+    assert slept == [pytest.approx(0.002)]
+    assert controller.worker_lifecycle[0]["stage"] == "stall_start"
+    assert controller.worker_lifecycle[1]["stage"] == "stall_end"

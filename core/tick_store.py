@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import deque
+from typing import Callable, Any
 from config import config as cfg
 from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
@@ -32,6 +33,7 @@ _FLUSH_THREAD_JOIN_COMPLETED = False
 _FLUSH_THREAD_TERMINATED = False
 _QUEUE_HIGH_WATER = 0
 _FLUSH_COUNT = 0
+_REPLAY_PRESSURE_HOOK: Callable[[dict[str, Any]], None] | None = None
 _AUDIT_COUNTERS = {
     "worker_started": 0,
     "rows_enqueued": 0,
@@ -71,6 +73,15 @@ def _flush_interval_sec() -> float:
         return max(0.05, float(getattr(cfg, "TICK_STORE_ASYNC_FLUSH_INTERVAL_SEC", 0.5) or 0.5))
     except Exception:
         return 0.5
+
+
+def set_replay_pressure_hook(hook: Callable[[dict[str, Any]], None] | None) -> None:
+    global _REPLAY_PRESSURE_HOOK
+    _REPLAY_PRESSURE_HOOK = hook
+
+
+def clear_replay_pressure_hook() -> None:
+    set_replay_pressure_hook(None)
 
 
 def _flush_batch_size() -> int:
@@ -511,6 +522,25 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
     if not rows:
         return True
     try:
+        if _async_db_writes_enabled() and _REPLAY_PRESSURE_HOOK is not None:
+            try:
+                _REPLAY_PRESSURE_HOOK(
+                    {
+                        "batch_rows": len(rows),
+                        "queue_depth": write_queue_depth(),
+                        "pending_writes": max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
+                        "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
+                        "rows_dequeued": _AUDIT_COUNTERS["rows_dequeued"],
+                        "committed_rows": _WRITE_FLUSH_COUNT,
+                        "committed_batches": _AUDIT_COUNTERS["committed_batches"],
+                        "worker_started": _AUDIT_COUNTERS["worker_started"],
+                        "worker_thread_name": _FLUSH_THREAD_NAME,
+                        "stage": "before_commit",
+                        "monotonic_ns": time.monotonic_ns(),
+                    }
+                )
+            except Exception:
+                pass
         init_ticks()
         with _conn() as conn:
             conn.executemany(
