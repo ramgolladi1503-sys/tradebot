@@ -85,9 +85,9 @@ Representative rows from `/Users/madhuram/tradebot/runtime/upstox_candidate_repl
 - `2024-05-30T09:30:00`: raw volume `0`, `atr 19.474999999999845`, `vol_z -0.28471783249923277`
 - `2024-05-30T09:45:00`: raw volume `0`, `atr 14.01071428571439`, `vol_z -0.7211813306145064`
 
-Volume classification: `VOLUME_GATE_BYPASSED`
+Volume classification: `HARNESS_SEMANTIC_MISMATCH`
 
-This is a documented production fallback / proxy lane, not true volume-confirmed ORB.
+This is a harness proxy, not true traded-volume confirmation for ORB.
 
 ### Candidate multiplicity and lifecycle
 
@@ -220,15 +220,15 @@ Breaking the opening-range boundary suppresses the strategy as expected:
 
 ### Corrected verdict
 
-`CONDITIONALLY_SUPPORTED`
+`INVALID_DUE_TO_BACKTEST_HARNESS`
 
 Reason:
 
-- the corrected session-safe harness is now honest and deterministic
-- the strategy shows positive baseline candle evidence and acceptable WFA behavior
-- the lane still uses a documented volume proxy fallback instead of true volume-confirmed ORB
-- no late-session candidate was observed in the corrected sampled corpus
+- the corrected session-safe harness is deterministic, but it remains a candle proxy rather than executable option-fill truth
+- the strategy evidence depends on same-candle-close proxy execution, not a proven production position contract
+- the lane still uses an ATR-derived proxy in the field named `volume_z`, which is not true traded-volume confirmation
 - the strategy exposes no explicit rejected-candidate object, only no-trade surfaces
+- the positive candle numbers are therefore research observations, not a final executable-strategy verdict
 
 ### Dataset
 
@@ -379,4 +379,4 @@ The historical candle run remains invalidated because the original harness cross
 - Strict option replay is still blocked by missing contract metadata and strict loader fields.
 - The candle validation uses the repo’s existing candle proxy lane, not executable option fills.
 - The sampled candle corpus uses zero-volume underlying bars, so VWAP is proxied by the existing candle harness rather than true traded volume.
-- The corrected candle rerun is executed and deterministic, but it remains a candle proxy study rather than executable option-fill truth.
+- The corrected candle rerun is documented in `/tmp`, but the exact prepared-input provenance is not committed, so the 1628 claim is withdrawn as non-reproducible evidence.

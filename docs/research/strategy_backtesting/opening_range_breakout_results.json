@@ -307,9 +307,9 @@
     "correction_status": "pending rerun"
   },
   "corrected_candle_validation": {
-    "verdict": "CONDITIONALLY_SUPPORTED",
-    "volume_classification": "VOLUME_GATE_BYPASSED",
-    "volume_note": "The candle harness computes a volatility proxy vol_z from ATR statistics, not from raw traded volume.",
+    "verdict": "INVALID_DUE_TO_BACKTEST_HARNESS",
+    "volume_classification": "HARNESS_SEMANTIC_MISMATCH",
+    "volume_note": "ATR-derived vol_z is mapped into the strategy input named volume_z; this is not traded-volume confirmation.",
     "dataset_manifest_sha256": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
     "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
     "candidate_hash": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
@@ -429,11 +429,19 @@
       "window_hash": "64b34d6c25523d2d79981fc79b282062983ff9b2df38238c82706c426c38368a",
       "trade_hash": "06c7eb1849bb08c1c2cba8dada73787ea4fe2ef3970753dca5c589c75eae5e18"
     },
-    "final_verdict": "CONDITIONALLY_SUPPORTED",
+    "final_verdict": "INVALID_DUE_TO_BACKTEST_HARNESS",
     "unresolved_limitations": [
       "The candle lane relies on a documented volume-proxy fallback, not true traded-volume proof.",
       "The strategy does not emit an explicit rejected-candidate object; no-trade rows are the observable blocker surface.",
       "No late-session candidate was observed in the corrected sample window."
-    ]
+    ],
+    "provenance_audit": {
+      "classification": "STALE_DOCUMENTED_RESULT_WITHOUT_REPRODUCIBLE_PROVENANCE",
+      "artifact_sha256": "132a8af1b32d6591accd7734ef6f25b107f0c60f56e3730cdbe8da0915710655",
+      "exact_source_file_list": "missing",
+      "command_identity": "not_recorded",
+      "working_directory": "not_recorded",
+      "python_executable": "not_recorded"
+    }
   }
 }
