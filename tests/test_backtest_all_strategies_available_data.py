@@ -152,6 +152,89 @@ def test_proxy_trade_uses_current_close_and_future_exit_without_option_pnl_claim
     assert horizon_5_zero_cost["verdict"] == mod.FINAL_VERDICT
 
 
+def test_proxy_trade_rows_stay_within_the_same_session_and_do_not_jump_to_future_dates(tmp_path: Path) -> None:
+    rows = []
+    for ts, close in [
+        ("2026-07-01 09:15:00", 100.0),
+        ("2026-07-01 09:16:00", 101.0),
+        ("2026-07-01 15:28:00", 110.0),
+        ("2026-07-01 15:29:00", 111.0),
+        ("2026-07-10 09:15:00", 200.0),
+        ("2026-07-10 09:16:00", 201.0),
+    ]:
+        rows.append(
+            {
+                "date": pd.Timestamp(ts),
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "close": close,
+                "volume": 100,
+                "instrument": "NIFTY",
+            }
+        )
+    data_path = tmp_path / "session_gap.parquet"
+    pd.DataFrame(rows).to_parquet(data_path)
+
+    frames = mod._prepare_frames(mod.load_dataset(data_path))
+    idx_by_instrument = {
+        instrument: {pd.Timestamp(row.date).isoformat(): int(idx) for idx, row in frame.iterrows()}
+        for instrument, frame in frames.items()
+    }
+    signal = mod.normalize_signal(
+        strategy="directional_proxy",
+        instrument="NIFTY",
+        timestamp="2026-07-01 15:28:00",
+        direction="BUY_CALL",
+    )
+
+    rows = mod._proxy_trade_rows(signal, frames, idx_by_instrument)
+    horizon_15_zero_cost = next(row for row in rows if row["exit_horizon_min"] == 15 and row["cost_bps"] == 0.0)
+
+    assert horizon_15_zero_cost["entry_timestamp"].startswith("2026-07-01T15:28:00")
+    assert horizon_15_zero_cost["exit_timestamp"].startswith("2026-07-01T15:29:00")
+    assert horizon_15_zero_cost["entry_session"] == "2026-07-01"
+    assert horizon_15_zero_cost["exit_session"] == "2026-07-01"
+    assert horizon_15_zero_cost["exit_underlying"] == frames["NIFTY"].loc[3, "close"]
+    assert pd.Timestamp(horizon_15_zero_cost["exit_timestamp"]).date() == pd.Timestamp(horizon_15_zero_cost["entry_timestamp"]).date()
+
+
+def test_proxy_trade_rows_reject_last_candle_without_any_same_session_forward_rows(tmp_path: Path) -> None:
+    rows = []
+    for ts, close in [
+        ("2026-07-01 15:29:00", 111.0),
+        ("2026-07-10 09:15:00", 200.0),
+        ("2026-07-10 09:16:00", 201.0),
+    ]:
+        rows.append(
+            {
+                "date": pd.Timestamp(ts),
+                "open": close,
+                "high": close + 1.0,
+                "low": close - 1.0,
+                "close": close,
+                "volume": 100,
+                "instrument": "NIFTY",
+            }
+        )
+    data_path = tmp_path / "last_candle.parquet"
+    pd.DataFrame(rows).to_parquet(data_path)
+
+    frames = mod._prepare_frames(mod.load_dataset(data_path))
+    idx_by_instrument = {
+        instrument: {pd.Timestamp(row.date).isoformat(): int(idx) for idx, row in frame.iterrows()}
+        for instrument, frame in frames.items()
+    }
+    signal = mod.normalize_signal(
+        strategy="directional_proxy",
+        instrument="NIFTY",
+        timestamp="2026-07-01 15:29:00",
+        direction="BUY_CALL",
+    )
+
+    assert mod._proxy_trade_rows(signal, frames, idx_by_instrument) == []
+
+
 def test_report_writer_does_not_require_optional_tabulate(tmp_path: Path, monkeypatch) -> None:
     data_path = _sample_data(tmp_path / "bars.parquet")
     out_dir = tmp_path / "out"

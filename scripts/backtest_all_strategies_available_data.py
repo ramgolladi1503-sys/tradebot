@@ -595,13 +595,24 @@ def _proxy_trade_rows(signal: NormalizedSignal, frames: Mapping[str, pd.DataFram
     idx = idx_by_instrument[signal.instrument].get(signal.timestamp)
     if idx is None:
         return []
+    entry_row = frame.loc[idx]
+    session_day = pd.Timestamp(entry_row.date).normalize()
+    session_rows = frame[pd.to_datetime(frame["date"]).dt.normalize() == session_day].reset_index(drop=True)
+    session_idx = int(session_rows.index[session_rows["date"] == entry_row.date][0]) if not session_rows.empty else None
+    if session_idx is None:
+        return []
+    future_rows = session_rows.iloc[session_idx + 1 :].reset_index(drop=True)
+    if future_rows.empty:
+        return []
     rows: list[dict[str, Any]] = []
-    entry = float(frame.loc[idx, "close"])
+    entry = float(entry_row.close)
     for horizon in EXIT_HORIZONS:
-        exit_idx = idx + int(horizon)
-        if exit_idx >= len(frame):
-            continue
-        exit_price = float(frame.loc[exit_idx, "close"])
+        horizon_idx = int(horizon) - 1
+        if horizon_idx < len(future_rows):
+            exit_row = future_rows.iloc[horizon_idx]
+        else:
+            exit_row = future_rows.iloc[-1]
+        exit_price = float(exit_row.close)
         gross_bps = ((exit_price / entry) - 1.0) * 10000.0 * int(signal.side)
         for cost in COST_BPS:
             net_bps = gross_bps - float(cost)
@@ -625,6 +636,10 @@ def _proxy_trade_rows(signal: NormalizedSignal, frames: Mapping[str, pd.DataFram
                     "win": bool(net_bps > 0),
                     "executable": False,
                     "verdict": FINAL_VERDICT,
+                    "entry_session": str(session_day.date()),
+                    "exit_session": str(pd.Timestamp(exit_row.date).normalize().date()),
+                    "entry_timestamp": pd.Timestamp(entry_row.date).isoformat(),
+                    "exit_timestamp": pd.Timestamp(exit_row.date).isoformat(),
                 }
             )
     return rows
