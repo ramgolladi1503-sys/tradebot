@@ -26,6 +26,8 @@ _WRITE_QUEUE_LOCK = threading.Lock()
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_THREAD_STOP = threading.Event()
 _FLUSH_LOCK = threading.Lock()
+_WRITE_ENQUEUE_COUNT = 0
+_WRITE_FLUSH_COUNT = 0
 
 
 def _normalize_token(token: int | str | None) -> int | None:
@@ -492,6 +494,7 @@ def record_tick_epoch(ts_epoch):
 
 
 def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]]) -> bool:
+    global _WRITE_FLUSH_COUNT
     if not rows:
         return True
     try:
@@ -505,6 +508,7 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
                 rows,
             )
             conn.commit()
+        _WRITE_FLUSH_COUNT += len(rows)
         return True
     except Exception as exc:
         try:
@@ -571,9 +575,11 @@ def _ensure_flush_thread() -> None:
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
+    global _WRITE_ENQUEUE_COUNT
     init_ticks()
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.append(row)
+        _WRITE_ENQUEUE_COUNT += 1
     _ensure_flush_thread()
     return True
 
@@ -594,6 +600,19 @@ def _shutdown_flush_thread() -> None:
             _FLUSH_LOCK.release()
 
 
+def write_queue_depth() -> int:
+    with _WRITE_QUEUE_LOCK:
+        return len(_WRITE_QUEUE)
+
+
+def write_enqueue_count() -> int:
+    return _WRITE_ENQUEUE_COUNT
+
+
+def write_flush_count() -> int:
+    return _WRITE_FLUSH_COUNT
+
+
 aexit_registered = False
 if not aexit_registered:
     atexit.register(_shutdown_flush_thread)
@@ -601,6 +620,8 @@ if not aexit_registered:
 
 
 def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kwargs):
+    from core.vwap_accumulator import get_global_vwap_accumulator
+
     allowed_aliases = {"ts_epoch", "instrument_token"}
     unexpected = sorted(set(kwargs.keys()) - allowed_aliases)
     if unexpected:
@@ -676,6 +697,14 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
 
     if not _db_writes_enabled():
         return True
+
+    # VWAP Accumulation
+    if token is not None and last_price is not None and volume is not None and ts_epoch is not None:
+        try:
+            acc = get_global_vwap_accumulator(int(token))
+            acc.observe_tick(ts_epoch, float(last_price), float(volume))
+        except Exception:
+            pass
 
     row = (ts_iso, token, last_price, volume, oi, ts_epoch, ts_iso)
     if _async_db_writes_enabled():
