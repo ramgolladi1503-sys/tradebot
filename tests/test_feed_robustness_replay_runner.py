@@ -250,8 +250,10 @@ def test_constant_delay_pressure_hook_records_worker_side_delay(monkeypatch):
     after = time.monotonic_ns()
 
     assert slept == [pytest.approx(0.001)]
-    assert controller.worker_lifecycle[0]["stage"] == "stall_start"
-    assert controller.worker_lifecycle[1]["stage"] == "stall_end"
+    assert controller.worker_lifecycle[0]["stage"] == "hook_start"
+    assert controller.worker_lifecycle[1]["stage"] == "stall_start"
+    assert controller.worker_lifecycle[2]["stage"] == "hook_end"
+    assert controller.worker_lifecycle[3]["stage"] == "stall_end"
     assert after >= before
 
 
@@ -269,8 +271,10 @@ def test_intermittent_stall_triggers_only_on_configured_dequeue_boundary(monkeyp
     controller.maybe_pause_before_commit({"rows_dequeued": 10, "rows_enqueued": 10})
 
     assert slept == [pytest.approx(0.002)]
-    assert controller.worker_lifecycle[0]["stage"] == "stall_start"
-    assert controller.worker_lifecycle[1]["stage"] == "stall_end"
+    assert controller.worker_lifecycle[0]["stage"] == "hook_start"
+    assert controller.worker_lifecycle[1]["stage"] == "stall_start"
+    assert controller.worker_lifecycle[2]["stage"] == "hook_end"
+    assert controller.worker_lifecycle[3]["stage"] == "stall_end"
 
 
 def test_pressure_profile_cannot_be_enabled_from_env(monkeypatch, tmp_path):
@@ -358,8 +362,14 @@ def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monk
     assert worker["queue_depth_high_water"] > 1
     assert worker["queue_depth_at_shutdown"] == 0
     assert worker["pending_writes_at_shutdown"] == 0
-    assert report["pressure_profile"]["hook_invocation_count"] > 0
-    assert report["pressure_profile"]["cumulative_requested_delay_ms"] == report["pressure_profile"]["hook_invocation_count"]
+    assert report["pressure_profile"]["hook_invocation_count"] == worker["committed_batches"]
+    assert report["pressure_profile"]["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
+    assert report["pressure_profile"]["max_pending_writes"] >= worker["queue_depth_high_water"]
+    assert report["pressure_profile"]["hook_ordinal"] == 2 * report["pressure_profile"]["hook_invocation_count"]
+    hook_ends = [entry for entry in report["worker_lifecycle"] if entry["stage"] == "hook_end"]
+    assert sum(int(entry["batch_size"]) for entry in hook_ends) == worker["committed_rows"]
+    assert all(int(entry["configured_delay_ms"]) == 1 for entry in hook_ends)
+    assert all(entry["monotonic_start_ns"] is not None and entry["monotonic_end_ns"] is not None for entry in hook_ends)
     assert controller.hook_invocation_count == report["pressure_profile"]["hook_invocation_count"]
     with sqlite3.connect(str(db_path)) as conn:
         committed_rows = conn.execute("select count(*) from ticks").fetchone()[0]
@@ -429,6 +439,7 @@ def test_pressure_profile_preserves_checksums_with_and_without_delay(monkeypatch
         }
         for record in pressured["records"]
     ]
+    assert pressured["pressure_profile"]["max_pending_writes"] >= pressured["persistence_worker"]["queue_depth_high_water"]
 
 
 def test_pressure_profile_intermittent_stall_uses_only_10k_to_90k_boundaries(monkeypatch):
@@ -447,6 +458,134 @@ def test_pressure_profile_intermittent_stall_uses_only_10k_to_90k_boundaries(mon
     assert len(slept) == 9
     assert controller.hook_invocation_count == 9
     assert controller._stall_index == 9
+
+
+def test_pressure_accounting_reports_max_pending_writes_and_batch_size(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(3_000 + i), "token": "A", "ltp": 300.0 + i, "vol": 2.0, "oi": 4.0}
+        for i in range(6)
+    ]
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+    controller = replay._ReplayPressureController(profile="constant_delay", delay_before_each_commit_ms=1, expected_total_rows=len(rows))
+    report = replay._run_once(
+        rows,
+        "normal_speed",
+        seed=0,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    profile = report["pressure_profile"]
+    worker = report["persistence_worker"]
+    assert profile["max_pending_writes"] >= worker["queue_depth_high_water"]
+    assert profile["hook_invocation_count"] == worker["committed_batches"]
+    assert profile["cumulative_requested_delay_ms"] == 1 * worker["committed_batches"]
+    assert profile["hook_ordinal"] == 2 * profile["hook_invocation_count"]
+    assert profile["max_pending_writes"] > 0
+    assert any(entry["stage"] == "producer_completed" for entry in report["queue_depth_timeline"])
+    assert any(entry["stage"] == "shutdown_requested" for entry in report["worker_lifecycle"])
+    worker_stages = [entry["stage"] for entry in report["worker_lifecycle"] if entry["stage"] in {"hook_start", "hook_end"}]
+    assert worker_stages[:2] == ["hook_start", "hook_end"]
+
+
+def test_pressure_hook_context_includes_batch_size(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(4_000 + i), "token": "A", "ltp": 400.0 + i, "vol": 2.0, "oi": 4.0}
+        for i in range(4)
+    ]
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+    seen = []
+    controller = replay._ReplayPressureController(profile="constant_delay", delay_before_each_commit_ms=1, expected_total_rows=len(rows))
+
+    original = controller.maybe_pause_before_commit
+
+    def wrapped(context):
+        seen.append(dict(context))
+        return original(context)
+
+    controller.maybe_pause_before_commit = wrapped  # type: ignore[assignment]
+    replay._run_once(
+        rows,
+        "normal_speed",
+        seed=0,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    assert seen
+    assert all("batch_size" in item for item in seen)
+    assert all(item["batch_size"] > 0 for item in seen)
+
+
+def test_pressure_resource_timeline_records_pre_producer_and_post_join_samples(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(5_000 + i), "token": "A", "ltp": 500.0 + i, "vol": 2.0, "oi": 4.0}
+        for i in range(6)
+    ]
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+    controller = replay._ReplayPressureController(profile="constant_delay", delay_before_each_commit_ms=1, expected_total_rows=len(rows))
+    report = replay._run_once(
+        rows,
+        "normal_speed",
+        seed=0,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    kinds = [entry["kind"] for entry in report["resource_timeline"]]
+    assert kinds[0] == "pre_producer_sample"
+    assert "post_join_sample" in kinds
+    assert any(kind == "periodic_sample" for kind in kinds) or len(kinds) >= 2
+    assert len(report["resource_timeline"]) >= 2
+
+
+def test_pressure_producer_completion_precedes_shutdown_and_join(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(6_000 + i), "token": "A", "ltp": 600.0 + i, "vol": 2.0, "oi": 4.0}
+        for i in range(6)
+    ]
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+    controller = replay._ReplayPressureController(profile="constant_delay", delay_before_each_commit_ms=1, expected_total_rows=len(rows))
+    replay._run_once(
+        rows,
+        "normal_speed",
+        seed=0,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    producer_completed = next(entry["monotonic_ns"] for entry in controller.timeline if entry["stage"] == "producer_completed")
+    shutdown_requested = next(entry["monotonic_ns"] for entry in controller.worker_lifecycle if entry["stage"] == "shutdown_requested")
+    worker_join_completed = next(entry["monotonic_ns"] for entry in controller.worker_lifecycle if entry["stage"] == "worker_join_completed")
+    assert producer_completed < shutdown_requested < worker_join_completed
 
 
 def test_pressure_write_failure_is_observable(monkeypatch, tmp_path):

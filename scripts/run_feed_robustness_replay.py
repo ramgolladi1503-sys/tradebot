@@ -237,9 +237,12 @@ class _ReplayPressureController:
         self._next_stall_at = self.stall_after_each_dequeued_rows if self.stall_after_each_dequeued_rows else None
         self._started_ns = time.monotonic_ns()
         self._last_queue_high_water: int | None = None
+        self._max_pending_writes = 0
+        self._hook_ordinal = 0
         self.hook_invocation_count = 0
         self.cumulative_requested_delay_ms = 0
         self.cumulative_observed_delay_ms = 0.0
+        self.resource_timeline.append({"kind": "pre_producer_sample", **_resource_timeline_sample()})
         self._record_queue_event("replay_start")
 
     @property
@@ -259,6 +262,7 @@ class _ReplayPressureController:
             "queue_depth": tick_store.write_queue_depth(),
             "queue_depth_high_water": worker_state.get("queue_depth_high_water"),
             "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
+            "pending_writes_max": self._max_pending_writes,
             "worker_state": {
                 "worker_started": worker_state.get("worker_started"),
                 "worker_join_completed": worker_state.get("worker_join_completed"),
@@ -277,6 +281,9 @@ class _ReplayPressureController:
         if isinstance(hw, int) and hw != self._last_queue_high_water:
             self._last_queue_high_water = hw
             self.resource_timeline.append({"kind": "queue_high_water_change", **_resource_timeline_sample()})
+        pending_writes = int(payload["pending_writes"])
+        queue_high_water = int(payload.get("queue_depth_high_water") or 0)
+        self._max_pending_writes = max(self._max_pending_writes, pending_writes, queue_high_water)
 
     def record_worker_event(self, stage: str, **extra: object) -> None:
         self.worker_lifecycle.append({
@@ -286,6 +293,23 @@ class _ReplayPressureController:
             "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
             **extra,
         })
+
+    def _record_hook_event(self, stage: str, context: dict[str, object], *, observed_delay_ms: float | None = None,
+                           start_ns: int | None = None, end_ns: int | None = None) -> None:
+        self._hook_ordinal += 1
+        entry = {
+            "stage": stage,
+            "hook_ordinal": self._hook_ordinal,
+            "batch_size": int(context.get("batch_size") or context.get("batch_rows") or 0),
+            "configured_delay_ms": self.delay_before_each_commit_ms if self.profile == "constant_delay" else self.stall_duration_ms,
+            "observed_delay_ms": observed_delay_ms,
+            "rows_dequeued_total": int(context.get("rows_dequeued") or 0),
+            "rows_committed_before_hook": int(context.get("committed_rows") or 0),
+            "rows_committed_after_commit": None,
+            "monotonic_start_ns": start_ns,
+            "monotonic_end_ns": end_ns,
+        }
+        self.worker_lifecycle.append(entry)
 
     def maybe_pause_before_commit(self, context: dict[str, object]) -> None:
         if not self.enabled:
@@ -298,6 +322,7 @@ class _ReplayPressureController:
                 self.hook_invocation_count += 1
                 self.cumulative_requested_delay_ms += self.delay_before_each_commit_ms
                 start_ns = time.monotonic_ns()
+                self._record_hook_event("hook_start", context_payload, start_ns=start_ns)
                 self.worker_lifecycle.append({
                     "stage": "stall_start",
                     "monotonic_ns": start_ns,
@@ -309,6 +334,13 @@ class _ReplayPressureController:
                 time.sleep(self.delay_before_each_commit_ms / 1000.0)
                 end_ns = time.monotonic_ns()
                 self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
+                self._record_hook_event(
+                    "hook_end",
+                    context_payload,
+                    observed_delay_ms=(end_ns - start_ns) / 1e6,
+                    start_ns=start_ns,
+                    end_ns=end_ns,
+                )
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -325,6 +357,7 @@ class _ReplayPressureController:
                 self.hook_invocation_count += 1
                 self.cumulative_requested_delay_ms += self.stall_duration_ms
                 start_ns = time.monotonic_ns()
+                self._record_hook_event("hook_start", context_payload, start_ns=start_ns)
                 self.worker_lifecycle.append({
                     "stage": "stall_start",
                     "monotonic_ns": start_ns,
@@ -338,6 +371,13 @@ class _ReplayPressureController:
                 time.sleep(self.stall_duration_ms / 1000.0)
                 end_ns = time.monotonic_ns()
                 self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
+                self._record_hook_event(
+                    "hook_end",
+                    context_payload,
+                    observed_delay_ms=(end_ns - start_ns) / 1e6,
+                    start_ns=start_ns,
+                    end_ns=end_ns,
+                )
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -467,13 +507,14 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
                 rows_produced=min(len(rows), start + len(batch)),
             )
             pressure_controller.resource_timeline.append({"kind": "periodic_sample", **_resource_timeline_sample()})
-    if not (pressure_controller is not None and pressure_controller.enabled):
-        tick_store.flush_pending_ticks()
     if pressure_controller is not None and pressure_controller.enabled:
         pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
         pressure_controller.record_worker_event("shutdown_requested", scenario=scenario)
+    else:
+        tick_store.flush_pending_ticks()
     tick_store.shutdown_persistence_worker()
     if pressure_controller is not None and pressure_controller.enabled:
+        pressure_controller.resource_timeline.append({"kind": "post_join_sample", **_resource_timeline_sample()})
         pressure_controller.record_worker_event("worker_join_completed", scenario=scenario, worker_state=tick_store.get_persistence_worker_state())
     input_rows = []
     for row in rows:
@@ -515,6 +556,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
             "hook_invocation_count": pressure_controller.hook_invocation_count,
             "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
             "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
+            "max_pending_writes": pressure_controller._max_pending_writes,
+            "hook_ordinal": pressure_controller._hook_ordinal,
         }
         report["worker_lifecycle"] = pressure_controller.worker_lifecycle
         report["queue_depth_timeline"] = pressure_controller.timeline
@@ -775,6 +818,7 @@ def main() -> int:
             "hook_invocation_count": pressure_controller.hook_invocation_count,
             "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
             "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
+            "max_pending_writes": pressure_controller._max_pending_writes,
         })
         (out / "queue_depth_timeline.jsonl").write_text(
             "\n".join(json.dumps(row, sort_keys=True) for row in pressure_controller.timeline) + "\n",

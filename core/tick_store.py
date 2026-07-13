@@ -546,6 +546,7 @@ def _write_rows(
                 _REPLAY_PRESSURE_HOOK(
                     {
                         "batch_rows": len(rows),
+                        "batch_size": len(rows),
                         "queue_depth": write_queue_depth(),
                         "pending_writes": max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
                         "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
