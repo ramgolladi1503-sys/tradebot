@@ -379,4 +379,4 @@ The historical candle run remains invalidated because the original harness cross
 - Strict option replay is still blocked by missing contract metadata and strict loader fields.
 - The candle validation uses the repo’s existing candle proxy lane, not executable option fills.
 - The sampled candle corpus uses zero-volume underlying bars, so VWAP is proxied by the existing candle harness rather than true traded volume.
-- The corrected candle rerun has not yet been executed, so the historical result set remains invalidated evidence only.
+- The corrected candle rerun is executed and deterministic, but it remains a candle proxy study rather than executable option-fill truth.
