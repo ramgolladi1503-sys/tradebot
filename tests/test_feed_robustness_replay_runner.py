@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 
 import pytest
@@ -270,3 +271,196 @@ def test_intermittent_stall_triggers_only_on_configured_dequeue_boundary(monkeyp
     assert slept == [pytest.approx(0.002)]
     assert controller.worker_lifecycle[0]["stage"] == "stall_start"
     assert controller.worker_lifecycle[1]["stage"] == "stall_end"
+
+
+def test_pressure_profile_cannot_be_enabled_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRADEBOT_FEED_FD_TRACE", "1")
+    monkeypatch.setenv("TRADEBOT_FEED_PRESSURE_PROFILE", "constant_delay")
+    monkeypatch.setenv("TICK_STORE_PRESSURE_PROFILE", "intermittent_stall")
+
+    captured = []
+
+    monkeypatch.setattr(replay, "_load", lambda *args, **kwargs: [
+        {"source_row_index": 0, "ts": 1.0, "token": "A", "ltp": 100.0, "vol": 1.0, "oi": 2.0},
+    ])
+    monkeypatch.setattr(replay, "_capture_timestamp_fidelity", lambda rows: {"summary": {"pass": True}, "rows": []})
+    monkeypatch.setattr(replay, "_run_once", lambda rows, scenario, seed, **kwargs: captured.append(kwargs.get("pressure_controller")) or {
+        "checksums": {"scenario": scenario, "seed": seed},
+        "verdict": "PASS",
+        "assertions": [],
+        "unexplained_message_differences": [],
+        "records": [],
+        "latency": {},
+        "reconnects": {},
+        "resource_snapshot": {},
+        "counters": {"pending_at_shutdown": 0},
+    })
+    monkeypatch.setattr(replay.tick_store, "reset_audit_counters", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "flush_pending_ticks", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "pending_tick_count", lambda: 0)
+    monkeypatch.setattr(replay.collector, "reset", lambda enabled=True: None)
+    monkeypatch.setattr(replay, "_sha", lambda path: "sha")
+    monkeypatch.setattr(replay, "_atomic_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(replay.subprocess, "check_output", lambda *args, **kwargs: "deadbeef\n")
+    monkeypatch.setattr(replay.platform, "platform", lambda: "test-platform")
+    monkeypatch.setattr(replay.Path, "is_file", lambda self: True)
+    monkeypatch.setattr(replay.Path, "resolve", lambda self: self)
+    monkeypatch.setattr(replay.sys, "argv", [
+        "run_feed_robustness_replay.py",
+        "--input", str(tmp_path / "input.parquet"),
+        "--output-dir", str(tmp_path / "out"),
+        "--iterations", "1",
+        "--max-rows", "1",
+        "--session-cycles", "0",
+        "--scenario", "normal_speed",
+    ])
+
+    exit_code = replay.main()
+    assert exit_code == 0
+    assert captured == [None]
+
+
+def test_pressure_profile_records_real_async_persistence_and_shutdown_drain(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(1_000 + i), "token": "A", "ltp": 100.0 + i, "vol": 1.0, "oi": 2.0}
+        for i in range(12)
+    ]
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+
+    controller = replay._ReplayPressureController(
+        profile="constant_delay",
+        delay_before_each_commit_ms=1,
+        expected_total_rows=len(rows),
+    )
+    report = replay._run_once(
+        rows,
+        "normal_speed",
+        seed=0,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=3,
+        trace_path=tmp_path / "fd_trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    worker = report["persistence_worker"]
+    assert worker["worker_started"] == 1
+    assert worker["worker_failures"] == 0
+    assert worker["rows_enqueued"] == len(rows)
+    assert worker["rows_dequeued"] == len(rows)
+    assert worker["committed_batches"] > 0
+    assert worker["committed_rows"] == len(rows)
+    assert worker["queue_depth_high_water"] > 1
+    assert worker["queue_depth_at_shutdown"] == 0
+    assert worker["pending_writes_at_shutdown"] == 0
+    assert report["pressure_profile"]["hook_invocation_count"] > 0
+    assert report["pressure_profile"]["cumulative_requested_delay_ms"] == report["pressure_profile"]["hook_invocation_count"]
+    assert controller.hook_invocation_count == report["pressure_profile"]["hook_invocation_count"]
+    with sqlite3.connect(str(db_path)) as conn:
+        committed_rows = conn.execute("select count(*) from ticks").fetchone()[0]
+    assert committed_rows == len(rows)
+
+
+def test_pressure_profile_preserves_checksums_with_and_without_delay(monkeypatch, tmp_path):
+    rows = [
+        {"source_row_index": i, "ts": float(2_000 + i), "token": "A", "ltp": 200.0 + i, "vol": 2.0, "oi": 3.0}
+        for i in range(8)
+    ]
+    monkeypatch.setattr(replay.time, "sleep", lambda *_args, **_kwargs: None)
+
+    baseline_db_path = tmp_path / "baseline.sqlite"
+    pressured_db_path = tmp_path / "pressured.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(baseline_db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(baseline_db_path), raising=False)
+    baseline = replay._run_once(
+        rows,
+        "normal_speed",
+        seed=1,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "baseline_trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=None,
+    )
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(pressured_db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(pressured_db_path), raising=False)
+    controller = replay._ReplayPressureController(
+        profile="constant_delay",
+        delay_before_each_commit_ms=1,
+        expected_total_rows=len(rows),
+    )
+    pressured = replay._run_once(
+        rows,
+        "normal_speed",
+        seed=1,
+        synchronous=False,
+        speed_factor=1.0,
+        batch_size=2,
+        trace_path=tmp_path / "pressured_trace.jsonl",
+        selected_persistence_mode="async_queue",
+        pressure_controller=controller,
+    )
+
+    assert baseline["checksums"] == pressured["checksums"]
+    assert [
+        {
+            "source_row_index": record["source_row_index"],
+            "instrument_token": record["instrument_token"],
+            "source_timestamp": record["source_timestamp"],
+            "last_price": record["last_price"],
+            "volume": record["volume"],
+            "oi": record["oi"],
+        }
+        for record in baseline["records"]
+    ] == [
+        {
+            "source_row_index": record["source_row_index"],
+            "instrument_token": record["instrument_token"],
+            "source_timestamp": record["source_timestamp"],
+            "last_price": record["last_price"],
+            "volume": record["volume"],
+            "oi": record["oi"],
+        }
+        for record in pressured["records"]
+    ]
+
+
+def test_pressure_profile_intermittent_stall_uses_only_10k_to_90k_boundaries(monkeypatch):
+    controller = replay._ReplayPressureController(
+        profile="intermittent_stall",
+        stall_after_each_dequeued_rows=10_000,
+        stall_duration_ms=1,
+        expected_total_rows=100_000,
+    )
+    slept = []
+    monkeypatch.setattr(replay.time, "sleep", lambda seconds: slept.append(seconds))
+
+    for dequeued_rows in range(10_000, 100_001, 10_000):
+        controller.maybe_pause_before_commit({"rows_dequeued": dequeued_rows, "rows_enqueued": dequeued_rows})
+
+    assert len(slept) == 9
+    assert controller.hook_invocation_count == 9
+    assert controller._stall_index == 9
+
+
+def test_pressure_write_failure_is_observable(monkeypatch, tmp_path):
+    db_path = tmp_path / "ticks.sqlite"
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(replay.tick_store, "init_ticks", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "_conn", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    before = replay.tick_store.get_audit_counters()["worker_failures"]
+    ok = replay.tick_store._write_rows(
+        [("2026-07-09T03:56:45Z", 1, 100.0, 1.0, 2.0, 1.0, "2026-07-09T03:56:45Z")],
+        worker_owned=True,
+    )
+
+    assert ok is False
+    assert replay.tick_store.get_audit_counters()["worker_failures"] == before + 1

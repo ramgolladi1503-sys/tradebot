@@ -223,11 +223,13 @@ class _ReplayPressureController:
         delay_before_each_commit_ms: int = 0,
         stall_after_each_dequeued_rows: int = 0,
         stall_duration_ms: int = 0,
+        expected_total_rows: int | None = None,
     ) -> None:
         self.profile = str(profile or "none")
         self.delay_before_each_commit_ms = max(0, int(delay_before_each_commit_ms or 0))
         self.stall_after_each_dequeued_rows = max(0, int(stall_after_each_dequeued_rows or 0))
         self.stall_duration_ms = max(0, int(stall_duration_ms or 0))
+        self.expected_total_rows = int(expected_total_rows) if expected_total_rows is not None else None
         self.timeline: list[dict[str, object]] = []
         self.resource_timeline: list[dict[str, object]] = []
         self.worker_lifecycle: list[dict[str, object]] = []
@@ -235,6 +237,9 @@ class _ReplayPressureController:
         self._next_stall_at = self.stall_after_each_dequeued_rows if self.stall_after_each_dequeued_rows else None
         self._started_ns = time.monotonic_ns()
         self._last_queue_high_water: int | None = None
+        self.hook_invocation_count = 0
+        self.cumulative_requested_delay_ms = 0
+        self.cumulative_observed_delay_ms = 0.0
         self._record_queue_event("replay_start")
 
     @property
@@ -285,9 +290,13 @@ class _ReplayPressureController:
     def maybe_pause_before_commit(self, context: dict[str, object]) -> None:
         if not self.enabled:
             return
-        self._record_queue_event("pressure_activation" if self._stall_index == 0 else "pressure_continue", **context)
+        context_payload = dict(context)
+        context_payload.pop("stage", None)
+        self._record_queue_event("pressure_activation" if self._stall_index == 0 else "pressure_continue", **context_payload)
         if self.profile == "constant_delay":
             if self.delay_before_each_commit_ms > 0:
+                self.hook_invocation_count += 1
+                self.cumulative_requested_delay_ms += self.delay_before_each_commit_ms
                 start_ns = time.monotonic_ns()
                 self.worker_lifecycle.append({
                     "stage": "stall_start",
@@ -299,6 +308,7 @@ class _ReplayPressureController:
                 })
                 time.sleep(self.delay_before_each_commit_ms / 1000.0)
                 end_ns = time.monotonic_ns()
+                self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -307,11 +317,13 @@ class _ReplayPressureController:
                     "queue_depth": tick_store.write_queue_depth(),
                     "pending_writes": max(0, tick_store.write_enqueue_count() - tick_store.write_flush_count()),
                 })
-            self._record_queue_event("commit_delay_applied", **context)
+            self._record_queue_event("commit_delay_applied", **context_payload)
             return
         if self.profile == "intermittent_stall" and self._next_stall_at is not None:
             dequeued_rows = int(context.get("rows_dequeued") or 0)
-            if dequeued_rows >= self._next_stall_at:
+            if dequeued_rows >= self._next_stall_at and (self.expected_total_rows is None or dequeued_rows < self.expected_total_rows):
+                self.hook_invocation_count += 1
+                self.cumulative_requested_delay_ms += self.stall_duration_ms
                 start_ns = time.monotonic_ns()
                 self.worker_lifecycle.append({
                     "stage": "stall_start",
@@ -325,6 +337,7 @@ class _ReplayPressureController:
                 })
                 time.sleep(self.stall_duration_ms / 1000.0)
                 end_ns = time.monotonic_ns()
+                self.cumulative_observed_delay_ms += (end_ns - start_ns) / 1e6
                 self.worker_lifecycle.append({
                     "stage": "stall_end",
                     "monotonic_ns": end_ns,
@@ -336,7 +349,7 @@ class _ReplayPressureController:
                 })
                 self._stall_index += 1
                 self._next_stall_at += self.stall_after_each_dequeued_rows
-                self._record_queue_event("stall_released", **context)
+                self._record_queue_event("stall_released", **context_payload)
 
     def capture_drain_report(self, *, producer_completion_ns: int, producer_completion_queue_depth: int,
                              producer_completion_pending_writes: int, worker_completion_ns: int | None,
@@ -400,6 +413,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     collector.reset(enabled=True)
     tick_store.reset_audit_counters()
     tick_store.clear_replay_pressure_hook()
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
     if trace_path is not None:
         try:
@@ -416,6 +431,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     callback_batches: list[dict] = []
     if pressure_controller is not None and pressure_controller.enabled:
         tick_store.set_replay_pressure_hook(lambda context: pressure_controller.maybe_pause_before_commit(context))
+        tick_store.set_replay_pressure_immediate_flush_enabled(False)
+        tick_store.set_replay_pressure_read_flush_enabled(False)
         pressure_controller.record_worker_event("hook_registered", scenario=scenario)
     for start in range(0, len(rows), batch_size):
         batch_rows = rows[start:start + batch_size]
@@ -450,7 +467,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
                 rows_produced=min(len(rows), start + len(batch)),
             )
             pressure_controller.resource_timeline.append({"kind": "periodic_sample", **_resource_timeline_sample()})
-    tick_store.flush_pending_ticks()
+    if not (pressure_controller is not None and pressure_controller.enabled):
+        tick_store.flush_pending_ticks()
     if pressure_controller is not None and pressure_controller.enabled:
         pressure_controller._record_queue_event("producer_completed", scenario=scenario, rows_produced=len(rows))
         pressure_controller.record_worker_event("shutdown_requested", scenario=scenario)
@@ -492,7 +510,11 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
             "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
             "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
             "stall_duration_ms": pressure_controller.stall_duration_ms,
+            "expected_total_rows": pressure_controller.expected_total_rows,
             "queue_high_water_threshold": _pressure_queue_threshold(),
+            "hook_invocation_count": pressure_controller.hook_invocation_count,
+            "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
+            "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
         }
         report["worker_lifecycle"] = pressure_controller.worker_lifecycle
         report["queue_depth_timeline"] = pressure_controller.timeline
@@ -507,6 +529,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
             worker_failures=tick_store.get_persistence_worker_state().get("worker_failures"),
         )
     tick_store.clear_replay_pressure_hook()
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     return report
 
 
@@ -728,8 +752,12 @@ def main() -> int:
                                                             "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
                                                             "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
                                                             "stall_duration_ms": pressure_controller.stall_duration_ms,
+                                                            "expected_total_rows": pressure_controller.expected_total_rows,
                                                             "enabled": pressure_controller.enabled,
                                                             "queue_high_water_threshold": _pressure_queue_threshold(),
+                                                            "hook_invocation_count": pressure_controller.hook_invocation_count,
+                                                            "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
+                                                            "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
                                                         }})
     _atomic_json(out / "resource_snapshot.json", {"final": cycle_snapshots[-1]["resource_snapshot"] if cycle_snapshots else final_run["resource_snapshot"],
                                                   "session_cycles": args.session_cycles,
@@ -742,7 +770,11 @@ def main() -> int:
             "delay_before_each_commit_ms": pressure_controller.delay_before_each_commit_ms,
             "stall_after_each_dequeued_rows": pressure_controller.stall_after_each_dequeued_rows,
             "stall_duration_ms": pressure_controller.stall_duration_ms,
+            "expected_total_rows": pressure_controller.expected_total_rows,
             "queue_high_water_threshold": _pressure_queue_threshold(),
+            "hook_invocation_count": pressure_controller.hook_invocation_count,
+            "cumulative_requested_delay_ms": pressure_controller.cumulative_requested_delay_ms,
+            "cumulative_observed_delay_ms": pressure_controller.cumulative_observed_delay_ms,
         })
         (out / "queue_depth_timeline.jsonl").write_text(
             "\n".join(json.dumps(row, sort_keys=True) for row in pressure_controller.timeline) + "\n",

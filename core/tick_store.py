@@ -34,6 +34,8 @@ _FLUSH_THREAD_TERMINATED = False
 _QUEUE_HIGH_WATER = 0
 _FLUSH_COUNT = 0
 _REPLAY_PRESSURE_HOOK: Callable[[dict[str, Any]], None] | None = None
+_REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH = False
+_REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES = False
 _AUDIT_COUNTERS = {
     "worker_started": 0,
     "rows_enqueued": 0,
@@ -82,6 +84,16 @@ def set_replay_pressure_hook(hook: Callable[[dict[str, Any]], None] | None) -> N
 
 def clear_replay_pressure_hook() -> None:
     set_replay_pressure_hook(None)
+
+
+def set_replay_pressure_immediate_flush_enabled(enabled: bool) -> None:
+    global _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH
+    _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH = not bool(enabled)
+
+
+def set_replay_pressure_read_flush_enabled(enabled: bool) -> None:
+    global _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES
+    _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES = not bool(enabled)
 
 
 def _flush_batch_size() -> int:
@@ -215,7 +227,8 @@ def _parse_ts_epoch(ts):
 
 def get_max_tick_epoch(conn: sqlite3.Connection) -> float | None:
     try:
-        _flush_pending_ticks()
+        if not _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES:
+            _flush_pending_ticks()
     except Exception:
         pass
     try:
@@ -325,7 +338,8 @@ def get_latest_tick_db(token: int) -> dict | None:
     if token_int is None:
         return None
     try:
-        _flush_pending_ticks()
+        if not _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES:
+            _flush_pending_ticks()
     except Exception:
         pass
     try:
@@ -385,7 +399,8 @@ def get_latest_tick_rows_db(tokens: list[int]) -> dict[int, dict]:
         return {}
     out: dict[int, dict] = {}
     try:
-        _flush_pending_ticks()
+        if not _REPLAY_PRESSURE_SUPPRESS_READ_FLUSHES:
+            _flush_pending_ticks()
     except Exception:
         pass
     try:
@@ -517,12 +532,16 @@ def record_tick_epoch(ts_epoch):
     _tick_window.append(ts_val)
 
 
-def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]]) -> bool:
+def _write_rows(
+    rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]],
+    *,
+    worker_owned: bool = False,
+) -> bool:
     global _WRITE_FLUSH_COUNT
     if not rows:
         return True
     try:
-        if _async_db_writes_enabled() and _REPLAY_PRESSURE_HOOK is not None:
+        if worker_owned and _async_db_writes_enabled() and _REPLAY_PRESSURE_HOOK is not None:
             try:
                 _REPLAY_PRESSURE_HOOK(
                     {
@@ -576,7 +595,7 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
         return False
 
 
-def _flush_pending_ticks(max_rows: int | None = None) -> int:
+def _flush_pending_ticks(max_rows: int | None = None, *, worker_owned: bool = False) -> int:
     global _FLUSH_COUNT, _QUEUE_HIGH_WATER
     batch_limit = max_rows if max_rows is not None else _flush_batch_size()
     rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]] = []
@@ -588,7 +607,7 @@ def _flush_pending_ticks(max_rows: int | None = None) -> int:
         return 0
     _FLUSH_COUNT += 1
     _AUDIT_COUNTERS["rows_dequeued"] += len(rows)
-    if _write_rows(rows):
+    if _write_rows(rows, worker_owned=worker_owned):
         return len(rows)
     with _WRITE_QUEUE_LOCK:
         for row in reversed(rows):
@@ -620,14 +639,14 @@ def _flush_loop() -> None:
         _FLUSH_THREAD_STOP.wait(_flush_interval_sec())
         if _FLUSH_LOCK.acquire(blocking=False):
             try:
-                while _flush_pending_ticks() > 0:
+                while _flush_pending_ticks(worker_owned=True) > 0:
                     pass
             finally:
                 _FLUSH_LOCK.release()
     if _FLUSH_LOCK.acquire(blocking=False):
         try:
-            while _flush_pending_ticks() > 0:
-                pass
+                while _flush_pending_ticks() > 0:
+                    pass
         finally:
             _FLUSH_LOCK.release()
     _FLUSH_THREAD_TERMINATED = True
@@ -674,7 +693,7 @@ def _shutdown_flush_thread() -> None:
             pass
     if _FLUSH_LOCK.acquire(blocking=False):
         try:
-            while _flush_pending_ticks() > 0:
+            while _flush_pending_ticks(worker_owned=True) > 0:
                 pass
         finally:
             _FLUSH_LOCK.release()
@@ -811,7 +830,8 @@ def insert_tick(ts=None, token=None, last_price=None, volume=None, oi=None, **kw
         # Keep async mode, but guarantee immediate table creation and read-after-write
         # visibility for lightweight tests/diagnostics that inspect SQLite right after
         # WS ingestion. Larger live bursts are still drained by the background flusher.
-        _flush_pending_ticks(max_rows=1)
+        if not _REPLAY_PRESSURE_SUPPRESS_IMMEDIATE_FLUSH:
+            _flush_pending_ticks(max_rows=1, worker_owned=False)
         return ok
 
     return _write_rows([row])
