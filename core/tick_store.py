@@ -26,6 +26,12 @@ _WRITE_QUEUE_LOCK = threading.Lock()
 _FLUSH_THREAD: threading.Thread | None = None
 _FLUSH_THREAD_STOP = threading.Event()
 _FLUSH_LOCK = threading.Lock()
+_FLUSH_THREAD_IDENT: int | None = None
+_FLUSH_THREAD_NAME: str | None = None
+_FLUSH_THREAD_JOIN_COMPLETED = False
+_FLUSH_THREAD_TERMINATED = False
+_QUEUE_HIGH_WATER = 0
+_FLUSH_COUNT = 0
 _AUDIT_COUNTERS = {
     "worker_started": 0,
     "rows_enqueued": 0,
@@ -541,13 +547,16 @@ def _write_rows(rows: list[tuple[str, int | None, float | None, float | None, fl
 
 
 def _flush_pending_ticks(max_rows: int | None = None) -> int:
+    global _FLUSH_COUNT, _QUEUE_HIGH_WATER
     batch_limit = max_rows if max_rows is not None else _flush_batch_size()
     rows: list[tuple[str, int | None, float | None, float | None, float | None, float, str]] = []
     with _WRITE_QUEUE_LOCK:
         while _WRITE_QUEUE and len(rows) < batch_limit:
             rows.append(_WRITE_QUEUE.popleft())
+        _QUEUE_HIGH_WATER = max(_QUEUE_HIGH_WATER, len(_WRITE_QUEUE))
     if not rows:
         return 0
+    _FLUSH_COUNT += 1
     _AUDIT_COUNTERS["rows_dequeued"] += len(rows)
     if _write_rows(rows):
         return len(rows)
@@ -576,6 +585,7 @@ def reset_audit_counters() -> None:
 
 
 def _flush_loop() -> None:
+    global _FLUSH_THREAD_TERMINATED
     while not _FLUSH_THREAD_STOP.is_set():
         _FLUSH_THREAD_STOP.wait(_flush_interval_sec())
         if _FLUSH_LOCK.acquire(blocking=False):
@@ -590,38 +600,46 @@ def _flush_loop() -> None:
                 pass
         finally:
             _FLUSH_LOCK.release()
+    _FLUSH_THREAD_TERMINATED = True
 
 
 def _ensure_flush_thread() -> None:
-    global _FLUSH_THREAD
+    global _FLUSH_THREAD, _FLUSH_THREAD_IDENT, _FLUSH_THREAD_NAME, _FLUSH_THREAD_TERMINATED, _FLUSH_THREAD_JOIN_COMPLETED
     if _FLUSH_THREAD is not None and _FLUSH_THREAD.is_alive():
         return
     with _INIT_LOCK:
         if _FLUSH_THREAD is not None and _FLUSH_THREAD.is_alive():
             return
+        _FLUSH_THREAD_TERMINATED = False
+        _FLUSH_THREAD_JOIN_COMPLETED = False
         _FLUSH_THREAD_STOP.clear()
         _FLUSH_THREAD = threading.Thread(target=_flush_loop, name="tick-store-flush", daemon=True)
         _FLUSH_THREAD.start()
+        _FLUSH_THREAD_IDENT = _FLUSH_THREAD.ident
+        _FLUSH_THREAD_NAME = _FLUSH_THREAD.name
         _AUDIT_COUNTERS["worker_started"] += 1
 
 
 def _enqueue_row(row: tuple[str, int | None, float | None, float | None, float | None, float, str]) -> bool:
-    global _WRITE_ENQUEUE_COUNT
+    global _WRITE_ENQUEUE_COUNT, _QUEUE_HIGH_WATER
     init_ticks()
     with _WRITE_QUEUE_LOCK:
         _WRITE_QUEUE.append(row)
         _AUDIT_COUNTERS["rows_enqueued"] += 1
         _WRITE_ENQUEUE_COUNT += 1
+        _QUEUE_HIGH_WATER = max(_QUEUE_HIGH_WATER, len(_WRITE_QUEUE))
     _ensure_flush_thread()
     return True
 
 
 def _shutdown_flush_thread() -> None:
+    global _FLUSH_THREAD_JOIN_COMPLETED
     _FLUSH_THREAD_STOP.set()
     thread = _FLUSH_THREAD
     if thread is not None and thread.is_alive():
         try:
             thread.join(timeout=2.0)
+            _FLUSH_THREAD_JOIN_COMPLETED = not thread.is_alive()
         except Exception:
             pass
     if _FLUSH_LOCK.acquire(blocking=False):
@@ -630,6 +648,8 @@ def _shutdown_flush_thread() -> None:
                 pass
         finally:
             _FLUSH_LOCK.release()
+    if thread is None:
+        _FLUSH_THREAD_JOIN_COMPLETED = True
 
 
 def write_queue_depth() -> int:
@@ -643,6 +663,33 @@ def write_enqueue_count() -> int:
 
 def write_flush_count() -> int:
     return _WRITE_FLUSH_COUNT
+
+
+def get_persistence_worker_state() -> dict[str, int | bool | str | None]:
+    return {
+        "worker_started": _AUDIT_COUNTERS["worker_started"],
+        "worker_start_count": _AUDIT_COUNTERS["worker_started"],
+        "worker_thread_id": _FLUSH_THREAD_IDENT,
+        "worker_thread_name": _FLUSH_THREAD_NAME,
+        "worker_terminated": _FLUSH_THREAD_TERMINATED,
+        "worker_join_completed": _FLUSH_THREAD_JOIN_COMPLETED,
+        "worker_failures": _AUDIT_COUNTERS["worker_failures"],
+        "rows_enqueued": _AUDIT_COUNTERS["rows_enqueued"],
+        "rows_dequeued": _AUDIT_COUNTERS["rows_dequeued"],
+        "committed_batches": _AUDIT_COUNTERS["committed_batches"],
+        "committed_rows": _WRITE_FLUSH_COUNT,
+        "queue_depth_initial": 0,
+        "queue_depth_high_water": _QUEUE_HIGH_WATER,
+        "queue_depth_at_shutdown": write_queue_depth(),
+        "pending_writes_at_shutdown": max(0, _WRITE_ENQUEUE_COUNT - _WRITE_FLUSH_COUNT),
+        "flush_count": _FLUSH_COUNT,
+        "batch_size": _flush_batch_size(),
+        "flush_interval": _flush_interval_sec(),
+    }
+
+
+def shutdown_persistence_worker() -> None:
+    _shutdown_flush_thread()
 
 
 aexit_registered = False

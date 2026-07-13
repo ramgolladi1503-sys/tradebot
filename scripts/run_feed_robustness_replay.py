@@ -209,6 +209,14 @@ def _describe_tick_store_mode() -> dict:
     }
 
 
+def _resolve_persistence_mode(scenario: str, selected_mode: str | None) -> bool:
+    if selected_mode == "sync":
+        return True
+    if selected_mode == "async_queue":
+        return False
+    return scenario != "normal_speed"
+
+
 def _deterministic_replay_schedule(rows: list[dict], speed_factor: float) -> tuple[float, float]:
     if len(rows) < 2:
         return 0.0, 0.0
@@ -221,7 +229,8 @@ def _deterministic_replay_schedule(rows: list[dict], speed_factor: float) -> tup
 
 def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, speed_factor: float = 1.0,
               batch_size: int = 1000, random_pause_probability: float = 0.0, random_pause_max_ms: float = 0.0,
-              scheduler_jitter_seed: int | None = None, trace_path: Path | None = None) -> dict:
+              scheduler_jitter_seed: int | None = None, trace_path: Path | None = None,
+              selected_persistence_mode: str | None = None) -> dict:
     collector.reset(enabled=True)
     tick_store.reset_audit_counters()
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
@@ -264,6 +273,7 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
         if scenario == "randomized_pauses" and rng.random() < random_pause_probability:
             time.sleep(rng.uniform(0.0, random_pause_max_ms) / 1000.0)
     tick_store.flush_pending_ticks()
+    tick_store.shutdown_persistence_worker()
     input_rows = []
     for row in rows:
         adapted = _adapt(row)
@@ -284,7 +294,8 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     }
     report["callback_batches"] = callback_batches
     report["persistence_mode"] = _describe_tick_store_mode()
-    report["persistence_worker"] = tick_store.get_audit_counters()
+    report["persistence_mode"]["selected_persistence_mode"] = selected_persistence_mode or "default"
+    report["persistence_worker"] = tick_store.get_persistence_worker_state()
     report["resource_snapshot"] = _resource_snapshot()
     report["fd_trace_summary"] = _fd_trace_summary(
         trace_path,
@@ -335,6 +346,12 @@ def main() -> int:
     parser.add_argument("--spike-end")
     parser.add_argument("--session-cycles", type=int, default=50)
     parser.add_argument(
+        "--persistence-mode",
+        choices=["default", "sync", "async_queue"],
+        default="default",
+        help="Diagnostic-only persistence mode selector.",
+    )
+    parser.add_argument(
         "--scenario",
         action="append",
         dest="scenarios",
@@ -376,11 +393,14 @@ def main() -> int:
     scenarios = _select_scenarios(scenarios, selected_scenarios, parser)
     results, faults = {}, []
     hard_failures = []
+    selected_persistence_mode = args.persistence_mode
     for scenario, spec in scenarios.items():
         scenario_rows = spec["rows"]
-        runs = [_run_once(scenario_rows, scenario, seed=i, synchronous=True, speed_factor=spec["speed_factor"],
+        scenario_sync = _resolve_persistence_mode(scenario, selected_persistence_mode)
+        runs = [_run_once(scenario_rows, scenario, seed=i, synchronous=scenario_sync, speed_factor=spec["speed_factor"],
                           batch_size=spec["batch_size"], random_pause_probability=spec.get("random_pause_probability", 0.0),
-                          random_pause_max_ms=spec.get("random_pause_max_ms", 0.0), trace_path=trace_path)
+                          random_pause_max_ms=spec.get("random_pause_max_ms", 0.0), trace_path=trace_path,
+                          selected_persistence_mode=selected_persistence_mode)
                 for i in range(args.iterations)]
         signatures = [run["checksums"] for run in runs]
         deterministic = all(item == signatures[0] for item in signatures[1:])
@@ -391,7 +411,7 @@ def main() -> int:
     current_runs = []
     current_deterministic = True
     if not selected_scenarios or "normal_speed_current_persistence" in selected_scenarios:
-        current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=False, speed_factor=1.0, batch_size=100, trace_path=trace_path)
+        current_runs = [_run_once(rows, "normal_speed_current_persistence", seed=i, synchronous=_resolve_persistence_mode("normal_speed_current_persistence", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode)
                         for i in range(args.iterations)]
         current_deterministic = all(run["checksums"] == current_runs[0]["checksums"] for run in current_runs[1:])
         if not current_deterministic or any(run["verdict"] == "FAIL" for run in current_runs):
@@ -404,7 +424,7 @@ def main() -> int:
     cycle_hashes = []
     if not selected_scenarios or "session_cycles" in selected_scenarios:
         for cycle in range(max(0, args.session_cycles)):
-            cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=False, speed_factor=1.0, batch_size=100, trace_path=trace_path)
+            cycle_run = _run_once(rows, f"session_cycle_{cycle}", seed=cycle, synchronous=_resolve_persistence_mode("session_cycle", selected_persistence_mode), speed_factor=1.0, batch_size=100, trace_path=trace_path, selected_persistence_mode=selected_persistence_mode)
             cycle_snapshots.append({
                 "cycle": cycle,
                 "resource_snapshot": cycle_run["resource_snapshot"],
@@ -457,6 +477,7 @@ def main() -> int:
                 "dirty_files": dirty_files,
                 "dirty_diff_sha256": diff_sha256,
                 "fd_trace_enabled": bool(os.environ.get("TRADEBOT_FEED_FD_TRACE")),
+                "persistence_mode": selected_persistence_mode,
                 "trace_path": str(trace_path),
                 "max_rows": args.max_rows,
                }

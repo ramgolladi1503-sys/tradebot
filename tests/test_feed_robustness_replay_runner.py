@@ -31,6 +31,13 @@ def test_tick_store_mode_description_is_explicit():
             "runner_forces_synchronous_persistence", "flush_interval_sec"} <= set(mode)
 
 
+def test_resolve_persistence_mode_explicit_modes():
+    assert replay._resolve_persistence_mode("normal_speed", "sync") is True
+    assert replay._resolve_persistence_mode("normal_speed", "async_queue") is False
+    assert replay._resolve_persistence_mode("normal_speed", "default") is False
+    assert replay._resolve_persistence_mode("normal_speed_current_persistence", "default") is True
+
+
 def test_deterministic_replay_schedule_uses_source_duration():
     rows = [{"ts": 10.0}, {"ts": 12.5}, {"ts": 13.0}]
     source_duration, target_duration = replay._deterministic_replay_schedule(rows, 5.0)
@@ -84,6 +91,18 @@ def test_fd_trace_summary_emits_terminal_fields(tmp_path):
     assert summary["callback_exit_fd_count"] == 2
     assert summary["post_worker_shutdown_fd"] == 11
     assert summary["final_fd"] == 11
+
+
+def test_tick_store_worker_state_is_explicit(monkeypatch, tmp_path):
+    monkeypatch.setattr(replay.tick_store.cfg, "TRADE_DB_PATH", str(tmp_path / "ticks.sqlite"), raising=False)
+    replay.tick_store.reset_audit_counters()
+    replay.tick_store.shutdown_persistence_worker()
+    state = replay.tick_store.get_persistence_worker_state()
+    assert {"worker_started", "worker_start_count", "worker_thread_id", "worker_terminated",
+            "worker_join_completed", "worker_failures", "rows_enqueued", "rows_dequeued",
+            "committed_batches", "committed_rows", "queue_depth_initial",
+            "queue_depth_high_water", "queue_depth_at_shutdown", "pending_writes_at_shutdown",
+            "flush_count", "batch_size", "flush_interval"} <= set(state)
 
 
 def test_runner_scenario_filter_selects_only_requested_scenario(monkeypatch, tmp_path):
@@ -143,7 +162,66 @@ def test_runner_main_runs_filtered_normal_speed_once(monkeypatch, tmp_path):
     assert calls[0][1] == 0
 
 
+def test_runner_main_records_persistence_mode(monkeypatch, tmp_path):
+    captured = {}
+    def _fake_run_once(rows, scenario, seed, **kwargs):
+        captured["kwargs"] = kwargs
+        return {
+            "checksums": {"scenario": scenario, "seed": seed},
+            "verdict": "PASS",
+            "assertions": [],
+            "unexplained_message_differences": [],
+            "records": [],
+            "latency": {},
+            "reconnects": {},
+            "resource_snapshot": {},
+            "counters": {"pending_at_shutdown": 0},
+        }
+
+    monkeypatch.setattr(replay, "_load", lambda *args, **kwargs: [
+        {"source_row_index": 0, "ts": 1.0, "token": "A", "ltp": 100.0, "vol": 1.0, "oi": 2.0},
+    ])
+    monkeypatch.setattr(replay, "_capture_timestamp_fidelity", lambda rows: {"summary": {"pass": True}, "rows": []})
+    monkeypatch.setattr(replay, "_run_once", _fake_run_once)
+    monkeypatch.setattr(replay.tick_store, "reset_audit_counters", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "flush_pending_ticks", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(replay.tick_store, "shutdown_persistence_worker", lambda: None)
+    monkeypatch.setattr(replay.tick_store, "pending_tick_count", lambda: 0)
+    monkeypatch.setattr(replay.collector, "reset", lambda enabled=True: None)
+    monkeypatch.setattr(replay, "_sha", lambda path: "sha")
+    monkeypatch.setattr(replay, "_atomic_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(replay.subprocess, "check_output", lambda *args, **kwargs: "deadbeef\n")
+    monkeypatch.setattr(replay.platform, "platform", lambda: "test-platform")
+    monkeypatch.setattr(replay.Path, "is_file", lambda self: True)
+    monkeypatch.setattr(replay.Path, "resolve", lambda self: self)
+    monkeypatch.setattr(replay.sys, "argv", [
+        "run_feed_robustness_replay.py",
+        "--input", str(tmp_path / "input.parquet"),
+        "--output-dir", str(tmp_path / "out"),
+        "--iterations", "1",
+        "--max-rows", "10",
+        "--session-cycles", "0",
+        "--scenario", "normal_speed",
+        "--persistence-mode", "async_queue",
+    ])
+
+    exit_code = replay.main()
+    assert exit_code == 0
+    assert captured["kwargs"]["selected_persistence_mode"] == "async_queue"
+
+
 def test_runner_rejects_unknown_scenario():
     parser = replay.argparse.ArgumentParser()
     with pytest.raises(SystemExit):
         replay._select_scenarios({}, ["unknown"], parser)
+
+
+def test_runner_rejects_unknown_persistence_mode(monkeypatch, tmp_path):
+    monkeypatch.setattr(replay.sys, "argv", [
+        "run_feed_robustness_replay.py",
+        "--input", str(tmp_path / "input.parquet"),
+        "--output-dir", str(tmp_path / "out"),
+        "--persistence-mode", "bogus",
+    ])
+    with pytest.raises(SystemExit):
+        replay.main()
