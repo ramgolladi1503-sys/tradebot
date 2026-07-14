@@ -34,7 +34,7 @@ Excluded:
 | `WS_DISCONNECTED` | Runtime shows websocket disconnected | `full_restart_candidate` |
 | `SILENT_FEED` | Runtime is connected-ish but no messages are flowing | `silent_reconnect_candidate` |
 | `NO_SUBSCRIPTIONS` | Intended tokens exist but no tokens are subscribed | `resubscribe_candidate` |
-| `OPTION_SUBSCRIPTIONS_MISSING` | Option subscriptions are missing or zero while intended tokens exist | `option_resubscribe_candidate` |
+| `OPTION_SUBSCRIPTIONS_MISSING` | Option subscriptions are miss-ing or zero while intended tokens exist | `option_resubscribe_candidate` |
 | `OPTION_FEED_BLOCKED` | Per-symbol option feed blocker is active | `option_freshness_recovery_candidate` |
 | `STALE_TICKS` | Tick age is stale and needs recovery attention | `tick_stale_recovery_candidate` |
 | `DEGRADED_UNKNOWN` | Feed is unhealthy but does not match a known recovery state | `inspect_feed_runtime` |

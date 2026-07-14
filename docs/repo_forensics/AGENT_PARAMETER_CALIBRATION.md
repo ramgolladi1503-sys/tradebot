@@ -41,7 +41,7 @@ No agent may return vague approval.
 |---|---:|---|---|
 | CRITICAL | Yes | Can cause live/broker/unsafe behavior or corrupt decision truth. | paper path imports live order placement; fallback candidate creates broker intent |
 | HIGH | Yes unless waived | Breaks runtime truth, trade-quality trust, or safety evidence. | ranking module not runtime-wired; risk gate before execution is UNKNOWN |
-| MEDIUM | No, but must be tracked | Weakens reliability, tests, or evidence. | shape-only tests, missing evidence reason |
+| MEDIUM | No, but must be tracked | Weakens reliability, tests, or evidence. | shape-only tests, miss-ing evidence reason |
 | LOW | No | Maintainability/documentation issue. | stale comment, weak naming |
 | INFO | No | Observation only. | module count, file inventory |
 | UNKNOWN | Must be explained | Could not prove correctness/safety. | dynamic runtime path not statically traceable |
@@ -153,7 +153,7 @@ HIGH if:
 - ranking output is not proven consumed by runtime
 - UI displays raw strategy rows as top opportunities
 - confidence/score cluster is too tight without ranking explanation
-- rank reason is missing
+- rank reason is miss-ing
 - score components are missing
 
 ### Safety Tripwires
@@ -203,7 +203,7 @@ Must output:
 
 - files touched vs allowed files
 - protected boundary status
-- broker/live/dashboard/runtime safety status
+- broker/live/dashboard/runtime safety stat-us
 - scope violations
 - verdict
 

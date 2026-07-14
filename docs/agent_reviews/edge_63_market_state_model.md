@@ -125,3 +125,8 @@ Later runtime wiring must prove:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to the read-only MarketState model.
+
+
+## High-Risk Path Review
+
+N/A

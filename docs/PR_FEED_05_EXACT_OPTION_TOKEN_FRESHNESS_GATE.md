@@ -4,7 +4,7 @@
 
 PR-FEED-05 adds a small read-only gate that validates exact option-token evidence before executable ranking output is allowed.
 
-The goal is to ensure a candidate is not treated as executable when the observed option token is missing, mismatched, or stale against the expected option token identity.
+The goal is to ensure a candidate is not treated as executable when the observed option token is miss-ing, mismatched, or stale against the expected option token identity.
 
 ## Scope
 

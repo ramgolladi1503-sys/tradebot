@@ -16,7 +16,7 @@ Keyword matching will claim a feature is implemented even when it isn't function
 ## Where can AST extraction miss strategy intent?
 - **Nested conditions**: AST doesn't inherently understand that an inner `if` is only reachable if the outer `if` is true. The intent (A AND B) is lost if we only extract that A and B exist somewhere in the file.
 - **Early returns/Blockers**: A blocker gate like `if not liquidity_ok(): return` creates a hard requirement for all subsequent code, but raw AST extraction might just see it as an isolated statement, missing its control-flow dominance.
-- **Candidate Emission Timing**: If a candidate is emitted *before* a risk check is performed, syntax-level AST won't catch the order of operations, claiming all components exist, missing the fatal flaw.
+- **Candidate Emission Timing**: If a candidate is emitted *before* a risk check is performed, syntax-level AST won't catch the order of operations, claiming all components exist, miss-ing the fatal flaw.
 
 ## Which strategies require semantic/manual review?
 All strategies that involve conditional logic flows require semantic review. If a strategy depends on a sequence of events (e.g., Extension -> Pullback -> Confirmation -> Target), keyword extraction is completely insufficient to verify the strategy's true mathematical integrity. Dynamic strategies using `getattr` or `eval` will always require manual review.

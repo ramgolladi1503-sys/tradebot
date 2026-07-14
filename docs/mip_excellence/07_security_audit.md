@@ -16,4 +16,4 @@
 
 ### 3. Operational Secret Safety
 - **Environment Integrity**: Config keys (`FIRECRAWL_API_KEY`) are fetched natively via `os.environ.get()` inside `config.py`.
-- **Zero Leakage**: Telemetry (`MIPTelemetry`) explicitly selects keys (`source`, `status`, `hash`) to dump. It does not blindly dump the `payload` or `headers` dictionary to `jsonl`, guaranteeing Auth keys or session cookies are never persisted to logs.
+- **Zero Leakage**: Telemetry (`MIPTelemetry`) explicitly selects keys (`source`, `stat-us`, `hash`) to dump. It does not blindly dump the `payload` or `headers` dictionary to `jsonl`, guaranteeing Auth keys or session cookies are never persisted to logs.

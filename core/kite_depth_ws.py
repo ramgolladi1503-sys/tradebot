@@ -13,10 +13,21 @@ from core.auth import get_kite_ticker
 from core.events import write_json_atomic
 from core.kite_client import kite_client
 from core.depth_store import depth_store
-from core.tick_store import get_last_tick, get_ltp, get_max_tick_epoch, insert_tick, record_tick_epoch
+from core.tick_store import (
+    get_last_tick,
+    get_ltp,
+    get_max_tick_epoch,
+    insert_tick,
+    record_tick_epoch,
+    write_enqueue_count,
+    write_flush_count,
+    write_queue_depth,
+)
 from core.time_utils import is_market_open_ist, now_utc_epoch, now_ist
 from core.runtime_boot_identity import stamp_runtime_payload
 from core.feed_runtime import build_canonical_feed_truth_state
+from core.feed_robustness_evidence import collector as feed_evidence
+from core.feed_fd_trace import process_fd_count, record_trace as record_fd_trace, reset_trace as reset_fd_trace
 from core.feed_recovery_coordinator import FeedRecoveryCoordinator, get_feed_recovery_coordinator
 from core.auth_manager import (
     clear_auth_required_state,
@@ -106,6 +117,8 @@ _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
+_LAST_PAYLOAD_TS_BY_TOKEN: dict[int, float] = {}
+_FEED_ON_TICKS_ROW_SEQ = 0
 _RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
 _RESTART_ASYNC_THREAD = None
@@ -118,6 +131,7 @@ _TICK_INGEST_ERROR_PATH = logs_dir() / "tick_ingest_errors.jsonl"
 _TICK_INGEST_ERROR_WRITER = get_jsonl_writer(_TICK_INGEST_ERROR_PATH)
 _TICK_INGEST_ERROR_LOCK = threading.Lock()
 _LAST_TICK_INGEST_ERROR_TS = 0.0
+_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT = 0
 _DEPTH_WS_LOCK: RunLock | None = None
 _DEPTH_WS_LOCK_ACQUIRED = False
 _STOP_REQUESTED = False
@@ -3094,6 +3108,8 @@ def _write_feed_runtime_snapshot(
     internal_retry_error: str | None = None,
     internal_retry_reason: str | None = None,
 ) -> None:
+    global _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT
+    _FEED_RUNTIME_SNAPSHOT_WRITE_COUNT += 1
     stage_timing_enabled = bool(getattr(cfg, "FEED_RUNTIME_STAGE_TIMING_ENABLE", True))
     stage_total_start = time.perf_counter()
     stage_timing_ms: dict[str, float] = {}
@@ -4474,7 +4490,24 @@ def _compute_silent_reconnect_action(
     has_underlying = any(int(tok) in set(underlying_tokens or set()) for tok in tracked_tokens)
     global_threshold = float(index_threshold_sec if has_underlying else option_threshold_sec)
     global_age_sec = max(0.0, float(now_epoch) - float(last_global_msg_epoch))
-    if global_age_sec <= global_threshold:
+
+    msg_map = dict(last_msg_by_token or {})
+    underlying_set = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
+    stale_tokens = 0
+    index_stale = 0
+    option_stale = 0
+    for tok in tracked_tokens:
+        threshold = float(index_threshold_sec if tok in underlying_set else option_threshold_sec)
+        token_last = msg_map.get(int(tok), float(last_reconnect_epoch))
+        token_age = max(0.0, float(now_epoch) - float(token_last))
+        if token_age > threshold:
+            stale_tokens += 1
+            if tok in underlying_set:
+                index_stale += 1
+            else:
+                option_stale += 1
+
+    if stale_tokens == 0:
         return {
             "silent_detected": False,
             "should_reconnect": False,
@@ -4485,21 +4518,7 @@ def _compute_silent_reconnect_action(
             "tracked_tokens": len(tracked_tokens),
             "backoff_sec": None,
         }
-    msg_map = dict(last_msg_by_token or {})
-    underlying_set = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
-    stale_tokens = 0
-    index_stale = 0
-    option_stale = 0
-    for tok in tracked_tokens:
-        threshold = float(index_threshold_sec if tok in underlying_set else option_threshold_sec)
-        token_last = msg_map.get(int(tok), float(last_global_msg_epoch))
-        token_age = max(0.0, float(now_epoch) - float(token_last))
-        if token_age > threshold:
-            stale_tokens += 1
-            if tok in underlying_set:
-                index_stale += 1
-            else:
-                option_stale += 1
+
     if stale_tokens < len(tracked_tokens):
         return {
             "silent_detected": False,
@@ -4593,6 +4612,12 @@ def _maybe_trigger_silent_reconnect(
         backoff_min_sec=float(backoff_min_sec),
         backoff_max_sec=float(backoff_max_sec),
     )
+    # Implement partial_recovery detection and blocking
+    if action.get("reason") == "partial_activity_detected":
+        _set_reconnect_blocked_reason("partial_recovery")
+    elif action.get("stale_tokens") == 0 and str(_RECONNECT_BLOCKED_REASON).strip().lower() == "partial_recovery":
+        _clear_reconnect_blocked_reason()
+
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0
         return False
@@ -4905,10 +4930,22 @@ def _should_ignore_restart_cooldown_for_ws_fault(*, code: int | None, reason_tex
 
 
 def on_ticks(ws, ticks):
-    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
+    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
     if not ticks:
         return
+    record_fd_trace(
+        "on_ticks.callback_entry",
+        row_index=_FEED_ON_TICKS_ROW_SEQ + 1,
+        queue_depth=write_queue_depth(),
+        pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+        runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+        extra={"tick_count": len(ticks or [])},
+    )
+    try:
+        feed_evidence.callback(len(ticks or []), callback_epoch=float(time.time()), rows=ticks)
+    except Exception:
+        pass
     try:
         if not _should_throttle_ws_event("depth_ws_ticks", now_epoch=float(time.time()), cooldown_sec=5.0):
             logger.info(
@@ -4947,6 +4984,7 @@ def on_ticks(ws, ticks):
         except Exception:
             pass
     for t in ticks:
+        _FEED_ON_TICKS_ROW_SEQ += 1
         if not isinstance(t, dict):
             continue
         payload_tick_epoch = _extract_tick_epoch(t)
@@ -4955,6 +4993,13 @@ def on_ticks(ws, ticks):
             token_int = int(t.get("instrument_token"))
         except Exception:
             token_int = None
+
+        if token_int is not None and payload_tick_epoch is not None:
+            prev_payload = _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int))
+            if prev_payload is not None and payload_tick_epoch < prev_payload:
+                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload})
+                continue
+            _LAST_PAYLOAD_TS_BY_TOKEN[token_int] = payload_tick_epoch
         freshness_tick_epoch = _normalized_tick_epoch(
             token_int,
             payload_epoch=payload_tick_epoch,
@@ -5009,6 +5054,14 @@ def on_ticks(ws, ticks):
             freshness_symbol = None
         if (not underlying_tick) and symbol and last_price is not None:
             option_freshness_symbol = symbol
+        record_fd_trace(
+            "on_ticks.pre_symbol_freshness",
+            row_index=_FEED_ON_TICKS_ROW_SEQ,
+            queue_depth=write_queue_depth(),
+            pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+            runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+            extra={"token": token_int, "symbol": symbol, "has_depth": has_depth, "has_ltp": last_price is not None},
+        )
         _update_symbol_freshness(
             freshness_symbol,
             freshness_tick_epoch,
@@ -5039,6 +5092,14 @@ def on_ticks(ws, ticks):
                 )
         except Exception:
             pass
+        record_fd_trace(
+            "on_ticks.post_market_data_record",
+            row_index=_FEED_ON_TICKS_ROW_SEQ,
+            queue_depth=write_queue_depth(),
+            pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+            runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+            extra={"token": token_int, "has_depth": has_depth},
+        )
         if last_price is not None or has_depth:
             record_tick_epoch(freshness_tick_epoch)
             if not _UNDERLYING_TOKENS and not _UNDERLYING_LOGGED_MISSING:
@@ -5047,13 +5108,47 @@ def on_ticks(ws, ticks):
 
         last_price_float = _safe_float(last_price)
         if token_int is None or last_price_float is None:
+            feed_evidence.inc(
+                "rejected",
+                reason="invalid_token" if token_int is None else "missing_or_invalid_last_price",
+            )
+            record_fd_trace(
+                "on_ticks.rejected",
+                row_index=_FEED_ON_TICKS_ROW_SEQ,
+                queue_depth=write_queue_depth(),
+                pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+                runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+                extra={"reason": "missing_token_or_last_price", "token": token_int},
+            )
             continue
         ts_value = freshness_tick_epoch
         volume = t.get("volume")
         if volume is None:
             volume = t.get("volume_traded")
         oi = t.get("oi")
+        audit_source_row_index = t.get("_audit_source_row_index")
+        if audit_source_row_index is not None:
+            feed_evidence.normalized(
+                audit_source_row_index,
+                token_int,
+                t.get("_audit_source_timestamp"),
+                last_price_float,
+                volume,
+                oi,
+            )
+        else:
+            feed_evidence.inc("normalized")
         try:
+            if audit_source_row_index is not None:
+                feed_evidence.published(audit_source_row_index, token_int, ts_value, last_price_float, volume, oi)
+            record_fd_trace(
+                "on_ticks.pre_insert_tick",
+                row_index=_FEED_ON_TICKS_ROW_SEQ,
+                queue_depth=write_queue_depth(),
+                pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+                runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+                extra={"token": token_int, "ts_epoch": ts_value},
+            )
             ok = insert_tick(
                 ts=ts_value,
                 token=token_int,
@@ -5062,13 +5157,40 @@ def on_ticks(ws, ticks):
                 oi=oi,
             )
             if not ok:
+                if audit_source_row_index is not None:
+                    feed_evidence.publication_failed(
+                        audit_source_row_index,
+                        token_int,
+                        ts_value,
+                        last_price_float,
+                        volume,
+                        oi,
+                        "insert_tick_returned_false",
+                    )
+                else:
+                    feed_evidence.inc("explicitly_dropped", reason="insert_tick_returned_false")
                 _log_tick_ingest_error(
                     token=token_int,
                     reason="insert_tick_returned_false",
                     keys=list(t.keys()),
                     tick_ts_present=ts_value is not None,
                 )
+            else:
+                if audit_source_row_index is None:
+                    feed_evidence.inc("published")
         except Exception as exc:
+            if audit_source_row_index is not None:
+                feed_evidence.publication_failed(
+                    audit_source_row_index,
+                    token_int,
+                    ts_value,
+                    last_price_float,
+                    volume,
+                    oi,
+                    f"{type(exc).__name__}:{exc}",
+                )
+            else:
+                feed_evidence.inc("explicitly_dropped", reason="insert_tick_exception")
             _log_tick_ingest_error(
                 token=token_int,
                 reason="insert_tick_exception",
@@ -5076,12 +5198,21 @@ def on_ticks(ws, ticks):
                 keys=list(t.keys()),
                 tick_ts_present=ts_value is not None,
             )
-    _LAST_WS_TICK_EPOCH = float(max_tick_epoch if max_tick_epoch is not None else now_epoch)
-    _reset_stale_on_fresh_ws_tick(
-        now_epoch=now_epoch,
-        tick_epoch=_LAST_WS_TICK_EPOCH,
-        reason="ws_ticks_flowing",
-    )
+        record_fd_trace(
+            "on_ticks.post_insert_tick",
+            row_index=_FEED_ON_TICKS_ROW_SEQ,
+            queue_depth=write_queue_depth(),
+            pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+            runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+            extra={"token": token_int, "ts_epoch": ts_value},
+        )
+    if max_tick_epoch is not None:
+        _LAST_WS_TICK_EPOCH = float(max_tick_epoch)
+        _reset_stale_on_fresh_ws_tick(
+            now_epoch=now_epoch,
+            tick_epoch=_LAST_WS_TICK_EPOCH,
+            reason="ws_ticks_flowing",
+        )
     if _reconnect_recovery_blocked_active():
         _RUNTIME_STATE = "RECOVERY_BLOCKED"
         _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
@@ -5089,6 +5220,14 @@ def on_ticks(ws, ticks):
         _RUNTIME_STATE = "RUNNING"
         _LAST_RUNTIME_ERROR = ""
     _tick_option_feed_verification(now_epoch=now_epoch)
+    record_fd_trace(
+        "on_ticks.pre_runtime_snapshot",
+        row_index=_FEED_ON_TICKS_ROW_SEQ,
+        queue_depth=write_queue_depth(),
+        pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+        runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+        extra={"rows_in_callback": len(ticks or [])},
+    )
     minute_bucket = int(_LAST_WS_TICK_EPOCH // 60.0)
     if _LAST_FEED_TICK_LOG_MINUTE != minute_bucket:
         _LAST_FEED_TICK_LOG_MINUTE = minute_bucket
@@ -5101,13 +5240,27 @@ def on_ticks(ws, ticks):
         last_error=_LAST_RUNTIME_ERROR,
         reconnect_blocked_reason=_RECONNECT_BLOCKED_REASON if _reconnect_recovery_blocked_active() else None,
     )
+    record_fd_trace(
+        "on_ticks.post_runtime_snapshot",
+        row_index=_FEED_ON_TICKS_ROW_SEQ,
+        queue_depth=write_queue_depth(),
+        pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+        runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+    )
+    record_fd_trace(
+        "on_ticks.callback_exit",
+        row_index=_FEED_ON_TICKS_ROW_SEQ,
+        queue_depth=write_queue_depth(),
+        pending_writes=max(0, write_enqueue_count() - write_flush_count()),
+        runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
+    )
 
 
 def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
     _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
     watchdog_thread = None
@@ -5131,6 +5284,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
         _LAST_FEED_HEALTH_STATE = None
         _LAST_WS_TICK_EPOCH = 0.0
         _LAST_MSG_TS_BY_TOKEN = {}
+        _LAST_PAYLOAD_TS_BY_TOKEN = {}
         _SYMBOL_LAST_OPTION_TICK_TS = {}
         _LAST_FEED_TICK_LOG_MINUTE = None
         _RUNTIME_STATE = "STOPPED"
@@ -5221,7 +5375,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     max_per_hour = int(getattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6))
     storm_trip = int(getattr(cfg, "FEED_RESTART_STORM_TRIP", max_per_hour))
 
-    with _RESTART_LOCK:
+    if not _RESTART_LOCK.acquire(blocking=False):
+        _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason})
+        return False
+    try:
         if feed_breaker_tripped():
             _log_ws("FEED_RESTART_BLOCKED_BY_BREAKER", {"reason": reason})
             return False
@@ -5365,12 +5522,19 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 now_epoch=float(now),
             )
             return True
+    finally:
+        _RESTART_LOCK.release()
 
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
+    if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
+        try:
+            reset_fd_trace(baseline_fd=process_fd_count())
+        except Exception:
+            pass
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(
@@ -5541,6 +5705,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
     _LAST_MSG_TS_BY_TOKEN = {}
+    _LAST_PAYLOAD_TS_BY_TOKEN = {}
     _SYMBOL_LAST_OPTION_TICK_TS = {}
     _LAST_FEED_TICK_LOG_MINUTE = None
     _LAST_FEED_HEALTH_STATE = None
@@ -5822,6 +5987,8 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             # watchdog waits for fresh post-connect ticks.
             _STALE_STRIKES = 0
             _WARMUP_PENDING = True
+            global _LAST_WS_TICK_EPOCH
+            _LAST_WS_TICK_EPOCH = 0.0
             for book in list(depth_store.books.values()):
                 if isinstance(book, dict):
                     book["ts_epoch"] = None

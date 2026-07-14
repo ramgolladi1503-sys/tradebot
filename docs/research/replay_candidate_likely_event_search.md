@@ -82,7 +82,7 @@ The isolated replay handoff runner did not naturally emit a candidate for any of
 
 The missing bridge is not the journal writer or the handoff writer. Those are already working on existing runtime artifacts.
 
-What is missing is a replay input row or replay slice that reproduces the same upstream runtime context required by the strategy generators to emit a candidate naturally.
+What is miss-ing is a replay input row or replay slice that reproduces the same upstream runtime context required by the strategy generators to emit a candidate naturally.
 
 In practice, the current replay rows are only option-market ticks, while the persisted candidate artifacts are the result of a richer runtime context that already passed through live/orchestrated market-state, option-pressure, feed-health, and candidate-pool logic.
 

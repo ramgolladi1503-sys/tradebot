@@ -105,3 +105,21 @@ PYTHONPATH=. python -m pytest tests/test_edge49_opportunity_selector_evidence.py
 ```
 
 Expected: all EDGE-49 selector evidence tests pass.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

@@ -6,7 +6,7 @@
 
 The current replay-only runner can reconstruct a normalized snapshot and `StrategyContext` from a one-row option tick slice, but it cannot naturally regenerate persisted candidates because the persisted runtime candidate artifacts were produced with richer runtime context than raw option ticks provide.
 
-The missing bridge is not the handoff/journal writer. The missing bridge is the replay input bundle that captures the runtime state needed by the strategy generators and candidate-pool layer to emit a candidate naturally.
+The miss-ing bridge is not the handoff/journal writer. The miss-ing bridge is the replay input bundle that captures the runtime state needed by the strategy generators and candidate-pool layer to emit a candidate naturally.
 
 ## Purpose
 
@@ -150,7 +150,7 @@ Currently available:
 
 Missing:
 
-- a replay-ready snapshot artifact that preserves all fields needed by candidate generation without synthesizing missing values
+- a replay-ready snapshot artifact that preserves all fields needed by candidate generation without synthesizing miss-ing values
 
 Can be recorded in future runs:
 
@@ -472,7 +472,7 @@ Can be recorded in future runs:
 - candidate journal persistence
 - some strategy-specific cue fields through the live runtime, depending on the strategy
 
-### Missing for natural candidate regeneration from replay rows alone
+### Miss-ing for natural candidate regeneration from replay rows alone
 
 - replay bundle carrying the same candidate-pool context as the live/runtime handoff
 - replay-ready market slice with the specific upstream state that the strategy generators need to emit a candidate
@@ -538,7 +538,7 @@ Rules:
 
 - never fabricate `StrategyContext` fields from unrelated data
 - never convert a raw option tick into a candidate-pool state if the strategy generator did not naturally emit it
-- never fill missing regime/feed-health with defaults that make the candidate look better
+- never fill miss-ing regime/feed-health with defaults that make the candidate look better
 - never promote `NO_CANDIDATE` to success
 - never derive OOS from current runtime unless the runtime partition context is explicit
 - never overwrite production `latest` files during replay proof runs

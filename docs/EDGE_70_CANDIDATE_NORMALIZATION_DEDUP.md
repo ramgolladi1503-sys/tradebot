@@ -73,7 +73,7 @@ EDGE-70 does not:
 |---|---|
 | Empty input | Report is invalid with `strategy_candidate_normalization_empty_input` |
 | Invalid EDGE-69 pool | Report is invalid with `strategy_candidate_normalization_pool_invalid` |
-| Missing required candidate fields | Candidate is rejected with `strategy_candidate_normalization_missing_field` |
+| Miss-ing required candidate fields | Candidate is rejected with `strategy_candidate_normalization_miss-ing_field` |
 | Invalid canonical key | Candidate is rejected with `strategy_candidate_normalization_invalid_candidate` |
 | Duplicate canonical key | First candidate is preserved, duplicate is rejected with `strategy_candidate_normalization_duplicate_candidate` |
 

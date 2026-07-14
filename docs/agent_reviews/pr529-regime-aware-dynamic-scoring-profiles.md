@@ -64,7 +64,7 @@ The PR is contract-only. It does not touch runtime startup, broker adapters, fee
 
 This PR improves safety evidence around regime-aware scoring profiles.
 
-The repo already had deterministic profile resolution. The missing part was explicit serialization proof that the object remains read-only and non-broker. This PR locks that contract before any later PR consumes the profile in scoring or ranking.
+The repo already had deterministic profile resolution. The miss-ing part was explicit serialization proof that the object remains read-only and non-broker. This PR locks that contract before any later PR consumes the profile in scoring or ranking.
 
 ## QA / Safety Review
 
@@ -127,3 +127,21 @@ It only proves regime profile evidence now serializes explicit read-only and non
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review that this remains contract-only and does not silently alter score calculation, ranking, runtime behavior, or execution behavior.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

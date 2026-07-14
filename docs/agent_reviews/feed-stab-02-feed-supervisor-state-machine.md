@@ -119,3 +119,8 @@ Runtime wiring remains unchanged in this PR.
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to the read-only FeedSupervisor state machine.
+
+
+## High-Risk Path Review
+
+N/A

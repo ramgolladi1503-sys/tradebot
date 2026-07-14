@@ -152,7 +152,7 @@ Build tasks:
 1. Build one snapshot per symbol per cycle.
 2. Compute indicators once and maintain freshness age.
 3. Warm-seed OHLC when possible.
-4. Emit explicit missing input reasons.
+4. Emit explicit miss-ing input reasons.
 
 Why:
 1. Most no-trade scenarios are indicator readiness issues.

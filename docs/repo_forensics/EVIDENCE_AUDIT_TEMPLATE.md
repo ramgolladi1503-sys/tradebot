@@ -15,8 +15,8 @@ Evidence must explain what happened, why it happened, whether it was an order ac
 | `decision` | all decision records | PASS / FAIL / UNKNOWN |
 | `reason` | all block/allow decisions | PASS / FAIL / UNKNOWN |
 | `timestamp` | all runtime evidence | PASS / FAIL / UNKNOWN |
-| `is_order_action` | read-only/order-adjacent evidence | PASS / FAIL / UNKNOWN |
-| `broker_api_called` | paper/live/order-adjacent evidence | PASS / FAIL / UNKNOWN |
+| `i-s_order_action` | read-only/order-adjacent evidence | PASS / FAIL / UNKNOWN |
+| `b-roker_api_called` | paper/live/order-adjacent evidence | PASS / FAIL / UNKNOWN |
 | `source` | generated evidence/report files | PASS / FAIL / UNKNOWN |
 
 ## Evidence Sources Reviewed
@@ -65,7 +65,7 @@ Contract test or generated evidence proving the field exists and is meaningful.
 Bad evidence:
 
 ```json
-{"status": "ok", "safe": true}
+{"stat-us": "ok", "sa-fe": true}
 ```
 
 Good evidence:

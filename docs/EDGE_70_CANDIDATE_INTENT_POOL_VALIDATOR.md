@@ -28,7 +28,7 @@ A candidate intent becomes eligible only when the EDGE-69 contract accepts it an
 
 ### Blocked
 
-A candidate intent is blocked when it is structurally valid but carries explicit blockers such as weak signal or missing confirmation.
+A candidate intent is blocked when it is structurally valid but carries explicit blockers such as weak signal or miss-ing confirmation.
 
 Blocked intents stay visible for diagnosis but do not make the pool ready.
 

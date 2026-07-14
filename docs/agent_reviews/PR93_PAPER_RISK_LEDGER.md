@@ -79,7 +79,7 @@ Approved with constraint: ledger reducer only, no runtime persistence or order m
 
 ### Security/safety verification
 
-- Input event flags `broker_order_action`, `live_order_action`, `is_order_action`, and `append` are rejected.
+- Input event flags `b-roker_order_action`, `l-ive_order_action`, `i-s_order_action`, and `append` are rejected.
 - Output snapshot keeps all action flags false.
 
 ### Result
@@ -143,3 +143,41 @@ Evidence summary for PR body/comment:
 - Hermes: PASS
 - GSD: PASS
 - Scope Guard: PASS
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

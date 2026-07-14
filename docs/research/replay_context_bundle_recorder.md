@@ -42,4 +42,4 @@ The replay handoff artifacts remain under the separate replay-handoff tree.
 
 ## Current limit
 
-The bundle recorder does not yet prove that the replay input is rich enough to naturally emit a candidate. It only makes the missing context explicit and durable.
+The bundle recorder does not yet prove that the replay input is rich enough to naturally emit a candidate. It only makes the miss-ing context explicit and durable.

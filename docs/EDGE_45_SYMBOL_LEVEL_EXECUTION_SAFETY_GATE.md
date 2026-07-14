@@ -6,7 +6,7 @@ EDGE-45 adds a read-only symbol-level execution safety gate.
 
 EDGE-43 created canonical feed-health truth. EDGE-45 uses that truth at executable-candidate level so a candidate cannot be executable when its specific symbol has unsafe feed evidence.
 
-This closes the gap where global/candidate execution truth could be clean while the target symbol had stale option ticks, blocked option feed evidence, subscription failure, missing symbol identity, or global feed/websocket unsafe evidence.
+This closes the gap where global/candidate execution truth could be clean while the target symbol had stale option ticks, blocked option feed evidence, subscription failure, miss-ing symbol identity, or global feed/websocket unsafe evidence.
 
 ## Implementation
 

@@ -59,11 +59,11 @@ EDGE-71 does not:
 |---|---|
 | Empty input | Report is invalid with `strategy_candidate_classification_empty_input` |
 | Invalid EDGE-70 normalization report | Report is invalid with `strategy_candidate_classification_normalization_invalid` |
-| Missing required candidate fields | Candidate is placed in `blocked_candidates` with `strategy_candidate_classification_missing_field` |
+| Miss-ing required candidate fields | Candidate is placed in `blocked_candidates` with `strategy_candidate_classification_miss-ing_field` |
 | Unknown direction | Candidate remains metadata-valid but receives `strategy_candidate_classification_unknown_direction` warning |
 | Unknown regime | Candidate remains metadata-valid but receives `strategy_candidate_classification_unknown_regime` warning |
 | Unknown family | Candidate remains metadata-valid but receives `strategy_candidate_classification_unknown_family` warning |
-| Missing core evidence keys | Candidate remains metadata-valid but receives `strategy_candidate_classification_evidence_incomplete` warning |
+| Miss-ing core evidence keys | Candidate remains metadata-valid but receives `strategy_candidate_classification_evidence_incomplete` warning |
 
 ## Acceptance Proof
 

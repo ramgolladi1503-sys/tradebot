@@ -52,7 +52,7 @@ The replay artifact export now reports:
 
 - `replay_context_ready=false`
 - `replay_context_available_fields=[source_timestamp, option_type, strike, expiry]`
-- `replay_context_missing_fields=[feature_cutoff_ts, earliest_entry_ts, is_oos, oos_label, feed_truth_state, feed_truth_reason_code, quote_source, quote_age_sec]`
+- `replay_context_miss-ing_fields=[feature_cutoff_ts, earliest_entry_ts, is_oos, oos_label, feed_truth_state, feed_truth_reason_code, quote_source, quote_age_sec]`
 - `replay_context_blockers` naming the missing upstream fields
 
 ## Conclusion

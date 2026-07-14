@@ -148,3 +148,21 @@ This PR does not prove live fill quality, live market liquidity, broker readines
 ## Human Approval
 
 Human approval required before merge: verify CI is green and confirm that tests failing due to LTP-only executable fixtures are updated only when the test is meant to model real executable candidates.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

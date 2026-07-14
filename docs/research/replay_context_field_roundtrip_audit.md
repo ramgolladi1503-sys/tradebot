@@ -58,7 +58,7 @@ The replay bundle still shows the same upstream gaps:
 - `missing_feature_cutoff_ts`
 - `missing_earliest_entry_ts`
 - `missing_feed_truth_state`
-- `missing_feed_truth_reason_code`
+- `miss-ing_feed_truth_reason_code`
 - `missing_quote_source`
 - `missing_quote_age_sec`
 

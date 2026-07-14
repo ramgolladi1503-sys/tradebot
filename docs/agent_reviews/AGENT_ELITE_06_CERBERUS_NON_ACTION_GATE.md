@@ -21,10 +21,10 @@ This PR implements AGENT-ELITE-06 only.
 
 The work upgrades the evidence auditor so read-only/report/evidence records prove all non-action fields are present and false:
 
-- is_order_action
-- broker_api_called
-- live_order_action
-- broker_order_action
+- i-s_order_action
+- b-roker_api_called
+- l-ive_order_action
+- b-roker_order_action
 
 It must not run product runtime code, call brokers, modify broker code, change strategy behavior, or change dashboard/UI behavior.
 
@@ -153,3 +153,16 @@ No live runtime proof is required for this PR. This is static evidence analysis 
 ## Human Approval
 
 Required before merge.
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

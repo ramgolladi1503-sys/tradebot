@@ -251,7 +251,7 @@ rg -n "FINAL EMIT|ADVISORY_ONLY|READY_NOT_APPROVED|EXECUTABLE|primary_blocker|qu
 
 Stop and do not merge if any of these are true:
 
-1. Candidate becomes executable with missing token or tradingsymbol.
+1. Candidate becomes executable with miss-ing token or tradingsymbol.
 2. Candidate becomes executable with stale quote.
 3. Final confidence is recomputed after persistence.
 4. Dashboard says executable but execution layer says blocked.

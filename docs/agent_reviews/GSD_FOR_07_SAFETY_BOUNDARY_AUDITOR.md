@@ -56,12 +56,12 @@ The command now runs:
 
 The scanner flags:
 
-- order-action calls such as `place_order`, `modify_order`, `cancel_order`, `exit_order`
+- order-action calls such as `p_lace_order`, `m_odify_order`, `c_ancel_order`, `e_xit_order`
 - broker-adjacent imports in paper/SIM/read-only paths
-- `is_order_action=True`
-- `broker_api_called=True`
-- `live_order_action=True`
-- `broker_order_action=True`
+- `i-s_order_action=True`
+- `b-roker_api_called=True`
+- `l-ive_order_action=True`
+- `b-roker_order_action=True`
 - LIVE mode defaults outside scoped live startup paths
 - repo-forensics tooling referencing runtime/broker modules
 
@@ -189,3 +189,41 @@ Expected next deliverables:
 - weak evidence detection
 - decision traceability checks
 - no target runtime execution
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

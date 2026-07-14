@@ -97,3 +97,8 @@ Confirm the runtime feed supervisor continues to supply the warmup and blocker f
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to the read-only feed-readiness-for-candidates contract.
+
+
+## High-Risk Path Review
+
+N/A

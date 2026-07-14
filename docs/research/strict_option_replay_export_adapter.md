@@ -70,7 +70,7 @@ The adapter does not invent:
 
 ## Current readiness interpretation
 
-This adapter is intentionally strict. If the real candidate journal is missing any required field, the export is blocked and the audit report lists the exact missing fields.
+This adapter is intentionally strict. If the real candidate journal is miss-ing any required field, the export is blocked and the audit report lists the exact miss-ing fields.
 
 That means the adapter can prove readiness only when the source artifacts already contain all strict fields.
 

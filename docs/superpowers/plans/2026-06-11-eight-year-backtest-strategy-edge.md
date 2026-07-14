@@ -95,7 +95,7 @@
 **Acceptance criteria:**
 - catalog can represent all source families from the design spec
 - feasibility result distinguishes true intraday options versus EOD/proxy/runtime replay
-- missing fields and missing sources produce explicit reasons, not booleans only
+- miss-ing fields and miss-ing sources produce explicit reasons, not booleans only
 
 **Risks:**
 - overloading the catalog with loader-specific behavior
@@ -423,7 +423,7 @@ Do not implement now:
 - reports symbols, dates, expiries, strikes, granularity, provenance
 - states whether true intraday option data exists
 - distinguishes EOD, proxy, and runtime replay fallback modes
-- reports exact missing fields and insufficiency reasons
+- reports exact miss-ing fields and insufficiency reasons
 - emits `INCONCLUSIVE_FOR_REAL_INTRADAY_OPTIONS` when real intraday option coverage is absent
 - performs no broker calls and no live-gate changes
 

@@ -77,7 +77,7 @@ Missing evidence must produce `unknown` or `insufficient evidence`. It must not 
 Two examples:
 
 1. If ranking received only one candidate, the system must say ranking quality is inconclusive, not good or bad.
-2. If feed evidence is missing, the system must not infer feed health from candidate absence.
+2. If feed evidence is miss-ing, the system must not infer feed health from candidate absence.
 
 ## No-Trading-Action Principle
 

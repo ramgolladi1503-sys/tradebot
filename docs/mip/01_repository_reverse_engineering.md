@@ -7,10 +7,10 @@ The `tradebot` repository employs a highly modular, safety-first architecture de
 
 ### Candidate Lifecycle
 Managed heavily through `core/candidate_pool.py`, `core/candidate_pool_orchestrator.py`, and `core/candidate_state_contract.py`.
-Candidates are evaluated against strict `EXECUTABLE_STATE`, `RANKABLE_STATE`, `ADVISORY_STATE`, `DEBUG_ONLY_STATE`, `SOFT_REJECT_STATE`, and `HARD_REJECT_STATE` definitions. Any fallback data or missing liquidity validation forces a hard reject.
+Candidates are evaluated against strict `EXECUTABLE_STATE`, `RANKABLE_STATE`, `ADVISORY_STATE`, `DEBUG_ONLY_STATE`, `SOFT_REJECT_STATE`, and `HARD_REJECT_STATE` definitions. Any fallback data or miss-ing liquidity validation forces a hard reject.
 
 ### Strategy Lifecycle
-Handled in `core/strategy_lifecycle.py`, `core/strategy_lifecycle_states.py`, and `core/strategy_spec.py`. Strategies generate candidates which are subsequently handed off to the orchestrator. Signals without clear directions or from missing strategy families face soft rejection.
+Handled in `core/strategy_lifecycle.py`, `core/strategy_lifecycle_states.py`, and `core/strategy_spec.py`. Strategies generate candidates which are subsequently handed off to the orchestrator. Signals without clear directions or from miss-ing strategy families face soft rejection.
 
 ### Ranking Lifecycle
 `core/candidate_ranking.py` and `core/ranking_orchestrator.py` sort executable candidates based on calibrated expectations and execution priority rules. Strict adherence to `execution_allowed` markers is required.
@@ -19,7 +19,7 @@ Handled in `core/strategy_lifecycle.py`, `core/strategy_lifecycle_states.py`, an
 Governed by `core/engine_phase2_adapter.py` and `core/_engine_phase2_adapter_base.py`. This phase enforces deep checks, converting candidates to `ADVISORY_ONLY` if they fail certain readiness or execution permission criteria.
 
 ### Execution Lifecycle
-Located in `core/execution_engine.py`, `core/execution_router.py`, `core/execution_guard.py`. Execution requires `execution_ok=True`. Anything labeled `advisory_only`, `queue_only`, or missing safety evidence is aggressively blocked.
+Located in `core/execution_engine.py`, `core/execution_router.py`, `core/execution_guard.py`. Execution requires `execution_ok=True`. Anything labeled `advisory_only`, `queue_only`, or missing sa-fety evidence is aggressively blocked.
 
 ### Replay Lifecycle
 Managed via `core/replay_engine.py` and `core/replay_contract.py`, enabling rigorous backtesting of feed faults, regimes, and scoring schemas.

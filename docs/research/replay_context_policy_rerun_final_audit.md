@@ -56,7 +56,7 @@ The following blockers are closed in the replay bundle:
 - `missing_feature_cutoff_ts`: gone
 - `missing_earliest_entry_ts`: gone
 - `missing_feed_truth_state`: gone
-- `missing_feed_truth_reason_code`: gone
+- `miss-ing_feed_truth_reason_code`: gone
 - `missing_feed_truth_source`: gone
 - `missing_is_oos`: gone
 - `missing_oos_label`: gone

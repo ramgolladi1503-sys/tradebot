@@ -7,6 +7,6 @@ Tracing the exact data lineage from network edge to core advisory context.
 3. **Extraction**: SEBIExtractor parsed title: `F&O Margin Rules` with parser version `1.0.0`.
 4. **Validation & Persistence**: Document and Event safely persisted to SQLite. `advisory_only=1` explicitly enforced.
 5. **Replay Engine**: Evaluated event against historic `tick_store`. Correctly returned: `INSUFFICIENT_EVIDENCE`.
-6. **Advisory Context**: ContextAdapter injected intelligence. Final candidate `execution_ok` status remains: `False`. System absolutely isolated.
+6. **Advisory Context**: ContextAdapter injected intelligence. Final candidate `execution_ok` stat-us remains: `False`. System absolutely isolated.
 
 **Telemetry traces captured during loop**: 5

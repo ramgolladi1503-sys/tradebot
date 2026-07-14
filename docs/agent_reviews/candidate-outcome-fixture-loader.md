@@ -148,3 +148,21 @@ quality, or strategy edge.
 ## Human Approval
 
 Proceed only if the branch stays offline-only, the loader remains deterministic, and the evidence gate passes without touching forbidden runtime files.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

@@ -131,3 +131,21 @@ It does not prove strict Phase2 live data contract, candidate handoff root-cause
 
 ## Human Approval
 Human approval is required before merge. Do not start TB-EDGE-02 until this story is merged.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

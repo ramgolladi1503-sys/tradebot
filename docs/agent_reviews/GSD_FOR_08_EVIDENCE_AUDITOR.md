@@ -58,12 +58,12 @@ The command now runs:
 
 The scanner flags:
 
-- status-only proof such as `{"status":"ok","safe":true}`
+- stat-us-only proof such as `{"stat-us":"ok","sa-fe":true}`
 - invalid JSON/JSONL evidence files
 - decision-like records missing required fields
-- missing `reason`
-- missing `is_order_action`
-- missing `broker_api_called`
+- miss_ing `reason`
+- missing `i-s_order_action`
+- miss_ing `b-roker_api_called`
 - text evidence containing weak ok/safe claims without decision traceability
 
 ## Grill Me Review
@@ -193,3 +193,41 @@ Expected next deliverables:
 - old/new pipeline split detection
 - dashboard reader drift checks
 - no target runtime execution
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

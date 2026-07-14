@@ -6,7 +6,7 @@ This matrix maps product behavior to edge purpose, risk, and required tests.
 
 | Feature / Contract | Edge Purpose | Risk If Missing | Required Behavior Tests | Suite |
 |---|---|---|---|---|
-| Fallback quote cannot become executable | Prevents fake edge from non-live quote data | Fake executable trades, false confidence, bad fills | fallback_used true blocked; quote_source REST_FALLBACK blocked; recovered_fallback blocked; clean live quote still executable | behavior, safety, regression, edge |
+| Fallback quote cannot become executable | Prevents fake edge from non-live quote data | Fake executable trades, false confidence, bad fills | fallback_used true blocked; quote_source REST_FALLBACK blocked; recovered_fallback blocked; clean live quote still executable | behavior, sa-fety, regression, edge |
 | Stale feed blocks execution | Prevents trading from old market state | Entries on dead prices | stale LTP blocked; stale option quote blocked; stale depth blocked; fresh feed allows | behavior, safety, edge |
 | Missing depth blocks selected option leg | Protects execution quality and fill realism | Slippage, bad entry, fake RR | missing depth blocks execution-grade entry; index-only depth relaxation does not apply to option leg | behavior, safety, edge |
 | Missing option proof blocks execution | Prevents unknown option tradability | Wrong token/illiquid option execution | missing token blocked; stale option chain blocked; fallback option chain blocked | behavior, safety, edge |

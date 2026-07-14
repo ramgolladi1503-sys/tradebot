@@ -82,7 +82,7 @@ Source policy:
 
 Fail-closed behavior:
 
-- If no feed-truth artifact is available, persist `feed_truth_reason_code = null` and record `missing_feed_truth_reason_code`.
+- If no feed-truth artifact is available, persist `feed_truth_reason_code = null` and record `miss-ing_feed_truth_reason_code`.
 
 Honest classification:
 

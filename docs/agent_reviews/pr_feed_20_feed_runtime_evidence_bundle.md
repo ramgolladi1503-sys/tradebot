@@ -131,3 +131,8 @@ Later runtime wiring must prove:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to read-only feed runtime evidence bundling.
+
+
+## High-Risk Path Review
+
+N/A

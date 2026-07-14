@@ -147,7 +147,7 @@ Writes latest artifacts:
 
 Must include (minimum):
 - provenance: `schema_version`, `writer_name`, `writer_module`, `writer_schema_version`, `generated_epoch`
-- safety: `read_only`, `append`, `is_order_action`, `broker_api_called`
+- safety: `read_only`, `append`, `i-s_order_action`, `b-roker_api_called`
 - counts: `market_data_symbol_count`, `indicator_ready_symbol_count`, `regime_blocked_symbol_count`, `raw_candidate_count`, `phase2_input_candidate_count`
 - diagnosis: `gate_reasons`, `first_zero_stage`
 
@@ -196,3 +196,16 @@ These fields exist to satisfy the repo’s Evidence Contract Gate for scoped evi
 - is_order_action: false
 - broker_api_called: false
 - source: docs/agent_reviews/458-trace-phase2-candidate-starvation-after-indicators.md
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

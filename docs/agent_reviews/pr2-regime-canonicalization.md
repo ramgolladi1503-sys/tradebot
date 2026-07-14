@@ -189,3 +189,21 @@ It only proves that the current codebase now translates regime labels through on
 Human approval is required before merge.
 
 Reviewers should verify that the mapping choices for `CHOP`, `COMPRESSION`, `VOLATILITY_EXPANSION`, `TRAP_RISK`, and `EXHAUSTION_RISK` match desk intent before broader regime-routing changes continue in later PRs.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

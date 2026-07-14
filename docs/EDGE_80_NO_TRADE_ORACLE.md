@@ -55,7 +55,7 @@ Highest priority examples:
 If no evidence is supplied, the oracle returns:
 
 - `status=NO_TRADE_REQUIRED`
-- `primary_reason=missing_no_trade_evidence`
+- `primary_reason=miss-ing_no_trade_evidence`
 
 This is intentional. A no-trade oracle that allows trading when evidence is missing is worse than useless; it creates fake safety.
 

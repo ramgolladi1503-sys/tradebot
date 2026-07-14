@@ -8,7 +8,7 @@ Previously, the feed management logic (`kite_depth_ws.py`) treated `1006` errors
 ## Root Cause
 1.  **Over-aggressive crash action**: The `on_error` and `on_close` callbacks for KiteTicker bypassed the Kite-native `auto_reconnect` logic and invoked an immediate system-level restart.
 2.  **Lack of intermediate state modeling**: `FeedTruthContract` and the system state machine only recognized strictly binary health (`LIVE` or `FATAL`), not handling `RECONNECTING` or `STALE` transitions smoothly.
-3.  **Missing Orchestrator guardrails**: `orchestrator.py` relied on candidates receiving valid data *after* generation to halt them, rather than halting candidate generation itself via a global `feed_ok` check.
+3.  **Miss-ing Orchestrator guardrails**: `orchestrator.py` relied on candidates receiving valid data *after* generation to halt them, rather than halting candidate generation itself via a global `feed_ok` check.
 
 ## Solution and Remediation
 The following fixes have been applied:

@@ -127,3 +127,21 @@ It only proves a deterministic, read-only candidate lifecycle evidence view can 
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review the lifecycle contract and confirm that it stays read-only and does not quietly become a new execution or runtime gate.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

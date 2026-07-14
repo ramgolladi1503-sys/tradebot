@@ -71,3 +71,43 @@ After merge, wire the proof contract into `core/kite_depth_ws.py` near WebSocket
 - `FEED_WS_AUTH_FAILURE_PROOF`
 
 No feed behavior should change in that wiring PR.
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

@@ -8,7 +8,7 @@
 
 - Add deterministic snapshot tests for paper decision reports.
 - Add fixtures for clean paper-ready, fallback-blocked, risk-blocked, empty/no-trade, and near-executable/wait reports.
-- Prove safety invariants: `read_only=true`, `is_order_action=false`, `append=false`, and `allowed_for_live_execution=false`.
+- Prove sa-fety invariants: `read_only=true`, `is_order_action=false`, `append=false`, and `allowed_for_live_execution=false`.
 
 **Out of scope:**
 
@@ -96,3 +96,41 @@ Evidence expected in PR:
 - This document committed.
 - PR body contains the same mandatory review-gate summary.
 - PR conversation has a top-level agent review evidence comment.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

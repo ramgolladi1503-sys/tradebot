@@ -180,3 +180,21 @@ Human approval required before merge:
 ## Remaining Risk
 
 The roadmap can still drift if future PRs skip the locked order. The active TODO must be maintained manually after each merge.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

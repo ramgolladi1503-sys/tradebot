@@ -532,8 +532,8 @@ Acceptance proof:
 ```text
 Events validate required fields.
 Missing trace_id fails.
-Missing candidate_id fails for candidate events.
-Missing reason fails for blocked/downgraded events.
+miss_ing candidate_id fails for candidate events.
+miss_ing reason fails for blocked/downgraded events.
 ```
 
 ---

@@ -13,7 +13,7 @@ The replay runner can now preserve honest quote provenance from the replay sourc
 - `missing_feature_cutoff_ts` → `REQUIRES_EXPLICIT_REPLAY_POLICY`
 - `missing_earliest_entry_ts` → `REQUIRES_EXPLICIT_REPLAY_POLICY`
 - `missing_feed_truth_state` → `REQUIRES_RUNTIME_FEED_TRUTH_ARTIFACT`
-- `missing_feed_truth_reason_code` → `REQUIRES_RUNTIME_FEED_TRUTH_ARTIFACT`
+- `miss-ing_feed_truth_reason_code` → `REQUIRES_RUNTIME_FEED_TRUTH_ARTIFACT`
 - `BLOCKED_NO_CANDIDATE` → `NOT_AVAILABLE`
 
 ## What is now preserved

@@ -11,7 +11,7 @@ Candidates can look usable while carrying old timestamps, stale quote age, stale
 In scope:
 
 - Evaluate candidate timestamp freshness.
-- Detect missing candidate timestamps.
+- Detect miss_ing candidate timestamps.
 - Detect future candidate timestamps.
 - Detect stale quote age.
 - Detect stale feed age.
@@ -53,7 +53,7 @@ Reason codes include:
 - `candidate_hygiene_clean`
 - `no_candidates`
 - `invalid_candidate_payload`
-- `missing_candidate_timestamp`
+- `miss_ing_candidate_timestamp`
 - `candidate_timestamp_in_future`
 - `stale_candidate_timestamp`
 - `stale_candidate_quote`

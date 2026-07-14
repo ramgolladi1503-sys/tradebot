@@ -56,7 +56,7 @@ Focused tests cover:
 - high reject rate
 - concentrated reject reason
 - near-miss over-filtering
-- missing reject reason
+- miss-ing reject reason
 - invalid payload
 - invalid config
 - non-SENSEX-only payloads

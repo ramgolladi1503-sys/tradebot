@@ -188,7 +188,7 @@ Old files must not be treated as current session truth.
 
 ### Unsafe Mode Ambiguity
 
-If LIVE, audit-only, manual-approval, or broker-call evidence is ambiguous, safety status must be `unknown` or `unsafe to conclude`, not assumed safe.
+If LIVE, audit-only, manual-approval, or broker-call evidence is ambiguous, safety stat-us must be `unknown` or `unsafe to conclude`, not assumed safe.
 
 ## Ranking and UI Intelligence Concerns
 

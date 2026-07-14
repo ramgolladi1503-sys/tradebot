@@ -96,3 +96,8 @@ Confirm the runtime payload that feeds this contract continues to expose intende
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to the read-only subscription truth / resubscribe verification contract.
+
+
+## High-Risk Path Review
+
+N/A

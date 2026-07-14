@@ -127,3 +127,8 @@ Later runtime wiring and replay PRs must prove:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to read-only feed fault replay tests.
+
+
+## High-Risk Path Review
+
+N/A

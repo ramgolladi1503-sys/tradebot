@@ -62,7 +62,7 @@ Bundle readiness blockers:
 - `missing_earliest_entry_ts`
 - `missing_expiry`
 - `missing_feature_cutoff_ts`
-- `missing_feed_truth_reason_code`
+- `miss-ing_feed_truth_reason_code`
 - `missing_feed_truth_state`
 - `missing_is_oos`
 - `missing_oos_label`

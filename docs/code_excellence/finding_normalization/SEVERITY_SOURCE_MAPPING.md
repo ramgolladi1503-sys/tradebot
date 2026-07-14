@@ -111,7 +111,7 @@ Examples:
 |---|---|
 | executable/non-executable disagreement | `contract_violation` |
 | truth detected in one layer but missing downstream | `propagation_gap` |
-| missing reason/source/actionability fields | `evidence_gap` |
+| miss_ing reason/source/actionability fields | `evidence_gap` |
 | mock-only or shape-only test | `test_reality_gap` |
 | broker/live/order boundary ambiguity | `safety_boundary_gap` |
 | duplicate old/new implementation paths | `architecture_drift` |

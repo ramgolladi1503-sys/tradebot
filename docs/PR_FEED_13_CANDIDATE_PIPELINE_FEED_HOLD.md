@@ -66,7 +66,7 @@ Expected:
 After merge, run a paper-mode runtime snapshot/candidate cycle and confirm:
 
 - pipeline reports include `feed_health_input_present=true` when feed truth is supplied.
-- unsafe feed truth results in `feed_hold_active=true`.
+- unsa-fe feed truth results in `feed_hold_active=true`.
 - unsafe feed truth produces zero ranked output.
 - healthy feed truth preserves normal ranking behavior.
 - no strategy/feed lifecycle behavior changes were introduced.

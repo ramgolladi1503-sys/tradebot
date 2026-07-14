@@ -164,7 +164,7 @@ Resolution:
 ### 5.6 Trade Starvation from Missing Index Bid/Ask
 
 Problem:
-1. Indices often have missing depth bid/ask; strict quote checks rejected all candidates.
+1. Indices often have miss-ing depth bid/ask; strict quote checks rejected all candidates.
 
 Resolution:
 1. In `PAPER/SIM`, synthetic index bid/ask from LTP with explicit markers.

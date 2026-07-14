@@ -56,3 +56,25 @@ source: docs/agent_reviews/edge-06-setup-fingerprint-contract.md
 ## Human Approval
 - This contract is read-only and conservative by design.
 - Any future use of `setup_id` in runtime gates or decisioning requires a separate approved PR.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

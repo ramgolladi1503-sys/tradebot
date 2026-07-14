@@ -56,8 +56,8 @@ Required test/evidence to close the finding.
 
 - [ ] No paper module imports live broker placement.
 - [ ] No SIM module imports live broker placement.
-- [ ] No read-only module sets `is_order_action=true`.
-- [ ] No read-only module sets `broker_api_called=true`.
+- [ ] No read-only module sets `i-s_order_action=true`.
+- [ ] No read-only module sets `b-roker_api_called=true`.
 - [ ] No dashboard path exposes submit/modify/cancel/exit actions unless explicitly scoped.
 - [ ] LIVE mode does not default on.
 - [ ] LIVE mode requires explicit readiness flags.

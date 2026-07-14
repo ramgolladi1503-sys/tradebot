@@ -58,3 +58,21 @@ This PR does not prove that the strategy/ranking UI fake signals issue is fixed.
 
 ## Human Approval
 Approved explicitly by user via PR #555 merge instructions.
+
+
+## High-Risk Path Review
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+- live_order_action: false
+- broker_order_action: false

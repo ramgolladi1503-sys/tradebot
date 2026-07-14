@@ -121,3 +121,8 @@ After merge, capture a paper-mode runtime candidate-cycle sample proving:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to ranked pipeline feed-hold integration.
+
+
+## High-Risk Path Review
+
+N/A

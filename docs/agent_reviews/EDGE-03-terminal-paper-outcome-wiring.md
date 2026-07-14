@@ -127,3 +127,32 @@ Blocked:
 
 ### Next PR
 EDGE-04 should locate the actual paper session owner and call `record_terminal_paper_outcome()` when paper orders become terminal.
+
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

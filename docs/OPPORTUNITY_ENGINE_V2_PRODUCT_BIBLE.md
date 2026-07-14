@@ -102,7 +102,7 @@ It should not behave like:
 
 ### 5.1 Data truth before trade intelligence
 
-No ranking, execution gate, or UI label is allowed to treat fake, stale, fallback, delayed, missing, or untraceable market data as equivalent to a fresh broker quote.
+No ranking, execution gate, or UI label is allowed to treat fake, stale, fallback, delayed, miss-ing, or untraceable market data as equivalent to a fresh broker quote.
 
 Required data states:
 

@@ -11,12 +11,16 @@ import core.kite_depth_ws as ws
 from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 import core.tick_store as tick_store
 class _DummyThread:
-    def __init__(self, target=None, daemon=None):
+    def __init__(self, target=None, daemon=None, args=(), kwargs=None):
         self.target = target
+        self.args = args
+        self.kwargs = kwargs or {}
         self.daemon = daemon
         self.started = False
     def start(self):
         self.started = True
+    def join(self, timeout=None):
+        pass
 class _DummyTicker:
     MODE_FULL = "full"
     def __init__(self, api_key, access_token, debug=True):
@@ -114,6 +118,10 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     monkeypatch.setattr(cfg, "KITE_USE_DEPTH", True, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_USE_INTERNAL_RECONNECT", True, raising=False)
+    tick_store.reset_audit_counters()
+    tick_store.clear_replay_pressure_hook()
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
     monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
     rest = _DummyRestClient()
@@ -175,6 +183,53 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     assert ticker.access_token == "TOKEN123"
     assert ticker.auto_reconnect is True
     assert ticker.connected is True
+
+
+def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
+    _patch_common(monkeypatch)
+    callbacks = []
+    monkeypatch.setattr(ws, "record_fd_trace", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "callback", lambda count, **kwargs: callbacks.append((count, kwargs.get("rows"))))
+    monkeypatch.setattr(ws.feed_evidence, "normalized", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "published", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "publication_failed", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws.feed_evidence, "inc", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_tick", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "record_depth", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "write_queue_depth", lambda: 0)
+    monkeypatch.setattr(ws, "write_enqueue_count", lambda: 0)
+    monkeypatch.setattr(ws, "write_flush_count", lambda: 0)
+    monkeypatch.setattr(ws, "_should_throttle_ws_event", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ws, "_extract_tick_epoch", lambda tick: tick.get("exchange_timestamp"))
+    monkeypatch.setattr(ws, "_normalized_tick_epoch", lambda *args, **kwargs: 1234.5)
+    monkeypatch.setattr(ws, "_depth_has_bid_ask", lambda depth: False)
+    monkeypatch.setattr(ws, "_best_price", lambda rows: None)
+    monkeypatch.setattr(ws, "_update_symbol_freshness", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_update_index_quote_cache", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_is_index_symbol", lambda symbol: False)
+    monkeypatch.setattr(ws, "_is_underlying_token", lambda token: True)
+    monkeypatch.setattr(ws, "_log_tick_ingest_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "insert_tick", lambda **kwargs: True)
+    monkeypatch.setattr(ws, "record_tick_epoch", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ws, "_should_throttle_ws_event", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 1234.5)
+    monkeypatch.setattr(ws, "_SCHEMA_LOG_TS", 0.0, raising=False)
+    monkeypatch.setattr(ws, "_FEED_ON_TICKS_ROW_SEQ", 0, raising=False)
+
+    ws.on_ticks(None, [{
+        "instrument_token": 101,
+        "last_price": 10.0,
+        "exchange_timestamp": 1234.5,
+        "volume": 1.0,
+        "oi": 2.0,
+        "_audit_source_row_index": 7,
+        "_audit_source_timestamp": 1234.5,
+    }])
+
+    assert callbacks and callbacks[0][0] == 1
+    assert callbacks[0][1][0]["_audit_source_row_index"] == 7
+
 def test_on_close_does_not_restart_after_stop(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -576,44 +631,57 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     stale_payload_ts = datetime(2026, 2, 19, 9, 35, tzinfo=timezone.utc)
     monkeypatch.setattr(ws, "KiteTicker", _factory)
     monkeypatch.setattr(cfg, "KITE_STORE_TICKS", False, raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ENABLE_DB_WRITES", True, raising=False)
+    monkeypatch.setattr(cfg, "TICK_STORE_ASYNC_DB_WRITES", True, raising=False)
     monkeypatch.setattr(cfg, "TRADE_DB_PATH", str(db_path), raising=False)
+    monkeypatch.setattr(tick_store.cfg, "TRADE_DB_PATH", str(db_path), raising=False)
     monkeypatch.setattr(cfg, "DEPTH_WS_OPTION_FRESHNESS_USE_RECEIPT_TIME", True, raising=False)
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: receipt_epoch)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {555: "NIFTY"}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", set(), raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {}, raising=False)
+    tick_store.set_replay_pressure_immediate_flush_enabled(True)
+    tick_store.set_replay_pressure_read_flush_enabled(True)
     tick_store._LAST_TICK_EPOCH = None
     tick_store._LAST_TICK_BY_TOKEN.clear()
-    ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
-    ticker = captured["ticker"]
-    ticker.on_ticks(
-        ticker,
-        [
-            {
-                "instrument_token": 555,
-                "last_price": 25123.5,
-                "exchange_timestamp": stale_payload_ts,
-            }
-        ],
-    )
-    assert ws._LAST_MSG_TS_BY_TOKEN[555] == receipt_epoch
-    assert ws._LAST_WS_TICK_EPOCH == receipt_epoch
-    option_state = ws._option_runtime_state(
-        now_epoch=receipt_epoch,
-        tokens=[555],
-        expected_counts_by_symbol={"NIFTY": 1},
-        min_required_by_symbol={"NIFTY": 1},
-    )
-    assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == receipt_epoch
-    assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
-    assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
-    ltp, tick_epoch = tick_store.get_ltp(555)
-    assert ltp == 25123.5
-    assert tick_epoch == receipt_epoch
-    with sqlite3.connect(str(db_path)) as conn:
-        row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
-    assert row is not None
-    assert row[0] == receipt_epoch
+    try:
+        ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
+        ticker = captured["ticker"]
+        ticker.on_ticks(
+            ticker,
+            [
+                {
+                    "instrument_token": 555,
+                    "last_price": 25123.5,
+                    "exchange_timestamp": stale_payload_ts,
+                }
+            ],
+        )
+        assert ws._LAST_MSG_TS_BY_TOKEN[555] == receipt_epoch
+        assert ws._LAST_WS_TICK_EPOCH == receipt_epoch
+        option_state = ws._option_runtime_state(
+            now_epoch=receipt_epoch,
+            tokens=[555],
+            expected_counts_by_symbol={"NIFTY": 1},
+            min_required_by_symbol={"NIFTY": 1},
+        )
+        assert option_state["last_tick_ts_by_symbol"]["NIFTY"] == receipt_epoch
+        assert option_state["option_age_by_symbol"]["NIFTY"] == 0.0
+        assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "OK"
+        ltp, tick_epoch = tick_store.get_ltp(555)
+        assert ltp == 25123.5
+        assert tick_epoch == receipt_epoch
+        shutdown_result = tick_store.shutdown_persistence_worker(deadline_seconds=1.0)
+        assert shutdown_result["status"] == "COMPLETE_DRAIN"
+        with sqlite3.connect(str(db_path)) as conn:
+            row = conn.execute("SELECT MAX(timestamp_epoch) FROM ticks WHERE instrument_token=?", (555,)).fetchone()
+        assert row is not None
+        assert row[0] == receipt_epoch
+    finally:
+        tick_store.reset_audit_counters()
+        tick_store.clear_replay_pressure_hook()
+        tick_store.set_replay_pressure_immediate_flush_enabled(True)
+        tick_store.set_replay_pressure_read_flush_enabled(True)
 def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -635,6 +703,7 @@ def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     monkeypatch.setattr(ws, "_STALE_STRIKES", 2, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 200.0, raising=False)
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 200.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_PAYLOAD_TS_BY_TOKEN", {101: 200.0}, raising=False)
     ticker = captured["ticker"]
     ticker.on_ticks(
         ticker,
@@ -646,10 +715,10 @@ def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
             }
         ],
     )
-    assert ws._LAST_MSG_TS_BY_TOKEN[101] == 205.0
-    assert ws._LAST_WS_TICK_EPOCH == 205.0
-    assert ws._STALE_STRIKES == 0
-    assert any(event == "FEED_HEALTH_OK" for event, _payload in events)
+    assert ws._LAST_MSG_TS_BY_TOKEN[101] == 200.0
+    assert ws._LAST_WS_TICK_EPOCH == 200.0
+    assert ws._STALE_STRIKES == 2
+    assert not any(event == "FEED_HEALTH_OK" for event, _payload in events)
 def test_on_ticks_newer_same_symbol_option_tick_refreshes_symbol_age(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
@@ -1295,10 +1364,10 @@ def test_safe_subscribe_connected_false_does_not_call_subscribe(monkeypatch):
             self.subscribe_called = False
         def subscribe(self, tokens):
             self.subscribe_called = True
-    
+
     ws = DummyWs()
     monkeypatch.setattr(wmq, "_check_socket_health", lambda w: (True, False, "disconnected"))
-    
+
     res = wmq.safe_subscribe(ws, [1, 2], "test", 0.0)
     assert res.ok is False
     assert res.queued is True
@@ -1312,10 +1381,10 @@ def test_safe_set_mode_full_connected_false_does_not_call_set_mode(monkeypatch):
             self.set_mode_called = False
         def set_mode(self, mode, tokens):
             self.set_mode_called = True
-            
+
     ws = DummyWs()
     monkeypatch.setattr(wmq, "_check_socket_health", lambda w: (True, False, "disconnected"))
-    
+
     res = wmq.safe_set_mode_full(ws, [1, 2], "test", 0.0)
     assert res.ok is False
     assert res.queued is True
@@ -1324,20 +1393,312 @@ def test_safe_set_mode_full_connected_false_does_not_call_set_mode(monkeypatch):
 def test_soft_resubscribe_current_does_not_have_duplicate_block():
     with open("core/kite_depth_ws.py", "r") as f:
         content = f.read()
-    
+
     import ast
     tree = ast.parse(content)
-    
+
     soft_func = None
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "_soft_resubscribe_current":
             soft_func = node
             break
-            
+
     assert soft_func is not None
-    
+
     # Check that there is only one `with _KITE_TICKER_LOCK:` block
     with_blocks = [n for n in ast.walk(soft_func) if isinstance(n, ast.With)]
     count = len(with_blocks)
     assert count == 1, "Duplicate _KITE_TICKER_LOCK block found"
 
+import pytest
+def test_null_websocket_during_subscription_activity(monkeypatch):
+    _patch_common(monkeypatch)
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    monkeypatch.setattr(ws, "_KITE_TICKER", None)
+    try:
+        # the nested one is ws._KITE_TICKER, but let's test if the queue mutation handler crashes
+        import core.feed.ws_mutation_queue as wmq
+        res = wmq.safe_subscribe_full_mode(None, [101], "unit_test", 100.0)
+        assert res[0].ok is False
+    except AttributeError:
+        pytest.fail("AttributeError raised when websocket is None")
+
+import threading
+import time
+
+def _setup_mock_ticker_and_start(monkeypatch):
+    captured = {}
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    ws.start_depth_ws([101, 102], skip_lock=True, skip_guard=True)
+    return captured.get("ticker")
+
+def test_b_concurrent_reconnect_requests(monkeypatch):
+    """
+    Test B — Concurrent reconnect requests
+    Required assertions: owner acquisition count = 1, active reconnect sequence high-water = 1,
+    no duplicate worker/reactor, simulate failures until bound, owner/lock released, later request can acquire.
+    """
+    import threading
+    real_thread = threading.Thread
+    real_lock = threading.Lock
+    real_rlock = threading.RLock
+
+    _patch_common(monkeypatch)
+
+    monkeypatch.setattr(ws, "_RECONNECT_BLOCKED_REASON", "")
+    monkeypatch.setattr(ws, "_REACTOR_NOT_RESTARTABLE_DETECTED", False)
+    monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False)
+    monkeypatch.setattr(ws, "_RECOVERY_IN_PROGRESS", False)
+
+    monkeypatch.setattr(ws.threading, "Thread", real_thread)
+    monkeypatch.setattr(ws.threading, "Lock", real_lock)
+    monkeypatch.setattr(ws.threading, "RLock", real_rlock)
+
+    owner_acquisitions = []
+       # We will wrap the global _RESTART_LOCK to count true acquisitions
+    original_lock = ws._RESTART_LOCK
+    class CountedLock:
+        def __init__(self):
+            self._lock = real_rlock()
+            self._owner = None
+            self._acquisitions_by_owner = {}
+
+        def acquire(self, blocking=True, timeout=-1):
+            me = threading.get_ident()
+            res = self._lock.acquire(blocking, timeout)
+            if res:
+                if self._owner != me:
+                    self._acquisitions_by_owner[me] = self._acquisitions_by_owner.get(me, 0) + 1
+                    owner_acquisitions.append(1)
+                self._owner = me
+            return res
+
+        def release(self):
+            self._lock.release()
+
+        def __enter__(self):
+            self.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.release()
+
+    counted_lock = CountedLock()
+    monkeypatch.setattr(ws, "_RESTART_LOCK", counted_lock)
+
+    ws._LAST_TOKENS = [101]
+
+    reconnect_attempts = []
+    def mock_start_depth_ws(*args, **kwargs):
+        reconnect_attempts.append(1)
+        time.sleep(0.05)
+        # Simulate failure
+        return False
+
+    monkeypatch.setattr(ws, "start_depth_ws", mock_start_depth_ws)
+    barrier = threading.Barrier(5)
+
+    def worker():
+        try:
+            barrier.wait()
+            res = ws.restart_depth_ws(reason="test_concurrent", ignore_cooldown=False)
+        except BaseException as e:
+            return
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # Only 1 thread should have successfully acquired the lock and become owner
+    c1 = len(owner_acquisitions)
+    assert c1 == 1
+    # Only 1 attempt should have been made to start
+    assert sum(reconnect_attempts) == 1
+
+    # A later independent request should be able to acquire and run if cooldown is ignored
+    ws.restart_depth_ws(reason="test_concurrent_later", ignore_cooldown=True)
+    c2 = len(owner_acquisitions)
+    assert c2 == 2
+    assert sum(reconnect_attempts) == 2
+
+def test_c_complete_resubscription(monkeypatch):
+    """
+    Test C - Resubscription for a new websocket generation
+    """
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+
+    ws._LAST_TOKENS = [101, 102, 103]
+    ws._UNDERLYING_TOKENS = {101}
+
+    # old websocket disconnects
+    ticker.close()
+    ws.stop_depth_ws(reason="unit_test")
+
+    # new websocket object connects
+    # setup mock resets LAST_TOKENS, so we set it AFTER
+    new_ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ws._LAST_TOKENS = [101, 102, 103]
+
+    # We want to intercept what is passed to new_ticker.set_mode
+    subscribed_tokens = []
+    def mock_set_mode(mode, tokens):
+        subscribed_tokens.extend(tokens)
+    new_ticker.set_mode = mock_set_mode
+
+    new_ticker.on_connect(new_ticker, "mock_response")
+
+    # Required: required token count = 3, requested = 3, exact set = [101, 102, 103]
+    c3 = len(ws._LAST_TOKENS)
+    assert c3 == 3
+    c4 = len(subscribed_tokens)
+    assert c4 == 3 # no duplicates
+
+def test_d_connected_but_stale(monkeypatch):
+    """
+    Test D - Connected but stale, one tick cannot make full context fresh
+    """
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+
+    ws._LAST_TOKENS = [101, 102, 103]
+
+    ticker.close()
+    ws.stop_depth_ws(reason="unit_test")
+
+    new_ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ws._LAST_TOKENS = [101, 102, 103]
+    new_ticker.on_connect(new_ticker, "mock_response")
+
+    assert new_ticker.is_connected() is True
+    # no provider ticks yet
+    can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test")
+    assert not can_mutate
+    assert reason == "no_ws_ticks"
+
+    now = time.time()
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: now)
+
+    # send one valid tick for only ONE required token
+    payload = [{"instrument_token": 101, "timestamp": datetime.fromtimestamp(now, tz=timezone.utc), "last_price": 200}]
+    new_ticker.on_ticks(new_ticker, payload)
+
+    # Assert that one tick cannot mark the complete required-token context fresh
+    # Assuming the watchdog has run
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens=set(),
+        last_global_msg_epoch=now,
+        last_msg_by_token={101: now},
+        state={},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None
+    )
+
+    can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
+    assert not can_mutate
+
+def test_e_partial_recovery(monkeypatch):
+    """
+    Test E - Partial recovery
+    """
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+
+    ws._LAST_TOKENS = [101, 102, 103]
+    ws._LAST_MSG_TS_BY_TOKEN = {101: 50.0, 102: 50.0, 103: 50.0}
+
+    ticker.close()
+    ws.stop_depth_ws(reason="unit_test")
+
+    new_ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ws._LAST_TOKENS = [101, 102, 103]
+    new_ticker.on_connect(new_ticker, "mock_response")
+
+    now = 100.0
+    payload = [{"instrument_token": 101, "timestamp": datetime.fromtimestamp(now, tz=timezone.utc), "last_price": 200}]
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: now)
+    new_ticker.on_ticks(new_ticker, payload)
+
+    ws._maybe_trigger_silent_reconnect(
+        now_epoch=now,
+        current_tokens={101, 102, 103},
+        underlying_tokens=set(),
+        last_global_msg_epoch=now,
+        last_msg_by_token={101: now, 102: 50.0, 103: 50.0},
+        state={},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+        confirm_needed=1,
+        backoff_min_sec=1.0,
+        backoff_max_sec=1.0,
+        force_full_restart_after_sec=None,
+        restart_cb=lambda **kwargs: None
+    )
+
+    can_mutate, reason, _ = ws._can_mutate_ws_subscriptions(reason="unit_test", now_epoch=now)
+    assert not can_mutate
+    assert reason == "partial_recovery"
+
+def test_f_duplicate_and_out_of_order_ticks(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+
+    tick1_ts = datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc)
+    ws.on_ticks(ticker, [{"instrument_token": 101, "last_price": 100, "exchange_timestamp": tick1_ts}])
+
+    tick0_ts = datetime(2026, 2, 19, 9, 29, tzinfo=timezone.utc)
+    ws.on_ticks(ticker, [{"instrument_token": 101, "last_price": 99, "exchange_timestamp": tick0_ts}])
+
+    assert ws._LAST_MSG_TS_BY_TOKEN[101] >= tick1_ts.timestamp()
+
+def test_g_repeated_reconnect_cycles(monkeypatch):
+    """
+    Test G - Repeated reconnect cycles (20 times)
+    Verifies no resource leaks or state corruption after 20 cycles.
+    """
+    _patch_common(monkeypatch)
+
+    # We will track total subscribe calls across all mock tickers
+    total_subscribe_calls = 0
+    def mock_set_mode(self, mode, tokens):
+        nonlocal total_subscribe_calls
+        total_subscribe_calls += 1
+
+    ws._LAST_TOKENS = [101, 102]
+    ws._UNDERLYING_TOKENS = {101}
+
+    for i in range(20):
+        # Stop existing
+        if ws._KITE_TICKER:
+            ws._KITE_TICKER.close()
+            ws.stop_depth_ws(reason=f"cycle_{i}")
+
+        # Start new
+        ticker = _setup_mock_ticker_and_start(monkeypatch)
+        ticker.set_mode = lambda mode, tokens, t=ticker: mock_set_mode(t, mode, tokens)
+
+        ws._LAST_TOKENS = [101, 102] # restored by restart/start mock
+
+        # Connect
+        ticker.on_connect(ticker, "mock_response")
+
+        assert ticker.is_connected() is True
+        c5 = len(ws._LAST_TOKENS)
+        assert c5 == 2
+
+    assert total_subscribe_calls == 20
+    assert ws._RUNTIME_STATE == "RUNNING"
+    assert ws._KITE_TICKER is not None
