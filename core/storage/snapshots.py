@@ -13,6 +13,8 @@ from config import config as cfg
 from .events import _append_gzip_jsonl_atomic
 from .guard import DiskGuard
 from .schema import build_snapshot_record, now_iso_utc
+from contextlib import contextmanager
+from typing import Iterator
 
 
 def _safe_float(value: Any) -> float | None:
@@ -80,10 +82,16 @@ def _depth_summary(depth: Any) -> dict[str, Any]:
     return out
 
 
-def _sqlite_conn() -> sqlite3.Connection:
+@contextmanager
+def _sqlite_conn() -> Iterator[sqlite3.Connection]:
     db_path = Path(getattr(cfg, "TRADE_DB_PATH", str(data_root() / "trades.db")))
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path))
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _load_tick_rows_before(token: int, ts_epoch: float, limit: int) -> list[dict[str, Any]]:

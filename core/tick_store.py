@@ -13,6 +13,7 @@ from core.fs_utils import ensure_parent_dir
 from core.paths import logs_dir
 from core.log_writer import get_jsonl_writer
 from core.time_utils import compute_age_sec, normalize_epoch_seconds, now_utc_epoch
+from contextlib import contextmanager
 
 _tick_window = deque(maxlen=200000)
 _LAST_TICK_EPOCH = None
@@ -150,6 +151,7 @@ def _flush_batch_size() -> int:
         return 1000
 
 
+@contextmanager
 def _conn():
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
@@ -159,7 +161,11 @@ def _conn():
         conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
         pass
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _tick_columns(conn: sqlite3.Connection) -> set[str]:

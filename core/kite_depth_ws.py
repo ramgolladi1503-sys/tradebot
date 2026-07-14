@@ -2078,7 +2078,8 @@ def _latest_db_tick_epoch() -> float | None:
     if not db_path.exists():
         return None
     try:
-        with sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False) as conn:
+        from contextlib import closing
+        with closing(sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)) as conn:
             conn.execute("PRAGMA busy_timeout=30000")
             try:
                 conn.execute("PRAGMA journal_mode=WAL")

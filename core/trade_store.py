@@ -3,6 +3,8 @@ import logging
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
+from typing import Iterator
 from datetime import datetime, timezone
 from config import config as cfg
 from pathlib import Path
@@ -17,7 +19,8 @@ _LAST_DEPTH_PRUNE_EPOCH = 0.0
 _LAST_DEPTH_LOCK_WARN_EPOCH = 0.0
 
 
-def _conn():
+@contextmanager
+def _conn() -> Iterator[sqlite3.Connection]:
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     timeout_sec = max(1.0, float(getattr(cfg, "TRADE_DB_TIMEOUT_SEC", 10.0) or 10.0))
     conn = sqlite3.connect(str(db_path), timeout=timeout_sec)
@@ -32,7 +35,10 @@ def _conn():
             conn.execute(f"PRAGMA synchronous={str(getattr(cfg, 'TRADE_DB_SYNCHRONOUS', 'NORMAL') or 'NORMAL')}")
     except Exception:
         pass
-    return conn
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def classify_outcome_label(realized_pnl: float, epsilon: float = 1e-6) -> str:
