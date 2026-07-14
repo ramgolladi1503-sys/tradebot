@@ -1,309 +1,316 @@
 IMPLEMENTATION DIRECTION:
 RIGHT
 
-VERDICT:
-PHASE2C_PASS_WITH_PREEXISTING_TEST_FAILURE
-
 APPROVED OBJECTIVE:
-Enforce the existing ownership boundary between raw strategy candidates and downstream Phase-2 option, liquidity, freshness and tradability validation.
+Complete semantic candidate-versus-Phase-2 ownership without changing setup definitions, setup evidence or thresholds.
 
 WHAT WAS ACTUALLY IMPLEMENTED:
-- Changed directional movement generators to emit truthful raw setup candidates only.
-- Removed fabricated generator-owned values for `option_confirmation_score`, `liquidity_score`, and `freshness_score`.
-- Stopped raw generators from emitting `VALIDATED_CANDIDATE`; they now emit `RAW_CANDIDATE`.
-- Reused the existing option-confirmation path to enrich directional raw candidates inside `core/candidate_pool_orchestrator.py`.
-- Made ownership-boundary validation mandatory at raw candidate intake and logged deterministic `CANDIDATE_OWNERSHIP_BLOCKED` events without aborting unrelated generators.
-- Converted `strategies/movement/option_pressure.py` into a compatibility wrapper that emits no standalone market-thesis candidate while preserving profile metadata.
+Raw directional candidates now describe setup thesis only. Phase-2 option/liquidity/freshness semantics were removed from raw `entry_trigger`, `invalid_if`, `rank_reason`, and raw confluence tags across the affected movement generators. No setup formulas, thresholds, context propagation, or downstream enrichment math changed. A new focused semantic-ownership test suite proves the wording cleanup, exact score-ownership arithmetic, and that Phase-2 eligibility still does not bypass manual approval or risk gating.
 
-ARCHITECTURE ASSESSMENT:
+ARCHITECTURE CHANGE:
 NONE
 
+SCOPE STATUS:
+IN_SCOPE
+
+EVIDENCE STATUS:
+PROVEN
+
 STARTING COMMIT:
+`a3abb328229e87ee2587678c41f4d60bce1a4a33`
+
+PHASE 0 COMMIT:
+`cf2d74bc7a2938a08bc651e25b5334481479d68c`
+
+PHASE 1A COMMIT:
+`9ace90c0b49d790f0e8926a75ecd9492ae6d3b26`
+
+PHASE 1B COMMIT:
+`2a247ec6d92f60aa101d462eb6f3013d1aec4d54`
+
+PHASE 1C COMMIT:
+`e74bbac98cfb3db43e15129bc78be4bb47564c45`
+
+PHASE 2A COMMIT:
+`db19774008db93671c8a24b93f98cb7488498ad2`
+
+PHASE 2B COMMIT:
+`b9142aa04cb977eea9eb9eff0eb6d6a2893c1d85`
+
+PHASE 2B OBSERVABILITY COMMIT:
 `2262e3baecb05b43f6113989f9715ea3ff199433`
 
-PRIOR PHASE COMMITS:
-- Phase 0: `cf2d74bc7a2938a08bc651e25b5334481479d68c`
-- Phase 1A: `9ace90c0b49d790f0e8926a75ecd9492ae6d3b26`
-- Phase 1B: `2a247ec6d92f60aa101d462eb6f3013d1aec4d54`
-- Phase 1C: `e74bbac98cfb3db43e15129bc78be4bb47564c45`
-- Phase 2A: `db19774008db93671c8a24b93f98cb7488498ad2`
-- Phase 2B: `b9142aa04cb977eea9eb9eff0eb6d6a2893c1d85`
-- Phase 2B observability: `2262e3baecb05b43f6113989f9715ea3ff199433`
-
 FILES CHANGED:
-- `core/movement_contract.py`
-- `core/option_confirmation.py`
-- `core/candidate_pool_orchestrator.py`
-- `core/candidate_normalizer.py`
-- `strategies/movement/_utils.py`
-- `strategies/movement/option_pressure.py`
+- `strategies/movement/opening_drive.py`
+- `strategies/movement/opening_range_breakout.py`
+- `strategies/movement/compression_breakout.py`
+- `strategies/movement/trend_pullback.py`
+- `strategies/movement/vwap_reclaim.py`
+- `strategies/movement/failed_breakout_trap.py`
+- `strategies/movement/exhaustion_reversal.py`
+- `strategies/movement/mean_reversion_extension.py`
+- `strategies/movement/event_volatility_expansion.py`
+- `strategies/movement/late_day_momentum.py`
 - `tests/test_candidate_phase2_ownership.py`
-- `tests/test_movement_contract.py`
-- `tests/test_candidate_pool_orchestrator.py`
-- `tests/test_candidate_pool_contract_snapshots.py`
-- `tests/test_option_confirmation.py`
-- `tests/test_strategy_context_truth.py`
-- `tests/test_strategy_profile_fail_closed.py`
-- `tests/test_strategy_missing_evidence_policy.py`
-- `tests/test_strategy_missing_evidence_observability.py`
-- `tests/test_strategy_registry_integrity.py`
-- `tests/test_opening_movement_strategies.py`
-- `tests/test_compression_trend_movement_strategies.py`
-- `tests/test_vwap_trap_movement_strategies.py`
-- `tests/test_exhaustion_mean_reversion_strategies.py`
-- `tests/test_event_late_day_movement_strategies.py`
-- `tests/fixtures/candidate_pool_contract/clean_report.json`
-- `tests/fixtures/candidate_pool_contract/no_trade_report.json`
-- `tests/fixtures/candidate_pool_contract/fallback_blocked_report.json`
+- `tests/test_candidate_phase2_semantic_ownership.py`
+- `docs/agent_reviews/strategy_truth_phase2c_candidate_phase2_ownership.md`
 
-COMPLETE FIELD-OWNERSHIP MATRIX:
+RAW SEMANTIC OWNERSHIP AUDIT:
+- Raw candidate text now stays within setup-thesis scope only.
+- Removed from raw semantics: `option_confirmation`, `option-side confirmation`, `option_quote_degrades`, `tradable`, `freshness`, `liquidity`, `validated`, and execution-approval language.
+- Downstream option confirmation remains represented only in `CandidateOptionConfirmation`, enriched candidate fields, and enriched evidence payloads such as `option_confirmation_truth`, `liquidity_truth`, and `freshness_truth`.
+- Raw evidence still carries observed market fields like `option_ltp`, `premium_change`, `spread_pct`, and `depth`, but not as truth-claim keys such as `option_confirmation_truth` or `execution_eligible`.
 
-| field | current writer | current reader | contract owner | current runtime meaning after Phase 2C | correct meaning | current default | fabricated by generator before Phase 2C | required correction | compatibility impact |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `strategy_id` | movement generator | pool, reports, tests | strategy layer | runtime strategy identity | strategy identity | required | no | none | none |
-| `movement_type` | movement generator | pool, reports, no-trade, tests | strategy layer | setup family | setup family | required | no | none | none |
-| `direction` | movement generator | pool, option confirmation, reports | strategy layer | directional intent | directional intent | required | no | none | none |
-| `thesis`/`reason` | movement generator | reports/tests | strategy layer | setup thesis text | setup thesis text | required | no | none | none |
-| `entry_trigger` | movement generator | reports/tests | strategy layer | setup trigger text | setup trigger text | required | no | none | none |
-| `invalid_if` | movement generator | reports/tests | strategy layer | invalidation description | invalidation description | required | no | none | none |
-| `raw_score` | movement generator | pool sorting, reports, tests | strategy layer | setup-quality score only | setup/pattern score only | required | yes, previously mixed with downstream quote truth indirectly | keep setup-only | expected score change at raw boundary only |
-| `price_structure_score` | movement generator | reports/tests | strategy layer | setup structure score | setup structure score | required | no | none | none |
-| `confidence_score` | movement generator | reports/tests | strategy layer | setup confidence derived from setup score and trap risk | setup confidence only | required | no | none | none |
-| `option_confirmation_score` | downstream enrichment | option scoring, ranking/report consumers, tests | Phase 2 | real quote-confirmation score | downstream-only confirmation truth | `None` until enrichment | yes | unset at raw generation | tests and snapshots updated |
-| `liquidity_score` | downstream enrichment | ranking/report consumers, tests | Phase 2 | real spread/depth liquidity score | downstream liquidity truth | `None` until enrichment | yes | unset at raw generation | tests and snapshots updated |
-| `freshness_score` | downstream enrichment | ranking/report consumers, tests | Phase 2 | real quote-age freshness score | downstream freshness truth | `None` until enrichment | yes | unset at raw generation | tests and snapshots updated |
-| `confluence_score` | movement generator | reports/tests | strategy layer | setup confluence score | setup confluence score | required | no | none | none |
-| `status` | raw generator, downstream enrichment, no-trade | pool, reports, ranking/tests | split by stage | `RAW_CANDIDATE` before enrichment; `VALIDATED_CANDIDATE`/`BLOCKED_CANDIDATE` after enrichment | stage-truthful state | required | yes, generators used `VALIDATED_CANDIDATE` | raw candidates cannot self-validate | direct-generator tests updated |
-| `option symbol/strike/expiry` | none in raw candidate | downstream/tradebuilder paths elsewhere | Phase 2 | not claimed by movement candidate | downstream-resolved contract truth or provisional hint only | absent | no | none in this phase | none |
-| `execution_eligible` / `executable_eligible` | downstream enrichment / no-trade / later engines | reports, ranking/tests | Phase 2 | false at raw generation; updated after downstream checks | downstream-owned tradability/execution eligibility | false | effectively yes via validated raw status semantics | raw generators do not mark executable | direct-generator tests updated |
-| `warnings` | strategy layer, ownership blocker, downstream enrichment | reports/tests | mixed | setup warnings plus downstream warnings after enrichment | observable per-stage warnings | `()` | no | none | none |
-| `provenance` / `profile_lineage` / `evidence` | strategy layer then downstream enrichment | reports/tests | mixed by field | setup evidence first, downstream truth evidence appended later | stage-owned provenance only | required/optional | yes for Phase-2 evidence keys in some old paths | raw boundary rejects Phase-2 evidence keys | enforced by validator |
+BEFORE/AFTER RAW THESIS STRINGS:
+- `opening_range_retest_v1`
+  - Before: `opening_range_breakout_retest_hold_with_option_confirmation`
+  - After: `opening_range_breakout_retest_hold`
+  - Before reason: `opening range breakout retest held with option-side confirmation`
+  - After reason: `opening range breakout retest held`
+- `compression_breakout_v1`
+  - Before: `compression_range_breakout_with_option_premium_expansion`
+  - After: `compression_range_breakout_release`
+  - Before reason: `range and ATR compression released into a confirmed option-side breakout`
+  - After reason: `range and ATR compression released into a directional breakout`
+- `trend_pullback_v1`
+  - Before: `trend_pullback_hold_with_option_premium_resumption`
+  - After: `trend_pullback_hold_resume`
+  - Before reason: `established trend resumed after controlled pullback with option-side confirmation`
+  - After reason: `established trend resumed after a controlled pullback`
+- `opening_drive_v1`
+  - Before: `opening_drive_with_vwap_alignment_and_option_confirmation`
+  - After: `opening_drive_with_vwap_alignment`
+- `vwap_reclaim_rejection_v1`
+  - Before: `confirmed_vwap_reclaim_or_rejection_with_option_confirmation`
+  - After: `confirmed_vwap_reclaim_or_rejection`
+- `failed_breakout_trap_v1`
+  - Before: `failed_breakout_reentry_with_opposite_option_confirmation`
+  - After: `failed_breakout_reentry`
+- `exhaustion_reversal_v1`
+  - Before: `stretched_move_premium_stall_with_opposite_option_confirmation`
+  - After: `stretched_move_exhaustion_stall`
+- `mean_reversion_extension_v1`
+  - Before: `range_extension_with_opposite_option_confirmation`
+  - After: `range_extension_reversion_setup`
+- `event_volatility_expansion_v1`
+  - Before: `volatility_expansion_with_directional_price_and_option_confirmation`
+  - After: `volatility_expansion_with_directional_price`
+- `late_day_momentum_v1`
+  - Before: `late_day_directional_continuation_with_option_confirmation`
+  - After: `late_day_directional_continuation`
 
-ALL CURRENT WRITERS AND READERS:
-- Raw writers:
-  - `strategies/movement/_utils.py::make_candidate`
-  - `strategies/movement/no_trade_chop.py` for safety suppression only
-- Raw readers:
-  - `core/candidate_pool_orchestrator.py`
-  - `core/candidate_pool.py`
-  - direct strategy tests
-- Downstream writers:
-  - `core/option_confirmation.py::enrich_candidate_with_option_confirmation`
-  - `core/no_trade_engine.py` influences no-trade candidates and report blockers
-- Downstream readers:
-  - `core/candidate_normalizer.py`
-  - candidate-pool report serialization and snapshot tests
-  - scoring/ranking consumers that already expect enriched values
-- Inventory/registry readers:
-  - `strategies/strategy_registry.py`
-  - `tests/test_strategy_registry_integrity.py`
-  - `tests/test_strategy_profile_fail_closed.py`
+ENTRY-TRIGGER AND INVALIDATION AUDIT:
+- Opening-range, compression, trend-pullback, VWAP reclaim, failed-breakout, exhaustion, mean-reversion, opening-drive, event-volatility, and late-day generators all dropped `option_quote_degrades` from raw `invalid_if`.
+- Raw invalidation text is now setup-owned only:
+  - `opening_range_retest_v1`: `price_returns_inside_opening_range`
+  - `compression_breakout_v1`: `price_returns_inside_compression_range`
+  - `trend_pullback_v1`: `pullback_breaks_anchor`
+  - `opening_drive_v1`: `price_reclaims_opening_drive`
+  - `vwap_reclaim_rejection_v1`: `price_crosses_back_through_vwap`
+  - `failed_breakout_trap_v1`: `price_rebreaks_failed_level`
+  - `exhaustion_reversal_v1`: `trend_continuation_reaccelerates`
+  - `mean_reversion_extension_v1`: `extension_expands_into_trend_continuation`
+  - `event_volatility_expansion_v1`: `price_mean_reverts_against_expansion`
+  - `late_day_momentum_v1`: `momentum_fades_or_price_returns_to_vwap`
 
-CONTRACT CONFLICTS FOUND:
-- Raw movement generators were previously writing `VALIDATED_CANDIDATE`.
-- Raw movement generators were previously writing non-null `option_confirmation_score`, `liquidity_score`, and `freshness_score`.
-- Standalone `OPTION_QUOTE_CONFIRMATION` previously appeared as a directional candidate producer instead of downstream evidence.
+RAW CONFLUENCE-TAG AUDIT:
+- Removed `option_confirmation` from raw tags in:
+  - `opening_drive_v1`
+  - `opening_range_retest_v1`
+  - `compression_breakout_v1`
+  - `trend_pullback_v1`
+  - `vwap_reclaim_rejection_v1`
+  - `mean_reversion_extension_v1`
+  - `event_volatility_expansion_v1`
+  - `late_day_momentum_v1`
+- Removed `opposite_option_confirmation` from raw tags in:
+  - `failed_breakout_trap_v1`
+  - `exhaustion_reversal_v1`
 
-RAW-CANDIDATE STATE DECISION:
-- Existing contract already supported `RAW_CANDIDATE`.
-- Phase 2C reuses that state rather than inventing a new candidate type.
-- Mandatory raw-boundary validation now blocks any strategy-produced candidate that claims `VALIDATED_CANDIDATE`, `RANKED_OPPORTUNITY`, Phase-2-owned score fields, or Phase-2 truth evidence keys.
+SCORE DECOMPOSITION MATRIX:
 
-DOWNSTREAM-OWNED UNSET REPRESENTATION:
-- `StrategyCandidate.option_confirmation_score: float | None`
-- `StrategyCandidate.liquidity_score: float | None`
-- `StrategyCandidate.freshness_score: float | None`
-- `None` means not evaluated yet.
-- `core/candidate_normalizer.py` now treats `None` as an unset raw value rather than forcing a float conversion.
+`opening_range_retest_v1`
+- Pre-Phase2C mixed raw score: `0.639513`
+- Post-Phase2C setup score: `0.328053`
+- Legacy weighted setup slice: `0.191513`
+- Legacy weighted downstream slice removed: `0.448000`
+- Arithmetic delta: `0.311460`
+- Exact components:
+  - `0.25 * price_structure_score = 0.082013`
+  - `0.25 * option_confirmation_score = 0.150000`
+  - `0.20 * liquidity_score = 0.172000`
+  - `0.15 * freshness_score = 0.126000`
+  - `0.15 * regime_alignment_score = 0.109500`
 
-PATTERN-SCORE HANDLING:
-- `raw_score` is now setup-owned only.
-- `make_candidate()` sets:
-  - `confluence_score = price_structure_score`
-  - `raw_score = confluence_score`
-  - `confidence_score = raw_score * (1 - trap_risk_score * 0.25)`
-- No setup formula or threshold was tuned.
-- The previous mixed raw score was removed because it embedded fake downstream confirmation/liquidity/freshness truth.
+`compression_breakout_v1`
+- Pre-Phase2C mixed raw score: `0.675169`
+- Post-Phase2C setup score: `0.470676`
+- Legacy weighted setup slice: `0.227169`
+- Legacy weighted downstream slice removed: `0.448000`
+- Arithmetic delta: `0.204493`
+- Exact components:
+  - `0.25 * price_structure_score = 0.117669`
+  - `0.25 * option_confirmation_score = 0.150000`
+  - `0.20 * liquidity_score = 0.172000`
+  - `0.15 * freshness_score = 0.126000`
+  - `0.15 * regime_alignment_score = 0.109500`
 
-OPTION-CONFIRMATION ROLE BEFORE/AFTER:
-- Before:
-  - `generate_option_pressure_candidates()` emitted a standalone `StrategyCandidate`.
-  - It appeared in default candidate-generator ordering and complete-context fingerprints.
-- After:
-  - `strategies/movement/option_pressure.py` preserves profile metadata but emits `()`.
-  - `core/candidate_pool_orchestrator.py` applies the existing downstream option-confirmation logic to directional raw candidates.
-  - `CandidateOptionConfirmation` remains the observable downstream confirmation artifact.
-  - No standalone option-confirmation candidate is counted as a directional market-thesis strategy.
+`trend_pullback_v1`
+- Pre-Phase2C mixed raw score: `0.719646`
+- Post-Phase2C setup score: `0.648584`
+- Legacy weighted setup slice: `0.271646`
+- Legacy weighted downstream slice removed: `0.448000`
+- Arithmetic delta: `0.071062`
+- Exact components:
+  - `0.25 * price_structure_score = 0.162146`
+  - `0.25 * option_confirmation_score = 0.150000`
+  - `0.20 * liquidity_score = 0.172000`
+  - `0.15 * freshness_score = 0.126000`
+  - `0.15 * regime_alignment_score = 0.109500`
 
-NO-TRADE ROLE VERIFICATION:
+EXACT ARITHMETIC RECONCILIATION:
+- Legacy mixed raw-score formula from pre-Phase2C `make_candidate()`:
+  - `0.25 * price_structure_score`
+  - `+ 0.25 * option_confirmation_score`
+  - `+ 0.20 * liquidity_score`
+  - `+ 0.15 * freshness_score`
+  - `+ 0.15 * regime_alignment_score`
+- Current raw-score formula:
+  - `raw_score = price_structure_score`
+- Proof:
+  - The setup-specific `price_structure_score` values for ORB, compression, and trend pullback remain exactly `0.328053`, `0.470676`, and `0.648584`.
+  - The prior mixed raw scores reconcile exactly to the weighted components above.
+  - The current raw score is the unchanged setup-owned calculation only; no generator threshold or setup-formula threshold changed in this corrective patch.
+
+PHASE-2 ELIGIBILITY DEFINITION:
+- `StrategyCandidate.executable_eligible` at `core/movement_contract.py:369-370` means only:
+  - candidate status is `VALIDATED_CANDIDATE` or `RANKED_OPPORTUNITY`
+  - and candidate has no hard blocker
+- This is a Phase-2/pipeline readiness signal, not order authorization.
+
+ELIGIBILITY WRITERS AND READERS:
+- Writer of raw readiness state:
+  - `strategies/movement/_utils.py::make_candidate()` writes `RAW_CANDIDATE`
+- Writer of enriched readiness state:
+  - `core/option_confirmation.py:225-266` upgrades directional candidates to `VALIDATED_CANDIDATE` or `BLOCKED_CANDIDATE` and writes real `option_confirmation_score`, `liquidity_score`, and `freshness_score`
+- Report readers:
+  - `core/candidate_pool_orchestrator.py:176-198` counts `candidate.executable_eligible` for reporting and suppression only
+  - `core/candidate_classifier.py` buckets candidates into `EXECUTABLE_CANDIDATE`, `NEAR_EXECUTABLE_CANDIDATE`, or advisory/suppressed classes without placing orders
+- Execution/tradability readers:
+  - `strategies/trade_builder.py:1357-1388` requires `execution_allowed`, `tradable`, executable entry truth, quote freshness, liquidity, and spread validation before returning `EXECUTABLE`
+  - `strategies/trade_builder.py:5489-5499` derives final `execution_allowed_final` only after nonlive executable truth and hard-blocker checks
+
+MANUAL-APPROVAL BOUNDARY PROOF:
+- `core/execution_guard.py:56-76` shows manual approval is a separate gate via `must_have_valid_approval(...)`.
+- New focused test proves a Phase-2-eligible candidate still fails with:
+  - `manual_approval_required:...`
+- Result:
+  - `candidate.executable_eligible=True` does not bypass manual approval.
+
+RISK-BOUNDARY PROOF:
+- `core/execution_guard.py:293-302` explicitly calls `risk_state.approve(trade)`.
+- New focused test injects a rejecting `risk_state` and proves the result is:
+  - `allowed=False`
+  - `reason="RiskState: risk_blocked_for_test"`
+- Result:
+  - Phase-2 eligibility does not bypass risk approval.
+
+DOWNSTREAM CONFIRMATION ARTIFACT PROOF:
+- `core/option_confirmation.py:239-265` still enriches candidates with:
+  - `option_confirmation_truth`
+  - `liquidity_truth`
+  - `freshness_truth`
+- New focused test proves enriched directional candidates retain:
+  - `option_confirmation_score=0.81475`
+  - `liquidity_score=0.86`
+  - `freshness_score=0.84`
+- Raw `rank_reason` strings no longer mention option confirmation, while downstream truth remains visible in enriched evidence and `CandidateOptionConfirmation`.
+
+EXECUTION-AUTHORITY TRACE RESULT:
+- No evidence found that `candidate.executable_eligible=True` alone authorizes an order.
+- Actual order/execution authority remains downstream:
+  - manual approval
+  - trade-builder execution truth
+  - `tradable`
+  - `execution_allowed`
+  - execution guard
+  - survival gates
+  - risk approval
+
+NO-TRADE VERIFICATION:
 - `NO_TRADE_CHOP` remains `safety_suppression`.
 - Canonical runtime identity remains `no_trade_engine_v1`.
-- No threshold or no-trade policy logic changed.
-
-MANDATORY BOUNDARY BEHAVIOR:
-- `core/movement_contract.py::phase2_boundary_violations(...)` now treats the following as raw-strategy ownership violations:
-  - non-`None` `option_confirmation_score`
-  - non-`None` `liquidity_score`
-  - non-`None` `freshness_score`
-  - `status == VALIDATED_CANDIDATE`
-  - `status == RANKED_OPPORTUNITY`
-  - Phase-2 evidence keys such as `quote_source`, `fallback_used`, `option_ltp_age_sec`, `liquidity_truth`, `freshness_truth`, `option_confirmation_truth`
-- `core/candidate_pool_orchestrator.py` now enforces that check at raw candidate intake.
-- Violations are dropped with deterministic logging:
-
-```text
-event=CANDIDATE_OWNERSHIP_BLOCKED runtime_strategy_id=bad_strategy_v1 violating_fields=freshness_score,liquidity_score,option_confirmation_score,status reason=strategy_candidate_claims_phase2_owned_truth
-```
-
-- Logging is wrapped in `try/except`, so observability cannot abort unrelated generators.
-
-SETUP FINGERPRINT BEFORE/AFTER:
-- Before Phase 2C direct-generator fingerprint:
-  - `opening_range_retest_v1 | BUY_CALL | 0.639513 | opening range breakout retest held with option-side confirmation`
-  - `compression_breakout_v1 | BUY_CALL | 0.675169 | range and ATR compression released into a confirmed option-side breakout`
-  - `trend_pullback_v1 | BUY_CALL | 0.719646 | established trend resumed after controlled pullback with option-side confirmation`
-  - `option_pressure_confirmation_v1 | BUY_CALL | 0.814750 | option pressure confirmation`
-- After Phase 2C raw-generator fingerprint:
-  - `opening_range_retest_v1 | BUY_CALL | 0.328053 | opening range breakout retest held with option-side confirmation`
-  - `compression_breakout_v1 | BUY_CALL | 0.470676 | range and ATR compression released into a confirmed option-side breakout`
-  - `trend_pullback_v1 | BUY_CALL | 0.648584 | established trend resumed after controlled pullback with option-side confirmation`
-- Preserved fields:
-  - strategy ids
-  - movement types
-  - directions
-  - thesis text
-  - entry trigger text
-  - invalidation text
-- Expected ownership correction:
-  - raw scores no longer include downstream quote-confirmation/liquidity/freshness truth
-  - standalone option-confirmation candidate is removed from the setup layer
-
-OWNERSHIP FINGERPRINT BEFORE/AFTER:
-- Before raw generation:
-  - `status=VALIDATED_CANDIDATE`
-  - `option_confirmation_score=0.814750`
-  - `liquidity_score=0.860000`
-  - `freshness_score=0.840000`
-  - `execution_eligible=true`
-- After raw generation:
-  - `status=RAW_CANDIDATE`
-  - `option_confirmation_score=None`
-  - `liquidity_score=None`
-  - `freshness_score=None`
-  - `execution_eligible=false`
-- After downstream enrichment in `build_candidate_pool_report(...)`:
-  - `opening_range_retest_v1 | VALIDATED_CANDIDATE | 0.81475 | 0.86 | 0.84 | true`
-  - `compression_breakout_v1 | VALIDATED_CANDIDATE | 0.81475 | 0.86 | 0.84 | true`
-  - `trend_pullback_v1 | VALIDATED_CANDIDATE | 0.81475 | 0.86 | 0.84 | true`
-
-CANDIDATE-COUNT CHANGES:
-- Default directional generator count changed from `11` to `10`.
-- Standalone `option_pressure_confirmation_v1` no longer appears in directional candidate fingerprints.
-- Complete enriched pool still carries directional candidates plus downstream `option_confirmations` as separate artifacts.
-- `report.metadata["raw_candidate_count_before_phase2_enrichment"]` records the directional raw count explicitly.
+- No no-trade threshold or role changes were made in this corrective patch.
 
 EXPECTED OWNERSHIP CORRECTIONS:
-- Direct movement generators now emit `RAW_CANDIDATE`.
-- Direct movement generators now leave Phase-2-owned fields unset.
-- Standalone option-pressure candidate generation disappears from the directional setup inventory.
-- Candidate-pool reports enrich directional candidates with real quote evidence through the existing downstream path.
+- Raw candidate wording changed from Phase-2-confirmed semantics to setup-thesis semantics.
+- Raw confluence tags no longer claim downstream option confirmation.
+- Downstream confirmation remains present only after enrichment.
 
 UNEXPECTED SETUP CHANGES:
-- None found.
-- The observed score changes are ownership-surface corrections, not setup-formula changes.
+- None observed.
 
-FOCUSED TESTS AND COUNTS:
-- Required focused suite:
-
+FOCUSED TEST COMMAND AND RESULT:
 ```bash
 python -m pytest -q \
+  tests/test_candidate_phase2_semantic_ownership.py \
   tests/test_candidate_phase2_ownership.py \
   tests/test_strategy_missing_evidence_observability.py \
   tests/test_strategy_missing_evidence_policy.py \
   tests/test_strategy_context_truth.py \
   tests/test_strategy_profile_fail_closed.py \
   tests/test_candidate_pool.py \
-  tests/test_candidate_pool_quality.py \
   tests/test_candidate_pool_orchestrator.py \
-  tests/test_candidate_pool_contract_snapshots.py \
   tests/test_option_confirmation.py \
-  tests/test_no_trade_engine.py \
-  tests/test_strategy_generators_lineage.py \
-  tests/test_movement_registry.py
+  tests/test_no_trade_engine.py
 ```
+- Result: `108 passed, 1 warning in 39.22s`
 
-- Result: `120 passed, 1 warning in 7.54s`
-
-- Additional ownership-related tests discovered from repo search:
-
+DISCOVERED OWNERSHIP/APPROVAL TEST COMMAND AND RESULT:
 ```bash
-python -m pytest -q \
-  tests/test_strategy_registry_integrity.py \
-  tests/test_opening_movement_strategies.py \
-  tests/test_compression_trend_movement_strategies.py \
-  tests/test_vwap_trap_movement_strategies.py \
-  tests/test_exhaustion_mean_reversion_strategies.py \
-  tests/test_event_late_day_movement_strategies.py \
-  tests/test_movement_contract.py \
-  tests/test_opportunity_scoring.py \
-  tests/test_opportunity_scoring_regime_profile_opt_in.py \
-  tests/test_execution_grade_firewall.py \
-  tests/test_hard_downgrade_engine.py \
-  tests/test_candidate_normalizer.py
+python -m pytest -q $(rg -l "execution_eligible|manual_approval|risk_approved|RAW_CANDIDATE|CandidateOptionConfirmation|option-side confirmation|confirmed option-side" tests --glob 'test*.py' | sort)
 ```
-
-- Result: `111 passed, 1 warning in 6.29s`
+- Result: `463 passed, 1 warning in 51.58s`
 
 STATIC CHECKS:
-
 ```bash
-python -m py_compile \
-  core/movement_contract.py \
-  strategies/movement/_utils.py \
-  core/candidate_pool_orchestrator.py \
-  tests/test_candidate_phase2_ownership.py
-
-ruff check \
-  core/movement_contract.py \
-  strategies/movement \
-  core/candidate_pool_orchestrator.py \
-  tests/test_candidate_phase2_ownership.py
-
+python -m py_compile strategies/movement/*.py tests/test_candidate_phase2_semantic_ownership.py
+ruff check strategies/movement tests/test_candidate_phase2_semantic_ownership.py
 git diff --check
 ```
-
-STATIC CHECK RESULT:
-All passed.
+- Result: all passed
 
 FULL-SUITE RESULT:
-- `python -m pytest -q`
-- Result: `1 failed, 5721 passed, 1 deselected, 935 warnings in 297.87s (0:04:57)`
+- `1 failed, 5726 passed, 1 deselected, 935 warnings in 310.55s (0:05:10)`
 
 FIRST FAILURE:
 - `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
-- Failure detail:
+- Failure remained on the established auth baseline:
+  - `RuntimeError:[AUTH] missing_kite_access_token`
+  - `Missing token at /Users/madhuram/tradebot-strategy-truth-foundation/.runtime/kite_access_token`
+  - `Run scripts/kite_autologin_localhost.py to refresh token.`
 
-```text
-RuntimeError:[AUTH] missing_kite_access_token
-Missing token at /Users/madhuram/tradebot-strategy-truth-foundation/.runtime/kite_access_token
-Run scripts/kite_autologin_localhost.py to refresh token.
-```
-
-- Classification: pre-existing baseline failure, identical to the previously established orchestrator credential path.
+BEHAVIOR PRESERVED:
+- Setup formulas unchanged
+- Setup thresholds unchanged
+- Strategy IDs unchanged
+- Directions unchanged
+- Raw setup scores unchanged from current Phase 2C structural ownership behavior
+- Phase 1C fail-closed profile behavior unchanged
+- Phase 2A truthful StrategyContext propagation unchanged
+- Phase 2B missing-evidence policy unchanged
+- Phase 2B blocker observability unchanged
+- No broker, network, execution, or persistent-thread activity introduced
 
 RISKS:
-- Some legacy consumers outside the focused Phase 2C surface may still implicitly assume all candidates are already enriched. The current targeted tests and normalizer fix cover the exercised paths, but the repository remains broad.
-- Raw-score comparisons across older artifacts are no longer apples-to-apples with pre-Phase-2C values because those older values embedded downstream truth.
-- If a future strategy module bypasses `make_candidate()` and writes Phase-2-owned fields directly, the orchestrator will now drop it. That is intended, but the failure will surface as a logged ownership block.
+- Raw evidence payloads still contain option-market observations such as `option_ltp`, `premium_change`, `spread_pct`, and `depth`; they are observational, not truth-claim fields, but external consumers that treat any option fields as downstream confirmation could still misread them.
+- Legacy consumers comparing current raw scores to pre-Phase2C mixed scores may misinterpret the semantic score change if they ignore the ownership decomposition above.
 
 ROLLBACK:
-- Revert only the Phase 2C ownership commit.
-- No config migration or data backfill is required.
+- Revert only the semantic-ownership corrective commit once created.
+- Do not revert Phase 2C structural ownership, Phase 2B missing-evidence safety, or Phase 2A truthful context propagation.
 
 EXPLICIT NON-CLAIMS:
-- No strategy threshold tuning.
-- No setup-definition rewrite.
-- No Phase 2A StrategyContext propagation change.
-- No Phase 2B missing-evidence policy change.
-- No new Phase-2 service, registry, queue, database, or event bus.
-- No change to no-trade policy, broker, risk, order, execution, dashboard, backtesting, or WFA behavior.
+- This patch does not add temporal completed-bar history.
+- This patch does not change setup definitions, thresholds, ranking formulas, no-trade policy, risk policy, manual-approval policy, broker behavior, or execution behavior.
+- This patch does not claim trading edge, better profitability, or higher candidate quality.
