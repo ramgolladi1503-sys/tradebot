@@ -10,6 +10,7 @@
   "strategies": [
     {
       "id": "MEAN_REVERSION_EXTENSION",
+      "runtime_strategy_id": "mean_reversion_extension_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "extension_risk_with_partial_mean_reversion_evidence",
@@ -19,6 +20,7 @@
     },
     {
       "id": "COMPRESSION_BREAKOUT",
+      "runtime_strategy_id": "compression_breakout_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "compression_breakout_candidate",
@@ -28,6 +30,7 @@
     },
     {
       "id": "TREND_PULLBACK",
+      "runtime_strategy_id": "trend_pullback_v1",
       "role": "candidate_generator",
       "status": "UNVERIFIED",
       "implementation_claim": "trend_pullback_candidate",
@@ -37,6 +40,8 @@
     },
     {
       "id": "VWAP_RECLAIM_REJECTION",
+      "aliases": ["VWAP_RECLAIM"],
+      "runtime_strategy_id": "vwap_reclaim_rejection_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "combined_vwap_reclaim_and_rejection_candidates",
@@ -46,6 +51,7 @@
     },
     {
       "id": "OPENING_DRIVE",
+      "runtime_strategy_id": "opening_drive_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "opening_drive_candidate",
@@ -55,6 +61,7 @@
     },
     {
       "id": "FAILED_BREAKOUT_TRAP",
+      "runtime_strategy_id": "failed_breakout_trap_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "failed_breakout_trap_candidate",
@@ -64,6 +71,7 @@
     },
     {
       "id": "EXHAUSTION_REVERSAL",
+      "runtime_strategy_id": "exhaustion_reversal_v1",
       "role": "candidate_generator",
       "status": "UNVERIFIED",
       "implementation_claim": "exhaustion_risk",
@@ -74,6 +82,7 @@
     {
       "id": "DIRECTIONAL_VOLATILITY_EXPANSION",
       "aliases": ["EVENT_VOLATILITY_EXPANSION"],
+      "runtime_strategy_id": "event_volatility_expansion_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "directional_volatility_expansion_candidate",
@@ -83,6 +92,7 @@
     },
     {
       "id": "LATE_DAY_MOMENTUM",
+      "runtime_strategy_id": "late_day_momentum_v1",
       "role": "candidate_generator",
       "status": "PARTIAL_DETECTOR",
       "implementation_claim": "late_day_momentum_candidate",
@@ -93,6 +103,7 @@
     {
       "id": "OPENING_RANGE_RETEST",
       "aliases": ["OPENING_RANGE_BREAKOUT"],
+      "runtime_strategy_id": "opening_range_retest_v1",
       "role": "candidate_generator",
       "status": "UNVERIFIED",
       "implementation_claim": "opening_range_retest",
@@ -103,6 +114,7 @@
     {
       "id": "OPTION_QUOTE_CONFIRMATION",
       "aliases": ["OPTION_PRESSURE"],
+      "runtime_strategy_id": "option_pressure_confirmation_v1",
       "role": "option_confirmation",
       "status": "UNVERIFIED",
       "implementation_claim": "option_quote_confirmation",
@@ -112,6 +124,7 @@
     },
     {
       "id": "NO_TRADE_CHOP",
+      "runtime_strategy_id": "no_trade_engine_v1",
       "role": "safety_suppression",
       "status": "UNVERIFIED",
       "implementation_claim": "no_trade_chop_suppression",
