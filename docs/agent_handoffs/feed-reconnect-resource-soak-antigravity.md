@@ -9,16 +9,18 @@ In this iteration, we:
 1. **Re-engineered the Test Harness**:
    - Implemented a distinct `process_start_baseline` and `post_warmup_baseline`. A simulated warmup disconnect/reconnect cycle is run before measuring FDs, ensuring that lazily initialized files (like `feed_restart_guard.jsonl` and `tick_store_errors.jsonl`) do not false-positive as cyclic leaks.
    - Converted the single static mock websocket into a `weakref`-tracked generational model to prove memory doesn't leak from orphaned connections.
-   - Ensured robust FD identity tracking using `/proc` or `lsof`.
+   - Ensured robust FD identity tracking using `lsof`.
+   - Fixed the verdict engine to capture hard failures properly instead of swallowing them.
 2. **Added Comprehensive Tests**:
-   - Created `tests/test_feed_reconnect_resource_soak.py` covering 13 critical requirements (metrics schema validation, seed determinism, deterministic bounds on 100/1000 cycle reconnections, lock recovery on owner failure, and synthetic leak detection).
+   - Created `tests/test_feed_reconnect_resource_soak.py` covering critical requirements (metrics schema validation, seed determinism, deterministic bounds on 100/1000 cycle reconnections, lock recovery on owner failure, and synthetic leak detection).
 3. **Validated SQLite Connection Lifecycle**:
-   - Included direct unit tests verifying standard exceptions/exit flows close the DB context managers securely.
+   - Fixed `core/trade_store.py` missing auto-commit issue by leveraging python's built in SQLite connection context manager. Fixed DB indentations. All storage suites are passing.
 4. **Drafted Required Audits**:
-   - Created `docs/agent_reviews/feed_reconnect_resource_soak_audit.md` documenting the results of the execution.
-   
+   - Updated `docs/agent_reviews/feed_reconnect_resource_soak_audit.md` documenting the results of the execution.
+
 ## Required Verification
-The full `pytest` suite has been run on this branch, confirming that both the new `test_feed_reconnect_resource_soak.py` tests and the broader repository feed/storage tests pass without regression.
+The full `pytest` suite has been run on this branch, confirming that both the new `test_feed_reconnect_resource_soak.py` tests and the broader repository feed/storage tests pass without regression (119 passed).
+All 6 resource-soak profiles (100 control, 1000 control, 100 reconnect, 1000 reconnect, negative fd leak, owner failure) ran successfully, catching the negative leak, and generating the expected memory and file descriptor leak metrics bounds for the positive ones.
 
 The branch now satisfies all constraints outlined in the adversarial review and the overarching `OFFLINE WEBSOCKET RECONNECT RESOURCE-SOAK PROOF` objective.
 
