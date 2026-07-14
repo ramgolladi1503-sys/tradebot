@@ -270,22 +270,16 @@ def make_candidate(
     params_hash: str | None = None,
     promotion_state: str = "ADVISORY_ONLY",
 ) -> StrategyCandidate:
-    blockers = tuple(sorted(set(side.blockers)))
-    merged_warnings = tuple(sorted(set(tuple(side.warnings) + tuple(warnings))))
+    blockers: tuple[str, ...] = ()
+    merged_warnings = tuple(sorted(set(tuple(warnings))))
     vol_score = volume_score(ctx)
     align_score = regime_alignment_score(regime, direction)
     timing_score = opening_timing_score(ctx)
     trap_risk_score = clamp_score(regime.scores.get("TRAP_RISK", 0.0))
-    confluence_score = clamp_score(
-        0.25 * price_structure_score
-        + 0.25 * side.option_confirmation_score
-        + 0.20 * side.liquidity_score
-        + 0.15 * side.freshness_score
-        + 0.15 * align_score
-    )
+    confluence_score = clamp_score(price_structure_score)
     raw_score = confluence_score
     confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))
-    status = "BLOCKED_CANDIDATE" if blockers else "VALIDATED_CANDIDATE"
+    status = "RAW_CANDIDATE"
     return StrategyCandidate(
         schema_version=1,
         strategy_id=strategy_id,
@@ -296,9 +290,9 @@ def make_candidate(
         raw_score=raw_score,
         confidence_score=confidence_score,
         price_structure_score=clamp_score(price_structure_score),
-        option_confirmation_score=side.option_confirmation_score,
-        liquidity_score=side.liquidity_score,
-        freshness_score=side.freshness_score,
+        option_confirmation_score=None,
+        liquidity_score=None,
+        freshness_score=None,
         volatility_score=vol_score,
         regime_alignment_score=align_score,
         timing_score=timing_score,

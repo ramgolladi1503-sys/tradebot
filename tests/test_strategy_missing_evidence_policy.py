@@ -129,10 +129,9 @@ def _runtime_truth_payload() -> dict:
 
 def test_complete_direct_context_fingerprint_is_unchanged():
     assert _fingerprint(_full_context()) == [
-        ("opening_range_retest_v1", 0.639513, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("option_pressure_confirmation_v1", 0.81475, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
 
 
@@ -155,8 +154,8 @@ def test_missing_required_evidence_blocks_only_affected_generators_and_pool_cont
 
     strategy_ids = [candidate.strategy_id for candidate in report.candidates]
     assert report.failed_generator_count == 0
-    assert strategy_ids == ["option_pressure_confirmation_v1"]
-    assert report.report_executable_eligible_count == 1
+    assert strategy_ids == []
+    assert report.report_executable_eligible_count == 0
 
 
 def test_missing_trend_pullback_anchor_blocks_candidate():
@@ -371,8 +370,7 @@ def test_option_pressure_candidate_blocks_when_quote_age_or_side_ltp_are_missing
         )
     )
 
-    assert len(missing_age) == 1
-    assert "STALE_OPTION_LTP" in missing_age[0].blockers
+    assert missing_age == ()
     assert "OPTION_CONFIRMATION_MISSING" in missing_ltp_assessment.ce.blockers
 
 

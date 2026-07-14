@@ -195,10 +195,10 @@ def _canonical_strength_key(candidate: StrategyCandidate) -> tuple[Any, ...]:
         _status_weight(candidate.status),
         float(candidate.confidence_score),
         float(candidate.raw_score),
-        float(candidate.option_confirmation_score),
+        _candidate_score(candidate.option_confirmation_score),
         float(candidate.price_structure_score),
-        float(candidate.liquidity_score),
-        float(candidate.freshness_score),
+        _candidate_score(candidate.liquidity_score),
+        _candidate_score(candidate.freshness_score),
         float(candidate.regime_alignment_score),
         -float(candidate.trap_risk_score),
         str(candidate.strategy_id),
@@ -213,6 +213,10 @@ def _status_weight(status: str) -> int:
         "BLOCKED_CANDIDATE": 2,
         "NO_TRADE": 1,
     }.get(str(status).upper(), 0)
+
+
+def _candidate_score(value: float | None) -> float:
+    return float(value) if value is not None else -1.0
 
 
 def _merge_candidate_evidence(canonical: StrategyCandidate, candidates: tuple[StrategyCandidate, ...]) -> StrategyCandidate:

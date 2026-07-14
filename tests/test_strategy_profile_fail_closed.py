@@ -124,10 +124,9 @@ def test_default_generators_preserve_phase1a_fingerprint():
     )
 
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.639513, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("option_pressure_confirmation_v1", 0.81475, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
 
 
@@ -153,12 +152,11 @@ def test_profile_value_drift_blocks_only_affected_generator_and_logs_warning(
     )
 
     assert report.failed_generator_count == 0
-    assert report.generator_count == 11
-    assert report.movement_candidate_count == 3
+    assert report.generator_count == 10
+    assert report.movement_candidate_count == 2
     assert _fingerprint(report) == [
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("option_pressure_confirmation_v1", 0.81475, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
     assert (
         "event=PROFILE_RESOLUTION_BLOCKED runtime_strategy_id=opening_range_retest_v1 "
@@ -188,9 +186,9 @@ def test_missing_alias_target_blocks_only_option_pressure_generator(
     assert report.failed_generator_count == 0
     assert report.movement_candidate_count == 3
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.639513, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
     assert (
         "event=PROFILE_RESOLUTION_BLOCKED runtime_strategy_id=option_pressure_confirmation_v1 "
@@ -243,10 +241,9 @@ def test_candidate_generation_does_not_call_source_parsing(monkeypatch: pytest.M
 
     assert report.failed_generator_count == 0
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.639513, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("option_pressure_confirmation_v1", 0.81475, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
 
 

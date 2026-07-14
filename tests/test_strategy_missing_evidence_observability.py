@@ -257,12 +257,10 @@ def test_missing_same_side_option_evidence_identifies_quote_fields(caplog: pytes
                 option_ltp_age_sec=None,
             ),
             _regime(),
-        )
+    )
 
     assert result == ()
-    assert _blocked_messages(caplog) == [
-        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=option_pressure_confirmation_v1 missing_fields=ce_depth,ce_premium_change,ce_spread_pct,option_ce_ltp,option_ltp_age_sec,option_pe_ltp,pe_depth,pe_premium_change,pe_spread_pct invalid_fields=- reason=missing_required_option_quote_evidence"
-    ]
+    assert _blocked_messages(caplog) == []
 
 
 @pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), -float("inf")])
@@ -333,16 +331,15 @@ def test_no_rejected_or_synthetic_candidate_is_created_for_observability(caplog:
 
 def test_complete_context_candidate_fingerprint_remains_exact():
     assert _fingerprint(_full_context()) == [
-        ("opening_range_retest_v1", 0.639513, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("compression_breakout_v1", 0.675169, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("trend_pullback_v1", 0.719646, "BUY_CALL", "VALIDATED_CANDIDATE"),
-        ("option_pressure_confirmation_v1", 0.81475, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
+        ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
 
 
 def test_raw_scores_remain_exact():
     fingerprint = _fingerprint(_full_context())
-    assert [score for _, score, _, _ in fingerprint] == [0.639513, 0.675169, 0.719646, 0.81475]
+    assert [score for _, score, _, _ in fingerprint] == [0.328053, 0.470676, 0.648584]
 
 
 def test_optional_missing_evidence_retains_phase_2b_zero_contribution_behavior():

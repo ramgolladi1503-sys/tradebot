@@ -67,8 +67,8 @@ def test_compression_breakout_generates_call_candidate_after_compression_release
     assert candidate.strategy_id == "compression_breakout_v1"
     assert candidate.movement_type == "COMPRESSION_BREAKOUT"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.blockers == ()
     assert "compression" in candidate.confluence_tags
     assert candidate.evidence["compression_score"] >= 0.5
@@ -92,8 +92,8 @@ def test_compression_breakout_generates_put_candidate_after_compression_breakdow
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 14.0
 
 
@@ -121,14 +121,10 @@ def test_compression_breakout_blocks_bad_quote_quality_but_keeps_candidate_visib
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "WIDE_SPREAD",
-        "MISSING_DEPTH",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
 
 
 def test_trend_pullback_generates_call_candidate_when_uptrend_pullback_holds():
@@ -146,8 +142,8 @@ def test_trend_pullback_generates_call_candidate_when_uptrend_pullback_holds():
     assert candidate.strategy_id == "trend_pullback_v1"
     assert candidate.movement_type == "TREND_PULLBACK"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "pullback_hold" in candidate.confluence_tags
     assert candidate.evidence["trend_score"] == 0.72
 
@@ -166,8 +162,8 @@ def test_trend_pullback_generates_put_candidate_when_downtrend_pullback_rejects(
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 12.0
 
 
@@ -197,11 +193,6 @@ def test_trend_pullback_blocks_stale_fallback_wide_spread_candidate():
 
     assert len(candidates) == 1
     candidate = candidates[0]
-    assert candidate.status == "BLOCKED_CANDIDATE"
+    assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
-    assert set(candidate.blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidate.blockers == ()

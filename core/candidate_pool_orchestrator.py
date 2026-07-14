@@ -10,6 +10,7 @@ behavior.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
@@ -21,12 +22,13 @@ from core.option_confirmation import (
     CandidateOptionConfirmation,
     OptionPressureAssessment,
     assess_option_pressure,
-    confirm_candidate_option_pressure,
+    enrich_candidate_with_option_confirmation,
 )
 
 CandidateGenerator = Callable[[StrategyContext, MovementRegimeResult], Iterable[StrategyCandidate]]
 
 REPORT_SCHEMA_VERSION = 1
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,7 +101,7 @@ def build_candidate_pool_report(
     option_assessment = option_pressure or assess_option_pressure(ctx)
     generators = tuple(candidate_generators) if candidate_generators is not None else get_default_candidate_generators()
 
-    movement_candidates: list[StrategyCandidate] = []
+    raw_movement_candidates: list[StrategyCandidate] = []
     warnings: list[str] = []
     failed_generator_count = 0
 
@@ -113,9 +115,26 @@ def build_candidate_pool_report(
             continue
         for candidate in generated:
             if isinstance(candidate, StrategyCandidate):
-                movement_candidates.append(candidate)
+                if _phase2_boundary_violations(candidate):
+                    warnings.append(f"candidate_ownership_blocked:{candidate.strategy_id}")
+                    continue
+                raw_movement_candidates.append(candidate)
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
+
+    movement_candidates: list[StrategyCandidate] = []
+    option_confirmations: list[CandidateOptionConfirmation] = []
+    for candidate in raw_movement_candidates:
+        if candidate.direction in {"BUY_CALL", "BUY_PUT"}:
+            enriched, confirmation = enrich_candidate_with_option_confirmation(
+                candidate,
+                ctx,
+                assessment=option_assessment,
+            )
+            movement_candidates.append(enriched)
+            option_confirmations.append(confirmation)
+        else:
+            movement_candidates.append(candidate)
 
     no_trade_assessment = assess_no_trade(
         ctx,
@@ -129,11 +148,7 @@ def build_candidate_pool_report(
         no_trade_candidates = _build_no_trade_candidates(ctx, regime_result, movement_candidates)
 
     candidates = tuple(movement_candidates) + tuple(no_trade_candidates)
-    option_confirmations = tuple(
-        confirm_candidate_option_pressure(candidate, ctx)
-        for candidate in movement_candidates
-        if candidate.direction in {"BUY_CALL", "BUY_PUT"}
-    )
+    option_confirmations_tuple = tuple(option_confirmations)
 
     blockers = tuple(
         sorted(
@@ -141,7 +156,7 @@ def build_candidate_pool_report(
                 tuple(option_assessment.blockers)
                 + tuple(no_trade_assessment.blockers)
                 + tuple(blocker for candidate in candidates for blocker in candidate.blockers)
-                + tuple(blocker for confirmation in option_confirmations for blocker in confirmation.blockers)
+                + tuple(blocker for confirmation in option_confirmations_tuple for blocker in confirmation.blockers)
             )
         )
     )
@@ -153,7 +168,7 @@ def build_candidate_pool_report(
                 + tuple(option_assessment.warnings)
                 + tuple(no_trade_assessment.warnings)
                 + tuple(warning for candidate in candidates for warning in candidate.warnings)
-                + tuple(warning for confirmation in option_confirmations for warning in confirmation.warnings)
+                + tuple(warning for confirmation in option_confirmations_tuple for warning in confirmation.warnings)
             )
         )
     )
@@ -171,7 +186,7 @@ def build_candidate_pool_report(
         option_pressure=option_assessment,
         no_trade_assessment=no_trade_assessment,
         candidates=candidates,
-        option_confirmations=option_confirmations,
+        option_confirmations=option_confirmations_tuple,
         blockers=blockers,
         warnings=all_warnings,
         candidate_count=len(candidates),
@@ -190,6 +205,7 @@ def build_candidate_pool_report(
             "dominant_option_direction": option_assessment.dominant_direction,
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
+            "raw_candidate_count_before_phase2_enrichment": len(raw_movement_candidates),
         },
     )
 
@@ -210,7 +226,6 @@ def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
         generate_mean_reversion_extension_candidates,
         generate_opening_drive_candidates,
         generate_opening_range_retest_candidates,
-        generate_option_pressure_candidates,
         generate_trend_pullback_candidates,
         generate_vwap_reclaim_rejection_candidates,
     )
@@ -225,7 +240,6 @@ def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
         generate_exhaustion_reversal_candidates,
         generate_mean_reversion_extension_candidates,
         generate_event_volatility_expansion_candidates,
-        generate_option_pressure_candidates,
         generate_late_day_momentum_candidates,
     )
 
@@ -242,6 +256,29 @@ def _build_no_trade_candidates(
 
 def _generator_name(generator: CandidateGenerator) -> str:
     return str(getattr(generator, "__name__", generator.__class__.__name__))
+
+
+def _phase2_boundary_violations(candidate: StrategyCandidate) -> tuple[str, ...]:
+    violations = candidate.phase2_boundary_violations(producer_stage="STRATEGY")
+    if not violations:
+        return ()
+    violating_fields = sorted(
+        {
+            violation.rsplit(":", 1)[-1]
+            for violation in violations
+            if ":" in violation
+        }
+    )
+    try:
+        logger.warning(
+            "event=CANDIDATE_OWNERSHIP_BLOCKED runtime_strategy_id=%s violating_fields=%s reason=%s",
+            candidate.strategy_id,
+            ",".join(violating_fields) or "-",
+            "strategy_candidate_claims_phase2_owned_truth",
+        )
+    except Exception:
+        pass
+    return violations
 
 
 __all__ = [

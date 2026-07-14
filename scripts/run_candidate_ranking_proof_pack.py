@@ -32,7 +32,13 @@ def _regime(payload: dict[str, Any]) -> MovementRegimeResult:
 
 
 def _candidate(payload: dict[str, Any]) -> StrategyCandidate:
-    return StrategyCandidate(**payload)
+    normalized = dict(payload)
+    if normalized.get("status") == "VALIDATED_CANDIDATE":
+        normalized["status"] = "RAW_CANDIDATE"
+    normalized["option_confirmation_score"] = None
+    normalized["liquidity_score"] = None
+    normalized["freshness_score"] = None
+    return StrategyCandidate(**normalized)
 
 
 def load_fixture(fixture_dir: Path, name: str) -> dict[str, Any]:

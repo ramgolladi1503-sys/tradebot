@@ -29,7 +29,8 @@
   ],
   "safety_flags": [
     "fallback_data",
-    "no_trade_suppression"
+    "no_trade_suppression",
+    "weak_option_confirmation"
   ],
   "metadata": {
     "orchestrator": "ranked_opportunity_pipeline_v1",

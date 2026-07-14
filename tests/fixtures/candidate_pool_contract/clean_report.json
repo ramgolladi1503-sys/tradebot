@@ -1,5 +1,6 @@
 {
   "append": false,
+  "blocked_candidate_count": 0,
   "blockers": [
     "OPTION_CONFIRMATION_MISSING"
   ],
@@ -12,7 +13,9 @@
       "movement_type": "COMPRESSION_BREAKOUT",
       "status": "VALIDATED_CANDIDATE",
       "strategy_id": "unit_buy_call",
-      "warnings": []
+      "warnings": [
+        "both_option_sides_active"
+      ]
     }
   ],
   "eligible_candidate_count_before_suppression": 1,
@@ -60,7 +63,6 @@
   "schema_version": 1,
   "symbol": "NIFTY",
   "validated_candidate_count": 1,
-  "blocked_candidate_count": 0,
   "warnings": [
     "both_option_sides_active"
   ]

@@ -34,7 +34,6 @@ EXPECTED_CANDIDATE_POOL_ORDER = (
     "generate_exhaustion_reversal_candidates",
     "generate_mean_reversion_extension_candidates",
     "generate_event_volatility_expansion_candidates",
-    "generate_option_pressure_candidates",
     "generate_late_day_momentum_candidates",
 )
 
@@ -361,8 +360,8 @@ def test_fixed_candidate_fingerprint_matches_phase0_baseline():
             "opening_range_retest_v1",
             "OPENING_RANGE_RETEST",
             "BUY_CALL",
-            "VALIDATED_CANDIDATE",
-            0.639513,
+            "RAW_CANDIDATE",
+            0.328053,
             (),
         ),
         (
@@ -370,8 +369,8 @@ def test_fixed_candidate_fingerprint_matches_phase0_baseline():
             "compression_breakout_v1",
             "COMPRESSION_BREAKOUT",
             "BUY_CALL",
-            "VALIDATED_CANDIDATE",
-            0.675169,
+            "RAW_CANDIDATE",
+            0.470676,
             (),
         ),
         (
@@ -379,17 +378,8 @@ def test_fixed_candidate_fingerprint_matches_phase0_baseline():
             "trend_pullback_v1",
             "TREND_PULLBACK",
             "BUY_CALL",
-            "VALIDATED_CANDIDATE",
-            0.719646,
-            (),
-        ),
-        (
-            "generate_option_pressure_candidates",
-            "option_pressure_confirmation_v1",
-            "OPTION_PRESSURE_CONFIRMATION",
-            "BUY_CALL",
-            "VALIDATED_CANDIDATE",
-            0.81475,
+            "RAW_CANDIDATE",
+            0.648584,
             (),
         ),
     ]

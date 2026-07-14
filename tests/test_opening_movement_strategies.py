@@ -57,8 +57,8 @@ def test_opening_drive_generates_valid_call_candidate():
     assert candidate.strategy_id == "opening_drive_v1"
     assert candidate.movement_type == "OPENING_DRIVE"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.blockers == ()
     assert "opening_drive" in candidate.confluence_tags
     assert candidate.evidence["premium_change"] == 12.0
@@ -77,8 +77,8 @@ def test_opening_drive_generates_valid_put_candidate():
     assert len(result) == 1
     candidate = result[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 14.0
 
 
@@ -99,14 +99,9 @@ def test_opening_drive_blocks_fallback_stale_wide_spread_and_missing_depth():
 
     assert len(result) == 1
     candidate = result[0]
-    assert candidate.status == "BLOCKED_CANDIDATE"
+    assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
-    assert set(candidate.blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "WIDE_SPREAD",
-        "MISSING_DEPTH",
-        "STALE_OPTION_LTP",
-    }
+    assert candidate.blockers == ()
 
 
 def test_orb_retest_generates_valid_call_candidate_near_retest_level():
@@ -127,8 +122,8 @@ def test_orb_retest_generates_valid_call_candidate_near_retest_level():
     assert candidate.strategy_id == "opening_range_retest_v1"
     assert candidate.movement_type == "OPENING_RANGE_RETEST"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "orb_retest" in candidate.confluence_tags
 
 
@@ -149,8 +144,8 @@ def test_orb_retest_generates_valid_put_candidate_near_retest_level():
     assert len(result) == 1
     candidate = result[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
 
 
 def test_orb_retest_returns_empty_when_timing_or_retest_evidence_missing():
@@ -178,12 +173,8 @@ def test_orb_retest_blocked_candidates_remain_visible_in_pool_summary():
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
-    assert summary.hard_blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
+    assert summary.hard_blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
