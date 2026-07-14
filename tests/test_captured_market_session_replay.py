@@ -26,6 +26,7 @@ CORPUS_ROOT = Path("/Users/madhuram/tradebot/runtime/upstox_candidate_replay")
 IST = ZoneInfo("Asia/Kolkata")
 EXPECTED_SESSION_START = "09:15:00"
 EXPECTED_LAST_BAR_START = "15:29:00"
+EXPECTED_SESSION_CLOSE = "15:30:00"
 EXPECTED_FULL_SESSION_BARS = 375
 KNOWN_HASHES = {
     "20260709/underlying/NSE_INDEX|Nifty 50_20260709.parquet": "89a0d9cc98ba6c6decf1d6a1f62fa8b82f80820b51205ae32f222287b7aa550d",
@@ -86,8 +87,30 @@ def _infer_symbol(df: pd.DataFrame, path: Path) -> str | None:
     return path.stem
 
 
-def _normalize_timestamps(series: pd.Series) -> tuple[pd.Series, str | None]:
-    timestamps = pd.to_datetime(series, errors="coerce")
+def _classify_numeric_timestamp_unit(series: pd.Series) -> str | None:
+    finite = series.dropna().map(float)
+    if finite.empty:
+        return None
+    abs_values = finite.map(abs)
+    minimum = float(abs_values.min())
+    maximum = float(abs_values.max())
+    unit_ranges = (
+        ("s", 1e8, 1e11),
+        ("ms", 1e11, 1e14),
+        ("us", 1e14, 1e17),
+        ("ns", 1e17, 1e20),
+    )
+    matches = [
+        unit
+        for unit, lower, upper in unit_ranges
+        if minimum >= lower and maximum < upper
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _coerce_timestamp_timezone(
+    timestamps: pd.Series,
+) -> tuple[pd.Series, str | None]:
     if timestamps.dt.tz is None:
         return timestamps.dt.tz_localize(IST), "Asia/Kolkata"
     tz = timestamps.dt.tz
@@ -96,6 +119,34 @@ def _normalize_timestamps(series: pd.Series) -> tuple[pd.Series, str | None]:
     except Exception:
         tz_name = str(tz)
     return timestamps.dt.tz_convert(IST), str(tz_name)
+
+
+def _normalize_timestamps(series: pd.Series) -> tuple[pd.Series, str | None, str, str | None]:
+    raw_non_null = series.dropna()
+    if raw_non_null.empty:
+        empty = pd.to_datetime(series, errors="coerce")
+        normalized, tz_name = _coerce_timestamp_timezone(empty)
+        return normalized, tz_name, "empty_series", None
+
+    if pd.api.types.is_datetime64_any_dtype(series):
+        timestamps = pd.to_datetime(series, errors="coerce")
+        normalized, tz_name = _coerce_timestamp_timezone(timestamps)
+        return normalized, tz_name, "datetime64_parse", "ns"
+
+    numeric = pd.to_numeric(series, errors="coerce")
+    if int(numeric.notna().sum()) == int(raw_non_null.shape[0]):
+        assumed_unit = _classify_numeric_timestamp_unit(numeric)
+        if assumed_unit is None:
+            invalid = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+            normalized, tz_name = _coerce_timestamp_timezone(invalid)
+            return normalized, tz_name, "unsupported_numeric_epoch", None
+        timestamps = pd.to_datetime(numeric, errors="coerce", unit=assumed_unit, utc=True)
+        normalized, tz_name = _coerce_timestamp_timezone(timestamps)
+        return normalized, tz_name, "numeric_epoch_parse", assumed_unit
+
+    timestamps = pd.to_datetime(series, errors="coerce")
+    normalized, tz_name = _coerce_timestamp_timezone(timestamps)
+    return normalized, tz_name, "string_parse", None
 
 
 def _timeframe_from_timestamps(timestamps: pd.Series) -> str | None:
@@ -113,6 +164,12 @@ def _timeframe_from_timestamps(timestamps: pd.Series) -> str | None:
 
 def _numeric(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
+
+
+def _session_window_bounds(session_date: str) -> tuple[datetime, datetime]:
+    session_open = datetime.fromisoformat(f"{session_date}T{EXPECTED_SESSION_START}+05:30")
+    session_close = datetime.fromisoformat(f"{session_date}T{EXPECTED_SESSION_CLOSE}+05:30")
+    return session_open, session_close
 
 
 def _inspect_market_file(path: Path) -> dict[str, Any]:
@@ -201,7 +258,12 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
             "rejection_reason": "timestamp_column_missing",
         }
 
-    timestamps, tz_name = _normalize_timestamps(df[timestamp_column])
+    raw_timestamp_series = df[timestamp_column]
+    raw_timestamp_non_null = raw_timestamp_series.dropna()
+    raw_first_timestamp_value = None if raw_timestamp_non_null.empty else raw_timestamp_non_null.iloc[0]
+    raw_last_timestamp_value = None if raw_timestamp_non_null.empty else raw_timestamp_non_null.iloc[-1]
+    raw_timestamp_type = None if raw_timestamp_non_null.empty else type(raw_first_timestamp_value).__name__
+    timestamps, tz_name, parser_used, assumed_unit = _normalize_timestamps(raw_timestamp_series)
     missing_timestamp_count = int(timestamps.isna().sum())
     valid_timestamps = timestamps.dropna()
     if valid_timestamps.empty:
@@ -222,6 +284,11 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
             "column_names": columns,
             "timestamp_column": timestamp_column,
             "timestamp_timezone": tz_name,
+            "timestamp_parser_used": parser_used,
+            "timestamp_assumed_unit": assumed_unit,
+            "raw_first_timestamp_value": None if raw_first_timestamp_value is None else str(raw_first_timestamp_value),
+            "raw_last_timestamp_value": None if raw_last_timestamp_value is None else str(raw_last_timestamp_value),
+            "raw_timestamp_type": raw_timestamp_type,
             "first_timestamp": None,
             "last_timestamp": None,
             "expected_session_start": None,
@@ -235,9 +302,12 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
             "invalid_ohlc_relationship_count": 0,
             "zero_volume_count": 0,
             "missing_volume_count": 0,
+            "timestamps_inside_regular_session_count": 0,
+            "bars_passing_ohlc_validation_count": 0,
+            "legal_completed_bar_count": 0,
             "partial_session_status": None,
             "suitability_classification": "INVALID_TIMESTAMP",
-            "rejection_reason": "timestamp_parse_failed",
+            "rejection_reason": "timestamp_parse_failed" if parser_used != "unsupported_numeric_epoch" else "unsupported_numeric_timestamp_representation",
         }
 
     duplicate_timestamp_count = int(valid_timestamps.duplicated().sum())
@@ -266,6 +336,9 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
     invalid_ohlc_relationship_count = 0
     zero_volume_count = 0
     missing_volume_count = 0
+    timestamps_inside_regular_session_count = 0
+    bars_passing_ohlc_validation_count = 0
+    legal_completed_bar_count = 0
     partial_session_status = None
     expected_session_start = None
     expected_session_end = None
@@ -303,6 +376,48 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
         if content_session_date is not None:
             expected_session_start = f"{content_session_date}T{EXPECTED_SESSION_START}+05:30"
             expected_session_end = f"{content_session_date}T{EXPECTED_LAST_BAR_START}+05:30"
+            session_open, session_close = _session_window_bounds(content_session_date)
+            timestamps_inside_regular_session_count = int(
+                ((valid_timestamps >= session_open) & (valid_timestamps < session_close)).sum()
+            )
+        valid_ohlc_mask = (
+            ~(pd.concat([o, h, low_series, c], axis=1).isna().any(axis=1))
+            & o.map(math.isfinite)
+            & h.map(math.isfinite)
+            & low_series.map(math.isfinite)
+            & c.map(math.isfinite)
+            & (h >= o)
+            & (h >= c)
+            & (h >= low_series)
+            & (low_series <= o)
+            & (low_series <= c)
+            & (low_series <= h)
+            & (o > 0)
+            & (h > 0)
+            & (low_series > 0)
+            & (c > 0)
+        )
+        bars_passing_ohlc_validation_count = int(valid_ohlc_mask.fillna(False).sum())
+        if content_session_date is not None and not (missing_ohlc_count or non_finite_ohlc_count or invalid_ohlc_relationship_count):
+            cutoff = valid_timestamps.iloc[-1] + pd.Timedelta(minutes=1)
+            candle_rows = [
+                {
+                    "ts": valid_timestamps.iloc[idx].to_pydatetime(),
+                    "open": float(o.iloc[idx]),
+                    "high": float(h.iloc[idx]),
+                    "low": float(low_series.iloc[idx]),
+                    "close": float(c.iloc[idx]),
+                    "volume": None if "volume" not in df.columns else df.iloc[idx]["volume"],
+                }
+                for idx in range(len(df))
+            ]
+            legal_completed_bar_count = build_session_bar_history_state(
+                symbol=str(symbol or path.stem),
+                bars=candle_rows,
+                cutoff_timestamp=cutoff.to_pydatetime(),
+                segment="NSE_FNO",
+                source=f"manifest:{relative_path}",
+            ).completed_bar_count
         expected_full = bool(
             content_session_date is not None
             and timeframe == "1m"
@@ -326,6 +441,12 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
         elif content_session_date is None:
             classification = "AMBIGUOUS"
             rejection_reason = "multi_date_candle_file"
+        elif legal_completed_bar_count == 0:
+            classification = "NO_LEGAL_COMPLETED_BARS"
+            rejection_reason = "no_completed_bars_within_regular_session"
+        elif timestamps_inside_regular_session_count != len(valid_timestamps):
+            classification = "UNSUPPORTED_SESSION_WINDOW"
+            rejection_reason = "timestamps_outside_regular_session"
         else:
             classification = "SUITABLE_FULL_UNDERLYING_SESSION" if expected_full else "SUITABLE_PARTIAL_UNDERLYING_SESSION"
     elif has_tick_fields:
@@ -353,6 +474,11 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
         "column_names": columns,
         "timestamp_column": timestamp_column,
         "timestamp_timezone": tz_name,
+        "timestamp_parser_used": parser_used,
+        "timestamp_assumed_unit": assumed_unit,
+        "raw_first_timestamp_value": None if raw_first_timestamp_value is None else str(raw_first_timestamp_value),
+        "raw_last_timestamp_value": None if raw_last_timestamp_value is None else str(raw_last_timestamp_value),
+        "raw_timestamp_type": raw_timestamp_type,
         "first_timestamp": None if valid_timestamps.empty else valid_timestamps.iloc[0].isoformat(),
         "last_timestamp": None if valid_timestamps.empty else valid_timestamps.iloc[-1].isoformat(),
         "expected_session_start": expected_session_start,
@@ -366,6 +492,9 @@ def _inspect_market_file(path: Path) -> dict[str, Any]:
         "invalid_ohlc_relationship_count": invalid_ohlc_relationship_count,
         "zero_volume_count": zero_volume_count,
         "missing_volume_count": missing_volume_count,
+        "timestamps_inside_regular_session_count": timestamps_inside_regular_session_count,
+        "bars_passing_ohlc_validation_count": bars_passing_ohlc_validation_count,
+        "legal_completed_bar_count": legal_completed_bar_count,
         "partial_session_status": partial_session_status,
         "suitability_classification": classification,
         "rejection_reason": rejection_reason,
@@ -379,44 +508,76 @@ def _corpus_manifest_payload() -> dict[str, Any]:
     manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
     symbols = sorted({str(row["symbol"]) for row in rows if row.get("symbol")})
     categories = sorted({str(row["instrument_category"]) for row in rows if row.get("instrument_category")})
-    content_timestamps = [
-        row["first_timestamp"]
-        for row in rows
-        if row.get("first_timestamp")
-    ] + [
-        row["last_timestamp"]
-        for row in rows
-        if row.get("last_timestamp")
-    ]
     suitable_rows = [
         row
         for row in rows
         if row["suitability_classification"] in {"SUITABLE_FULL_UNDERLYING_SESSION", "SUITABLE_PARTIAL_UNDERLYING_SESSION"}
     ]
+    tick_rows = [
+        row
+        for row in rows
+        if row["suitability_classification"] in {"OPTION_QUOTE_OR_TICK_DATA", "UNDERLYING_TICK_DATA"}
+    ]
+    artifact_rows = [row for row in rows if row["suitability_classification"] == "NON_MARKET_ARTIFACT"]
+
+    def _date_range(selected_rows: list[dict[str, Any]]) -> dict[str, str | None]:
+        timestamps = [
+            item["first_timestamp"]
+            for item in selected_rows
+            if item.get("first_timestamp")
+        ] + [
+            item["last_timestamp"]
+            for item in selected_rows
+            if item.get("last_timestamp")
+        ]
+        if not timestamps:
+            return {"earliest": None, "latest": None}
+        return {"earliest": min(timestamps), "latest": max(timestamps)}
+
     per_symbol_session_counts: dict[str, int] = defaultdict(int)
     for row in suitable_rows:
         per_symbol_session_counts[str(row["symbol"])] += 1
     counts = Counter(row["suitability_classification"] for row in rows)
+    reconciliation_total = (
+        counts["NON_MARKET_ARTIFACT"]
+        + counts["SUITABLE_FULL_UNDERLYING_SESSION"]
+        + counts["SUITABLE_PARTIAL_UNDERLYING_SESSION"]
+        + counts["NO_LEGAL_COMPLETED_BARS"]
+        + counts["UNSUPPORTED_SESSION_WINDOW"]
+        + counts["OPTION_CANDLE_DATA"]
+        + counts["OPTION_QUOTE_OR_TICK_DATA"]
+        + counts["UNDERLYING_TICK_DATA"]
+        + counts["INVALID_SCHEMA"]
+        + counts["INVALID_TIMESTAMP"]
+        + counts["INVALID_OHLC"]
+        + counts["AMBIGUOUS"]
+    )
     return {
         "rows": rows,
         "manifest_hash": manifest_hash,
         "summary": {
-            "total_discovered_files": len(rows),
+            "all_discovered_files": len(rows),
             "total_parquet_files": sum(1 for row in rows if row["file_format"] == "parquet"),
             "total_csv_files": sum(1 for row in rows if row["file_format"] == "csv"),
             "total_json_files": sum(1 for row in rows if row["file_format"] == "json"),
-            "total_suitable_full_underlying_sessions": counts["SUITABLE_FULL_UNDERLYING_SESSION"],
-            "total_suitable_partial_underlying_sessions": counts["SUITABLE_PARTIAL_UNDERLYING_SESSION"],
+            "market_data_files": len(rows) - counts["NON_MARKET_ARTIFACT"],
+            "non_market_artifacts": counts["NON_MARKET_ARTIFACT"],
+            "suitable_full_underlying_sessions": counts["SUITABLE_FULL_UNDERLYING_SESSION"],
+            "suitable_nonempty_partial_underlying_sessions": counts["SUITABLE_PARTIAL_UNDERLYING_SESSION"],
+            "zero_legal_bar_files": counts["NO_LEGAL_COMPLETED_BARS"],
+            "unsupported_session_window_files": counts["UNSUPPORTED_SESSION_WINDOW"],
             "total_option_candle_files": counts["OPTION_CANDLE_DATA"],
-            "total_tick_quote_files": counts["OPTION_QUOTE_OR_TICK_DATA"] + counts["UNDERLYING_TICK_DATA"],
-            "total_invalid_schema_files": counts["INVALID_SCHEMA"],
-            "total_invalid_timestamp_files": counts["INVALID_TIMESTAMP"],
-            "total_invalid_ohlc_files": counts["INVALID_OHLC"],
-            "total_ambiguous_files": counts["AMBIGUOUS"],
+            "tick_quote_files": counts["OPTION_QUOTE_OR_TICK_DATA"] + counts["UNDERLYING_TICK_DATA"],
+            "invalid_schema_files": counts["INVALID_SCHEMA"],
+            "invalid_timestamp_files": counts["INVALID_TIMESTAMP"],
+            "invalid_ohlc_files": counts["INVALID_OHLC"],
+            "ambiguous_files": counts["AMBIGUOUS"],
             "symbols_discovered": symbols,
             "instrument_categories_discovered": categories,
-            "earliest_content_timestamp": min(content_timestamps) if content_timestamps else None,
-            "latest_content_timestamp": max(content_timestamps) if content_timestamps else None,
+            "all_timestamp_bearing_files_date_range": _date_range([row for row in rows if row.get("first_timestamp")]),
+            "suitable_underlying_candle_date_range": _date_range(suitable_rows),
+            "tick_quote_date_range": _date_range(tick_rows),
+            "artifact_date_range": _date_range(artifact_rows),
             "distinct_session_dates": sorted({row["session_date_inferred_from_content"] for row in suitable_rows if row["session_date_inferred_from_content"]}),
             "per_symbol_session_counts": dict(sorted(per_symbol_session_counts.items())),
             "zero_volume_session_counts": sum(
@@ -424,6 +585,7 @@ def _corpus_manifest_payload() -> dict[str, Any]:
                 for row in suitable_rows
                 if int(row.get("zero_volume_count") or 0) == int(row.get("row_count") or 0)
             ),
+            "classification_reconciliation_total": reconciliation_total,
         },
     }
 
@@ -431,7 +593,7 @@ def _corpus_manifest_payload() -> dict[str, Any]:
 @lru_cache(maxsize=None)
 def _load_candle_rows(path: Path) -> tuple[dict[str, Any], ...]:
     df = pd.read_parquet(path) if path.suffix.lower() == ".parquet" else pd.read_csv(path)
-    timestamps, _tz = _normalize_timestamps(df["timestamp"])
+    timestamps, _tz, _parser_used, _assumed_unit = _normalize_timestamps(df["timestamp"])
     rows: list[dict[str, Any]] = []
     for idx in range(len(df)):
         rows.append(
@@ -509,7 +671,7 @@ def _selected_replay_corpus() -> dict[str, Any]:
     selected_rows = sorted(selected.values(), key=lambda row: row["relative_path"])
     return {
         "selection_rule": (
-            "deterministic_union_of_first_five_dates + earliest/full/latest/full + earliest partial + per-symbol earliest "
+            "deterministic_union_of_first_five_dates + earliest/full/latest/full + lexicographically_first_nonempty_partial + per-symbol earliest "
             "+ first consecutive same-symbol pair + min/max full-session range-percent diversity"
         ),
         "rows": selected_rows,
@@ -607,6 +769,8 @@ def test_manifest_classifies_options_json_artifacts_and_underlying_sessions_sepa
     }
     assert row_map["20260709/underlying/NIFTY 23900 CE 14 JUL 26.parquet"]["suitability_classification"] == "OPTION_QUOTE_OR_TICK_DATA"
     assert row_map["20240101/manifests/upstox_fetch_manifest_20240101.json"]["suitability_classification"] == "NON_MARKET_ARTIFACT"
+    assert row_map["20241101/underlying/BANKNIFTY_20241101.parquet"]["suitability_classification"] == "NO_LEGAL_COMPLETED_BARS"
+    assert row_map["20250425/underlying/NIFTY_20250425.parquet"]["suitability_classification"] == "UNSUPPORTED_SESSION_WINDOW"
 
 
 def test_selected_replay_corpus_meets_deterministic_coverage_rule() -> None:
@@ -620,6 +784,89 @@ def test_selected_replay_corpus_meets_deterministic_coverage_rule() -> None:
     assert len(symbols) >= 2
     assert any(row["suitability_classification"] == "SUITABLE_FULL_UNDERLYING_SESSION" for row in rows)
     assert any(row["suitability_classification"] == "SUITABLE_PARTIAL_UNDERLYING_SESSION" for row in rows)
+    assert "lexicographically_first_nonempty_partial" in selection["selection_rule"]
+    assert "20241212/underlying/BANKNIFTY_20241212.parquet" in {row["relative_path"] for row in rows}
+
+
+def test_numeric_timestamp_unit_classification_is_deterministic() -> None:
+    assert _classify_numeric_timestamp_unit(pd.Series([1783569405.740924, 1783569410.0])) == "s"
+    assert _classify_numeric_timestamp_unit(pd.Series([1783569405740, 1783569410000])) == "ms"
+    assert _classify_numeric_timestamp_unit(pd.Series([1783569405740924, 1783569410000000])) == "us"
+    assert _classify_numeric_timestamp_unit(pd.Series([1783569405740924000, 1783569410000000000])) == "ns"
+
+
+def test_unsupported_numeric_timestamps_are_not_guessed() -> None:
+    timestamps, tz_name, parser_used, assumed_unit = _normalize_timestamps(pd.Series([12345, 67890]))
+    assert timestamps.isna().all()
+    assert tz_name == "Asia/Kolkata"
+    assert parser_used == "unsupported_numeric_epoch"
+    assert assumed_unit is None
+
+
+def test_tick_epoch_seconds_no_longer_contaminate_candle_date_range() -> None:
+    rows = _corpus_manifest_payload()["rows"]
+    tick_row = next(row for row in rows if row["relative_path"] == "20260709/underlying/NIFTY 23900 CE 14 JUL 26.parquet")
+    summary = _corpus_manifest_payload()["summary"]
+
+    assert tick_row["timestamp_parser_used"] == "numeric_epoch_parse"
+    assert tick_row["timestamp_assumed_unit"] == "s"
+    assert tick_row["session_date_inferred_from_content"] == "2026-07-09"
+    assert summary["suitable_underlying_candle_date_range"]["earliest"] == "2024-05-30T09:15:00+05:30"
+    assert summary["suitable_underlying_candle_date_range"]["latest"] == "2026-07-10T15:29:00+05:30"
+    assert summary["tick_quote_date_range"]["earliest"].startswith("2026-07-09T09:")
+
+
+def test_zero_legal_bar_file_is_not_counted_as_suitable_partial() -> None:
+    row = next(
+        row
+        for row in _corpus_manifest_payload()["rows"]
+        if row["relative_path"] == "20241101/underlying/BANKNIFTY_20241101.parquet"
+    )
+
+    assert row["suitability_classification"] == "NO_LEGAL_COMPLETED_BARS"
+    assert row["legal_completed_bar_count"] == 0
+    assert row["timestamps_inside_regular_session_count"] == 0
+    assert row["rejection_reason"] == "no_completed_bars_within_regular_session"
+
+
+def test_nonempty_partial_session_is_causal_and_captured() -> None:
+    row = next(
+        row
+        for row in _selected_replay_corpus()["rows"]
+        if row["relative_path"] == "20241212/underlying/BANKNIFTY_20241212.parquet"
+    )
+    checkpoints = _checkpoints_for_row(row)
+    first = _build_state_from_row(row, checkpoints[1].cutoff)
+    second = _build_state_from_row(row, checkpoints[2].cutoff)
+    final_state = _build_state_from_row(row, checkpoints[-1].cutoff)
+
+    assert row["suitability_classification"] == "SUITABLE_PARTIAL_UNDERLYING_SESSION"
+    assert row["legal_completed_bar_count"] == 374
+    assert final_state.partial_session is True
+    assert 1 <= final_state.completed_bar_count < EXPECTED_FULL_SESSION_BARS
+    assert first.open_price is not None
+    assert second.previous_completed_close is not None
+    assert final_state.day_high >= first.day_high
+    assert final_state.day_low <= first.day_low
+
+
+def test_classification_counts_reconcile_exactly() -> None:
+    summary = _corpus_manifest_payload()["summary"]
+    reconciled = (
+        summary["non_market_artifacts"]
+        + summary["suitable_full_underlying_sessions"]
+        + summary["suitable_nonempty_partial_underlying_sessions"]
+        + summary["zero_legal_bar_files"]
+        + summary["unsupported_session_window_files"]
+        + summary["total_option_candle_files"]
+        + summary["tick_quote_files"]
+        + summary["invalid_schema_files"]
+        + summary["invalid_timestamp_files"]
+        + summary["invalid_ohlc_files"]
+        + summary["ambiguous_files"]
+    )
+    assert reconciled == summary["all_discovered_files"]
+    assert summary["classification_reconciliation_total"] == summary["all_discovered_files"]
 
 
 def test_incremental_and_batch_replay_match_for_selected_sessions() -> None:

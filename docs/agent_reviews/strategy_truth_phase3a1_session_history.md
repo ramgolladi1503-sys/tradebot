@@ -1,291 +1,228 @@
-# Strategy Truth Phase 3A1 Session History
+# Strategy Truth Phase 3A1 Evidence Correction
 
 ## IMPLEMENTATION DIRECTION
-RIGHT_WITH_GAPS
+RIGHT
 
 ## approved objective
-Implement the causal completed-bar history and session-state portion of Phase 3A using the complete local Upstox historical-candle corpus, without defining or populating ATR short/long, structure anchors, or range width.
+Resolve the Phase 3A1 ancestry, timestamp-classification and partial-session evidence inconsistencies without changing completed-bar semantics or strategy behavior.
 
-## what was implemented
-- Added `core/session_bar_history.py` to derive a bounded, deterministic, one-session completed-bar view from causal one-minute bars.
-- Propagated truthful session-state fields into runtime market data and `StrategyContext`:
-  - `open_price`
-  - `day_high`
-  - `day_low`
-  - `previous_completed_close`
-  - `metadata["completed_bar_history"]`
-  - `metadata["completed_bar_history_provenance"]`
-- Added focused contract tests and recursive captured-corpus replay tests.
-- Generated deterministic corpus-manifest and checkpoint artifacts:
+## what was actually implemented
+- Verified that `44e00eba482ed233082a48dd858c20e12ab3fbd3` is the direct parent of `e1da0fba4d3c7b16d33085171e3a7498735fba9c`.
+- Corrected the recursive replay-manifest helper so numeric epoch timestamps are classified deterministically as seconds, milliseconds, microseconds, or nanoseconds instead of being guessed by bare `pd.to_datetime(...)`.
+- Corrected the evidence-layer session classifications:
+  - `SUITABLE_PARTIAL_UNDERLYING_SESSION` now means a genuine non-empty captured partial session with `1 <= legal_completed_bar_count < 375`.
+  - `NO_LEGAL_COMPLETED_BARS` now covers files with valid OHLC schema but zero regular-session completed bars.
+  - `UNSUPPORTED_SESSION_WINDOW` now covers files with timestamps outside the accepted regular-session window.
+- Regenerated:
   - `docs/agent_reviews/strategy_truth_phase3a1_corpus_manifest.json`
   - `docs/agent_reviews/strategy_truth_phase3a1_checkpoints.json`
+- Replaced the selected partial replay file with the lexicographically first valid non-empty captured partial session.
 
 ## architecture assessment
-NONE. The patch adds one narrow history-building module and reuses existing market-data, truth-metadata, and `StrategyContext.metadata` paths. It does not add a new indicator framework, storage layer, event system, or replay engine.
+NECESSARY_MINIMAL. `core/session_bar_history.py` remains a narrowly scoped production module introduced by Phase 3A1. This corrective patch did not add new production architecture; it corrected evidence and classification around the existing module.
 
 ## commits
-- starting commit: `2262e3baecb05b43f6113989f9715ea3ff199433`
-- phase 0: `cf2d74bc7a2938a08bc651e25b5334481479d68c`
-- phase 1A: `9ace90c0b49d790f0e8926a75ecd9492ae6d3b26`
-- phase 1B: `2a247ec6d92f60aa101d462eb6f3013d1aec4d54`
-- phase 1C: `e74bbac98cfb3db43e15129bc78be4bb47564c45`
-- phase 2A: `db19774008db93671c8a24b93f98cb7488498ad2`
-- phase 2B: `b9142aa04cb977eea9eb9eff0eb6d6a2893c1d85`
-- phase 2B observability: `2262e3baecb05b43f6113989f9715ea3ff199433`
+- Phase 2C semantic base: `44e00eba482ed233082a48dd858c20e12ab3fbd3`
+- Phase 3A1 original commit: `e1da0fba4d3c7b16d33085171e3a7498735fba9c`
+- Actual Phase 3A1 starting commit: `44e00eba482ed233082a48dd858c20e12ab3fbd3`
+
+## ancestry result
+- `git show -s --format='commit=%H%nparents=%P%nsubject=%s' e1da0fba4d3c7b16d33085171e3a7498735fba9c`
+  - commit: `e1da0fba4d3c7b16d33085171e3a7498735fba9c`
+  - parent: `44e00eba482ed233082a48dd858c20e12ab3fbd3`
+  - subject: `strategy: add causal session bar history`
+- `git merge-base --is-ancestor 44e00eba482ed233082a48dd858c20e12ab3fbd3 e1da0fba4d3c7b16d33085171e3a7498735fba9c`
+  - exit status: `0`
+- `git rev-list --ancestry-path 44e00eba482ed233082a48dd858c20e12ab3fbd3..e1da0fba4d3c7b16d33085171e3a7498735fba9c --oneline`
+  - `e1da0fba strategy: add causal session bar history`
 
 ## files changed
-- `core/session_bar_history.py`
-- `core/movement_contract.py`
-- `core/runtime_snapshot_producer.py`
-- `core/market_data.py`
-- `core/orchestrator.py`
-- `tests/test_completed_bar_history_contract.py`
 - `tests/test_captured_market_session_replay.py`
 - `docs/agent_reviews/strategy_truth_phase3a1_corpus_manifest.json`
 - `docs/agent_reviews/strategy_truth_phase3a1_checkpoints.json`
 - `docs/agent_reviews/strategy_truth_phase3a1_session_history.md`
 
-## corpus root
-`/Users/madhuram/tradebot/runtime/upstox_candidate_replay`
+## 1970 timestamp source
+The old manifest contained `129` rows with parsed timestamps in `1970-01-01`. Every one of those rows came from tick-or-quote parquet files under `20260709/underlying/` with numeric `ts` values such as:
 
-## captured-data inventory
-- Total discovered files: `1811`
-- Parquet files: `1150`
-- JSON files: `661`
-- CSV files: `0`
-- Instrument categories: `artifact`, `option`, `underlying`
+- raw value: `1783569405.740924`
+- raw type: `float64`
+- timestamp column: `ts`
+- old parser path: bare `pd.to_datetime(series, errors="coerce")`
+- old assumed unit: effectively nanoseconds by pandas inference
+- old parsed timestamp: `1970-01-01T00:00:01.783569405+05:30`
 
-## classification counts
-- `SUITABLE_FULL_UNDERLYING_SESSION`: `998`
-- `SUITABLE_PARTIAL_UNDERLYING_SESSION`: `23`
-- `OPTION_CANDLE_DATA`: `0`
-- `OPTION_QUOTE_OR_TICK_DATA` and `UNDERLYING_TICK_DATA` together: `129`
-- `INVALID_SCHEMA`: `0`
-- `INVALID_TIMESTAMP`: `0`
-- `INVALID_OHLC`: `0`
-- `AMBIGUOUS`: `0`
+Affected old classifications:
+- `OPTION_QUOTE_OR_TICK_DATA`: `126`
+- `UNDERLYING_TICK_DATA`: `3`
 
-## symbols and session counts
-- `BANKNIFTY`: `495`
-- `NIFTY`: `516`
-- `NSE_INDEX|Nifty 50`: `5`
-- `NSE_INDEX|Nifty Bank`: `5`
+No `SUITABLE_FULL_UNDERLYING_SESSION` or `SUITABLE_PARTIAL_UNDERLYING_SESSION` row carried a 1970 timestamp.
 
-## date range
-- Earliest content timestamp: `1970-01-01T00:00:01.783569405+05:30`
-- Latest content timestamp: `2026-07-10T15:29:00+05:30`
-- Distinct session dates span `2024-05-30` through `2026-07-10`
+## 1970 timestamp classification
+Exact cause: `TICK_OR_QUOTE_TIMESTAMP_UNIT_MISMATCH`
 
-## full-session and partial-session counts
-- Full underlying sessions: `998`
-- Partial underlying sessions: `23`
-- Zero-volume session count: `1021`
+After correction:
+- parser used: `numeric_epoch_parse`
+- assumed unit: `s`
+- example corrected session date: `2026-07-09`
+- the `1970` date no longer appears in suitable-candle summaries or tick/quote content dates
 
-## invalid or ambiguous count
-`0`
+## date ranges
+- Suitable underlying candle sessions:
+  - earliest: `2024-05-30T09:15:00+05:30`
+  - latest: `2026-07-10T15:29:00+05:30`
+- Tick/quote market data:
+  - earliest: `2026-07-09T09:26:45.740700006+05:30`
+  - latest: `2026-07-09T15:39:01.652374029+05:30`
+- Non-market artifacts:
+  - earliest: `None`
+  - latest: `None`
+  - reason: no timestamp-bearing artifact files were present in the JSON artifact set
+- All parsed timestamp-bearing files:
+  - earliest: `2024-05-30T09:15:00+05:30`
+  - latest: `2026-07-10T15:29:00+05:30`
 
-## captured-data hashes
-- Manifest hash: `4ce551f1be6447b5062849e6d8de9fe33d9f4d1320fef295d251b521535b654c`
-- Per-session final hashes are recorded in `docs/agent_reviews/strategy_truth_phase3a1_checkpoints.json`
+The primary Phase 3A1 date range is the suitable-underlying-candle range above.
 
-## selected replay corpus
-- `20240530/underlying/NIFTY_20240530.parquet`
-- `20240531/underlying/NIFTY_20240531.parquet`
-- `20240603/underlying/NIFTY_20240603.parquet`
-- `20240604/underlying/NIFTY_20240604.parquet`
-- `20240605/underlying/NIFTY_20240605.parquet`
-- `20240701/underlying/BANKNIFTY_20240701.parquet`
-- `20240702/underlying/BANKNIFTY_20240702.parquet`
-- `20240830/underlying/NIFTY_20240830.parquet`
+## zero-bar partial investigation
+Investigated file:
 - `20241101/underlying/BANKNIFTY_20241101.parquet`
-- `20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet`
-- `20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet`
-- `20260707/underlying/NSE_INDEX|Nifty 50_20260707.parquet`
-- `20260707/underlying/NSE_INDEX|Nifty Bank_20260707.parquet`
-- `20260710/underlying/NSE_INDEX|Nifty Bank_20260710.parquet`
 
-## selection rule
-`deterministic_union_of_first_five_dates + earliest/full/latest/full + earliest partial + per-symbol earliest + first consecutive same-symbol pair + min/max full-session range-percent diversity`
+Observed facts:
+- row count: `60`
+- raw first timestamp: `2024-11-01 18:00:00`
+- raw last timestamp: `2024-11-01 18:59:00`
+- raw timestamp type: `Timestamp`
+- timezone: `Asia/Kolkata`
+- path date: `2024-11-01`
+- content date: `2024-11-01`
+- expected regular session window: `2024-11-01T09:15:00+05:30` through `2024-11-01T15:29:00+05:30`
+- timestamps inside accepted session window: `0`
+- bars passing OHLC validation: `60`
+- legal completed bars at final cutoff: `0`
+- zero-bar reason: all rows are after-hours bars outside the accepted regular session window
 
-## completed-bar contract
-- Input bars are restricted to the current symbol and current session only.
-- Only bars with `bar_end_timestamp <= cutoff_timestamp` are emitted as completed bars.
-- Completed bars must be one-minute, ordered, duplicate-free, finite, positive, and internally consistent (`high >= open/low/close`, `low <= open/high/close`).
-- Bars from earlier or later sessions are ignored rather than merged.
-- A deterministic `history_hash` is computed from the normalized completed-bar payload.
-- The output is bounded by `session_history_bound(segment="NSE_FNO", timeframe="1m") == 375`.
+Cause classification:
+- `OUTSIDE_REGULAR_SESSION`
 
-## session-state contract
-- `open_price`: first completed session open when available.
-- `day_high`: maximum completed-bar high through cutoff.
-- `day_low`: minimum completed-bar low through cutoff.
-- `previous_completed_close`: close of the penultimate completed bar, or `None` if fewer than two completed bars exist.
-- `completed_bar_history`: immutable metadata view of normalized completed bars.
-- `completed_bar_history_provenance`: source component, timeframe, completeness, session date, latest completed timestamp, count, and deterministic hash.
+Final manifest classification:
+- `NO_LEGAL_COMPLETED_BARS`
+- rejection reason: `no_completed_bars_within_regular_session`
 
-## source matrix
-| Field | Source component | Source data | Scope/timeframe | Runtime exposure | Status |
-| --- | --- | --- | --- | --- | --- |
-| `open_price` | `core.session_bar_history.build_session_bar_history_state` | completed one-minute session bars | `session_completed_bar` / `1m` | market data row + `strategy_context_truth` | TRUTHFUL |
-| `day_high` | `core.session_bar_history.build_session_bar_history_state` | completed one-minute session bars | `session_completed_bar` / `1m` | market data row + `strategy_context_truth` | TRUTHFUL |
-| `day_low` | `core.session_bar_history.build_session_bar_history_state` | completed one-minute session bars | `session_completed_bar` / `1m` | market data row + `strategy_context_truth` | TRUTHFUL |
-| `previous_completed_close` | `core.session_bar_history.build_session_bar_history_state` | completed one-minute session bars | `session_completed_bar` / `1m` | market data row + `StrategyContext.previous_completed_close` + metadata | TRUTHFUL |
-| `completed_bar_history` | `core.session_bar_history.build_session_bar_history_state` | normalized completed one-minute bars | `session_completed_bar` / `1m` | `StrategyContext.metadata` | TRUTHFUL |
-| `atr_short` | not defined in Phase 3A1 | none | none | remains missing | UNDEFINED_BY_SCOPE |
-| `atr_long` | not defined in Phase 3A1 | none | none | remains missing | UNDEFINED_BY_SCOPE |
-| `nearest_support` | not defined in Phase 3A1 | none | none | remains missing | UNDEFINED_BY_SCOPE |
-| `nearest_resistance` | not defined in Phase 3A1 | none | none | remains missing | UNDEFINED_BY_SCOPE |
-| `range_width_pct` | not defined in Phase 3A1 | none | none | remains missing | UNDEFINED_BY_SCOPE |
+## non-empty partial session
+Deterministic selected captured partial session:
+- `20241212/underlying/BANKNIFTY_20241212.parquet`
 
-## verified defects
-- Phase 2A truthful runtime propagation still lacked a causal completed-bar history contract.
-- `open_price`, `day_high`, `day_low`, and `previous_completed_close` were not being derived from a deterministic completed-bar session view.
-- Runtime truth metadata lacked a bounded metadata view of completed bar history.
+Selection rule:
+- `lexicographically_first_nonempty_partial` within the overall deterministic replay-corpus rule
 
-## false audit leads
-- The recursive captured corpus does not contain option candle sessions for this phase. `total_option_candle_files` is `0`.
-- Many files that look option-like by path or symbol are actually quote or tick files, not candle files. They were classified as tick/quote data rather than forced into the candle replay set.
+Observed facts:
+- single symbol: `BANKNIFTY`
+- single session date: `2024-12-12`
+- row count: `374`
+- timeframe: `1m`
+- duplicate timestamps: `0`
+- invalid OHLC rows: `0`
+- timestamps inside accepted session window: `374`
+- legal completed bars at final cutoff: `374`
+- final state: `partial_session=True`
 
-## open/day high/day low/previous close results
-- `open_price`: now comes from the first completed bar of the active session only.
-- `day_high`: now comes from the maximum completed-bar high through cutoff only.
-- `day_low`: now comes from the minimum completed-bar low through cutoff only.
-- `previous_completed_close`: now comes from the penultimate completed bar only, never the active incomplete bar or a future bar.
+## non-empty partial causal proof
+For `20241212/underlying/BANKNIFTY_20241212.parquet`:
+- `after_first_completed_bar` -> `open_price` is available
+- `after_second_completed_bar` -> `previous_completed_close` is available
+- `final_completed_bar` -> `completed_bar_count=374`
+- `day_high` and `day_low` progress causally across checkpoints
+- incremental replay equals batch replay at each deterministic checkpoint
+- future mutation does not alter earlier checkpoint hashes or session-state fields
+- no full-session completeness claim is made
 
-## ATR, structure-anchor, and range-width status
-- No `atr_short` contract was defined.
-- No `atr_long` contract was defined.
-- No support or resistance anchor contract was defined.
-- No `range_width_pct` contract was defined.
-- Tests explicitly assert those fields remain `None` after context construction.
+## classification counts before and after
+Before correction:
+- suitable full underlying sessions: `998`
+- suitable partial underlying sessions: `23`
+- tick/quote files: `129`
+- invalid timestamp files: `0`
+- invalid OHLC files: `0`
+- ambiguous files: `0`
 
-## volume status
-- Completed-bar history preserves volume only when it is truthful and positive.
-- Zero or non-truthful volume is emitted as `None` in completed-bar history instead of being represented as valid session-volume evidence.
+After correction:
+- all discovered files: `1811`
+- market-data files: `1150`
+- non-market artifacts: `661`
+- suitable full underlying sessions: `998`
+- suitable non-empty partial underlying sessions: `10`
+- zero-legal-bar files: `2`
+- unsupported-session-window files: `11`
+- option candle files: `0`
+- tick/quote files: `129`
+- invalid schema files: `0`
+- invalid timestamp files: `0`
+- invalid OHLC files: `0`
+- ambiguous files: `0`
 
-## causality proof
-- Contract tests prove the current incomplete bar is excluded from completed history.
-- Replay tests build state from prefixes only and compare incremental replay against batch replay at the same cutoff.
-- Context tests prove no AST source parsing is invoked during runtime context construction.
+## classification reconciliation
+`661 + 998 + 10 + 2 + 11 + 0 + 129 + 0 + 0 + 0 + 0 = 1811`
 
-## future-mutation proof
-- `test_future_mutation_and_truncation_do_not_change_earlier_state` verifies appending later bars does not change the earlier checkpoint state or hash.
+This exactly matches `all_discovered_files=1811`.
 
-## truncation-equivalence proof
-- The same test verifies truncating the feed after a checkpoint yields the same earlier state as the full file observed at that checkpoint.
+## known source hash result
+Rechecked and confirmed:
+- `NSE_INDEX|Nifty 50_20260709.parquet`
+  - expected: `89a0d9cc98ba6c6decf1d6a1f62fa8b82f80820b51205ae32f222287b7aa550d`
+  - actual: `89a0d9cc98ba6c6decf1d6a1f62fa8b82f80820b51205ae32f222287b7aa550d`
+- `NSE_INDEX|Nifty Bank_20260709.parquet`
+  - expected: `8dfdc7b8a2c06ce46379d8f7f1cb59d10cd075bd34ceff0643c2b053ccdeb718`
+  - actual: `8dfdc7b8a2c06ce46379d8f7f1cb59d10cd075bd34ceff0643c2b053ccdeb718`
 
-## incremental-versus-batch proof
-- `test_incremental_and_batch_replay_match_for_selected_sessions` verifies checkpoint-by-checkpoint equality between:
-  - incremental prefix replay
-  - single batch replay constrained to the same cutoff
+## manifest and checkpoint hashes
+- Manifest hash before correction: `4ce551f1be6447b5062849e6d8de9fe33d9f4d1320fef295d251b521535b654c`
+- Manifest hash after correction: `3aea80971eda706cd9a6fd0e02c85167bee789797459bcdf2de52fddebd863ea`
+- Manifest artifact file hash before correction: `8038d7ce83932914daf5a3e485001362df431845e824648b2e85b857285ea408`
+- Manifest artifact file hash after correction: `fab40da5af394fc10872057b40bae718b360f367404e19eacfbd445d584f191c`
+- Checkpoint artifact file hash before correction: `6622f4ee8ce8fc1e827ad5a8f3e8264ed7b554f259516a96883592c5c8b2a526`
+- Checkpoint artifact file hash after correction: `f86abd9dfb95e35f0d70f9ee9737155c9827063d28c72b6aca42206c74283081`
 
-## session-reset proof
-- `test_session_reset_requires_new_session_history`
-- `test_consecutive_session_reset_and_cross_symbol_isolation`
+## completed-bar contract result
+Preserved. No production session-history semantics were changed. The corrective patch only changed manifest classification and evidence selection.
 
-These prove a new session starts a new history and prior-session bars do not bleed into the next session state.
+## session-state result
+Preserved. `open_price`, `day_high`, `day_low`, `previous_completed_close`, and completed-bar-history metadata still come from the same Phase 3A1 completed-bar path.
 
-## cross-symbol isolation proof
-- `test_consecutive_session_reset_and_cross_symbol_isolation` verifies symbol histories are isolated and do not contaminate each other.
+## causality regression result
+None found.
 
-## partial-session handling
-- Partial sessions are allowed and explicitly marked `partial_session=True`.
-- The selected corpus intentionally includes one partial session: `20241101/underlying/BANKNIFTY_20241101.parquet`.
-- Its final checkpoint contains zero completed bars and deterministic empty-history hash `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`.
+## incremental-versus-batch result
+Preserved across the corrected selected replay corpus, including the newly selected non-empty partial session.
 
-## checkpoint results
-- The checkpoint artifact records deterministic cutoffs and state snapshots for every selected session.
-- Full sessions end at `375` completed bars.
-- The selected partial session ends at `0` completed bars and remains explicitly partial.
-
-## per-session final hashes
-- `20240530/underlying/NIFTY_20240530.parquet` -> `aa0af5ae016a83c190ce1d4b47cd918372f27fccecedc9b2e1d8e249bc45ff80`
-- `20240531/underlying/NIFTY_20240531.parquet` -> `b91083febeed96e6c3a6bcc39365b2aa42c4e77fcff7f48eaacdbda9167267f2`
-- `20240603/underlying/NIFTY_20240603.parquet` -> `9f59bb49c5e6b40b4f4fde37928720d5e6e25711ee6d7fd21fb16a65ae38e06f`
-- `20240604/underlying/NIFTY_20240604.parquet` -> `627c104d6cdc0c7fe552525f8ce8a2ef725b4ffa0b1e20a47587a6ea8297a1e5`
-- `20240605/underlying/NIFTY_20240605.parquet` -> `a853c62aa98799c30a8a0384fc1ecc32ea08187b67ac0655ae276e582ecca4d4`
-- `20240701/underlying/BANKNIFTY_20240701.parquet` -> `7ef3a9bb5fc58a01ae5f54ba845131ee9975f7c4e29fd38f45caafb8506254bb`
-- `20240702/underlying/BANKNIFTY_20240702.parquet` -> `f4303946aef90a59e063504c5c0d7c2bb749c7763a11f33f8d100ec829b74627`
-- `20240830/underlying/NIFTY_20240830.parquet` -> `1468c437fd4ed67c2fd6a10c7b3c29c9d859e5911920a9a27aaed786fa7ccd95`
-- `20241101/underlying/BANKNIFTY_20241101.parquet` -> `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`
-- `20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet` -> `0d9f9918d0fa90465fcbe872f4edb4f45161299ece14ca4c55cdccc197a18471`
-- `20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet` -> `2574424e31f41eaf241368191bec9a0e66b3e6a50f51d17e90823698096b56b9`
-- `20260707/underlying/NSE_INDEX|Nifty 50_20260707.parquet` -> `d057133a92da4ca04beed70b30f65b5d91eb85c7ec3ea7c7f6c5390f45815e7d`
-- `20260707/underlying/NSE_INDEX|Nifty Bank_20260707.parquet` -> `dfb7c495c8d057f7d92270d66986dc6fae336f26d22bb33a985939518e1958dd`
-- `20260710/underlying/NSE_INDEX|Nifty Bank_20260710.parquet` -> `693d4a224a84c875901ac3d283b2de4051bb1e253cc4f9719741c6404419e86a`
-
-## context before/after
-- Before:
-  - no bounded completed-bar session-history contract
-  - no deterministic history hash
-  - no truthful `previous_completed_close`
-  - no completed-bar history metadata view
-- After:
-  - completed-bar history is causal, bounded, deterministic, and session-scoped
-  - `open_price`, `day_high`, `day_low`, and `previous_completed_close` come from completed bars only
-  - runtime truth metadata exposes history and provenance
-  - undefined Phase 3A1 fields remain missing
+## lint baseline comparison
+- The corrective Python changes are limited to `tests/test_captured_market_session_replay.py`.
+- `ruff check tests/test_captured_market_session_replay.py` passes.
+- No new lint violation was introduced on corrective task-owned changed lines.
+- Repository-wide legacy lint debt outside this file remains out of scope and unchanged.
 
 ## focused tests and results
-- `python -m pytest -q tests/test_completed_bar_history_contract.py`
-  - `6 passed, 1 warning in 1.63s`
 - `python -m pytest -q tests/test_captured_market_session_replay.py`
-  - `7 passed, 1 warning in 252.53s`
+  - `13 passed, 1 warning in 168.14s`
 - Required focused command:
   - `python -m pytest -q tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py tests/test_strategy_context_truth.py tests/test_candidate_phase2_semantic_ownership.py tests/test_candidate_phase2_ownership.py tests/test_strategy_missing_evidence_observability.py tests/test_strategy_missing_evidence_policy.py tests/test_strategy_profile_fail_closed.py tests/test_candidate_pool.py tests/test_candidate_pool_orchestrator.py`
-  - `101 passed, 1 warning in 226.51s`
-- Additional discovered tests:
-  - `python -m pytest -q tests/test_edge_99_replay_clock_no_future_leak.py tests/test_market_data_candles.py tests/test_market_data_orb_candle.py tests/test_market_data_warm_seed.py tests/test_market_data_minutes_since_open.py tests/test_session_calendar.py tests/test_replay_context_runtime_field_mapping.py`
-  - `46 passed, 1 warning in 8.74s`
-- Re-run after lint cleanup:
-  - `python -m pytest -q tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py`
-  - `13 passed, 1 warning in 201.02s`
-
-## static checks
-- `python -m py_compile core/session_bar_history.py core/movement_contract.py core/runtime_snapshot_producer.py core/market_data.py core/orchestrator.py tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py`
-  - passed
-- `ruff check tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py`
-  - passed after test-name cleanup
-- `ruff check core/session_bar_history.py core/movement_contract.py core/runtime_snapshot_producer.py core/market_data.py core/orchestrator.py tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py`
-  - fails on a pre-existing repository lint backlog in `core/orchestrator.py` and unrelated legacy issues such as top-of-file import order and duplicate helper redefinitions; this Phase 3A1 patch did not attempt a repository-wide lint remediation
-- `git diff --check`
-  - passed
+  - `107 passed, 1 warning in 186.59s (0:03:06)`
 
 ## full-suite result
-`python -m pytest -q` -> `1 failed, 5739 passed, 1 deselected, 935 warnings in 602.31s (0:10:02)`
+`python -m pytest -q` -> `1 failed, 5745 passed, 1 deselected, 935 warnings in 534.83s (0:08:54)`
 
 ## first failure
-`tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
+- `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
+- `RuntimeError:[AUTH] missing_kite_access_token`
 
-Observed failure text:
-
-```text
-RuntimeError:[AUTH] missing_kite_access_token
-Missing token at /Users/madhuram/tradebot-strategy-truth-foundation/.runtime/kite_access_token
-Run scripts/kite_autologin_localhost.py to refresh token.
-```
-
-This matches the established pre-existing orchestrator credential baseline and is outside Phase 3A1 scope.
-
-## risks
-- The captured corpus proves the completed-bar/session-state contract, not temporal strategy conformance.
-- The Phase 3A1 patch intentionally leaves ATR short/long, support/resistance anchors, and range width undefined.
-- The recursive corpus contains tick/quote files and artifacts beyond the selected replay set; those were inventoried but not promoted into a candle-history contract.
-
-## rollback
-- Revert commit `strategy: add causal session bar history`.
-- Remove the new `core/session_bar_history.py` module.
-- Remove session-state propagation from `core/market_data.py`, `core/orchestrator.py`, and `core/runtime_snapshot_producer.py`.
-- Remove the two Phase 3A1 test files and generated evidence artifacts.
+The rerun remained identical to the established pre-existing auth failure.
 
 ## explicit non-claims
 - No ATR short/long contract was defined.
 - No support/resistance contract was defined.
 - No range-width contract was defined.
-- No movement strategy was repaired.
-- No temporal pattern conformance was proved.
-- No predictive edge was proved.
-- No profitability was measured.
-- No option replay was performed.
-- No backtesting or WFA was performed.
-- No live readiness was proved.
+- No movement strategy was changed.
+- No temporal strategy conformance was implemented.
+- No profitability or predictive edge was claimed.
+- No option replay, backtesting, or WFA was performed.
+- No live-readiness claim was added.
