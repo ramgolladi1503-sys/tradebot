@@ -124,8 +124,8 @@ def assess_option_pressure(ctx: StrategyContext) -> OptionPressureAssessment:
         quote_source=ctx.quote_source,
     )
 
-    pe_weakness = 1.0 if (pe.premium_change is None or pe.premium_change <= 0) else clamp_score(1.0 - pe.premium_score)
-    ce_weakness = 1.0 if (ce.premium_change is None or ce.premium_change <= 0) else clamp_score(1.0 - ce.premium_score)
+    pe_weakness = 0.0 if pe.premium_change is None else (1.0 if pe.premium_change <= 0 else clamp_score(1.0 - pe.premium_score))
+    ce_weakness = 0.0 if ce.premium_change is None else (1.0 if ce.premium_change <= 0 else clamp_score(1.0 - ce.premium_score))
     bullish_score = clamp_score(0.75 * ce.pressure_score + 0.25 * pe_weakness)
     bearish_score = clamp_score(0.75 * pe.pressure_score + 0.25 * ce_weakness)
     delta = abs(bullish_score - bearish_score)

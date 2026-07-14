@@ -67,6 +67,7 @@ def generate_mean_reversion_extension_candidates(
     candidates: list[StrategyCandidate] = []
     if (
         distance > 0
+        and _range_boundary_level(ctx, "BUY_PUT") is not None
         and _trend_continuation_score(ctx, regime, "BUY_CALL")
         <= max_trend_continuation_score
     ):
@@ -83,6 +84,7 @@ def generate_mean_reversion_extension_candidates(
         )
     if (
         distance < 0
+        and _range_boundary_level(ctx, "BUY_CALL") is not None
         and _trend_continuation_score(ctx, regime, "BUY_PUT")
         <= max_trend_continuation_score
     ):
@@ -165,18 +167,26 @@ def _range_boundary_score(ctx: StrategyContext, direction: str) -> float:
     if spot is None:
         return 0.0
     if direction == "BUY_PUT":
-        boundary = safe_float(ctx.nearest_resistance) or safe_float(ctx.day_high)
+        boundary = _range_boundary_level(ctx, direction)
         if boundary is None or boundary <= 0 or spot > boundary:
             return 0.0
         distance = abs(boundary - spot) / abs(boundary)
         return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))
     if direction == "BUY_CALL":
-        boundary = safe_float(ctx.nearest_support) or safe_float(ctx.day_low)
+        boundary = _range_boundary_level(ctx, direction)
         if boundary is None or boundary <= 0 or spot < boundary:
             return 0.0
         distance = abs(spot - boundary) / abs(boundary)
         return clamp_score(1.0 - ratio_score(distance, start=0.0, full=0.004))
     return 0.0
+
+
+def _range_boundary_level(ctx: StrategyContext, direction: str) -> float | None:
+    if direction == "BUY_PUT":
+        return safe_float(ctx.nearest_resistance) or safe_float(ctx.day_high)
+    if direction == "BUY_CALL":
+        return safe_float(ctx.nearest_support) or safe_float(ctx.day_low)
+    return None
 
 
 def _trend_continuation_score(

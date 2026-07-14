@@ -18,6 +18,7 @@ from core.strategy_parameter_profiles import (
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
+    missing_evidence_warning,
     ratio_score,
     safe_float,
     side_evidence,
@@ -121,6 +122,7 @@ def _build_candidate(
         "spread_pct": side.spread_pct,
         "depth": side.depth,
     }
+    warnings = missing_evidence_warning(STRATEGY_ID, "vwap_slope") if safe_float(ctx.vwap_slope) is None else ()
     return make_candidate(
         ctx=ctx,
         regime=regime,
@@ -133,7 +135,7 @@ def _build_candidate(
         invalid_if="price_crosses_back_through_vwap_or_option_quote_degrades",
         rank_reason="confirmed VWAP reclaim/rejection with option-side confirmation and non-chop regime",
         evidence=evidence,
-        warnings=(),
+        warnings=warnings,
         confluence_tags=("vwap", "reclaim_rejection", "option_confirmation"),
         strategy_version="v1",
         params_used=params,
@@ -177,7 +179,7 @@ def _has_downside_vwap_confirmation(ctx: StrategyContext) -> bool:
 def _vwap_slope_alignment_score(ctx: StrategyContext, direction: str) -> float:
     slope = safe_float(ctx.vwap_slope)
     if slope is None:
-        return 0.5
+        return 0.0
     if direction == "BUY_CALL" and slope >= 0:
         return clamp_score(0.5 + ratio_score(abs(slope), start=0.0, full=0.08) * 0.5)
     if direction == "BUY_PUT" and slope <= 0:

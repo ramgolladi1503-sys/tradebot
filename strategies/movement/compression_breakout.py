@@ -171,20 +171,16 @@ def _compression_evidence_score(
 ) -> float:
     max_range_width_pct = float(params["MAX_RANGE_WIDTH_PCT"])
     max_atr_ratio = float(params["MAX_ATR_RATIO"])
-    parts: list[float] = []
     range_width = safe_float(ctx.range_width_pct)
-    if range_width is not None:
-        parts.append(
-            clamp_score((max_range_width_pct - range_width) / max_range_width_pct)
-        )
     atr_ratio = _atr_ratio(ctx)
-    if atr_ratio is not None:
-        parts.append(clamp_score((max_atr_ratio - atr_ratio) / max_atr_ratio))
+    if range_width is None or atr_ratio is None:
+        return 0.0
+    parts: list[float] = []
+    parts.append(clamp_score((max_range_width_pct - range_width) / max_range_width_pct))
+    parts.append(clamp_score((max_atr_ratio - atr_ratio) / max_atr_ratio))
     regime_score = safe_float(regime.scores.get("COMPRESSION"))
     if regime_score is not None:
         parts.append(regime_score)
-    if not parts:
-        return 0.0
     return clamp_score(sum(parts) / len(parts))
 
 

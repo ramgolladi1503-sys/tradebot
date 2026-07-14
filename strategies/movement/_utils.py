@@ -152,6 +152,15 @@ def side_evidence(ctx: StrategyContext, direction: str) -> SideEvidence:
     )
 
 
+def missing_evidence_warning(strategy_id: str, *fields: str) -> tuple[str, ...]:
+    strategy = str(strategy_id or "").strip()
+    return tuple(
+        f"missing_optional_evidence:{strategy}:{str(field).strip()}"
+        for field in fields
+        if str(field).strip()
+    )
+
+
 def volume_score(ctx: StrategyContext) -> float:
     return ratio_score(safe_float(ctx.volume_z), start=0.5, full=2.0)
 

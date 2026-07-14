@@ -225,7 +225,7 @@ def _failed_low_level(ctx: StrategyContext) -> float | None:
 def _option_stall_for_failed_upside(ctx: StrategyContext) -> float:
     ce_change = safe_float(ctx.ce_premium_change)
     pe_change = safe_float(ctx.pe_premium_change)
-    ce_stall = 1.0 if ce_change is None or ce_change <= 0 else 0.0
+    ce_stall = 0.0 if ce_change is None else (1.0 if ce_change <= 0 else 0.0)
     pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)
     return clamp_score(0.55 * ce_stall + 0.45 * pe_confirm)
 
@@ -233,7 +233,7 @@ def _option_stall_for_failed_upside(ctx: StrategyContext) -> float:
 def _option_stall_for_failed_downside(ctx: StrategyContext) -> float:
     pe_change = safe_float(ctx.pe_premium_change)
     ce_change = safe_float(ctx.ce_premium_change)
-    pe_stall = 1.0 if pe_change is None or pe_change <= 0 else 0.0
+    pe_stall = 0.0 if pe_change is None else (1.0 if pe_change <= 0 else 0.0)
     ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)
     return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)
 

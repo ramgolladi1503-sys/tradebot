@@ -153,13 +153,17 @@ def _upside_exhaustion_score(
     pe_change = safe_float(ctx.pe_premium_change)
     volume = safe_float(ctx.volume_z)
     ce_stall = (
-        1.0
-        if ce_change is None or ce_change <= 0
-        else clamp_score(1.0 - ratio_score(ce_change, start=0.0, full=12.0))
+        0.0
+        if ce_change is None
+        else (
+            1.0
+            if ce_change <= 0
+            else clamp_score(1.0 - ratio_score(ce_change, start=0.0, full=12.0))
+        )
     )
     pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)
     volume_fade = (
-        1.0
+        0.0
         if volume is None
         else clamp_score(1.0 - ratio_score(volume, start=0.4, full=2.0))
     )
@@ -188,13 +192,17 @@ def _downside_exhaustion_score(
     ce_change = safe_float(ctx.ce_premium_change)
     volume = safe_float(ctx.volume_z)
     pe_stall = (
-        1.0
-        if pe_change is None or pe_change <= 0
-        else clamp_score(1.0 - ratio_score(pe_change, start=0.0, full=12.0))
+        0.0
+        if pe_change is None
+        else (
+            1.0
+            if pe_change <= 0
+            else clamp_score(1.0 - ratio_score(pe_change, start=0.0, full=12.0))
+        )
     )
     ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)
     volume_fade = (
-        1.0
+        0.0
         if volume is None
         else clamp_score(1.0 - ratio_score(volume, start=0.4, full=2.0))
     )

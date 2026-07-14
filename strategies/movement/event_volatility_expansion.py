@@ -167,8 +167,10 @@ def _expansion_score(
     min_volume_z = float(params["MIN_VOLUME_Z"])
     min_atr_expansion_ratio = float(params["MIN_ATR_EXPANSION_RATIO"])
     atr_ratio = _atr_ratio(ctx)
-    regime_score = safe_float(regime.scores.get("VOLATILITY_EXPANSION")) or 0.0
     volume = safe_float(ctx.volume_z)
+    if atr_ratio is None or volume is None:
+        return 0.0
+    regime_score = safe_float(regime.scores.get("VOLATILITY_EXPANSION")) or 0.0
     volatility_state_bonus = (
         1.0
         if str(ctx.volatility_state or "").strip().upper()

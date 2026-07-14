@@ -70,9 +70,9 @@ def _call_pullback_holds(
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     support = safe_float(ctx.nearest_support)
-    if spot is None or vwap is None:
+    if spot is None or vwap is None or support is None or support <= 0:
         return False
-    anchor = support if support is not None and support > 0 else vwap
+    anchor = support
     if spot < anchor or spot < vwap:
         return False
     distance = pct_distance(spot, anchor)
@@ -90,9 +90,9 @@ def _put_pullback_holds(
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     resistance = safe_float(ctx.nearest_resistance)
-    if spot is None or vwap is None:
+    if spot is None or vwap is None or resistance is None or resistance <= 0:
         return False
-    anchor = resistance if resistance is not None and resistance > 0 else vwap
+    anchor = resistance
     if spot > anchor or spot > vwap:
         return False
     distance = pct_distance(spot, anchor)
@@ -163,9 +163,9 @@ def _build_candidate(
 
 def _pullback_anchor(ctx: StrategyContext, direction: str) -> float | None:
     if direction == "BUY_CALL":
-        return safe_float(ctx.nearest_support) or safe_float(ctx.vwap)
+        return safe_float(ctx.nearest_support)
     if direction == "BUY_PUT":
-        return safe_float(ctx.nearest_resistance) or safe_float(ctx.vwap)
+        return safe_float(ctx.nearest_resistance)
     return None
 
 
