@@ -105,7 +105,8 @@ from core import risk_halt
 from core.decision_logger import log_decision, update_execution, update_outcome
 from core.risk_utils import to_pct
 from core.feed_runtime import build_canonical_feed_truth_state
-from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist
+from core.time_utils import now_ist, now_utc_epoch, is_market_open_ist, parse_ts_ist
+from core.session_calendar import minutes_to_close as session_minutes_to_close
 from core.meta_model import MetaModel
 from core.decision_trace import decision_config_snapshot
 from core.reports.daily_audit import build_daily_audit, write_daily_audit_placeholder
@@ -1464,6 +1465,262 @@ def _snapshot_atm_strike(market_data: dict) -> float | None:
     return min(strikes, key=lambda strike: abs(float(strike) - float(ltp)))
 
 
+def _strategy_context_timestamp_epoch(market_data: dict) -> float | None:
+    for key in ("ltp_ts_epoch", "quote_ts_epoch", "candle_ts_epoch", "timestamp"):
+        value = _coerce_snapshot_number(market_data.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _strategy_context_minutes_to_close(market_data: dict) -> int | None:
+    raw_segment = str(market_data.get("segment") or "").strip()
+    segment = raw_segment or None
+    raw_ts = market_data.get("timestamp_ist")
+    now_dt = parse_ts_ist(raw_ts) if raw_ts not in (None, "", "None") else None
+    if now_dt is None:
+        return None
+    try:
+        return int(session_minutes_to_close(now_dt=now_dt, segment=segment))
+    except Exception:
+        return None
+
+
+def _option_side_summary(market_data: dict, *, side: str, atm_strike: float | None) -> dict[str, float | None]:
+    chain = market_data.get("option_chain") if isinstance(market_data.get("option_chain"), list) else []
+    side_rows = [
+        row for row in chain
+        if isinstance(row, dict) and str(row.get("type") or "").upper() == side
+    ]
+    if not side_rows:
+        return {"ltp": None, "premium_change": None, "spread_pct": None, "depth": None}
+
+    def _row_distance(row: dict) -> tuple[int, float]:
+        strike = _coerce_snapshot_number(row.get("strike"))
+        if atm_strike is None or strike is None:
+            return (1, float("inf"))
+        return (0, abs(float(strike) - float(atm_strike)))
+
+    target = min(side_rows, key=_row_distance)
+    bid_qty = _coerce_snapshot_number(target.get("bid_qty"))
+    ask_qty = _coerce_snapshot_number(target.get("ask_qty"))
+    depth = None
+    if bid_qty is not None or ask_qty is not None:
+        depth = float(bid_qty or 0.0) + float(ask_qty or 0.0)
+    return {
+        "ltp": _coerce_snapshot_number(target.get("ltp", target.get("last_price"))),
+        "premium_change": _coerce_snapshot_number(target.get("ltp_change")),
+        "spread_pct": _coerce_snapshot_number(target.get("spread_pct")),
+        "depth": depth,
+    }
+
+
+def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    truth: dict[str, Any] = {}
+    provenance: dict[str, Any] = {}
+    missing: dict[str, Any] = {}
+
+    def _record(field: str, value: Any, *, status: str, source_field: str, source_component: str, scope: str, complete: bool | None = None, timeframe: str | None = None, units: str | None = None, lookback: str | None = None) -> None:
+        if value is None:
+            missing[field] = {
+                "status": status,
+                "source_component": source_component,
+                "source_field": source_field,
+            }
+            return
+        truth[field] = value
+        payload = {
+            "status": status,
+            "source_component": source_component,
+            "source_field": source_field,
+            "source_event_timestamp": _strategy_context_timestamp_epoch(market_data),
+            "receipt_timestamp": _strategy_context_timestamp_epoch(market_data),
+            "scope": scope,
+            "complete": complete,
+        }
+        if timeframe is not None:
+            payload["timeframe"] = timeframe
+        if units is not None:
+            payload["units"] = units
+        if lookback is not None:
+            payload["lookback"] = lookback
+        provenance[field] = payload
+
+    ts_epoch = _strategy_context_timestamp_epoch(market_data)
+    if ts_epoch is not None:
+        truth["ts_epoch"] = ts_epoch
+        provenance["ts_epoch"] = {
+            "status": "TRUTHFUL",
+            "source_component": "core.market_data.fetch_live_market_data",
+            "source_field": "ltp_ts_epoch",
+            "source_event_timestamp": ts_epoch,
+            "receipt_timestamp": ts_epoch,
+            "scope": "tick",
+            "complete": True,
+        }
+
+    prev_ltp = _coerce_snapshot_number(market_data.get("prev_ltp"))
+    if prev_ltp is not None:
+        metadata["previous_spot_ltp"] = prev_ltp
+        provenance["previous_spot_ltp"] = {
+            "status": "TRUTHFUL",
+            "source_component": "core.market_data.fetch_live_market_data",
+            "source_field": "prev_ltp",
+            "source_event_timestamp": ts_epoch,
+            "receipt_timestamp": ts_epoch,
+            "scope": "previous_tick",
+            "complete": True,
+        }
+    else:
+        missing["previous_spot_ltp"] = {
+            "status": "MISSING_SOURCE",
+            "source_component": "core.market_data.fetch_live_market_data",
+            "source_field": "prev_ltp",
+        }
+
+    _record(
+        "vwap",
+        _coerce_snapshot_number(market_data.get("vwap")),
+        status="TRUTHFUL",
+        source_field="vwap",
+        source_component="core.market_data.fetch_live_market_data",
+        scope="session_indicator",
+        complete=True,
+        timeframe="1m",
+    )
+    _record(
+        "atr",
+        _coerce_snapshot_number(market_data.get("atr")),
+        status="TRUTHFUL",
+        source_field="atr",
+        source_component="core.market_data.fetch_live_market_data",
+        scope="indicator",
+        complete=True,
+        timeframe="1m",
+        lookback="ATR_PERIOD",
+    )
+    _record(
+        "volume_z",
+        _coerce_snapshot_number(market_data.get("vol_z")),
+        status="TRUTHFUL",
+        source_field="vol_z",
+        source_component="core.market_data.fetch_live_market_data",
+        scope="indicator",
+        complete=True,
+        timeframe="1m",
+        lookback="VOL_WINDOW",
+    )
+    _record(
+        "vwap_slope",
+        _coerce_snapshot_number(market_data.get("vwap_slope")),
+        status="TRUTHFUL",
+        source_field="vwap_slope",
+        source_component="core.market_data.fetch_live_market_data",
+        scope="indicator",
+        complete=True,
+        timeframe="1m",
+        units="price_per_bar",
+        lookback="VWAP_SLOPE_WINDOW",
+    )
+    _record(
+        "minutes_since_open",
+        _coerce_snapshot_number(market_data.get("minutes_since_open")),
+        status="TRUTHFUL",
+        source_field="minutes_since_open",
+        source_component="core.market_data.fetch_live_market_data",
+        scope="session_clock",
+        complete=bool(market_data.get("market_open")),
+    )
+    _record(
+        "minutes_to_close",
+        _strategy_context_minutes_to_close(market_data),
+        status="TRUTHFUL",
+        source_field="timestamp_ist",
+        source_component="core.session_calendar.minutes_to_close",
+        scope="session_clock",
+        complete=bool(market_data.get("market_open")),
+    )
+
+    orb_state = market_data.get("orb_state") if isinstance(market_data.get("orb_state"), dict) else {}
+    orb_status = str(orb_state.get("status") or "").upper()
+    orb_complete = orb_status not in {"", "PENDING"}
+    orb_high = _coerce_snapshot_number(market_data.get("orb_high")) if orb_complete else None
+    orb_low = _coerce_snapshot_number(market_data.get("orb_low")) if orb_complete else None
+    _record(
+        "orb_high",
+        orb_high,
+        status="TRUTHFUL" if orb_complete else "INCOMPLETE",
+        source_field="orb_high",
+        source_component="core.market_data._orb_state_from_candles",
+        scope="opening_range",
+        complete=orb_complete,
+        timeframe="1m",
+    )
+    _record(
+        "orb_low",
+        orb_low,
+        status="TRUTHFUL" if orb_complete else "INCOMPLETE",
+        source_field="orb_low",
+        source_component="core.market_data._orb_state_from_candles",
+        scope="opening_range",
+        complete=orb_complete,
+        timeframe="1m",
+    )
+
+    atm_strike = _snapshot_atm_strike(market_data)
+    ce = _option_side_summary(market_data, side="CE", atm_strike=atm_strike)
+    pe = _option_side_summary(market_data, side="PE", atm_strike=atm_strike)
+    for field, value, source in (
+        ("option_ce_ltp", ce["ltp"], "option_chain[CE].ltp"),
+        ("ce_premium_change", ce["premium_change"], "option_chain[CE].ltp_change"),
+        ("ce_spread_pct", ce["spread_pct"], "option_chain[CE].spread_pct"),
+        ("ce_depth", ce["depth"], "option_chain[CE].bid_qty+ask_qty"),
+        ("option_pe_ltp", pe["ltp"], "option_chain[PE].ltp"),
+        ("pe_premium_change", pe["premium_change"], "option_chain[PE].ltp_change"),
+        ("pe_spread_pct", pe["spread_pct"], "option_chain[PE].spread_pct"),
+        ("pe_depth", pe["depth"], "option_chain[PE].bid_qty+ask_qty"),
+    ):
+        _record(
+            field,
+            value,
+            status="TRUTHFUL" if value is not None else "MISSING_SOURCE",
+            source_field=source,
+            source_component="core.option_chain.fetch_option_chain",
+            scope="option_quote",
+            complete=True if value is not None else None,
+        )
+
+    option_age = _coerce_snapshot_number(
+        (market_data.get("option_chain_health") or {}).get("quote_age_sec")
+    )
+    _record(
+        "option_ltp_age_sec",
+        option_age,
+        status="TRUTHFUL",
+        source_field="option_chain_health.quote_age_sec",
+        source_component="core.market_data._option_chain_health",
+        scope="option_quote",
+        complete=True if option_age is not None else None,
+        units="seconds",
+    )
+
+    for missing_field in ("open_price", "day_high", "day_low", "atr_short", "atr_long", "range_width_pct"):
+        missing.setdefault(
+            missing_field,
+            {
+                "status": "MISSING_SOURCE",
+                "source_component": "canonical_market_snapshot",
+                "source_field": missing_field,
+            },
+        )
+
+    metadata["strategy_context_truth"] = truth
+    metadata["strategy_context_provenance"] = provenance
+    metadata["strategy_context_missing"] = missing
+    return metadata
+
+
 def _snapshot_symbol_payload(market_data: dict, warnings: list[str]) -> dict:
     symbol = str(market_data.get("symbol") or "").upper()
     cross_quality = market_data.get("cross_asset_quality") if isinstance(market_data.get("cross_asset_quality"), dict) else {}
@@ -1511,7 +1768,13 @@ def _snapshot_symbol_payload(market_data: dict, warnings: list[str]) -> dict:
                 option_chain_health.get("quote_age_sec", feed_health.get("option_quote_age_sec"))
             ),
             "status": feed_health.get("status") or option_chain_health.get("status"),
+            "quote_source": market_data.get("quote_source"),
+            "fallback_used": bool(
+                market_data.get("nonlive_feature_fallback")
+                or str(market_data.get("chain_source") or "").startswith("synthetic")
+            ),
         },
+        metadata=_strategy_context_snapshot_metadata(market_data),
     )
 
 

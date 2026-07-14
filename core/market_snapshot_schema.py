@@ -81,6 +81,7 @@ def build_symbol_snapshot_defaults() -> dict[str, Any]:
         "option_chain_summary": _default_option_chain_summary(),
         "feed_health": _default_feed_health(),
         "quote_truth": _default_quote_truth(),
+        "metadata": {},
     }
 
 
@@ -204,4 +205,7 @@ def normalize_symbol_snapshot(payload: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(target, dict):
             continue
         target.update(deepcopy(section))
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        out["metadata"] = deepcopy(metadata)
     return out

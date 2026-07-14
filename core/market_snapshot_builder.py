@@ -232,6 +232,7 @@ def build_symbol_market_snapshot(
     option_chain_summary=None,
     feed_health=None,
     quote_truth=None,
+    metadata=None,
 ) -> dict[str, Any]:
     return normalize_symbol_snapshot(
         {
@@ -244,6 +245,7 @@ def build_symbol_market_snapshot(
             "option_chain_summary": dict(option_chain_summary or {}),
             "feed_health": dict(feed_health or {}),
             "quote_truth": dict(quote_truth or {}),
+            "metadata": dict(metadata or {}),
         }
     )
 
