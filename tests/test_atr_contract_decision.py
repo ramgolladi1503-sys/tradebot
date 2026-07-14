@@ -112,13 +112,15 @@ def test_every_current_atr_short_reader_and_writer_is_accounted_for() -> None:
         PRODUCTION_READER_FILES
         | PRODUCTION_DECLARATION_FILES
         | NONAUTHORITATIVE_PROXY_FILES
-        | {"core/atr_contract.py", "tests/test_atr_contract_decision.py"}
+        | {"core/atr_contract.py", "core/market_data.py", "core/session_atr.py", "tests/test_atr_contract_decision.py"}
         | {
             "tests/test_captured_market_session_replay.py",
+            "tests/test_captured_atr_replay.py",
             "tests/test_compression_trend_movement_strategies.py",
             "tests/test_event_late_day_movement_strategies.py",
             "tests/test_movement_regime.py",
             "tests/test_strategy_context_truth.py",
+            "tests/test_session_atr_runtime.py",
             "tests/test_strategy_missing_evidence_observability.py",
             "tests/test_strategy_missing_evidence_policy.py",
             "tests/test_strategy_profile_fail_closed.py",
@@ -138,13 +140,15 @@ def test_every_current_atr_long_reader_and_writer_is_accounted_for() -> None:
         PRODUCTION_READER_FILES
         | PRODUCTION_DECLARATION_FILES
         | NONAUTHORITATIVE_PROXY_FILES
-        | {"tests/test_atr_contract_decision.py"}
+        | {"core/market_data.py", "core/session_atr.py", "tests/test_atr_contract_decision.py"}
         | {
             "tests/test_captured_market_session_replay.py",
+            "tests/test_captured_atr_replay.py",
             "tests/test_compression_trend_movement_strategies.py",
             "tests/test_event_late_day_movement_strategies.py",
             "tests/test_movement_regime.py",
             "tests/test_strategy_context_truth.py",
+            "tests/test_session_atr_runtime.py",
             "tests/test_strategy_missing_evidence_observability.py",
             "tests/test_strategy_missing_evidence_policy.py",
             "tests/test_strategy_profile_fail_closed.py",

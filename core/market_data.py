@@ -28,6 +28,7 @@ from core.depth_store import depth_store
 from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
 from core.regime_session_context import resolve_canonical_session_context
 from core.session_bar_history import SessionBarHistoryError, build_session_bar_history_state
+from core.session_atr import calculate_session_atr_state
 from core.paths import logs_dir
 from core.time_utils import (
     compute_age_sec,
@@ -3153,6 +3154,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 source_component="core.market_data.fetch_live_market_data",
                 receipt_timestamp=now.isoformat(),
             )
+            session_atr_state = calculate_session_atr_state(session_state)
         except SessionBarHistoryError as exc:
             completed_bar_history = []
             completed_bar_history_provenance = {
@@ -3161,6 +3163,13 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "source_field": "completed_bar_history",
                 "reason": str(exc),
             }
+            session_atr_state = calculate_session_atr_state(
+                (),
+                symbol=symbol,
+                session_date=now.date().isoformat(),
+                timeframe="1m",
+                source_history_hash="",
+            )
 
         exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         market_open_now = bool(market_ctx.is_market_open)
@@ -3795,6 +3804,15 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "orb_state": dict(orb_state),
             "minutes_since_open": minutes_since_open,
             "atr": atr,
+            "atr_short": session_atr_state.atr_short,
+            "atr_long": session_atr_state.atr_long,
+            "atr_short_status": session_atr_state.short_status,
+            "atr_long_status": session_atr_state.long_status,
+            "atr_short_long_state": session_atr_state.to_dict(),
+            "atr_short_long_provenance": session_atr_state.provenance_payload(
+                source_component="core.session_atr.calculate_session_atr_state",
+                receipt_timestamp=now_ist().isoformat(),
+            ),
             "vwap_slope": vwap_slope,
             "rsi_mom": rsi_mom,
             "vol_z": vol_z,

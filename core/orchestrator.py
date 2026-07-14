@@ -1600,6 +1600,49 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         timeframe="1m",
         lookback="ATR_PERIOD",
     )
+    atr_state = market_data.get("atr_short_long_state") if isinstance(market_data.get("atr_short_long_state"), dict) else {}
+    atr_provenance = (
+        market_data.get("atr_short_long_provenance")
+        if isinstance(market_data.get("atr_short_long_provenance"), dict)
+        else {}
+    )
+    atr_source_component = str(
+        atr_provenance.get("source_component")
+        or "core.session_atr.calculate_session_atr_state"
+    )
+    atr_timeframe = str(atr_state.get("timeframe") or "1m")
+    atr_short_status = str(
+        market_data.get("atr_short_status")
+        or atr_state.get("short_status")
+        or ("AVAILABLE" if _coerce_snapshot_number(market_data.get("atr_short")) is not None else "WARMING_UP")
+    )
+    atr_long_status = str(
+        market_data.get("atr_long_status")
+        or atr_state.get("long_status")
+        or ("AVAILABLE" if _coerce_snapshot_number(market_data.get("atr_long")) is not None else "WARMING_UP")
+    )
+    _record(
+        "atr_short",
+        _coerce_snapshot_number(market_data.get("atr_short")),
+        status=atr_short_status,
+        source_field="atr_short",
+        source_component=atr_source_component,
+        scope="session_indicator",
+        complete=bool(_coerce_snapshot_number(market_data.get("atr_short")) is not None),
+        timeframe=atr_timeframe,
+        lookback=str(atr_state.get("short_lookback") or 5),
+    )
+    _record(
+        "atr_long",
+        _coerce_snapshot_number(market_data.get("atr_long")),
+        status=atr_long_status,
+        source_field="atr_long",
+        source_component=atr_source_component,
+        scope="session_indicator",
+        complete=bool(_coerce_snapshot_number(market_data.get("atr_long")) is not None),
+        timeframe=atr_timeframe,
+        lookback=str(atr_state.get("long_lookback") or 30),
+    )
     _record(
         "open_price",
         _coerce_snapshot_number(market_data.get("open_price")),
@@ -1672,6 +1715,10 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
             "source_component": str(completed_bar_history_provenance.get("source_component") or "core.session_bar_history.build_session_bar_history_state"),
             "source_field": "completed_bar_history",
         }
+    if isinstance(atr_state, dict) and atr_state:
+        metadata["atr_short_long_state"] = dict(atr_state)
+    if atr_provenance:
+        metadata["atr_short_long_provenance"] = dict(atr_provenance)
     _record(
         "volume_z",
         _coerce_snapshot_number(market_data.get("vol_z")),
@@ -1777,7 +1824,7 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         units="seconds",
     )
 
-    for missing_field in ("atr_short", "atr_long", "range_width_pct"):
+    for missing_field in ("range_width_pct",):
         missing.setdefault(
             missing_field,
             {
