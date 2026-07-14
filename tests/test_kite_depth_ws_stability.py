@@ -1557,7 +1557,6 @@ def test_c_complete_resubscription(monkeypatch):
     # Required: required token count = 3, requested = 3, exact set = [101, 102, 103]
     c3 = len(ws._LAST_TOKENS)
     assert c3 == 3
-    subscribed_tokens = ws._fetch_subscribed_tokens()
     c4 = len(subscribed_tokens)
     assert c4 == 3 # no duplicates
 
