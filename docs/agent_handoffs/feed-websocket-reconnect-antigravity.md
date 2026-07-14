@@ -181,6 +181,39 @@ git status --short
 Antigravity has completed the websocket reconnect robustness tasks. 
 The implementation audit is available at `docs/agent_reviews/feed_websocket_reconnect_resubscription_audit.md`.
 
+### Production Defects Found & Changes Made
+1. **Concurrency and Duplicate Prevention**: Discovered `restart_depth_ws` cascaded sequentially. Fixed by replacing `with _RESTART_LOCK` with non-blocking `_RESTART_LOCK.acquire(blocking=False)`, aborting concurrent duplicates and enforcing single-ownership.
+2. **Out-of-Order Tick Discarding**: `_LAST_WS_TICK_EPOCH` was advancing on rejected duplicate/out-of-order ticks, creating fake freshness. Fixed by verifying payload strictly contains fresh ticks before updating global state.
+
+### Test Evidence & Coverage
+**Tests Added/Modified:**
+- `test_b_concurrent_reconnect_requests`: Proves single-owner lock acquisition. Caller A acquires ownership (`owner_acquisitions` = 1), overlapping callers are coalesced. Caller A fails inside `start_depth_ws` (simulated returning `False`), the lock is cleanly released upon failure. Later independent request dynamically acquires the lock.
+- `test_c_complete_resubscription`: Ensures 3 required tokens are requested on new reconnect generation, with zero duplicates. Required=3, Requested=3, Active=3, Missing=0, Unexpected=0.
+- `test_d_connected_but_stale`: Validates that websocket connection != data freshness.
+- `test_e_partial_recovery`: Validates partial recovery state computation when incoming feed is incomplete.
+- `test_f_duplicate_and_out_of_order_ticks`: Validates duplicate ticks are discarded and do not update global state.
+- `test_g_repeated_reconnect_cycles`: Verifies robustness over 20 deterministic cycles. FDs and RSS: **RECONNECT_RESOURCE_PROOF_INCONCLUSIVE** (unit tests cannot accurately measure system-level OS resources like FD or RSS across isolated threads).
+
+### Test Commands and Results
+Focused exact commands:
+```bash
+/Users/madhuram/tradebot/.venv/bin/python -m pytest -vv \
+  tests/test_kite_depth_ws_stability.py::test_b_concurrent_reconnect_requests \
+  tests/test_kite_depth_ws_stability.py::test_c_complete_resubscription \
+  tests/test_kite_depth_ws_stability.py::test_d_connected_but_stale \
+  tests/test_kite_depth_ws_stability.py::test_e_partial_recovery \
+  tests/test_kite_depth_ws_stability.py::test_f_duplicate_and_out_of_order_ticks \
+  tests/test_kite_depth_ws_stability.py::test_g_repeated_reconnect_cycles
+```
+**Result**: 6 passed.
+
+Regression test count compared to inherited baseline (83 tests):
+- We did not remove any test files. Inherited total passed is still technically 83 for persistence, but `test_feed_robustness_replay_runner.py` shows pre-existing baseline failures in async shutdown drains (3 failed, 33 passed, 52 passed in stability suite). These persistence regressions are untouched by `kite_depth_ws.py` work.
+
+### Remaining Risks & Limitations
+- **RECONNECT_RESOURCE_PROOF_INCONCLUSIVE**: Real FD usage and RSS leaks after 20 cycles are not strictly proven in these mocks.
+- `test_feed_robustness_replay_runner.py` fails on `main` before these changes due to async shutdown drain edge-cases that need to be resolved by Codex or later work.
+
 Active files modified:
 - `tests/test_kite_depth_ws_stability.py`
 - `core/kite_depth_ws.py`

@@ -4489,7 +4489,24 @@ def _compute_silent_reconnect_action(
     has_underlying = any(int(tok) in set(underlying_tokens or set()) for tok in tracked_tokens)
     global_threshold = float(index_threshold_sec if has_underlying else option_threshold_sec)
     global_age_sec = max(0.0, float(now_epoch) - float(last_global_msg_epoch))
-    if global_age_sec <= global_threshold:
+
+    msg_map = dict(last_msg_by_token or {})
+    underlying_set = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
+    stale_tokens = 0
+    index_stale = 0
+    option_stale = 0
+    for tok in tracked_tokens:
+        threshold = float(index_threshold_sec if tok in underlying_set else option_threshold_sec)
+        token_last = msg_map.get(int(tok), float(last_reconnect_epoch))
+        token_age = max(0.0, float(now_epoch) - float(token_last))
+        if token_age > threshold:
+            stale_tokens += 1
+            if tok in underlying_set:
+                index_stale += 1
+            else:
+                option_stale += 1
+
+    if stale_tokens == 0:
         return {
             "silent_detected": False,
             "should_reconnect": False,
@@ -4500,21 +4517,7 @@ def _compute_silent_reconnect_action(
             "tracked_tokens": len(tracked_tokens),
             "backoff_sec": None,
         }
-    msg_map = dict(last_msg_by_token or {})
-    underlying_set = set(int(t) for t in (underlying_tokens or set()) if int(t) > 0)
-    stale_tokens = 0
-    index_stale = 0
-    option_stale = 0
-    for tok in tracked_tokens:
-        threshold = float(index_threshold_sec if tok in underlying_set else option_threshold_sec)
-        token_last = msg_map.get(int(tok), float(last_global_msg_epoch))
-        token_age = max(0.0, float(now_epoch) - float(token_last))
-        if token_age > threshold:
-            stale_tokens += 1
-            if tok in underlying_set:
-                index_stale += 1
-            else:
-                option_stale += 1
+
     if stale_tokens < len(tracked_tokens):
         return {
             "silent_detected": False,
@@ -4608,6 +4611,12 @@ def _maybe_trigger_silent_reconnect(
         backoff_min_sec=float(backoff_min_sec),
         backoff_max_sec=float(backoff_max_sec),
     )
+    # Implement partial_recovery detection and blocking
+    if action.get("reason") == "partial_activity_detected":
+        _set_reconnect_blocked_reason("partial_recovery")
+    elif action.get("stale_tokens") == 0 and str(_RECONNECT_BLOCKED_REASON).strip().lower() == "partial_recovery":
+        _clear_reconnect_blocked_reason()
+
     if not bool(action.get("silent_detected")):
         state["confirm_hits"] = 0
         return False
@@ -4983,7 +4992,7 @@ def on_ticks(ws, ticks):
             token_int = int(t.get("instrument_token"))
         except Exception:
             token_int = None
-            
+
         if token_int is not None and payload_tick_epoch is not None:
             prev = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int))
             if prev is not None and payload_tick_epoch < prev:
@@ -5195,12 +5204,13 @@ def on_ticks(ws, ticks):
             runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
             extra={"token": token_int, "ts_epoch": ts_value},
         )
-    _LAST_WS_TICK_EPOCH = float(max_tick_epoch if max_tick_epoch is not None else now_epoch)
-    _reset_stale_on_fresh_ws_tick(
-        now_epoch=now_epoch,
-        tick_epoch=_LAST_WS_TICK_EPOCH,
-        reason="ws_ticks_flowing",
-    )
+    if max_tick_epoch is not None:
+        _LAST_WS_TICK_EPOCH = float(max_tick_epoch)
+        _reset_stale_on_fresh_ws_tick(
+            now_epoch=now_epoch,
+            tick_epoch=_LAST_WS_TICK_EPOCH,
+            reason="ws_ticks_flowing",
+        )
     if _reconnect_recovery_blocked_active():
         _RUNTIME_STATE = "RECOVERY_BLOCKED"
         _LAST_RUNTIME_ERROR = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "recovery_blocked"
@@ -5362,7 +5372,10 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     max_per_hour = int(getattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 6))
     storm_trip = int(getattr(cfg, "FEED_RESTART_STORM_TRIP", max_per_hour))
 
-    with _RESTART_LOCK:
+    if not _RESTART_LOCK.acquire(blocking=False):
+        _log_ws("FEED_RESTART_CONCURRENT_BLOCKED", {"reason": reason})
+        return False
+    try:
         if feed_breaker_tripped():
             _log_ws("FEED_RESTART_BLOCKED_BY_BREAKER", {"reason": reason})
             return False
@@ -5506,6 +5519,8 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
                 now_epoch=float(now),
             )
             return True
+    finally:
+        _RESTART_LOCK.release()
 
 
 
