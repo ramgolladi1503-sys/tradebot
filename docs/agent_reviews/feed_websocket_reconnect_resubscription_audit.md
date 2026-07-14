@@ -1,31 +1,82 @@
 # Feed Websocket Reconnect and Resubscription Audit
 
 ## Date
-2026-07-13
+2026-07-14
 
 ## Summary
-This audit reviews the implementation of websocket feed robustness mechanisms, explicitly covering disconnects, reconnect concurrency, resubscription, and tick freshness validation.
+This audit reviews the implementation of websocket feed robustness mechanisms, explicitly covering disconnects, reconnect concurrency, resubscription, tick freshness validation, and the corrected out-of-order payload tracking.
 
-## Modifications Made
-1. **Concurrency and Duplicate Prevention**: Validated that `_RESTART_LOCK` correctly gates `restart_depth_ws`, preventing duplicate concurrent reconnect workers. 
-2. **Tick Freshness on Reconnect**: Enforced strict freshness tracking by explicitly resetting `_LAST_WS_TICK_EPOCH` to `0.0` inside `on_connect`. This guarantees that immediately after a socket connection succeeds, the system correctly classifies the data as stale (`is_market_data_fresh() == False`) until actual provider ticks arrive.
-3. **Out-of-Order Tick Discarding**: Addressed a critical flaw where `_normalized_tick_epoch` would blindly cap older tick timestamps to the most recent high-water mark and allow the outdated payload to overwrite current best prices. Ticks with an `exchange_timestamp` older than the last seen epoch for the token are now strictly discarded before state mutation.
-4. **Resubscription Safety**: Validated that `safe_subscribe_full_mode` respects socket state, queuing the requests when the socket is unready and skipping duplicate redundant subscriptions when tokens are already cached.
-5. **Null Socket Guard**: Verified that outer boundaries and queue handlers properly handle `ws=None` states without raising `AttributeError`.
+## Verified History and Regressions
 
-## Test Suite Coverage
-Introduced deterministic unit tests (Tests A-G) in `tests/test_kite_depth_ws_stability.py` that trigger and assert on:
-- Null websocket scenarios
-- Concurrent restart triggers
-- Safe token resubscription boundaries
-- Immediate post-reconnect stale status
-- Out-of-order `on_ticks` payload rejection
+We explicitly retract the previous incorrect claim that the three persistence failures were inherited.
 
-All core tests (including new edge case tests) passed deterministically. 
+Starting commit:
+501e4ca0714a5432f001f11a2da51ba7155b0242
 
-## Verdict
-- `WEBSOCKET_DISCONNECT_HANDLED`
-- `WEBSOCKET_RECONNECT_SINGLE_OWNER_PASS`
-- `WEBSOCKET_RESUBSCRIBE_COMPLETE`
-- `TICK_FRESHNESS_STRICT_VALIDATED`
-- `OUT_OF_ORDER_TICK_DROPPED`
+Previous failing Antigravity tip:
+f6995787e8170bb8c26714513aaebd6438a0031c
+
+Corrected tip:
+ec79fad47143003b49c7a604c0555ab97f21798f
+
+At starting commit 501e4ca:
+the three persistence tests passed
+
+At f6995787:
+combined result was 3 failed, 87 passed
+
+At ec79fad4:
+full required combined result was 90 passed
+
+The three regressions fixed in the corrected tip were:
+test_pressure_profile_records_real_async_persistence_and_shutdown_drain
+test_pressure_accounting_reports_max_pending_writes_and_batch_size
+test_pressure_hook_context_includes_batch_size
+
+## Exact Root Cause
+_LAST_MSG_TS_BY_TOKEN was incorrectly used for both:
+1. local receipt/freshness tracking
+2. provider payload out-of-order rejection
+
+Deterministic replay payload timestamps were older than local receipt times, so valid replay ticks were incorrectly rejected.
+
+## Correction
+_LAST_PAYLOAD_TS_BY_TOKEN now stores provider payload high-water timestamps used only for duplicate/out-of-order rejection.
+
+_LAST_MSG_TS_BY_TOKEN remains local receipt/freshness state.
+
+Replay runs clear websocket tracking state at the beginning of each isolated _run_once execution because each replay profile represents a fresh simulated websocket session.
+
+## Verified Behavior
+older provider event:
+rejected without mutating newer token state
+
+exact duplicate:
+rejected according to the deterministic duplicate policy
+
+valid provider event behind local receipt time:
+accepted when newer than the prior provider payload timestamp
+
+rejected-only payload:
+does not advance _LAST_WS_TICK_EPOCH
+
+mixed payload:
+accepts valid events and rejects stale events independently
+
+## Final Verdicts
+WEBSOCKET_DISCONNECT_HANDLED
+WEBSOCKET_RECONNECT_SINGLE_OWNER_PASS
+WEBSOCKET_RESUBSCRIPTION_COMPLETE_PASS
+POST_RECONNECT_FRESHNESS_PASS
+POST_RECONNECT_PARTIAL_RECOVERY_BLOCKED
+OUT_OF_ORDER_TICK_REJECTION
+20_CYCLE_RECONNECT_LOGIC_SIMULATION_PASS
+RECONNECT_RESOURCE_PROOF_INCONCLUSIVE
+
+## Open Items
+live-provider reconnect proof remains open
+full-session live soak remains open
+provider completeness remains open
+ranking freshness remains separate
+execution freshness remains separate
+overall production readiness is not proven
