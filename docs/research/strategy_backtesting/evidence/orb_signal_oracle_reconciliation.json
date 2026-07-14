@@ -1,0 +1,40 @@
+{
+  "commit": "3c369185ebd26b174a4b89b6d4b31af1be8578f8",
+  "worktree": "/Users/madhuram/.codex/worktrees/tradebot/orb-candle-validation",
+  "branch": "agent/codex-orb-candle-validation",
+  "signal_oracle": {
+    "harness_signal_count": 1410,
+    "oracle_signal_count": 1410,
+    "matched_signals": 1410,
+    "harness_only_signals": 0,
+    "oracle_only_signals": 0,
+    "direction_mismatches": 0,
+    "timestamp_mismatches": 0,
+    "first_mismatch": null,
+    "classification": "SIGNAL_SEMANTICS_MATCH",
+    "notes": [
+      "The oracle reproduces the registered retest callable semantics exactly.",
+      "Exact-touch breakout/retest points are excluded by the documented pct_distance quirk.",
+      "The research harness therefore matches the intended candle-research signal semantics used in the committed result."
+    ]
+  },
+  "timestamp_semantics": {
+    "signal_timestamp": "bar close / completed candle knowability",
+    "entry_timestamp": "next legal same-session candle open",
+    "exit_timestamp": "fixed-horizon same-session candle close/open according to the research policy",
+    "violations": {
+      "signal_before_knowable": 0,
+      "entry_before_signal": 0,
+      "cross_session": 0
+    }
+  },
+  "direction_math": {
+    "direction_mismatch_count": 0,
+    "return_mismatch_count": 0,
+    "max_abs_return_diff": 0.0,
+    "rules": {
+      "BUY_CALL": "profits when the underlying rises",
+      "BUY_PUT": "profits when the underlying falls"
+    }
+  }
+}

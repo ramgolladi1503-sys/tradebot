@@ -1,0 +1,47 @@
+{
+  "dataset": "full eligible NIFTY corpus",
+  "sessions": 505,
+  "signals": 13095,
+  "accepted_trades": 1345,
+  "gross_sum": -0.05940465568538866,
+  "net_sum": -0.3284046556853887,
+  "avg_net": -0.0002441670302493596,
+  "median_net": -0.00019391591798647562,
+  "win_rate": 0.42156133828996284,
+  "profit_factor": 0.6158312876311497,
+  "max_drawdown": -0.33124725167349933,
+  "session_block_ci_95": {
+    "mean": [
+      -0.0004445955692707227,
+      -0.00020598144152862713
+    ],
+    "median": [
+      -0.00032258276452195575,
+      -0.00015731542816104765
+    ],
+    "win_rate": [
+      0.37180028129395215,
+      0.43224331926863574
+    ]
+  },
+  "hash": "32aa4dba0e06733d843097f60d461ddd5b9ff6c12af999b38466c16f541d281a",
+  "replication": {
+    "alt_60_session_sample": {
+      "sessions": 60,
+      "signals": 1598,
+      "accepted_trades": 162,
+      "net_sum": -0.02226010320139084,
+      "profit_factor": 0.7745361178764473,
+      "hash": "7304d33163f689716268910e41854110d0321022f999f8496bcf7a987edbe33f"
+    },
+    "banknifty": {
+      "sessions": 483,
+      "signals": 9871,
+      "accepted_trades": 1112,
+      "net_sum": -0.22084564033541196,
+      "profit_factor": 0.7271150101448653,
+      "hash": "1448937de5f8de4239c188303f68f487253964adac1248da65e4cdc148585a40"
+    }
+  },
+  "stability_classification": "SAMPLE_STABLE_NEGATIVE"
+}
