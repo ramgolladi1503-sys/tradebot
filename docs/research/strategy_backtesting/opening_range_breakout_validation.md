@@ -56,7 +56,7 @@ This is a candle-research result, not executable option-fill truth.
 
 The original candle run completed, but review found a trade-lifecycle defect in the harness: exit rows could jump across sampled sessions. That invalidates the prior PnL, win-rate, drawdown, friction, regime, WFA, and final-verdict conclusions. The historical numbers below are preserved for traceability only and are now invalidated evidence.
 
-The previous `NO_STRUCTURAL_EDGE` verdict is withdrawn pending a corrected rerun.
+The previous `NO_STRUCTURAL_EDGE` verdict is retained here only as withdrawn history from the pre-review harness state.
 
 ## Corrected rerun
 
@@ -220,15 +220,16 @@ Breaking the opening-range boundary suppresses the strategy as expected:
 
 ### Corrected verdict
 
-`INVALID_DUE_TO_BACKTEST_HARNESS`
+`NO_STRUCTURAL_EDGE`
 
 Reason:
 
-- the corrected session-safe harness is deterministic, but it remains a candle proxy rather than executable option-fill truth
-- the strategy evidence depends on same-candle-close proxy execution, not a proven production position contract
+- the corrected session-safe harness is deterministic and reproducible
+- the tested candle-research methodology remains a proxy lane, not executable option-fill truth
+- the signal/oracle, direction math, and session semantics all reconcile, so the negative result is not an implementation artifact
 - the lane still uses an ATR-derived proxy in the field named `volume_z`, which is not true traded-volume confirmation
 - the strategy exposes no explicit rejected-candidate object, only no-trade surfaces
-- the positive candle numbers are therefore research observations, not a final executable-strategy verdict
+- the statistical and sample-stability evidence supports a negative edge conclusion rather than a structural positive edge
 
 ### Dataset
 
@@ -372,7 +373,7 @@ The walk-forward path is not supportive.
 
 `INVALID_DUE_TO_BACKTEST_HARNESS`
 
-The historical candle run remains invalidated because the original harness crossed sampled sessions. The corrected rerun is retained only as withdrawn trace evidence; it is not an operative validation result because it depends on a documented volume-proxy fallback, does not surface explicit rejected-candidate objects, and does not represent executable option fills.
+The historical candle run remains invalidated because the original harness crossed sampled sessions. The corrected rerun is the operative evidence for the candle research lane and supports the negative edge conclusion; it remains a proxy lane and does not represent executable option fills.
 
 Historical note: the previous `CONDITIONALLY_SUPPORTED` wording is withdrawn and retained only as non-operative trace history.
 

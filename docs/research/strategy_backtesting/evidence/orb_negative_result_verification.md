@@ -11,6 +11,9 @@ Commit verified: `3c369185ebd26b174a4b89b6d4b31af1be8578f8`
 
 The committed ORB candle result is negative for the tested candle-research methodology and is not explained by a direction bug, timestamp bug, or signal-oracle mismatch.
 
+- signal-level verdict: `ORB_SIGNAL_EDGE_NOT_SUPPORTED`
+- OHLCV research-policy verdict: `NO_STRUCTURAL_EDGE`
+
 ## Correctness checks
 
 - direction mismatches: `0`

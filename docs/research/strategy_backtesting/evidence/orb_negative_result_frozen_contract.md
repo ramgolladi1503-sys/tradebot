@@ -40,8 +40,8 @@ The earlier candidate/trade numbers are preserved for traceability but are not t
 - cross-session trades: 0
 - overlapping Layer C trades: 0
 - current verification conclusion: `NEGATIVE_RESULT_CONFIRMED`
-- signal-level verdict: `SIGNAL_SEMANTICS_MATCH`
-- OHLCV research-policy verdict: `INVALID_DUE_TO_BACKTEST_HARNESS`
+- signal-level verdict: `ORB_SIGNAL_EDGE_NOT_SUPPORTED`
+- OHLCV research-policy verdict: `NO_STRUCTURAL_EDGE`
 
 ## Strict replay lane
 

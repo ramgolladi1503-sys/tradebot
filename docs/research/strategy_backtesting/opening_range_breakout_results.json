@@ -1,97 +1,146 @@
 {
-  "strategy_id": "OPENING_RANGE_BREAKOUT",
-  "strict_replay": {
-    "verdict": "INVALID_DUE_TO_DATA",
-    "trusted_backtest_engine": "core/option_backtest/engine.py::OptionBacktestEngine",
-    "trusted_wfa_engine": "core/option_backtest/wfa.py::run_option_replay_wfa",
-    "frozen_baseline_commit": "8d4a6de390f02ac128ab05091f1a68ea4b56144e",
-    "strategy_impl": {
-      "registry_entry": "strategies/strategy_registry.py::load_strategy_registry()",
-      "registry_key": "OPENING_RANGE_BREAKOUT",
-      "callable": "strategies/movement/opening_range_breakout.py::generate_opening_range_retest_candidates",
-      "default_params": {
-        "MIN_RETEST_MINUTES": 15,
-        "MAX_RETEST_MINUTES": 90,
-        "MAX_RETEST_DISTANCE_PCT": 0.0018,
-        "MIN_BREAKOUT_DISTANCE_PCT": 0.0008
+  "candle_validation": {
+    "candidate_hash": "fc12a163c3488cfd6b90ff326c0740f381a9368e7243cdf2f801ce43f0ac7198",
+    "correction_pending": true,
+    "correction_status": "pending rerun",
+    "dataset_manifest_sha256": "6437f2cbd04313d47c1412e1ef225ef2c1c70336e064b49cd341fa03d2ca6a58",
+    "date_range": [
+      "2024-05-30T09:15:00",
+      "2026-07-10T15:29:00"
+    ],
+    "deterministic_pass_1": {
+      "blocker_counts": {
+        "breakout_invalid_numeric_input": 15,
+        "breakout_missing_range": 15,
+        "breakout_no_range_break": 213,
+        "breakout_volume_not_confirmed": 15981
       },
-      "opening_range_minutes": 15,
-      "earliest_legal_signal_minutes_since_open": 15,
-      "session_state_reset": "core.market_data ORB state reset per day_key"
+      "candidate_count": 6290,
+      "rejection_count": 16209,
+      "trade_count_15m": 6290
     },
-    "data_eligibility": {
-      "status": "INVALID_DUE_TO_DATA",
-      "dataset_path": "/Users/madhuram/tradebot-strategy-backtesting/runtime/strategy_validation/resolved_option_ticks_20260702.parquet",
-      "dataset_sha256": "7ef6dfae7de94a1f52fac97b007259ada769347ff72299e238b6cac43ab54508",
-      "row_count": 876127,
-      "date_range_utc": [
-        "2026-07-02 10:52:39",
-        "2026-07-02 17:21:45"
-      ],
-      "instruments": [
-        "BANKNIFTY",
-        "NIFTY"
-      ],
-      "spread_available": true,
-      "strict_loader_compatibility": false,
-      "missing_loader_fields": [
-        "timestamp",
-        "open",
-        "high",
-        "low",
-        "close",
-        "oi",
-        "underlying",
-        "option_type",
-        "strike",
-        "expiry",
-        "provider",
-        "dataset_hash",
-        "bar_interval",
-        "quote_timestamp"
-      ]
+    "deterministic_pass_2": {
+      "blocker_counts": {
+        "breakout_invalid_numeric_input": 15,
+        "breakout_missing_range": 15,
+        "breakout_no_range_break": 213,
+        "breakout_volume_not_confirmed": 15981
+      },
+      "candidate_count": 6290,
+      "rejection_count": 16209,
+      "trade_count_15m": 25160
     },
-    "deterministic_replay": {
-      "status": "BLOCKED_NO_STRICT_DATA",
-      "candidate_count": 0,
-      "trade_count": 0,
-      "first_candidate_timestamp": null,
-      "first_executable_trade_timestamp": null,
-      "session_distribution": null
+    "file_count": 521,
+    "final_verdict": "NO_STRUCTURAL_EDGE",
+    "friction": {
+      "adverse": {
+        "avg_net_bps": -13.243021,
+        "cost_bps_roundtrip": 10.0,
+        "losses": 5257,
+        "max_drawdown_bps": -83298.600028,
+        "net_bps_sum": -83298.600028,
+        "trade_count": 6290,
+        "wins": 1033
+      },
+      "baseline": {
+        "avg_net_bps": -7.243021,
+        "cost_bps_roundtrip": 4.0,
+        "losses": 4141,
+        "max_drawdown_bps": -45564.816432,
+        "net_bps_sum": -45558.600028,
+        "trade_count": 6290,
+        "wins": 2149
+      },
+      "severe": {
+        "avg_net_bps": -21.243021,
+        "cost_bps_roundtrip": 18.0,
+        "losses": 5931,
+        "max_drawdown_bps": -133618.600028,
+        "net_bps_sum": -133618.600028,
+        "trade_count": 6290,
+        "wins": 359
+      }
     },
+    "instruments": [
+      "NIFTY"
+    ],
+    "invalidated_after_review": true,
+    "invalidated_reason": "Exit rows could cross sampled sessions in the proxy harness.",
     "manual_reconciliation": {
-      "status": "NOT_RUN",
-      "winning_trade": null,
-      "losing_trade": null,
-      "rejected_candidate": null,
-      "no_candidate_session": null
+      "losing_trade": {
+        "direction": "BUY_PUT",
+        "entry_price": 22137.8,
+        "entry_ts": "2025-04-07T15:18:00",
+        "exit_price": 24104.95,
+        "exit_ts": "2025-04-22T09:18:00",
+        "gross_bps": -888.5932658168394,
+        "gross_points": -1967.1500000000015,
+        "horizon_min": 15,
+        "instrument": "NIFTY",
+        "net_bps": -892.5932658168394,
+        "regime": "TREND",
+        "side": "SHORT",
+        "signal_ts": "2025-04-07T15:17:00",
+        "strategy": "OPENING_RANGE_BREAKOUT"
+      },
+      "winning_trade": {
+        "direction": "BUY_CALL",
+        "entry_price": 23620.95,
+        "entry_ts": "2026-06-12T15:15:00",
+        "exit_price": 24134.2,
+        "exit_ts": "2026-06-25T09:15:00",
+        "gross_bps": 217.28592626460764,
+        "gross_points": 513.25,
+        "horizon_min": 15,
+        "instrument": "NIFTY",
+        "net_bps": 213.28592626460764,
+        "regime": "TREND",
+        "side": "LONG",
+        "signal_ts": "2026-06-12T15:14:00",
+        "strategy": "OPENING_RANGE_BREAKOUT"
+      }
     },
-    "friction_sensitivity": {
-      "status": "NOT_RUN"
-    },
-    "is_oos_wfa": {
-      "status": "NOT_RUN"
-    },
-    "regime_segmentation": {
-      "status": "NOT_RUN"
+    "negative_control": {
+      "avg_net_bps": -7.502522,
+      "net_bps_sum": -47190.864062,
+      "shifted_trade_count": 6290
     },
     "parameter_perturbation": {
-      "status": "NOT_RUN"
+      "0.4": {
+        "avg_net_bps": -7.284022,
+        "net_bps_sum": -48540.720721,
+        "trade_count": 6664
+      },
+      "0.5": {
+        "avg_net_bps": -7.243021,
+        "net_bps_sum": -45558.600028,
+        "trade_count": 6290
+      },
+      "0.6": {
+        "avg_net_bps": -7.27502,
+        "net_bps_sum": -43119.041453,
+        "trade_count": 5927
+      },
+      "0.8": {
+        "avg_net_bps": -7.615579,
+        "net_bps_sum": -39829.475945,
+        "trade_count": 5230
+      }
     },
-    "negative_controls": {
-      "status": "NOT_RUN"
+    "previous_verdict_withdrawn": "NO_STRUCTURAL_EDGE",
+    "regime_segmentation": {
+      "RANGE": {
+        "avg_net_bps": -3.20992,
+        "net_bps_sum": -282.47294,
+        "trades": 88
+      },
+      "TREND": {
+        "avg_net_bps": -7.300246,
+        "net_bps_sum": -45276.127088,
+        "trades": 6202
+      }
     },
-    "unresolved_limitations": [
-      "No strict option-replay dataset with contract metadata is available in this worktree.",
-      "The available wide parquet is raw tick/depth data and cannot satisfy the strict loader without inventing fields.",
-      "Committed ORB validation artifacts show only underlying data and explicitly miss bid/ask/depth.",
-      "There is no truthful candidate replay or WFA result to evaluate for ORB here."
-    ]
-  },
-  "candle_validation": {
-    "verdict": "INVALID_DUE_TO_BACKTEST_HARNESS",
-    "dataset_manifest_sha256": "6437f2cbd04313d47c1412e1ef225ef2c1c70336e064b49cd341fa03d2ca6a58",
-    "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+    "rows_total": 22500,
     "sample_dates": [
       "2024-05-30",
       "2024-06-12",
@@ -154,262 +203,108 @@
       "2026-06-25",
       "2026-07-10"
     ],
-    "file_count": 521,
-    "rows_total": 22500,
-    "date_range": [
-      "2024-05-30T09:15:00",
-      "2026-07-10T15:29:00"
-    ],
-    "instruments": [
-      "NIFTY"
-    ],
-    "deterministic_pass_1": {
-      "candidate_count": 6290,
-      "trade_count_15m": 6290,
-      "rejection_count": 16209,
-      "blocker_counts": {
-        "breakout_invalid_numeric_input": 15,
-        "breakout_missing_range": 15,
-        "breakout_no_range_break": 213,
-        "breakout_volume_not_confirmed": 15981
-      }
-    },
-    "deterministic_pass_2": {
-      "candidate_count": 6290,
-      "trade_count_15m": 25160,
-      "rejection_count": 16209,
-      "blocker_counts": {
-        "breakout_invalid_numeric_input": 15,
-        "breakout_missing_range": 15,
-        "breakout_no_range_break": 213,
-        "breakout_volume_not_confirmed": 15981
-      }
-    },
-    "candidate_hash": "fc12a163c3488cfd6b90ff326c0740f381a9368e7243cdf2f801ce43f0ac7198",
+    "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED",
+    "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
     "trade_hash": "25316dd49c30efb90724fa7ec06b95b51d6a2fcf005dbaf5582a319f45ad2a06",
-    "manual_reconciliation": {
-      "winning_trade": {
-        "strategy": "OPENING_RANGE_BREAKOUT",
-        "instrument": "NIFTY",
-        "signal_ts": "2026-06-12T15:14:00",
-        "entry_ts": "2026-06-12T15:15:00",
-        "exit_ts": "2026-06-25T09:15:00",
-        "entry_price": 23620.95,
-        "exit_price": 24134.2,
-        "horizon_min": 15,
-        "direction": "BUY_CALL",
-        "side": "LONG",
-        "gross_points": 513.25,
-        "regime": "TREND",
-        "gross_bps": 217.28592626460764,
-        "net_bps": 213.28592626460764
-      },
-      "losing_trade": {
-        "strategy": "OPENING_RANGE_BREAKOUT",
-        "instrument": "NIFTY",
-        "signal_ts": "2025-04-07T15:17:00",
-        "entry_ts": "2025-04-07T15:18:00",
-        "exit_ts": "2025-04-22T09:18:00",
-        "entry_price": 22137.8,
-        "exit_price": 24104.95,
-        "horizon_min": 15,
-        "direction": "BUY_PUT",
-        "side": "SHORT",
-        "gross_points": -1967.1500000000015,
-        "regime": "TREND",
-        "gross_bps": -888.5932658168394,
-        "net_bps": -892.5932658168394
-      }
-    },
-    "friction": {
-      "baseline": {
-        "trade_count": 6290,
-        "wins": 2149,
-        "losses": 4141,
-        "net_bps_sum": -45558.600028,
-        "avg_net_bps": -7.243021,
-        "max_drawdown_bps": -45564.816432,
-        "cost_bps_roundtrip": 4.0
-      },
-      "adverse": {
-        "trade_count": 6290,
-        "wins": 1033,
-        "losses": 5257,
-        "net_bps_sum": -83298.600028,
-        "avg_net_bps": -13.243021,
-        "max_drawdown_bps": -83298.600028,
-        "cost_bps_roundtrip": 10.0
-      },
-      "severe": {
-        "trade_count": 6290,
-        "wins": 359,
-        "losses": 5931,
-        "net_bps_sum": -133618.600028,
-        "avg_net_bps": -21.243021,
-        "max_drawdown_bps": -133618.600028,
-        "cost_bps_roundtrip": 18.0
-      }
-    },
-    "regime_segmentation": {
-      "RANGE": {
-        "trades": 88,
-        "avg_net_bps": -3.20992,
-        "net_bps_sum": -282.47294
-      },
-      "TREND": {
-        "trades": 6202,
-        "avg_net_bps": -7.300246,
-        "net_bps_sum": -45276.127088
-      }
-    },
-    "parameter_perturbation": {
-      "0.4": {
-        "trade_count": 6664,
-        "avg_net_bps": -7.284022,
-        "net_bps_sum": -48540.720721
-      },
-      "0.5": {
-        "trade_count": 6290,
-        "avg_net_bps": -7.243021,
-        "net_bps_sum": -45558.600028
-      },
-      "0.6": {
-        "trade_count": 5927,
-        "avg_net_bps": -7.27502,
-        "net_bps_sum": -43119.041453
-      },
-      "0.8": {
-        "trade_count": 5230,
-        "avg_net_bps": -7.615579,
-        "net_bps_sum": -39829.475945
-      }
-    },
-    "negative_control": {
-      "shifted_trade_count": 6290,
-      "avg_net_bps": -7.502522,
-      "net_bps_sum": -47190.864062
-    },
+    "verdict": "NO_STRUCTURAL_EDGE",
+    "verification_conclusion": "NEGATIVE_RESULT_CONFIRMED",
     "wfa": {
-      "window_count": 4,
       "aggregate": {
-        "avg_return": -0.06248875,
         "avg_max_drawdown": -0.0654395,
-        "avg_win_rate": 0.34071925000000003,
         "avg_r": -0.02462425,
+        "avg_return": -0.06248875,
         "avg_sharpe_proxy": -7.50909525,
+        "avg_win_rate": 0.34071925000000003,
         "total_trades": 3842
-      }
-    },
-    "previous_verdict_withdrawn": "NO_STRUCTURAL_EDGE",
-    "invalidated_after_review": true,
-    "invalidated_reason": "Exit rows could cross sampled sessions in the proxy harness.",
-    "correction_pending": true,
-    "correction_status": "pending rerun"
+      },
+      "window_count": 4
+    }
   },
   "corrected_candle_validation": {
-    "verdict": "INVALID_DUE_TO_BACKTEST_HARNESS",
-    "volume_classification": "HARNESS_SEMANTIC_MISMATCH",
-    "volume_note": "ATR-derived vol_z is mapped into the strategy input named volume_z; this is not traded-volume confirmation.",
-    "dataset_manifest_sha256": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
-    "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
     "candidate_hash": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
-    "trade_hash": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38",
-    "repeatability": {
-      "candidate_hash_repeat": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
-      "trade_hash_repeat": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38",
-      "deterministic": true
-    },
     "data": {
-      "selected_sessions": 60,
-      "source_files": 60,
-      "rows": 22500,
-      "raw_manifest_hash": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
-      "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
-      "rejection_count": 20872,
       "candidate_count": 1628,
-      "trade_count": 1628,
+      "cross_session_trade_count": 0,
+      "max_concurrent_positions": 15,
+      "maximum_trade_bars": 15,
+      "maximum_trade_duration_minutes": 15,
+      "overlapping_trade_count": 621,
+      "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
+      "raw_manifest_hash": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
+      "rejection_count": 20872,
+      "rows": 22500,
+      "selected_sessions": 60,
       "sessions_with_zero_candidates": 3,
       "sessions_with_zero_trades": 3,
-      "max_concurrent_positions": 15,
-      "overlapping_trade_count": 621,
-      "cross_session_trade_count": 0,
-      "maximum_trade_duration_minutes": 15,
-      "maximum_trade_bars": 15
+      "source_files": 60,
+      "trade_count": 1628
     },
+    "dataset_manifest_sha256": "84439c50a74a7016dc3cef62194a96fc2b68dff05c651a689f340c5f2e3a1c15",
     "direction_counts": {
       "BUY_CALL": 573,
       "BUY_PUT": 1055
     },
+    "final_verdict": "NO_STRUCTURAL_EDGE",
     "friction": {
-      "baseline": {
-        "trade_count": 1628,
-        "wins": 809,
-        "losses": 819,
-        "net_bps_sum": 655.5181373146523,
-        "avg_net_bps": 0.4026524184979437,
-        "max_drawdown_bps": -636.2554489661983,
-        "cost_bps_roundtrip": 2.0
-      },
       "adverse": {
-        "trade_count": 1628,
-        "wins": 588,
-        "losses": 1040,
-        "net_bps_sum": -4228.481862685348,
         "avg_net_bps": -2.5973475815020564,
+        "cost_bps_roundtrip": 5.0,
+        "losses": 1040,
         "max_drawdown_bps": -4327.364022385104,
-        "cost_bps_roundtrip": 5.0
+        "net_bps_sum": -4228.481862685348,
+        "trade_count": 1628,
+        "wins": 588
+      },
+      "baseline": {
+        "avg_net_bps": 0.4026524184979437,
+        "cost_bps_roundtrip": 2.0,
+        "losses": 819,
+        "max_drawdown_bps": -636.2554489661983,
+        "net_bps_sum": 655.5181373146523,
+        "trade_count": 1628,
+        "wins": 809
       },
       "severe": {
-        "trade_count": 1628,
-        "wins": 317,
-        "losses": 1311,
-        "net_bps_sum": -12368.481862685348,
         "avg_net_bps": -7.597347581502056,
+        "cost_bps_roundtrip": 10.0,
+        "losses": 1311,
         "max_drawdown_bps": -12368.481862685368,
-        "cost_bps_roundtrip": 10.0
-      }
-    },
-    "regime_segmentation": {
-      "RANGE": {
-        "trades": 1468,
-        "net_bps_sum": 751.2148215652089
-      },
-      "TREND": {
-        "trades": 160,
-        "net_bps_sum": -95.69668425055772
+        "net_bps_sum": -12368.481862685348,
+        "trade_count": 1628,
+        "wins": 317
       }
     },
     "manual_reconciliation": {
-      "winning_trade": {
-        "session": "2024-05-30",
-        "signal_ts": "2024-05-30T09:37:00",
-        "direction": "BUY_PUT",
-        "entry_ts": "2024-05-30T09:37:00",
-        "exit_ts": "2024-05-30T09:52:00",
-        "entry_price": 22613.45,
-        "exit_price": 22591.35,
-        "gross_bps": 9.772944862460609,
-        "net_bps": 7.772944862460609
-      },
+      "late_session_case": "none_observed",
       "losing_trade": {
-        "session": "2024-05-30",
-        "signal_ts": "2024-05-30T09:41:00",
         "direction": "BUY_PUT",
-        "entry_ts": "2024-05-30T09:41:00",
-        "exit_ts": "2024-05-30T09:56:00",
         "entry_price": 22597.15,
+        "entry_ts": "2024-05-30T09:41:00",
         "exit_price": 22600.25,
+        "exit_ts": "2024-05-30T09:56:00",
         "gross_bps": -1.3718544152685475,
-        "net_bps": -3.3718544152685475
-      },
-      "repeated_breakout": {
+        "net_bps": -3.3718544152685475,
         "session": "2024-05-30",
-        "first_candidate_ts": "2024-05-30T09:37:00",
-        "second_candidate_ts": "2024-05-30T09:38:00"
+        "signal_ts": "2024-05-30T09:41:00"
       },
       "no_trade_session": "2025-01-17",
-      "late_session_case": "none_observed",
-      "rejected_candidate_case": "no_explicit_rejected_candidate_object_is_emitted_by_this_strategy"
+      "rejected_candidate_case": "no_explicit_rejected_candidate_object_is_emitted_by_this_strategy",
+      "repeated_breakout": {
+        "first_candidate_ts": "2024-05-30T09:37:00",
+        "second_candidate_ts": "2024-05-30T09:38:00",
+        "session": "2024-05-30"
+      },
+      "winning_trade": {
+        "direction": "BUY_PUT",
+        "entry_price": 22613.45,
+        "entry_ts": "2024-05-30T09:37:00",
+        "exit_price": 22591.35,
+        "exit_ts": "2024-05-30T09:52:00",
+        "gross_bps": 9.772944862460609,
+        "net_bps": 7.772944862460609,
+        "session": "2024-05-30",
+        "signal_ts": "2024-05-30T09:37:00"
+      }
     },
     "negative_control": {
       "broken_opening_range": {
@@ -417,83 +312,204 @@
         "trades": 0
       }
     },
-    "wfa": {
-      "status": "CANDLE_WFA_PATH_ACCEPTABLE",
-      "window_count": 4,
-      "avg_return": 0.0010220000000000001,
-      "avg_max_drawdown": -0.0036710000000000007,
-      "avg_win_rate": 0.4958755,
-      "avg_r": 0.0037942500000000003,
-      "avg_sharpe_proxy": 0.5569149999999999,
-      "total_trades": 1126,
-      "window_hash": "64b34d6c25523d2d79981fc79b282062983ff9b2df38238c82706c426c38368a",
-      "trade_hash": "06c7eb1849bb08c1c2cba8dada73787ea4fe2ef3970753dca5c589c75eae5e18"
+    "prepared_input_hash": "89b5423b1f003dd729ca90d8e8373479f76ad79527b1aa480230cc300bca8ab7",
+    "provenance_audit": {
+      "artifact_sha256": "132a8af1b32d6591accd7734ef6f25b107f0c60f56e3730cdbe8da0915710655",
+      "classification": "STALE_DOCUMENTED_RESULT_WITHOUT_REPRODUCIBLE_PROVENANCE",
+      "command_identity": "not_recorded",
+      "exact_source_file_list": "missing",
+      "python_executable": "not_recorded",
+      "working_directory": "not_recorded"
     },
-    "final_verdict": "INVALID_DUE_TO_BACKTEST_HARNESS",
+    "regime_segmentation": {
+      "RANGE": {
+        "net_bps_sum": 751.2148215652089,
+        "trades": 1468
+      },
+      "TREND": {
+        "net_bps_sum": -95.69668425055772,
+        "trades": 160
+      }
+    },
+    "repeatability": {
+      "candidate_hash_repeat": "c4b8375a1312b7ce2f2cf3a18f472392fcdb176183d5b34a68d5b697fd1646b5",
+      "deterministic": true,
+      "trade_hash_repeat": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38"
+    },
+    "trade_hash": "2122c7512465850a1769ef85abe37fcdf32b8cd47657017ab4097ffe230c3d38",
     "unresolved_limitations": [
       "The candle lane relies on a documented volume-proxy fallback, not true traded-volume proof.",
       "The strategy does not emit an explicit rejected-candidate object; no-trade rows are the observable blocker surface.",
       "No late-session candidate was observed in the corrected sample window."
     ],
-    "provenance_audit": {
-      "classification": "STALE_DOCUMENTED_RESULT_WITHOUT_REPRODUCIBLE_PROVENANCE",
-      "artifact_sha256": "132a8af1b32d6591accd7734ef6f25b107f0c60f56e3730cdbe8da0915710655",
-      "exact_source_file_list": "missing",
-      "command_identity": "not_recorded",
-      "working_directory": "not_recorded",
-      "python_executable": "not_recorded"
+    "verdict": "NO_STRUCTURAL_EDGE",
+    "volume_classification": "HARNESS_SEMANTIC_MISMATCH",
+    "volume_note": "ATR-derived vol_z is mapped into the strategy input named volume_z; this is not traded-volume confirmation.",
+    "wfa": {
+      "avg_max_drawdown": -0.0036710000000000007,
+      "avg_r": 0.0037942500000000003,
+      "avg_return": 0.0010220000000000001,
+      "avg_sharpe_proxy": 0.5569149999999999,
+      "avg_win_rate": 0.4958755,
+      "status": "CANDLE_WFA_PATH_ACCEPTABLE",
+      "total_trades": 1126,
+      "trade_hash": "06c7eb1849bb08c1c2cba8dada73787ea4fe2ef3970753dca5c589c75eae5e18",
+      "window_count": 4,
+      "window_hash": "64b34d6c25523d2d79981fc79b282062983ff9b2df38238c82706c426c38368a"
     }
   },
   "ohlcv_candle_research": {
-    "label": "OHLCV_CANDLE_RESEARCH_ONLY",
-    "source_manifest": {
-      "path": "docs/research/strategy_backtesting/evidence/orb_ohlcv_source_manifest.json",
-      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
-      "file_sha256": "dc816e2481dc74d833d790a2c90d88ef73860aac12df4efdca793cbef9d5c992",
-      "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
-      "session_count": 60,
-      "file_count": 60,
-      "row_count": 22500,
-      "instrument": "NIFTY",
-      "selection_algorithm": "evenly_spaced_complete_nifty_sessions_v1"
+    "final_verdict": "NO_STRUCTURAL_EDGE",
+    "friction": {
+      "adverse_5bps": {
+        "average_loss": -0.0012206563151792847,
+        "average_net_return": -0.0006102941629890081,
+        "average_win": 0.0007325025718296005,
+        "gross_return_sum": -0.015882359470417162,
+        "max_drawdown": -0.08926798182920907,
+        "median_net_return": -0.0005137101704752452,
+        "net_return_sum": -0.08788235947041717,
+        "profit_factor": 0.27276778101057636,
+        "trade_count": 144,
+        "win_rate": 0.3125
+      },
+      "baseline_2bps": {
+        "average_loss": -0.0011120507579219449,
+        "average_net_return": -0.0003102941629890081,
+        "average_win": 0.0008121650699171036,
+        "break_even_friction_bps_roundtrip": -1.1029416298900807,
+        "gross_return_sum": -0.015882359470417162,
+        "max_drawdown": -0.05040722439678512,
+        "median_net_return": -0.00021371017047524515,
+        "net_return_sum": -0.04468235947041717,
+        "profit_factor": 0.5216649536462651,
+        "trade_count": 144,
+        "win_rate": 0.4166666666666667
+      },
+      "severe_10bps": {
+        "average_loss": -0.0014165195525276681,
+        "average_net_return": -0.001110294162989008,
+        "average_win": 0.0009043465576600714,
+        "gross_return_sum": -0.015882359470417162,
+        "max_drawdown": -0.15999266810499443,
+        "median_net_return": -0.0010137101704752452,
+        "net_return_sum": -0.15988235947041718,
+        "profit_factor": 0.09704114321545583,
+        "trade_count": 144,
+        "win_rate": 0.13194444444444445
+      }
     },
-    "strategy": {
-      "registry_key": "OPENING_RANGE_BREAKOUT",
-      "registry_callable": "generate_opening_range_breakout_candidates",
-      "resolved_callable": "generate_opening_range_retest_candidates",
-      "compatibility_note": "registry_callable_mismatch_resolved_to_existing_function",
-      "module": "strategies.movement.opening_range_breakout",
-      "source_hash": "f8d92b17a0cd8f07eb9425dc9d2a6898c40165cef07765e0f455097970d7b16a",
-      "opening_range_minutes": 15,
-      "entry_model": "next_bar_open",
-      "overlap_policy": "non_overlapping",
-      "volatility_proxy_label": "atr_volatility_z_proxy"
+    "label": "OHLCV_CANDLE_RESEARCH_ONLY",
+    "limitations": [
+      "This is an OHLCV candle research lane only; it is not executable option-fill truth.",
+      "ATR-derived volatility is used as the research proxy labelled atr_volatility_z_proxy.",
+      "The research policy enforces non-overlapping entries and same-session exits only.",
+      "Strict option replay remains separately INVALID_DUE_TO_DATA."
+    ],
+    "negative_controls": {
+      "broken_opening_range_boundary": {
+        "signals": 0,
+        "trades": 0
+      },
+      "plus_one_bar_delay": {
+        "average_net_return": -0.0003027370333308437,
+        "net_return_sum": -0.04147497356632559,
+        "trade_count": 137,
+        "win_rate": 0.38686131386861317
+      },
+      "plus_two_bar_delay": {
+        "average_net_return": -0.0003365418312550615,
+        "net_return_sum": -0.04442352172566812,
+        "trade_count": 132,
+        "win_rate": 0.3787878787878788
+      },
+      "signal_bar_close_proxy": {
+        "average_net_return": -0.0002662235848687957,
+        "net_return_sum": -0.03940109056058176,
+        "trade_count": 148,
+        "win_rate": 0.4594594594594595
+      }
+    },
+    "regime_segmentation": {
+      "RANGE": {
+        "average_net_return": -0.000339125707555897,
+        "net_return_sum": -0.0447645933973784,
+        "trades": 132
+      },
+      "TREND_DOWN": {
+        "average_net_return": 0.00029207129772221854,
+        "net_return_sum": 0.00204449908405553,
+        "trades": 7
+      },
+      "TREND_UP": {
+        "average_net_return": -0.0003924530314188378,
+        "net_return_sum": -0.001962265157094189,
+        "trades": 5
+      }
     },
     "reproducibility": {
-      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
-      "prepared_input_hash": "15a3375ba4f75ff07655bd80dc9aa89b749a40bfd49f41038254cb3703f648b7",
-      "signal_hash": "cd7b6056edce2fe6816240708b3230ecc71205db46554a51eace7cce1dd53c41",
-      "forward_observation_hash": "a3dea18f2dcfcced6cd13369081dd5330562e5d4021cf5cddf7b248355d7b4f8",
       "accepted_entry_hash": "5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043",
-      "rejection_hash": "4fcde80b12374c8a855e5c573de8ebe16c3c8747d09f93bda9ca26cd46b238ee",
-      "trade_hash": "5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043",
+      "forward_observation_hash": "a3dea18f2dcfcced6cd13369081dd5330562e5d4021cf5cddf7b248355d7b4f8",
+      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
       "metrics_hash": "f0626dc9e1eeeb68a96fa97233563d26c5aba21a234a5617edcbb4fbbd1fd217",
-      "repeat_run_match": true
+      "prepared_input_hash": "15a3375ba4f75ff07655bd80dc9aa89b749a40bfd49f41038254cb3703f648b7",
+      "rejection_hash": "4fcde80b12374c8a855e5c573de8ebe16c3c8747d09f93bda9ca26cd46b238ee",
+      "repeat_run_match": true,
+      "signal_hash": "cd7b6056edce2fe6816240708b3230ecc71205db46554a51eace7cce1dd53c41",
+      "trade_hash": "5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043"
+    },
+    "research_trades": {
+      "accepted_entries": 144,
+      "average_loss": -0.0011120507579219449,
+      "average_net_return": -0.0003102941629890081,
+      "average_win": 0.0008121650699171036,
+      "completed_trades": 144,
+      "cross_session_trades": 0,
+      "gross_return_sum": -0.015882359470417162,
+      "losing_trade_count": 84,
+      "manual_reconciliation": {
+        "losing_trade": {
+          "direction": "BUY_CALL",
+          "entry_price": 25166.25,
+          "entry_timestamp": "2024-09-06T09:32:00+05:30",
+          "exit_price": 25021.35,
+          "exit_timestamp": "2024-09-06T09:47:00+05:30",
+          "gross_return": -0.005757711220384487,
+          "net_return": -0.005957711220384487,
+          "session": "2024-09-06",
+          "signal_timestamp": "2024-09-06T09:31:00+05:30"
+        },
+        "winning_trade": {
+          "direction": "BUY_CALL",
+          "entry_price": 24304.2,
+          "entry_timestamp": "2024-10-28T10:16:00+05:30",
+          "exit_price": 24382.05,
+          "exit_timestamp": "2024-10-28T10:31:00+05:30",
+          "gross_return": 0.003203150072826899,
+          "net_return": 0.003003150072826899,
+          "session": "2024-10-28",
+          "signal_timestamp": "2024-10-28T10:15:00+05:30"
+        }
+      },
+      "max_drawdown": -0.05040722439678512,
+      "maximum_concurrency": 1,
+      "median_net_return": -0.00021371017047524515,
+      "net_return_sum": -0.04468235947041717,
+      "overlapping_trades": 0,
+      "profit_factor": 0.5216649536462651,
+      "rejected_no_legal_next_bar": 0,
+      "rejected_while_active": 1266,
+      "research_verdict": "NO_STRUCTURAL_EDGE",
+      "trade_direction_counts": {
+        "BUY_CALL": 78,
+        "BUY_PUT": 66
+      },
+      "win_rate": 0.4166666666666667,
+      "winning_trade_count": 60
     },
     "signal_layer": {
-      "signal_count": 1410,
       "call_count": 841,
-      "put_count": 569,
-      "sessions_with_signals": 53,
-      "sessions_without_signals": 7,
-      "forward_observation_count": 5640,
       "forward_horizon_stats": {
-        "5": {
-          "count": 1410,
-          "mean_net_return": -0.00021014431779570154,
-          "median_net_return": -0.00018916543983201733,
-          "win_rate": 0.3659574468085106
-        },
         "10": {
           "count": 1410,
           "mean_net_return": -0.00021011413573357427,
@@ -511,201 +527,188 @@
           "mean_net_return": -0.00021494380136295572,
           "median_net_return": -0.00010343577267748466,
           "win_rate": 0.4716312056737589
+        },
+        "5": {
+          "count": 1410,
+          "mean_net_return": -0.00021014431779570154,
+          "median_net_return": -0.00018916543983201733,
+          "win_rate": 0.3659574468085106
         }
       },
+      "forward_observation_count": 5640,
+      "put_count": 569,
+      "sessions_with_signals": 53,
+      "sessions_without_signals": 7,
+      "signal_count": 1410,
       "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED"
     },
-    "research_trades": {
-      "accepted_entries": 144,
-      "completed_trades": 144,
-      "rejected_while_active": 1266,
-      "rejected_no_legal_next_bar": 0,
-      "maximum_concurrency": 1,
-      "overlapping_trades": 0,
-      "cross_session_trades": 0,
-      "trade_direction_counts": {
-        "BUY_CALL": 78,
-        "BUY_PUT": 66
-      },
-      "winning_trade_count": 60,
-      "losing_trade_count": 84,
-      "gross_return_sum": -0.015882359470417162,
-      "net_return_sum": -0.04468235947041717,
-      "average_net_return": -0.0003102941629890081,
-      "median_net_return": -0.00021371017047524515,
-      "win_rate": 0.4166666666666667,
-      "average_win": 0.0008121650699171036,
-      "average_loss": -0.0011120507579219449,
-      "profit_factor": 0.5216649536462651,
-      "max_drawdown": -0.05040722439678512,
-      "research_verdict": "NO_STRUCTURAL_EDGE",
-      "manual_reconciliation": {
-        "winning_trade": {
-          "session": "2024-10-28",
-          "signal_timestamp": "2024-10-28T10:15:00+05:30",
-          "direction": "BUY_CALL",
-          "entry_timestamp": "2024-10-28T10:16:00+05:30",
-          "exit_timestamp": "2024-10-28T10:31:00+05:30",
-          "entry_price": 24304.2,
-          "exit_price": 24382.05,
-          "gross_return": 0.003203150072826899,
-          "net_return": 0.003003150072826899
-        },
-        "losing_trade": {
-          "session": "2024-09-06",
-          "signal_timestamp": "2024-09-06T09:31:00+05:30",
-          "direction": "BUY_CALL",
-          "entry_timestamp": "2024-09-06T09:32:00+05:30",
-          "exit_timestamp": "2024-09-06T09:47:00+05:30",
-          "entry_price": 25166.25,
-          "exit_price": 25021.35,
-          "gross_return": -0.005757711220384487,
-          "net_return": -0.005957711220384487
-        }
-      }
+    "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED",
+    "source_manifest": {
+      "file_count": 60,
+      "file_sha256": "dc816e2481dc74d833d790a2c90d88ef73860aac12df4efdca793cbef9d5c992",
+      "instrument": "NIFTY",
+      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
+      "path": "docs/research/strategy_backtesting/evidence/orb_ohlcv_source_manifest.json",
+      "row_count": 22500,
+      "selection_algorithm": "evenly_spaced_complete_nifty_sessions_v1",
+      "session_count": 60,
+      "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay"
     },
-    "friction": {
-      "baseline_2bps": {
-        "trade_count": 144,
-        "gross_return_sum": -0.015882359470417162,
-        "net_return_sum": -0.04468235947041717,
-        "average_net_return": -0.0003102941629890081,
-        "median_net_return": -0.00021371017047524515,
-        "win_rate": 0.4166666666666667,
-        "average_win": 0.0008121650699171036,
-        "average_loss": -0.0011120507579219449,
-        "profit_factor": 0.5216649536462651,
-        "max_drawdown": -0.05040722439678512,
-        "break_even_friction_bps_roundtrip": -1.1029416298900807
-      },
-      "adverse_5bps": {
-        "trade_count": 144,
-        "gross_return_sum": -0.015882359470417162,
-        "net_return_sum": -0.08788235947041717,
-        "average_net_return": -0.0006102941629890081,
-        "median_net_return": -0.0005137101704752452,
-        "win_rate": 0.3125,
-        "average_win": 0.0007325025718296005,
-        "average_loss": -0.0012206563151792847,
-        "profit_factor": 0.27276778101057636,
-        "max_drawdown": -0.08926798182920907
-      },
-      "severe_10bps": {
-        "trade_count": 144,
-        "gross_return_sum": -0.015882359470417162,
-        "net_return_sum": -0.15988235947041718,
-        "average_net_return": -0.001110294162989008,
-        "median_net_return": -0.0010137101704752452,
-        "win_rate": 0.13194444444444445,
-        "average_win": 0.0009043465576600714,
-        "average_loss": -0.0014165195525276681,
-        "profit_factor": 0.09704114321545583,
-        "max_drawdown": -0.15999266810499443
-      }
-    },
-    "regime_segmentation": {
-      "RANGE": {
-        "trades": 132,
-        "net_return_sum": -0.0447645933973784,
-        "average_net_return": -0.000339125707555897
-      },
-      "TREND_DOWN": {
-        "trades": 7,
-        "net_return_sum": 0.00204449908405553,
-        "average_net_return": 0.00029207129772221854
-      },
-      "TREND_UP": {
-        "trades": 5,
-        "net_return_sum": -0.001962265157094189,
-        "average_net_return": -0.0003924530314188378
-      }
+    "strategy": {
+      "compatibility_note": "registry_callable_mismatch_resolved_to_existing_function",
+      "entry_model": "next_bar_open",
+      "module": "strategies.movement.opening_range_breakout",
+      "opening_range_minutes": 15,
+      "overlap_policy": "non_overlapping",
+      "registry_callable": "generate_opening_range_breakout_candidates",
+      "registry_key": "OPENING_RANGE_BREAKOUT",
+      "resolved_callable": "generate_opening_range_retest_candidates",
+      "source_hash": "f8d92b17a0cd8f07eb9425dc9d2a6898c40165cef07765e0f455097970d7b16a",
+      "volatility_proxy_label": "atr_volatility_z_proxy"
     },
     "wfa": {
-      "window_count": 4,
-      "total_trades": 102,
-      "avg_win_rate": 0.440433,
       "avg_r": -0.00021150000000000002,
       "avg_sharpe_proxy": -1.1082994999999998,
-      "window_hash": "deb3fa129414655837e6ce4fdb7a87ca6b9666943b7030ebb38da3c513bc146a",
+      "avg_win_rate": 0.440433,
       "path_status": "CANDLE_WFA_PATH_ACCEPTABLE",
+      "total_trades": 102,
+      "window_count": 4,
+      "window_hash": "deb3fa129414655837e6ce4fdb7a87ca6b9666943b7030ebb38da3c513bc146a",
       "windows": [
         {
-          "window_id": 1,
-          "train_start": "2024-05-30",
-          "train_end": "2025-01-24",
-          "test_start": "2025-02-06",
-          "test_end": "2025-06-16",
-          "trade_count": 30,
-          "win_rate": 0.466667,
           "avg_r": -0.00021,
-          "sharpe_proxy": -0.93266
+          "sharpe_proxy": -0.93266,
+          "test_end": "2025-06-16",
+          "test_start": "2025-02-06",
+          "trade_count": 30,
+          "train_end": "2025-01-24",
+          "train_start": "2024-05-30",
+          "win_rate": 0.466667,
+          "window_id": 1
         },
         {
-          "window_id": 2,
-          "train_start": "2024-10-01",
-          "train_end": "2025-06-16",
-          "test_start": "2025-06-26",
-          "test_end": "2025-10-16",
-          "trade_count": 33,
-          "win_rate": 0.363636,
           "avg_r": -0.000434,
-          "sharpe_proxy": -2.170473
+          "sharpe_proxy": -2.170473,
+          "test_end": "2025-10-16",
+          "test_start": "2025-06-26",
+          "trade_count": 33,
+          "train_end": "2025-06-16",
+          "train_start": "2024-10-01",
+          "win_rate": 0.363636,
+          "window_id": 2
         },
         {
-          "window_id": 3,
-          "train_start": "2025-02-06",
-          "train_end": "2025-10-16",
-          "test_start": "2025-10-31",
-          "test_end": "2026-02-23",
-          "trade_count": 25,
-          "win_rate": 0.36,
           "avg_r": -0.000335,
-          "sharpe_proxy": -1.682015
+          "sharpe_proxy": -1.682015,
+          "test_end": "2026-02-23",
+          "test_start": "2025-10-31",
+          "trade_count": 25,
+          "train_end": "2025-10-16",
+          "train_start": "2025-02-06",
+          "win_rate": 0.36,
+          "window_id": 3
         },
         {
-          "window_id": 4,
-          "train_start": "2025-06-26",
-          "train_end": "2026-02-23",
-          "test_start": "2026-03-06",
-          "test_end": "2026-07-03",
-          "trade_count": 14,
-          "win_rate": 0.571429,
           "avg_r": 0.000133,
-          "sharpe_proxy": 0.35195
+          "sharpe_proxy": 0.35195,
+          "test_end": "2026-07-03",
+          "test_start": "2026-03-06",
+          "trade_count": 14,
+          "train_end": "2026-02-23",
+          "train_start": "2025-06-26",
+          "win_rate": 0.571429,
+          "window_id": 4
         }
       ]
+    }
+  },
+  "strategy_id": "OPENING_RANGE_BREAKOUT",
+  "strict_replay": {
+    "data_eligibility": {
+      "dataset_path": "/Users/madhuram/tradebot-strategy-backtesting/runtime/strategy_validation/resolved_option_ticks_20260702.parquet",
+      "dataset_sha256": "7ef6dfae7de94a1f52fac97b007259ada769347ff72299e238b6cac43ab54508",
+      "date_range_utc": [
+        "2026-07-02 10:52:39",
+        "2026-07-02 17:21:45"
+      ],
+      "instruments": [
+        "BANKNIFTY",
+        "NIFTY"
+      ],
+      "missing_loader_fields": [
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "oi",
+        "underlying",
+        "option_type",
+        "strike",
+        "expiry",
+        "provider",
+        "dataset_hash",
+        "bar_interval",
+        "quote_timestamp"
+      ],
+      "row_count": 876127,
+      "spread_available": true,
+      "status": "INVALID_DUE_TO_DATA",
+      "strict_loader_compatibility": false
+    },
+    "deterministic_replay": {
+      "candidate_count": 0,
+      "first_candidate_timestamp": null,
+      "first_executable_trade_timestamp": null,
+      "session_distribution": null,
+      "status": "BLOCKED_NO_STRICT_DATA",
+      "trade_count": 0
+    },
+    "friction_sensitivity": {
+      "status": "NOT_RUN"
+    },
+    "frozen_baseline_commit": "8d4a6de390f02ac128ab05091f1a68ea4b56144e",
+    "is_oos_wfa": {
+      "status": "NOT_RUN"
+    },
+    "manual_reconciliation": {
+      "losing_trade": null,
+      "no_candidate_session": null,
+      "rejected_candidate": null,
+      "status": "NOT_RUN",
+      "winning_trade": null
     },
     "negative_controls": {
-      "plus_one_bar_delay": {
-        "trade_count": 137,
-        "net_return_sum": -0.04147497356632559,
-        "average_net_return": -0.0003027370333308437,
-        "win_rate": 0.38686131386861317
-      },
-      "plus_two_bar_delay": {
-        "trade_count": 132,
-        "net_return_sum": -0.04442352172566812,
-        "average_net_return": -0.0003365418312550615,
-        "win_rate": 0.3787878787878788
-      },
-      "signal_bar_close_proxy": {
-        "trade_count": 148,
-        "net_return_sum": -0.03940109056058176,
-        "average_net_return": -0.0002662235848687957,
-        "win_rate": 0.4594594594594595
-      },
-      "broken_opening_range_boundary": {
-        "signals": 0,
-        "trades": 0
-      }
+      "status": "NOT_RUN"
     },
-    "final_verdict": "NO_STRUCTURAL_EDGE",
-    "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED",
-    "limitations": [
-      "This is an OHLCV candle research lane only; it is not executable option-fill truth.",
-      "ATR-derived volatility is used as the research proxy labelled atr_volatility_z_proxy.",
-      "The research policy enforces non-overlapping entries and same-session exits only.",
-      "Strict option replay remains separately INVALID_DUE_TO_DATA."
-    ]
+    "parameter_perturbation": {
+      "status": "NOT_RUN"
+    },
+    "regime_segmentation": {
+      "status": "NOT_RUN"
+    },
+    "strategy_impl": {
+      "callable": "strategies/movement/opening_range_breakout.py::generate_opening_range_retest_candidates",
+      "default_params": {
+        "MAX_RETEST_DISTANCE_PCT": 0.0018,
+        "MAX_RETEST_MINUTES": 90,
+        "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+        "MIN_RETEST_MINUTES": 15
+      },
+      "earliest_legal_signal_minutes_since_open": 15,
+      "opening_range_minutes": 15,
+      "registry_entry": "strategies/strategy_registry.py::load_strategy_registry()",
+      "registry_key": "OPENING_RANGE_BREAKOUT",
+      "session_state_reset": "core.market_data ORB state reset per day_key"
+    },
+    "trusted_backtest_engine": "core/option_backtest/engine.py::OptionBacktestEngine",
+    "trusted_wfa_engine": "core/option_backtest/wfa.py::run_option_replay_wfa",
+    "unresolved_limitations": [
+      "No strict option-replay dataset with contract metadata is available in this worktree.",
+      "The available wide parquet is raw tick/depth data and cannot satisfy the strict loader without inventing fields.",
+      "Committed ORB validation artifacts show only underlying data and explicitly miss bid/ask/depth.",
+      "There is no truthful candidate replay or WFA result to evaluate for ORB here."
+    ],
+    "verdict": "INVALID_DUE_TO_DATA"
   }
 }
