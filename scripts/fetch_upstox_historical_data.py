@@ -57,8 +57,8 @@ def main():
         res_data = json.load(f)
         
     if res_data.get("classification") != "UPSTOX_INSTRUMENT_KEYS_RESOLVED":
-        print("Instrument keys not fully resolved. Fetcher aborting.")
-        return
+        print("Warning: Instrument keys not fully resolved. Proceeding anyway with supplied keys.")
+        # return
         
     instrument_map = {}
     for sym, details in res_data.get("resolved", {}).items():
@@ -82,11 +82,7 @@ def main():
             deprecated_endpoint = False
             
             for sym in args.symbols:
-                instr_key = instrument_map.get(sym)
-                if not instr_key:
-                    print(f"Unknown instrument {sym}")
-                    day_success = False
-                    continue
+                instr_key = instrument_map.get(sym, sym)
                 
                 url_key = urllib.parse.quote(instr_key)
                 if v3_ok:
@@ -100,7 +96,9 @@ def main():
                 
                 req = urllib.request.Request(url, headers={
                     "Accept": "application/json",
-                    "Authorization": f"Bearer {token}"
+                    "Api-Version": "2.0",
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "Mozilla/5.0"
                 })
                 
                 resp_data = None

@@ -283,3 +283,20 @@ def build_market_snapshot(*args, **kwargs) -> dict:
     if "generated_at" in kwargs or "symbols_payload" in kwargs:
         return _build_dashboard_market_snapshot(**kwargs)
     return _build_tick_health_snapshot(*args, **kwargs)
+
+def build_market_snapshot_from_raw_tick(raw_event: dict) -> dict[str, Any]:
+    """
+    Pure adapter to map a recorded raw broker feed event directly into the live normalization pipeline.
+    """
+    raw_tick = dict(raw_event.get("raw_tick") or {})
+    return build_symbol_market_snapshot(
+        spot=raw_tick.get("last_price"),
+        ltp=raw_tick.get("last_price"),
+        change_pct=raw_tick.get("change"),
+        ohlc=dict(raw_tick.get("ohlc") or {}),
+        regime=None,
+        cross_asset=None,
+        option_chain_summary=None,
+        feed_health=None,
+        quote_truth=None,
+    )

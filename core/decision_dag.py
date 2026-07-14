@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping, Sequence
 from config import config as cfg
 from core.live_indicator_readiness import build_live_indicator_readiness_report
 from core.market_context import SESSION_NORMAL_OPEN, coerce_segment_for_market_context, derive_market_context
+from core.regime_session_context import resolve_canonical_session_context
 from core.time_utils import compute_age_sec, now_utc_epoch
 
 logger = logging.getLogger(__name__)
@@ -883,7 +884,20 @@ def _node_regime_ok(snapshot: MarketSnapshot, ctx: Mapping[str, Any], deps: Mapp
     # Evaluate regime entropy via the central normalized gate
     from core.regime_entropy_gate import evaluate_regime_entropy_gate
 
-    session_bucket = snapshot.raw_data.get("session_bucket", "DEFAULT") if isinstance(snapshot.raw_data, dict) else "DEFAULT"
+    raw_data = snapshot.raw_data if isinstance(snapshot.raw_data, dict) else {}
+    session_bucket = str(raw_data.get("session_bucket") or "").strip().upper()
+    if not session_bucket:
+        session_bucket = resolve_canonical_session_context(
+            raw_data.get("timestamp_ist")
+            or raw_data.get("timestamp")
+            or raw_data.get("quote_ts")
+            or raw_data.get("quote_ts_epoch")
+            or raw_data.get("ltp_ts_epoch")
+            or raw_data.get("candle_ts_epoch"),
+            segment=str(raw_data.get("segment") or "NSE_FNO"),
+            is_expiry_day=bool(raw_data.get("is_expiry_day")),
+            is_event_mode=bool(raw_data.get("is_event_mode")),
+        ).canonical_session_bucket
     expiry_day = bool(snapshot.raw_data.get("is_expiry_day")) if isinstance(snapshot.raw_data, dict) else False
     event_mode = bool(snapshot.raw_data.get("is_event_mode")) if isinstance(snapshot.raw_data, dict) else False
 

@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from core.events import write_json_atomic
 from core.paths import data_root
+from core.replay_context_recorder import build_replay_context_record
 
 RUNTIME_CANDIDATE_HANDOFF_SCHEMA_VERSION = 1
 RUNTIME_CANDIDATE_HANDOFF_SOURCE = "runtime_candidate_handoff_evidence_v1"
@@ -69,6 +70,13 @@ def build_runtime_candidate_handoff_payload(
         or top_exec.get("candidate_id")
         or top_exec.get("id")
     ) or None
+    explicit_oos_keys = {key: top_exec.get(key) for key in ("is_oos", "oos_label", "oos_source", "partition_id", "split_name") if top_exec.get(key) not in (None, "", "None")}
+    explicit_quote_keys = {key: top_exec.get(key) for key in ("quote_source", "quote_age_sec") if top_exec.get(key) not in (None, "", "None")}
+    explicit_policy_keys = {
+        key: top_exec.get(key)
+        for key in ("feature_cutoff_ts", "earliest_entry_ts", "feed_truth_state", "feed_truth_reason_code", "feed_truth_source")
+        if top_exec.get(key) not in (None, "", "None")
+    }
     has_reportable_executable = bool(top_exec) or ranked_exec_count > 0
     handoff_mismatch = bool(
         has_reportable_executable
@@ -93,6 +101,9 @@ def build_runtime_candidate_handoff_payload(
         "top_reportable_executable_trade_id": top_exec_trade_id,
         "top_reportable_executable": bool(has_reportable_executable),
         "top_reportable_executable_snapshot": top_exec,
+        **explicit_oos_keys,
+        **explicit_quote_keys,
+        **explicit_policy_keys,
         "cycle_ranked_candidates_count_before_append": _optional_non_negative_int(cycle_ranked_candidates_count_before_append),
         "cycle_ranked_candidates_count_after_append": _optional_non_negative_int(cycle_ranked_candidates_count_after_append),
         "phase2_input_count": phase2_input,
@@ -112,6 +123,8 @@ def build_runtime_candidate_handoff_payload(
             "does_not_call_broker": True,
         },
     }
+    replay_context = build_replay_context_record(payload, source=RUNTIME_CANDIDATE_HANDOFF_SOURCE, require_candidate_pool_inputs=True)
+    payload.update(replay_context)
     return payload
 
 
