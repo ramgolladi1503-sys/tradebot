@@ -8,13 +8,17 @@ or alter runtime behavior.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import assess_option_pressure
+from core.strategy_parameter_profiles import resolve_required_profile_parameters
 from strategies.movement._utils import clamp_score
 
 STRATEGY_ID = "option_pressure_confirmation_v1"
 MOVEMENT_TYPE = "OPTION_PRESSURE_CONFIRMATION"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_PRESSURE_SCORE": 0.45,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_option_pressure_candidates(
@@ -23,9 +27,11 @@ def generate_option_pressure_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Emit advisory option-pressure candidates for the dominant side."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_pressure_score = float(params.get("MIN_PRESSURE_SCORE", 0.45))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_pressure_score = float(params["MIN_PRESSURE_SCORE"])
 
     assessment = assess_option_pressure(ctx)
     if assessment.dominant_direction == "NEUTRAL":
@@ -106,8 +112,8 @@ def generate_option_pressure_candidates(
                 "strategy_id": STRATEGY_ID,
                 "strategy_version": "v1",
                 "params_used": params,
-                "params_hash": profile.params_hash if profile else None,
-                "promotion_state": profile.promotion_state if profile else "ADVISORY_ONLY",
+                "params_hash": profile.parameter_hash,
+                "promotion_state": "ADVISORY_ONLY",
             },
         ),
     )

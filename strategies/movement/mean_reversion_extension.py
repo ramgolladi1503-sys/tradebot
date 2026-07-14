@@ -7,8 +7,11 @@ to fade strong continuation and emits read-only StrategyCandidate objects only.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -20,6 +23,13 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "mean_reversion_extension_v1"
 MOVEMENT_TYPE = "MEAN_REVERSION_EXTENSION"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_RANGE_OR_CHOP_SCORE": 0.45,
+    "MIN_EXTENSION_FROM_VWAP_PCT": 0.0035,
+    "MAX_EXTENSION_FROM_VWAP_PCT": 0.014,
+    "MAX_TREND_CONTINUATION_SCORE": 0.55,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_mean_reversion_extension_candidates(
@@ -28,18 +38,14 @@ def generate_mean_reversion_extension_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate mean-reversion candidates only in range/chop extension contexts."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_range_or_chop_score = float(params.get("MIN_RANGE_OR_CHOP_SCORE", 0.45))
-    min_extension_from_vwap_pct = float(
-        params.get("MIN_EXTENSION_FROM_VWAP_PCT", 0.0035)
-    )
-    max_extension_from_vwap_pct = float(
-        params.get("MAX_EXTENSION_FROM_VWAP_PCT", 0.014)
-    )
-    max_trend_continuation_score = float(
-        params.get("MAX_TREND_CONTINUATION_SCORE", 0.55)
-    )
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_range_or_chop_score = float(params["MIN_RANGE_OR_CHOP_SCORE"])
+    min_extension_from_vwap_pct = float(params["MIN_EXTENSION_FROM_VWAP_PCT"])
+    max_extension_from_vwap_pct = float(params["MAX_EXTENSION_FROM_VWAP_PCT"])
+    max_trend_continuation_score = float(params["MAX_TREND_CONTINUATION_SCORE"])
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
@@ -68,6 +74,7 @@ def generate_mean_reversion_extension_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_PUT",
                 range_chop_score,
                 abs(distance),
@@ -83,6 +90,7 @@ def generate_mean_reversion_extension_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_CALL",
                 range_chop_score,
                 abs(distance),
@@ -95,20 +103,15 @@ def generate_mean_reversion_extension_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     range_chop_score: float,
     extension_abs: float,
     reversion_type: str,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_extension_from_vwap_pct = float(
-        params.get("MIN_EXTENSION_FROM_VWAP_PCT", 0.0035)
-    )
-    max_extension_from_vwap_pct = float(
-        params.get("MAX_EXTENSION_FROM_VWAP_PCT", 0.014)
-    )
+    params = dict(profile.parameters)
+    min_extension_from_vwap_pct = float(params["MIN_EXTENSION_FROM_VWAP_PCT"])
+    max_extension_from_vwap_pct = float(params["MAX_EXTENSION_FROM_VWAP_PCT"])
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.45 * range_chop_score
@@ -152,7 +155,7 @@ def _build_candidate(
         suppression_tags=("avoid_fading_strong_trend",),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 

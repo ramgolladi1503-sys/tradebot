@@ -307,7 +307,7 @@ print(json.dumps({"row_count": len(rows), "network_calls": calls}))
     assert payload == {"row_count": 12, "network_calls": []}
 
 
-def test_profile_value_drift_preserves_prior_generator_behavior(monkeypatch):
+def test_profile_value_drift_blocks_generator_without_silent_runtime_fallback(monkeypatch):
     baseline_candidates = generate_opening_drive_candidates(
         _base_context(),
         _regime(TREND_UP=0.8, VOLATILITY_EXPANSION=0.4),
@@ -347,9 +347,6 @@ def test_profile_value_drift_preserves_prior_generator_behavior(monkeypatch):
         _base_context(),
         _regime(TREND_UP=0.8, VOLATILITY_EXPANSION=0.4),
     )
-    assert len(candidates) == 1
-    candidate = candidates[0]
-    assert candidate.strategy_id == baseline.strategy_id
-    assert candidate.direction == baseline.direction
-    assert candidate.status == baseline.status
-    assert round(candidate.raw_score, 6) == round(baseline.raw_score, 6)
+    assert candidates == ()
+    assert baseline.strategy_id == "opening_drive_v1"
+    assert baseline.direction == "BUY_CALL"

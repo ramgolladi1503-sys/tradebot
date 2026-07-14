@@ -573,7 +573,39 @@ def _extract_embedded_profile_defaults(entry: StrategyRegistryEntry) -> dict[str
             f"embedded_profile_defaults_parse_failed:{entry.strategy_id}:{type(exc).__name__}"
         ) from exc
 
-    defaults: dict[str, Any] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name) or target.id != "EMBEDDED_PROFILE_DEFAULTS":
+            continue
+        if not isinstance(node.value, ast.Dict):
+            raise StrategyRegistryIntegrityError(
+                f"embedded_profile_defaults_not_dict:{entry.strategy_id}"
+            )
+        defaults: dict[str, Any] = {}
+        for key_node, value_node in zip(node.value.keys, node.value.values):
+            if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                raise StrategyRegistryIntegrityError(
+                    f"embedded_profile_default_not_literal:{entry.strategy_id}"
+                )
+            key = str(key_node.value).strip()
+            if not key:
+                raise StrategyRegistryIntegrityError(
+                    f"embedded_profile_default_key_missing:{entry.strategy_id}"
+                )
+            try:
+                value = _ast_literal_value(value_node)
+            except StrategyRegistryIntegrityError as exc:
+                raise StrategyRegistryIntegrityError(
+                    f"embedded_profile_default_not_literal:{entry.strategy_id}:{key}"
+                ) from exc
+            defaults[key] = value
+        return defaults
+
+    defaults = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue

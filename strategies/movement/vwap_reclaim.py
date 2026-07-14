@@ -10,8 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -23,6 +26,12 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "vwap_reclaim_rejection_v1"
 MOVEMENT_TYPE = "VWAP_RECLAIM_REJECTION"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_VWAP_DISTANCE_PCT": 0.00035,
+    "MAX_VWAP_ENTRY_DISTANCE_PCT": 0.0035,
+    "MAX_CHOP_SCORE": 0.55,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_vwap_reclaim_rejection_candidates(
@@ -31,13 +40,13 @@ def generate_vwap_reclaim_rejection_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate CALL/PUT candidates for confirmed VWAP reclaim/rejection events."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_vwap_distance_pct = float(params.get("MIN_VWAP_DISTANCE_PCT", 0.00035))
-    max_vwap_entry_distance_pct = float(
-        params.get("MAX_VWAP_ENTRY_DISTANCE_PCT", 0.0035)
-    )
-    max_chop_score = float(params.get("MAX_CHOP_SCORE", 0.55))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_vwap_distance_pct = float(params["MIN_VWAP_DISTANCE_PCT"])
+    max_vwap_entry_distance_pct = float(params["MAX_VWAP_ENTRY_DISTANCE_PCT"])
+    max_chop_score = float(params["MAX_CHOP_SCORE"])
 
     if float(regime.scores.get("CHOP", 0.0)) >= max_chop_score:
         return ()
@@ -57,7 +66,12 @@ def generate_vwap_reclaim_rejection_candidates(
     if vwap_move > 0 and _has_upside_vwap_confirmation(ctx):
         candidates.append(
             _build_candidate(
-                ctx, regime, "BUY_CALL", vwap_move, "upside_vwap_reclaim_or_rejection"
+                ctx,
+                regime,
+                profile,
+                "BUY_CALL",
+                vwap_move,
+                "upside_vwap_reclaim_or_rejection",
             )
         )
     if vwap_move < 0 and _has_downside_vwap_confirmation(ctx):
@@ -65,6 +79,7 @@ def generate_vwap_reclaim_rejection_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_PUT",
                 abs(vwap_move),
                 "downside_vwap_reclaim_or_rejection",
@@ -76,16 +91,13 @@ def generate_vwap_reclaim_rejection_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     vwap_distance_abs: float,
     confirmation_type: str,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_vwap_entry_distance_pct = float(
-        params.get("MAX_VWAP_ENTRY_DISTANCE_PCT", 0.0035)
-    )
+    params = dict(profile.parameters)
+    max_vwap_entry_distance_pct = float(params["MAX_VWAP_ENTRY_DISTANCE_PCT"])
     side = side_evidence(ctx, direction)
     slope_score = _vwap_slope_alignment_score(ctx, direction)
     distance_quality = clamp_score(
@@ -125,7 +137,7 @@ def _build_candidate(
         confluence_tags=("vwap", "reclaim_rejection", "option_confirmation"),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 

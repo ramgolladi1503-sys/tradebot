@@ -8,8 +8,11 @@ It emits read-only StrategyCandidate objects only and does not alter execution.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -21,6 +24,13 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "exhaustion_reversal_v1"
 MOVEMENT_TYPE = "EXHAUSTION_REVERSAL"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_STRETCH_FROM_VWAP_PCT": 0.005,
+    "MAX_ENTRY_STRETCH_PCT": 0.018,
+    "MIN_EXHAUSTION_SCORE": 0.5,
+    "MAX_CONTINUATION_PRESSURE_SCORE": 0.55,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_exhaustion_reversal_candidates(
@@ -29,14 +39,14 @@ def generate_exhaustion_reversal_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate opposite-side candidates only when stretched move is stalling."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_stretch_from_vwap_pct = float(params.get("MIN_STRETCH_FROM_VWAP_PCT", 0.005))
-    max_entry_stretch_pct = float(params.get("MAX_ENTRY_STRETCH_PCT", 0.018))
-    min_exhaustion_score = float(params.get("MIN_EXHAUSTION_SCORE", 0.50))
-    max_continuation_pressure_score = float(
-        params.get("MAX_CONTINUATION_PRESSURE_SCORE", 0.55)
-    )
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_stretch_from_vwap_pct = float(params["MIN_STRETCH_FROM_VWAP_PCT"])
+    max_entry_stretch_pct = float(params["MAX_ENTRY_STRETCH_PCT"])
+    min_exhaustion_score = float(params["MIN_EXHAUSTION_SCORE"])
+    max_continuation_pressure_score = float(params["MAX_CONTINUATION_PRESSURE_SCORE"])
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
@@ -51,28 +61,24 @@ def generate_exhaustion_reversal_candidates(
 
     candidates: list[StrategyCandidate] = []
     if distance > 0:
-        score = _upside_exhaustion_score(ctx, regime, abs(distance))
+        score = _upside_exhaustion_score(ctx, regime, profile, abs(distance))
         if (
             score >= min_exhaustion_score
             and _continuation_pressure_score(ctx, "BUY_CALL")
             <= max_continuation_pressure_score
         ):
             candidates.append(
-                _build_candidate(
-                    ctx, regime, "BUY_PUT", score, abs(distance), "upside_exhaustion"
-                )
+                _build_candidate(ctx, regime, profile, "BUY_PUT", score, abs(distance), "upside_exhaustion")
             )
     if distance < 0:
-        score = _downside_exhaustion_score(ctx, regime, abs(distance))
+        score = _downside_exhaustion_score(ctx, regime, profile, abs(distance))
         if (
             score >= min_exhaustion_score
             and _continuation_pressure_score(ctx, "BUY_PUT")
             <= max_continuation_pressure_score
         ):
             candidates.append(
-                _build_candidate(
-                    ctx, regime, "BUY_CALL", score, abs(distance), "downside_exhaustion"
-                )
+                _build_candidate(ctx, regime, profile, "BUY_CALL", score, abs(distance), "downside_exhaustion")
             )
     return tuple(candidates)
 
@@ -80,16 +86,15 @@ def generate_exhaustion_reversal_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     exhaustion_score: float,
     stretch_abs: float,
     exhaustion_type: str,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_stretch_from_vwap_pct = float(params.get("MIN_STRETCH_FROM_VWAP_PCT", 0.005))
-    max_entry_stretch_pct = float(params.get("MAX_ENTRY_STRETCH_PCT", 0.018))
+    params = dict(profile.parameters)
+    min_stretch_from_vwap_pct = float(params["MIN_STRETCH_FROM_VWAP_PCT"])
+    max_entry_stretch_pct = float(params["MAX_ENTRY_STRETCH_PCT"])
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.50 * exhaustion_score
@@ -130,19 +135,20 @@ def _build_candidate(
         suppression_tags=("avoid_blind_trend_fade",),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 
 
 def _upside_exhaustion_score(
-    ctx: StrategyContext, regime: MovementRegimeResult, stretch_abs: float
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
+    stretch_abs: float,
 ) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_stretch_from_vwap_pct = float(params.get("MIN_STRETCH_FROM_VWAP_PCT", 0.005))
-    max_entry_stretch_pct = float(params.get("MAX_ENTRY_STRETCH_PCT", 0.018))
+    params = dict(profile.parameters)
+    min_stretch_from_vwap_pct = float(params["MIN_STRETCH_FROM_VWAP_PCT"])
+    max_entry_stretch_pct = float(params["MAX_ENTRY_STRETCH_PCT"])
     ce_change = safe_float(ctx.ce_premium_change)
     pe_change = safe_float(ctx.pe_premium_change)
     volume = safe_float(ctx.volume_z)
@@ -170,13 +176,14 @@ def _upside_exhaustion_score(
 
 
 def _downside_exhaustion_score(
-    ctx: StrategyContext, regime: MovementRegimeResult, stretch_abs: float
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
+    stretch_abs: float,
 ) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_stretch_from_vwap_pct = float(params.get("MIN_STRETCH_FROM_VWAP_PCT", 0.005))
-    max_entry_stretch_pct = float(params.get("MAX_ENTRY_STRETCH_PCT", 0.018))
+    params = dict(profile.parameters)
+    min_stretch_from_vwap_pct = float(params["MIN_STRETCH_FROM_VWAP_PCT"])
+    max_entry_stretch_pct = float(params["MAX_ENTRY_STRETCH_PCT"])
     pe_change = safe_float(ctx.pe_premium_change)
     ce_change = safe_float(ctx.ce_premium_change)
     volume = safe_float(ctx.volume_z)

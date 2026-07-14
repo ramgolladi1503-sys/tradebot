@@ -8,8 +8,11 @@ objects only and does not alter execution paths.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -21,6 +24,14 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "event_volatility_expansion_v1"
 MOVEMENT_TYPE = "EVENT_VOLATILITY_EXPANSION"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_VOL_EXPANSION_SCORE": 0.4,
+    "MIN_IMPULSE_FROM_VWAP_PCT": 0.0025,
+    "MAX_CHASE_DISTANCE_PCT": 0.014,
+    "MIN_VOLUME_Z": 1.2,
+    "MIN_ATR_EXPANSION_RATIO": 1.15,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_event_volatility_expansion_candidates(
@@ -29,11 +40,13 @@ def generate_event_volatility_expansion_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate CALL/PUT candidates when volatility expansion is confirmed."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_vol_expansion_score = float(params.get("MIN_VOL_EXPANSION_SCORE", 0.40))
-    min_impulse_from_vwap_pct = float(params.get("MIN_IMPULSE_FROM_VWAP_PCT", 0.0025))
-    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.014))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_vol_expansion_score = float(params["MIN_VOL_EXPANSION_SCORE"])
+    min_impulse_from_vwap_pct = float(params["MIN_IMPULSE_FROM_VWAP_PCT"])
+    max_chase_distance_pct = float(params["MAX_CHASE_DISTANCE_PCT"])
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
@@ -46,7 +59,7 @@ def generate_event_volatility_expansion_candidates(
     if abs(vwap_move) > max_chase_distance_pct:
         return ()
 
-    expansion_score = _expansion_score(ctx, regime)
+    expansion_score = _expansion_score(ctx, regime, profile)
     if expansion_score < min_vol_expansion_score:
         return ()
 
@@ -56,6 +69,7 @@ def generate_event_volatility_expansion_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_CALL",
                 expansion_score,
                 abs(vwap_move),
@@ -67,6 +81,7 @@ def generate_event_volatility_expansion_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_PUT",
                 expansion_score,
                 abs(vwap_move),
@@ -79,18 +94,17 @@ def generate_event_volatility_expansion_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     expansion_score: float,
     impulse_abs: float,
     expansion_type: str,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_impulse_from_vwap_pct = float(params.get("MIN_IMPULSE_FROM_VWAP_PCT", 0.0025))
-    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.014))
-    min_volume_z = float(params.get("MIN_VOLUME_Z", 1.2))
-    min_atr_expansion_ratio = float(params.get("MIN_ATR_EXPANSION_RATIO", 1.15))
+    params = dict(profile.parameters)
+    min_impulse_from_vwap_pct = float(params["MIN_IMPULSE_FROM_VWAP_PCT"])
+    max_chase_distance_pct = float(params["MAX_CHASE_DISTANCE_PCT"])
+    min_volume_z = float(params["MIN_VOLUME_Z"])
+    min_atr_expansion_ratio = float(params["MIN_ATR_EXPANSION_RATIO"])
     side = side_evidence(ctx, direction)
     atr_ratio = _atr_ratio(ctx)
     price_structure_score = clamp_score(
@@ -139,17 +153,19 @@ def _build_candidate(
         suppression_tags=("avoid_late_spike_chase",),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 
 
-def _expansion_score(ctx: StrategyContext, regime: MovementRegimeResult) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_volume_z = float(params.get("MIN_VOLUME_Z", 1.2))
-    min_atr_expansion_ratio = float(params.get("MIN_ATR_EXPANSION_RATIO", 1.15))
+def _expansion_score(
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
+) -> float:
+    params = dict(profile.parameters)
+    min_volume_z = float(params["MIN_VOLUME_Z"])
+    min_atr_expansion_ratio = float(params["MIN_ATR_EXPANSION_RATIO"])
     atr_ratio = _atr_ratio(ctx)
     regime_score = safe_float(regime.scores.get("VOLATILITY_EXPANSION")) or 0.0
     volume = safe_float(ctx.volume_z)

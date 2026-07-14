@@ -8,8 +8,11 @@ read-only and never calls broker/order/depth/execution code.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -21,6 +24,13 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "opening_range_retest_v1"
 MOVEMENT_TYPE = "OPENING_RANGE_RETEST"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_RETEST_MINUTES": 15,
+    "MAX_RETEST_MINUTES": 90,
+    "MAX_RETEST_DISTANCE_PCT": 0.0018,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_opening_range_retest_candidates(
@@ -29,10 +39,12 @@ def generate_opening_range_retest_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate ORB retest candidates for CALL/PUT when evidence exists."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_retest_minutes = float(params.get("MIN_RETEST_MINUTES", 15))
-    max_retest_minutes = float(params.get("MAX_RETEST_MINUTES", 90))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_retest_minutes = float(params["MIN_RETEST_MINUTES"])
+    max_retest_minutes = float(params["MAX_RETEST_MINUTES"])
 
     minutes = safe_float(ctx.minutes_since_open)
     if minutes is None or minutes < min_retest_minutes or minutes > max_retest_minutes:
@@ -46,18 +58,22 @@ def generate_opening_range_retest_candidates(
         return ()
 
     candidates: list[StrategyCandidate] = []
-    if _call_retest_confirmed(spot=spot, vwap=vwap, orb_high=orb_high):
-        candidates.append(_build_candidate(ctx, regime, "BUY_CALL", orb_high))
-    if _put_retest_confirmed(spot=spot, vwap=vwap, orb_low=orb_low):
-        candidates.append(_build_candidate(ctx, regime, "BUY_PUT", orb_low))
+    if _call_retest_confirmed(profile, spot=spot, vwap=vwap, orb_high=orb_high):
+        candidates.append(_build_candidate(ctx, regime, profile, "BUY_CALL", orb_high))
+    if _put_retest_confirmed(profile, spot=spot, vwap=vwap, orb_low=orb_low):
+        candidates.append(_build_candidate(ctx, regime, profile, "BUY_PUT", orb_low))
     return tuple(candidates)
 
 
-def _call_retest_confirmed(*, spot: float, vwap: float, orb_high: float) -> bool:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
+def _call_retest_confirmed(
+    profile: RuntimeProfileResolution,
+    *,
+    spot: float,
+    vwap: float,
+    orb_high: float,
+) -> bool:
+    params = dict(profile.parameters)
+    max_retest_distance_pct = float(params["MAX_RETEST_DISTANCE_PCT"])
     return (
         spot >= orb_high
         and spot >= vwap
@@ -66,11 +82,15 @@ def _call_retest_confirmed(*, spot: float, vwap: float, orb_high: float) -> bool
     )
 
 
-def _put_retest_confirmed(*, spot: float, vwap: float, orb_low: float) -> bool:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
+def _put_retest_confirmed(
+    profile: RuntimeProfileResolution,
+    *,
+    spot: float,
+    vwap: float,
+    orb_low: float,
+) -> bool:
+    params = dict(profile.parameters)
+    max_retest_distance_pct = float(params["MAX_RETEST_DISTANCE_PCT"])
     return (
         spot <= orb_low
         and spot <= vwap
@@ -82,14 +102,13 @@ def _put_retest_confirmed(*, spot: float, vwap: float, orb_low: float) -> bool:
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     retest_level: float,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_retest_distance_pct = float(params.get("MAX_RETEST_DISTANCE_PCT", 0.0018))
-    min_breakout_distance_pct = float(params.get("MIN_BREAKOUT_DISTANCE_PCT", 0.0008))
+    params = dict(profile.parameters)
+    max_retest_distance_pct = float(params["MAX_RETEST_DISTANCE_PCT"])
+    min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
     side = side_evidence(ctx, direction)
     spot = safe_float(ctx.spot_ltp)
     retest_distance = pct_distance(spot, retest_level) or 0.0
@@ -131,7 +150,7 @@ def _build_candidate(
         confluence_tags=("orb_retest", "vwap_alignment", "option_confirmation"),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 

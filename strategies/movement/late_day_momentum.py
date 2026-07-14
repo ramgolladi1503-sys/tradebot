@@ -8,8 +8,11 @@ alter execution paths.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -21,6 +24,15 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "late_day_momentum_v1"
 MOVEMENT_TYPE = "LATE_DAY_MOMENTUM"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MIN_MINUTES_SINCE_OPEN": 240,
+    "MIN_MINUTES_TO_CLOSE": 20,
+    "MIN_DIRECTIONAL_SCORE": 0.45,
+    "MIN_VWAP_DISTANCE_PCT": 0.002,
+    "MAX_CHASE_DISTANCE_PCT": 0.012,
+    "MAX_CHOP_SCORE": 0.5,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_late_day_momentum_candidates(
@@ -29,14 +41,16 @@ def generate_late_day_momentum_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate late-day continuation candidates when timing and evidence align."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_minutes_since_open = float(params.get("MIN_MINUTES_SINCE_OPEN", 240))
-    min_minutes_to_close = float(params.get("MIN_MINUTES_TO_CLOSE", 20))
-    min_directional_score = float(params.get("MIN_DIRECTIONAL_SCORE", 0.45))
-    min_vwap_distance_pct = float(params.get("MIN_VWAP_DISTANCE_PCT", 0.002))
-    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.012))
-    max_chop_score = float(params.get("MAX_CHOP_SCORE", 0.50))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_minutes_since_open = float(params["MIN_MINUTES_SINCE_OPEN"])
+    min_minutes_to_close = float(params["MIN_MINUTES_TO_CLOSE"])
+    min_directional_score = float(params["MIN_DIRECTIONAL_SCORE"])
+    min_vwap_distance_pct = float(params["MIN_VWAP_DISTANCE_PCT"])
+    max_chase_distance_pct = float(params["MAX_CHASE_DISTANCE_PCT"])
+    max_chop_score = float(params["MAX_CHOP_SCORE"])
 
     minutes_since_open = safe_float(ctx.minutes_since_open)
     minutes_to_close = safe_float(ctx.minutes_to_close)
@@ -66,6 +80,7 @@ def generate_late_day_momentum_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_CALL",
                 trend_up,
                 abs(vwap_move),
@@ -77,6 +92,7 @@ def generate_late_day_momentum_candidates(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_PUT",
                 trend_down,
                 abs(vwap_move),
@@ -89,18 +105,17 @@ def generate_late_day_momentum_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     directional_score: float,
     vwap_distance_abs: float,
     momentum_type: str,
 ) -> StrategyCandidate:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_vwap_distance_pct = float(params.get("MIN_VWAP_DISTANCE_PCT", 0.002))
-    max_chase_distance_pct = float(params.get("MAX_CHASE_DISTANCE_PCT", 0.012))
+    params = dict(profile.parameters)
+    min_vwap_distance_pct = float(params["MIN_VWAP_DISTANCE_PCT"])
+    max_chase_distance_pct = float(params["MAX_CHASE_DISTANCE_PCT"])
     side = side_evidence(ctx, direction)
-    timing_quality = _timing_quality(ctx)
+    timing_quality = _timing_quality(ctx, profile)
     price_structure_score = clamp_score(
         0.40 * directional_score
         + 0.25
@@ -143,16 +158,16 @@ def _build_candidate(
         suppression_tags=("avoid_end_of_day_decay_chase",),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 
 
-def _timing_quality(ctx: StrategyContext) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_minutes_since_open = float(params.get("MIN_MINUTES_SINCE_OPEN", 240))
+def _timing_quality(
+    ctx: StrategyContext, profile: RuntimeProfileResolution
+) -> float:
+    params = dict(profile.parameters)
+    min_minutes_since_open = float(params["MIN_MINUTES_SINCE_OPEN"])
     since_open = safe_float(ctx.minutes_since_open)
     to_close = safe_float(ctx.minutes_to_close)
     if since_open is None or to_close is None:

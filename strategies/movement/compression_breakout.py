@@ -8,8 +8,8 @@ orders, alter execution gates, touch depth subscriptions, or tune live trading.
 from __future__ import annotations
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import RuntimeProfileResolution, resolve_required_profile_parameters
 from strategies.movement._utils import (
     clamp_score,
     make_candidate,
@@ -21,6 +21,20 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "compression_breakout_v1"
 MOVEMENT_TYPE = "COMPRESSION_BREAKOUT"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MAX_ATR_RATIO": 0.75,
+    "MAX_RANGE_WIDTH_PCT": 0.35,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+    "MIN_COMPRESSION_SCORE": 0.5,
+    "MIN_VWAP_ALIGNMENT_PCT": 0.0004,
+}
+REQUIRED_PROFILE_KEYS = (
+    "MAX_ATR_RATIO",
+    "MAX_RANGE_WIDTH_PCT",
+    "MIN_BREAKOUT_DISTANCE_PCT",
+    "MIN_COMPRESSION_SCORE",
+    "MIN_VWAP_ALIGNMENT_PCT",
+)
 
 
 def generate_compression_breakout_candidates(
@@ -29,18 +43,20 @@ def generate_compression_breakout_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate CALL/PUT candidates only after compression break evidence."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_compression_score = float(params.get("MIN_COMPRESSION_SCORE", 0.50))
-    min_breakout_distance_pct = float(params.get("MIN_BREAKOUT_DISTANCE_PCT", 0.0008))
-    min_vwap_alignment_pct = float(params.get("MIN_VWAP_ALIGNMENT_PCT", 0.0004))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_compression_score = float(params["MIN_COMPRESSION_SCORE"])
+    min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
+    min_vwap_alignment_pct = float(params["MIN_VWAP_ALIGNMENT_PCT"])
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
     if spot is None or vwap is None:
         return ()
 
-    compression_score = _compression_evidence_score(ctx, regime)
+    compression_score = _compression_evidence_score(ctx, regime, params)
     if compression_score < min_compression_score:
         return ()
 
@@ -59,6 +75,7 @@ def generate_compression_breakout_candidates(
                 _build_candidate(
                     ctx,
                     regime,
+                    profile,
                     "BUY_CALL",
                     compression_score,
                     breakout_distance,
@@ -77,6 +94,7 @@ def generate_compression_breakout_candidates(
                 _build_candidate(
                     ctx,
                     regime,
+                    profile,
                     "BUY_PUT",
                     compression_score,
                     breakout_distance,
@@ -91,6 +109,7 @@ def generate_compression_breakout_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     compression_score: float,
     breakout_distance: float,
@@ -98,10 +117,9 @@ def _build_candidate(
     breakout_level: float,
 ) -> StrategyCandidate:
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_breakout_distance_pct = float(params.get("MIN_BREAKOUT_DISTANCE_PCT", 0.0008))
-    min_vwap_alignment_pct = float(params.get("MIN_VWAP_ALIGNMENT_PCT", 0.0004))
+    params = dict(profile.parameters)
+    min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
+    min_vwap_alignment_pct = float(params["MIN_VWAP_ALIGNMENT_PCT"])
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
         0.45 * compression_score
@@ -141,19 +159,18 @@ def _build_candidate(
         confluence_tags=("compression", "range_breakout", "option_confirmation"),
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 
 
 def _compression_evidence_score(
-    ctx: StrategyContext, regime: MovementRegimeResult
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    params: dict[str, object],
 ) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_range_width_pct = float(params.get("MAX_RANGE_WIDTH_PCT", 0.35))
-    max_atr_ratio = float(params.get("MAX_ATR_RATIO", 0.75))
+    max_range_width_pct = float(params["MAX_RANGE_WIDTH_PCT"])
+    max_atr_ratio = float(params["MAX_ATR_RATIO"])
     parts: list[float] = []
     range_width = safe_float(ctx.range_width_pct)
     if range_width is not None:

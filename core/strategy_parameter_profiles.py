@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
@@ -27,6 +28,9 @@ EMBEDDED_FALLBACK = "EMBEDDED_FALLBACK"
 MISSING_PROFILE = "MISSING_PROFILE"
 AMBIGUOUS_PROFILE = "AMBIGUOUS_PROFILE"
 PROFILE_VALUE_DRIFT = "PROFILE_VALUE_DRIFT"
+INCOMPLETE_PROFILE = "INCOMPLETE_PROFILE"
+
+_PROFILE_LOGGER = logging.getLogger(__name__)
 
 
 def _normalize_hash_value(value: Any) -> Any:
@@ -139,6 +143,25 @@ class StrategyParameterProfile:
             "parameter_hash": self.parameter_hash,
             "parameters": dict(self.params),
             "warnings": tuple(self.warnings),
+        }
+
+
+@dataclass(frozen=True)
+class RuntimeProfileResolution:
+    requested_profile_id: str
+    resolved_profile_id: str | None
+    profile_version: str
+    resolution_source: str
+    parameter_hash: str | None
+    parameters: Mapping[str, Any]
+    blocked_reason: str | None = None
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def is_valid(self) -> bool:
+        return self.blocked_reason is None and self.resolution_source in {
+            EXACT_PROFILE,
+            COMPATIBILITY_ALIAS,
         }
 
 
@@ -629,3 +652,86 @@ def build_profile_resolution_record(
     record = profile.to_resolution_record()
     record["mismatch_classification"] = classification
     return record
+
+
+def resolve_required_profile_parameters(
+    requested_profile_id: str,
+    required_keys: Iterable[str],
+    *,
+    version: str = "v1",
+    allow_empty_profile: bool = False,
+) -> RuntimeProfileResolution:
+    """Resolve a profile for runtime consumption and fail closed when invalid."""
+
+    requested = str(requested_profile_id or "").strip()
+    profile_version = str(version or "").strip()
+    normalized_required_keys = tuple(
+        sorted({str(key).strip() for key in required_keys if str(key).strip()})
+    )
+    classification = classify_profile_resolution(requested, profile_version)
+    profile = get_default_profile(requested, profile_version)
+
+    blocked_reason: str | None = None
+    resolved_profile_id: str | None = None
+    parameter_hash: str | None = None
+    parameters: Mapping[str, Any] = {}
+    warnings: tuple[str, ...] = ()
+
+    if classification not in {EXACT_PROFILE, COMPATIBILITY_ALIAS} or profile is None:
+        blocked_reason = f"profile_resolution_{classification.lower()}"
+    else:
+        resolved_profile_id = profile.resolved_profile_id
+        parameter_hash = profile.parameter_hash
+        parameters = dict(profile.parameters)
+        warnings = tuple(profile.warnings)
+        if not isinstance(parameters, Mapping):
+            classification = INCOMPLETE_PROFILE
+            blocked_reason = "profile_parameters_not_mapping"
+            parameters = {}
+            parameter_hash = None
+            resolved_profile_id = None
+        else:
+            missing_keys = tuple(
+                key for key in normalized_required_keys if key not in parameters
+            )
+            if missing_keys:
+                classification = INCOMPLETE_PROFILE
+                blocked_reason = f"profile_missing_required_keys:{','.join(missing_keys)}"
+                parameters = {}
+                parameter_hash = None
+                resolved_profile_id = None
+            elif not allow_empty_profile and not parameters and normalized_required_keys:
+                classification = INCOMPLETE_PROFILE
+                blocked_reason = "profile_parameters_empty"
+                parameter_hash = None
+                resolved_profile_id = None
+
+    if blocked_reason is not None:
+        _PROFILE_LOGGER.warning(
+            "event=PROFILE_RESOLUTION_BLOCKED runtime_strategy_id=%s requested_profile_id=%s resolution_classification=%s blocked_reason=%s",
+            requested,
+            requested,
+            classification,
+            blocked_reason,
+        )
+        return RuntimeProfileResolution(
+            requested_profile_id=requested,
+            resolved_profile_id=resolved_profile_id,
+            profile_version=profile_version,
+            resolution_source=classification,
+            parameter_hash=parameter_hash,
+            parameters=parameters,
+            blocked_reason=blocked_reason,
+            warnings=warnings,
+        )
+
+    return RuntimeProfileResolution(
+        requested_profile_id=requested,
+        resolved_profile_id=resolved_profile_id,
+        profile_version=profile_version,
+        resolution_source=classification,
+        parameter_hash=parameter_hash,
+        parameters=parameters,
+        blocked_reason=None,
+        warnings=warnings,
+    )
