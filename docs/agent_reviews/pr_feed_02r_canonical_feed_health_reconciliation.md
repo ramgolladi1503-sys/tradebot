@@ -48,3 +48,8 @@ Verdict: scoped PR only.
 ## Human Approval
 
 Verdict: required.
+
+
+## High-Risk Path Review
+
+N/A

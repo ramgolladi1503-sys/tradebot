@@ -99,3 +99,7 @@ Expected proof:
 
 - Human approval required before merge.
 - Reviewer should verify the patch is limited to test subprocess readiness and evidence documentation.
+
+## High-Risk Path Review
+
+N/A

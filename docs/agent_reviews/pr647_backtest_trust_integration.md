@@ -112,3 +112,8 @@ This PR does not prove live trading readiness, broker fill quality, profitabilit
 ## Human Approval
 
 Approved for merge after CI turns green.
+
+
+## High-Risk Path Review
+
+N/A

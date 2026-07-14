@@ -86,3 +86,8 @@ EDGE-58 is contract-only. After merge, EDGE-59 must wire `normalize_top_opportun
 ## Human Approval
 
 Approved for PR as a read-only executable-truth contract for top opportunity lists.
+
+
+## High-Risk Path Review
+
+N/A

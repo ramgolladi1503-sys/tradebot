@@ -105,3 +105,8 @@ source: docs/agent_reviews/edge-05-strategy-regime-expectancy-aggregator.md
 ## Human Approval
 
 - This PR stays within the agreed read-only aggregation scope and does not require live order approval.
+
+
+## High-Risk Path Review
+
+N/A

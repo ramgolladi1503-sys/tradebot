@@ -40,3 +40,8 @@ It does not change live feed recovery, strategy selection, ranking math, or Phas
 
 ## Human Approval
 Reviewed and approved for merge only after CI and agent-review evidence gates pass.
+
+
+## High-Risk Path Review
+
+N/A

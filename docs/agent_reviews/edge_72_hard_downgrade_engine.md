@@ -110,3 +110,8 @@ Future runtime proof is required only when a later scoped PR reads hard downgrad
 ## Human Approval
 
 Ready for review after CI passes.
+
+
+## High-Risk Path Review
+
+N/A

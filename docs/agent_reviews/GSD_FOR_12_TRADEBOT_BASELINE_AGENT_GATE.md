@@ -105,3 +105,8 @@ Verdict: `BLOCKED`
 ### Human Approval
 
 - Approved via CI constraints.
+
+
+## High-Risk Path Review
+
+N/A

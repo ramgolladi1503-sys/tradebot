@@ -167,3 +167,8 @@ Recommended approval conditions:
 - Code Excellence Gates pass on current HEAD
 - no `.runtime` artifacts are committed
 - final verdict remains honest about missing real historical data
+
+
+## High-Risk Path Review
+
+N/A

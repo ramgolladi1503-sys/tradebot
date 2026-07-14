@@ -180,3 +180,8 @@ It only proves the current candidate funnel can be summarized deterministically 
 Human approval is still required before merge.
 
 Reviewers should confirm the summary is read-only, the tests remain deterministic, and no downstream consumer treats this metadata as new execution truth.
+
+
+## High-Risk Path Review
+
+N/A

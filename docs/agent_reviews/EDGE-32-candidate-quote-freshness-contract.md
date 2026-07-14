@@ -147,3 +147,8 @@ This PR does not prove live feed health, live broker readiness, live executable 
 ## Human Approval
 
 Human approval required before merge: verify CI is green and confirm that tests failing due to absent freshness fields are updated only when the test is meant to model real executable candidates.
+
+
+## High-Risk Path Review
+
+N/A

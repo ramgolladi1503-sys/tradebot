@@ -29,3 +29,8 @@ This PR does not prove that the HTF strategies are profitable or mathematically 
 
 ## Human Approval
 Requires explicit approval before merging, despite being a test-only PR.
+
+
+## High-Risk Path Review
+
+N/A

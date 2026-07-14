@@ -105,3 +105,8 @@ PYTHONPATH=. python -m pytest tests/test_edge49_opportunity_selector_evidence.py
 ```
 
 Expected: all EDGE-49 selector evidence tests pass.
+
+
+## High-Risk Path Review
+
+N/A

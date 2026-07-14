@@ -108,3 +108,8 @@ A final tiny runtime-page PR should call `render_home_freshness_panel(st)` in th
 ## Human Approval
 
 Approved for EDGE-54 scope only: Home freshness panel placement helper with tests and no live behavior change.
+
+
+## High-Risk Path Review
+
+N/A

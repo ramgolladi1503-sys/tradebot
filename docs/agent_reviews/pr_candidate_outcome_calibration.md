@@ -48,3 +48,8 @@ This PR does not prove edge for any specific strategy. It only introduces the pi
 
 ## Human Approval
 Automatically approved via policy rules and explicitly requested by user.
+
+
+## High-Risk Path Review
+
+N/A

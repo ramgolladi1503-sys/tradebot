@@ -144,3 +144,8 @@ This PR only defines the read-only contract. It does not claim runtime wiring ex
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to read-only exact option-token freshness gating.
+
+
+## High-Risk Path Review
+
+N/A

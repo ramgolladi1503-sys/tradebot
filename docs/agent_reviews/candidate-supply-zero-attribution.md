@@ -108,3 +108,8 @@ source: docs/agent_reviews/candidate-supply-zero-attribution.md
 - Revert `core/agents/candidate_supply_agent.py` and `core/agents/command_center.py` together if attribution proves misleading in live evidence.
 - Keep the doc and tests as the rollback verification baseline only if the code revert is required.
 - Re-run the focused tests and command-center evidence generation after any rollback.
+
+
+## High-Risk Path Review
+
+N/A

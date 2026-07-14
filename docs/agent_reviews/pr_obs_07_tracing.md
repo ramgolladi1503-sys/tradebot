@@ -207,3 +207,8 @@ This PR only adds the disabled-by-default tracing adapter.
 User requested continuation after merged PR #205 / PR-OBS-06 and asked to proceed until CI is green after the pull request is created.
 
 This implementation follows the documented PR-OBS-07 roadmap scope and does not cross into runtime wiring, strategy, ranking, risk, dashboard, paper execution, live execution, or broker behavior.
+
+
+## High-Risk Path Review
+
+N/A

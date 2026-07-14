@@ -151,3 +151,12 @@ Human review is required before any later PR wires slippage/cost truth into runt
 ## Next Action
 
 After EDGE-86 merges green, continue to EDGE-87 — Strategy Family Kill/Keep Report.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A

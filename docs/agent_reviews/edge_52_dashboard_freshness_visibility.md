@@ -110,3 +110,8 @@ Future PRs must render freshness fields in the Streamlit UI before operators rel
 ## Human Approval
 
 Approved for EDGE-52 scope only: dashboard reader freshness visibility with no layout migration or live behavior change.
+
+
+## High-Risk Path Review
+
+N/A

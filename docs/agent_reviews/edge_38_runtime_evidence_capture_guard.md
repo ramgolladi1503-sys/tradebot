@@ -117,3 +117,7 @@ Run:
 ```bash
 PYTHONPATH=. python -m pytest tests/test_runtime_evidence_capture_guard.py
 ```
+
+## High-Risk Path Review
+
+N/A

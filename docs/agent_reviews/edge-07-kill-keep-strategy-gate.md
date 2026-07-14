@@ -57,3 +57,12 @@ source: docs/agent_reviews/edge-07-kill-keep-strategy-gate.md
 ## Human Approval
 - This gate is conservative by design.
 - Any future attempt to relax safety or to make the gate auto-promote rows requires a separate approved PR.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A

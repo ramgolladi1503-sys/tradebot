@@ -127,3 +127,8 @@ It only proves regime profile evidence now serializes explicit read-only and non
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review that this remains contract-only and does not silently alter score calculation, ranking, runtime behavior, or execution behavior.
+
+
+## High-Risk Path Review
+
+N/A

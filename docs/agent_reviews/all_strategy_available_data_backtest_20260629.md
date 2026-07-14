@@ -161,3 +161,8 @@ This PR does not prove:
 Human approval is required before merge.
 
 This PR is acceptable only if CI is green and the scope remains limited to offline evidence generation.
+
+
+## High-Risk Path Review
+
+N/A

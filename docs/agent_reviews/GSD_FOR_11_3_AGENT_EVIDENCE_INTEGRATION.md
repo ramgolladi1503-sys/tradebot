@@ -182,3 +182,28 @@ Expected next deliverables:
 - commit the first baseline report under `docs/repo_forensics/reports/`
 - commit generated 3-agent evidence for the baseline
 - no target runtime execution
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

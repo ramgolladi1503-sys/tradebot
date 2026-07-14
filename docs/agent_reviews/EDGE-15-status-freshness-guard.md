@@ -43,3 +43,44 @@ python -m pytest tests/test_runtime_auth_freshness.py
 - newer auth-required state is not incorrectly ignored
 - missing auth state does not create fake auth failure
 - no runtime trading behavior is changed
+
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

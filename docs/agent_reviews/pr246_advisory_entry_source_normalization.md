@@ -122,3 +122,8 @@ Run PAPER live-market again and confirm:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains scoped to advisory schema-boundary normalization.
+
+
+## High-Risk Path Review
+
+N/A

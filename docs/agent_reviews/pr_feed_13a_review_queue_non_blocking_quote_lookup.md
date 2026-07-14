@@ -64,3 +64,8 @@ This does not prove feed recovery, subscription health, ranking suppression, str
 ## Human Approval
 
 Ready for human review after CI is green.
+
+
+## High-Risk Path Review
+
+N/A

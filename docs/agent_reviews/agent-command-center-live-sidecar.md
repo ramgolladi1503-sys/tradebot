@@ -151,3 +151,8 @@ Observe the sidecar against a real live session and refine evidence aggregation 
 
 Human approval required before merge.
 
+
+
+## High-Risk Path Review
+
+N/A

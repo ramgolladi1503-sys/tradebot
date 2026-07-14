@@ -114,3 +114,8 @@ Future PRs must adopt `read_snapshot_with_freshness(...)` in dashboard/runtime r
 ## Human Approval
 
 Approved for EDGE-51 scope only: read-only runtime snapshot freshness reader with no dashboard migration or live behavior change.
+
+
+## High-Risk Path Review
+
+N/A

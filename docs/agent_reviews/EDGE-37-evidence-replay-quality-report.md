@@ -162,3 +162,8 @@ The report should classify the diagnostic as not execution-ready if it observes 
 ## Human Approval
 
 Human approval required before merge: confirm CI is green and the CLI report is useful against the May 22 evidence bundle on the local machine.
+
+
+## High-Risk Path Review
+
+N/A

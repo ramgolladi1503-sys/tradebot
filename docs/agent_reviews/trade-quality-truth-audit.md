@@ -135,3 +135,8 @@ acceptance_proof:
 ## Human Approval
 
 Human approval required before merge.
+
+
+## High-Risk Path Review
+
+N/A

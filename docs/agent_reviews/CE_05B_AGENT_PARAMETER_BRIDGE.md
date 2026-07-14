@@ -148,3 +148,28 @@ CE-06 — Remediation Planner Implementation
 Expected rule:
 
 - CE-06 must use `load_code_excellence_agent_parameters()` instead of hardcoded Daedalus/Ariadne rules where config is needed.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

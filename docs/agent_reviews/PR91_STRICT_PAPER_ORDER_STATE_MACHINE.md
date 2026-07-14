@@ -98,3 +98,28 @@ Evidence expected in PR:
 - This document committed.
 - PR body includes 3-agent evidence summary.
 - PR conversation includes top-level 3-agent evidence comment.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

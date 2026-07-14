@@ -59,3 +59,48 @@ PYTHONPATH=. pytest -q tests/test_code_excellence_minerva_gate.py
 ## Next PR
 
 CE-09 — Cerberus Safety Regression Gate.
+
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

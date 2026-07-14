@@ -104,3 +104,7 @@ After merge, run the Streamlit dashboard locally and verify the Home tab renders
 ## Human Approval
 
 Approved for EDGE-55 scope only: tiny runtime Home freshness visibility call with tests and no live behavior change.
+
+## High-Risk Path Review
+
+N/A

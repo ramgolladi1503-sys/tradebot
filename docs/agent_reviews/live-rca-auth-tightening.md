@@ -87,3 +87,8 @@ This PR is evidence-classification only. It does not change runtime trading beha
 ## Human Approval
 
 Human approval required before merge.
+
+
+## High-Risk Path Review
+
+N/A

@@ -236,3 +236,8 @@ Human approval is required before:
 - Changing live, broker, order, feed, risk, or strategy behavior based on these reports.
 
 This PR is acceptable only as offline evidence tooling.
+
+
+## High-Risk Path Review
+
+N/A

@@ -59,3 +59,12 @@ source: docs/agent_reviews/edge-08-expectancy-based-ranking-engine.md
 ## Human Approval
 - This contract is conservative by design.
 - Any future attempt to replace the existing rank selector with edge rank requires a separate approved PR.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A

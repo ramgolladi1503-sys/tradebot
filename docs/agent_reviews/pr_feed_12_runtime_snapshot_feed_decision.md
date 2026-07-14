@@ -128,3 +128,8 @@ After merge, capture a runtime snapshot sample proving:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to runtime snapshot feed-decision wiring.
+
+
+## High-Risk Path Review
+
+N/A

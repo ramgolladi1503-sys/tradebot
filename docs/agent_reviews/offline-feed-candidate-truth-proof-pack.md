@@ -193,3 +193,8 @@ acceptance_proof:
 ## Human Approval
 
 Human approval is required before merge. Confirm the offline proof pack is deterministic and the validation suite is green.
+
+
+## High-Risk Path Review
+
+N/A

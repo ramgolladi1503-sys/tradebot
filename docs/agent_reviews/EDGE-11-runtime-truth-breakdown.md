@@ -76,3 +76,43 @@ PY
 ```
 
 Use the report to decide whether the next fix belongs in feed auth, stale file publication, or option subscription setup.
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

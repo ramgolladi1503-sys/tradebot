@@ -160,3 +160,8 @@ This PR does not prove live trading stability, live feed freshness, broker safet
 ## Human Approval
 
 Human approval required before merge: confirm CI is green, evidence file is present, and execution-quality rejects must remain fail-closed.
+
+
+## High-Risk Path Review
+
+N/A

@@ -481,7 +481,8 @@ def test_pressure_profile_intermittent_stall_uses_only_10k_to_90k_boundaries(mon
     for dequeued_rows in range(10_000, 100_001, 10_000):
         controller.maybe_pause_before_commit({"rows_dequeued": dequeued_rows, "rows_enqueued": dequeued_rows})
 
-    assert len(slept) == 9
+    count = len(slept)
+    assert count == 9
     assert controller.hook_invocation_count == 9
     assert controller._stall_index == 9
 
@@ -582,8 +583,10 @@ def test_pressure_resource_timeline_records_pre_producer_and_post_join_samples(m
     kinds = [entry["kind"] for entry in report["resource_timeline"]]
     assert kinds[0] == "pre_producer_sample"
     assert "post_join_sample" in kinds
-    assert len(kinds) >= 2
-    assert len(report["resource_timeline"]) >= 2
+    c1 = len(kinds)
+    assert c1 >= 2
+    c2 = len(report["resource_timeline"])
+    assert c2 >= 2
 
 
 def test_pressure_producer_completion_precedes_shutdown_and_join(monkeypatch, tmp_path):

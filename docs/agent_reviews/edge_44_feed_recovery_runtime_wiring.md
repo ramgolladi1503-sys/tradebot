@@ -122,3 +122,8 @@ PYTHONPATH=. python -m pytest tests/test_feed_recovery_runtime.py
 Expected:
 
 - Classifier handles healthy, closed, auth-blocked, disconnected, silent, missing subscription, option-blocked, and invalid payload cases.
+
+
+## High-Risk Path Review
+
+N/A

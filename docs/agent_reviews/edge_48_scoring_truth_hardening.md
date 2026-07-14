@@ -105,3 +105,8 @@ PYTHONPATH=. python -m pytest tests/test_edge48_scoring_truth_contract.py
 ```
 
 Expected: all EDGE-48 scoring-truth contract tests pass.
+
+
+## High-Risk Path Review
+
+N/A

@@ -59,3 +59,12 @@ source: docs/agent_reviews/edge-09-top-opportunity-selector.md
 ## Human Approval
 - This contract is conservative by design.
 - Any future attempt to make the selector drive execution requires a separate approved PR.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A

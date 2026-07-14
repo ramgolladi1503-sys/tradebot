@@ -134,3 +134,8 @@ Expected manual result:
 ## Human Approval
 
 Ready for human review after CI passes.
+
+
+## High-Risk Path Review
+
+N/A

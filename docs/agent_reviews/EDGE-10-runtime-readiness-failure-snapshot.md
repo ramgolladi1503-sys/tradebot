@@ -68,3 +68,43 @@ python scripts/runtime_readiness_failure_snapshot.py
 ```
 
 Then decide whether to fix feed/auth/latency readiness before attempting another PAPER evidence run.
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

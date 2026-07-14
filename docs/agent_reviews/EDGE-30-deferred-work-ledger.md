@@ -132,3 +132,8 @@ None. Documentation-only PR.
 
 Approved by: Ram, after CI passes
 Date: 2026-05-22
+
+
+## High-Risk Path Review
+
+N/A

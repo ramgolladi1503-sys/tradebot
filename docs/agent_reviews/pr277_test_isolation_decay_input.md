@@ -96,3 +96,7 @@ Expected proof:
 
 - Human approval required before merge.
 - Reviewer should verify this PR remains limited to test isolation, decay input precedence, and evidence documentation.
+
+## High-Risk Path Review
+
+N/A

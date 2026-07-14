@@ -154,3 +154,8 @@ Human review is required before wiring this utility into broader runtime loops.
 ## Next Action
 
 After this PR merges green, continue with LIVE-TRUTH-06 — Stale Candidate Hygiene Guard.
+
+
+## High-Risk Path Review
+
+N/A

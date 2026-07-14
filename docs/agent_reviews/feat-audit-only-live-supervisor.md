@@ -48,3 +48,8 @@ This PR does not guarantee that the resumed session will have a connected WebSoc
 
 ## Human Approval
 Requires explicit human review before merge, per standard project protocol.
+
+
+## High-Risk Path Review
+
+N/A

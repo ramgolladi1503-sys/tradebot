@@ -140,3 +140,31 @@ Blocked:
 
 ### Next PR
 EDGE-03 should wire terminal paper outcomes into this contract so the EDGE-01 audit no longer reports zero records.
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

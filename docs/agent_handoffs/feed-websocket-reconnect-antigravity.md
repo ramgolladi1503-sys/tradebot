@@ -69,7 +69,7 @@ Replay evidence:
 Semantic hashes:
 
 - canonical semantic hash: `9eefbd54d8a88201c4398b9d43b2e8c07f01c77947c7bed5ceb3a6aff8d7cf9d`
-- final per-token-state hash: `f103a7d35c540fd19ce74f422cd409f4305c0042acfcf038927fff4bd931b5b5`
+- final per-token-state hash: `f103a7d35c540fd 19ce74f422cd409f4305c0042acfcf038927fff4bd931b5b5`
 
 ## Current Antigravity objective
 

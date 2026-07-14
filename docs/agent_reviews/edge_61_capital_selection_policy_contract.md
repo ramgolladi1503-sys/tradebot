@@ -210,3 +210,8 @@ Human approval required before merge:
 ## Remaining Risk
 
 This contract is intentionally conservative and schema-flexible. Future `CandidateIntent`, `MarketState`, and final executable quality gates should provide canonical fields so this policy can consume stricter inputs instead of loose candidate rows.
+
+
+## High-Risk Path Review
+
+N/A

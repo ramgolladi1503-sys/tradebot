@@ -174,3 +174,8 @@ The report writer only formats deterministic offline fixture evaluations. It doe
 ## Human Approval
 
 Proceed only if the branch stays offline-only, the writer remains deterministic, and the evidence gate passes without touching forbidden runtime files.
+
+
+## High-Risk Path Review
+
+N/A

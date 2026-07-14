@@ -132,3 +132,8 @@ It only proves the repository now has a deterministic opt-in contract for separa
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review that the change remains opt-in, contract-only, and does not silently alter runtime or strategy behavior.
+
+
+## High-Risk Path Review
+
+N/A

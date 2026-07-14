@@ -87,3 +87,8 @@ source: docs/agent_reviews/edge-12-edge-readiness-report.md
 
 ## Human Approval
 - Required before any future change that would use auto-discovery, runtime wiring, or live promotion.
+
+
+## High-Risk Path Review
+
+N/A

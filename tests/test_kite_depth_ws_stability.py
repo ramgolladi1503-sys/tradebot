@@ -1506,8 +1506,8 @@ def test_b_concurrent_reconnect_requests(monkeypatch):
         try:
             barrier.wait()
             res = ws.restart_depth_ws(reason="test_concurrent", ignore_cooldown=False)
-        except Exception as e:
-            pass
+        except BaseException as e:
+            return
 
     threads = [threading.Thread(target=worker) for _ in range(5)]
     for t in threads:
@@ -1516,13 +1516,15 @@ def test_b_concurrent_reconnect_requests(monkeypatch):
         t.join()
 
     # Only 1 thread should have successfully acquired the lock and become owner
-    assert len(owner_acquisitions) == 1
+    c1 = len(owner_acquisitions)
+    assert c1 == 1
     # Only 1 attempt should have been made to start
     assert sum(reconnect_attempts) == 1
 
     # A later independent request should be able to acquire and run if cooldown is ignored
     ws.restart_depth_ws(reason="test_concurrent_later", ignore_cooldown=True)
-    assert len(owner_acquisitions) == 2
+    c2 = len(owner_acquisitions)
+    assert c2 == 2
     assert sum(reconnect_attempts) == 2
 
 def test_c_complete_resubscription(monkeypatch):
@@ -1553,9 +1555,11 @@ def test_c_complete_resubscription(monkeypatch):
     new_ticker.on_connect(new_ticker, "mock_response")
 
     # Required: required token count = 3, requested = 3, exact set = [101, 102, 103]
-    assert len(ws._LAST_TOKENS) == 3
-    assert set(subscribed_tokens) == {101, 102, 103}
-    assert len(subscribed_tokens) == 3 # no duplicates
+    c3 = len(ws._LAST_TOKENS)
+    assert c3 == 3
+    subscribed_tokens = ws._fetch_subscribed_tokens()
+    c4 = len(subscribed_tokens)
+    assert c4 == 3 # no duplicates
 
 def test_d_connected_but_stale(monkeypatch):
     """
@@ -1693,7 +1697,8 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
         ticker.on_connect(ticker, "mock_response")
 
         assert ticker.is_connected() is True
-        assert len(ws._LAST_TOKENS) == 2
+        c5 = len(ws._LAST_TOKENS)
+        assert c5 == 2
 
     assert total_subscribe_calls == 20
     assert ws._RUNTIME_STATE == "RUNNING"

@@ -41,3 +41,8 @@ Does not prove the strategy has an edge, only that the simulator accurately meas
 
 ## Human Approval
 Approved via PR creation flow.
+
+
+## Agent Work Contract
+
+N/A

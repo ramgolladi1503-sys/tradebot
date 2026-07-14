@@ -166,3 +166,8 @@ It only proves the runtime selector no longer disagrees with the offline selecto
 Human approval is required before merge.
 
 Reviewers should verify that the fallback markers are intentionally conservative and do not suppress clean live candidates.
+
+
+## High-Risk Path Review
+
+N/A

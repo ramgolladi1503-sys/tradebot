@@ -173,3 +173,8 @@ first_missing_event = MARKET_DATA_WARMUP_SEED_COMPLETED
 
 Approved by: Ram, after CI passes
 Date: 2026-05-21
+
+
+## High-Risk Path Review
+
+N/A

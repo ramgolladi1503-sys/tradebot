@@ -145,3 +145,12 @@ Human review is required before any later PR wires reduced outcomes into runtime
 ## Next Action
 
 After EDGE-84 merges green, continue to EDGE-85 — Strategy Expectancy by Regime.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A

@@ -117,3 +117,8 @@ Ready for maintainer review after CI is green.
 ## Next Action
 
 After this PR is merged, continue with `EDGE-88 — Strategy Lifecycle States` only from the latest merged main commit.
+
+
+## High-Risk Path Review
+
+N/A

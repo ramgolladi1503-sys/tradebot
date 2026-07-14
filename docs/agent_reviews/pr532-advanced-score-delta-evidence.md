@@ -168,3 +168,8 @@ The only post-merge proof required is that CI remains green and the evidence mod
 Human approval is required before merge.
 
 Do not merge because the report looks useful. Merge only if it remains offline, read-only, and safety-preserving.
+
+
+## High-Risk Path Review
+
+N/A

@@ -104,3 +104,8 @@ After merge, inspect a runtime candidate row with `option_ltp_source=rest_fallba
 ## Human Approval
 
 Approved for EDGE-57 scope only: fallback entry references are advisory-only with no live behavior change.
+
+
+## High-Risk Path Review
+
+N/A

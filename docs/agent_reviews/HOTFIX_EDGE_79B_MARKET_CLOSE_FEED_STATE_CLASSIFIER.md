@@ -122,3 +122,20 @@ Expected result:
 - websocket disconnect is distinct from stale LTP
 - close-window slowdown is explicit
 - no runtime or dashboard change
+
+
+## Scope Guard
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A

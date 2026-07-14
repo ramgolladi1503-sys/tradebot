@@ -82,3 +82,8 @@ After merge, open the dashboard against a `top_opportunities_latest.json` payloa
 ## Human Approval
 
 Approved for PR as a reader-boundary wiring change for EDGE-58 top opportunity truth.
+
+
+## High-Risk Path Review
+
+N/A

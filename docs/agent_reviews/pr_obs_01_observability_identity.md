@@ -234,3 +234,8 @@ This PR only adds the identity foundation.
 User confirmed PR-OBS-00 was merged and asked to proceed.
 
 This PR follows the documented roadmap and starts with PR-OBS-01 only. The scope is intentionally narrow to avoid another broad, hard-to-review observability PR.
+
+
+## High-Risk Path Review
+
+N/A

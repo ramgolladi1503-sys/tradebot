@@ -140,3 +140,7 @@ This PR does not prove live feed health, websocket recovery, broker readiness, s
 ## Human Approval
 
 Human approval required before merge: verify CI is green and confirm this PR is accepted as an evidence contract, not runtime reconnection implementation.
+
+## High-Risk Path Review
+
+N/A

@@ -128,3 +128,32 @@ Blocked:
 
 ### Next PR
 EDGE-05 should update the actual runtime/session call site to use `transition_paper_order_and_record_outcome()` when paper orders reach terminal states.
+
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

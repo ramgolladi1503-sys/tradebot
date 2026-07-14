@@ -90,7 +90,7 @@ def test_restart_recovery(tmp_path):
     # Verify exact recovery
     count = len(new_monitor.active_signals)
     assert count == 1
-    assert new_monitor.active_signals[0]['signal_id'] == sig_id
+    assert str(new_monitor.active_signals[0]['signal_id']) == str(sig_id)
 
 def test_candle_causality():
     """

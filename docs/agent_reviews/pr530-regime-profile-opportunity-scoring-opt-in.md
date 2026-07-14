@@ -133,3 +133,8 @@ It only proves opportunity scoring can consume regime-aware component weights th
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review that default scoring remains unchanged and no runtime/ranking cutover was introduced.
+
+
+## High-Risk Path Review
+
+N/A

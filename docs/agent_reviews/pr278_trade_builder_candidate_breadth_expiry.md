@@ -100,3 +100,7 @@ Expected proof:
 
 - Human approval required before merge.
 - Reviewer should verify the patch is limited to replacing expired synthetic fixture dates and adding evidence.
+
+## High-Risk Path Review
+
+N/A

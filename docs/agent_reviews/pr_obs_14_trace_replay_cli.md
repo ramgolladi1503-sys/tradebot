@@ -109,3 +109,8 @@ This PR does not prove trading quality, profitability, runtime latency, or produ
 ## Human Approval
 
 Ready for PR review after CI passes.
+
+
+## High-Risk Path Review
+
+N/A

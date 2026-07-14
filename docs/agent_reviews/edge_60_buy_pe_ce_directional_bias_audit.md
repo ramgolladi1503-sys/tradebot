@@ -190,3 +190,8 @@ Human approval required before merge:
 ## Remaining Risk
 
 Direction extraction is intentionally conservative, but candidate schemas may evolve. Future PRs that introduce `CandidateIntent` or strategy-specific contracts should wire canonical direction fields into this audit instead of relying on loose row extraction.
+
+
+## High-Risk Path Review
+
+N/A

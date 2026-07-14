@@ -137,3 +137,7 @@ This PR does not prove live feed health, broker readiness, strategy expectancy, 
 ## Human Approval
 
 Human approval required before merge: verify CI is green and confirm this PR is accepted as a clean scoring primitive, not runtime scoring integration.
+
+## High-Risk Path Review
+
+N/A

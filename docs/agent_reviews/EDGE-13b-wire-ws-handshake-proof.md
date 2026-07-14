@@ -47,3 +47,44 @@ python -m pytest \
 - proof contains only safe tail markers, token length, and whitespace flag
 - no full secret is logged
 - runtime behavior is unchanged
+
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

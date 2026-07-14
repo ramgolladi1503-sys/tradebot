@@ -108,3 +108,8 @@ Future runtime proof is required only when a later scoped PR reads classified ca
 ## Human Approval
 
 Ready for review after CI passes.
+
+
+## High-Risk Path Review
+
+N/A

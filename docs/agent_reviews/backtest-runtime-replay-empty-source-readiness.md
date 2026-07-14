@@ -146,3 +146,8 @@ Merge only if:
 - agent review evidence passes
 - code-excellence gates pass
 - runtime replay no longer unlocks from empty sources
+
+
+## High-Risk Path Review
+
+N/A

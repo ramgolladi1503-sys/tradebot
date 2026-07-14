@@ -115,3 +115,8 @@ Ready for maintainer review after CI is green.
 ## Next Action
 
 After this PR is merged, continue with `EDGE-90 — Strategy Suspension and Retirement Rules` only from the latest merged main commit.
+
+
+## High-Risk Path Review
+
+N/A

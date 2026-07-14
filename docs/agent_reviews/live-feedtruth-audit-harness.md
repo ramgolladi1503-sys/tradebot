@@ -84,3 +84,8 @@
 ## Human Approval
 - This is safe to review as evidence tooling only.
 - No live execution change is introduced.
+
+
+## High-Risk Path Review
+
+N/A

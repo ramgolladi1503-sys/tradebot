@@ -112,3 +112,8 @@ acceptance_proof:
 ## Human Approval
 
 This is safe to review as read-only proof tooling only.
+
+
+## High-Risk Path Review
+
+N/A

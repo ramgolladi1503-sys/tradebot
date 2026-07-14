@@ -127,3 +127,8 @@ It only proves a deterministic, read-only candidate lifecycle evidence view can 
 Human approval is required before merge.
 
 Do not merge only because the PR is green. Review the lifecycle contract and confirm that it stays read-only and does not quietly become a new execution or runtime gate.
+
+
+## High-Risk Path Review
+
+N/A

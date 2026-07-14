@@ -153,3 +153,8 @@ Recommended approval condition:
 - Focused selector tests pass.
 - PR diff confirms no unrelated experimental feed files are included.
 - Maintainer confirms the fallback firewall behavior matches intended trading product safety.
+
+
+## High-Risk Path Review
+
+N/A

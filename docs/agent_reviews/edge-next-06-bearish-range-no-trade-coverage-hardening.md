@@ -111,3 +111,12 @@ source: Codex (GPT-5.2)
 
 ## Human Approval
 - Approved by the user before implementation after the plan was revised to keep candidate-level mismatch separate from pool-level readiness weakness and to keep CHOP/noise fail-closed.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A

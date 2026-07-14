@@ -95,3 +95,12 @@ source: Codex (GPT-5.2)
 
 ## Human Approval
 - Required before any broader ranking, strategy, or live-execution changes beyond this scope.
+
+
+## Agent Work Contract
+
+N/A
+
+## High-Risk Path Review
+
+N/A

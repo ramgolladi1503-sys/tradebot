@@ -166,3 +166,8 @@ Add richer per-agent heuristics after the contract and readers are stable.
 ## Human Approval
 
 Human approval is required before merge.
+
+
+## High-Risk Path Review
+
+N/A

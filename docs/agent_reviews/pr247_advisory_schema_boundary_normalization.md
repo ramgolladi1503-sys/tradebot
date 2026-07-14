@@ -123,3 +123,8 @@ Run PAPER live-market again and confirm:
 ## Human Approval
 
 Proceed only if CI is green and runtime proof confirms the `compat` advisory schema error is gone.
+
+
+## High-Risk Path Review
+
+N/A

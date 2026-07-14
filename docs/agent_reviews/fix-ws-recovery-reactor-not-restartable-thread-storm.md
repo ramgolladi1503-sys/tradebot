@@ -130,3 +130,8 @@ PASS — restart suppression is explicit and fail-closed.
 ## Human Approval
 
 - This change is approved for a narrow recovery-suppression fix and evidence-only runtime reporting.
+
+
+## Agent Work Contract
+
+N/A

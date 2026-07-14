@@ -103,3 +103,8 @@ acceptance_proof:
 ## Human Approval
 
 This is safe to review as a pure offline contract change.
+
+
+## High-Risk Path Review
+
+N/A

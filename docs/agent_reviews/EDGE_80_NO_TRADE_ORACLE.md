@@ -138,3 +138,20 @@ Expected result:
 - missing evidence fails closed
 - no-trade reasons are deterministic
 - clean supplied evidence remains non-action
+
+
+## Scope Guard
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A

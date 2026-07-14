@@ -120,3 +120,8 @@ timestamp: 2026-06-03T19:25:00Z
 is_order_action: false
 broker_api_called: false
 source: docs/agent_reviews/intelligence-layer-architecture-contract.md
+
+
+## High-Risk Path Review
+
+N/A

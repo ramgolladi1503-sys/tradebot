@@ -136,3 +136,8 @@ Ready for maintainer review after CI is green.
 ## Next Action
 
 After this PR is merged, continue with `PR-FEED-17 — Extract Token Resolution Read Model` only from the latest merged main commit.
+
+
+## High-Risk Path Review
+
+N/A

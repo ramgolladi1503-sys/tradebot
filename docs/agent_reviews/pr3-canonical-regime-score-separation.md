@@ -175,3 +175,8 @@ It only proves the current read-only score-separation logic now consumes regime 
 Human approval is required before merge.
 
 Reviewers should verify that preserving `CHOP`, `HIGH_VOL`, `LOW_VOL`, and other analytical labels is consistent with desk intent and that later PRs do not collapse those labels prematurely.
+
+
+## High-Risk Path Review
+
+N/A

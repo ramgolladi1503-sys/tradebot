@@ -41,3 +41,8 @@ source: static_analysis
 
 ## Human Approval
 - Pre-approved in previous session context.
+
+
+## High-Risk Path Review
+
+N/A

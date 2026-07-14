@@ -264,3 +264,8 @@ This PR only adds the read-only candidate lifecycle event emitter shell.
 User requested continuation after merged PR #203 / PR-OBS-04 and asked to proceed until CI is green after the pull request is created.
 
 This implementation follows the documented PR-OBS-05 roadmap scope and does not cross into runtime wiring, strategy, ranking, risk, dashboard, paper execution, live execution, or broker behavior.
+
+
+## High-Risk Path Review
+
+N/A

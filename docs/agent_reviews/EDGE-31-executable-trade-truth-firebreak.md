@@ -152,3 +152,8 @@ Human approval required before merge: verify CI is green and confirm that reduci
 ### Acceptance statement
 
 EDGE-31 is acceptable only if the new test file passes and existing execution-quality/opportunity-engine tests do not regress.
+
+
+## High-Risk Path Review
+
+N/A

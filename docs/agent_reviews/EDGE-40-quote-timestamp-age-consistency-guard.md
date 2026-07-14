@@ -133,3 +133,8 @@ It only proves quote timestamp/age contradiction fails closed for execution-capa
 ## Human Approval
 
 Human approval required before merge: confirm CI is green and focused tests pass locally or in CI.
+
+
+## High-Risk Path Review
+
+N/A

@@ -128,3 +128,8 @@ After merge, confirm the runtime source that emits feed snapshots supplies consi
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to the read-only reconnect quarantine / warmup-cycle classifier.
+
+
+## High-Risk Path Review
+
+N/A

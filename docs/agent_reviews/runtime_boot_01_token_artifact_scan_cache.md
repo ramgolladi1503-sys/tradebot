@@ -157,3 +157,8 @@ After merge, run PAPER live-market again and confirm:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains scoped to removing the repository scan from repeated runtime hot paths while preserving startup security.
+
+
+## High-Risk Path Review
+
+N/A

@@ -57,3 +57,43 @@ python -m pytest tests/test_paper_runtime_setup_identity.py tests/test_paper_out
 ## Next
 
 Patch the actual paper execution outcome call site to use `attach_runtime_setup_identity(payload, trade)` before journal write.
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

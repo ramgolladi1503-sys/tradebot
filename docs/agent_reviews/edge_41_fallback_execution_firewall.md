@@ -96,3 +96,8 @@ Next runtime evidence pack should show fallback/degraded quote candidates as adv
 ## Human Approval
 
 Human approval required before merge.
+
+
+## High-Risk Path Review
+
+N/A

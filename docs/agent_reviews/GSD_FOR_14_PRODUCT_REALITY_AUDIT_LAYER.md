@@ -194,3 +194,28 @@ GSD-FOR-15 — CI Required Forensics PR Gate
 ```
 
 That follow-up should wire the PR gate into GitHub Actions so the process becomes repo-enforced, not chat-enforced.
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

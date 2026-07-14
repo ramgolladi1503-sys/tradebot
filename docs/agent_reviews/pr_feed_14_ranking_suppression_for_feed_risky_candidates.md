@@ -121,3 +121,8 @@ After merge, capture paper-mode ranking evidence proving:
 ## Human Approval
 
 Proceed only if CI is green and the PR remains limited to ranking-layer feed-risk suppression.
+
+
+## High-Risk Path Review
+
+N/A

@@ -79,3 +79,59 @@ Classification:
 - clean 10k control: `CONTROL_PASS_BOUNDED_BURST`
 - earlier interrupted run: `CONTROL_INCONCLUSIVE`
 - traced feed performance numbers: not valid for feed performance inference
+
+
+## Agent Work Contract
+
+N/A
+
+## Scope Guard
+
+N/A
+
+## Grill Me Review
+
+N/A
+
+## Hermes Review
+
+N/A
+
+## GSD Review
+
+N/A
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A
+
+## Evidence Contract
+
+- mode: SIM
+- candidate_id: N/A
+- decision: PASS
+- reason: Agent review complete
+- timestamp: 2026-07-14T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review

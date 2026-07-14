@@ -154,3 +154,28 @@ Expected deliverables:
 - symptom/finding/source mapping rules
 - example RCA for one known TradeBot issue
 - no implementation engine yet
+
+
+## QA / Safety Review
+
+N/A
+
+## High-Risk Path Review
+
+N/A
+
+## Acceptance Proof
+
+N/A
+
+## Runtime Proof Required After Merge
+
+N/A
+
+## What This PR Does Not Prove
+
+N/A
+
+## Human Approval
+
+N/A

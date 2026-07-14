@@ -77,3 +77,8 @@ source: agent_review_evidence_v1
 ## Human Approval
 - Required before enabling LIVE operation.
 - Review required if expanding required-indicator set or changing freshness thresholds for executability.
+
+
+## High-Risk Path Review
+
+N/A

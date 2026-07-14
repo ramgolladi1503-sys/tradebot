@@ -135,3 +135,8 @@ relevant in later roadmap PRs that explicitly wire ranking or runtime evidence.
 Human approval required before merge: yes.
 
 Approval status: pending repository owner review.
+
+
+## High-Risk Path Review
+
+N/A

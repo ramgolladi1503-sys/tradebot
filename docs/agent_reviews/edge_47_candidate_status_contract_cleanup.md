@@ -101,3 +101,7 @@ PYTHONPATH=. python -m pytest tests/test_edge47_candidate_status_contract.py
 ```
 
 Expected: all EDGE-47 candidate-status contract tests pass.
+
+## High-Risk Path Review
+
+N/A

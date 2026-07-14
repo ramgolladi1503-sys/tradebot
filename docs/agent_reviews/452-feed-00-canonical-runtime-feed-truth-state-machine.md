@@ -72,3 +72,8 @@ It does not prove ranking has edge, Phase2 data is strict, fallback execution is
 
 ## Human Approval
 Human approval is required before merge. Do not start TB-EDGE-01 until FEED-00 is merged.
+
+
+## High-Risk Path Review
+
+N/A

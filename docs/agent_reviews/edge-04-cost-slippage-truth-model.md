@@ -114,3 +114,8 @@ source: docs/agent_reviews/edge-04-cost-slippage-truth-model.md
 
 ## Human Approval
 - This PR stays within the agreed read-only scope and does not require live order approval.
+
+
+## High-Risk Path Review
+
+N/A

@@ -105,3 +105,8 @@ After merge, run the Streamlit dashboard locally. Temporarily simulate a Home fr
 ## Human Approval
 
 Approved for EDGE-56 scope only: Home freshness failure visibility with no live behavior change.
+
+
+## High-Risk Path Review
+
+N/A
