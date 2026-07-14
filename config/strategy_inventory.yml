@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "inventory_id": "strategy_truth_phase0_v1",
+  "inventory_status": "UNVERIFIED",
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "strategies": [
+    {
+      "id": "MEAN_REVERSION_EXTENSION",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "extension_risk_with_partial_mean_reversion_evidence",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Extension can be identified, but a completed-bar reversal turn is not yet proven."
+    },
+    {
+      "id": "COMPRESSION_BREAKOUT",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "compression_breakout_candidate",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "A fixed completed-bar compression sequence and frozen-range breakout are not yet conformance-proven."
+    },
+    {
+      "id": "TREND_PULLBACK",
+      "role": "candidate_generator",
+      "status": "UNVERIFIED",
+      "implementation_claim": "trend_pullback_candidate",
+      "validation_level": "quarantined",
+      "execution_eligible": false,
+      "reason": "Quarantined because trend, retracement, structural hold, and resumption ordering are not currently proven."
+    },
+    {
+      "id": "VWAP_RECLAIM_REJECTION",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "combined_vwap_reclaim_and_rejection_candidates",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Reclaim and rejection remain combined and their distinct temporal sequences are not yet conformance-proven."
+    },
+    {
+      "id": "OPENING_DRIVE",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "opening_drive_candidate",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Opening-window displacement exists, but completed-bar persistence and immediate-reversal failure evidence are not yet proven."
+    },
+    {
+      "id": "FAILED_BREAKOUT_TRAP",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "failed_breakout_trap_candidate",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Prior-break and re-entry concepts exist, but excursion, failed continuation, and ordered close-back-inside evidence are not yet conformance-proven."
+    },
+    {
+      "id": "EXHAUSTION_REVERSAL",
+      "role": "candidate_generator",
+      "status": "UNVERIFIED",
+      "implementation_claim": "exhaustion_risk",
+      "validation_level": "quarantined",
+      "execution_eligible": false,
+      "reason": "Quarantined and truthfully limited to exhaustion risk until completed-bar reversal structure is proven."
+    },
+    {
+      "id": "DIRECTIONAL_VOLATILITY_EXPANSION",
+      "aliases": ["EVENT_VOLATILITY_EXPANSION"],
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "directional_volatility_expansion_candidate",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "No event/calendar provenance is supplied; the truthful claim is generic directional volatility expansion."
+    },
+    {
+      "id": "LATE_DAY_MOMENTUM",
+      "role": "candidate_generator",
+      "status": "PARTIAL_DETECTOR",
+      "implementation_claim": "late_day_momentum_candidate",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Earlier-session direction, persistence, and remaining holding-time evidence are not yet conformance-proven."
+    },
+    {
+      "id": "OPENING_RANGE_RETEST",
+      "aliases": ["OPENING_RANGE_BREAKOUT"],
+      "role": "candidate_generator",
+      "status": "UNVERIFIED",
+      "implementation_claim": "opening_range_retest",
+      "validation_level": "quarantined",
+      "execution_eligible": false,
+      "reason": "Quarantined because opening-range completion, breakout excursion, return, and hold sequence are not currently proven."
+    },
+    {
+      "id": "OPTION_QUOTE_CONFIRMATION",
+      "aliases": ["OPTION_PRESSURE"],
+      "role": "option_confirmation",
+      "status": "UNVERIFIED",
+      "implementation_claim": "option_quote_confirmation",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "Quote evidence may confirm or downgrade a candidate but does not independently establish market thesis or genuine order-flow pressure."
+    },
+    {
+      "id": "NO_TRADE_CHOP",
+      "role": "safety_suppression",
+      "status": "UNVERIFIED",
+      "implementation_claim": "no_trade_chop_suppression",
+      "validation_level": "unverified",
+      "execution_eligible": false,
+      "reason": "This is a no-trade safety layer, not a candidate generator or tradable strategy."
+    }
+  ]
+}
