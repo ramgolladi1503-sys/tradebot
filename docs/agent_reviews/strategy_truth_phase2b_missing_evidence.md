@@ -1,126 +1,112 @@
-# STRATEGY TRUTH PHASE 2B
-
-## IMPLEMENTATION DIRECTION
-
+IMPLEMENTATION DIRECTION:
 RIGHT
 
-## approved objective
+VERDICT:
+PHASE2B_COMPLETE
 
-Apply a uniform fail-safe policy for missing market evidence without changing setup definitions, thresholds or complete-context behavior.
+APPROVED OBJECTIVE:
+Close the Phase 2B missing-evidence observability gap without changing candidate logic, scores, thresholds or setup definitions.
 
-## what was implemented
+WHAT WAS ACTUALLY IMPLEMENTED:
+Added a shared deterministic blocked-event helper in `strategies/movement/_utils.py`, wired required-evidence early returns in the affected generators to emit `STRATEGY_EVIDENCE_BLOCKED`, added focused observability tests in `tests/test_strategy_missing_evidence_observability.py`, and updated this evidence record. No scoring, threshold, setup-definition, or candidate-type changes were made.
 
-- Removed missing-as-positive scoring in `failed_breakout_trap`, `exhaustion_reversal`, `vwap_reclaim`, and `core.option_confirmation`.
-- Tightened thesis-evidence gating so missing structure/compression/expansion anchors no longer pass through `trend_pullback`, `compression_breakout`, `mean_reversion_extension`, or `event_volatility_expansion`.
-- Added a focused Phase 2B test suite at `tests/test_strategy_missing_evidence_policy.py`.
-- Preserved the Phase 1A-2A complete-context fingerprint and left runtime StrategyContext truth mapping untouched.
+ARCHITECTURE CHANGE:
+NONE
 
-## architecture assessment
+SCOPE STATUS:
+IN_SCOPE
 
-- `ARCHITECTURE CHANGE: NONE`
-- No new registry, service, database, event bus, config file, or state machine was added.
-- Changes stayed inside existing movement generators, one shared movement helper, one read-only option-confirmation module, one new focused test file, and this evidence document.
+EVIDENCE STATUS:
+PROVEN
 
-## starting commit
+STARTING COMMIT:
+`b9142aa04cb977eea9eb9eff0eb6d6a2893c1d85`
 
-- Starting commit: `db19774008db93671c8a24b93f98cb7488498ad2`
-- Phase 0: `cf2d74bc7a2938a08bc651e25b5334481479d68c`
-- Phase 1A: `9ace90c0b49d790f0e8926a75ecd9492ae6d3b26`
-- Phase 1B: `2a247ec6d92f60aa101d462eb6f3013d1aec4d54`
-- Phase 1C: `e74bbac98cfb3db43e15129bc78be4bb47564c45`
-- Phase 2A: `db19774008db93671c8a24b93f98cb7488498ad2`
+PHASE 0 COMMIT:
+`cf2d74bc7a2938a08bc651e25b5334481479d68c`
 
-## files changed
+PHASE 1A COMMIT:
+`9ace90c0b49d790f0e8926a75ecd9492ae6d3b26`
 
+PHASE 1B COMMIT:
+`2a247ec6d92f60aa101d462eb6f3013d1aec4d54`
+
+PHASE 1C COMMIT:
+`e74bbac98cfb3db43e15129bc78be4bb47564c45`
+
+PHASE 2A COMMIT:
+`db19774008db93671c8a24b93f98cb7488498ad2`
+
+PHASE 2B COMMIT:
+`b9142aa04cb977eea9eb9eff0eb6d6a2893c1d85`
+
+FILES CHANGED:
 - `strategies/movement/_utils.py`
-- `strategies/movement/trend_pullback.py`
 - `strategies/movement/compression_breakout.py`
 - `strategies/movement/event_volatility_expansion.py`
-- `strategies/movement/mean_reversion_extension.py`
-- `strategies/movement/failed_breakout_trap.py`
 - `strategies/movement/exhaustion_reversal.py`
+- `strategies/movement/failed_breakout_trap.py`
+- `strategies/movement/late_day_momentum.py`
+- `strategies/movement/mean_reversion_extension.py`
+- `strategies/movement/opening_drive.py`
+- `strategies/movement/opening_range_breakout.py`
+- `strategies/movement/option_pressure.py`
+- `strategies/movement/trend_pullback.py`
 - `strategies/movement/vwap_reclaim.py`
-- `core/option_confirmation.py`
-- `tests/test_strategy_missing_evidence_policy.py`
+- `tests/test_strategy_missing_evidence_observability.py`
 - `docs/agent_reviews/strategy_truth_phase2b_missing_evidence.md`
 
-## complete evidence-classification matrix
+BLOCKED-EVENT MECHANISM:
+- `classify_required_fields(...)` separates `missing_fields` from `invalid_fields` using field-specific validation modes: `positive`, `non_negative`, and `finite`.
+- `emit_strategy_evidence_blocked(...)` logs `event=STRATEGY_EVIDENCE_BLOCKED` with `runtime_strategy_id`, sorted `missing_fields`, sorted `invalid_fields`, and a stable `reason`.
+- `block_on_required_fields(...)` combines validation plus logging and returns `True` only when the generator should block.
+- Logging is wrapped in `try/except`, so logging failures cannot change candidate generation.
+- Empty field groups are rendered as `-`; no timestamps, object ids, or raw payload dumps are included.
 
-| component | input field(s) | classification | old missing behavior | new missing behavior | blocking | warning emitted | complete-context result | runtime-path effect |
-|---|---|---|---|---|---|---|---|---|
-| `OPENING_DRIVE` | `minutes_since_open`, `open_price`, `vwap`, `spot_ltp` | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `OPENING_RANGE_RETEST` | `minutes_since_open`, `orb_high`, `orb_low`, `vwap`, `spot_ltp` | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `COMPRESSION_BREAKOUT` | `range_width_pct`, `atr_short`, `atr_long` | `REQUIRED_THESIS_EVIDENCE` | Regime score could satisfy compression without direct compression evidence | Compression score becomes `0.0`; candidate suppressed | Yes | No | Unchanged | Missing compression inputs now remove the candidate |
-| `COMPRESSION_BREAKOUT` | breakout level, VWAP alignment | `REQUIRED_THESIS_EVIDENCE` | Already blocked by price checks | Unchanged | Yes | No | Unchanged | None |
-| `TREND_PULLBACK` | `nearest_support` or `nearest_resistance` | `REQUIRED_THESIS_EVIDENCE` | Fell back to `vwap` as anchor | Missing structure anchor blocks candidate | Yes | No | Unchanged | Runtime contexts missing support/resistance no longer emit pullback candidates |
-| `TREND_PULLBACK` | trend regime score | `REQUIRED_THESIS_EVIDENCE` | Already blocked by threshold | Unchanged | Yes | No | Unchanged | None |
-| `VWAP_RECLAIM_REJECTION` | `vwap`, `spot_ltp`, confirmation metadata or previous spot | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `VWAP_RECLAIM_REJECTION` | `vwap_slope` | `OPTIONAL_CORROBORATION` | Missing slope added `0.5` alignment | Missing slope contributes `0.0` | No | Yes: `missing_optional_evidence:vwap_reclaim_rejection_v1:vwap_slope` | Unchanged | Runtime score can decrease but not increase when slope is absent |
-| `FAILED_BREAKOUT_TRAP` | ORB/day/structure re-entry fields | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `FAILED_BREAKOUT_TRAP` | trend-side premium stall | `OPTIONAL_CORROBORATION` | Missing premium counted as perfect stall | Missing premium contributes `0.0`; explicit non-positive premium still counts as stall | No | No | Unchanged | Score decreases or candidate disappears when stall evidence is absent |
-| `EXHAUSTION_REVERSAL` | `spot_ltp`, `vwap`, stretch window | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `EXHAUSTION_REVERSAL` | trend-side premium stall | `OPTIONAL_CORROBORATION` | Missing premium counted as full stall | Missing premium contributes `0.0` | No | No | Unchanged | Score decreases or candidate disappears |
-| `EXHAUSTION_REVERSAL` | `volume_z` fade evidence | `OPTIONAL_CORROBORATION` | Missing volume counted as full fade | Missing volume contributes `0.0` | No | No | Unchanged | Score decreases or candidate disappears |
-| `MEAN_REVERSION_EXTENSION` | support/resistance or day boundary anchor | `REQUIRED_THESIS_EVIDENCE` | Candidate could emit with no boundary anchor | Missing boundary now blocks candidate | Yes | No | Unchanged | Runtime contexts missing range anchors now suppress the candidate |
-| `MEAN_REVERSION_EXTENSION` | continuation evidence | `INVALIDATION_EVIDENCE` | Missing continuation already scored zero, not positive | Unchanged | Threshold path | No | Unchanged | None |
-| `EVENT_VOLATILITY_EXPANSION` | `atr_short`, `atr_long`, `volume_z` | `REQUIRED_THESIS_EVIDENCE` | Regime/volatility-state could satisfy expansion with missing ATR or volume | Expansion score becomes `0.0`; candidate suppressed | Yes | No | Unchanged | Missing ATR or volume now removes the candidate |
-| `LATE_DAY_MOMENTUM` | `minutes_since_open`, `minutes_to_close`, `vwap`, `spot_ltp` | `REQUIRED_THESIS_EVIDENCE` | Already blocked | Unchanged | Yes | No | Unchanged | None |
-| `LATE_DAY_MOMENTUM` | `volume_z` | `OPTIONAL_CORROBORATION` | Already scored zero when missing | Unchanged | No | No | Unchanged | None |
-| `OPTION_QUOTE_CONFIRMATION` | side quote LTP, premium, spread, depth, age, fallback | `DOWNSTREAM_OPTION_EVIDENCE` | Missing same-side evidence already blocked; missing opposite premium inflated weakness score | Missing opposite premium now contributes zero weakness; same-side missing evidence still blocks | Same-side only | Existing side warnings only | Unchanged | Pressure score no longer increases from absent opposite premium |
-| `NO_TRADE_CHOP` | N/A | `NOT_USED` | Safety suppression only | Unchanged | N/A | N/A | Unchanged | None |
+COMPLETE GENERATOR-TO-EVENT MATRIX:
+| generator | blocked reason | observed fields |
+| --- | --- | --- |
+| `opening_drive_v1` | `missing_required_session_timing` | `minutes_since_open` |
+| `opening_drive_v1` | `missing_required_thesis_evidence` | `open_price`, `spot_ltp`, `vwap` |
+| `opening_range_retest_v1` | `missing_required_session_timing` | `minutes_since_open` |
+| `opening_range_retest_v1` | `missing_required_orb_evidence` | `orb_high`, `orb_low`, `spot_ltp`, `vwap` |
+| `compression_breakout_v1` | `missing_required_thesis_evidence` | `atr_long`, `atr_short`, `range_width_pct`, `spot_ltp`, `vwap` |
+| `trend_pullback_v1` | `missing_required_thesis_evidence` | `spot_ltp`, `vwap` |
+| `trend_pullback_v1` | `missing_required_structure_anchor` | `nearest_resistance` or `nearest_support` |
+| `vwap_reclaim_rejection_v1` | `missing_required_thesis_evidence` | `spot_ltp`, `vwap` |
+| `failed_breakout_trap_v1` | `missing_required_thesis_evidence` | `spot_ltp` |
+| `exhaustion_reversal_v1` | `missing_required_thesis_evidence` | `spot_ltp`, `vwap` |
+| `mean_reversion_extension_v1` | `missing_required_thesis_evidence` | `spot_ltp`, `vwap` |
+| `mean_reversion_extension_v1` | `missing_required_structure_anchor` | `day_high`, `nearest_resistance` or `day_low`, `nearest_support` |
+| `event_volatility_expansion_v1` | `missing_required_thesis_evidence` | `atr_long`, `atr_short`, `spot_ltp`, `volume_z`, `vwap` |
+| `late_day_momentum_v1` | `missing_required_session_timing` | `minutes_since_open`, `minutes_to_close` |
+| `late_day_momentum_v1` | `missing_required_thesis_evidence` | `spot_ltp`, `vwap` |
+| `option_pressure_confirmation_v1` | `missing_required_option_quote_evidence` | `ce_depth`, `ce_premium_change`, `ce_spread_pct`, `option_ce_ltp`, `option_ltp_age_sec`, `option_pe_ltp`, `pe_depth`, `pe_premium_change`, `pe_spread_pct` |
+| `no_trade_chop_v1` | not applicable | safety suppression only |
 
-## verified missing-as-positive defects
+SAMPLE DETERMINISTIC EVENTS:
+```text
+event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=compression_breakout_v1 missing_fields=atr_long,atr_short,range_width_pct invalid_fields=- reason=missing_required_thesis_evidence
+event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=nearest_resistance invalid_fields=- reason=missing_required_structure_anchor
+event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=orb_high,orb_low invalid_fields=- reason=missing_required_orb_evidence
+event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=option_pressure_confirmation_v1 missing_fields=option_ce_ltp invalid_fields=- reason=missing_required_option_quote_evidence
+```
 
-- `FAILED_BREAKOUT_TRAP`: missing CE/PE premium was treated the same as explicit stall.
-- `EXHAUSTION_REVERSAL`: missing premium was treated the same as explicit stall.
-- `EXHAUSTION_REVERSAL`: missing `volume_z` was treated the same as explicit fade.
-- `VWAP_RECLAIM_REJECTION`: missing `vwap_slope` added non-zero alignment.
-- `OPTION_QUOTE_CONFIRMATION`: missing opposite-side premium inflated dominant-side pressure.
-- `TREND_PULLBACK`: missing structure anchor could still emit via `vwap` fallback.
-- `COMPRESSION_BREAKOUT`: missing direct compression fields could still emit from regime score alone.
-- `MEAN_REVERSION_EXTENSION`: missing range boundary could still emit.
-- `EVENT_VOLATILITY_EXPANSION`: missing ATR or volume could still emit from regime state alone.
+DETERMINISM PROOF:
+- Field names are sorted before formatting.
+- Repeated identical calls produce byte-identical blocked messages in `tests/test_strategy_missing_evidence_observability.py::test_repeated_identical_calls_produce_identical_blocked_evidence`.
+- Invalid-value classification is stable for `None`, `NaN`, `inf`, and `-inf`.
+- The event payload has only strategy id, field names, and a fixed reason string.
 
-## false audit leads
+NO SYNTHETIC CANDIDATE PROOF:
+- `tests/test_strategy_missing_evidence_observability.py::test_no_rejected_or_synthetic_candidate_is_created_for_observability` proves blocked generators still return no candidate.
+- No new candidate class, candidate status, or rejected placeholder was introduced.
 
-- `OPENING_DRIVE` already blocked on missing timing, open price, VWAP, and spot.
-- `OPENING_RANGE_RETEST` already blocked on missing timing and ORB fields.
-- `LATE_DAY_MOMENTUM` already blocked on missing timing and core directional fields.
-- The candidate-pool orchestrator already contained generator failures without aborting other generators.
-- Phase 2A runtime StrategyContext propagation remained truthful; no Phase 2A file edits were required.
+FAILURE CONTAINMENT PROOF:
+- `tests/test_strategy_missing_evidence_observability.py::test_one_blocked_component_does_not_abort_other_generators` proves one blocked generator still emits its blocked event while another generator in the same pool run can return a real candidate.
+- Candidate-pool behavior remains containment-based; blocked observability does not raise or abort the pool.
 
-## shared policy
-
-- Required thesis evidence missing or non-finite: emit no candidate for that component.
-- Optional corroboration missing: contribute zero positive evidence.
-- Missing optional evidence must not raise the raw score.
-- Missing evidence is never converted into `0`, `0.5`, `1.0`, current price, or another fabricated positive substitute.
-- One blocked or empty generator must not abort the rest of the pool.
-
-## field-specific validators
-
-- Prices and anchors: finite and `> 0`
-- ATR fields: finite and `> 0`
-- Premium change: finite; `0` remains a valid observed value but is not positive confirmation
-- Spread: finite and `>= 0`
-- Depth: finite and `>= 0`, with the existing minimum applied separately
-- Volume z-score: finite; `0` and negative values remain valid observed values
-- Minutes: finite; boundary zero remains valid
-- `None`, `NaN`, `inf`, and `-inf`: invalid for required market evidence
-
-## per-generator changes
-
-- `trend_pullback`: removed the fallback from structure anchor to `vwap`; setup now requires explicit support/resistance anchor.
-- `compression_breakout`: direct compression inputs (`range_width_pct` and ATR ratio) are required before regime compression can matter.
-- `event_volatility_expansion`: direct ATR ratio and volume evidence are required before regime expansion can matter.
-- `mean_reversion_extension`: explicit range boundary anchor is required before extension reversion can emit.
-- `failed_breakout_trap`: missing premium now means no stall contribution.
-- `exhaustion_reversal`: missing premium and missing volume now mean no stall/fade contribution.
-- `vwap_reclaim`: missing slope now contributes zero and emits a deterministic warning.
-- `core.option_confirmation`: missing opposite premium no longer counts as weakness.
-
-## complete-context fingerprint
-
+COMPLETE-CONTEXT FINGERPRINT:
 Preserved exactly:
 
 ```text
@@ -145,68 +131,71 @@ BUY_CALL
 VALIDATED_CANDIDATE
 ```
 
-## runtime before/after
+RAW SCORE PRESERVATION:
+- `tests/test_strategy_missing_evidence_observability.py::test_complete_context_raw_scores_remain_exact` proves the complete-context raw scores remain unchanged.
 
-- Before: several generators could still emit when direct runtime evidence remained missing because missing structure, compression, expansion, stall, fade, or slope evidence was treated as neutral or positive.
-- After: those same missing fields either block the affected component or contribute zero positive evidence. Other generators continue to run.
+OPTIONAL-MISSING BEHAVIOR PRESERVED:
+- `tests/test_strategy_missing_evidence_observability.py::test_optional_missing_evidence_retains_zero_contribution_behavior` proves the Phase 2B zero-contribution policy remains intact for optional evidence.
 
-## expected candidate removals
+PROFILE AND CONTEXT BOUNDARIES PRESERVED:
+- `tests/test_strategy_missing_evidence_observability.py::test_phase1c_profile_blocking_remains_unchanged` proves Phase 1C fail-closed profile behavior is unchanged.
+- `tests/test_strategy_missing_evidence_observability.py::test_phase2a_context_truth_remains_unchanged` proves Phase 2A runtime truth mapping is unchanged.
 
-- `TREND_PULLBACK` can disappear when runtime support/resistance is missing.
-- `COMPRESSION_BREAKOUT` can disappear when runtime range-width or ATR ratio is missing.
-- `MEAN_REVERSION_EXTENSION` can disappear when no real range boundary is available.
-- `EVENT_VOLATILITY_EXPANSION` can disappear when ATR ratio or volume evidence is missing.
-- `FAILED_BREAKOUT_TRAP`, `EXHAUSTION_REVERSAL`, and `VWAP_RECLAIM_REJECTION` can score lower or disappear when corroboration is absent.
+PROOF THAT OTHER GENERATORS CONTINUE:
+- The observability helper returns only a boolean and logs side effects.
+- Generators still return `()` on blocked evidence and the pool keeps iterating.
+- Focused containment coverage passed without any candidate-pool order changes.
 
-## unexpected changes
+PROOF THAT NO SYNTHETIC CANDIDATE IS CREATED:
+- Blocked generators emit only a log event and still return an empty tuple.
+- No code path appends a rejected candidate or metadata-only pseudo-candidate.
 
-- None found in complete direct-context behavior.
-- No generator-order or pool-failure-containment regressions were observed in the focused suite.
-
-## focused tests and counts
-
-- Command:
-
+FOCUSED TEST COMMAND:
 ```bash
 python -m pytest -q \
+  tests/test_strategy_missing_evidence_observability.py \
   tests/test_strategy_missing_evidence_policy.py \
   tests/test_strategy_context_truth.py \
   tests/test_strategy_profile_fail_closed.py \
-  tests/test_strategy_profile_integrity.py \
   tests/test_candidate_pool.py \
-  tests/test_candidate_pool_quality.py \
   tests/test_candidate_pool_orchestrator.py \
-  tests/test_candidate_pool_contract_snapshots.py \
   tests/test_opening_movement_strategies.py \
   tests/test_compression_trend_movement_strategies.py \
   tests/test_vwap_trap_movement_strategies.py \
   tests/test_exhaustion_mean_reversion_strategies.py \
   tests/test_event_late_day_movement_strategies.py \
   tests/test_option_confirmation.py \
-  tests/test_no_trade_engine.py \
-  tests/test_strategy_generators_lineage.py \
-  tests/test_movement_registry.py
+  tests/test_no_trade_engine.py
 ```
 
-- Result: `141 passed, 1 warning`
-- Additional search for requested phrases only found non-movement contract/remediation references; no extra Phase 2B movement-runtime tests were required beyond the focused set.
+FOCUSED TEST RESULT:
+`132 passed, 1 warning in 8.33s`
 
-## static checks
+STATIC CHECKS:
+```bash
+python -m py_compile \
+  strategies/movement/_utils.py \
+  strategies/movement/*.py \
+  tests/test_strategy_missing_evidence_observability.py
 
-- `python -m py_compile strategies/movement/_utils.py strategies/movement/*.py tests/test_strategy_missing_evidence_policy.py`
-- `ruff check strategies/movement tests/test_strategy_missing_evidence_policy.py`
-- `git diff --check`
-- Result: all passed
+ruff check \
+  strategies/movement \
+  tests/test_strategy_missing_evidence_observability.py
 
-## full-suite result
+git diff --check
+```
 
-- Command: `python -m pytest -q`
-- Result: `5688 passed, 1 failed, 1 deselected`
+STATIC CHECK RESULT:
+All passed.
 
-## first failure
+FULL-SUITE RESULT:
+`1 failed, 5710 passed, 1 deselected, 935 warnings in 306.29s (0:05:06)`
 
-- `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
-- Observed error text:
+FIRST FAILURE:
+`tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
+
+FIRST FAILURE DETAIL:
+The failure remained the established credential-path baseline:
 
 ```text
 RuntimeError:[AUTH] missing_kite_access_token
@@ -214,23 +203,26 @@ Missing token at /Users/madhuram/tradebot-strategy-truth-foundation/.runtime/kit
 Run scripts/kite_autologin_localhost.py to refresh token.
 ```
 
-- Classification: pre-existing orchestrator credential-path failure, identical to the previously established baseline failure from the Phase 2A reproduction.
+BEHAVIOR PRESERVED:
+- Complete-context candidate count, order, ids, directions, statuses, and scores stayed exact.
+- No candidate logic, formula, threshold, or setup definition changed.
+- Optional missing evidence still contributes zero, not positive evidence.
+- `NO_TRADE_CHOP` remains `safety_suppression`.
+- No synthetic candidate, no network call, no broker/order/execution path, and no persistent thread activity were added.
 
-## risks
+BEHAVIOR CHANGED:
+- Required-evidence blockers that already returned no candidate now emit a deterministic observable blocked event.
 
-- Runtime candidate counts can drop where Phase 2A still leaves truthful gaps in support/resistance, ATR, or range-width sources.
-- Optional-missing warnings are only surfaced where a candidate still exists; fully blocked components do not emit a separate warning artifact in this phase.
-- `core.movement_regime.py` still uses heuristic regime scores; this phase intentionally did not redesign that regime layer.
+REMAINING RISKS:
+- Runtime candidate counts can still drop where truthful Phase 2A sources remain missing; that is intentional and unchanged.
+- This pass makes blockers observable; it does not yet resolve candidate-versus-Phase-2 ownership boundaries.
 
-## rollback
+ROLLBACK:
+- Revert only the observability corrective commit. No config or data migration is required.
 
-- Revert the Phase 2B commit only. No data migration, config migration, or shared-checkout cleanup is required.
-
-## explicit non-claims
-
-- No strategy threshold was tuned.
-- No setup sequence was rewritten.
-- No ranking, no-trade, execution, broker, feed, dashboard, backtesting, or WFA logic was changed.
-- No new market-data producer or indicator source was added.
-- No claim is made about tradable edge, profitability, or pattern validity.
-- No claim is made that missing Phase 2A runtime sources are now available; missingness is only handled more safely.
+EXPLICIT NON-CLAIMS:
+- No strategy threshold tuning.
+- No setup-definition rewrite.
+- No profile-resolution change.
+- No ranking, no-trade, feed, broker, risk, order, execution, dashboard, backtesting, or WFA change.
+- No claim of trading edge or profitability.

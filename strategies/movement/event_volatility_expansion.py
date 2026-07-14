@@ -14,6 +14,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -50,7 +51,14 @@ def generate_event_volatility_expansion_candidates(
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
-    if spot is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
     vwap_move = signed_pct_distance(spot, vwap)
@@ -59,8 +67,19 @@ def generate_event_volatility_expansion_candidates(
     if abs(vwap_move) > max_chase_distance_pct:
         return ()
 
+    expansion_missing = block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("atr_short", ctx.atr_short, "positive"),
+            ("atr_long", ctx.atr_long, "positive"),
+            ("volume_z", ctx.volume_z, "finite"),
+        ),
+    )
     expansion_score = _expansion_score(ctx, regime, profile)
     if expansion_score < min_vol_expansion_score:
+        if expansion_missing:
+            return ()
         return ()
 
     candidates: list[StrategyCandidate] = []

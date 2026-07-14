@@ -14,6 +14,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     pct_distance,
@@ -48,18 +49,40 @@ def generate_opening_drive_candidates(
     min_vwap_alignment_pct = float(params["MIN_VWAP_ALIGNMENT_PCT"])
 
     minutes = safe_float(ctx.minutes_since_open)
-    if minutes is None or minutes < 0 or minutes > max_opening_drive_minutes:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_session_timing",
+        field_specs=(("minutes_since_open", ctx.minutes_since_open, "non_negative"),),
+    ):
+        return ()
+    if minutes is None or minutes > max_opening_drive_minutes:
         return ()
 
     spot = safe_float(ctx.spot_ltp)
     open_price = safe_float(ctx.open_price)
     vwap = safe_float(ctx.vwap)
-    if spot is None or open_price is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("open_price", ctx.open_price, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
     open_move = signed_pct_distance(spot, open_price)
     vwap_move = signed_pct_distance(spot, vwap)
     if open_move is None or vwap_move is None:
+        block_on_required_fields(
+            STRATEGY_ID,
+            reason="missing_required_thesis_evidence",
+            field_specs=(
+                ("open_price", ctx.open_price, "positive"),
+                ("vwap", ctx.vwap, "positive"),
+            ),
+        )
         return ()
 
     candidates: list[StrategyCandidate] = []

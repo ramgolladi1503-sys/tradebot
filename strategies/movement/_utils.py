@@ -7,6 +7,7 @@ trading behavior.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,8 @@ MAX_OPTION_LTP_AGE_SEC = 2.5
 MAX_OPTION_SPREAD_PCT = 4.0
 MIN_OPTION_DEPTH = 1.0
 MIN_PREMIUM_CONFIRMATION = 0.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -161,6 +164,70 @@ def missing_evidence_warning(strategy_id: str, *fields: str) -> tuple[str, ...]:
     )
 
 
+def classify_required_fields(
+    *field_specs: tuple[str, Any, str],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
+    for field_name, value, mode in field_specs:
+        name = str(field_name or "").strip()
+        if not name:
+            continue
+        if value is None:
+            missing_fields.append(name)
+            continue
+        numeric = safe_float(value)
+        if mode == "positive":
+            if numeric is None or numeric <= 0:
+                invalid_fields.append(name)
+        elif mode == "non_negative":
+            if numeric is None or numeric < 0:
+                invalid_fields.append(name)
+        elif mode == "finite":
+            if numeric is None:
+                invalid_fields.append(name)
+        else:
+            raise ValueError(f"unsupported_required_field_mode:{mode}")
+    return tuple(sorted(set(missing_fields))), tuple(sorted(set(invalid_fields)))
+
+
+def emit_strategy_evidence_blocked(
+    strategy_id: str,
+    *,
+    reason: str,
+    missing_fields: tuple[str, ...] = (),
+    invalid_fields: tuple[str, ...] = (),
+) -> None:
+    try:
+        logger.warning(
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=%s missing_fields=%s invalid_fields=%s reason=%s",
+            str(strategy_id or "").strip(),
+            ",".join(sorted(set(str(field).strip() for field in missing_fields if str(field).strip()))) or "-",
+            ",".join(sorted(set(str(field).strip() for field in invalid_fields if str(field).strip()))) or "-",
+            str(reason or "").strip() or "missing_required_thesis_evidence",
+        )
+    except Exception:
+        return
+
+
+def block_on_required_fields(
+    strategy_id: str,
+    *,
+    reason: str,
+    field_specs: tuple[tuple[str, Any, str], ...],
+) -> bool:
+    missing_fields, invalid_fields = classify_required_fields(*field_specs)
+    if not missing_fields and not invalid_fields:
+        return False
+    emit_strategy_evidence_blocked(
+        strategy_id,
+        reason=reason,
+        missing_fields=missing_fields,
+        invalid_fields=invalid_fields,
+    )
+    return True
+
+
 def volume_score(ctx: StrategyContext) -> float:
     return ratio_score(safe_float(ctx.volume_z), start=0.5, full=2.0)
 
@@ -276,8 +343,12 @@ __all__ = [
     "MAX_OPTION_SPREAD_PCT",
     "MIN_OPTION_DEPTH",
     "SideEvidence",
+    "block_on_required_fields",
     "clamp_score",
+    "classify_required_fields",
+    "emit_strategy_evidence_blocked",
     "make_candidate",
+    "missing_evidence_warning",
     "opening_timing_score",
     "pct_distance",
     "ratio_score",

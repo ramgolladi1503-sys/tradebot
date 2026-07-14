@@ -14,6 +14,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -50,7 +51,14 @@ def generate_exhaustion_reversal_candidates(
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
-    if spot is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
     distance = signed_pct_distance(spot, vwap)

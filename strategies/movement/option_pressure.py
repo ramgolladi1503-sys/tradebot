@@ -11,7 +11,7 @@ from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.option_confirmation import assess_option_pressure
 from core.strategy_parameter_profiles import resolve_required_profile_parameters
-from strategies.movement._utils import clamp_score
+from strategies.movement._utils import block_on_required_fields, clamp_score
 
 STRATEGY_ID = "option_pressure_confirmation_v1"
 MOVEMENT_TYPE = "OPTION_PRESSURE_CONFIRMATION"
@@ -32,9 +32,25 @@ def generate_option_pressure_candidates(
         return ()
     params = dict(profile.parameters)
     min_pressure_score = float(params["MIN_PRESSURE_SCORE"])
+    required_quote_fields = (
+        ("option_ce_ltp", ctx.option_ce_ltp, "positive"),
+        ("ce_premium_change", ctx.ce_premium_change, "finite"),
+        ("ce_spread_pct", ctx.ce_spread_pct, "non_negative"),
+        ("ce_depth", ctx.ce_depth, "non_negative"),
+        ("option_pe_ltp", ctx.option_pe_ltp, "positive"),
+        ("pe_premium_change", ctx.pe_premium_change, "finite"),
+        ("pe_spread_pct", ctx.pe_spread_pct, "non_negative"),
+        ("pe_depth", ctx.pe_depth, "non_negative"),
+        ("option_ltp_age_sec", ctx.option_ltp_age_sec, "non_negative"),
+    )
 
     assessment = assess_option_pressure(ctx)
     if assessment.dominant_direction == "NEUTRAL":
+        block_on_required_fields(
+            STRATEGY_ID,
+            reason="missing_required_option_quote_evidence",
+            field_specs=required_quote_fields,
+        )
         return ()
 
     if assessment.dominant_direction == "BUY_CALL":
@@ -47,6 +63,11 @@ def generate_option_pressure_candidates(
         opposite_score = assessment.bullish_score
 
     if score < min_pressure_score:
+        block_on_required_fields(
+            STRATEGY_ID,
+            reason="missing_required_option_quote_evidence",
+            field_specs=required_quote_fields,
+        )
         return ()
 
     blockers = tuple(sorted(set(side.blockers)))

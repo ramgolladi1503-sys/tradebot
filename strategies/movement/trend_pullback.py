@@ -15,6 +15,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     pct_distance,
@@ -56,8 +57,46 @@ def generate_trend_pullback_candidates(
 
     if trend_up >= min_trend_score and _call_pullback_holds(ctx, profile):
         candidates.append(_build_candidate(ctx, regime, profile, "BUY_CALL", trend_up))
+    elif trend_up >= min_trend_score:
+        spot = safe_float(ctx.spot_ltp)
+        vwap = safe_float(ctx.vwap)
+        support = safe_float(ctx.nearest_support)
+        if spot is None or vwap is None:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_thesis_evidence",
+                field_specs=(
+                    ("spot_ltp", ctx.spot_ltp, "positive"),
+                    ("vwap", ctx.vwap, "positive"),
+                ),
+            )
+        elif support is None or support <= 0:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_structure_anchor",
+                field_specs=(("nearest_support", ctx.nearest_support, "positive"),),
+            )
     if trend_down >= min_trend_score and _put_pullback_holds(ctx, profile):
         candidates.append(_build_candidate(ctx, regime, profile, "BUY_PUT", trend_down))
+    elif trend_down >= min_trend_score:
+        spot = safe_float(ctx.spot_ltp)
+        vwap = safe_float(ctx.vwap)
+        resistance = safe_float(ctx.nearest_resistance)
+        if spot is None or vwap is None:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_thesis_evidence",
+                field_specs=(
+                    ("spot_ltp", ctx.spot_ltp, "positive"),
+                    ("vwap", ctx.vwap, "positive"),
+                ),
+            )
+        elif resistance is None or resistance <= 0:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_structure_anchor",
+                field_specs=(("nearest_resistance", ctx.nearest_resistance, "positive"),),
+            )
     return tuple(candidates)
 
 

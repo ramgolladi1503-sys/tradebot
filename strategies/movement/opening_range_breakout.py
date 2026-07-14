@@ -14,6 +14,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     pct_distance,
@@ -47,6 +48,12 @@ def generate_opening_range_retest_candidates(
     max_retest_minutes = float(params["MAX_RETEST_MINUTES"])
 
     minutes = safe_float(ctx.minutes_since_open)
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_session_timing",
+        field_specs=(("minutes_since_open", ctx.minutes_since_open, "non_negative"),),
+    ):
+        return ()
     if minutes is None or minutes < min_retest_minutes or minutes > max_retest_minutes:
         return ()
 
@@ -54,7 +61,16 @@ def generate_opening_range_retest_candidates(
     vwap = safe_float(ctx.vwap)
     orb_high = safe_float(ctx.orb_high)
     orb_low = safe_float(ctx.orb_low)
-    if spot is None or vwap is None or orb_high is None or orb_low is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_orb_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+            ("orb_high", ctx.orb_high, "positive"),
+            ("orb_low", ctx.orb_low, "positive"),
+        ),
+    ):
         return ()
 
     candidates: list[StrategyCandidate] = []

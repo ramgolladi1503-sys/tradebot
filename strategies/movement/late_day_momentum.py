@@ -14,6 +14,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -54,6 +55,15 @@ def generate_late_day_momentum_candidates(
 
     minutes_since_open = safe_float(ctx.minutes_since_open)
     minutes_to_close = safe_float(ctx.minutes_to_close)
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_session_timing",
+        field_specs=(
+            ("minutes_since_open", ctx.minutes_since_open, "non_negative"),
+            ("minutes_to_close", ctx.minutes_to_close, "non_negative"),
+        ),
+    ):
+        return ()
     if minutes_since_open is None or minutes_since_open < min_minutes_since_open:
         return ()
     if minutes_to_close is None or minutes_to_close < min_minutes_to_close:
@@ -63,7 +73,14 @@ def generate_late_day_momentum_candidates(
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
-    if spot is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
     vwap_move = signed_pct_distance(spot, vwap)

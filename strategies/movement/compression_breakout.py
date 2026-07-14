@@ -11,6 +11,7 @@ from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.strategy_parameter_profiles import RuntimeProfileResolution, resolve_required_profile_parameters
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -53,11 +54,29 @@ def generate_compression_breakout_candidates(
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
-    if spot is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
+    compression_missing = block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("range_width_pct", ctx.range_width_pct, "finite"),
+            ("atr_short", ctx.atr_short, "positive"),
+            ("atr_long", ctx.atr_long, "positive"),
+        ),
+    )
     compression_score = _compression_evidence_score(ctx, regime, params)
     if compression_score < min_compression_score:
+        if compression_missing:
+            return ()
         return ()
 
     candidates: list[StrategyCandidate] = []

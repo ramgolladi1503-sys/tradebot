@@ -13,6 +13,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -49,7 +50,14 @@ def generate_mean_reversion_extension_candidates(
 
     spot = safe_float(ctx.spot_ltp)
     vwap = safe_float(ctx.vwap)
-    if spot is None or vwap is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(
+            ("spot_ltp", ctx.spot_ltp, "positive"),
+            ("vwap", ctx.vwap, "positive"),
+        ),
+    ):
         return ()
 
     range_chop_score = max(
@@ -99,6 +107,25 @@ def generate_mean_reversion_extension_candidates(
                 "lower_extension_reversion",
             )
         )
+    if not candidates:
+        if distance > 0 and _range_boundary_level(ctx, "BUY_PUT") is None:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_structure_anchor",
+                field_specs=(
+                    ("nearest_resistance", ctx.nearest_resistance, "positive"),
+                    ("day_high", ctx.day_high, "positive"),
+                ),
+            )
+        elif distance < 0 and _range_boundary_level(ctx, "BUY_CALL") is None:
+            block_on_required_fields(
+                STRATEGY_ID,
+                reason="missing_required_structure_anchor",
+                field_specs=(
+                    ("nearest_support", ctx.nearest_support, "positive"),
+                    ("day_low", ctx.day_low, "positive"),
+                ),
+            )
     return tuple(candidates)
 
 

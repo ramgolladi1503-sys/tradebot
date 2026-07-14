@@ -15,6 +15,7 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -44,8 +45,11 @@ def generate_failed_breakout_trap_candidates(
     params = dict(profile.parameters)
     min_trap_evidence_score = float(params["MIN_TRAP_EVIDENCE_SCORE"])
 
-    spot = safe_float(ctx.spot_ltp)
-    if spot is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(("spot_ltp", ctx.spot_ltp, "positive"),),
+    ):
         return ()
 
     candidates: list[StrategyCandidate] = []
