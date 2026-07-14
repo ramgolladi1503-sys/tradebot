@@ -1,0 +1,82 @@
+{
+  "committed_sample": {
+    "effective_sessions": 53,
+    "profitable_sessions": 18,
+    "losing_sessions": 35,
+    "session_block_mean_ci_95": [
+      -0.0005479610165920424,
+      -0.00010984641569645342
+    ],
+    "session_block_median_ci_95": [
+      -0.00042144001478829887,
+      3.0634797813846053e-06
+    ],
+    "session_block_win_rate_ci_95": [
+      0.328125,
+      0.5
+    ],
+    "permutation_p_value": 0.0092,
+    "mean_percentile_in_null": 0.0046
+  },
+  "mfe_mae": {
+    "horizons_minutes": [1, 2, 3, 5, 10, 15, 30],
+    "mean_mfe": [
+      -0.000011142888400493852,
+      0.000112921775881486,
+      0.00020109468361609008,
+      0.0003045506391619316,
+      0.0004504972834773692,
+      0.0005634457469322063,
+      0.0007588001525694394
+    ],
+    "mean_mae": [
+      -0.000011142888400493852,
+      -0.00011737527105845019,
+      -0.00020623265884959282,
+      -0.00034452711091376614,
+      -0.0005314460214422279,
+      -0.000677776407731376,
+      -0.0009932356891436994
+    ],
+    "threshold_pass_rates_pct": {
+      "2bps": [30.56, 40.97, 43.75, 52.78, 63.89, 65.97, 68.75],
+      "5bps": [12.5, 21.53, 27.78, 34.72, 46.53, 53.47, 54.17],
+      "10bps": [2.78, 3.47, 8.33, 10.42, 18.06, 22.22, 31.94],
+      "20bps": [0.0, 0.69, 0.69, 1.39, 2.08, 3.47, 7.64]
+    }
+  },
+  "matched_null_controls": {
+    "random_same_session": {
+      "count": 100,
+      "mean_return": -0.00017753834681036846,
+      "win_rate": 0.44,
+      "profit_factor": 0.6798338674910405
+    },
+    "sign_flipped_direction": {
+      "count": 144,
+      "mean_return": -8.970583701099195e-05,
+      "win_rate": 0.4097222222222222,
+      "profit_factor": 0.8329077204414622
+    },
+    "shifted_one_session": {
+      "count": 143,
+      "mean_return": -0.00019260707287338714,
+      "win_rate": 0.4125874125874126,
+      "profit_factor": 0.6755421874421573
+    },
+    "randomized_opening_range": {
+      "count": 127,
+      "mean_return": -0.00037145450813571467,
+      "win_rate": 0.4015748031496063,
+      "profit_factor": 0.47221401857043027
+    },
+    "random_direction_same_timestamp": {
+      "count": 144,
+      "mean_return": -1.664819240505096e-05,
+      "win_rate": 0.4652777777777778,
+      "profit_factor": 0.9662052512948714
+    }
+  },
+  "conclusion": "The base ORB candle signal set does not outperform random or matched null controls in a statistically meaningful way.",
+  "classification": "NEGATIVE_RESULT_CONFIRMED"
+}

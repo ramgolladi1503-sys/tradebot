@@ -12,7 +12,15 @@ from core.session_calendar import is_open, get_session
 IST_TZ = ZoneInfo("Asia/Kolkata")
 
 
+_INJECTED_CLOCK = None
+
+def inject_clock(fn):
+    global _INJECTED_CLOCK
+    _INJECTED_CLOCK = fn
+
 def utc_now() -> datetime:
+    if _INJECTED_CLOCK:
+        return _INJECTED_CLOCK().astimezone(timezone.utc)
     return datetime.now(timezone.utc)
 
 
@@ -89,6 +97,8 @@ def compute_age_sec(ts_epoch: Any, now_epoch: Any) -> Optional[float]:
 
 
 def now_ist() -> datetime:
+    if _INJECTED_CLOCK:
+        return _INJECTED_CLOCK()
     return datetime.now(timezone.utc).astimezone(IST_TZ)
 
 
