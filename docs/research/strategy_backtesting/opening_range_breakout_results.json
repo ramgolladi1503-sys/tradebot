@@ -443,5 +443,269 @@
       "working_directory": "not_recorded",
       "python_executable": "not_recorded"
     }
+  },
+  "ohlcv_candle_research": {
+    "label": "OHLCV_CANDLE_RESEARCH_ONLY",
+    "source_manifest": {
+      "path": "docs/research/strategy_backtesting/evidence/orb_ohlcv_source_manifest.json",
+      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
+      "file_sha256": "dc816e2481dc74d833d790a2c90d88ef73860aac12df4efdca793cbef9d5c992",
+      "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+      "session_count": 60,
+      "file_count": 60,
+      "row_count": 22500,
+      "instrument": "NIFTY",
+      "selection_algorithm": "evenly_spaced_complete_nifty_sessions_v1"
+    },
+    "strategy": {
+      "registry_key": "OPENING_RANGE_BREAKOUT",
+      "registry_callable": "generate_opening_range_breakout_candidates",
+      "resolved_callable": "generate_opening_range_retest_candidates",
+      "compatibility_note": "registry_callable_mismatch_resolved_to_existing_function",
+      "module": "strategies.movement.opening_range_breakout",
+      "source_hash": "f8d92b17a0cd8f07eb9425dc9d2a6898c40165cef07765e0f455097970d7b16a",
+      "opening_range_minutes": 15,
+      "entry_model": "next_bar_open",
+      "overlap_policy": "non_overlapping",
+      "volatility_proxy_label": "atr_volatility_z_proxy"
+    },
+    "reproducibility": {
+      "manifest_hash": "113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220",
+      "prepared_input_hash": "15a3375ba4f75ff07655bd80dc9aa89b749a40bfd49f41038254cb3703f648b7",
+      "signal_hash": "cd7b6056edce2fe6816240708b3230ecc71205db46554a51eace7cce1dd53c41",
+      "forward_observation_hash": "a3dea18f2dcfcced6cd13369081dd5330562e5d4021cf5cddf7b248355d7b4f8",
+      "accepted_entry_hash": "5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043",
+      "rejection_hash": "4fcde80b12374c8a855e5c573de8ebe16c3c8747d09f93bda9ca26cd46b238ee",
+      "trade_hash": "5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043",
+      "metrics_hash": "f0626dc9e1eeeb68a96fa97233563d26c5aba21a234a5617edcbb4fbbd1fd217",
+      "repeat_run_match": true
+    },
+    "signal_layer": {
+      "signal_count": 1410,
+      "call_count": 841,
+      "put_count": 569,
+      "sessions_with_signals": 53,
+      "sessions_without_signals": 7,
+      "forward_observation_count": 5640,
+      "forward_horizon_stats": {
+        "5": {
+          "count": 1410,
+          "mean_net_return": -0.00021014431779570154,
+          "median_net_return": -0.00018916543983201733,
+          "win_rate": 0.3659574468085106
+        },
+        "10": {
+          "count": 1410,
+          "mean_net_return": -0.00021011413573357427,
+          "median_net_return": -0.000181517096666217,
+          "win_rate": 0.3964539007092199
+        },
+        "15": {
+          "count": 1410,
+          "mean_net_return": -0.00018756469881005405,
+          "median_net_return": -0.0001497829640732749,
+          "win_rate": 0.42836879432624114
+        },
+        "30": {
+          "count": 1410,
+          "mean_net_return": -0.00021494380136295572,
+          "median_net_return": -0.00010343577267748466,
+          "win_rate": 0.4716312056737589
+        }
+      },
+      "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED"
+    },
+    "research_trades": {
+      "accepted_entries": 144,
+      "completed_trades": 144,
+      "rejected_while_active": 1266,
+      "rejected_no_legal_next_bar": 0,
+      "maximum_concurrency": 1,
+      "overlapping_trades": 0,
+      "cross_session_trades": 0,
+      "trade_direction_counts": {
+        "BUY_CALL": 78,
+        "BUY_PUT": 66
+      },
+      "winning_trade_count": 60,
+      "losing_trade_count": 84,
+      "gross_return_sum": -0.015882359470417162,
+      "net_return_sum": -0.04468235947041717,
+      "average_net_return": -0.0003102941629890081,
+      "median_net_return": -0.00021371017047524515,
+      "win_rate": 0.4166666666666667,
+      "average_win": 0.0008121650699171036,
+      "average_loss": -0.0011120507579219449,
+      "profit_factor": 0.5216649536462651,
+      "max_drawdown": -0.05040722439678512,
+      "research_verdict": "NO_STRUCTURAL_EDGE",
+      "manual_reconciliation": {
+        "winning_trade": {
+          "session": "2024-10-28",
+          "signal_timestamp": "2024-10-28T10:15:00+05:30",
+          "direction": "BUY_CALL",
+          "entry_timestamp": "2024-10-28T10:16:00+05:30",
+          "exit_timestamp": "2024-10-28T10:31:00+05:30",
+          "entry_price": 24304.2,
+          "exit_price": 24382.05,
+          "gross_return": 0.003203150072826899,
+          "net_return": 0.003003150072826899
+        },
+        "losing_trade": {
+          "session": "2024-09-06",
+          "signal_timestamp": "2024-09-06T09:31:00+05:30",
+          "direction": "BUY_CALL",
+          "entry_timestamp": "2024-09-06T09:32:00+05:30",
+          "exit_timestamp": "2024-09-06T09:47:00+05:30",
+          "entry_price": 25166.25,
+          "exit_price": 25021.35,
+          "gross_return": -0.005757711220384487,
+          "net_return": -0.005957711220384487
+        }
+      }
+    },
+    "friction": {
+      "baseline_2bps": {
+        "trade_count": 144,
+        "gross_return_sum": -0.015882359470417162,
+        "net_return_sum": -0.04468235947041717,
+        "average_net_return": -0.0003102941629890081,
+        "median_net_return": -0.00021371017047524515,
+        "win_rate": 0.4166666666666667,
+        "average_win": 0.0008121650699171036,
+        "average_loss": -0.0011120507579219449,
+        "profit_factor": 0.5216649536462651,
+        "max_drawdown": -0.05040722439678512,
+        "break_even_friction_bps_roundtrip": -1.1029416298900807
+      },
+      "adverse_5bps": {
+        "trade_count": 144,
+        "gross_return_sum": -0.015882359470417162,
+        "net_return_sum": -0.08788235947041717,
+        "average_net_return": -0.0006102941629890081,
+        "median_net_return": -0.0005137101704752452,
+        "win_rate": 0.3125,
+        "average_win": 0.0007325025718296005,
+        "average_loss": -0.0012206563151792847,
+        "profit_factor": 0.27276778101057636,
+        "max_drawdown": -0.08926798182920907
+      },
+      "severe_10bps": {
+        "trade_count": 144,
+        "gross_return_sum": -0.015882359470417162,
+        "net_return_sum": -0.15988235947041718,
+        "average_net_return": -0.001110294162989008,
+        "median_net_return": -0.0010137101704752452,
+        "win_rate": 0.13194444444444445,
+        "average_win": 0.0009043465576600714,
+        "average_loss": -0.0014165195525276681,
+        "profit_factor": 0.09704114321545583,
+        "max_drawdown": -0.15999266810499443
+      }
+    },
+    "regime_segmentation": {
+      "RANGE": {
+        "trades": 132,
+        "net_return_sum": -0.0447645933973784,
+        "average_net_return": -0.000339125707555897
+      },
+      "TREND_DOWN": {
+        "trades": 7,
+        "net_return_sum": 0.00204449908405553,
+        "average_net_return": 0.00029207129772221854
+      },
+      "TREND_UP": {
+        "trades": 5,
+        "net_return_sum": -0.001962265157094189,
+        "average_net_return": -0.0003924530314188378
+      }
+    },
+    "wfa": {
+      "window_count": 4,
+      "total_trades": 102,
+      "avg_win_rate": 0.440433,
+      "avg_r": -0.00021150000000000002,
+      "avg_sharpe_proxy": -1.1082994999999998,
+      "window_hash": "deb3fa129414655837e6ce4fdb7a87ca6b9666943b7030ebb38da3c513bc146a",
+      "path_status": "CANDLE_WFA_PATH_ACCEPTABLE",
+      "windows": [
+        {
+          "window_id": 1,
+          "train_start": "2024-05-30",
+          "train_end": "2025-01-24",
+          "test_start": "2025-02-06",
+          "test_end": "2025-06-16",
+          "trade_count": 30,
+          "win_rate": 0.466667,
+          "avg_r": -0.00021,
+          "sharpe_proxy": -0.93266
+        },
+        {
+          "window_id": 2,
+          "train_start": "2024-10-01",
+          "train_end": "2025-06-16",
+          "test_start": "2025-06-26",
+          "test_end": "2025-10-16",
+          "trade_count": 33,
+          "win_rate": 0.363636,
+          "avg_r": -0.000434,
+          "sharpe_proxy": -2.170473
+        },
+        {
+          "window_id": 3,
+          "train_start": "2025-02-06",
+          "train_end": "2025-10-16",
+          "test_start": "2025-10-31",
+          "test_end": "2026-02-23",
+          "trade_count": 25,
+          "win_rate": 0.36,
+          "avg_r": -0.000335,
+          "sharpe_proxy": -1.682015
+        },
+        {
+          "window_id": 4,
+          "train_start": "2025-06-26",
+          "train_end": "2026-02-23",
+          "test_start": "2026-03-06",
+          "test_end": "2026-07-03",
+          "trade_count": 14,
+          "win_rate": 0.571429,
+          "avg_r": 0.000133,
+          "sharpe_proxy": 0.35195
+        }
+      ]
+    },
+    "negative_controls": {
+      "plus_one_bar_delay": {
+        "trade_count": 137,
+        "net_return_sum": -0.04147497356632559,
+        "average_net_return": -0.0003027370333308437,
+        "win_rate": 0.38686131386861317
+      },
+      "plus_two_bar_delay": {
+        "trade_count": 132,
+        "net_return_sum": -0.04442352172566812,
+        "average_net_return": -0.0003365418312550615,
+        "win_rate": 0.3787878787878788
+      },
+      "signal_bar_close_proxy": {
+        "trade_count": 148,
+        "net_return_sum": -0.03940109056058176,
+        "average_net_return": -0.0002662235848687957,
+        "win_rate": 0.4594594594594595
+      },
+      "broken_opening_range_boundary": {
+        "signals": 0,
+        "trades": 0
+      }
+    },
+    "final_verdict": "NO_STRUCTURAL_EDGE",
+    "signal_verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED",
+    "limitations": [
+      "This is an OHLCV candle research lane only; it is not executable option-fill truth.",
+      "ATR-derived volatility is used as the research proxy labelled atr_volatility_z_proxy.",
+      "The research policy enforces non-overlapping entries and same-session exits only.",
+      "Strict option replay remains separately INVALID_DUE_TO_DATA."
+    ]
   }
 }

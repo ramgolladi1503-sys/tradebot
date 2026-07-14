@@ -382,3 +382,158 @@ Historical note: the previous `CONDITIONALLY_SUPPORTED` wording is withdrawn and
 - The candle validation uses the repo’s existing candle proxy lane, not executable option fills.
 - The sampled candle corpus uses zero-volume underlying bars, so VWAP is proxied by the existing candle harness rather than true traded volume.
 - The corrected candle rerun is documented in `/tmp`, but the exact prepared-input provenance is not committed, so the 1628 claim is withdrawn as non-reproducible evidence.
+
+
+## OHLCV candle research validation
+
+This section is the operative historical-candle research lane for `OPENING_RANGE_BREAKOUT`.
+
+Label: `OHLCV_CANDLE_RESEARCH_ONLY`
+
+It uses historical NIFTY candle data from `/Users/madhuram/tradebot/runtime/upstox_candidate_replay`, the deterministic 60-session source manifest in `docs/research/strategy_backtesting/evidence/orb_ohlcv_source_manifest.json`, the existing ORB movement strategy callable resolved from `strategies/movement/opening_range_breakout.py`, and the existing walk-forward engine in `core/walk_forward.py`.
+
+### Manifest and reproducibility
+
+- canonical manifest hash: `113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220`
+- source-manifest file SHA-256: `dc816e2481dc74d833d790a2c90d88ef73860aac12df4efdca793cbef9d5c992`
+- source root: `/Users/madhuram/tradebot/runtime/upstox_candidate_replay`
+- session count: `60`
+- file count: `60`
+- row count: `22500`
+- instrument: `NIFTY`
+- deterministic selection rule: evenly spaced complete NIFTY sessions with 375 one-minute candles
+- reproducibility: run 1 and run 2 matched on manifest hash, prepared-input hash, signal hash, forward-observation hash, accepted-entry hash, rejection hash, trade hash, and metrics hash
+
+### Strategy identity and terminology
+
+- registry key: `OPENING_RANGE_BREAKOUT`
+- registry callable advertised: `generate_opening_range_breakout_candidates`
+- actual module implementation used: `strategies/movement/opening_range_breakout.py::generate_opening_range_retest_candidates`
+- registry compatibility note: `registry_callable_mismatch_resolved_to_existing_function`
+- opening-range minimum: `15` minutes
+- research entry model: `next_bar_open`
+- research overlap policy: `non_overlapping`
+- volatility input label: `atr_volatility_z_proxy`
+- `atr_volatility_z_proxy` is an ATR-derived volatility proxy, not traded-volume confirmation
+
+### Layer A — raw ORB signals
+
+Raw signal observations are not trades.
+
+- signal count: `1410`
+- CALL signals: `841`
+- PUT signals: `569`
+- sessions with signals: `53`
+- sessions without signals: `7`
+- signal hash: `cd7b6056edce2fe6816240708b3230ecc71205db46554a51eace7cce1dd53c41`
+
+### Layer B — signal forward-return observations
+
+These are causal close-to-close forward observations, not executable trades.
+
+- observation count: `5640`
+- horizons: `5`, `10`, `15`, `30` minutes
+- forward-observation hash: `a3dea18f2dcfcced6cd13369081dd5330562e5d4021cf5cddf7b248355d7b4f8`
+
+Per-horizon results:
+
+- `5m`: count `1410`, mean net return `-0.00021014431779570154`, median `-0.00018916543983201733`, win rate `0.3659574468085106`
+- `10m`: count `1410`, mean net return `-0.00021011413573357427`, median `-0.000181517096666217`, win rate `0.3964539007092199`
+- `15m`: count `1410`, mean net return `-0.00018756469881005405`, median `-0.0001497829640732749`, win rate `0.42836879432624114`
+- `30m`: count `1410`, mean net return `-0.00021494380136295572`, median `-0.00010343577267748466`, win rate `0.4716312056737589`
+
+### Layer C — non-overlapping OHLCV research trades
+
+Research policy: `ORB_OHLCV_RESEARCH_POLICY_V1`
+
+- accepted entries: `144`
+- completed research trades: `144`
+- rejected while active: `1266`
+- rejected because no legal next bar exists: `0`
+- maximum concurrency: `1`
+- overlapping trades: `0`
+- cross-session trades: `0`
+- accepted-entry hash: `5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043`
+- rejection hash: `4fcde80b12374c8a855e5c573de8ebe16c3c8747d09f93bda9ca26cd46b238ee`
+- trade hash: `5d8b4da30867f9e77db9e8edbb4470d0c9f82a666426e48ad3fed6fec8247043`
+
+Directional split:
+
+- BUY_CALL trades: `78`
+- BUY_PUT trades: `66`
+
+### Friction sensitivity
+
+Baseline friction is `2.0 bps` round-trip. Increasing friction worsens the result as expected.
+
+- `2.0 bps`: trade count `144`, gross sum `-0.015882359470417162`, net sum `-0.04468235947041717`, avg net `-0.0003102941629890081`, median net `-0.00021371017047524515`, win rate `0.4166666666666667`, avg win `0.0008121650699171036`, avg loss `-0.0011120507579219449`, profit factor `0.5216649536462651`, max drawdown `-0.05040722439678512`
+- `5.0 bps`: trade count `144`, gross sum `-0.015882359470417162`, net sum `-0.08788235947041717`, avg net `-0.0006102941629890081`, median net `-0.0005137101704752452`, win rate `0.3125`, avg win `0.0007325025718296005`, avg loss `-0.0012206563151792847`, profit factor `0.27276778101057636`, max drawdown `-0.08926798182920907`
+- `10.0 bps`: trade count `144`, gross sum `-0.015882359470417162`, net sum `-0.15988235947041718`, avg net `-0.001110294162989008`, median net `-0.0010137101704752452`, win rate `0.13194444444444445`, avg win `0.0009043465576600714`, avg loss `-0.0014165195525276681`, profit factor `0.09704114321545583`, max drawdown `-0.15999266810499443`
+
+### Manual reconciliation
+
+Winning trade:
+
+- session: `2024-10-28`
+- signal: `2024-10-28T10:15:00+05:30`
+- direction: `BUY_CALL`
+- entry: `2024-10-28T10:16:00+05:30`
+- exit: `2024-10-28T10:31:00+05:30`
+- entry price: `24304.2`
+- exit price: `24382.05`
+- gross return: `0.003203150072826899`
+- net return: `0.003003150072826899`
+
+Losing trade:
+
+- session: `2024-09-06`
+- signal: `2024-09-06T09:31:00+05:30`
+- direction: `BUY_CALL`
+- entry: `2024-09-06T09:32:00+05:30`
+- exit: `2024-09-06T09:47:00+05:30`
+- entry price: `25166.25`
+- exit price: `25021.35`
+- gross return: `-0.005757711220384487`
+- net return: `-0.005957711220384487`
+
+### Regime segmentation
+
+Regime is the causally available regime hinted by the candidate scores at decision time.
+
+- RANGE: `132` trades, net sum `-0.0447645933973784`, avg net `-0.000339125707555897`
+- TREND_DOWN: `7` trades, net sum `0.00204449908405553`, avg net `0.00029207129772221854`
+- TREND_UP: `5` trades, net sum `-0.001962265157094189`, avg net `-0.0003924530314188378`
+
+### WFA
+
+Walk-forward was run through `core.walk_forward.run_walk_forward` using the same candle-research policy and a train/test fold split of `20/10` days with a `10`-day step.
+
+- window count: `4`
+- total trades: `102`
+- average win rate: `0.440433`
+- average R: `-0.00021150000000000002`
+- average sharpe proxy: `-1.1082994999999998`
+- WFA window hash: `deb3fa129414655837e6ce4fdb7a87ca6b9666943b7030ebb38da3c513bc146a`
+- WFA path status: `CANDLE_WFA_PATH_ACCEPTABLE`
+
+Fold summary:
+
+- window 1: `2024-05-30` to `2025-01-24` test `2025-02-06` to `2025-06-16`, trades `30`, win rate `0.466667`, avg R `-0.00021`, sharpe proxy `-0.93266`
+- window 2: `2024-10-01` to `2025-06-16` test `2025-06-26` to `2025-10-16`, trades `33`, win rate `0.363636`, avg R `-0.000434`, sharpe proxy `-2.170473`
+- window 3: `2025-02-06` to `2025-10-16` test `2025-10-31` to `2026-02-23`, trades `25`, win rate `0.36`, avg R `-0.000335`, sharpe proxy `-1.682015`
+- window 4: `2025-06-26` to `2026-02-23` test `2026-03-06` to `2026-07-03`, trades `14`, win rate `0.571429`, avg R `0.000133`, sharpe proxy `0.35195`
+
+### Negative controls
+
+- plus-one-bar entry delay: `137` trades, net sum `-0.04147497356632559`, avg net `-0.0003027370333308437`, win rate `0.38686131386861317`
+- plus-two-bar entry delay: `132` trades, net sum `-0.04442352172566812`, avg net `-0.0003365418312550615`, win rate `0.3787878787878788`
+- signal-bar-close proxy sensitivity: `148` trades, net sum `-0.03940109056058176`, avg net `-0.0002662235848687957`, win rate `0.4594594594594595`
+- broken opening-range boundary test: `0` signals, `0` trades
+
+### Final verdicts
+
+Signal-level verdict: `ORB_SIGNAL_EDGE_NOT_SUPPORTED`
+
+OHLCV research-policy verdict: `NO_STRUCTURAL_EDGE`
+
+This is an OHLCV candle-research result only. It does not claim executable option fills, broker truth, or strict option-replay certification.

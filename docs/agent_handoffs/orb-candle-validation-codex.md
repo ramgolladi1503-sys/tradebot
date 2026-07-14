@@ -76,12 +76,9 @@ Do not describe it as true volume-confirmed ORB.
 
 ## Pending verification
 
-Do not treat the following as final until re-reviewed:
-
-- whether the corrected rerun should remain `CONDITIONALLY_SUPPORTED`
-- whether the candle WFA path is acceptable for the final report
-- whether manual reconciliation and negative-control claims are sufficiently strong for the report text
-- whether the corrected evidence files need one more tightening pass before final commit
+The OHLCV research closure above supersedes the earlier pending-verification state.
+Do not reopen the withdrawn corrected-rerun claim. The operative result is the
+`NO_STRUCTURAL_EDGE` OHLCV research verdict documented below.
 
 ## Deliberately unchanged
 
@@ -99,3 +96,15 @@ The historical Upstox candle corpus under `/Users/madhuram/tradebot/runtime/upst
 ## Handoff guidance
 
 Continue the ORB correctness task from this point only after migrating into the standardized Codex worktree and verifying the checkpoint branch.
+
+
+## OHLCV candle research closure
+
+- manifest hash: `113ce0079e9b5bdd9ff87fc62f327a27bb7feb328418b7ea3519bcc664275220`
+- signal count: `1410`
+- accepted research trades: `144`
+- research verdict: `NO_STRUCTURAL_EDGE`
+- signal-level verdict: `ORB_SIGNAL_EDGE_NOT_SUPPORTED`
+- WFA path: `CANDLE_WFA_PATH_ACCEPTABLE`
+- strict replay lane remains: `INVALID_DUE_TO_DATA`
+- no production code, broker integration, order logic, or risk engine code was changed by this research validation
