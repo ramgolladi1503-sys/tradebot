@@ -16,12 +16,24 @@ modules.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping
+
+from core.strategy_parameter_profiles import (
+    AMBIGUOUS_PROFILE,
+    COMPATIBILITY_ALIAS,
+    EMBEDDED_FALLBACK,
+    EMBEDDED_PROFILE_DEFAULTS,
+    MISSING_PROFILE,
+    PROFILE_VALUE_DRIFT,
+    classify_profile_resolution,
+    get_default_profile,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +63,26 @@ class StrategyRegistryEntry:
     movement_type: str = ""
     role: str = ""
     callable_init_args: tuple[Any, ...] = ()
+
+
+@dataclass(frozen=True)
+class StrategyProfileIntegrityRow:
+    inventory_canonical_id: str
+    public_compatibility_id: str
+    runtime_strategy_id: str
+    module_strategy_id: str
+    profile_id_requested_by_generator: str
+    canonical_profile_id: str
+    profile_id_present_in_store: str | None
+    profile_version: str
+    parameter_keys: tuple[str, ...]
+    embedded_default_keys: tuple[str, ...]
+    effective_parameter_values: tuple[tuple[str, Any], ...]
+    embedded_default_values: tuple[tuple[str, Any], ...]
+    resolution_source: str | None
+    compatibility_alias: str | None
+    parameter_hash: str | None
+    mismatch_classification: str
 
 
 # These components are intentionally absent from the movement-strategy
@@ -457,6 +489,36 @@ def validate_strategy_inventory(
             )
         runtime_ids.add(runtime_id)
 
+        raw_canonical_profile_id = raw_item.get("canonical_profile_id")
+        if not isinstance(raw_canonical_profile_id, str):
+            raise StrategyRegistryIntegrityError(
+                f"inventory_canonical_profile_id_not_string:{canonical_id}"
+            )
+        canonical_profile_id = raw_canonical_profile_id.strip()
+        if not canonical_profile_id:
+            raise StrategyRegistryIntegrityError(
+                f"inventory_canonical_profile_id_missing:{canonical_id}"
+            )
+
+        raw_profile_version = raw_item.get("profile_version")
+        if not isinstance(raw_profile_version, str):
+            raise StrategyRegistryIntegrityError(
+                f"inventory_profile_version_not_string:{canonical_id}"
+            )
+        profile_version = raw_profile_version.strip()
+        if not profile_version:
+            raise StrategyRegistryIntegrityError(
+                f"inventory_profile_version_missing:{canonical_id}"
+            )
+        if runtime_id.rsplit("_", 1)[-1] != profile_version:
+            raise StrategyRegistryIntegrityError(
+                f"inventory_profile_version_runtime_mismatch:{canonical_id}"
+            )
+        if canonical_profile_id.rsplit("_", 1)[-1] != profile_version:
+            raise StrategyRegistryIntegrityError(
+                f"inventory_profile_version_canonical_mismatch:{canonical_id}"
+            )
+
         raw_aliases = raw_item.get("aliases", [])
         if not isinstance(raw_aliases, list):
             raise StrategyRegistryIntegrityError(
@@ -488,6 +550,188 @@ def _module_name_from_path(module_path: str) -> str:
     if not normalized.endswith(".py") or normalized.startswith("/") or ".." in normalized.split("/"):
         raise StrategyRegistryIntegrityError(f"registry_module_path_invalid:{module_path}")
     return normalized[:-3].replace("/", ".")
+
+
+def _ast_literal_value(node: ast.AST) -> Any:
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        value = _ast_literal_value(node.operand)
+        if isinstance(value, (int, float)):
+            return -value
+    raise StrategyRegistryIntegrityError("embedded_profile_default_not_literal")
+
+
+def _extract_embedded_profile_defaults(entry: StrategyRegistryEntry) -> dict[str, Any]:
+    module_file = REPO_ROOT / entry.module_path
+    try:
+        tree = ast.parse(module_file.read_text(encoding="utf-8"), filename=str(module_file))
+    except StrategyRegistryIntegrityError:
+        raise
+    except Exception as exc:
+        raise StrategyRegistryIntegrityError(
+            f"embedded_profile_defaults_parse_failed:{entry.strategy_id}:{type(exc).__name__}"
+        ) from exc
+
+    defaults: dict[str, Any] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "get":
+            continue
+        if not isinstance(node.func.value, ast.Name) or node.func.value.id != "params":
+            continue
+        if len(node.args) != 2:
+            continue
+        key_node, value_node = node.args
+        if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+            continue
+        key = str(key_node.value).strip()
+        if not key:
+            continue
+        try:
+            value = _ast_literal_value(value_node)
+        except StrategyRegistryIntegrityError as exc:
+            raise StrategyRegistryIntegrityError(
+                f"embedded_profile_default_not_literal:{entry.strategy_id}:{key}"
+            ) from exc
+        if key in defaults and defaults[key] != value:
+            raise StrategyRegistryIntegrityError(
+                f"embedded_profile_default_ambiguous:{entry.strategy_id}:{key}"
+            )
+        defaults[key] = value
+
+    return defaults
+
+
+def _profile_integrity_row(
+    *,
+    entry: StrategyRegistryEntry,
+    inventory_item: Mapping[str, Any],
+    module_strategy_id: str,
+) -> StrategyProfileIntegrityRow:
+    requested_profile_id = str(entry.runtime_strategy_id or "").strip()
+    inventory_canonical_id = str(inventory_item.get("id") or "").strip()
+    public_compatibility_id = inventory_canonical_id
+    aliases = inventory_item.get("aliases", [])
+    if isinstance(aliases, list) and aliases:
+        first_alias = str(aliases[0] or "").strip()
+        if first_alias:
+            public_compatibility_id = first_alias
+
+    canonical_profile_id = str(inventory_item.get("canonical_profile_id") or "").strip()
+    profile_version = str(inventory_item.get("profile_version") or "").strip()
+    profile = get_default_profile(requested_profile_id, profile_version)
+    classification = classify_profile_resolution(requested_profile_id, profile_version)
+    embedded_defaults = _extract_embedded_profile_defaults(entry)
+    declared_embedded_defaults = EMBEDDED_PROFILE_DEFAULTS.get(requested_profile_id)
+    if declared_embedded_defaults is None:
+        classification = AMBIGUOUS_PROFILE
+    elif dict(declared_embedded_defaults) != dict(embedded_defaults):
+        classification = PROFILE_VALUE_DRIFT
+        profile = None
+
+    if profile is None:
+        if classification == PROFILE_VALUE_DRIFT:
+            profile_id_present_in_store = canonical_profile_id or None
+            resolution_source = None
+        elif classification == EMBEDDED_FALLBACK:
+            profile_id_present_in_store = None
+            resolution_source = EMBEDDED_FALLBACK
+        elif classification == MISSING_PROFILE:
+            profile_id_present_in_store = None
+            resolution_source = None
+        else:
+            profile_id_present_in_store = None
+            resolution_source = classification
+        parameter_keys = tuple(sorted(str(key) for key in (declared_embedded_defaults or embedded_defaults)))
+        effective_parameter_values: tuple[tuple[str, Any], ...] = ()
+        parameter_hash = None
+        compatibility_alias = None
+    else:
+        effective_params = dict(profile.params)
+        if dict(embedded_defaults) != effective_params:
+            classification = PROFILE_VALUE_DRIFT
+            profile_id_present_in_store = canonical_profile_id or None
+            resolution_source = None
+            parameter_keys = tuple(sorted(str(key) for key in effective_params))
+            effective_parameter_values = ()
+            parameter_hash = None
+            compatibility_alias = None
+        else:
+            profile_id_present_in_store = profile.resolved_profile_id
+            resolution_source = profile.resolution_source
+            parameter_keys = tuple(sorted(str(key) for key in effective_params))
+            effective_parameter_values = tuple(
+                (str(key), effective_params[key]) for key in sorted(effective_params)
+            )
+            parameter_hash = profile.parameter_hash
+            compatibility_alias = (
+                f"{requested_profile_id}->{profile.resolved_profile_id}"
+                if profile.resolution_source == COMPATIBILITY_ALIAS
+                else None
+            )
+
+    embedded_default_keys = tuple(sorted(str(key) for key in embedded_defaults))
+    embedded_default_values = tuple(
+        (str(key), embedded_defaults[key]) for key in sorted(embedded_defaults)
+    )
+    return StrategyProfileIntegrityRow(
+        inventory_canonical_id=inventory_canonical_id,
+        public_compatibility_id=public_compatibility_id,
+        runtime_strategy_id=requested_profile_id,
+        module_strategy_id=str(module_strategy_id or "").strip(),
+        profile_id_requested_by_generator=requested_profile_id,
+        canonical_profile_id=canonical_profile_id,
+        profile_id_present_in_store=profile_id_present_in_store,
+        profile_version=profile_version,
+        parameter_keys=parameter_keys,
+        embedded_default_keys=embedded_default_keys,
+        effective_parameter_values=effective_parameter_values,
+        embedded_default_values=embedded_default_values,
+        resolution_source=resolution_source,
+        compatibility_alias=compatibility_alias,
+        parameter_hash=parameter_hash,
+        mismatch_classification=classification,
+    )
+
+
+def build_strategy_profile_integrity_rows(
+    registry: Mapping[str, StrategyRegistryEntry] | None = None,
+    inventory: Mapping[str, Any] | None = None,
+) -> tuple[StrategyProfileIntegrityRow, ...]:
+    """Build the inventory/profile reconciliation matrix for the 12 movement components."""
+
+    expected_registry = load_strategy_registry()
+    registry_map = dict(expected_registry if registry is None else registry)
+    inventory_payload = dict(load_strategy_inventory() if inventory is None else inventory)
+    inventory_index = validate_strategy_inventory(inventory_payload)
+
+    rows: list[StrategyProfileIntegrityRow] = []
+    for expected_entry in get_movement_strategy_entries():
+        entry = registry_map.get(expected_entry.strategy_id)
+        if entry is None:
+            raise StrategyRegistryIntegrityError(
+                f"movement_registry_entry_missing:{expected_entry.strategy_id}"
+            )
+        inventory_item = inventory_index.get(entry.strategy_id)
+        if inventory_item is None:
+            raise StrategyRegistryIntegrityError(
+                f"registry_id_not_in_inventory:{entry.strategy_id}"
+            )
+
+        module = importlib.import_module(_module_name_from_path(entry.module_path))
+        rows.append(
+            _profile_integrity_row(
+                entry=entry,
+                inventory_item=inventory_item,
+                module_strategy_id=str(getattr(module, "STRATEGY_ID", "") or ""),
+            )
+        )
+
+    return tuple(rows)
 
 
 def resolve_registered_module(entry: StrategyRegistryEntry) -> Any:
@@ -624,6 +868,7 @@ def validate_strategy_registry_integrity(
 
     resolved_by_inventory_id: dict[str, list[str]] = {}
     validated: list[StrategyRegistryEntry] = []
+    profile_rows: list[StrategyProfileIntegrityRow] = []
     for expected_entry in expected_movement_entries:
         entry = registry_map.get(expected_entry.strategy_id)
         if entry is None:
@@ -672,6 +917,22 @@ def validate_strategy_registry_integrity(
                 f"registered_export_identity_mismatch:{entry.strategy_id}"
             )
 
+        profile_row = _profile_integrity_row(
+            entry=entry,
+            inventory_item=inventory_item,
+            module_strategy_id=str(getattr(module, "STRATEGY_ID", "") or ""),
+        )
+        if profile_row.profile_id_present_in_store != str(
+            inventory_item.get("canonical_profile_id") or ""
+        ).strip():
+            raise StrategyRegistryIntegrityError(
+                f"profile_resolution_canonical_mismatch:{entry.strategy_id}"
+            )
+        if profile_row.mismatch_classification in {MISSING_PROFILE, PROFILE_VALUE_DRIFT, AMBIGUOUS_PROFILE}:
+            raise StrategyRegistryIntegrityError(
+                f"profile_resolution_mismatch:{entry.strategy_id}:{profile_row.mismatch_classification}"
+            )
+        profile_rows.append(profile_row)
         resolved_by_inventory_id.setdefault(canonical_id, []).append(entry.strategy_id)
         validated.append(entry)
 
@@ -684,6 +945,8 @@ def validate_strategy_registry_integrity(
             raise StrategyRegistryIntegrityError(
                 f"inventory_registry_mapping_count:{canonical_id}:{len(registry_ids)}"
             )
+    if len(profile_rows) != len(expected_movement_entries):
+        raise StrategyRegistryIntegrityError("profile_integrity_row_count_mismatch")
 
     return tuple(validated)
 
@@ -695,9 +958,11 @@ __all__ = [
     "ALLOWED_INVENTORY_ROLES",
     "DEFAULT_INVENTORY_PATH",
     "NON_INVENTORY_REGISTRY_ALLOWLIST",
+    "StrategyProfileIntegrityRow",
     "StrategyRegistryEntry",
     "StrategyRegistryIntegrityError",
     "build_strategy_registry",
+    "build_strategy_profile_integrity_rows",
     "get_movement_strategies",
     "get_movement_strategy_entries",
     "load_strategy_inventory",
