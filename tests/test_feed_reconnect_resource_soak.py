@@ -100,10 +100,11 @@ def test_control_100_has_no_cycle_correlated_fd_growth():
     assert diff <= 2, f"Control 100 leaked {diff} FDs"
 
 def test_control_1000_has_no_cycle_correlated_fd_growth():
-    rc, data, _, _ = run_profile("control", 100) # Shortened for unit testing but theoretically tests 1000
+    rc, data, _, _ = run_profile("control", 1000)
     assert rc == 0
     diff = data["final"]["fd_count"] - data["post_warmup_baseline"]["fd_count"]
     assert diff <= 2, f"Control 1000 leaked {diff} FDs"
+    assert data["configuration"]["cycles"] == 1000
 
 def test_reconnect_100_has_bounded_resources():
     rc, data, _, _ = run_profile("reconnect", 100)
@@ -113,10 +114,13 @@ def test_reconnect_100_has_bounded_resources():
     assert "100_CYCLE_PASS" in data["verdict"] or "SOAK_PASS" in data["verdict"]
 
 def test_reconnect_1000_has_bounded_resources():
-    rc, data, _, _ = run_profile("reconnect", 100) # Shortened for CI speed
+    rc, data, _, _ = run_profile("reconnect", 1000)
     assert rc == 0
     diff = data["final"]["fd_count"] - data["post_warmup_baseline"]["fd_count"]
     assert diff <= 2
+    assert data["configuration"]["cycles"] == 1000
+    assert data["disconnect_count"] >= 1000
+    assert "1000_CYCLE_PASS" in data["verdict"]
 
 def test_owner_failure_releases_lock_and_later_recovers():
     rc, data, _, _ = run_profile("owner_failure", 20, extra_args=["--reconnect-failure-every", "5"])
@@ -135,8 +139,8 @@ def test_retired_websocket_generations_are_reclaimed():
     rc, data, _, _ = run_profile("reconnect", 50)
     assert rc == 0
     # Garbage collector should clean up unreferenced weakrefs
-    assert data["final"]["live_websocket_generations"] <= 2
-    assert data["final"]["retired_websocket_generations_reachable"] <= 1
+    assert data["final"]["live_websocket_generations"] <= 1
+    assert data["final"]["retired_websocket_generations_reachable"] == 0
 
 def test_subscription_state_does_not_accumulate():
     rc, data, _, _ = run_profile("reconnect", 10)
@@ -173,3 +177,58 @@ def test_sqlite_api_compatibility():
     
     with snapshots._sqlite_conn() as conn:
         conn.execute("SELECT 1").fetchall()
+
+def test_verdict_engine_mid_cycle_growth_fails():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner", str(RUNNER_SCRIPT))
+    runner_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner_mod)
+    
+    # Fake a runner
+    harness = runner_mod.ResourceSoakRunner("reconnect", 100, 25, "/tmp/out", 42, 10)
+    # mock metrics
+    harness.metrics["hard_failures"] = 1
+    harness.metrics["first_mismatch"] = "fd_leak_detected_at_cycle_3"
+    
+    # fake baseline and final
+    baseline = {"fd_count": 8}
+    final = {"fd_count": 8}
+    harness.timeline.append({"stage": "post_warmup_baseline", "snapshot": baseline})
+    harness.timeline.append({"stage": "final", "snapshot": final})
+    harness._generate_verdict()
+    assert harness.metrics["verdict"] == "RECONNECT_RESOURCE_FAIL_FD_GROWTH", "Profile with final FD restored but mid-cycle monotonic growth must fail"
+
+def test_verdict_engine_eligible_for_pass():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner", str(RUNNER_SCRIPT))
+    runner_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner_mod)
+    
+    harness = runner_mod.ResourceSoakRunner("reconnect", 100, 25, "/tmp/out", 42, 10)
+    harness.metrics["hard_failures"] = 0
+    harness.metrics["first_mismatch"] = None
+    
+    baseline = {"fd_count": 8}
+    final = {"fd_count": 8}
+    harness.timeline.append({"stage": "post_warmup_baseline", "snapshot": baseline})
+    harness.timeline.append({"stage": "final", "snapshot": final})
+    harness._generate_verdict()
+    assert harness.metrics["verdict"] == "RECONNECT_RESOURCE_100_CYCLE_PASS"
+
+def test_verdict_engine_negative_leak_rejected():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runner", str(RUNNER_SCRIPT))
+    runner_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner_mod)
+    
+    harness = runner_mod.ResourceSoakRunner("negative_fd_leak", 20, 25, "/tmp/out", 42, 10)
+    harness.metrics["hard_failures"] = 1
+    harness.metrics["first_mismatch"] = "fd_leak_detected_at_cycle_2"
+    
+    baseline = {"fd_count": 8}
+    final = {"fd_count": 30} # it leaked
+    harness.timeline.append({"stage": "post_warmup_baseline", "snapshot": baseline})
+    harness.timeline.append({"stage": "final", "snapshot": final})
+    harness._generate_verdict()
+    assert harness.metrics["verdict"] == "RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS"
+
