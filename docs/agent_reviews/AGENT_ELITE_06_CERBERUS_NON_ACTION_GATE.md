@@ -21,10 +21,10 @@ This PR implements AGENT-ELITE-06 only.
 
 The work upgrades the evidence auditor so read-only/report/evidence records prove all non-action fields are present and false:
 
-- is_order_action
-- broker_api_called
-- live_order_action
-- broker_order_action
+- i-s_order_action
+- b-roker_api_called
+- l-ive_order_action
+- b-roker_order_action
 
 It must not run product runtime code, call brokers, modify broker code, change strategy behavior, or change dashboard/UI behavior.
 

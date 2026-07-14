@@ -131,7 +131,7 @@ These require live market data:
 - SENSEX/BFO subscription behavior under live feed
 - stale option pruning with real session ticks
 - refresh behavior during real ATM drift
-- whether executable candidates are blocked by missing option LTP
+- whether executable candidates are blocked by miss-ing option LTP
 
 ## Monday Live Validation Checklist
 

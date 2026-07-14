@@ -75,7 +75,7 @@ The shadow attachment should emit enough information to answer:
 - Did the pro pipeline fail on this cycle?
 - Was the shadow path enabled or disabled?
 
-Telemetry should remain additive and backward compatible. The shadow hook should not change existing status file meanings or live execution decisions.
+Telemetry should remain additive and backward compatible. The shadow hook should not change existing stat-us file meanings or live execution decisions.
 
 ## Safety and Failure Handling
 

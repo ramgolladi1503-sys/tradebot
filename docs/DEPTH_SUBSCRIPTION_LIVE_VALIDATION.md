@@ -286,6 +286,6 @@ Do not treat lack of trades as failure. Treat lack of truthful reason as failure
 Examples:
 
 - Good `NO_TRADE`: `FEED_STALE`, `LOW_CONFIDENCE`, `UNRESOLVED_CONTRACT`, `LIQUIDITY_WEAK`.
-- Bad `NO_TRADE`: empty reason, missing status file, contradictory counts, or candidates visible in dashboard but engine reports zero candidates.
+- Bad `NO_TRADE`: empty reason, miss-ing status file, contradictory counts, or candidates visible in dashboard but engine reports zero candidates.
 
 The depth layer’s job is to make real market data available and observable. The execution layer still decides whether a trade is good enough.

@@ -25,7 +25,7 @@ In each strategy, local variables are dynamically injected at evaluation time us
 - The strategy generators still do not bypass or catch quote-quality exceptions (e.g. stale/fallback quotes).
 - The `score_candidate` logic in `core/opportunity_scoring.py` retains the original hard downgrade behaviors.
 - Explicit tests were written (`tests/test_fallback_never_executable.py`) proving that even if `promotion_state = "PROMOTED"`, any candidate carrying a downgrade for `fallback_quote_data` or other truth gate failure will remain in `ADVISORY_CANDIDATE` or `NO_TRADE_CANDIDATE`.
-- Strategy fallback checks (such as verifying `spot`, `vwap`, etc. are not None and returning empty candidate lists if missing) remain completely unmodified.
+- Strategy fallback checks (such as verifying `spot`, `vwap`, etc. are not None and returning empty candidate lists if miss-ing) remain completely unmodified.
 
 ## 3. Confirmation That Candidates Remain Read-Only
 - All strategy files generate `StrategyCandidate` objects cleanly without side-effects.

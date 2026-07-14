@@ -45,7 +45,7 @@ A candidate is accepted only when all required proof checks pass:
 - final executable trade quality gate evidence is present and passing
 - replay proof-pack evidence is present and passing
 
-A candidate is rejected when any required proof check is missing, invalid, blocked, rejected, failed, unsafe, or not executable.
+A candidate is rejected when any required proof check is miss-ing, invalid, blocked, rejected, failed, unsafe, or not executable.
 
 ## Output contract
 

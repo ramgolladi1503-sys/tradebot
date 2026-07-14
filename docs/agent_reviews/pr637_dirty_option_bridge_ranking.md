@@ -44,7 +44,7 @@
 - Evidence gate command:
   `python scripts/validate_agent_review_evidence.py --base-ref origin/main`
 - High-Risk Path Review: `strategies/trade_builder.py` is high risk. The change is limited to PAPER/SIM candidate evidence preservation and execution-blocker classification for known dirty producer reasons. It keeps LIVE basic-filter hard rejects returning no candidate, and it does not call broker APIs, place orders, modify order adapters, change credentials, or relax risk/feed/strategy thresholds.
-- High-Risk Path Review: `core/option_chain.py` is high risk. The change only annotates missing IV term-structure evidence on existing option-chain rows. It does not fetch new broker data, change quote selection, or alter order eligibility by itself.
+- High-Risk Path Review: `core/option_chain.py` is high risk. The change only annotates miss-ing IV term-structure evidence on existing option-chain rows. It does not fetch new broker data, change quote selection, or alter order eligibility by itself.
 - High-Risk Path Review: `core/opportunity_engine.py` is high risk. The change is limited to primary-blocker display priority for explicit dirty option bridge candidates. It does not upgrade candidates, relax execution checks, or make any candidate executable.
 
 ## Acceptance Proof

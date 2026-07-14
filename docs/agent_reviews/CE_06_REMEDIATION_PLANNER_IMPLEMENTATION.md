@@ -60,7 +60,7 @@ The implementation is limited to a planning layer. It produces remediation plan 
 
 PASS.
 
-The planner blocks weak remediation candidates when the configured Daedalus block rules detect missing root cause, broad file scope, missing file scope, or safety/runtime issues without root-cause proof.
+The planner blocks weak remediation candidates when the configured Daedalus block rules detect miss-ing root cause, broad file scope, miss-ing file scope, or safety/runtime issues without root-cause proof.
 
 The planner does not pretend unknowns are fixable. Weak RCA becomes `ACCEPTED_UNKNOWN` and blocked plan status.
 

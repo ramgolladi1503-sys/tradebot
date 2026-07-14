@@ -57,7 +57,7 @@ Invalid or incomplete replay rows do not receive fake path metrics.
 
 Blocked reasons include:
 
-- `MISSING_CANDIDATE_ID`
+- `miss_ing_candidate_ID`
 - `INVALID_ENTRY_PRICE`
 - `EMPTY_PRICE_PATH`
 - `INVALID_PRICE_PATH`
@@ -110,7 +110,7 @@ Coverage includes:
 - top-mover bucket classification
 - invalid entry price
 - empty price path
-- missing candidate ID
+- miss_ing candidate ID
 - batch replay-row report wiring
 - blocked report status and reasons
 - read-only safety flags

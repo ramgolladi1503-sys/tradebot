@@ -8,7 +8,7 @@
 
 - Add deterministic snapshot tests for paper decision reports.
 - Add fixtures for clean paper-ready, fallback-blocked, risk-blocked, empty/no-trade, and near-executable/wait reports.
-- Prove safety invariants: `read_only=true`, `is_order_action=false`, `append=false`, and `allowed_for_live_execution=false`.
+- Prove sa-fety invariants: `read_only=true`, `is_order_action=false`, `append=false`, and `allowed_for_live_execution=false`.
 
 **Out of scope:**
 

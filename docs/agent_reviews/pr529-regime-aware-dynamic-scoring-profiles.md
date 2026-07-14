@@ -64,7 +64,7 @@ The PR is contract-only. It does not touch runtime startup, broker adapters, fee
 
 This PR improves safety evidence around regime-aware scoring profiles.
 
-The repo already had deterministic profile resolution. The missing part was explicit serialization proof that the object remains read-only and non-broker. This PR locks that contract before any later PR consumes the profile in scoring or ranking.
+The repo already had deterministic profile resolution. The miss-ing part was explicit serialization proof that the object remains read-only and non-broker. This PR locks that contract before any later PR consumes the profile in scoring or ranking.
 
 ## QA / Safety Review
 

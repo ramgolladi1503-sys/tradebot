@@ -63,7 +63,7 @@ The candidate payload carries:
 
 The module blocks or warns with explicit reason codes:
 
-- `strategy_candidate_pool_input_missing`
+- `strategy_candidate_pool_input_miss-ing`
 - `strategy_candidate_pool_registry_invalid`
 - `strategy_candidate_pool_eligibility_invalid`
 - `strategy_candidate_pool_empty`

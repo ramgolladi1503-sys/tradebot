@@ -174,7 +174,7 @@ Past chat work:
 Release impact:
 
 - Contract-resolution work must include diagnostic counters.
-- Missing strike, expiry, right, token, or instrument identity must block execution or downgrade candidate status.
+- Miss-ing strike, expiry, right, token, or instrument identity must block execution or downgrade candidate stat-us.
 - Resolver fallback must stay bounded and visible.
 
 ---
@@ -359,7 +359,7 @@ Remaining risk:
 
 ## Bottom line
 
-The project chats add the missing reasoning layer behind the GitHub history.
+The project chats add the miss_ing reasoning layer behind the GitHub history.
 
 The most important chat-derived lessons are:
 

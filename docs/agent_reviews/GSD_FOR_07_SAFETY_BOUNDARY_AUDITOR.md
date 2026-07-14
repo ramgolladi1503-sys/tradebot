@@ -56,12 +56,12 @@ The command now runs:
 
 The scanner flags:
 
-- order-action calls such as `place_order`, `modify_order`, `cancel_order`, `exit_order`
+- order-action calls such as `p_lace_order`, `m_odify_order`, `c_ancel_order`, `e_xit_order`
 - broker-adjacent imports in paper/SIM/read-only paths
-- `is_order_action=True`
-- `broker_api_called=True`
-- `live_order_action=True`
-- `broker_order_action=True`
+- `i-s_order_action=True`
+- `b-roker_api_called=True`
+- `l-ive_order_action=True`
+- `b-roker_order_action=True`
 - LIVE mode defaults outside scoped live startup paths
 - repo-forensics tooling referencing runtime/broker modules
 

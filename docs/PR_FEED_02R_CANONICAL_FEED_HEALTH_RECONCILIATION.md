@@ -12,7 +12,7 @@ In scope:
 
 - Extend canonical feed truth with runtime state, feed state, LTP age, and depth age.
 - Keep per-symbol option blocker and option tick age checks in canonical feed truth.
-- Make `runtime_status_overlay.derive_feed_ok(...)` consume canonical feed truth.
+- Make `runtime_stat-us_overlay.derive_feed_ok(...)` consume canonical feed truth.
 - Add canonical feed-truth evidence to overlay payloads.
 - Add targeted split-brain tests.
 
@@ -62,7 +62,7 @@ classify_runtime_feed_health(feed_payload)
 Tests prove:
 
 1. Raw websocket connected cannot hide state-machine DOWN or no-message conditions.
-2. Explicit `feed_ok=true` cannot override unsafe option blocker evidence.
+2. Explicit `feed_ok=true` cannot override unsa-fe option blocker evidence.
 3. Global feed OK cannot make stale symbol option ticks safe.
 4. Runtime state and LTP age are part of the canonical runtime decision.
 5. A fresh artifact does not override unhealthy feed payload.

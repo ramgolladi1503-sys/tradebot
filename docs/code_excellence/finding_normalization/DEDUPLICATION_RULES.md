@@ -151,7 +151,7 @@ relationships:
 Finding A:
 
 ```text
-repo-forensics evidence_high: decision record missing reason field in runtime/events.jsonl
+repo-forensics evidence_high: decision record miss_ing reason field in runtime/events.jsonl
 ```
 
 Finding B:

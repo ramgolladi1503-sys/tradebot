@@ -4,7 +4,7 @@
 
 ### Scope
 
-Block fallback-resolved option contracts from ever surviving as executable Phase2 candidates. The live-observation validator found fallback-linked NIFTY traces reaching executable-looking shape (`permission=EXECUTE`, `final_action=EXECUTE`, `execution_allowed=True`). That is unsafe because fallback contract resolution means the orderable instrument mapping is uncertain.
+Block fallback-resolved option contracts from ever surviving as executable Phase2 candidates. The live-observation validator found fallback-linked NIFTY traces reaching executable-looking shape (`permission=EXECUTE`, `final_action=EXECUTE`, `execution_allowed=True`). That is unsa-fe because fallback contract resolution means the orderable instrument mapping is uncertain.
 
 ### Files changed
 

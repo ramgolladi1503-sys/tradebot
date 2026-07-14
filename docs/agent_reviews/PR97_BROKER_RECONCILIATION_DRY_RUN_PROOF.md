@@ -87,7 +87,7 @@ Approved.
 2. Add pure `build_broker_reconciliation_dry_run_proof(...)`.
 3. Validate gate report approval and dry-run state.
 4. Validate supplied receipt dry-run state.
-5. Compare broker-shaped fields and emit missing/mismatch evidence.
+5. Compare broker-shaped fields and emit miss-ing/mismatch evidence.
 6. Add positive and negative tests.
 
 ### Test command

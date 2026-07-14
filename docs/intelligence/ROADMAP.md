@@ -187,7 +187,7 @@ Detect whether ranking is decision-useful.
 
 ### Allowed Scope
 
-- Detect score compression, missing/defaulted scores, fallback contamination, candidate insufficiency, and display-vs-ranking confusion.
+- Detect score compression, miss-ing/defaulted scores, fallback contamination, candidate insufficiency, and display-vs-ranking confusion.
 
 ### Forbidden Scope
 

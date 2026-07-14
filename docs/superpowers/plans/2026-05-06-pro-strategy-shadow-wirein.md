@@ -16,7 +16,7 @@
 - Modify: `core/pro_strategy_pipeline.py` - make the pro pipeline shadow-aware so the new shadow flag actually activates the report path while the live enable flag stays reserved for later promotion work.
 - Modify: `core/orchestrator.py` - add a guarded pro shadow hook alongside the existing `v2` shadow pipeline, with summary logging and fail-closed exception handling.
 - Modify: `tests/test_pro_strategy_pipeline.py` - extend the pipeline contract tests to cover the new shadow flag behavior.
-- Create: `tests/test_orchestrator_pro_shadow.py` - prove the orchestrator shadow hook is disabled by default, emits a report when enabled, and does not alter live cycle status behavior.
+- Create: `tests/test_orchestrator_pro_shadow.py` - prove the orchestrator shadow hook is disabled by default, emits a report when enabled, and does not alter live cycle stat-us behavior.
 
 ## Task 1: Add the shadow flag and make the pro pipeline shadow-aware
 

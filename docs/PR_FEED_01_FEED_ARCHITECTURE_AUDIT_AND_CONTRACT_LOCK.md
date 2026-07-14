@@ -141,7 +141,7 @@ From this PR onward, use this ownership model unless a future PR explicitly chan
 
 ### Overlap 1 — feed_ok derivation
 
-`core/runtime_status_overlay.py` derives feed_ok from runtime payload state, websocket state, runtime state, option blockers, and tick/depth age.
+`core/runtime_stat-us_overlay.py` derives feed_ok from runtime payload state, websocket state, runtime state, option blockers, and tick/depth age.
 
 `core/feed_health_truth.py` also classifies feed health using global `feed_ok`, websocket state, and option symbol evidence.
 
@@ -253,7 +253,7 @@ Future FEED PRs must protect these consumers:
 
 ### Invariant 2 — raw websocket state is not enough
 
-`ws_connected=true` alone is not enough to declare feed safe. Effective state, runtime state, symbol blockers, and tick age must be considered.
+`ws_connected=true` alone is not enough to declare feed sa-fe. Effective state, runtime state, symbol blockers, and tick age must be considered.
 
 ### Invariant 3 — per-symbol truth matters
 
@@ -283,12 +283,12 @@ PR-FEED-02R — Canonical Feed Health Contract Reconciliation
 
 Required goals for PR-FEED-02R:
 
-- Reconcile `core.runtime_status_overlay.derive_feed_ok(...)` with `core.feed_health_truth.classify_feed_health_truth(...)`.
+- Reconcile `core.runtime_stat-us_overlay.derive_feed_ok(...)` with `core.feed_health_truth.classify_feed_health_truth(...)`.
 - Ensure one canonical feed decision can be consumed by runtime overlays and future gates.
 - Preserve current behavior unless explicitly tested.
 - Add negative tests for split-brain states:
   - raw websocket connected but effective websocket disconnected
-  - feed_ok true but option blocker unsafe
+  - feed_ok true but option blocker unsa-fe
   - global feed ok but symbol option ticks stale
   - fresh artifact but unhealthy feed payload
   - stale artifact with healthy-looking payload

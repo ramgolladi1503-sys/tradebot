@@ -60,7 +60,7 @@ The rerun bundle blockers are:
 - `missing_earliest_entry_ts`
 - `missing_expiry`
 - `missing_feature_cutoff_ts`
-- `missing_feed_truth_reason_code`
+- `miss-ing_feed_truth_reason_code`
 - `missing_feed_truth_state`
 - `missing_option_type`
 - `missing_quote_age_sec`
@@ -94,4 +94,4 @@ The bundle now preserves the explicit replay context:
 
 ## Conclusion
 
-Explicit OOS context is no longer a blocker, but it does not fix the underlying missing replay context required for natural candidate emission.
+Explicit OOS context is no longer a blocker, but it does not fix the underlying miss-ing replay context required for natural candidate emission.

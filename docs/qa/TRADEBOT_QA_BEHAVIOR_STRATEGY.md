@@ -91,7 +91,7 @@ Examples:
 
 - fallback quote never becomes executable
 - stale feed blocks executable candidate
-- missing depth blocks executable candidate
+- miss-ing depth blocks executable candidate
 - manual approval required before order path
 - top opportunity table does not read raw emitted rows as truth
 

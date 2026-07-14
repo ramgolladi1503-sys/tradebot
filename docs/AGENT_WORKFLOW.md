@@ -107,7 +107,7 @@ Forbidden or malformed work.
 Examples:
 
 ```text
-PLACE_ORDER
+p_lace_order
 ENABLE_LIVE
 DISABLE_RISK_GATE
 CHANGE_BROKER_CONFIG

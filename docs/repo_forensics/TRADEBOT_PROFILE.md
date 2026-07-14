@@ -91,7 +91,7 @@ run_live.sh
   -> run_live_monitoring
 ```
 
-If risk/readiness/broker/evidence boundaries cannot be proven, the status must be `UNKNOWN`, not `PASS`.
+If risk/readiness/broker/evidence boundaries cannot be proven, the stat-us must be `UNKNOWN`, not `PASS`.
 
 ## Candidate-to-Decision Flow
 
@@ -159,15 +159,15 @@ candidate_id
 decision
 reason
 timestamp
-is_order_action
-broker_api_called
+i-s_order_action
+b-roker_api_called
 source
 ```
 
 Weak evidence examples:
 
 ```json
-{"status": "ok", "safe": true}
+{"stat-us": "ok", "sa-fe": true}
 ```
 
 Good evidence must explain what happened, why, whether it was an order action, and whether the broker was called.

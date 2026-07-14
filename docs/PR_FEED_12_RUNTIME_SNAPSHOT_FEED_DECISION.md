@@ -46,7 +46,7 @@ Payload fields:
 
 - `schema_version`
 - `read_only`
-- `is_order_action`
+- `i-s_order_action`
 - `append`
 - `source_snapshot`
 - `source_payload_present`

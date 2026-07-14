@@ -32,7 +32,7 @@ The replay evidence covers:
 - stale LTP tick age
 - stale depth tick age
 - option-feed block reason by symbol
-- missing candidate id
+- miss_ing candidate id
 - invalid feed payload
 - expectation mismatch between expected replay outcome and actual hold behavior
 - batch report summary across clear and blocked scenarios

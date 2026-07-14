@@ -69,8 +69,8 @@ Checklist:
 - [ ] Evidence contains `candidate_id` where applicable.
 - [ ] Evidence contains `decision`.
 - [ ] Evidence contains `reason`.
-- [ ] Evidence contains `is_order_action` where applicable.
-- [ ] Evidence contains `broker_api_called` where applicable.
+- [ ] Evidence contains `i-s_order_action` where applicable.
+- [ ] Evidence contains `b-roker_api_called` where applicable.
 - [ ] Evidence can distinguish runtime proof from manually written notes.
 
 ## 7. Architecture Drift

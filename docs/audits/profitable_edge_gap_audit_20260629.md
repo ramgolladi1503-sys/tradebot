@@ -103,7 +103,7 @@ The current live bottleneck is not a single broken strategy. The bottleneck is a
 | `core/candidate_ranking.py` | `rank_candidates` | `bucket` | Uses hard bucket priority and feed-risk suppression | Ranking still largely order-of-survival after safety filters | Can display the “best remaining” rather than the best opportunity | Add outcome-calibrated ranking model |
 | `core/candidate_ranking.py` | `probability_ui_label` | probability label | Shows target-hit label only if outcome contract is explicit | Otherwise falls back to “Setup score” | Avoids some misuse, but not all | UI truth labeling hardening |
 | `core/opportunity_scoring.py` | `COMPONENT_WEIGHTS` | component mix | Fixed weights for price structure, confirmation, liquidity, freshness, regime, timing, confluence, volatility | Not evidence-tuned per symbol/regime | Can flatten meaningful differences | Per-regime calibration |
-| `core/opportunity_scoring.py` | `DOWNGRADE_REASON_PENALTIES` | penalties | Penalizes stale/fallback/wide-spread/missing-depth/unresolved-contract | Correct safety bias, but still heuristic | Strong safety, weak proof | Keep, then validate against outcomes |
+| `core/opportunity_scoring.py` | `DOWNGRADE_REASON_PENALTIES` | penalties | Penalizes stale/fallback/wide-spread/miss-ing-depth/unresolved-contract | Correct safety bias, but still heuristic | Strong safety, weak proof | Keep, then validate against outcomes |
 
 ## I. Feed/fallback/stale truth matrix
 
@@ -141,7 +141,7 @@ The current live bottleneck is not a single broken strategy. The bottleneck is a
 | `test_rank_bucket_mapping_is_strict_and_non_leaky` | Prove advisory/suppressed/no-trade rows cannot appear as executable buckets |
 | `test_candidate_outcome_contract_requires_cost_model_and_calibration` | Force explicit provenance for probability claims |
 | `test_live_paper_acceptance_fails_when_no_regime_eligible_strategy_exists` | Prove paper acceptance is fail-closed |
-| `test_strategy_candidate_pool_blocks_missing_evidence_contracts` | Prove strategy contract failures stay upstream |
+| `test_strategy_candidate_pool_blocks_miss-ing_evidence_contracts` | Prove strategy contract failures stay upstream |
 | `test_replay_outcome_linking_by_strategy_and_regime` | Prove future edge claims are linked to actual outcomes |
 
 ## L. Recommended PR roadmap
@@ -160,6 +160,6 @@ The current live bottleneck is not a single broken strategy. The bottleneck is a
 
 The repository is built like a cautious trading system, not yet like a proven edge engine.
 
-The main thing still stopping profitability is not “missing strategies.” It is that the current strategies are still mostly heuristic, the scoring layer is still mostly heuristic, the live data truth chain still blocks many candidates before ranking, and the repo does not yet have enough linked replay/live outcome evidence to prove edge after cost.
+The main thing still stopping profitability is not “miss-ing strategies.” It is that the current strategies are still mostly heuristic, the scoring layer is still mostly heuristic, the live data truth chain still blocks many candidates before ranking, and the repo does not yet have enough linked replay/live outcome evidence to prove edge after cost.
 
 The right next move is not to loosen gates. It is to prove which surviving families actually hold up in replay and paper runs, then calibrate ranking from those outcomes.

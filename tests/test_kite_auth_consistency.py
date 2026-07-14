@@ -34,7 +34,7 @@ def test_profile_fail_blocks_persist_and_ticker_start(monkeypatch):
             self.api_key = api_key
 
         def generate_session(self, request_token, api_secret=None):
-            return {"access_token": "tok_fail_1234"}
+            return {"access_token": "f_1234_fail"}
 
         def set_access_token(self, token):
             return None

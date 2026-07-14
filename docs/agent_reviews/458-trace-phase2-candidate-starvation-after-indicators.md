@@ -147,7 +147,7 @@ Writes latest artifacts:
 
 Must include (minimum):
 - provenance: `schema_version`, `writer_name`, `writer_module`, `writer_schema_version`, `generated_epoch`
-- safety: `read_only`, `append`, `is_order_action`, `broker_api_called`
+- safety: `read_only`, `append`, `i-s_order_action`, `b-roker_api_called`
 - counts: `market_data_symbol_count`, `indicator_ready_symbol_count`, `regime_blocked_symbol_count`, `raw_candidate_count`, `phase2_input_candidate_count`
 - diagnosis: `gate_reasons`, `first_zero_stage`
 

@@ -41,7 +41,7 @@ The inspected code already contains important pieces:
 
 - `classify_candidate_quote_freshness()` validates executable candidate freshness.
 - `classify_quote_age_truth()` compares reported quote age with timestamp-derived age.
-- `resolve_option_token()` already rejects expired requested contracts and marks safe fallback token resolution as `execution_grade=false` and `advisory_only=true`.
+- `resolve_option_token()` already rejects expired requested contracts and marks sa-fe fallback token resolution as `execution_grade=false` and `advisory_only=true`.
 - `advisory_schema.py` derives candidate status, readiness, execution status, and quote source, but runtime evidence showed these semantics still need cleanup across the pipeline.
 
 ## Roadmap principles

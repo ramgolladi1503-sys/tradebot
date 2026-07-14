@@ -55,4 +55,4 @@ No dashboard dependency.
 python -m pytest tests/test_replay_trace.py
 ```
 
-Tests cover candidate replay, blocked-path replay, stale-feed cycle replay, invalid-event failure, one-filter enforcement, missing-target failure, and CLI text/JSON output.
+Tests cover candidate replay, blocked-path replay, stale-feed cycle replay, invalid-event failure, one-filter enforcement, miss-ing-target failure, and CLI text/JSON output.

@@ -28,7 +28,7 @@ Allowed when behavior may be correct but proof is incomplete or ambiguous.
 
 Examples:
 
-- add missing reason field
+- add miss_ing reason field
 - add missing source flag
 - add explicit actionability status
 

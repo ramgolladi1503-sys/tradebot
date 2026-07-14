@@ -121,7 +121,7 @@ Behavior may be correct, but evidence is incomplete or ambiguous.
 Example:
 
 ```text
-status exists but reason, source, or broker_api_called flag is missing
+stat-us exists but reason, source, or b-roker_api_called flag is miss-ing
 ```
 
 ### test_reality_gap

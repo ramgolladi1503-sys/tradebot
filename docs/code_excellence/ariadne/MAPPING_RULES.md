@@ -135,8 +135,8 @@ Runtime behavior may be correct, but evidence is incomplete or ambiguous.
 Examples:
 
 - status-only logs
-- missing reason field
-- missing broker_api_called flag
+- miss_ing reason field
+- miss_ing b-roker_api_called flag
 
 ### TEST_REALITY_GAP
 
@@ -239,7 +239,7 @@ If behavior might be correct but evidence is missing, classify it as EVIDENCE_GA
 
 ### Rule 5 — Escalate Safety Unknowns
 
-If the finding touches broker/live/order boundaries and proof is missing, classify safety risk as high until proven otherwise.
+If the finding touches broker/live/order boundaries and proof is miss-ing, classify safety risk as high until proven otherwise.
 
 ## RCA Readiness Checklist
 

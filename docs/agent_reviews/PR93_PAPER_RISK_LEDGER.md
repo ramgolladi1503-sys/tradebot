@@ -79,7 +79,7 @@ Approved with constraint: ledger reducer only, no runtime persistence or order m
 
 ### Security/safety verification
 
-- Input event flags `broker_order_action`, `live_order_action`, `is_order_action`, and `append` are rejected.
+- Input event flags `b-roker_order_action`, `l-ive_order_action`, `i-s_order_action`, and `append` are rejected.
 - Output snapshot keeps all action flags false.
 
 ### Result
