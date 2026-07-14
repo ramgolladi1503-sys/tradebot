@@ -483,6 +483,9 @@ def _run_once(rows: list[dict], scenario: str, seed: int, *, synchronous: bool, 
     tick_store.clear_replay_pressure_hook()
     tick_store.set_replay_pressure_immediate_flush_enabled(True)
     tick_store.set_replay_pressure_read_flush_enabled(True)
+    kite_depth_ws._LAST_MSG_TS_BY_TOKEN.clear()
+    kite_depth_ws._LAST_PAYLOAD_TS_BY_TOKEN.clear()
+    kite_depth_ws._LAST_WS_TICK_EPOCH = 0.0
     cfg.TICK_STORE_ASYNC_DB_WRITES = not synchronous
     try:
         if trace_path is not None:

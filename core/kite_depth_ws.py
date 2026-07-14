@@ -117,6 +117,7 @@ _SYMBOL_LAST_OPTION_TICK_TS: dict[str, float] = {}
 _STALE_PRUNE_STRIKES_BY_TOKEN: dict[int, int] = {}
 _LAST_WS_TICK_EPOCH: float = 0.0
 _LAST_MSG_TS_BY_TOKEN: dict[int, float] = {}
+_LAST_PAYLOAD_TS_BY_TOKEN: dict[int, float] = {}
 _FEED_ON_TICKS_ROW_SEQ = 0
 _RESTART_LOCK = threading.RLock()
 _RESTART_ASYNC_LOCK = threading.Lock()
@@ -4929,7 +4930,7 @@ def _should_ignore_restart_cooldown_for_ws_fault(*, code: int | None, reason_tex
 
 
 def on_ticks(ws, ticks):
-    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
+    global _UNDERLYING_LOGGED_MISSING, _SCHEMA_LOG_TS, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _FEED_ON_TICKS_ROW_SEQ
     _ = ws
     if not ticks:
         return
@@ -4994,10 +4995,11 @@ def on_ticks(ws, ticks):
             token_int = None
 
         if token_int is not None and payload_tick_epoch is not None:
-            prev = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(token_int))
-            if prev is not None and payload_tick_epoch < prev:
-                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev})
+            prev_payload = _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int))
+            if prev_payload is not None and payload_tick_epoch < prev_payload:
+                _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload})
                 continue
+            _LAST_PAYLOAD_TS_BY_TOKEN[token_int] = payload_tick_epoch
         freshness_tick_epoch = _normalized_tick_epoch(
             token_int,
             payload_epoch=payload_tick_epoch,
@@ -5258,7 +5260,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
     _reset_feed_restart_verification(reason=f"stop_depth_ws:{reason}")
     _reset_option_feed_verification(reason=f"stop_depth_ws:{reason}")
     watchdog_thread = None
@@ -5282,6 +5284,7 @@ def stop_depth_ws(reason: str = "manual_stop"):
         _LAST_FEED_HEALTH_STATE = None
         _LAST_WS_TICK_EPOCH = 0.0
         _LAST_MSG_TS_BY_TOKEN = {}
+        _LAST_PAYLOAD_TS_BY_TOKEN = {}
         _SYMBOL_LAST_OPTION_TICK_TS = {}
         _LAST_FEED_TICK_LOG_MINUTE = None
         _RUNTIME_STATE = "STOPPED"
@@ -5525,7 +5528,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
 
 
 def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = False, skip_guard: bool = False) -> bool:
-    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
+    global _DEPTH_WS_START_EPOCH, _KITE_TICKER, _WATCHDOG_THREAD, _WATCHDOG_STOP, _LAST_TOKENS, _STALE_STRIKES, _WARMUP_PENDING, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _SYMBOL_LAST_OPTION_TICK_TS
     _log_ws("ws_start_requested", {"tokens_count": len(instrument_tokens), "ws_lifecycle_state": "STARTING"})
     if bool(getattr(cfg, "FEED_FD_TRACE_ENABLE", False)) or bool(str(os.environ.get("TRADEBOT_FEED_FD_TRACE", "")).strip()):
         try:
@@ -5702,6 +5705,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     _STOP_REQUESTED = False
     _LAST_WS_TICK_EPOCH = 0.0
     _LAST_MSG_TS_BY_TOKEN = {}
+    _LAST_PAYLOAD_TS_BY_TOKEN = {}
     _SYMBOL_LAST_OPTION_TICK_TS = {}
     _LAST_FEED_TICK_LOG_MINUTE = None
     _LAST_FEED_HEALTH_STATE = None

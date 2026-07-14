@@ -703,6 +703,7 @@ def test_on_ticks_clamps_epoch_monotonic_and_resets_stale_strikes(monkeypatch):
     monkeypatch.setattr(ws, "_STALE_STRIKES", 2, raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 200.0, raising=False)
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {101: 200.0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_PAYLOAD_TS_BY_TOKEN", {101: 200.0}, raising=False)
     ticker = captured["ticker"]
     ticker.on_ticks(
         ticker,
