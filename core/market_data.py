@@ -27,6 +27,7 @@ from core.filters import get_bias
 from core.depth_store import depth_store
 from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
 from core.regime_session_context import resolve_canonical_session_context
+from core.session_bar_history import SessionBarHistoryError, build_session_bar_history_state
 from core.paths import logs_dir
 from core.time_utils import (
     compute_age_sec,
@@ -2711,6 +2712,12 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             pass
         orb_high = ltp
         orb_low = ltp
+        open_price = None
+        day_high = None
+        day_low = None
+        previous_completed_close = None
+        completed_bar_history = []
+        completed_bar_history_provenance = {}
         volume = None
         vwap_slope = 0
         rsi = None
@@ -3128,6 +3135,32 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             orb_high = ltp
         if orb_low is None:
             orb_low = ltp
+        try:
+            session_state = build_session_bar_history_state(
+                symbol=symbol,
+                bars=bars,
+                cutoff_timestamp=now,
+                segment=segment,
+                source="core.market_data.ohlc_buffer",
+                receipt_timestamp=now,
+            )
+            open_price = session_state.open_price
+            day_high = session_state.day_high
+            day_low = session_state.day_low
+            previous_completed_close = session_state.previous_completed_close
+            completed_bar_history = session_state.history_payload()
+            completed_bar_history_provenance = session_state.provenance_payload(
+                source_component="core.market_data.fetch_live_market_data",
+                receipt_timestamp=now.isoformat(),
+            )
+        except SessionBarHistoryError as exc:
+            completed_bar_history = []
+            completed_bar_history_provenance = {
+                "status": "INCOMPLETE",
+                "source_component": "core.market_data.fetch_live_market_data",
+                "source_field": "completed_bar_history",
+                "reason": str(exc),
+            }
 
         exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         market_open_now = bool(market_ctx.is_market_open)
@@ -3774,6 +3807,12 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "depth_imbalance": depth_imbalance,
             "orb_high": orb_high,
             "orb_low": orb_low,
+            "open_price": open_price,
+            "day_high": day_high,
+            "day_low": day_low,
+            "previous_completed_close": previous_completed_close,
+            "completed_bar_history": completed_bar_history,
+            "completed_bar_history_provenance": completed_bar_history_provenance,
             "volume": volume,
             "bid": bid,
             "ask": ask,

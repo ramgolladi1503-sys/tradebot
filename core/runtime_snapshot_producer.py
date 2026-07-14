@@ -85,6 +85,7 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
     payload["vwap"] = truth.get("vwap", data.get("vwap"))
     payload["day_high"] = truth.get("day_high", data.get("day_high"))
     payload["day_low"] = truth.get("day_low", data.get("day_low"))
+    payload["previous_completed_close"] = truth.get("previous_completed_close", data.get("previous_completed_close"))
     payload["nearest_support"] = truth.get("nearest_support", data.get("nearest_support"))
     payload["nearest_resistance"] = truth.get("nearest_resistance", data.get("nearest_resistance"))
     payload["open_price"] = truth.get("open_price", data.get("open_price"))
@@ -117,6 +118,15 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
         merged_metadata["strategy_context_provenance"] = provenance
     if missing:
         merged_metadata["strategy_context_missing"] = missing
+    completed_bar_history = truth.get("completed_bar_history")
+    if isinstance(completed_bar_history, list):
+        merged_metadata["completed_bar_history"] = completed_bar_history
+    completed_bar_history_provenance = provenance.get("completed_bar_history")
+    if isinstance(completed_bar_history_provenance, Mapping):
+        merged_metadata["completed_bar_history_provenance"] = dict(completed_bar_history_provenance)
+    previous_completed_close = truth.get("previous_completed_close")
+    if previous_completed_close is not None:
+        merged_metadata["previous_completed_close"] = previous_completed_close
     payload["metadata"] = merged_metadata
     filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
     return StrategyContext(**filtered)

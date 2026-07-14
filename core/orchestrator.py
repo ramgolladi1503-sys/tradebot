@@ -1601,6 +1601,78 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         lookback="ATR_PERIOD",
     )
     _record(
+        "open_price",
+        _coerce_snapshot_number(market_data.get("open_price")),
+        status="TRUTHFUL" if _coerce_snapshot_number(market_data.get("open_price")) is not None else "INCOMPLETE",
+        source_field="open_price",
+        source_component="core.session_bar_history.build_session_bar_history_state",
+        scope="session_completed_bar",
+        complete=bool(_coerce_snapshot_number(market_data.get("open_price")) is not None),
+        timeframe="1m",
+    )
+    _record(
+        "day_high",
+        _coerce_snapshot_number(market_data.get("day_high")),
+        status="TRUTHFUL" if _coerce_snapshot_number(market_data.get("day_high")) is not None else "INCOMPLETE",
+        source_field="day_high",
+        source_component="core.session_bar_history.build_session_bar_history_state",
+        scope="session_completed_bar",
+        complete=bool(_coerce_snapshot_number(market_data.get("day_high")) is not None),
+        timeframe="1m",
+    )
+    _record(
+        "day_low",
+        _coerce_snapshot_number(market_data.get("day_low")),
+        status="TRUTHFUL" if _coerce_snapshot_number(market_data.get("day_low")) is not None else "INCOMPLETE",
+        source_field="day_low",
+        source_component="core.session_bar_history.build_session_bar_history_state",
+        scope="session_completed_bar",
+        complete=bool(_coerce_snapshot_number(market_data.get("day_low")) is not None),
+        timeframe="1m",
+    )
+    _record(
+        "previous_completed_close",
+        _coerce_snapshot_number(market_data.get("previous_completed_close")),
+        status="TRUTHFUL" if _coerce_snapshot_number(market_data.get("previous_completed_close")) is not None else "INCOMPLETE",
+        source_field="previous_completed_close",
+        source_component="core.session_bar_history.build_session_bar_history_state",
+        scope="session_completed_bar",
+        complete=bool(_coerce_snapshot_number(market_data.get("previous_completed_close")) is not None),
+        timeframe="1m",
+    )
+    completed_bar_history = market_data.get("completed_bar_history")
+    completed_bar_history_provenance = (
+        dict(market_data.get("completed_bar_history_provenance") or {})
+        if isinstance(market_data.get("completed_bar_history_provenance"), dict)
+        else {}
+    )
+    if isinstance(completed_bar_history, list):
+        truth["completed_bar_history"] = completed_bar_history
+        provenance["completed_bar_history"] = {
+            "status": str(completed_bar_history_provenance.get("status") or ("TRUTHFUL" if completed_bar_history else "INCOMPLETE")),
+            "source_component": str(completed_bar_history_provenance.get("source_component") or "core.session_bar_history.build_session_bar_history_state"),
+            "source_field": "completed_bar_history",
+            "source_event_timestamp": completed_bar_history_provenance.get("source_event_timestamp"),
+            "receipt_timestamp": completed_bar_history_provenance.get("receipt_timestamp"),
+            "scope": "session_completed_bar_history",
+            "complete": bool(completed_bar_history_provenance.get("is_complete", False)),
+            "timeframe": str(completed_bar_history_provenance.get("timeframe") or "1m"),
+            "symbol": completed_bar_history_provenance.get("symbol"),
+            "session_date": completed_bar_history_provenance.get("session_date"),
+            "completed_bar_count": completed_bar_history_provenance.get("completed_bar_count"),
+            "latest_completed_timestamp": completed_bar_history_provenance.get("latest_completed_timestamp"),
+            "history_bound": completed_bar_history_provenance.get("history_bound"),
+            "history_hash": completed_bar_history_provenance.get("history_hash"),
+            "partial_session": bool(completed_bar_history_provenance.get("partial_session", True)),
+            "is_complete": bool(completed_bar_history_provenance.get("is_complete", False)),
+        }
+    else:
+        missing["completed_bar_history"] = {
+            "status": str(completed_bar_history_provenance.get("status") or "INCOMPLETE"),
+            "source_component": str(completed_bar_history_provenance.get("source_component") or "core.session_bar_history.build_session_bar_history_state"),
+            "source_field": "completed_bar_history",
+        }
+    _record(
         "volume_z",
         _coerce_snapshot_number(market_data.get("vol_z")),
         status="TRUTHFUL",
@@ -1705,7 +1777,7 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         units="seconds",
     )
 
-    for missing_field in ("open_price", "day_high", "day_low", "atr_short", "atr_long", "range_width_pct"):
+    for missing_field in ("atr_short", "atr_long", "range_width_pct"):
         missing.setdefault(
             missing_field,
             {

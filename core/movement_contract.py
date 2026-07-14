@@ -408,6 +408,7 @@ class StrategyContext:
     orb_low: float | None = None
     prev_day_high: float | None = None
     prev_day_low: float | None = None
+    previous_completed_close: float | None = None
     nearest_support: float | None = None
     nearest_resistance: float | None = None
     atr: float | None = None
