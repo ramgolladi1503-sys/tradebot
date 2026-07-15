@@ -105,6 +105,12 @@ FULL-SUITE RESULT:
 - first failure: `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
 - failure cause: `RuntimeError:[AUTH] missing_kite_access_token`
 
+FULL SUITE RERUN IN THIS TASK:
+NO
+
+LATEST APPLICABLE FULL-SUITE RESULT:
+`1 failed, 5798 passed, 1 deselected, 935 warnings in 484.76s`
+
 STATIC CHECK RESULT:
 - `python -m py_compile scripts/run_htf_real_paper_monitor.py tests/test_htf_real_paper_monitor.py`
 - `ruff check scripts/run_htf_real_paper_monitor.py tests/test_htf_real_paper_monitor.py`
