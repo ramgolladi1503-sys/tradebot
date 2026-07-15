@@ -11,7 +11,7 @@ from strategies.movement.trend_pullback import generate_trend_pullback_candidate
 IST = ZoneInfo("Asia/Kolkata")
 
 
-def _trend_pullback_history(*, closes: tuple[float, ...] = (22570.0, 22590.0, 22605.0)) -> list[dict[str, object]]:
+def _trend_pullback_history(*, closes: tuple[float, ...] = (22590.0, 22630.0, 22615.0, 22635.0)) -> list[dict[str, object]]:
     start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
     bars: list[dict[str, object]] = []
     for index, close in enumerate(closes):
@@ -117,7 +117,7 @@ def test_compression_breakout_generates_put_candidate_after_compression_breakdow
         nearest_resistance=22620.0,
         pe_premium_change=14.0,
         ce_premium_change=0.0,
-        completed_bar_history=_trend_pullback_history(closes=(22540.0, 22530.0, 22510.0)),
+        completed_bar_history=_trend_pullback_history(closes=(22620.0, 22595.0, 22605.0, 22580.0)),
     )
     candidates = generate_compression_breakout_candidates(
         ctx,
@@ -191,7 +191,7 @@ def test_trend_pullback_generates_put_candidate_when_downtrend_pullback_rejects(
         pe_premium_change=12.0,
         ce_premium_change=0.0,
         minutes_since_open=80,
-        completed_bar_history=_trend_pullback_history(closes=(22540.0, 22530.0, 22510.0)),
+        completed_bar_history=_trend_pullback_history(closes=(22525.0, 22500.0, 22510.0, 22480.0)),
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_DOWN", TREND_DOWN=0.74))
 

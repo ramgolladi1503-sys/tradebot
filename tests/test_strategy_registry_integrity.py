@@ -45,7 +45,7 @@ IST = ZoneInfo("Asia/Kolkata")
 
 def _trend_pullback_history() -> list[dict[str, object]]:
     start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
-    closes = (22510.0, 22535.0, 22560.0)
+    closes = (22590.0, 22630.0, 22615.0, 22635.0)
     bars: list[dict[str, object]] = []
     for index, close in enumerate(closes):
         bar_start = start + timedelta(minutes=index)

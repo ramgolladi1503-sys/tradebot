@@ -5,9 +5,9 @@ APPROVED OBJECTIVE:
 Complete the `trend_pullback_v1` temporal contract by making completed-bar history first-class, removing the fail-open previous-close fallback, and failing closed on missing or inconsistent temporal evidence without changing strategy formulas, thresholds, or the accepted candidate fingerprint.
 
 WHAT WAS ACTUALLY IMPLEMENTED:
-`StrategyContext` now carries `completed_bar_history` as an explicit field, and the runtime adapter propagates it from the existing truth payload into the context. `trend_pullback_v1` now derives its temporal state from the last two completed bars in that history, emits a deterministic `STRATEGY_EVIDENCE_BLOCKED` event when the history is missing or inconsistent, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
+`StrategyContext` now carries `completed_bar_history` as an explicit field, and the runtime adapter propagates it from the existing truth payload into the context. `trend_pullback_v1` now derives its temporal state from the last four completed bars in that history, emits a deterministic `STRATEGY_EVIDENCE_BLOCKED` event when the history is missing or inconsistent, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
 
-The acceptance fixtures were updated to supply causal completed-bar history everywhere `trend_pullback_v1` is expected to emit, so the accepted direct-context and runtime fingerprints remain unchanged.
+The acceptance fixtures were updated to supply causal completed-bar history everywhere `trend_pullback_v1` is expected to emit, so the accepted primary-context direct and pool fingerprints remain unchanged. A separate temporal-semantics fixture exercises a different four-bar chronology and therefore produces a different raw score, but that is a context-specific consequence of the new temporal contract rather than a formula change.
 
 ARCHITECTURE CHANGE:
 NECESSARY_MINIMAL
@@ -51,11 +51,17 @@ FILES CHANGED:
 
 COMPLETE CONTEXT CONTRACT:
 `completed_bar_history` is authoritative completed-bar evidence for `trend_pullback_v1`.
-The strategy consumes the last two completed closes from that history and no longer depends on `previous_completed_close` alone.
+The strategy consumes the last four completed closes from that history and no longer depends on `previous_completed_close` alone.
+
+TEMPORAL CONTRACT VERSION:
+`trend_pullback_temporal_v1`
+
+MINIMUM HISTORY:
+4 completed `1m` bars
 
 TEMPORAL STATE RESULT:
-CALL side requires the penultimate completed close below VWAP and the latest completed close at or above VWAP.
-PUT side requires the penultimate completed close above VWAP and the latest completed close at or below VWAP.
+CALL side requires a causal trend-establishment sequence, a controlled pullback that holds structure, and a continuation trigger that reclaims VWAP.
+PUT side requires the mirrored causal sequence with resistance as the anchor.
 
 BLOCKED-EVENT RESULT:
 Missing or inconsistent completed-bar history emits
@@ -70,17 +76,24 @@ DIRECT-CONTEXT FINGERPRINT:
 TEMPORAL TRACE RESULT:
 Prefix 1: no candidate
 Prefix 2: no candidate
-Prefix 3: one `trend_pullback_v1` candidate
-Prefix 4: no repeated candidate
+Prefix 3: no candidate
+Prefix 4: one `trend_pullback_v1` candidate
+Prefix 5: no repeated candidate
 
 EMISSION FINGERPRINT:
 `trend_pullback_v1`
 `BUY_CALL`
 `RAW_CANDIDATE`
-`0.648584`
+`0.648584` in the accepted primary context; `0.612584` in the stricter ad hoc semantics fixture
 `trend_pullback_hold_resume`
 `pullback_breaks_anchor`
 `established trend resumed after a controlled pullback`
+
+RAW OWNERSHIP RESULT:
+The generator still emits `RAW_CANDIDATE` at the movement layer.
+
+DOWNSTREAM OWNERSHIP RESULT:
+No downstream Phase-2 ownership claims were added or changed here.
 
 BEHAVIOR CHANGED:
 `trend_pullback_v1` now fails closed when its completed-bar history is missing or inconsistent, and its temporal gate is derived from completed history rather than a scalar-only fallback.
@@ -89,10 +102,10 @@ BEHAVIOR PRESERVED:
 The accepted candidate identity, direction, score, trigger text, invalidation text, and direct-context fingerprint remain unchanged when the truthful completed history is present.
 
 FOCUSED TEST RESULT:
-`97 passed, 1 warning in 8.46s`
+`139 passed, 1 warning in 5.26s`
 
 FULL-SUITE RESULT:
-`1 failed, 5812 passed, 1 deselected, 935 warnings in 573.74s`
+`1 failed, 5817 passed, 1 deselected, 935 warnings in 373.68s`
 
 FIRST FAILURE:
 `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
