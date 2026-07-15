@@ -1,57 +1,97 @@
 # Strategy Truth Phase 3B Temporal Harness
 
-## IMPLEMENTATION DIRECTION
-RIGHT
+IMPLEMENTATION DIRECTION:
+RIGHT_WITH_GAPS
 
-## APPROVED OBJECTIVE
-Build a common temporal setup-conformance harness over causal completed-bar prefixes and begin the trend_pullback audit without changing strategy formulas, thresholds, or candidate ownership.
+APPROVED OBJECTIVE:
+Build a reusable causal temporal setup-conformance harness, integrate the accepted restart-persistence ancestry, and finish the Phase 3B temporal proof gate without changing strategy formulas, thresholds, ownership, or execution behavior.
 
-## WHAT WAS ACTUALLY IMPLEMENTED
-- Added a shared temporal harness in [`core/strategy_temporal_harness.py`](/Users/madhuram/tradebot-strategy-phase3b/core/strategy_temporal_harness.py)
-- Added generic harness coverage in [`tests/test_strategy_temporal_harness.py`](/Users/madhuram/tradebot-strategy-phase3b/tests/test_strategy_temporal_harness.py)
-- Added a first strategy-level temporal audit for trend_pullback in [`tests/test_trend_pullback_temporal_conformance.py`](/Users/madhuram/tradebot-strategy-phase3b/tests/test_trend_pullback_temporal_conformance.py)
-- Recorded the current temporal classification and strategy input inventory in this evidence note
-- No production movement strategy logic was changed
+WHAT WAS ACTUALLY IMPLEMENTED:
+Added an explicit audit-only temporal trace model and oracle hook in [`core/strategy_temporal_harness.py`](../../core/strategy_temporal_harness.py), plus deterministic proof tests for prefix traversal, future-mutation invariance, truncation equivalence, prefix determinism, session reset, invalidation causality, no premature emission, single emission, and repeated-emission detection. Added a trend_pullback readiness audit and a separate temporal-semantics audit that classifies the current behavior as `SNAPSHOT_FALSE_POSITIVE`. Integrated the accepted restart-persistence ancestry via cherry-picked commits `627cca14` and `acc9e053`. No production movement strategy logic was changed.
 
-## ARCHITECTURE CHANGE
+RUNTIME ARCHITECTURE CHANGE:
 NONE
 
-## REQUIRED FIXES COMPLETED
-4
-- Common harness for causal completed-bar prefix evaluation
-- Deterministic candidate fingerprinting for setup conformance
-- First trend_pullback prefix audit over causal history
-- Evidence note for the temporal audit boundary
+AUDIT ARCHITECTURE CHANGE:
+Added a reusable causal temporal setup-conformance harness with explicit trace states, oracle-driven observations, and repeated-emission detection.
 
-## REQUIRED FIXES REMAINING
-0
-
-## SCOPE STATUS
+SCOPE STATUS:
 IN_SCOPE
 
-## EVIDENCE STATUS
+EVIDENCE STATUS:
 PROVEN
 
-## STARTING COMMIT
-- `951673de6dfb3c5b94bd6da19317111fae0d172b`
+INTEGRATION STATUS:
+COMPLETE
 
-## PHASE 3A2 COMMIT
-- `272b80774a0d0afed951783d2eddc40d81e61494`
+FILES CHANGED:
+- `core/strategy_temporal_harness.py`
+- `tests/test_strategy_temporal_harness.py`
+- `tests/test_trend_pullback_temporal_conformance.py`
+- `docs/agent_reviews/strategy_truth_phase3b_temporal_harness.md`
 
-## PHASE 3A3 COMMIT
-- `3479b898072ead19bea0bc563a016d97be75a1d0`
+STARTING HEAD:
+`5d11ce2b0a5e16962fd6b6fb4f6ada0823c17f7f`
 
-## PHASE 3B OBSERVABILITY COMMIT
-- to be recorded in the final commit hash
+PHASE 3A3 ACCEPTED BASE:
+`272b80774a0d0afed951783d2eddc40d81e61494`
 
-## FILES CHANGED
-- [`core/strategy_temporal_harness.py`](/Users/madhuram/tradebot-strategy-phase3b/core/strategy_temporal_harness.py)
-- [`tests/test_strategy_temporal_harness.py`](/Users/madhuram/tradebot-strategy-phase3b/tests/test_strategy_temporal_harness.py)
-- [`tests/test_trend_pullback_temporal_conformance.py`](/Users/madhuram/tradebot-strategy-phase3b/tests/test_trend_pullback_temporal_conformance.py)
-- [`docs/agent_reviews/strategy_truth_phase3b_temporal_harness.md`](/Users/madhuram/tradebot-strategy-phase3b/docs/agent_reviews/strategy_truth_phase3b_temporal_harness.md)
+PHASE 3B INITIAL HARNESS:
+`5d11ce2b0a5e16962fd6b6fb4f6ada0823c17f7f`
 
-## COMPLETE TEMPORAL INPUT INVENTORY
-### Priority strategy classification
+RESTART IMPLEMENTATION SOURCE:
+`e66163dc74bf10595ee758e6dfcf77ad03e8946f`
+
+RESTART EVIDENCE SOURCE:
+`ebe904eaec4f864186ccb49a67b88cbd2c3db8ab`
+
+RESTART IMPLEMENTATION INTEGRATED COMMIT:
+`627cca1412258af32c03e7f309b78d2914703687`
+
+RESTART EVIDENCE INTEGRATED COMMIT:
+`acc9e05385c6269cadf0b21ce203b87a3fc3540c`
+
+PHASE 3B FINAL PROOF BASE:
+`acc9e05385c6269cadf0b21ce203b87a3fc3540c`
+
+ORIGINAL DIRTY FILE PRESERVED:
+YES
+
+PRESERVED PATCH PATH:
+`/tmp/phase3b_temporal_harness_uncommitted.patch`
+
+PRESERVED PATCH HASH:
+`199a0b78f62440842a3fd8432cf45ba2f541f6a458e8055de7207f30c00a9bd3`
+
+PATCH APPLIED:
+NO
+
+PATCH REVIEW RESULT:
+The preserved patch was a stale blocked-handoff evidence diff and did not add useful proof for the integrated continuation branch, so it was kept outside Git and not applied.
+
+COMPLETE TEMPORAL TRACE MODEL:
+- `strategy_id`
+- `symbol`
+- `session_id`
+- `prefix_bar_count`
+- `checkpoint_timestamp`
+- `history_hash`
+- `setup_state_before`
+- `observed_conditions`
+- `transition`
+- `setup_state_after`
+- `candidate_emitted`
+- `candidate_semantic_fingerprint`
+- `invalidation_reason`
+- `blocker_reason`
+- `provenance`
+
+ORACLE CONTRACT:
+- A test-only oracle drives the harness state model.
+- The harness keeps prefix replay causal and immutable.
+- The oracle records actual candidate emission and semantic fingerprints without mutating production strategies.
+
+COMPLETE TEMPORAL INPUT INVENTORY:
 | strategy_id | temporal class | current temporal inputs | current audit posture |
 | --- | --- | --- | --- |
 | `opening_drive_v1` | session-open setup | `minutes_since_open`, `open_price`, `vwap`, `orb_high`, `orb_low`, `spot_ltp` | time-gated snapshot setup |
@@ -65,63 +105,98 @@ PROVEN
 | `event_volatility_expansion_v1` | volatility-expansion setup | `spot_ltp`, `vwap`, `atr_short`, `atr_long`, `volume_z`, volatility-expansion regime score | snapshot-driven ratio setup |
 | `late_day_momentum_v1` | session-close setup | `minutes_since_open`, `minutes_to_close`, `spot_ltp`, `vwap`, `volume_z`, `expiry_context` | time-gated snapshot setup |
 
-## TEMPORAL HARNESS DESIGN
+TEMPORAL HARNESS DESIGN:
 - The harness runs a strategy across every causal completed-bar prefix produced by `core.session_bar_history.build_session_bar_history_state`
-- It captures prefix count, history hash, latest completed timestamp, and provenance for each step
+- It captures prefix count, history hash, checkpoint timestamp, provenance, explicit setup-state transitions, and semantic fingerprints for each step
 - It fingerprints actual `StrategyCandidate` outputs instead of relying on mocked candidate shapes
 - It does not mutate candidate logic, thresholds, or score formulas
 
-## TREND_PULLBACK AUDIT
-- The first audit uses a causal prefix sequence where the setup becomes ready at the third completed bar
-- Before the threshold, `nearest_support` is absent and no candidate is emitted
-- After the threshold, the same canonical raw candidate fingerprint appears and remains stable on later prefixes
-- The strategy remains snapshot-driven; this phase does not add direct `completed_bar_history` consumption to the generator
+FUTURE-MUTATION RESULT:
+PASS
 
-## COMPLETE-CONTEXT FINGERPRINT
-- `trend_pullback_v1`
-- `0.648584`
-- `BUY_CALL`
-- `RAW_CANDIDATE`
-- `trend_pullback_hold_resume`
-- `pullback_breaks_anchor`
-- `established trend resumed after a controlled pullback`
+TRUNCATION RESULT:
+PASS
 
-## EXPECTED OBSERVATIONS
-- Causal prefix history changes the setup-ready boundary
-- Candidate identity, direction, score, entry trigger, invalidation description, and rank reason remain stable once the setup is complete
-- No strategy formula or threshold changed
+PREFIX-DETERMINISM RESULT:
+PASS
 
-## UNEXPECTED CHANGES
-- None observed in this phase
+SESSION-RESET RESULT:
+PASS
 
-## PROOF SUMMARY
-- Harness test proves deterministic prefix traversal and immutable trace results
-- Trend pullback audit proves setup readiness emerges only after the causal prefix threshold and remains stable after it
+INVALIDATION RESULT:
+PASS
 
-## FOCUSED TEST RESULT
-- `92 passed, 1 warning in 6.62s`
+PREMATURE-EMISSION RESULT:
+PASS
 
-## STATIC CHECK RESULT
-- `All checks passed!`
+SINGLE-EMISSION RESULT:
+PASS
 
-## FULL-SUITE RESULT
-- `5801 passed, 1 deselected, 1 failed, 935 warnings in 458.27s (0:07:38)`
+REPEATED-EMISSION DETECTION RESULT:
+PASS
 
-## FIRST FAILURE
-- `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
-- The failure remains the established missing-token baseline: `RuntimeError:[AUTH] missing_kite_access_token`
-- The failure text masks the injected `forced_cycle_error`, so the branch did not introduce a new orchestrator-auth path
+TREND_PULLBACK CONTEXT-READINESS RESULT:
+CONTEXT_READINESS_GATING
 
-## RISKS
-- The harness still relies on explicit context builders for current strategies because the production generators do not yet consume `completed_bar_history` directly
-- The phase remains audit-only; no temporal strategy repair has been introduced
+TREND_PULLBACK TEMPORAL CLASSIFICATION:
+SNAPSHOT_FALSE_POSITIVE
 
-## ROLLBACK
-- Remove the new harness module, its tests, and this evidence note if the audit direction is rejected
+EARLIEST ACTUAL EMISSION:
+prefix 1
 
-## EXPLICIT NON-CLAIMS
-- No runtime strategy propagation changed
-- No thresholds changed
-- No setup formulas changed
-- No phase-2 ownership behavior changed
-- No claim of profitability or temporal alpha is made
+EXPECTED TEMPORAL EMISSION:
+prefix 3
+
+INVALIDATION RESPECTED:
+NOT_TESTED_IN_THIS_STRATEGY_AUDIT
+
+SESSION RESET RESPECTED:
+YES
+
+REPEATED EMISSION COUNT:
+3
+
+PRODUCTION STRATEGY CHANGED:
+NO
+
+FOCUSED TEST RESULT:
+`12 passed in 1.01s`
+
+FOCUSED REGRESSION RESULT:
+`87 passed in 5.90s`
+
+STATIC CHECK RESULT:
+`python -m py_compile`, `ruff check`, and `git diff --check` all passed for the modified Phase 3B files.
+
+FULL-SUITE RESULT:
+`1 failed, 5810 passed, 1 deselected, 934 warnings in 392.17s`
+
+FAILURE CLASSIFICATION:
+PREEXISTING_ENVIRONMENT_CREDENTIAL
+
+FIRST FAILURE:
+`tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
+
+The failure remained the established missing-token baseline:
+`RuntimeError:[AUTH] missing_kite_access_token`
+
+EXPECTED TRUTH CORRECTIONS:
+- The harness now records explicit temporal states instead of only candidate fingerprints.
+- Trend pullback is no longer overstated as temporally conformant; the current audit reads as a snapshot false positive with repeated emission risk.
+- Restart ancestry is now integrated through patch-equivalent cherry-picks, not assumed from the initial harness base.
+
+UNEXPECTED CHANGES:
+None observed in the Phase 3B proof path.
+
+RISKS:
+- The harness remains audit-only and depends on explicit oracle/test fixtures.
+- The full suite still has the established repository auth-token failure outside this phase.
+
+ROLLBACK:
+- Remove `core/strategy_temporal_harness.py`, the two temporal test files, and this evidence note if the audit direction is rejected.
+
+EXPLICIT NON-CLAIMS:
+- No claim of profitability or temporal alpha.
+- No strategy formula, threshold, or ownership change.
+- No production runtime context propagation change.
+- No fix to the repository-wide auth-token baseline.
