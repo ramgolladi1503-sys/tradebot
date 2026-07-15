@@ -75,9 +75,11 @@ NON-DIGIT RESULT:
 
 MISSING-VALUE RESULT:
 - input: `None`
-- loaded value: `None`
-- loaded type: `NoneType`
+- pandas value: `<NA>` (`NAType`)
+- DataFrame value: `<NA>` (`NAType`)
+- public monitor value: `None` (`NoneType`)
 - no fabricated `"nan"`, `"None"`, or `"<NA>"` string
+- the `None` exposure is produced by `df.to_dict("records")` during monitor rehydration
 
 LEGACY-CSV RESULT:
 - a CSV containing an unquoted digit-only `signal_id` reloads as the exact string identifier
