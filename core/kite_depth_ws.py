@@ -1537,6 +1537,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
 
     if _use_native_reconnect():
         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
+
         if not soft_ok:
             _log_ws(
                 "FEED_WS_1006_RECOVERY_SOFT_RECONNECT_FAILED",
@@ -4814,6 +4815,13 @@ def _close_ticker_instance(instance):
                 method()
             except Exception as exc:
                 _log_ws("FEED_CLOSE_ERROR", {"method": method_name, "error": str(exc)})
+    # Break reference cycles by clearing callbacks
+    for cb in ("on_connect", "on_close", "on_error", "on_reconnect", "on_ticks", "on_noreconnect", "on_order_update", "on_message"):
+        if hasattr(instance, cb):
+            try:
+                setattr(instance, cb, None)
+            except Exception:
+                pass
 
 
 def _join_thread_safe(thread_obj, timeout_sec: float) -> None:
@@ -4845,18 +4853,21 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
+
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
-        _log_ws(
-            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
-            {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
-        )
-        return False
+        if source != "ws1006_recovery" and not source.startswith("ws1006_recovery"):
+            _log_ws(
+                "FEED_RECOVERY_ALREADY_IN_PROGRESS",
+                {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
+            )
+            return False
     if _RECOVERY_IN_PROGRESS:
-        _log_ws(
-            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
-            {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
-        )
-        return False
+        if source != "ws1006_recovery" and not source.startswith("ws1006_recovery"):
+            _log_ws(
+                "FEED_RECOVERY_ALREADY_IN_PROGRESS",
+                {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
+            )
+            return False
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(source=f"_schedule_restart_depth_ws:{source}", reason=blocked_reason)
@@ -5310,15 +5321,18 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
     _log_ws("feed_restart_required", {"reason": reason})
+
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
-        _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
-        return False
+        if not reason.startswith("ws1006_recovery_full"):
+            _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
+            return False
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
     if _RECOVERY_IN_PROGRESS and not _reconnect_recovery_blocked_active():
-        _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
-        return False
+        if not reason.startswith("ws1006_recovery_full"):
+            _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
+            return False
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _log_ws(
@@ -5995,6 +6009,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
+
+            _FEED_RECOVERY_COORDINATOR.clear_recovery(
+                source="on_connect",
+                reason="subscription_replay_complete",
+            )
+            _sync_ws1006_recovery_state_from_coordinator()
+
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
             _persist_runtime_snapshot_row(
@@ -6239,7 +6260,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 return
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
-    def _watchdog():
+    def _watchdog(stop_event):
         global _STALE_STRIKES, _WARMUP_PENDING
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
@@ -6342,7 +6363,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             )
 
         while True:
-            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+            if stop_event is None or stop_event.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6350,7 +6371,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked",
                     reason=blocked_reason,
                 )
-                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                while not (stop_event is None or stop_event.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6358,11 +6379,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                if stop_event is None or stop_event.is_set():
                     break
                 continue
             time.sleep(max(0.5, watchdog_poll_sec))
-            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+            if stop_event is None or stop_event.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6370,7 +6391,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked_after_sleep",
                     reason=blocked_reason,
                 )
-                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                while not (stop_event is None or stop_event.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6378,7 +6399,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                if stop_event is None or stop_event.is_set():
                     break
                 continue
             now_loop = float(time.time())
@@ -6732,9 +6753,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_error = on_error
     kws.on_close = on_close
     kws.on_ticks = on_ticks
-    watchdog_thread = threading.Thread(target=_watchdog)
+    watchdog_thread = threading.Thread(
+        target=_watchdog,
+        args=(_WATCHDOG_STOP,),
+    )
     try:
-        watchdog_thread.name = "kite-depth-watchdog"
+        watchdog_thread.name = f"kite-depth-watchdog-{kws.generation_id}"
     except Exception:
         pass
     try:

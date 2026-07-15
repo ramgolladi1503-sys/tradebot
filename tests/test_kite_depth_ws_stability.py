@@ -245,8 +245,9 @@ def test_on_close_does_not_restart_after_stop(monkeypatch):
     monkeypatch.setattr(ws, "restart_depth_ws", _restart)
     ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
     ticker = captured["ticker"]
+    original_on_close = ticker.on_close
     ws.stop_depth_ws(reason="unit_test_stop")
-    ticker.on_close(ticker, 1000, "normal")
+    original_on_close(ticker, 1000, "normal")
     assert restarts["count"] == 0
 def test_ws1006_peer_drop_on_error_is_recoverable_first(monkeypatch):
     _patch_common(monkeypatch)
@@ -1702,3 +1703,74 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
     assert total_subscribe_calls == 20
     assert ws._RUNTIME_STATE == "RUNNING"
     assert ws._KITE_TICKER is not None
+
+
+
+
+
+def test_watchdog_lifecycle_receives_own_signal_and_exits(monkeypatch):
+    import core.kite_depth_ws as ws
+    
+    _patch_common(monkeypatch)
+    
+    threads = []
+    class ThreadCapture:
+        def __init__(self, target=None, daemon=None, args=(), kwargs=None):
+            self.target = target
+            self.args = args
+            self.kwargs = kwargs or {}
+            self.daemon = daemon
+            threads.append(self)
+        def start(self): pass
+        def join(self, t=0): pass
+        def is_alive(self): return True
+        
+    monkeypatch.setattr(ws.threading, "Thread", ThreadCapture)
+    
+    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
+    watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
+    assert len(watchdogs) == 1, "Watchdog thread not spawned"
+    
+    t1 = watchdogs[0]
+    stop_event_1 = t1.args[0]
+    assert stop_event_1 is not None, "Old watchdog should have its own stop event"
+    assert not stop_event_1.is_set()
+    
+    # trigger reconnect
+    ws.restart_depth_ws("test", ignore_cooldown=True)
+    
+    assert stop_event_1.is_set(), "Old watchdog stop event should be set on exit"
+    
+    watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
+    assert len(watchdogs) == 2, "New watchdog should be spawned"
+    
+    t2 = watchdogs[1]
+    stop_event_2 = t2.args[0]
+    assert stop_event_2 is not stop_event_1, "New watchdog uses a different event"
+    assert not stop_event_2.is_set(), "Replacing global event cannot strand the old thread"
+
+def test_callback_retirement(monkeypatch):
+    import core.kite_depth_ws as ws
+    _patch_common(monkeypatch)
+
+    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
+    t1 = ws._KITE_TICKER
+    
+    assert getattr(t1, "on_close", None) is not None
+    assert getattr(t1, "on_error", None) is not None
+    assert getattr(t1, "on_connect", None) is not None
+    
+    ws._close_ticker_instance(t1)
+    
+    assert getattr(t1, "on_close", None) is None
+    assert getattr(t1, "on_error", None) is None
+    assert getattr(t1, "on_connect", None) is None
+    
+    ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
+    t2 = ws._KITE_TICKER
+    
+    assert t2 is not t1
+    assert getattr(t2, "on_close", None) is not None
+    
+    ws._close_ticker_instance(t1)
+    assert getattr(t2, "on_close", None) is not None, "Retiring old generation cleared current generation callbacks"

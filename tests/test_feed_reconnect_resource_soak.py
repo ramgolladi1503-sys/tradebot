@@ -109,17 +109,30 @@ def test_control_1000_has_no_cycle_correlated_fd_growth():
 def test_reconnect_100_has_bounded_resources():
     rc, data, _, _ = run_profile("reconnect", 100)
     assert rc == 0
-    diff = data["final"]["fd_count"] - data["post_warmup_baseline"]["fd_count"]
+    diff = data["process_fd_final"] - data["process_fd_warmup"]
+    
+    assert data["configuration"]["cycles"] == 100
+    assert data["disconnect_count"] == 100
+    assert data["verified_successful_reconnect_count"] == 100
+    assert data["generation_transition_count"] == 100
     assert diff <= 2
+    assert data["final"]["retired_websocket_generations_reachable"] == 0
+    assert data["hard_failures"] == 0
     assert "100_CYCLE_PASS" in data["verdict"] or "SOAK_PASS" in data["verdict"]
 
 def test_reconnect_1000_has_bounded_resources():
     rc, data, _, _ = run_profile("reconnect", 1000)
     assert rc == 0
-    diff = data["final"]["fd_count"] - data["post_warmup_baseline"]["fd_count"]
-    assert diff <= 2
+    diff = data["process_fd_final"] - data["process_fd_warmup"]
+    
     assert data["configuration"]["cycles"] == 1000
-    assert data["disconnect_count"] >= 1000
+    assert data["disconnect_count"] == 1000
+    assert data["verified_successful_reconnect_count"] == 1000
+    assert data["generation_transition_count"] == 1000
+    assert data["websocket_generations_created"] == 1001
+    assert diff <= 2
+    assert data["final"]["retired_websocket_generations_reachable"] == 0
+    assert data["hard_failures"] == 0
     assert "1000_CYCLE_PASS" in data["verdict"]
 
 def test_owner_failure_releases_lock_and_later_recovers():
@@ -145,7 +158,9 @@ def test_retired_websocket_generations_are_reclaimed():
 def test_subscription_state_does_not_accumulate():
     rc, data, _, _ = run_profile("reconnect", 10)
     assert rc == 0
-    f = data["final"]
+    # The final snapshot is taken after stop_depth_ws() and _KITE_TICKER=None,
+    # so requested_token_count drops to 0. We must check the last cycle sample.
+    f = data["cycle_samples"][-1]["snapshot"]
     assert f["required_token_count"] == f["requested_token_count"]
     assert f["missing_token_count"] == 0
     assert f["unexpected_token_count"] == 0

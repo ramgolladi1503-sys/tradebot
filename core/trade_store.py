@@ -3,6 +3,8 @@ import logging
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
+from typing import Iterator
 from datetime import datetime, timezone
 from config import config as cfg
 from pathlib import Path
@@ -17,7 +19,8 @@ _LAST_DEPTH_PRUNE_EPOCH = 0.0
 _LAST_DEPTH_LOCK_WARN_EPOCH = 0.0
 
 
-def _conn():
+@contextmanager
+def _conn() -> Iterator[sqlite3.Connection]:
     db_path = ensure_parent_dir(Path(str(cfg.TRADE_DB_PATH)))
     timeout_sec = max(1.0, float(getattr(cfg, "TRADE_DB_TIMEOUT_SEC", 10.0) or 10.0))
     conn = sqlite3.connect(str(db_path), timeout=timeout_sec)
@@ -32,7 +35,11 @@ def _conn():
             conn.execute(f"PRAGMA synchronous={str(getattr(cfg, 'TRADE_DB_SYNCHRONOUS', 'NORMAL') or 'NORMAL')}")
     except Exception:
         pass
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def classify_outcome_label(realized_pnl: float, epsilon: float = 1e-6) -> str:
@@ -117,279 +124,279 @@ def init_db(force: bool = False):
         )
         """
         )
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN execution_quality REAL")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN strike INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN expiry TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN option_type TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN instrument_id TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN underlying TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN instrument_type TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN right TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN qty_lots INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN qty_units INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN validity_sec INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN tradable INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN tradable_reasons_blocking TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN source_flags_json TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE trades ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        for col, sql_type in [
-            ("exit_price", "REAL"),
-            ("exit_time", "TEXT"),
-            ("exit_reason", "TEXT"),
-            ("realized_pnl", "REAL"),
-            ("r_multiple_realized", "REAL"),
-            ("outcome_label", "TEXT"),
-            ("outcome_grade", "TEXT"),
-            ("legs_count", "INTEGER"),
-            ("avg_exit", "REAL"),
-            ("exit_reason_final", "TEXT"),
-            ("trailing_enabled", "INTEGER"),
-            ("trailing_method", "TEXT"),
-            ("trailing_atr_mult", "REAL"),
-            ("trail_stop_init", "REAL"),
-            ("trail_stop_last", "REAL"),
-            ("trail_updates", "INTEGER"),
-        ]:
             try:
-                conn.execute(f"ALTER TABLE trades ADD COLUMN {col} {sql_type}")
+                conn.execute("ALTER TABLE trades ADD COLUMN execution_quality REAL")
             except Exception:
                 pass
-        conn.execute(
-            """
-        CREATE TABLE IF NOT EXISTS outcomes (
-            trade_id TEXT,
-            exit_price REAL,
-            exit_time TEXT,
-            actual INTEGER,
-            r_multiple REAL,
-            r_label INTEGER,
-            exit_reason TEXT,
-            realized_pnl REAL,
-            r_multiple_realized REAL,
-            outcome_label TEXT,
-            outcome_grade TEXT,
-            timestamp_epoch REAL,
-            timestamp_iso TEXT
-        )
-        """
-        )
-        try:
-            conn.execute("ALTER TABLE outcomes ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE outcomes ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        for col, sql_type in [
-            ("exit_reason", "TEXT"),
-            ("realized_pnl", "REAL"),
-            ("r_multiple_realized", "REAL"),
-            ("outcome_label", "TEXT"),
-            ("outcome_grade", "TEXT"),
-        ]:
             try:
-                conn.execute(f"ALTER TABLE outcomes ADD COLUMN {col} {sql_type}")
+                conn.execute("ALTER TABLE trades ADD COLUMN strike INTEGER")
             except Exception:
                 pass
-        conn.execute(
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN expiry TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN option_type TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN instrument_id TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN underlying TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN instrument_type TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN right TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN qty_lots INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN qty_units INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN validity_sec INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN tradable INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN tradable_reasons_blocking TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN source_flags_json TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN timestamp_epoch REAL")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE trades ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            for col, sql_type in [
+                ("exit_price", "REAL"),
+                ("exit_time", "TEXT"),
+                ("exit_reason", "TEXT"),
+                ("realized_pnl", "REAL"),
+                ("r_multiple_realized", "REAL"),
+                ("outcome_label", "TEXT"),
+                ("outcome_grade", "TEXT"),
+                ("legs_count", "INTEGER"),
+                ("avg_exit", "REAL"),
+                ("exit_reason_final", "TEXT"),
+                ("trailing_enabled", "INTEGER"),
+                ("trailing_method", "TEXT"),
+                ("trailing_atr_mult", "REAL"),
+                ("trail_stop_init", "REAL"),
+                ("trail_stop_last", "REAL"),
+                ("trail_updates", "INTEGER"),
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE trades ADD COLUMN {col} {sql_type}")
+                except Exception:
+                    pass
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS outcomes (
+                trade_id TEXT,
+                exit_price REAL,
+                exit_time TEXT,
+                actual INTEGER,
+                r_multiple REAL,
+                r_label INTEGER,
+                exit_reason TEXT,
+                realized_pnl REAL,
+                r_multiple_realized REAL,
+                outcome_label TEXT,
+                outcome_grade TEXT,
+                timestamp_epoch REAL,
+                timestamp_iso TEXT
+            )
             """
-        CREATE TABLE IF NOT EXISTS execution_stats (
-            timestamp TEXT,
-            instrument TEXT,
-            slippage_bps REAL,
-            latency_ms REAL,
-            fill_ratio REAL,
-            timestamp_epoch REAL,
-            timestamp_iso TEXT
-        )
-        """
-        )
-        try:
-            conn.execute("ALTER TABLE execution_stats ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE execution_stats ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        conn.execute(
+            )
+            try:
+                conn.execute("ALTER TABLE outcomes ADD COLUMN timestamp_epoch REAL")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE outcomes ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            for col, sql_type in [
+                ("exit_reason", "TEXT"),
+                ("realized_pnl", "REAL"),
+                ("r_multiple_realized", "REAL"),
+                ("outcome_label", "TEXT"),
+                ("outcome_grade", "TEXT"),
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE outcomes ADD COLUMN {col} {sql_type}")
+                except Exception:
+                    pass
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS execution_stats (
+                timestamp TEXT,
+                instrument TEXT,
+                slippage_bps REAL,
+                latency_ms REAL,
+                fill_ratio REAL,
+                timestamp_epoch REAL,
+                timestamp_iso TEXT
+            )
             """
-        CREATE TABLE IF NOT EXISTS depth_snapshots (
-            timestamp TEXT,
-            instrument_token INTEGER,
-            depth_json TEXT,
-            timestamp_iso TEXT,
-            timestamp_epoch REAL
-        )
-        """
-        )
-        try:
-            conn.execute("ALTER TABLE depth_snapshots ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE depth_snapshots ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
-        conn.execute(
+            )
+            try:
+                conn.execute("ALTER TABLE execution_stats ADD COLUMN timestamp_epoch REAL")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE execution_stats ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS depth_snapshots (
+                timestamp TEXT,
+                instrument_token INTEGER,
+                depth_json TEXT,
+                timestamp_iso TEXT,
+                timestamp_epoch REAL
+            )
             """
-        CREATE TABLE IF NOT EXISTS broker_fills (
-            order_id TEXT,
-            trade_id TEXT,
-            symbol TEXT,
-            underlying TEXT,
-            side TEXT,
-            qty INTEGER,
-            qty_lots INTEGER,
-            qty_units INTEGER,
-            price REAL,
-            timestamp TEXT,
-            exchange TEXT,
-            instrument_token INTEGER,
-            instrument_type TEXT,
-            expiry TEXT,
-            strike INTEGER,
-            right TEXT,
-            instrument_id TEXT,
-            timestamp_epoch REAL,
-            timestamp_iso TEXT
-        )
-        """
-        )
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN timestamp_epoch REAL")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN timestamp_iso TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN underlying TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN qty_lots INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN qty_units INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN instrument_type TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN expiry TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN strike INTEGER")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN right TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE broker_fills ADD COLUMN instrument_id TEXT")
-        except Exception:
-            pass
-        conn.execute(
+            )
+            try:
+                conn.execute("ALTER TABLE depth_snapshots ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE depth_snapshots ADD COLUMN timestamp_epoch REAL")
+            except Exception:
+                pass
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS broker_fills (
+                order_id TEXT,
+                trade_id TEXT,
+                symbol TEXT,
+                underlying TEXT,
+                side TEXT,
+                qty INTEGER,
+                qty_lots INTEGER,
+                qty_units INTEGER,
+                price REAL,
+                timestamp TEXT,
+                exchange TEXT,
+                instrument_token INTEGER,
+                instrument_type TEXT,
+                expiry TEXT,
+                strike INTEGER,
+                right TEXT,
+                instrument_id TEXT,
+                timestamp_epoch REAL,
+                timestamp_iso TEXT
+            )
             """
-        CREATE TABLE IF NOT EXISTS trail_events (
-            trace_id TEXT,
-            timestamp_epoch REAL,
-            timestamp_iso TEXT,
-            trail_stop REAL,
-            ltp REAL,
-            reason TEXT
-        )
-        """
-        )
-        conn.execute(
+            )
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN timestamp_epoch REAL")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN timestamp_iso TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN underlying TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN qty_lots INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN qty_units INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN instrument_type TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN expiry TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN strike INTEGER")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN right TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE broker_fills ADD COLUMN instrument_id TEXT")
+            except Exception:
+                pass
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS trail_events (
+                trace_id TEXT,
+                timestamp_epoch REAL,
+                timestamp_iso TEXT,
+                trail_stop REAL,
+                ltp REAL,
+                reason TEXT
+            )
             """
-        CREATE TABLE IF NOT EXISTS trade_legs (
-            trace_id TEXT,
-            leg_id INTEGER,
-            qty_units INTEGER,
-            price REAL,
-            timestamp_epoch REAL,
-            timestamp_iso TEXT,
-            reason TEXT
-        )
-        """
-        )
-        conn.execute(
+            )
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS trade_legs (
+                trace_id TEXT,
+                leg_id INTEGER,
+                qty_units INTEGER,
+                price REAL,
+                timestamp_epoch REAL,
+                timestamp_iso TEXT,
+                reason TEXT
+            )
             """
-        CREATE TABLE IF NOT EXISTS daily_stats (
-            date TEXT PRIMARY KEY,
-            trades INTEGER,
-            pnl REAL,
-            win_rate REAL,
-            profit_factor REAL,
-            sharpe REAL,
-            max_drawdown REAL
-        )
-        """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_ts_epoch ON depth_snapshots(timestamp_epoch)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_token_ts ON depth_snapshots(instrument_token, timestamp_epoch)"
-        )
+            )
+            conn.execute(
+                """
+            CREATE TABLE IF NOT EXISTS daily_stats (
+                date TEXT PRIMARY KEY,
+                trades INTEGER,
+                pnl REAL,
+                win_rate REAL,
+                profit_factor REAL,
+                sharpe REAL,
+                max_drawdown REAL
+            )
+            """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_ts_epoch ON depth_snapshots(timestamp_epoch)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_depth_snapshots_token_ts ON depth_snapshots(instrument_token, timestamp_epoch)"
+            )
         _DB_SCHEMA_INIT_PATH = target_db_path
 
 
