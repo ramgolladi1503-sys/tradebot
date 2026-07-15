@@ -5,9 +5,9 @@ APPROVED OBJECTIVE:
 Complete the `trend_pullback_v1` temporal contract by making completed-bar history first-class, removing the fail-open previous-close fallback, and failing closed on missing or inconsistent temporal evidence without changing strategy formulas, thresholds, or the accepted candidate fingerprint.
 
 WHAT WAS ACTUALLY IMPLEMENTED:
-The runtime-context propagation work was already present in the earlier context-contract commit. This final commit only tightens the temporal proof surface: `trend_pullback_v1` now derives its temporal state from the last four completed bars in that history, emits a deterministic `STRATEGY_EVIDENCE_BLOCKED` event when the history is missing or inconsistent, records an explicit trigger-bar expiry timestamp in the setup identity, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
+The runtime-context propagation work was already present in the earlier context-contract commit. This final proof update leaves the temporal contract unchanged while closing the remaining evidence gaps: `trend_pullback_v1` still derives its temporal state from the last four completed bars in that history, emits deterministic `STRATEGY_EVIDENCE_BLOCKED` events when the history is missing or inconsistent, records an explicit trigger-bar expiry timestamp in the setup identity, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
 
-The acceptance fixtures were updated to supply causal completed-bar history everywhere `trend_pullback_v1` is expected to emit, so the accepted primary-context direct and pool fingerprints remain unchanged. A separate temporal-semantics fixture exercises a different four-bar chronology and therefore produces a different raw score, but that is a context-specific consequence of the new temporal contract rather than a formula change.
+The acceptance fixtures were updated to supply causal completed-bar history everywhere `trend_pullback_v1` is expected to emit, so the accepted primary-context direct and pool fingerprints remain unchanged. The added temporal-semantics fixture now proves malformed-history rejection, unrelated-strategy controls, and a future-mutation negative control without changing strategy formulas or thresholds.
 
 INTERMEDIATE CLASSIFICATION:
 PARTIALLY_TEMPORAL
@@ -19,10 +19,11 @@ ARCHITECTURE CHANGE:
 NECESSARY_MINIMAL
 
 REQUIRED FIXES COMPLETED:
-3
+4
 - Tightened `strategies/movement/trend_pullback.py` to require a four-bar causal window, emit deterministic blocked evidence for invalid temporal windows, and record trigger-bar expiry in the setup identity.
-- Added explicit invalidation, non-revival, fresh-identity, and expiry tests in `tests/test_trend_pullback_temporal_semantics.py`.
+- Added malformed-history, unrelated-strategy control, and future-mutation negative-control tests in `tests/test_trend_pullback_temporal_semantics.py`.
 - Corrected the evidence doc so earlier runtime-context changes are attributed to the prior context-contract commit, not the final semantics commit.
+- Added a final certification addendum that records the base-versus-current control outcomes and the malformed-history mapping separately from market invalidation.
 
 REQUIRED FIXES REMAINING:
 0
@@ -34,10 +35,10 @@ EVIDENCE STATUS:
 PROVEN
 
 STARTING HEAD:
-b7338e0b8e056ec23970c4a0293552eae46cbff2
+21452308859dfdb118bb88d0428ab2a3e4059f2a
 
 FINAL HEAD:
-d42ab899efa44d5b573a8f71d8ada1f5c16a05fb
+21452308859dfdb118bb88d0428ab2a3e4059f2a
 
 FILES CHANGED:
 - `strategies/movement/trend_pullback.py`
@@ -176,3 +177,20 @@ No thresholds changed.
 No other movement strategy changed.
 No profitability claim was made.
 No broker, order, execution, or feed behavior was altered.
+
+FINAL CERTIFICATION BASE:
+21452308859dfdb118bb88d0428ab2a3e4059f2a
+
+MOVEMENT-STRATEGY DIFF RESULT:
+`git diff --name-only 04a6d325ab2ccb0d00067d89fed5a15ed082b17f..HEAD -- strategies/movement` returns only `strategies/movement/trend_pullback.py`.
+
+FINAL CERTIFICATION MATRIX:
+
+| acceptance requirement | exact test | actual callable | assertions | result | remaining gap |
+| --- | --- | --- | --- | --- | --- |
+| malformed temporal history | `test_malformed_completed_history_blocks_trend_pullback[mixed-session]`, `test_malformed_completed_history_blocks_trend_pullback[unordered-timestamps]`, `test_malformed_completed_history_blocks_trend_pullback[duplicate-timestamps]`, `test_malformed_completed_history_blocks_trend_pullback[non-1m-interval]`, `test_malformed_completed_history_blocks_trend_pullback[missing-close]`, `test_malformed_completed_history_blocks_trend_pullback[insufficient-history]` | `generate_trend_pullback_candidates` | each malformed history emits one deterministic `STRATEGY_EVIDENCE_BLOCKED` event with `runtime_strategy_id=trend_pullback_v1` and either `missing_fields=completed_bar_history` or `invalid_fields` naming the malformed bar path | proven | none |
+| market anchor invalidation | `test_valid_bullish_history_anchor_break_invalidates_setup` / `test_valid_bearish_history_anchor_break_invalidates_setup` | `generate_trend_pullback_candidates` | valid same-session history breaks the anchor and logs `reason=pullback_breaks_anchor` with no candidate emitted | proven | none |
+| opening_range_retest_v1 control | `test_opening_range_retest_control_unchanged_by_trend_pullback_temporal_repair` | `generate_opening_range_retest_candidates` | direct callable emits one `BUY_CALL` raw candidate with fingerprint `(opening_range_retest_v1, 0.238053, BUY_CALL, RAW_CANDIDATE, opening_range_breakout_retest_hold, price_returns_inside_opening_range)` and matches the base-control run | proven | none |
+| option_pressure_confirmation_v1 control | `test_option_pressure_confirmation_control_unchanged_by_trend_pullback_temporal_repair` | `generate_option_pressure_candidates` | direct callable returns no standalone candidate and matches the base-control run | proven | none |
+| future mutation earlier invariance | `test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint` | `generate_trend_pullback_candidates` | the four-bar checkpoint stays identical across base and mutated histories for candidate count, ID, direction, raw score, and setup identity | proven | none |
+| future mutation later-change negative control | `test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint` | `generate_trend_pullback_candidates` | the six-bar base history still emits one candidate with raw score `0.612584`, while the mutated history emits no candidate | proven | none |

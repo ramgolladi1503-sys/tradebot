@@ -4,8 +4,12 @@ import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
+from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 
 
@@ -267,7 +271,7 @@ def test_complete_new_session_b_setup_can_emit():
 
 
 def test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint():
-    base_history = _bars((22590.0, 22630.0, 22615.0, 22635.0, 22638.0, 22641.0))
+    base_history = _bars((22590.0, 22630.0, 22615.0, 22635.0, 22620.0, 22640.0))
     mutated_history = _bars((22590.0, 22630.0, 22615.0, 22635.0, 22300.0, 22850.0))
 
     base = generate_trend_pullback_candidates(
@@ -285,6 +289,129 @@ def test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint():
     assert base[0].direction == mutated[0].direction
     assert round(base[0].raw_score, 6) == round(mutated[0].raw_score, 6)
     assert base[0].evidence["setup_identity"] == mutated[0].evidence["setup_identity"]
+
+    later_base = generate_trend_pullback_candidates(_context(completed_bar_history=base_history), _regime(up=0.72))
+    later_mutated = generate_trend_pullback_candidates(
+        _context(completed_bar_history=mutated_history),
+        _regime(up=0.72),
+    )
+
+    assert len(later_base) == 1
+    assert later_base[0].strategy_id == "trend_pullback_v1"
+    assert later_base[0].direction == "BUY_CALL"
+    assert round(later_base[0].raw_score, 6) == 0.612584
+    assert later_base[0].status == "RAW_CANDIDATE"
+    assert later_base[0].evidence["setup_identity"]["expiry_timestamp"] == "2026-07-14T09:21:00+05:30"
+    assert later_mutated == ()
+
+
+def test_opening_range_retest_control_unchanged_by_trend_pullback_temporal_repair():
+    candidates = generate_opening_range_retest_candidates(
+        _context(orb_high=22600.0, orb_low=22460.0, pe_premium_change=0.0),
+        _regime(),
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.strategy_id == "opening_range_retest_v1"
+    assert candidate.direction == "BUY_CALL"
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.raw_score == pytest.approx(0.238053, rel=0.0, abs=1e-6)
+    assert candidate.entry_trigger == "opening_range_breakout_retest_hold"
+    assert candidate.invalid_if == "price_returns_inside_opening_range"
+    assert candidate.rank_reason == "opening range breakout retest held"
+
+
+def test_option_pressure_confirmation_control_unchanged_by_trend_pullback_temporal_repair():
+    assert generate_option_pressure_candidates(_context(), _regime()) == ()
+
+
+@pytest.mark.parametrize(
+    ("history_factory", "expected_message"),
+    [
+        pytest.param(
+            lambda: _mutated_history_with_session_mismatch(),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=- invalid_fields=completed_bar_history[0].session_date,completed_bar_history[1].session_date,completed_bar_history[2].session_date,completed_bar_history[3].session_date reason=invalid_completed_history",
+            id="mixed-session",
+        ),
+        pytest.param(
+            lambda: _mutated_history_with_unordered_timestamps(),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=- invalid_fields=completed_bar_history[3].bar_start_timestamp reason=invalid_completed_history",
+            id="unordered-timestamps",
+        ),
+        pytest.param(
+            lambda: _mutated_history_with_duplicate_timestamps(),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=- invalid_fields=completed_bar_history[3].bar_start_timestamp reason=invalid_completed_history",
+            id="duplicate-timestamps",
+        ),
+        pytest.param(
+            lambda: _mutated_history_with_non_1m_interval(),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=- invalid_fields=completed_bar_history[2].timeframe reason=invalid_completed_history",
+            id="non-1m-interval",
+        ),
+        pytest.param(
+            lambda: _mutated_history_with_missing_close(),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=- invalid_fields=completed_bar_history[2].close reason=invalid_completed_history",
+            id="missing-close",
+        ),
+        pytest.param(
+            lambda: _bars((22590.0, 22630.0, 22615.0)),
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=trend_pullback_v1 missing_fields=completed_bar_history invalid_fields=- reason=missing_required_temporal_evidence",
+            id="insufficient-history",
+        ),
+    ],
+)
+def test_malformed_completed_history_blocks_trend_pullback(
+    history_factory,
+    expected_message: str,
+    caplog: pytest.LogCaptureFixture,
+):
+    with caplog.at_level(logging.WARNING):
+        result = generate_trend_pullback_candidates(
+            _context(completed_bar_history=history_factory()),
+            _regime(up=0.72),
+        )
+
+    assert result == ()
+    assert [record.message for record in caplog.records if "event=STRATEGY_EVIDENCE_BLOCKED" in record.message] == [
+        expected_message
+    ]
+
+
+def _mutated_history_with_session_mismatch() -> list[dict[str, object]]:
+    history = _bars((22590.0, 22630.0, 22615.0, 22635.0))
+    for bar in history:
+        bar["session_date"] = "2026-07-14"
+    history[-1]["session_date"] = "2026-07-15"
+    return history
+
+
+def _mutated_history_with_unordered_timestamps() -> list[dict[str, object]]:
+    history = _bars((22590.0, 22630.0, 22615.0, 22635.0))
+    history[2]["bar_start_timestamp"] = "2026-07-14T09:20:00+05:30"
+    history[2]["bar_end_timestamp"] = "2026-07-14T09:21:00+05:30"
+    history[3]["bar_start_timestamp"] = "2026-07-14T09:19:00+05:30"
+    history[3]["bar_end_timestamp"] = "2026-07-14T09:20:00+05:30"
+    return history
+
+
+def _mutated_history_with_duplicate_timestamps() -> list[dict[str, object]]:
+    history = _bars((22590.0, 22630.0, 22615.0, 22635.0))
+    history[3]["bar_start_timestamp"] = history[2]["bar_start_timestamp"]
+    history[3]["bar_end_timestamp"] = history[2]["bar_end_timestamp"]
+    return history
+
+
+def _mutated_history_with_non_1m_interval() -> list[dict[str, object]]:
+    history = _bars((22590.0, 22630.0, 22615.0, 22635.0))
+    history[2]["timeframe"] = "5m"
+    return history
+
+
+def _mutated_history_with_missing_close() -> list[dict[str, object]]:
+    history = _bars((22590.0, 22630.0, 22615.0, 22635.0))
+    history[2]["close"] = None
+    return history
 
 
 def test_new_setup_after_invalidation_can_emit_with_new_identity():
