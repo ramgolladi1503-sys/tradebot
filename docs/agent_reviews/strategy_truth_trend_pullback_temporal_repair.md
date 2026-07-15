@@ -13,7 +13,7 @@ INTERMEDIATE CLASSIFICATION:
 PARTIALLY_TEMPORAL
 
 EXPIRY RESULT:
-The setup expires at the trigger-bar close. The recorded `expiry_timestamp` is the final completed bar in the accepted four-bar window, so a later same-session setup gets a new identity rather than reusing the expired one.
+The setup uses a rolling four-bar expiry contract. The recorded `expiry_timestamp` is the trigger-bar close of the emitted setup, and a stale ready setup disappears once the latest eligible four-bar window no longer contains the same causal prefix. A later same-session setup gets a new identity rather than reusing the expired one.
 
 ARCHITECTURE CHANGE:
 NECESSARY_MINIMAL
@@ -64,6 +64,31 @@ CURRENT FOLLOW-UP COMMIT:
 - `strategies/movement/trend_pullback.py`
 - `tests/test_trend_pullback_temporal_semantics.py`
 - `docs/agent_reviews/strategy_truth_trend_pullback_temporal_repair.md`
+
+ACCEPTANCE MATRIX:
+
+| acceptance requirement | test name | production strategy called | assertions made | result | remaining gap |
+| --- | --- | --- | --- | --- | --- |
+| missing history | `test_missing_completed_history_blocks_trend_pullback` / `test_missing_trend_pullback_history_identifies_completed_bar_history` | `generate_trend_pullback_candidates` | no candidate; deterministic blocked event names `completed_bar_history` | proven | none |
+| invalid history | `test_valid_bullish_history_anchor_break_invalidates_setup` / bearish mirror | `generate_trend_pullback_candidates` | valid same-session history breaks anchor and logs `pullback_breaks_anchor` | proven | none |
+| two-bar false positive | `test_bullish_two_bar_vwap_cross_without_trend_does_not_emit` / bearish mirror | `generate_trend_pullback_candidates` | two-bar window does not emit | proven | none |
+| trend without pullback | `test_ready_untriggered_setup_expires_before_late_trigger` | `generate_trend_pullback_candidates` | stale ready window expires before late trigger-like bar | proven | none |
+| pullback without trigger | `test_ready_untriggered_setup_expires_before_late_trigger` | `generate_trend_pullback_candidates` | no candidate until a complete causal trigger exists | proven | none |
+| valid CALL | `test_valid_bullish_trend_pullback_trigger_emits_once` | `generate_trend_pullback_candidates` | one `BUY_CALL`, raw candidate, expiry timestamp recorded | proven | none |
+| valid PUT | `test_valid_bearish_trend_pullback_trigger_emits_once` | `generate_trend_pullback_candidates` | one `BUY_PUT`, raw candidate, expiry timestamp recorded | proven | none |
+| market invalidation | `test_valid_bullish_history_anchor_break_invalidates_setup` / bearish mirror | `generate_trend_pullback_candidates` | anchor break blocks emission | proven | none |
+| non-revival | `test_invalidated_setup_cannot_revive_on_later_trigger` | `generate_trend_pullback_candidates` | later bar does not resurrect invalidated setup | proven | none |
+| new setup | `test_new_setup_after_invalidation_can_emit_with_new_identity` | `generate_trend_pullback_candidates` | later causal sequence emits with different setup identity | proven | none |
+| session reset | `test_session_b_does_not_inherit_session_a_ready_setup` / `test_complete_new_session_b_setup_can_emit` | `generate_trend_pullback_candidates` | session B does not inherit session A; fresh session B setup emits | proven | none |
+| expiry | `test_ready_untriggered_setup_expires_before_late_trigger` | `generate_trend_pullback_candidates` | rolling-window expiry removes stale ready setup | proven | none |
+| single emission | `test_valid_bullish_trend_pullback_trigger_emits_once` / harness single-emit proof | `generate_trend_pullback_candidates` | one candidate for one causal setup | proven | none |
+| future mutation | `test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint` | `generate_trend_pullback_candidates` | future OHLC changes do not alter earlier checkpoint output | proven | none |
+| physical truncation | `tests/test_trend_pullback_temporal_conformance.py::test_full_source_cutoff_equals_physically_truncated_temporal_prefix` | `generate_trend_pullback_candidates` via temporal harness | truncated prefix equals physical cutoff | proven | none |
+| determinism | `tests/test_trend_pullback_temporal_conformance.py::test_temporal_trace_is_deterministic_for_same_prefix_sequence` | `generate_trend_pullback_candidates` via temporal harness | repeated prefix sequence reproduces identical trace | proven | none |
+| setup identity | `test_valid_bullish_trend_pullback_trigger_emits_once` / session-B emission test | `generate_trend_pullback_candidates` | setup identity includes timestamps and expiry | proven | none |
+| raw ownership | `tests/test_candidate_phase2_ownership.py::test_directional_generators_emit_raw_candidates_with_unset_phase2_fields` | `generate_trend_pullback_candidates` | raw candidate state preserved; phase-2 scores unset | proven | none |
+| downstream ownership | `tests/test_candidate_phase2_semantic_ownership.py::test_enriched_phase2_artifacts_keep_real_confirmation_separate_from_raw_thesis` | `build_candidate_pool_report` | downstream ownership stays separate from raw thesis | proven | none |
+| unrelated strategy controls | `tests/test_strategy_context_truth.py`, `tests/test_strategy_profile_fail_closed.py`, `tests/test_strategy_registry_integrity.py` | `generate_trend_pullback_candidates` in shared regression sets | accepted fingerprint unchanged and no unrelated strategy drift | proven | none |
 
 COMPLETE CONTEXT CONTRACT:
 `completed_bar_history` is authoritative completed-bar evidence for `trend_pullback_v1`.
@@ -125,13 +150,13 @@ BEHAVIOR PRESERVED:
 The accepted candidate identity, direction, score, trigger text, invalidation text, and direct-context fingerprint remain unchanged when the truthful completed history is present.
 
 FOCUSED TEST RESULT:
-`9 passed, 1 warning in 0.68s`
+`13 passed, 1 warning in 0.96s`
 
 FOCUSED SUITE RESULT:
-`139 passed, 1 warning in 5.26s`
+`147 passed, 1 warning in 4.44s`
 
 FULL-SUITE RESULT:
-`1 failed, 5817 passed, 1 deselected, 935 warnings in 373.68s`
+`1 failed, 5825 passed, 1 deselected, 935 warnings in 392.00s`
 
 FIRST FAILURE:
 `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`

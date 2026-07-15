@@ -12,8 +12,12 @@ from strategies.movement.trend_pullback import generate_trend_pullback_candidate
 IST = ZoneInfo("Asia/Kolkata")
 
 
-def _bars(closes: tuple[float, ...]) -> list[dict[str, object]]:
-    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
+def _bars(
+    closes: tuple[float, ...],
+    *,
+    session_date: str = "2026-07-14",
+) -> list[dict[str, object]]:
+    start = datetime.fromisoformat(f"{session_date}T09:15:00+05:30")
     bars: list[dict[str, object]] = []
     for index, close in enumerate(closes):
         bar_start = start + timedelta(minutes=index)
@@ -21,7 +25,7 @@ def _bars(closes: tuple[float, ...]) -> list[dict[str, object]]:
         bars.append(
             {
                 "symbol": "NIFTY",
-                "session_date": "2026-07-14",
+                "session_date": session_date,
                 "timeframe": "1m",
                 "bar_start_timestamp": bar_start.isoformat(),
                 "bar_end_timestamp": bar_end.isoformat(),
@@ -216,6 +220,71 @@ def test_invalidated_setup_cannot_revive_on_later_trigger():
         _regime(up=0.72),
     )
     assert candidates == ()
+
+
+def test_ready_untriggered_setup_expires_before_late_trigger():
+    stale_history = _bars((22590.0, 22630.0, 22615.0, 22580.0, 22638.0))
+    stale = generate_trend_pullback_candidates(_context(completed_bar_history=stale_history), _regime(up=0.72))
+    assert stale == ()
+
+    fresh = generate_trend_pullback_candidates(
+        _context(completed_bar_history=_bars((22590.0, 22630.0, 22615.0, 22635.0))),
+        _regime(up=0.72),
+    )
+    assert len(fresh) == 1
+    assert fresh[0].evidence["setup_identity"]["expiry_timestamp"] == "2026-07-14T09:19:00+05:30"
+
+
+def test_session_b_does_not_inherit_session_a_ready_setup():
+    session_a = generate_trend_pullback_candidates(
+        _context(
+            completed_bar_history=_bars((22590.0, 22630.0, 22615.0), session_date="2026-07-14"),
+        ),
+        _regime(up=0.72),
+    )
+    assert session_a == ()
+
+    session_b = generate_trend_pullback_candidates(
+        _context(
+            completed_bar_history=_bars((22635.0,), session_date="2026-07-15"),
+        ),
+        _regime(up=0.72),
+    )
+    assert session_b == ()
+
+
+def test_complete_new_session_b_setup_can_emit():
+    session_b = generate_trend_pullback_candidates(
+        _context(
+            completed_bar_history=_bars((22590.0, 22630.0, 22615.0, 22635.0), session_date="2026-07-15"),
+        ),
+        _regime(up=0.72),
+    )
+    assert len(session_b) == 1
+    identity = session_b[0].evidence["setup_identity"]
+    assert identity["session_date"] == "2026-07-15"
+    assert identity["expiry_timestamp"] == "2026-07-15T09:19:00+05:30"
+
+
+def test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint():
+    base_history = _bars((22590.0, 22630.0, 22615.0, 22635.0, 22638.0, 22641.0))
+    mutated_history = _bars((22590.0, 22630.0, 22615.0, 22635.0, 22300.0, 22850.0))
+
+    base = generate_trend_pullback_candidates(
+        _context(completed_bar_history=base_history[:4]),
+        _regime(up=0.72),
+    )
+    mutated = generate_trend_pullback_candidates(
+        _context(completed_bar_history=mutated_history[:4]),
+        _regime(up=0.72),
+    )
+
+    assert len(base) == 1
+    assert len(mutated) == 1
+    assert base[0].strategy_id == mutated[0].strategy_id
+    assert base[0].direction == mutated[0].direction
+    assert round(base[0].raw_score, 6) == round(mutated[0].raw_score, 6)
+    assert base[0].evidence["setup_identity"] == mutated[0].evidence["setup_identity"]
 
 
 def test_new_setup_after_invalidation_can_emit_with_new_identity():
