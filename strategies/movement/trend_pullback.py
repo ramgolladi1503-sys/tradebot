@@ -117,6 +117,8 @@ def _call_pullback_holds(
     distance = pct_distance(spot, anchor)
     if distance is None or distance > max_pullback_distance_pct:
         return False
+    if not _call_temporal_reclaim_holds(ctx, vwap):
+        return False
     return ((spot - anchor) / abs(anchor)) >= min_structure_resume_pct
 
 
@@ -136,6 +138,8 @@ def _put_pullback_holds(
         return False
     distance = pct_distance(spot, anchor)
     if distance is None or distance > max_pullback_distance_pct:
+        return False
+    if not _put_temporal_reclaim_holds(ctx, vwap):
         return False
     return ((anchor - spot) / abs(anchor)) >= min_structure_resume_pct
 
@@ -219,6 +223,20 @@ def _resume_distance(
     if direction == "BUY_PUT" and spot <= anchor:
         return (anchor - spot) / abs(anchor)
     return 0.0
+
+
+def _call_temporal_reclaim_holds(ctx: StrategyContext, vwap: float) -> bool:
+    previous_completed_close = safe_float(ctx.previous_completed_close)
+    if previous_completed_close is None:
+        return True
+    return previous_completed_close < vwap
+
+
+def _put_temporal_reclaim_holds(ctx: StrategyContext, vwap: float) -> bool:
+    previous_completed_close = safe_float(ctx.previous_completed_close)
+    if previous_completed_close is None:
+        return True
+    return previous_completed_close > vwap
 
 
 __all__ = ["STRATEGY_ID", "MOVEMENT_TYPE", "generate_trend_pullback_candidates"]

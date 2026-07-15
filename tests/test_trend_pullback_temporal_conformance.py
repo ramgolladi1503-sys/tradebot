@@ -80,6 +80,7 @@ def _context_with_gating(state) -> StrategyContext:
         "fallback_used": False,
         "minutes_since_open": 35,
         "minutes_to_close": 280,
+        "previous_completed_close": state.previous_completed_close,
         "metadata": {
             "history_hash": state.history_hash,
             "prefix_completed_bar_count": state.completed_bar_count,
@@ -122,6 +123,7 @@ def _context_with_full_snapshot(state) -> StrategyContext:
         "fallback_used": False,
         "minutes_since_open": 35,
         "minutes_to_close": 280,
+        "previous_completed_close": state.previous_completed_close,
         "metadata": {
             "history_hash": state.history_hash,
             "prefix_completed_bar_count": state.completed_bar_count,
@@ -214,7 +216,7 @@ def test_trend_pullback_context_readiness_gating():
     assert trace.steps[0].candidate_emitted is False
     assert trace.steps[1].candidate_emitted is False
     assert trace.steps[2].candidate_emitted is True
-    assert trace.steps[3].candidate_emitted is True
+    assert trace.steps[3].candidate_emitted is False
     assert trace.steps[2].candidate_semantic_fingerprint == TemporalCandidateFingerprint(
         strategy_id="trend_pullback_v1",
         direction="BUY_CALL",
@@ -229,7 +231,7 @@ def test_trend_pullback_context_readiness_gating():
     assert trace.steps[2].history_provenance["complete"] is False
 
 
-def test_trend_pullback_temporal_semantics_show_snapshot_false_positive():
+def test_trend_pullback_temporal_semantics_require_previous_close_transition():
     case = TemporalSetupConformanceCase(
         case_id="trend_pullback_temporal",
         strategy_id="trend_pullback_v1",
@@ -237,7 +239,7 @@ def test_trend_pullback_temporal_semantics_show_snapshot_false_positive():
         segment="NSE_FNO",
         session_id="NIFTY:2026-07-14",
         completed_bars=_bars(),
-        context_builder=_context_with_full_snapshot,
+        context_builder=_context_with_gating,
         regime_builder=lambda _state: _trend_regime(),
         evaluator=generate_trend_pullback_candidates,
         oracle=_trend_pullback_oracle,
@@ -250,16 +252,22 @@ def test_trend_pullback_temporal_semantics_show_snapshot_false_positive():
     assert trace.steps[1].setup_state_after == "SETUP_READY"
     assert trace.steps[2].setup_state_after == "TRIGGERED"
     assert trace.steps[3].setup_state_after == "EMITTED"
-    assert trace.steps[0].candidate_emitted is True
-    assert trace.steps[1].candidate_emitted is True
+    assert trace.steps[0].candidate_emitted is False
+    assert trace.steps[1].candidate_emitted is False
     assert trace.steps[2].candidate_emitted is True
-    assert trace.steps[3].candidate_emitted is True
-    assert trace.emission_count == 4
-    assert trace.first_emission_checkpoint == trace.steps[0].checkpoint_timestamp
-    assert trace.repeated_semantic_fingerprint_count == 3
-    assert trace.steps[0].candidate_semantic_fingerprint == trace.steps[1].candidate_semantic_fingerprint
-    assert trace.steps[1].candidate_semantic_fingerprint == trace.steps[2].candidate_semantic_fingerprint
-    assert trace.steps[2].candidate_semantic_fingerprint == trace.steps[3].candidate_semantic_fingerprint
+    assert trace.steps[3].candidate_emitted is False
+    assert trace.emission_count == 1
+    assert trace.first_emission_checkpoint == trace.steps[2].checkpoint_timestamp
+    assert trace.repeated_semantic_fingerprint_count == 0
+    assert trace.steps[2].candidate_semantic_fingerprint == TemporalCandidateFingerprint(
+        strategy_id="trend_pullback_v1",
+        direction="BUY_CALL",
+        status="RAW_CANDIDATE",
+        raw_score=0.648584,
+        entry_trigger="trend_pullback_hold_resume",
+        invalid_if="pullback_breaks_anchor",
+        rank_reason="established trend resumed after a controlled pullback",
+    )
 
-    classification = "SNAPSHOT_FALSE_POSITIVE"
-    assert classification == "SNAPSHOT_FALSE_POSITIVE"
+    classification = "CAUSAL_PREFIX_SINGLE_EMIT"
+    assert classification == "CAUSAL_PREFIX_SINGLE_EMIT"
