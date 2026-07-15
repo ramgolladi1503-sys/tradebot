@@ -37,7 +37,7 @@ STARTING HEAD:
 b7338e0b8e056ec23970c4a0293552eae46cbff2
 
 FINAL HEAD:
-pending commit
+d42ab899efa44d5b573a8f71d8ada1f5c16a05fb
 
 FILES CHANGED:
 - `strategies/movement/trend_pullback.py`
