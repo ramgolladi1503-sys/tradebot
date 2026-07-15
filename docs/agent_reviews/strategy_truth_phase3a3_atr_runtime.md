@@ -168,7 +168,7 @@ REQUIRED FIXES COMPLETED:
 REQUIRED FIXES REMAINING:
 - The repository-wide auth-token baseline still fails in the full suite.
 - An unrelated `test_restart_recovery` assertion failure also remains in the repository-wide suite.
-- The phase commit hash in this document is still pending until the final commit is created.
+- The phase commit hash in this document is `12bebbad3e554e97538e762e0d0e8538cecb0b6b`.
 
 FOCUSED TEST RESULT:
 - `python -m pytest -q tests/test_atr_contract_decision.py tests/test_session_atr_runtime.py tests/test_captured_atr_replay.py tests/test_phase3a3_atr_proofs.py tests/test_completed_bar_history_contract.py tests/test_captured_market_session_replay.py tests/test_strategy_context_truth.py tests/test_strategy_missing_evidence_policy.py tests/test_strategy_missing_evidence_observability.py tests/test_candidate_phase2_ownership.py tests/test_candidate_phase2_semantic_ownership.py`
@@ -198,7 +198,7 @@ NEW ARCHITECTURE:
 
 REMAINING RISKS:
 - The missing-kite-access-token baseline still blocks a completely green full suite.
-- The phase commit hash in this document must be finalized after the commit is created.
+- The phase commit hash in this document is `12bebbad3e554e97538e762e0d0e8538cecb0b6b`.
 
 ORIGINAL DIRTY WORKTREE STATUS:
 - A tracked evidence file was overwritten by an aborted handback and was restored before phase implementation continued.
