@@ -34,20 +34,20 @@ FINAL HEAD:
 pending commit
 
 FILES CHANGED:
-`core/movement_contract.py`
-`core/runtime_snapshot_producer.py`
-`strategies/movement/trend_pullback.py`
-`tests/test_candidate_phase2_ownership.py`
-`tests/test_candidate_phase2_semantic_ownership.py`
-`tests/test_compression_trend_movement_strategies.py`
-`tests/test_strategy_context_truth.py`
-`tests/test_strategy_missing_evidence_observability.py`
-`tests/test_strategy_missing_evidence_policy.py`
-`tests/test_strategy_profile_fail_closed.py`
-`tests/test_strategy_registry_integrity.py`
-`tests/test_strategy_temporal_harness.py`
-`tests/test_trend_pullback_temporal_conformance.py`
-`docs/agent_reviews/strategy_truth_trend_pullback_temporal_repair.md`
+- `core/movement_contract.py`
+- `core/runtime_snapshot_producer.py`
+- `strategies/movement/trend_pullback.py`
+- `tests/test_candidate_phase2_ownership.py`
+- `tests/test_candidate_phase2_semantic_ownership.py`
+- `tests/test_compression_trend_movement_strategies.py`
+- `tests/test_strategy_context_truth.py`
+- `tests/test_strategy_missing_evidence_observability.py`
+- `tests/test_strategy_missing_evidence_policy.py`
+- `tests/test_strategy_profile_fail_closed.py`
+- `tests/test_strategy_registry_integrity.py`
+- `tests/test_strategy_temporal_harness.py`
+- `tests/test_trend_pullback_temporal_conformance.py`
+- `docs/agent_reviews/strategy_truth_trend_pullback_temporal_repair.md`
 
 COMPLETE CONTEXT CONTRACT:
 `completed_bar_history` is authoritative completed-bar evidence for `trend_pullback_v1`.
