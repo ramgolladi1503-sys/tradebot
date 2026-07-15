@@ -193,7 +193,7 @@ def resolve_instruments():
     nifty_spot = [
         i
         for i in instruments
-        if i.get("trading_symbol") == "NIFTY 50"
+        if i.get("trading_symbol") == "NIFTY"
         and i.get("instrument_type") == "INDEX"
     ]
     if not nifty_spot:
@@ -216,7 +216,7 @@ def resolve_instruments():
     bank_spot = [
         i
         for i in instruments
-        if i.get("trading_symbol") == "NIFTY BANK"
+        if i.get("trading_symbol") == "BANKNIFTY"
         and i.get("instrument_type") == "INDEX"
     ]
     if not bank_spot:
@@ -337,76 +337,40 @@ class DataCollector:
         try:
             # We must parse the message payload correctly. Upstox returns
             # dictionary for V3
-            for key, data in message.items():
+            feeds = message.get("feeds", {})
+            for key, data in feeds.items():
                 if isinstance(data, dict):
+                    # 'fullFeed' or 'ff' is Full Feed
+                    ff = data.get("fullFeed", data.get("ff", {}))
+                    market_ff = ff.get("marketFF", ff.get("indexFF", {}))
+                    
+                    if not market_ff:
+                        continue
+                        
+                    ltpc = market_ff.get("ltpc", {})
+                    
                     # parse
                     rec = {
                         "ts": time.time(),
                         "instrument_key": key,
-                        "ltp": (
-                            float(data.get("ltpc", {}).get("ltp", 0.0))
-                            if data.get("ltpc")
-                            else None
-                        ),
-                        "volume": (
-                            int(
-                                data.get("ff", {})
-                                .get("market_ff", {})
-                                .get("vtt", 0)
-                            )
-                            if data.get("ff")
-                            else None
-                        ),
-                        "oi": (
-                            float(
-                                data.get("ff", {})
-                                .get("market_ff", {})
-                                .get("oi", 0.0)
-                            )
-                            if data.get("ff")
-                            else None
-                        ),
+                        "ltp": float(ltpc.get("ltp", 0.0)) if ltpc else None,
+                        "volume": int(market_ff.get("vtt", 0)) if "vtt" in market_ff else None,
+                        "oi": float(market_ff.get("oi", 0.0)) if "oi" in market_ff else None,
                     }
-
-                    # Depth
-                    depth = data.get("depth", {})
-                    buy = depth.get("buy", [])
-                    sell = depth.get("sell", [])
-                    rec["bid_price"] = (
-                        float(buy[0].get("price", 0.0)) if buy else None
-                    )
-                    rec["ask_price"] = (
-                        float(sell[0].get("price", 0.0)) if sell else None
-                    )
-
-                    # Greeks
-                    option_greeks = data.get("option_greeks", {})
-                    rec["delta"] = (
-                        float(option_greeks.get("delta", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["theta"] = (
-                        float(option_greeks.get("theta", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["gamma"] = (
-                        float(option_greeks.get("gamma", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["vega"] = (
-                        float(option_greeks.get("vega", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["iv"] = (
-                        float(option_greeks.get("iv", 0.0))
-                        if option_greeks
-                        else None
-                    )
-
+                    
+                    market_level = market_ff.get("marketLevel", {})
+                    bid_ask = market_level.get("bidAskQuote", [])
+                    
+                    rec["bid_price"] = float(bid_ask[0].get("bidP", 0.0)) if bid_ask else None
+                    rec["ask_price"] = float(bid_ask[0].get("askP", 0.0)) if bid_ask else None
+                    
+                    greeks = market_ff.get("optionGreeks", {})
+                    rec["delta"] = float(greeks.get("delta", 0.0)) if greeks else None
+                    rec["theta"] = float(greeks.get("theta", 0.0)) if greeks else None
+                    rec["gamma"] = float(greeks.get("gamma", 0.0)) if greeks else None
+                    rec["vega"] = float(greeks.get("vega", 0.0)) if greeks else None
+                    rec["iv"] = float(market_ff.get("iv", 0.0)) if "iv" in market_ff else None
+                    
                     self.buffer.append(rec)
         except Exception:
             self.parse_failures += 1
@@ -497,7 +461,10 @@ def main():
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")
 
-    collector.streamer.close()
+    try:
+        collector.streamer.close()
+    except AttributeError:
+        pass
     collector.finalize()
 
 
