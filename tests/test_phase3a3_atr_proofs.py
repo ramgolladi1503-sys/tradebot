@@ -9,6 +9,8 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
 from core.session_atr import calculate_session_atr_state
 from core.session_bar_history import build_session_bar_history_state
+from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.compression_breakout import generate_compression_breakout_candidates
 from strategies.movement.event_volatility_expansion import generate_event_volatility_expansion_candidates
 from tests.test_captured_market_session_replay import (
@@ -266,3 +268,138 @@ def test_atr_warmup_and_ratio_proofs_for_strategy_consumers(caplog: pytest.LogCa
     assert expansion_missing_regime.evidence["atr_short_long_ratio"] is None
     assert expansion_ready_regime.evidence["atr_short_long_ratio"] == pytest.approx(150.0 / 90.0)
     assert expansion_ready_regime.scores["VOLATILITY_EXPANSION"] >= 0.4
+
+
+def test_non_atr_control_and_regime_numerical_impact_remain_stable() -> None:
+    control_without_atr = _base_context(
+        ts_epoch=1721028600.0,
+        minutes_since_open=35,
+        spot_ltp=22608.0,
+        vwap=22550.0,
+        orb_high=22600.0,
+        orb_low=22460.0,
+        atr_short=None,
+        atr_long=None,
+    )
+    control_with_atr = _base_context(
+        ts_epoch=1721028600.0,
+        minutes_since_open=35,
+        spot_ltp=22608.0,
+        vwap=22550.0,
+        orb_high=22600.0,
+        orb_low=22460.0,
+        atr_short=35.0,
+        atr_long=100.0,
+    )
+    regime = _regime(TREND_UP=0.6, VOLATILITY_EXPANSION=0.3)
+
+    opening_without_atr = generate_opening_range_retest_candidates(control_without_atr, regime)
+    opening_with_atr = generate_opening_range_retest_candidates(control_with_atr, regime)
+    option_without_atr = generate_option_pressure_candidates(control_without_atr, regime)
+    option_with_atr = generate_option_pressure_candidates(control_with_atr, regime)
+    expected_opening_fingerprint = (
+        "opening_range_retest_v1",
+        "OPENING_RANGE_RETEST",
+        "NIFTY",
+        "BUY_CALL",
+        "RAW_CANDIDATE",
+        pytest.approx(0.42150442477876104),
+        pytest.approx(0.42150442477876104),
+        pytest.approx(0.42150442477876104),
+        None,
+        None,
+        None,
+        pytest.approx(0.6666666666666666),
+        pytest.approx(0.45),
+        pytest.approx(0.4),
+        pytest.approx(0.0),
+        pytest.approx(0.42150442477876104),
+        "opening_range_breakout_retest_hold",
+        "price_returns_inside_opening_range",
+        "opening range breakout retest held",
+        (),
+    )
+
+    def _opening_fingerprint(candidate):
+        return (
+            candidate.strategy_id,
+            candidate.movement_type,
+            candidate.symbol,
+            candidate.direction,
+            candidate.status,
+            candidate.raw_score,
+            candidate.confidence_score,
+            candidate.price_structure_score,
+            candidate.option_confirmation_score,
+            candidate.liquidity_score,
+            candidate.freshness_score,
+            candidate.volatility_score,
+            candidate.regime_alignment_score,
+            candidate.timing_score,
+            candidate.trap_risk_score,
+            candidate.confluence_score,
+            candidate.entry_trigger,
+            candidate.invalid_if,
+            candidate.rank_reason,
+            candidate.warnings,
+        )
+
+    assert len(opening_without_atr) == len(opening_with_atr) == 1
+    assert [
+        (
+            candidate.strategy_id,
+            round(candidate.raw_score, 6),
+            candidate.direction,
+            candidate.status,
+            candidate.entry_trigger,
+            candidate.invalid_if,
+            candidate.rank_reason,
+            candidate.warnings,
+        )
+        for candidate in opening_without_atr
+    ] == [
+        ("opening_range_retest_v1", 0.421504, "BUY_CALL", "RAW_CANDIDATE", "opening_range_breakout_retest_hold", "price_returns_inside_opening_range", "opening range breakout retest held", ())
+    ]
+    assert [_opening_fingerprint(candidate) for candidate in opening_without_atr] == [expected_opening_fingerprint]
+    assert [_opening_fingerprint(candidate) for candidate in opening_with_atr] == [expected_opening_fingerprint]
+    assert option_without_atr == option_with_atr == ()
+
+    regime_without_atr = classify_movement_regime(
+        _base_context(
+            ts_epoch=1721028000.0,
+            spot_ltp=74010.0,
+            vwap=74000.0,
+            vwap_slope=0.0,
+            day_high=74100.0,
+            day_low=73920.0,
+            range_width_pct=0.12,
+            volume_z=0.45,
+            option_ltp_age_sec=0.6,
+            atr_short=None,
+            atr_long=None,
+        )
+    )
+    regime_with_atr = classify_movement_regime(
+        _base_context(
+            ts_epoch=1721028000.0,
+            spot_ltp=74010.0,
+            vwap=74000.0,
+            vwap_slope=0.0,
+            day_high=74100.0,
+            day_low=73920.0,
+            range_width_pct=0.12,
+            volume_z=0.45,
+            option_ltp_age_sec=0.6,
+            atr_short=35.0,
+            atr_long=100.0,
+        )
+    )
+
+    assert regime_without_atr.primary_regime == "RANGE"
+    assert regime_with_atr.primary_regime == "RANGE"
+    assert regime_without_atr.evidence["atr_short_long_ratio"] is None
+    assert regime_with_atr.evidence["atr_short_long_ratio"] == pytest.approx(0.35)
+    assert regime_without_atr.scores["COMPRESSION"] == pytest.approx(0.4957142857142857)
+    assert regime_with_atr.scores["COMPRESSION"] == pytest.approx(0.6823809523809523)
+    assert regime_without_atr.scores["VOLATILITY_EXPANSION"] == pytest.approx(0.0)
+    assert regime_with_atr.scores["VOLATILITY_EXPANSION"] == pytest.approx(0.0)
