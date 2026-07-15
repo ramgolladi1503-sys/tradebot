@@ -17,6 +17,7 @@ from core.strategy_parameter_profiles import (
 from strategies.movement._utils import (
     block_on_required_fields,
     clamp_score,
+    emit_strategy_evidence_blocked,
     make_candidate,
     pct_distance,
     ratio_score,
@@ -226,17 +227,77 @@ def _resume_distance(
 
 
 def _call_temporal_reclaim_holds(ctx: StrategyContext, vwap: float) -> bool:
-    previous_completed_close = safe_float(ctx.previous_completed_close)
-    if previous_completed_close is None:
-        return True
-    return previous_completed_close < vwap
+    previous_completed_close, latest_completed_close, missing_fields, invalid_fields = (
+        _completed_history_temporal_closes(ctx)
+    )
+    if missing_fields or invalid_fields:
+        emit_strategy_evidence_blocked(
+            STRATEGY_ID,
+            reason="missing_required_temporal_evidence",
+            missing_fields=missing_fields,
+            invalid_fields=invalid_fields,
+        )
+        return False
+    return previous_completed_close < vwap and latest_completed_close >= vwap
 
 
 def _put_temporal_reclaim_holds(ctx: StrategyContext, vwap: float) -> bool:
-    previous_completed_close = safe_float(ctx.previous_completed_close)
+    previous_completed_close, latest_completed_close, missing_fields, invalid_fields = (
+        _completed_history_temporal_closes(ctx)
+    )
+    if missing_fields or invalid_fields:
+        emit_strategy_evidence_blocked(
+            STRATEGY_ID,
+            reason="missing_required_temporal_evidence",
+            missing_fields=missing_fields,
+            invalid_fields=invalid_fields,
+        )
+        return False
+    return previous_completed_close > vwap and latest_completed_close <= vwap
+
+
+def _completed_history_temporal_closes(
+    ctx: StrategyContext,
+) -> tuple[float | None, float | None, tuple[str, ...], tuple[str, ...]]:
+    history = ctx.completed_bar_history
+    if history is None:
+        return None, None, ("completed_bar_history",), ()
+    if not isinstance(history, (list, tuple)):
+        return None, None, (), ("completed_bar_history",)
+    if len(history) < 2:
+        return None, None, ("completed_bar_history",), ()
+
+    previous_completed_close = _history_close(history[-2])
+    latest_completed_close = _history_close(history[-1])
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
     if previous_completed_close is None:
-        return True
-    return previous_completed_close > vwap
+        invalid_fields.append("completed_bar_history[-2].close")
+    if latest_completed_close is None:
+        invalid_fields.append("completed_bar_history[-1].close")
+
+    context_previous_close = safe_float(ctx.previous_completed_close)
+    if ctx.previous_completed_close is not None and context_previous_close is None:
+        invalid_fields.append("previous_completed_close")
+    elif (
+        context_previous_close is not None
+        and previous_completed_close is not None
+        and abs(context_previous_close - previous_completed_close) > 1e-9
+    ):
+        invalid_fields.append("previous_completed_close")
+
+    return (
+        previous_completed_close,
+        latest_completed_close,
+        tuple(sorted(set(missing_fields))),
+        tuple(sorted(set(invalid_fields))),
+    )
+
+
+def _history_close(entry: object) -> float | None:
+    if isinstance(entry, dict):
+        return safe_float(entry.get("close"))
+    return safe_float(getattr(entry, "close", None))
 
 
 __all__ = ["STRATEGY_ID", "MOVEMENT_TYPE", "generate_trend_pullback_candidates"]

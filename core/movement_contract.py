@@ -411,6 +411,7 @@ class StrategyContext:
     previous_completed_close: float | None = None
     nearest_support: float | None = None
     nearest_resistance: float | None = None
+    completed_bar_history: tuple[dict[str, Any], ...] | list[dict[str, Any]] | None = None
     atr: float | None = None
     atr_short: float | None = None
     atr_long: float | None = None
@@ -441,6 +442,11 @@ class StrategyContext:
         object.__setattr__(self, "ts_epoch", _optional_float(self.ts_epoch, field_name="ts_epoch"))
         object.__setattr__(self, "regime_scores", _score_map(self.regime_scores, field_name="regime_scores"))
         object.__setattr__(self, "metadata", _jsonable_map(self.metadata, field_name="metadata"))
+        history = self.completed_bar_history
+        if history is not None and not isinstance(history, (list, tuple)):
+            raise MovementContractError("completed_bar_history_not_sequence")
+        if history is not None:
+            object.__setattr__(self, "completed_bar_history", tuple(history))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

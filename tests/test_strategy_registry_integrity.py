@@ -3,6 +3,8 @@ import json
 import subprocess
 import sys
 from dataclasses import replace
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -36,6 +38,37 @@ EXPECTED_CANDIDATE_POOL_ORDER = (
     "generate_event_volatility_expansion_candidates",
     "generate_late_day_momentum_candidates",
 )
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _trend_pullback_history() -> list[dict[str, object]]:
+    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
+    closes = (22510.0, 22535.0, 22560.0)
+    bars: list[dict[str, object]] = []
+    for index, close in enumerate(closes):
+        bar_start = start + timedelta(minutes=index)
+        bar_end = bar_start + timedelta(minutes=1)
+        bars.append(
+            {
+                "symbol": "NIFTY",
+                "session_date": "2026-07-14",
+                "timeframe": "1m",
+                "bar_start_timestamp": bar_start.isoformat(),
+                "bar_end_timestamp": bar_end.isoformat(),
+                "open": close - 5.0,
+                "high": close + 10.0,
+                "low": close - 10.0,
+                "close": close,
+                "volume": 1000.0 + (index * 100.0),
+                "source": "unit_test",
+                "source_timestamp": bar_end.isoformat(),
+                "receipt_timestamp": (bar_end + timedelta(seconds=1)).isoformat(),
+                "is_complete": True,
+            }
+        )
+    return bars
 
 
 def _regime(primary="TREND_UP", **overrides):
@@ -100,6 +133,7 @@ def _rich_fixed_context():
         quote_source="live_option_tick",
         fallback_used=False,
         minutes_since_open=35,
+        completed_bar_history=_trend_pullback_history(),
     )
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import socket
 import threading
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -11,6 +13,37 @@ from core.movement_regime import MovementRegimeResult
 from core.orchestrator import _snapshot_symbol_payload
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 import strategies.strategy_registry as strategy_registry
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _trend_pullback_history() -> list[dict[str, object]]:
+    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
+    closes = (22510.0, 22535.0, 22560.0)
+    bars: list[dict[str, object]] = []
+    for index, close in enumerate(closes):
+        bar_start = start + timedelta(minutes=index)
+        bar_end = bar_start + timedelta(minutes=1)
+        bars.append(
+            {
+                "symbol": "NIFTY",
+                "session_date": "2026-07-14",
+                "timeframe": "1m",
+                "bar_start_timestamp": bar_start.isoformat(),
+                "bar_end_timestamp": bar_end.isoformat(),
+                "open": close - 5.0,
+                "high": close + 10.0,
+                "low": close - 10.0,
+                "close": close,
+                "volume": 1000.0 + (index * 100.0),
+                "source": "unit_test",
+                "source_timestamp": bar_end.isoformat(),
+                "receipt_timestamp": (bar_end + timedelta(seconds=1)).isoformat(),
+                "is_complete": True,
+            }
+        )
+    return bars
 
 
 def _regime() -> MovementRegimeResult:
@@ -41,6 +74,7 @@ def _full_truth_snapshot() -> dict:
             "strategy_context_truth": {
                 "ts_epoch": 1721028600.0,
                 "vwap": 22540.0,
+                "completed_bar_history": _trend_pullback_history(),
                 "orb_high": 22600.0,
                 "orb_low": 22460.0,
                 "atr": 70.0,
@@ -83,6 +117,7 @@ def _direct_context() -> StrategyContext:
         spot_ltp=22620.0,
         open_price=22500.0,
         vwap=22540.0,
+        completed_bar_history=_trend_pullback_history(),
         day_high=22620.0,
         day_low=22460.0,
         nearest_support=22590.0,
@@ -335,6 +370,8 @@ def test_runtime_adapter_matches_direct_context_when_truth_is_complete():
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
+    assert isinstance(ctx.completed_bar_history, tuple)
+    assert len(ctx.completed_bar_history) == 3
 
 
 def test_runtime_context_construction_opens_no_network_or_threads(monkeypatch: pytest.MonkeyPatch):

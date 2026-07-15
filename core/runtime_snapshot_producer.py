@@ -88,6 +88,7 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
     payload["previous_completed_close"] = truth.get("previous_completed_close", data.get("previous_completed_close"))
     payload["nearest_support"] = truth.get("nearest_support", data.get("nearest_support"))
     payload["nearest_resistance"] = truth.get("nearest_resistance", data.get("nearest_resistance"))
+    payload["completed_bar_history"] = truth.get("completed_bar_history", data.get("completed_bar_history"))
     payload["open_price"] = truth.get("open_price", data.get("open_price"))
     payload["orb_high"] = truth.get("orb_high", data.get("orb_high"))
     payload["orb_low"] = truth.get("orb_low", data.get("orb_low"))
@@ -120,6 +121,7 @@ def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> S
         merged_metadata["strategy_context_missing"] = missing
     completed_bar_history = truth.get("completed_bar_history")
     if isinstance(completed_bar_history, list):
+        payload["completed_bar_history"] = completed_bar_history
         merged_metadata["completed_bar_history"] = completed_bar_history
     completed_bar_history_provenance = provenance.get("completed_bar_history")
     if isinstance(completed_bar_history_provenance, Mapping):

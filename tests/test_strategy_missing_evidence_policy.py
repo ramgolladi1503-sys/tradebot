@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import socket
 import threading
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -21,6 +23,37 @@ from strategies.movement.option_pressure import generate_option_pressure_candida
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
 import strategies.strategy_registry as strategy_registry
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _trend_pullback_history() -> list[dict[str, object]]:
+    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
+    closes = (22510.0, 22535.0, 22560.0)
+    bars: list[dict[str, object]] = []
+    for index, close in enumerate(closes):
+        bar_start = start + timedelta(minutes=index)
+        bar_end = bar_start + timedelta(minutes=1)
+        bars.append(
+            {
+                "symbol": "NIFTY",
+                "session_date": "2026-07-14",
+                "timeframe": "1m",
+                "bar_start_timestamp": bar_start.isoformat(),
+                "bar_end_timestamp": bar_end.isoformat(),
+                "open": close - 5.0,
+                "high": close + 10.0,
+                "low": close - 10.0,
+                "close": close,
+                "volume": 1000.0 + (index * 100.0),
+                "source": "unit_test",
+                "source_timestamp": bar_end.isoformat(),
+                "receipt_timestamp": (bar_end + timedelta(seconds=1)).isoformat(),
+                "is_complete": True,
+            }
+        )
+    return bars
 
 
 def _regime(primary: str = "TREND_UP", **scores: float) -> MovementRegimeResult:
@@ -72,6 +105,7 @@ def _full_context(**overrides: object) -> StrategyContext:
         "fallback_used": False,
         "minutes_since_open": 35,
         "minutes_to_close": 280,
+        "completed_bar_history": _trend_pullback_history(),
         "metadata": {
             "previous_spot_ltp": 22590.0,
             "price_reentered_range": True,
@@ -115,6 +149,12 @@ def _runtime_truth_payload() -> dict:
             "ltp_ts_epoch": 1721028600.0,
             "orb_high": 22600.0,
             "orb_low": 22460.0,
+            "completed_bar_history": _trend_pullback_history(),
+            "completed_bar_history_provenance": {
+                "source_component": "tests.test_strategy_missing_evidence_policy",
+                "source_field": "completed_bar_history",
+                "status": "TRUTHFUL",
+            },
             "orb_state": {"status": "NEUTRAL"},
             "option_chain_health": {"quote_age_sec": 0.4},
             "quote_source": "live_option_tick",
@@ -165,6 +205,18 @@ def test_missing_trend_pullback_anchor_blocks_candidate():
             vwap=22600.0,
             nearest_support=None,
             ce_premium_change=11.0,
+        ),
+        _regime(primary="TREND_UP", TREND_UP=0.72),
+    ) == ()
+
+
+def test_missing_trend_pullback_temporal_history_blocks_candidate():
+    assert generate_trend_pullback_candidates(
+        _full_context(
+            spot_ltp=22615.0,
+            vwap=22600.0,
+            nearest_support=22590.0,
+            completed_bar_history=None,
         ),
         _regime(primary="TREND_UP", TREND_UP=0.72),
     ) == ()

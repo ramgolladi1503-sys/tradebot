@@ -81,6 +81,7 @@ def _context_with_gating(state) -> StrategyContext:
         "minutes_since_open": 35,
         "minutes_to_close": 280,
         "previous_completed_close": state.previous_completed_close,
+        "completed_bar_history": state.history_payload(),
         "metadata": {
             "history_hash": state.history_hash,
             "prefix_completed_bar_count": state.completed_bar_count,
@@ -124,6 +125,7 @@ def _context_with_full_snapshot(state) -> StrategyContext:
         "minutes_since_open": 35,
         "minutes_to_close": 280,
         "previous_completed_close": state.previous_completed_close,
+        "completed_bar_history": state.history_payload(),
         "metadata": {
             "history_hash": state.history_hash,
             "prefix_completed_bar_count": state.completed_bar_count,

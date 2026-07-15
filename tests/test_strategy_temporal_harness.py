@@ -218,6 +218,7 @@ def _trend_pullback_context(state) -> StrategyContext:
         "fallback_used": False,
         "minutes_since_open": 35,
         "minutes_to_close": 280,
+        "completed_bar_history": state.history_payload(),
         "metadata": {
             "history_hash": state.history_hash,
             "prefix_completed_bar_count": state.completed_bar_count,
