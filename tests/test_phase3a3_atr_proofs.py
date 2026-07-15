@@ -399,7 +399,13 @@ def test_non_atr_control_and_regime_numerical_impact_remain_stable() -> None:
     assert regime_with_atr.primary_regime == "RANGE"
     assert regime_without_atr.evidence["atr_short_long_ratio"] is None
     assert regime_with_atr.evidence["atr_short_long_ratio"] == pytest.approx(0.35)
+    assert regime_without_atr.evidence["primary_score"] == pytest.approx(0.8200000000000001)
+    assert regime_with_atr.evidence["primary_score"] == pytest.approx(0.8200000000000001)
+    assert regime_without_atr.scores["RANGE"] == pytest.approx(0.8200000000000001)
+    assert regime_with_atr.scores["RANGE"] == pytest.approx(0.8200000000000001)
     assert regime_without_atr.scores["COMPRESSION"] == pytest.approx(0.4957142857142857)
     assert regime_with_atr.scores["COMPRESSION"] == pytest.approx(0.6823809523809523)
     assert regime_without_atr.scores["VOLATILITY_EXPANSION"] == pytest.approx(0.0)
     assert regime_with_atr.scores["VOLATILITY_EXPANSION"] == pytest.approx(0.0)
+    assert regime_without_atr.warnings == ()
+    assert regime_with_atr.warnings == ()
