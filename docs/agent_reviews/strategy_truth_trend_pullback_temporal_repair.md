@@ -5,18 +5,24 @@ APPROVED OBJECTIVE:
 Complete the `trend_pullback_v1` temporal contract by making completed-bar history first-class, removing the fail-open previous-close fallback, and failing closed on missing or inconsistent temporal evidence without changing strategy formulas, thresholds, or the accepted candidate fingerprint.
 
 WHAT WAS ACTUALLY IMPLEMENTED:
-`StrategyContext` now carries `completed_bar_history` as an explicit field, and the runtime adapter propagates it from the existing truth payload into the context. `trend_pullback_v1` now derives its temporal state from the last four completed bars in that history, emits a deterministic `STRATEGY_EVIDENCE_BLOCKED` event when the history is missing or inconsistent, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
+The runtime-context propagation work was already present in the earlier context-contract commit. This final commit only tightens the temporal proof surface: `trend_pullback_v1` now derives its temporal state from the last four completed bars in that history, emits a deterministic `STRATEGY_EVIDENCE_BLOCKED` event when the history is missing or inconsistent, records an explicit trigger-bar expiry timestamp in the setup identity, and no longer treats a missing `previous_completed_close` as an acceptable fallback.
 
 The acceptance fixtures were updated to supply causal completed-bar history everywhere `trend_pullback_v1` is expected to emit, so the accepted primary-context direct and pool fingerprints remain unchanged. A separate temporal-semantics fixture exercises a different four-bar chronology and therefore produces a different raw score, but that is a context-specific consequence of the new temporal contract rather than a formula change.
+
+INTERMEDIATE CLASSIFICATION:
+PARTIALLY_TEMPORAL
+
+EXPIRY RESULT:
+The setup expires at the trigger-bar close. The recorded `expiry_timestamp` is the final completed bar in the accepted four-bar window, so a later same-session setup gets a new identity rather than reusing the expired one.
 
 ARCHITECTURE CHANGE:
 NECESSARY_MINIMAL
 
 REQUIRED FIXES COMPLETED:
 3
-- Added `completed_bar_history` to `StrategyContext` and propagated it through `core.runtime_snapshot_producer._strategy_context_from_market_symbol`.
-- Reworked `strategies/movement/trend_pullback.py` to derive temporal state from completed history, fail closed on missing temporal evidence, and emit deterministic blocked evidence.
-- Updated trend_pullback fixtures and contract tests so the accepted fingerprint still emits with truthful completed history.
+- Tightened `strategies/movement/trend_pullback.py` to require a four-bar causal window, emit deterministic blocked evidence for invalid temporal windows, and record trigger-bar expiry in the setup identity.
+- Added explicit invalidation, non-revival, fresh-identity, and expiry tests in `tests/test_trend_pullback_temporal_semantics.py`.
+- Corrected the evidence doc so earlier runtime-context changes are attributed to the prior context-contract commit, not the final semantics commit.
 
 REQUIRED FIXES REMAINING:
 0
@@ -28,15 +34,19 @@ EVIDENCE STATUS:
 PROVEN
 
 STARTING HEAD:
-9614c4ab08a20573d565073999f4d40aefcaff33
+b7338e0b8e056ec23970c4a0293552eae46cbff2
 
 FINAL HEAD:
 pending commit
 
 FILES CHANGED:
+- `strategies/movement/trend_pullback.py`
+- `tests/test_trend_pullback_temporal_semantics.py`
+- `docs/agent_reviews/strategy_truth_trend_pullback_temporal_repair.md`
+
+PRIOR CONTEXT-CONTRACT FILES:
 - `core/movement_contract.py`
 - `core/runtime_snapshot_producer.py`
-- `strategies/movement/trend_pullback.py`
 - `tests/test_candidate_phase2_ownership.py`
 - `tests/test_candidate_phase2_semantic_ownership.py`
 - `tests/test_compression_trend_movement_strategies.py`
@@ -46,7 +56,13 @@ FILES CHANGED:
 - `tests/test_strategy_profile_fail_closed.py`
 - `tests/test_strategy_registry_integrity.py`
 - `tests/test_strategy_temporal_harness.py`
+
+ALREADY-VERIFIED FOUR-BAR SEMANTICS FILE:
 - `tests/test_trend_pullback_temporal_conformance.py`
+
+CURRENT FOLLOW-UP COMMIT:
+- `strategies/movement/trend_pullback.py`
+- `tests/test_trend_pullback_temporal_semantics.py`
 - `docs/agent_reviews/strategy_truth_trend_pullback_temporal_repair.md`
 
 COMPLETE CONTEXT CONTRACT:
@@ -89,6 +105,13 @@ EMISSION FINGERPRINT:
 `pullback_breaks_anchor`
 `established trend resumed after a controlled pullback`
 
+SETUP IDENTITIES:
+Accepted primary-context setup identity:
+`contract_version=trend_pullback_temporal_v1, symbol=NIFTY, session_date=2026-07-14, direction=BUY_CALL, trend_establishment_timestamp=2026-07-14T09:17:00+05:30, pullback_ready_timestamp=2026-07-14T09:18:00+05:30, expiry_timestamp=2026-07-14T09:19:00+05:30`
+
+Fresh post-invalidation setup identity:
+`contract_version=trend_pullback_temporal_v1, symbol=NIFTY, session_date=2026-07-14, direction=BUY_CALL, trend_establishment_timestamp=2026-07-14T09:22:00+05:30, pullback_ready_timestamp=2026-07-14T09:23:00+05:30, expiry_timestamp=2026-07-14T09:24:00+05:30`
+
 RAW OWNERSHIP RESULT:
 The generator still emits `RAW_CANDIDATE` at the movement layer.
 
@@ -102,6 +125,9 @@ BEHAVIOR PRESERVED:
 The accepted candidate identity, direction, score, trigger text, invalidation text, and direct-context fingerprint remain unchanged when the truthful completed history is present.
 
 FOCUSED TEST RESULT:
+`9 passed, 1 warning in 0.68s`
+
+FOCUSED SUITE RESULT:
 `139 passed, 1 warning in 5.26s`
 
 FULL-SUITE RESULT:

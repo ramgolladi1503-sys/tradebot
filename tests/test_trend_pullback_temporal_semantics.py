@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -130,12 +131,26 @@ def test_valid_bullish_trend_pullback_trigger_emits_once():
     assert candidate.raw_score > 0.6
     assert candidate.evidence["temporal_contract_version"] == "trend_pullback_temporal_v1"
     assert candidate.evidence["setup_identity"]["direction"] == "BUY_CALL"
+    assert candidate.evidence["setup_identity"]["expiry_timestamp"] == "2026-07-14T09:19:00+05:30"
 
     later_candles = generate_trend_pullback_candidates(
         _context(completed_bar_history=_bars((22590.0, 22630.0, 22615.0, 22635.0, 22638.0))),
         _regime(up=0.72),
     )
     assert later_candles == ()
+
+
+def test_valid_bullish_history_anchor_break_invalidates_setup(caplog):
+    caplog.set_level(logging.WARNING)
+    candidates = generate_trend_pullback_candidates(
+        _context(
+            completed_bar_history=_bars((22570.0, 22590.0, 22630.0, 22580.0, 22625.0)),
+        ),
+        _regime(up=0.72),
+    )
+    assert candidates == ()
+    assert any("runtime_strategy_id=trend_pullback_v1" in record.message for record in caplog.records)
+    assert any("reason=pullback_breaks_anchor" in record.message for record in caplog.records)
 
 
 def test_valid_bearish_trend_pullback_trigger_emits_once():
@@ -157,6 +172,7 @@ def test_valid_bearish_trend_pullback_trigger_emits_once():
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.evidence["temporal_contract_version"] == "trend_pullback_temporal_v1"
+    assert candidate.evidence["setup_identity"]["expiry_timestamp"] == "2026-07-14T09:19:00+05:30"
 
     later_candles = generate_trend_pullback_candidates(
         _context(
@@ -171,3 +187,49 @@ def test_valid_bearish_trend_pullback_trigger_emits_once():
         _regime(down=0.72),
     )
     assert later_candles == ()
+
+
+def test_valid_bearish_history_anchor_break_invalidates_setup(caplog):
+    caplog.set_level(logging.WARNING)
+    candidates = generate_trend_pullback_candidates(
+        _context(
+            spot_ltp=22520.0,
+            vwap=22540.0,
+            nearest_support=22510.0,
+            nearest_resistance=22580.0,
+            pe_premium_change=13.0,
+            ce_premium_change=0.0,
+            completed_bar_history=_bars((22650.0, 22630.0, 22530.0, 22610.0, 22570.0)),
+        ),
+        _regime(down=0.72),
+    )
+    assert candidates == ()
+    assert any("runtime_strategy_id=trend_pullback_v1" in record.message for record in caplog.records)
+    assert any("reason=pullback_breaks_anchor" in record.message for record in caplog.records)
+
+
+def test_invalidated_setup_cannot_revive_on_later_trigger():
+    candidates = generate_trend_pullback_candidates(
+        _context(
+            completed_bar_history=_bars((22570.0, 22590.0, 22630.0, 22580.0, 22625.0, 22628.0)),
+        ),
+        _regime(up=0.72),
+    )
+    assert candidates == ()
+
+
+def test_new_setup_after_invalidation_can_emit_with_new_identity():
+    initial = generate_trend_pullback_candidates(_context(), _regime(up=0.72))
+    assert len(initial) == 1
+    initial_identity = initial[0].evidence["setup_identity"]
+
+    fresh_history = _bars((22570.0, 22590.0, 22630.0, 22580.0, 22625.0, 22595.0, 22632.0, 22608.0, 22636.0))
+    later = generate_trend_pullback_candidates(
+        _context(completed_bar_history=fresh_history),
+        _regime(up=0.72),
+    )
+    assert len(later) == 1
+    later_identity = later[0].evidence["setup_identity"]
+    assert later_identity["direction"] == "BUY_CALL"
+    assert later_identity["expiry_timestamp"] == "2026-07-14T09:24:00+05:30"
+    assert later_identity != initial_identity

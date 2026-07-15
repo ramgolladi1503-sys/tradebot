@@ -343,6 +343,7 @@ def _call_pullback_result(
         "direction": "BUY_CALL",
         "trend_establishment_timestamp": second.bar_end_timestamp,
         "pullback_ready_timestamp": pullback.bar_end_timestamp,
+        "expiry_timestamp": trigger.bar_end_timestamp,
     }
     return _TemporalContractResult(valid=True, setup_identity=setup_identity)
 
@@ -427,6 +428,7 @@ def _put_pullback_result(
         "direction": "BUY_PUT",
         "trend_establishment_timestamp": second.bar_end_timestamp,
         "pullback_ready_timestamp": pullback.bar_end_timestamp,
+        "expiry_timestamp": trigger.bar_end_timestamp,
     }
     return _TemporalContractResult(valid=True, setup_identity=setup_identity)
 
