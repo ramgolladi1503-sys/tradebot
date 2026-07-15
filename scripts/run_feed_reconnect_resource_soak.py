@@ -86,24 +86,29 @@ def _resource_snapshot() -> dict:
         "sqlite_fd_count": len(sqlite_fds),
         "live_websocket_generations": live_tickers,
         "retired_websocket_generations_reachable": retired_reachable,
-        "reactor_count": 0, # Twisted reactor unused in dummy
-        "feed_worker_count": 0, # Async workers disabled in dummy
+        "reactor_count": None, # Distinguish unmeasured with None
+        "feed_worker_count": None, # Distinguish unmeasured with None
         "queue_depth": getattr(ws, "_feed_queue_depth", lambda: 0)(),
         "queue_high_water": getattr(ws, "_feed_queue_high_water", lambda: 0)(),
         "required_token_count": len(ws._LAST_TOKENS or []),
-        "requested_token_count": len(ws._LAST_TOKENS or []),
-        "active_token_count": len(ws._LAST_TOKENS or []),
+        "requested_token_count": len(getattr(ws._KITE_TICKER, "tokens", [])) if ws._KITE_TICKER else 0,
+        "active_token_count": len(getattr(ws._KITE_TICKER, "tokens", [])) if ws._KITE_TICKER else 0,
         "missing_token_count": 0,
         "unexpected_token_count": 0,
         "duplicate_subscription_count": 0,
-        "fresh_token_count": len(ws._LAST_TOKENS or []),
+        "fresh_token_count": len(getattr(ws._KITE_TICKER, "tokens", [])) if ws._KITE_TICKER else 0,
         "stale_token_count": 0,
         "active_reconnect_sequences": 1 if getattr(ws, "_RECOVERY_IN_PROGRESS", False) else 0,
         "reconnect_lock_held": getattr(ws, "_DEPTH_WS_LOCK_ACQUIRED", False),
     }
 
 class _DummyTicker:
+    MODE_FULL = "full"
+    MODE_QUOTE = "quote"
+    _GLOBAL_GEN_ID = 0
     def __init__(self, api_key, access_token, debug=True, **kwargs):
+        _DummyTicker._GLOBAL_GEN_ID += 1
+        self.generation_id = _DummyTicker._GLOBAL_GEN_ID
         self.api_key = api_key
         self.access_token = access_token
         self.debug = debug
@@ -119,7 +124,14 @@ class _DummyTicker:
         self.on_close = None
         self.on_ticks = None
         self.stop_retry_count = 0
-        self.factory = None
+        
+        class DummyFactory:
+            def __init__(self, ticker):
+                self.ticker = ticker
+            def is_connected(self):
+                return self.ticker.connected
+        self.factory = DummyFactory(self)
+        self.tokens = []
         WEAK_TICKERS.append(weakref.ref(self))
         
     def subscribe(self, tokens):
@@ -132,7 +144,7 @@ class _DummyTicker:
     def connect(self, threaded=True):
         self.connected = True
         if self.on_connect:
-            self.on_connect(self)
+            self.on_connect(self, {"status": "ok"})
             
     def close(self):
         self.connected = False
@@ -158,6 +170,8 @@ class _DummyRestClient:
         self.token = token
     def profile(self):
         return {"user_id": "ABCD1234"}
+    def instruments(self, exchange=None):
+        return [{"instrument_token": 1, "tradingsymbol": "A"}, {"instrument_token": 2, "tradingsymbol": "B"}, {"instrument_token": 3, "tradingsymbol": "C"}]
 
 def patch_kite(monkeypatch=None):
     class PatchManager:
@@ -185,6 +199,7 @@ def patch_kite(monkeypatch=None):
     pm.setattr(ws, "KiteTicker", _DummyTicker, raising=False)
     pm.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=False)
     pm.setattr(ws, "is_market_open_ist", lambda: True, raising=False)
+    pm.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=False)
     
     import core.auth as auth_module
     import core.auth_manager as auth_manager
@@ -192,9 +207,18 @@ def patch_kite(monkeypatch=None):
     pm.setattr(auth_manager, "resolve_access_token", lambda **kwargs: "TOKEN123", raising=False)
     pm.setattr(auth_module, "get_kite_credentials", lambda **kwargs: ("api_key_1234", "TOKEN123"), raising=False)
     
-    pm.setattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", True, raising=False)
-    pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_max_recoverable_attempts_per_session", 1000, raising=False)
+    pm.setattr(cfg, "DEPTH_WS_ALLOW_SOFT_RECONNECTS", False, raising=False)
+    pm.setattr(cfg, "DEPTH_WS_MAX_RECOVERIES_PER_WINDOW", 10000, raising=False)
+    pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_max_recoverable_attempts_per_session", 10000, raising=False)
+    pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_max_recoveries_per_window", 10000, raising=False)
+    pm.setattr(cfg, "DEPTH_WS_WS1006_RECOVERABLE_MAX_ATTEMPTS_PER_SESSION", 10000, raising=False)
     pm.setattr(ws._FEED_RECOVERY_COORDINATOR, "_recoverable_retry_cooldown_sec", 0.0, raising=False)
+    
+    # Disable circuit breakers for 100-cycle synthetic soak
+    pm.setattr(ws, "feed_breaker_tripped", lambda: False, raising=False)
+    pm.setattr(ws.feed_restart_guard, "allow_restart", lambda **kw: True, raising=False)
+    pm.setattr(cfg, "FEED_MAX_FULL_RESTARTS_PER_HOUR", 10000, raising=False)
+    pm.setattr(cfg, "FEED_RESTART_STORM_TRIP", 10000, raising=False)
     
     return pm
 
@@ -217,8 +241,15 @@ class ResourceSoakRunner:
             "reconnect_owner_acquisition_count": 0,
             "reconnect_attempt_count": 0,
             "successful_reconnect_count": 0,
+            "verified_successful_reconnect_count": 0,
             "terminal_failure_count": 0,
             "active_reconnect_sequence_high_water": 0,
+            "websocket_generations_created": 0,
+            "initial_generation_id": None,
+            "final_generation_id": None,
+            "generation_transition_count": 0,
+            "same_generation_reused_count": 0,
+            "generation_creation_failures": 0,
             "hard_failures": 0,
             "first_mismatch": None,
             "verdict": "UNKNOWN",
@@ -256,9 +287,14 @@ class ResourceSoakRunner:
             self.metrics["active_reconnect_sequence_high_water"] = seq
 
     def _run_reconnect_cycle(self, i):
-        ticker = ws._KITE_TICKER
-        if not ticker:
+        old_ticker = ws._KITE_TICKER
+        if not old_ticker:
             return
+            
+        old_generation_id = getattr(old_ticker, "generation_id", id(old_ticker))
+        
+        if self.metrics["initial_generation_id"] is None:
+            self.metrics["initial_generation_id"] = old_generation_id
             
         if self.profile == "owner_failure" and self.fail_every > 0 and i > 0 and i % self.fail_every == 0:
             ws._log_ws("SOAK_SIMULATE_OWNER_FAILURE", {"cycle": i})
@@ -276,9 +312,42 @@ class ResourceSoakRunner:
             self.metrics["reconnect_request_count"] += 1
             self.metrics["reconnect_owner_acquisition_count"] += 1
             self.metrics["reconnect_attempt_count"] += 1
-            ticker.simulate_error(1006, "peer dropped")
+            old_ticker.simulate_error(1006, "peer dropped")
             time.sleep(0.01) 
             self.metrics["successful_reconnect_count"] += 1
+            
+        new_ticker = ws._KITE_TICKER
+        
+        # Wait for async reconnect to finish
+        for _ in range(20):
+            new_ticker = ws._KITE_TICKER
+            if new_ticker is not None and getattr(new_ticker, "generation_id", id(new_ticker)) != old_generation_id and not getattr(ws, "_RECOVERY_IN_PROGRESS", False):
+                break
+            time.sleep(0.1)
+
+        if new_ticker is None:
+            self.metrics["generation_creation_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+        else:
+            new_generation_id = getattr(new_ticker, "generation_id", id(new_ticker))
+            self.metrics["final_generation_id"] = new_generation_id
+            if new_generation_id == old_generation_id:
+                self.metrics["same_generation_reused_count"] += 1
+            else:
+                self.metrics["generation_transition_count"] += 1
+                self.metrics["websocket_generations_created"] += 1
+                
+            # Verify strict success criteria
+            if (new_generation_id != old_generation_id and
+                new_ticker.connected and
+                not getattr(ws, "_RECOVERY_IN_PROGRESS", False) and
+                not getattr(ws, "_DEPTH_WS_LOCK_ACQUIRED", False) and
+                len(getattr(new_ticker, "tokens", [])) == len(ws._LAST_TOKENS or [])):
+                self.metrics["verified_successful_reconnect_count"] += 1
+            else:
+                self.metrics["hard_failures"] += 1
+                if not self.metrics["first_mismatch"]:
+                    self.metrics["first_mismatch"] = "strict_success_failed"
             
         self._update_metrics()
 
@@ -346,24 +415,63 @@ class ResourceSoakRunner:
             gc.collect()
             time.sleep(0.1)
             
-            # DEBUG: Print referrers of the remaining live tickers if any
+            # DEBUG: Print bounded diagnostic information
             for wt in WEAK_TICKERS:
                 t = wt()
                 if t is not None:
-                    import sys
-                    print(f"DEBUG: Found live ticker {t}, referrers:")
+                    import gc
+                    gen_id = getattr(t, 'generation_id', 'unknown')
+                    obj_type = type(t).__name__
+                    ref_types = set()
+                    by_callback = False
+                    by_factory = False
+                    by_module = False
+                    by_loop_var = False
+                    
                     for ref in gc.get_referrers(t):
-                        print(f"  -> {type(ref)}")
-                        if isinstance(ref, dict):
-                            print(f"       dict keys: {list(ref.keys())}")
-                        elif type(ref).__name__ == "cell":
-                            print(f"       cell contents: {ref.cell_contents}")
+                        r_type = type(ref).__name__
+                        ref_types.add(r_type)
+                        
+                        if r_type in ('cell', 'function', 'method', 'instancemethod'):
+                            by_callback = True
+                        elif r_type == 'DummyFactory':
+                            by_factory = True
+                        elif r_type == 'dict':
+                            if ref.get('__name__') == 'core.kite_depth_ws':
+                                by_module = True
+                            if ref.get('__name__') == 'core.kite_client':
+                                by_module = True
+                        elif r_type == 'frame':
+                            if 'wt' in ref.f_locals and 't' in ref.f_locals:
+                                by_loop_var = True
+                                
+                    ref_types_str = ', '.join(sorted(ref_types))
+                    print(f"DEBUG: generation ID: {gen_id}")
+                    print(f"DEBUG: object type: {obj_type}")
+                    print(f"DEBUG: referrer type names: {ref_types_str}")
+                    print(f"DEBUG: whether referenced by callback: {by_callback}")
+                    print(f"DEBUG: whether referenced by factory: {by_factory}")
+                    print(f"DEBUG: whether referenced by websocket module global: {by_module}")
+                    print(f"DEBUG: whether referenced by local loop var: {by_loop_var}")
             
             final = _resource_snapshot()
             self.timeline.append({"stage": "final", "snapshot": final})
             
             self._generate_verdict()
                     
+            # calculate high waters and rss_slope
+            high_water = {}
+            if self.timeline:
+                for k in ["fd_count", "sqlite_fd_count", "rss_bytes", "python_thread_count", "queue_depth"]:
+                    high_water[k] = max(item["snapshot"].get(k, 0) for item in self.timeline if "snapshot" in item)
+            
+            rss_values = [item["snapshot"]["rss_bytes"] for item in self.timeline[2:-1] if "snapshot" in item]
+            rss_slope = 0.0
+            if len(rss_values) > 1:
+                rss_slope = (rss_values[-1] - rss_values[0]) / max(1, len(rss_values))
+                
+            final["rss_slope_bytes_per_sample"] = rss_slope
+
             res = {
                 "configuration": {
                     "profile": self.profile,
@@ -373,7 +481,7 @@ class ResourceSoakRunner:
                 "seed": self.seed_val,
                 "process_start_baseline": self.timeline[0]["snapshot"],
                 "post_warmup_baseline": self.timeline[1]["snapshot"],
-                "high_water": {}, 
+                "high_water": high_water, 
                 "final": final,
                 "verdict": self.metrics["verdict"],
                 "hard_failures": self.metrics["hard_failures"],
@@ -392,6 +500,10 @@ class ResourceSoakRunner:
                 except Exception:
                     pass
             self.dummy_leak_fds.clear()
+            try:
+                ws.stop_depth_ws(reason="shutdown")
+            except Exception:
+                pass
 
 def main():
     parser = argparse.ArgumentParser()
@@ -428,6 +540,8 @@ def main():
     elif args.profile in ("negative_control", "negative_fd_leak") and result["verdict"] != "RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS":
         print("NEGATIVE CONTROL DETECTOR FAILED!")
         sys.exit(1)
+    
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
