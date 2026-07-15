@@ -122,15 +122,16 @@ def test_every_current_atr_short_reader_and_writer_is_accounted_for() -> None:
             "tests/test_strategy_context_truth.py",
             "tests/test_session_atr_runtime.py",
             "tests/test_strategy_missing_evidence_observability.py",
-            "tests/test_strategy_missing_evidence_policy.py",
-            "tests/test_strategy_profile_fail_closed.py",
-            "tests/test_strategy_registry_integrity.py",
-            "tests/test_candidate_phase2_ownership.py",
-            "tests/test_candidate_phase2_semantic_ownership.py",
-            "tests/test_vwap_trap_movement_strategies.py",
-            "tests/test_exhaustion_mean_reversion_strategies.py",
-        }
-    )
+                "tests/test_strategy_missing_evidence_policy.py",
+                "tests/test_strategy_profile_fail_closed.py",
+                "tests/test_strategy_registry_integrity.py",
+                "tests/test_candidate_phase2_ownership.py",
+                "tests/test_candidate_phase2_semantic_ownership.py",
+                "tests/test_vwap_trap_movement_strategies.py",
+                "tests/test_exhaustion_mean_reversion_strategies.py",
+                "tests/test_phase3a3_atr_proofs.py",
+            }
+        )
     assert actual == expected
 
 
@@ -150,15 +151,16 @@ def test_every_current_atr_long_reader_and_writer_is_accounted_for() -> None:
             "tests/test_strategy_context_truth.py",
             "tests/test_session_atr_runtime.py",
             "tests/test_strategy_missing_evidence_observability.py",
-            "tests/test_strategy_missing_evidence_policy.py",
-            "tests/test_strategy_profile_fail_closed.py",
-            "tests/test_strategy_registry_integrity.py",
-            "tests/test_candidate_phase2_ownership.py",
-            "tests/test_candidate_phase2_semantic_ownership.py",
-            "tests/test_vwap_trap_movement_strategies.py",
-            "tests/test_exhaustion_mean_reversion_strategies.py",
-        }
-    )
+                "tests/test_strategy_missing_evidence_policy.py",
+                "tests/test_strategy_profile_fail_closed.py",
+                "tests/test_strategy_registry_integrity.py",
+                "tests/test_candidate_phase2_ownership.py",
+                "tests/test_candidate_phase2_semantic_ownership.py",
+                "tests/test_vwap_trap_movement_strategies.py",
+                "tests/test_exhaustion_mean_reversion_strategies.py",
+                "tests/test_phase3a3_atr_proofs.py",
+            }
+        )
     assert actual == expected
 
 
