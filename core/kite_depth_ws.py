@@ -5950,12 +5950,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
             subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         )
+        replayed_tokens = sorted(set(int(t) for t in getattr(ws, "tokens", []) if int(t) > 0))
+        exact_subscription_replay = replayed_tokens == desired
+        option_verification_required = any(
+            int(count or 0) > 0 for count in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).values()
+        )
         _log_ws(
             "FEED_ON_CONNECT_SUBSCRIBE",
             {
                 "reason": reason,
                 "tokens": len(desired),
                 "final_token_count_before_subscribe": len(desired),
+                "exact_subscription_replay": bool(exact_subscription_replay),
+                "option_verification_required": bool(option_verification_required),
                 "subscription_requested_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
@@ -5963,6 +5970,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 **selection_payload,
             },
         )
+        if exact_subscription_replay and not option_verification_required:
+            _FEED_RECOVERY_COORDINATOR.clear_recovery(
+                source="subscription_replay_exact",
+                reason=reason,
+            )
+            _sync_ws1006_recovery_state_from_coordinator()
+        return exact_subscription_replay
         _log_ws(
             "FEED_RESUBSCRIBE",
             {
@@ -6009,12 +6023,6 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
-
-            _FEED_RECOVERY_COORDINATOR.clear_recovery(
-                source="on_connect",
-                reason="subscription_replay_complete",
-            )
-            _sync_ws1006_recovery_state_from_coordinator()
 
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""

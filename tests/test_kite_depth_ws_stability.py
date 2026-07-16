@@ -185,6 +185,254 @@ def test_start_depth_ws_uses_resolved_token(monkeypatch):
     assert ticker.connected is True
 
 
+def test_on_connect_does_not_clear_recovery_before_option_verification(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 2}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    assert all(call["source"] != "on_connect" for call in clear_calls)
+    assert all(call["source"] != "subscription_replay_exact" for call in clear_calls)
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
+
+
+def test_on_connect_clears_recovery_only_after_exact_subscription_replay_without_option_verification(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    assert any(call["source"] == "subscription_replay_exact" for call in clear_calls)
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
+
+
+def test_on_connect_zero_count_option_map_does_not_block_recovery_clear(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 0, "BANKNIFTY": 0}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 0, "BANKNIFTY": 0}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    assert any(call["source"] == "subscription_replay_exact" for call in clear_calls)
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
+
+
+def test_on_connect_replay_exception_keeps_recovery_uncleared_and_marks_subscribe_failed(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+
+    def _boom(tokens):
+        raise RuntimeError("subscribe exploded")
+
+    ticker.subscribe = _boom
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    assert clear_calls == []
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert ws._LAST_RUNTIME_ERROR == "subscribe exploded"
+
+
+def test_on_connect_incomplete_subscription_replay_keeps_recovery_uncleared(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    class _PartialTicker(_DummyTicker):
+        def subscribe(self, tokens):
+            self.tokens = list(tokens[:-1])
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _PartialTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101, 202], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    assert clear_calls == []
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
+    assert sorted(getattr(ticker, "tokens", [])) == [101]
+
+
+def test_option_verification_success_clears_recovery_exactly_once(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "_option_feed_verification_min_ticks_per_symbol", lambda: 1, raising=False)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+    assert clear_calls == []
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
+
+    start_epoch = float(ws._OPTION_FEED_VERIFY_START_EPOCH)
+    monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"BANKNIFTY": start_epoch + 1.0}, raising=False)
+    ws._tick_option_feed_verification(now_epoch=start_epoch + 1.0)
+    ws._tick_option_feed_verification(now_epoch=start_epoch + 2.0)
+
+    assert [call["source"] for call in clear_calls] == ["option_feed_verification_ok"]
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is False
+    assert ws._OPTION_FEED_VERIFY_STATE == "OK"
+
+
+def test_option_verification_failure_keeps_recovery_fail_closed(monkeypatch):
+    _patch_common(monkeypatch)
+    captured = {}
+    clear_calls = []
+
+    def _factory(api_key, access_token, debug=True, **kwargs):
+        ticker = _DummyTicker(api_key, access_token, debug=debug)
+        captured["ticker"] = ticker
+        return ticker
+
+    original_clear = ws._FEED_RECOVERY_COORDINATOR.clear_recovery
+
+    def _clear_recovery(**kwargs):
+        clear_calls.append(dict(kwargs))
+        return original_clear(**kwargs)
+
+    monkeypatch.setattr(ws, "KiteTicker", _factory)
+    monkeypatch.setattr(ws._FEED_RECOVERY_COORDINATOR, "clear_recovery", _clear_recovery, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"BANKNIFTY": 1}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "BANKNIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+
+    ws._FEED_RECOVERY_COORDINATOR.request_recovery(source="unit_test", code=1006, reason="peer dropped")
+    ws._sync_ws1006_recovery_state_from_coordinator()
+    ws.start_depth_ws([101], skip_lock=True, skip_guard=True)
+    ticker = captured["ticker"]
+    ticker.on_connect(ticker, {"status": "ok"})
+
+    deadline = float(ws._OPTION_FEED_VERIFY_DEADLINE_EPOCH)
+    ws._tick_option_feed_verification(now_epoch=deadline + 1.0)
+
+    assert clear_calls == []
+    assert ws._FEED_RECOVERY_COORDINATOR.state.recovery_in_progress is True
+    assert ws._OPTION_FEED_VERIFY_STATE == "FAILED"
+    assert ws._OPTION_FEED_VERIFY_FAILURE_DETAIL in {"NO_LIVE_OPTION_FEED_AFTER_SUBSCRIBE", "OPTION_FEED_VERIFY_TIMEOUT"}
+
+
 def test_on_ticks_records_decoded_boundary_once_per_callback(monkeypatch):
     _patch_common(monkeypatch)
     callbacks = []
