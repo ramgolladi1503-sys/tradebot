@@ -409,6 +409,30 @@ class ResourceSoakRunner:
             "verdict": "UNKNOWN",
         }
 
+    def _close_dummy_leaks(self) -> None:
+        for leak_handle in self.dummy_leak_fds:
+            try:
+                leak_handle.close()
+            except Exception:
+                try:
+                    os.close(leak_handle)
+                except Exception:
+                    pass
+        self.dummy_leak_fds.clear()
+
+    def _cleanup_runtime(self, reason: str) -> None:
+        try:
+            ws.stop_depth_ws(reason=reason)
+        except Exception:
+            pass
+        time.sleep(0.2)
+        setattr(ws, "_KITE_TICKER", None)
+
+    def _post_cleanup_snapshot(self) -> dict:
+        self._close_dummy_leaks()
+        self._cleanup_runtime("shutdown")
+        return _resource_snapshot()
+
     def _set_first_mismatch(self, message: str) -> None:
         if self.metrics["first_mismatch"] is None:
             self.metrics["first_mismatch"] = str(message)
@@ -638,9 +662,7 @@ class ResourceSoakRunner:
                 if cycle_result == "failed":
                     break
 
-            ws.stop_depth_ws(reason="soak_finish")
-            time.sleep(0.2)
-            setattr(ws, "_KITE_TICKER", None)
+            self._cleanup_runtime("soak_finish")
             final = _resource_snapshot()
             self.timeline.append({"stage": "final", "snapshot": final})
             self._generate_verdict()
@@ -693,24 +715,16 @@ class ResourceSoakRunner:
                 "first_mismatch": self.metrics["first_mismatch"],
                 "cycle_samples": [item for item in self.timeline if "cycle" in item],
             }
+            if self.profile in {"negative_fd_leak", "sqlite_same_path_multi_descriptor_negative"}:
+                post_cleanup_final = self._post_cleanup_snapshot()
+                result["post_cleanup_final"] = post_cleanup_final
             result.update(self.metrics)
             return result
         finally:
             if pm:
                 pm.restore()
-            for leak_handle in self.dummy_leak_fds:
-                try:
-                    leak_handle.close()
-                except Exception:
-                    try:
-                        os.close(leak_handle)
-                    except Exception:
-                        pass
-            self.dummy_leak_fds.clear()
-            try:
-                ws.stop_depth_ws(reason="shutdown")
-            except Exception:
-                pass
+            self._close_dummy_leaks()
+            self._cleanup_runtime("shutdown")
 
 
 def main():

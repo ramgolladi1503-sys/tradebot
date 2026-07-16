@@ -217,9 +217,21 @@ def test_synthetic_fd_leak_is_detected():
 
 def test_synthetic_fd_leak_cleanup_returns_to_baseline():
     rc, data, _, _ = run_profile("negative_fd_leak", 20)
-    # The runner cleans up the dummy leaked FDs in its finally block.
-    # The test passes because the detector successfully caught it (indicated by negative control pass)
+    assert rc == 0
     assert data["verdict"] == "RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS"
+    assert "post_cleanup_final" in data
+    assert data["final"]["fd_count"] > data["post_warmup_baseline"]["fd_count"]
+    assert data["post_cleanup_final"]["fd_count"] == data["post_warmup_baseline"]["fd_count"]
+    assert data["post_cleanup_final"]["sqlite_fd_count"] == data["post_warmup_baseline"]["sqlite_fd_count"]
+
+def test_sqlite_negative_cleanup_returns_to_baseline():
+    rc, data, _, _ = run_profile("sqlite_same_path_multi_descriptor_negative", 20)
+    assert rc == 0
+    assert data["verdict"] == "RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS"
+    assert "post_cleanup_final" in data
+    assert data["final"]["sqlite_fd_count"] > data["post_warmup_baseline"]["sqlite_fd_count"]
+    assert data["post_cleanup_final"]["fd_count"] <= data["post_warmup_baseline"]["fd_count"]
+    assert data["post_cleanup_final"]["sqlite_fd_count"] == data["post_warmup_baseline"]["sqlite_fd_count"]
 
 # Test for SQLite context manager API directly
 def test_sqlite_api_compatibility():
