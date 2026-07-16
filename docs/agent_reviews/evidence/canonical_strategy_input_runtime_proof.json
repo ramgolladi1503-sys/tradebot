@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "execution_mode": "PAPER",
+    "is_order_action": false,
+    "broker_api_called": false,
+    "timestamp": "2026-07-16T17:13:38.085324+00:00"
+  },
+  "scenarios": {
+    "A_normal_completed_bar": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544761.0,
+      "candle_ts_epoch": 1672544700.0,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 1,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": null,
+      "ohlc_last_bar_epoch": 1672544700.0,
+      "indicators_ok": true,
+      "invalid_reason": null
+    },
+    "B_warm_seed_startup": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544761.0,
+      "candle_ts_epoch": null,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 0,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": "HIST_FETCH_FAILED",
+      "ohlc_last_bar_epoch": null,
+      "indicators_ok": false,
+      "invalid_reason": null
+    },
+    "C_exact_completion_boundary": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544760.0,
+      "candle_ts_epoch": 1672544700.0,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 1,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": null,
+      "ohlc_last_bar_epoch": 1672544700.0,
+      "indicators_ok": true,
+      "invalid_reason": null
+    },
+    "D_late_tick": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544761.0,
+      "candle_ts_epoch": 1672544700.0,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 1,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": null,
+      "ohlc_last_bar_epoch": 1672544700.0,
+      "indicators_ok": true,
+      "invalid_reason": null
+    },
+    "E_no_completed_bars": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544730.0,
+      "candle_ts_epoch": null,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 0,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": null,
+      "ohlc_last_bar_epoch": null,
+      "indicators_ok": false,
+      "invalid_reason": null
+    },
+    "F_invalid_history": {
+      "symbol": "NIFTY",
+      "valid": true,
+      "timestamp": 1672544761.0,
+      "candle_ts_epoch": null,
+      "indicator_last_update_epoch": 1672544700.0,
+      "ohlc_bars_count": 0,
+      "ohlc_seeded": false,
+      "ohlc_seed_reason": "HIST_FETCH_FAILED",
+      "ohlc_last_bar_epoch": null,
+      "indicators_ok": false,
+      "invalid_reason": null
+    },
+    "G_cross_symbol_isolation": {
+      "NIFTY": {
+        "symbol": "NIFTY",
+        "valid": true,
+        "timestamp": 1672544761.0,
+        "candle_ts_epoch": 1672544700.0,
+        "indicator_last_update_epoch": 1672544700.0,
+        "ohlc_bars_count": 1,
+        "ohlc_seeded": false,
+        "ohlc_seed_reason": null,
+        "ohlc_last_bar_epoch": 1672544700.0,
+        "indicators_ok": true,
+        "invalid_reason": null
+      },
+      "BANKNIFTY": {
+        "symbol": "BANKNIFTY",
+        "valid": true,
+        "timestamp": 1672544761.0,
+        "candle_ts_epoch": 1672544700.0,
+        "indicator_last_update_epoch": 1672544700.0,
+        "ohlc_bars_count": 1,
+        "ohlc_seeded": false,
+        "ohlc_seed_reason": null,
+        "ohlc_last_bar_epoch": 1672544700.0,
+        "indicators_ok": true,
+        "invalid_reason": null
+      }
+    }
+  }
+}
