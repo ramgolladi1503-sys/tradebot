@@ -1,20 +1,19 @@
-name: PR657 Autofix
+name: PR657 Autofix Prepare
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/canonical-strategy-input-truth
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: pr657-autofix-${{ github.ref }}
+  group: pr657-autofix-prepare-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  fix:
-    if: github.event.head_commit.message != 'test: align freshness fixtures with frozen cutoff'
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -23,11 +22,10 @@ jobs:
       EXECUTION_MODE: PAPER
       KITE_USE_API: "false"
     steps:
-      - name: Checkout branch
+      - name: Checkout pull-request branch
         uses: actions/checkout@v4
         with:
           ref: fix/canonical-strategy-input-truth
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,7 +38,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Align legacy fixtures with the frozen cutoff
+      - name: Prepare fixture compatibility correction
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -139,12 +137,7 @@ jobs:
           handoff_path.write_text(handoff, encoding='utf-8')
           PY
 
-      - name: Remove temporary diagnostic workflows
-        run: |
-          rm -f .github/workflows/pr657-diagnostics.yml
-          rm -f .github/workflows/pr657-autofix.yml
-
-      - name: Run the four failed tests and related canonical suites
+      - name: Run failed tests and related canonical suites
         run: |
           PYTHONPATH=. pytest -q -o addopts='' \
             tests/test_market_data_index_quote_cache.py::test_index_depth_missing_synthesizes_quote \
@@ -154,17 +147,17 @@ jobs:
             tests/core/test_canonical_strategy_input_truth.py \
             tests/test_market_data_warm_seed.py
 
-      - name: Commit and push guarded fix
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            tests/test_market_data_index_quote_cache.py \
-            tests/test_time_sanity_staleness.py \
-            docs/agent_reviews/canonical_strategy_input_truth_repair.md \
-            docs/agent_handoffs/canonical-strategy-input-truth-repair-codex.md \
-            .github/workflows/pr657-diagnostics.yml \
-            .github/workflows/pr657-autofix.yml
-          git diff --cached --check
-          git commit -m "test: align freshness fixtures with frozen cutoff"
-          git push origin HEAD:fix/canonical-strategy-input-truth
+      - name: Capture prepared diff
+        run: git diff --check && git diff > pr657-autofix.patch
+
+      - name: Upload verified corrected files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr657-autofix-${{ github.run_id }}
+          if-no-files-found: error
+          path: |
+            tests/test_market_data_index_quote_cache.py
+            tests/test_time_sanity_staleness.py
+            docs/agent_reviews/canonical_strategy_input_truth_repair.md
+            docs/agent_handoffs/canonical-strategy-input-truth-repair-codex.md
+            pr657-autofix.patch
