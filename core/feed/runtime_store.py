@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+from contextlib import contextmanager
 
 from config import config as cfg
 from core.events import write_json_atomic
@@ -25,7 +26,8 @@ def _db_path() -> Path:
     return ensure_parent_dir(trade_db_path(desk_id))
 
 
-def _conn() -> sqlite3.Connection:
+@contextmanager
+def _conn() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(str(_db_path()), timeout=30.0, check_same_thread=False)
     try:
         conn.execute("PRAGMA busy_timeout=30000")
@@ -33,7 +35,11 @@ def _conn() -> sqlite3.Connection:
         conn.execute("PRAGMA synchronous=NORMAL")
     except Exception:
         pass
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_feed_runtime_table() -> None:
