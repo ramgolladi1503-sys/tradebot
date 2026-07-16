@@ -143,10 +143,10 @@ def build_candidate_pool_report(
                         owner_blockers.append(owner_blocker)
                         warnings.append(owner_blocker)
                         continue
+                    if not owner_summary["new_authoritative_output"]:
+                        continue
                     setup_id = str(owner_summary["setup_id"])
                     if setup_id in authoritative_setup_ids:
-                        duplicate_warning = f"opening_range_retest_owner_duplicate:{setup_id}"
-                        warnings.append(duplicate_warning)
                         continue
                     authoritative_setup_ids.add(setup_id)
                 raw_movement_candidates.append(candidate)
@@ -239,7 +239,10 @@ def build_candidate_pool_report(
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "raw_candidate_count_before_phase2_enrichment": len(raw_movement_candidates),
             "opening_range_retest_owner_results": tuple(owner_results),
-            "opening_range_retest_owner_authoritative_count": len(authoritative_setup_ids),
+            "opening_range_retest_owner_candidate_input_count": sum(1 for result in owner_results),
+            "opening_range_retest_owner_proposal_count": sum(1 for result in owner_results),
+            "opening_range_retest_owner_authoritative_count": sum(1 for result in owner_results if result["new_authoritative_output"]),
+            "opening_range_retest_owner_existing_record_count": sum(1 for result in owner_results if result["existing_authoritative_record"]),
             "opening_range_retest_owner_blocked_count": len(owner_blockers),
         },
     )
@@ -326,7 +329,12 @@ def _accept_opening_range_retest_candidate(
         "publication_state": publication_result.publication_state,
         "publication_attempts": publication_result.publication_attempts,
         "outbox_id": publication_result.outbox_id,
-        "authoritative": publication_result.result in ACCEPTED_PUBLICATION_RESULTS,
+        "authoritative": publication_result.result == "ACCEPTED_FOR_PUBLICATION",
+        "existing_authoritative_record": publication_result.result in ACCEPTED_PUBLICATION_RESULTS,
+        "new_authoritative_output": publication_result.result == "ACCEPTED_FOR_PUBLICATION",
+        "proposal_count": 1,
+        "outbox_insert_count": 1 if publication_result.result == "ACCEPTED_FOR_PUBLICATION" else 0,
+        "durable_record_count": 1 if publication_result.result in ACCEPTED_PUBLICATION_RESULTS else 0,
     }
     if publication_result.result not in ACCEPTED_PUBLICATION_RESULTS:
         blocker = f"opening_range_retest_owner_blocked:{publication_result.result}:{summary['setup_id']}"

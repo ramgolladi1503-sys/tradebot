@@ -166,7 +166,15 @@ def test_owner_duplicate_restart_remains_authoritative_but_not_republished(tmp_p
     assert first_report.metadata["opening_range_retest_owner_results"][0]["result"] == "ACCEPTED_FOR_PUBLICATION"
     assert second_report.metadata["opening_range_retest_owner_results"][0]["result"] == "ALREADY_EMITTED"
     assert len([candidate for candidate in first_report.candidates if candidate.strategy_id == "opening_range_retest_v1"]) == 1
-    assert len([candidate for candidate in second_report.candidates if candidate.strategy_id == "opening_range_retest_v1"]) == 1
+    assert len([candidate for candidate in second_report.candidates if candidate.strategy_id == "opening_range_retest_v1"]) == 0
+    assert first_report.metadata["opening_range_retest_owner_authoritative_count"] == 1
+    assert second_report.metadata["opening_range_retest_owner_authoritative_count"] == 0
+    assert first_report.metadata["opening_range_retest_owner_existing_record_count"] == 1
+    assert second_report.metadata["opening_range_retest_owner_existing_record_count"] == 1
+    assert first_report.metadata["opening_range_retest_owner_proposal_count"] == 1
+    assert second_report.metadata["opening_range_retest_owner_proposal_count"] == 1
+    assert first_report.metadata["raw_candidate_count_before_phase2_enrichment"] == 1
+    assert second_report.metadata["raw_candidate_count_before_phase2_enrichment"] == 0
 
 
 def test_owner_duplicate_within_single_report_is_suppressed(tmp_path: Path):
@@ -248,5 +256,5 @@ def test_owner_acceptance_is_concurrent_and_deterministic(tmp_path: Path):
 
     assert len(results) == 2
     assert sorted(item["owner_result"] for item in results) == ["ACCEPTED_FOR_PUBLICATION", "ALREADY_EMITTED"]
-    assert [item["candidate_count"] for item in results] == [1, 1]
+    assert sorted(item["candidate_count"] for item in results) == [0, 1]
     assert len({item["setup_id"] for item in results}) == 1

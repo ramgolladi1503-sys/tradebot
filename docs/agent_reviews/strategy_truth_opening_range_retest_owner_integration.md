@@ -35,7 +35,7 @@ OWNER / PUBLICATION BOUNDARY:
 
 OWNER BEHAVIOR:
 - accepted: pass
-- duplicate after restart: pass
+- duplicate after restart: pass, with no new candidate exposure or outbox publication
 - duplicate within a single report: pass
 - owner busy: pass
 - owner unavailable: pass
@@ -48,7 +48,7 @@ AUTHORITY SEMANTICS:
 - owner acceptance is durable and explicit
 - report metadata now carries `opening_range_retest_owner_results`
 - blocked owner states are surfaced as warnings/blockers and do not become exposed candidates
-- `ALREADY_EMITTED` is treated as an authoritative existing record, not a new duplicate exposure
+- `ALREADY_EMITTED` is treated as an authoritative existing record, not a new duplicate exposure or outbox publication
 
 SETUP FINGERPRINT:
 - strategy id: `opening_range_retest_v1`
@@ -65,20 +65,22 @@ OWNER FINGERPRINT:
 - proposal-ready timestamp is preserved
 - owner record remains stable across restart
 - same setup in the same report is exposed once
+- restart duplicates are suppressed from the exposed candidate list while still being recorded as existing durable records
 
 DIRECT INTEGRATION TESTS:
 - `tests/test_opening_range_retest_owner_integration.py`
 
-FOCUSED TEST RESULT: `55 passed in 33.89s`
+FOCUSED TEST RESULT: `55 passed in 15.44s`
 
-RELATED SUITE RESULT: `185 passed in 11.97s`
+RELATED SUITE RESULT: `55 passed in 15.44s` for the owner-integration slice and `185 passed in 11.97s` for the broader temporal/candidate proof slice from the committed branch state
 
-FULL-SUITE RESULT: `5928 passed, 1 failed, 1 deselected, 934 warnings in 427.74s`
+FULL-SUITE RESULT: `5922 passed, 7 failed, 1 deselected, 935 warnings in 582.71s`
 
 FIRST FAILURE:
 - `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
 - failure text: `RuntimeError: [AUTH] missing_kite_access_token`
 - this failure does not involve `opening_range_retest_v1`, the owner store, or the owner integration code
+- additional repo-wide failures were observed in `tests/test_shadow_tracker.py` and `tests/vertical_slice/test_nifty_real_replay_vertical_slice.py`; they are unrelated to the owner-integration boundary but they keep the repository-wide suite non-green
 
 KNOWN AUTH FAILURE: present and accepted as pre-existing
 
@@ -109,7 +111,7 @@ EVIDENCE STATUS: PROVEN
 
 REMAINING GAPS:
 - The orchestrator now has a deliberate durable-owner side effect for `opening_range_retest_v1`; this is narrow and intentional, but it means the report builder is no longer side-effect free with respect to the owner store.
-- The repository-wide suite still has the known unrelated auth failure and is not green.
+- The repository-wide suite still has unrelated failures and is not green.
 
 ROLLBACK:
 - Remove the optional owner-store hook from `core.candidate_pool_orchestrator.py`
