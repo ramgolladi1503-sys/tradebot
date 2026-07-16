@@ -315,6 +315,7 @@ def patch_kite(profile: str, monkeypatch=None):
     pm.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=False)
     pm.setattr(ws, "is_market_open_ist", lambda: True, raising=False)
     pm.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=False)
+    pm.setattr(cfg, "KITE_API_KEY", "api_key_1234", raising=False)
     pm.setattr(cfg, "KITE_USE_API", True, raising=False)
     pm.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
     pm.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
