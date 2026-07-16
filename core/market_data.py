@@ -25,9 +25,13 @@ from core.ohlc_buffer import ohlc_buffer
 from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
-from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
+from core.market_context import coerce_segment_for_market_context, derive_market_context
 from core.regime_session_context import resolve_canonical_session_context
-from core.session_bar_history import SessionBarHistoryError, build_session_bar_history_state
+from core.session_bar_history import (
+    SessionBarHistoryError,
+    build_session_bar_history_state,
+    calculate_session_range_width_pct_from_completed_history,
+)
 from core.session_atr import calculate_session_atr_state
 from core.paths import logs_dir
 from core.time_utils import (
@@ -2828,7 +2832,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 ema = ind["ema"]
             last_ts = ind.get("last_ts")
             bars_ready = bool(ohlc_bars_count >= min_bars and ohlc_bars_count > 0)
-            required_inputs_ok = bars_ready
             indicator_inputs_ok = bars_ready
             if last_ts:
                 try:
@@ -3129,7 +3132,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             orb_state = _orb_state_from_candles(
                 symbol,
                 bars,
-                now_dt=now,
+                now_dt=cycle_cutoff,
                 segment=segment,
                 market_open=bool(is_market_open),
                 market_mode=market_ctx.mode,
@@ -3157,11 +3160,32 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             day_high = session_state.day_high
             day_low = session_state.day_low
             previous_completed_close = session_state.previous_completed_close
+            range_width_pct = calculate_session_range_width_pct_from_completed_history(
+                symbol=symbol,
+                bars=bars,
+                cutoff_timestamp=cycle_cutoff,
+                segment=segment,
+                reference_price=ltp,
+                timeframe=session_state.timeframe,
+            )
             completed_bar_history = session_state.history_payload()
             completed_bar_history_provenance = session_state.provenance_payload(
                 source_component="core.market_data.fetch_live_market_data",
                 receipt_timestamp=cycle_cutoff.isoformat(),
             )
+            range_width_pct_provenance = {
+                "status": "TRUTHFUL" if range_width_pct is not None else "MISSING_SOURCE",
+                "source_component": "core.session_bar_history.calculate_session_range_width_pct_from_completed_history",
+                "source_field": "range_width_pct",
+                "source_event_timestamp": session_state.latest_completed_timestamp,
+                "receipt_timestamp": cycle_cutoff.isoformat(),
+                "scope": "session_completed_bar",
+                "complete": bool(range_width_pct is not None),
+                "timeframe": session_state.timeframe,
+                "symbol": session_state.symbol,
+                "session_date": session_state.session_date,
+                "reason": None if range_width_pct is not None else "missing_or_malformed_completed_bar_history",
+            }
             session_atr_state = calculate_session_atr_state(session_state)
         except SessionBarHistoryError as exc:
             completed_bar_history = []
@@ -3169,6 +3193,13 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "status": "INCOMPLETE",
                 "source_component": "core.market_data.fetch_live_market_data",
                 "source_field": "completed_bar_history",
+                "reason": str(exc),
+            }
+            range_width_pct = None
+            range_width_pct_provenance = {
+                "status": "INCOMPLETE",
+                "source_component": "core.session_bar_history.calculate_session_range_width_pct_from_completed_history",
+                "source_field": "range_width_pct",
                 "reason": str(exc),
             }
             session_atr_state = calculate_session_atr_state(
@@ -3179,9 +3210,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 source_history_hash="",
             )
 
-        exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         market_open_now = bool(market_ctx.is_market_open)
-        strict_live_market_open = bool(market_ctx.mode == "LIVE" and market_open_now)
         option_chain = _fetch_option_chain_with_context(
             symbol,
             ltp,
@@ -3836,6 +3865,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "open_price": open_price,
             "day_high": day_high,
             "day_low": day_low,
+            "range_width_pct": range_width_pct,
+            "range_width_pct_provenance": range_width_pct_provenance,
             "previous_completed_close": previous_completed_close,
             "completed_bar_history": completed_bar_history,
             "completed_bar_history_provenance": completed_bar_history_provenance,

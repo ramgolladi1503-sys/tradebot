@@ -75,6 +75,115 @@ def session_history_bound(*, segment: str, timeframe: str = TIMEFRAME_1M) -> int
     return int(session_minutes + REGULAR_SESSION_HISTORY_ALLOWANCE)
 
 
+def calculate_session_range_width_pct(
+    *,
+    day_high: Any,
+    day_low: Any,
+    reference_price: Any,
+) -> float | None:
+    try:
+        high = _coerce_price(day_high, field_name="day_high")
+        low = _coerce_price(day_low, field_name="day_low")
+        denominator = _coerce_price(reference_price, field_name="reference_price")
+    except SessionBarHistoryError:
+        return None
+    if high < low or denominator <= 0.0:
+        return None
+    return float((high - low) / denominator)
+
+
+def calculate_session_range_width_pct_from_completed_history(
+    *,
+    symbol: str,
+    bars: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    cutoff_timestamp: Any,
+    segment: str,
+    reference_price: Any,
+    timeframe: str = TIMEFRAME_1M,
+) -> float | None:
+    normalized_symbol = str(symbol or "").strip().upper()
+    if not normalized_symbol:
+        return None
+
+    try:
+        normalized_cutoff = _coerce_datetime(cutoff_timestamp, field_name="cutoff_timestamp")
+    except SessionBarHistoryError:
+        return None
+
+    session_date = normalized_cutoff.date().isoformat()
+    open_dt, close_dt = _session_window(session_date, segment=segment)
+
+    day_high: float | None = None
+    day_low: float | None = None
+    seen_starts: set[datetime] = set()
+    previous_start: datetime | None = None
+
+    for raw_bar in list(bars or []):
+        raw_symbol = str(raw_bar.get("symbol") or raw_bar.get("instrument") or "").strip().upper()
+        if raw_symbol and raw_symbol != normalized_symbol:
+            return None
+        raw_session_date = str(raw_bar.get("session_date") or "").strip()
+        if raw_session_date and raw_session_date != session_date:
+            return None
+
+        bar_start_raw = raw_bar.get("ts", raw_bar.get("date", raw_bar.get("bar_start_timestamp")))
+        if bar_start_raw is None:
+            return None
+        try:
+            bar_start = _coerce_datetime(bar_start_raw, field_name="bar_timestamp")
+        except SessionBarHistoryError:
+            return None
+        if bar_start.second != 0 or bar_start.microsecond != 0:
+            return None
+        bar_start = bar_start.replace(second=0, microsecond=0)
+        if bar_start < open_dt or bar_start >= close_dt:
+            continue
+        if bar_start.date().isoformat() != session_date:
+            continue
+        if previous_start is not None and bar_start < previous_start:
+            return None
+        if bar_start in seen_starts:
+            return None
+        previous_start = bar_start
+        seen_starts.add(bar_start)
+
+        bar_end_raw = raw_bar.get("bar_end_timestamp")
+        if bar_end_raw is not None:
+            try:
+                bar_end = _coerce_datetime(bar_end_raw, field_name="bar_end_timestamp")
+            except SessionBarHistoryError:
+                return None
+            if bar_end - bar_start != timedelta(minutes=1):
+                return None
+        else:
+            bar_end = bar_start + timedelta(minutes=1)
+        if bar_end > normalized_cutoff:
+            continue
+
+        try:
+            open_price = _coerce_price(raw_bar.get("open"), field_name="open")
+            high_price = _coerce_price(raw_bar.get("high"), field_name="high")
+            low_price = _coerce_price(raw_bar.get("low"), field_name="low")
+            close_price = _coerce_price(raw_bar.get("close"), field_name="close")
+        except SessionBarHistoryError:
+            return None
+        if high_price < max(open_price, close_price, low_price):
+            return None
+        if low_price > min(open_price, close_price, high_price):
+            return None
+
+        day_high = high_price if day_high is None else max(day_high, high_price)
+        day_low = low_price if day_low is None else min(day_low, low_price)
+
+    if day_high is None or day_low is None:
+        return None
+    return calculate_session_range_width_pct(
+        day_high=day_high,
+        day_low=day_low,
+        reference_price=reference_price,
+    )
+
+
 @dataclass(frozen=True)
 class CompletedBarSnapshot:
     symbol: str
@@ -186,10 +295,11 @@ def build_session_bar_history_state(
     volume_truthful = False
 
     for raw_bar in list(bars or []):
-        bar_start_raw = raw_bar.get("ts", raw_bar.get("date"))
+        bar_start_raw = raw_bar.get("ts", raw_bar.get("date", raw_bar.get("bar_start_timestamp")))
         if bar_start_raw is None:
             raise SessionBarHistoryError("missing_bar_timestamp")
-        bar_start = _coerce_datetime(bar_start_raw, field_name="bar_timestamp").replace(second=0, microsecond=0)
+        bar_start = _coerce_datetime(bar_start_raw, field_name="bar_timestamp")
+        bar_start = bar_start.replace(second=0, microsecond=0)
         if bar_start < open_dt or bar_start >= close_dt:
             continue
         if bar_start.date().isoformat() != session_date:
@@ -201,7 +311,11 @@ def build_session_bar_history_state(
         previous_start = bar_start
         seen_starts.add(bar_start)
 
-        bar_end = bar_start + timedelta(minutes=1)
+        bar_end_raw = raw_bar.get("bar_end_timestamp")
+        if bar_end_raw is not None:
+            bar_end = _coerce_datetime(bar_end_raw, field_name="bar_end_timestamp")
+        else:
+            bar_end = bar_start + timedelta(minutes=1)
         if bar_end > normalized_cutoff:
             continue
 

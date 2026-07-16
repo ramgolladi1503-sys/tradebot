@@ -1683,6 +1683,28 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         complete=bool(_coerce_snapshot_number(market_data.get("previous_completed_close")) is not None),
         timeframe="1m",
     )
+    range_width_provenance = (
+        dict(market_data.get("range_width_pct_provenance") or {})
+        if isinstance(market_data.get("range_width_pct_provenance"), dict)
+        else {}
+    )
+    _record(
+        "range_width_pct",
+        _coerce_snapshot_number(market_data.get("range_width_pct")),
+        status=str(
+            range_width_provenance.get("status")
+            or ("TRUTHFUL" if _coerce_snapshot_number(market_data.get("range_width_pct")) is not None else "MISSING_SOURCE")
+        ),
+        source_field="range_width_pct",
+        source_component=str(
+            range_width_provenance.get("source_component")
+            or "core.session_bar_history.calculate_session_range_width_pct"
+        ),
+        scope="session_completed_bar",
+        complete=bool(_coerce_snapshot_number(market_data.get("range_width_pct")) is not None),
+        timeframe=str(range_width_provenance.get("timeframe") or "1m"),
+        units="fraction",
+    )
     completed_bar_history = market_data.get("completed_bar_history")
     completed_bar_history_provenance = (
         dict(market_data.get("completed_bar_history_provenance") or {})
@@ -1823,16 +1845,6 @@ def _strategy_context_snapshot_metadata(market_data: dict) -> dict[str, Any]:
         complete=True if option_age is not None else None,
         units="seconds",
     )
-
-    for missing_field in ("range_width_pct",):
-        missing.setdefault(
-            missing_field,
-            {
-                "status": "MISSING_SOURCE",
-                "source_component": "canonical_market_snapshot",
-                "source_field": missing_field,
-            },
-        )
 
     metadata["strategy_context_truth"] = truth
     metadata["strategy_context_provenance"] = provenance
