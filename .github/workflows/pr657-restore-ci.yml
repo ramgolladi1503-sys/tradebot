@@ -1,0 +1,36 @@
+name: PR657 Restore Main CI
+
+on:
+  push:
+    branches:
+      - fix/canonical-strategy-input-truth
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/canonical-strategy-input-truth
+          fetch-depth: 0
+
+      - name: Restore canonical CI workflow from main
+        run: |
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          rm -f .github/workflows/pr657-restore-ci.yml
+          git diff --check
+
+      - name: Commit and push restoration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/ci.yml .github/workflows/pr657-restore-ci.yml
+          git diff --cached --check
+          git commit -m "chore: restore canonical CI workflow"
+          git push origin HEAD:fix/canonical-strategy-input-truth
