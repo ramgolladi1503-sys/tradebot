@@ -17,10 +17,11 @@ class _DummyThread:
         self.kwargs = kwargs or {}
         self.daemon = daemon
         self.started = False
+        self.join_calls = []
     def start(self):
         self.started = True
     def join(self, timeout=None):
-        pass
+        self.join_calls.append(timeout)
 class _DummyTicker:
     MODE_FULL = "full"
     def __init__(self, api_key, access_token, debug=True):
@@ -601,14 +602,7 @@ def test_ws1006_peer_drop_escalates_after_max_recoverable_attempts(monkeypatch):
     ws._sync_ws1006_recovery_state_from_coordinator()
     ws._handle_ws1006_recoverable(source="on_error", ws=object(), code=1006, reason="connection was closed uncleanly (peer dropped)")
     assert any(event == "FEED_RECOVERY_BLOCKED" for event, _ in events)
-    assert scheduled == [
-        {
-            "force_full_restart": True,
-            "ignore_cooldown": True,
-            "reason": "ws1006_recovery_full:on_error",
-            "source": "ws1006_recovery",
-        }
-    ]
+    assert scheduled == []
     assert ws._WS1006_RECOVERABLE_ATTEMPTS == 1
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["process_restart_required"] is True
@@ -642,7 +636,7 @@ def test_ws1006_main_loop_terminated_routes_to_process_restart_required(monkeypa
     assert payload["process_restart_required"] is True
     assert payload["reconnect_blocked_reason"] == "ws1006_process_restart_required"
     assert payload["restart_suppressed"] is True
-def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
+def test_fatal_on_error_does_not_schedule_manual_full_restart(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
     scheduled = []
@@ -664,14 +658,7 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
         1006,
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
-    assert scheduled == [
-        {
-            "force_full_restart": True,
-            "ignore_cooldown": True,
-            "reason": "ws1006_recovery_full:on_error",
-            "source": "ws1006_recovery",
-        }
-    ]
+    assert scheduled == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -686,7 +673,7 @@ def test_fatal_on_error_schedules_async_forced_full_restart(monkeypatch):
     assert payload["ws1006_recovery_attempt_count"] == 1
     assert payload["ws_recovery_state"] == "RECOVERING_WS_DROP"
     assert payload["option_feed_verification_state"] in {"IDLE", "PENDING"}
-def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
+def test_fatal_on_close_does_not_schedule_manual_full_restart(monkeypatch):
     _patch_common(monkeypatch)
     captured = {}
     scheduled = []
@@ -708,14 +695,7 @@ def test_fatal_on_close_schedules_async_forced_full_restart(monkeypatch):
         1006,
         "connection was closed uncleanly (peer dropped the TCP connection without previous WebSocket closing handshake)",
     )
-    assert scheduled == [
-        {
-            "force_full_restart": True,
-            "ignore_cooldown": True,
-            "reason": "ws1006_recovery_full:on_close",
-            "source": "ws1006_recovery",
-        }
-    ]
+    assert scheduled == []
     payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
     assert payload["runtime_state"] in {"RECONNECTING", "DEGRADED"}
     assert payload["ws_connected"] is False
@@ -1968,16 +1948,21 @@ def test_watchdog_lifecycle_receives_own_signal_and_exits(monkeypatch):
             self.args = args
             self.kwargs = kwargs or {}
             self.daemon = daemon
+            self.started = False
+            self.join_calls = []
             threads.append(self)
-        def start(self): pass
-        def join(self, t=0): pass
+        def start(self):
+            self.started = True
+        def join(self, t=0):
+            self.join_calls.append(t)
         def is_alive(self): return True
         
     monkeypatch.setattr(ws.threading, "Thread", ThreadCapture)
     
     ws.start_depth_ws([1], skip_lock=True, skip_guard=True)
     watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
-    assert len(watchdogs) == 1, "Watchdog thread not spawned"
+    watchdog_count_1 = len(watchdogs)
+    assert watchdog_count_1 == 1, "Watchdog thread not spawned"
     
     t1 = watchdogs[0]
     stop_event_1 = t1.args[0]
@@ -1990,7 +1975,8 @@ def test_watchdog_lifecycle_receives_own_signal_and_exits(monkeypatch):
     assert stop_event_1.is_set(), "Old watchdog stop event should be set on exit"
     
     watchdogs = [t for t in threads if getattr(t.target, '__name__', '') == '_watchdog']
-    assert len(watchdogs) == 2, "New watchdog should be spawned"
+    watchdog_count_2 = len(watchdogs)
+    assert watchdog_count_2 == 2, "New watchdog should be spawned"
     
     t2 = watchdogs[1]
     stop_event_2 = t2.args[0]

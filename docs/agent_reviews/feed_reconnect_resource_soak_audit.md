@@ -1,5 +1,14 @@
 # Feed Reconnect Resource Soak Audit
 
+mode: OFFLINE_SYNTHETIC
+candidate_id: feed_reconnect_resource_soak_pr656
+decision: RECONNECT_RESOURCE_PASS
+reason: exact offline reconnect, resource, owner, subscription, and negative-cleanup invariants passed for the documented checkpoint
+timestamp: 2026-07-16T08:34:08Z
+is_order_action: false
+broker_api_called: false
+source: scripts/run_feed_reconnect_resource_soak.py
+
 ## Agent Work Contract
 - `source_agent`: Codex
 - `action`: UPDATE_DOCS

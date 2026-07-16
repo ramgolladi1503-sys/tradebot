@@ -307,12 +307,17 @@ def patch_kite(profile: str, monkeypatch=None):
 
     pm.setattr(ws.kite_client, "ensure", lambda: _DummyRestClient(), raising=False)
     pm.setattr(ws.kite_client, "kite", _DummyRestClient(), raising=False)
+    pm.setattr(ws.kite_client, "instruments", lambda exchange=None, force=False: _DummyRestClient().instruments(exchange), raising=False)
+    pm.setattr(ws.kite_client, "next_available_expiry", lambda *args, **kwargs: None, raising=False)
     pm.setattr(ws.kite_client, "_active_api_key", "api_key_1234", raising=False)
     pm.setattr(ws.kite_client, "_active_access_token", "TOKEN123", raising=False)
     pm.setattr(ws, "KiteTicker", _DummyTicker, raising=False)
     pm.setattr(ws, "get_kite_auth_health", lambda force=True: {"ok": True}, raising=False)
     pm.setattr(ws, "is_market_open_ist", lambda: True, raising=False)
     pm.setattr(ws, "_ensure_depth_ws_lock", lambda: True, raising=False)
+    pm.setattr(cfg, "KITE_USE_API", True, raising=False)
+    pm.setattr(cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    pm.setattr(cfg, "TRADING_MODE", "PAPER", raising=False)
 
     import core.auth as auth_module
     import core.auth_manager as auth_manager
@@ -454,6 +459,10 @@ class ResourceSoakRunner:
         if ws._KITE_TICKER:
             ws._KITE_TICKER.simulate_error(1006, "warmup drop")
         time.sleep(0.1)
+        try:
+            ws.feed_restart_guard.reset(reason="soak_warmup_baseline")
+        except Exception:
+            pass
 
         post_warmup = _resource_snapshot()
         self.timeline.append({"stage": "process_start_baseline", "snapshot": process_start})
@@ -497,6 +506,30 @@ class ResourceSoakRunner:
             return False, ticker, new_generation_id
         return True, ticker, new_generation_id
 
+    def _request_controlled_recovery(self, cycle_index: int):
+        decision = ws._FEED_RECOVERY_COORDINATOR.request_recovery(
+            source=f"soak_cycle_{cycle_index}",
+            code=1006,
+            reason="peer dropped",
+        )
+        ws._sync_ws1006_recovery_state_from_coordinator()
+        return decision
+
+    def _start_new_generation(self, cycle_index: int, *, owner_failure_triggered: bool) -> bool:
+        ws.stop_depth_ws(reason=f"soak_cycle_disconnect_{cycle_index}")
+        time.sleep(0.05)
+        setattr(ws, "_STOP_REQUESTED", False)
+        restart_ok = ws.start_depth_ws(self.tokens, skip_lock=True, skip_guard=True)
+        self.metrics["reconnect_owner_acquisition_count"] += 1
+        self.metrics["reconnect_attempt_count"] += 1
+        if restart_ok is False:
+            self.metrics["hard_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+            mismatch = "owner_restart_rejected" if owner_failure_triggered else "restart_rejected"
+            self._set_first_mismatch(f"cycle_{cycle_index}_{mismatch}")
+            return False
+        return True
+
     def _run_reconnect_cycle(self, cycle_index: int):
         old_ticker = ws._KITE_TICKER
         if not old_ticker:
@@ -521,22 +554,28 @@ class ResourceSoakRunner:
         if owner_failure_triggered:
             ws._log_ws("SOAK_SIMULATE_OWNER_FAILURE", {"cycle": cycle_index})
             self.metrics["owner_failures_injected_count"] += 1
-            ws.stop_depth_ws(reason="simulate_owner_failure")
-            time.sleep(0.05)
             self.metrics["owner_failures_observed_count"] += 1
-            setattr(ws, "_STOP_REQUESTED", False)
-            restart_ok = ws.start_depth_ws(self.tokens, skip_lock=True, skip_guard=True)
-            self.metrics["reconnect_owner_acquisition_count"] += 1
-            self.metrics["reconnect_attempt_count"] += 1
-            if restart_ok is False:
-                self.metrics["hard_failures"] += 1
-                self.metrics["terminal_failure_count"] += 1
-                self._set_first_mismatch(f"cycle_{cycle_index}_owner_restart_rejected")
-                return "failed"
-        else:
-            self.metrics["reconnect_owner_acquisition_count"] += 1
-            self.metrics["reconnect_attempt_count"] += 1
-            old_ticker.simulate_error(1006, "peer dropped")
+        decision = self._request_controlled_recovery(cycle_index)
+        if decision.action == "RECOVERY_BLOCKED":
+            if self.profile == "reconnect_guarded":
+                self.guard_block_observed = True
+                self.metrics["guarded_policy_block_count"] += 1
+                self._update_metrics()
+                self._set_first_mismatch(
+                    f"guarded_policy_blocked_at_cycle_{cycle_index}: recovery blocked by original safety limits"
+                )
+                return "guarded_blocked"
+            self.metrics["hard_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+            self._set_first_mismatch(f"cycle_{cycle_index}_recovery_blocked")
+            return "failed"
+        if decision.action != "SOFT_RECONNECT":
+            self.metrics["hard_failures"] += 1
+            self.metrics["terminal_failure_count"] += 1
+            self._set_first_mismatch(f"cycle_{cycle_index}_unexpected_recovery_action:{decision.action}")
+            return "failed"
+        if not self._start_new_generation(cycle_index, owner_failure_triggered=owner_failure_triggered):
+            return "failed"
 
         timeout_sec = 10.0
         deadline = time.time() + timeout_sec
@@ -552,15 +591,6 @@ class ResourceSoakRunner:
                     self.metrics["owner_recoveries_completed_count"] += 1
                 self._update_metrics()
                 return "success"
-
-            if self.profile == "reconnect_guarded" and self._recovery_blocked():
-                self.guard_block_observed = True
-                self.metrics["guarded_policy_block_count"] += 1
-                self._update_metrics()
-                self._set_first_mismatch(
-                    f"guarded_policy_blocked_at_cycle_{cycle_index}: recovery blocked by original safety limits"
-                )
-                return "guarded_blocked"
 
             if new_generation_id == old_generation_id:
                 self.metrics["same_generation_reused_count"] += 1

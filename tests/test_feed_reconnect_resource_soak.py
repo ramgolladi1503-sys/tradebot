@@ -34,6 +34,20 @@ def run_profile(profile, cycles, seed=42, extra_args=None):
             
         with open(out_json, "r") as f:
             data = json.load(f)
+
+        if res.returncode != 0:
+            pytest.fail(
+                "Runner returned non-zero exit code.\n"
+                f"command={cmd}\n"
+                f"returncode={res.returncode}\n"
+                f"stdout={res.stdout}\n"
+                f"stderr={res.stderr}\n"
+                f"output_json={data}\n"
+                f"verdict={data.get('verdict')}\n"
+                f"hard_failures={data.get('hard_failures')}\n"
+                f"first_mismatch={data.get('first_mismatch')}\n"
+                f"runtime_state={data.get('final', {}).get('runtime_state')}\n"
+            )
             
         return res.returncode, data, res.stdout, res.stderr
     finally:

@@ -1524,15 +1524,6 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
             restart_attempted=False,
             reconnect_blocked_reason=None,
         )
-        if (not _reconnect_recovery_blocked_active()
-                and not feed_breaker_tripped()
-                and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
-            _schedule_restart_depth_ws(
-                reason=f"ws1006_recovery_full:{source}",
-                ignore_cooldown=True,
-                force_full_restart=True,
-                source="ws1006_recovery",
-            )
         return True
 
     if _use_native_reconnect():
@@ -1564,15 +1555,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                 restart_attempted=False,
                 reconnect_blocked_reason=None,
             )
-            if (not _reconnect_recovery_blocked_active()
-                    and not feed_breaker_tripped()
-                    and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
-                _schedule_restart_depth_ws(
-                    reason=f"ws1006_recovery_full:{source}",
-                    ignore_cooldown=True,
-                    force_full_restart=True,
-                    source="ws1006_recovery",
-                )
+            return True
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
     return True
@@ -4855,19 +4838,17 @@ def _schedule_restart_depth_ws(
     global _RESTART_ASYNC_THREAD
 
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
-        if source != "ws1006_recovery" and not source.startswith("ws1006_recovery"):
-            _log_ws(
-                "FEED_RECOVERY_ALREADY_IN_PROGRESS",
-                {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
-            )
-            return False
+        _log_ws(
+            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
+            {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
+        )
+        return False
     if _RECOVERY_IN_PROGRESS:
-        if source != "ws1006_recovery" and not source.startswith("ws1006_recovery"):
-            _log_ws(
-                "FEED_RECOVERY_ALREADY_IN_PROGRESS",
-                {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
-            )
-            return False
+        _log_ws(
+            "FEED_RECOVERY_ALREADY_IN_PROGRESS",
+            {"reason": reason, "source": source, "force_full_restart": bool(force_full_restart)},
+        )
+        return False
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or _reactor_not_restartable_block_reason()
         _emit_reconnect_recovery_blocked_snapshot(source=f"_schedule_restart_depth_ws:{source}", reason=blocked_reason)
@@ -5323,16 +5304,14 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     _log_ws("feed_restart_required", {"reason": reason})
 
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
-        if not reason.startswith("ws1006_recovery_full"):
-            _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
-            return False
+        _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
+        return False
     if _AUTH_REQUIRED_LATCH:
         _log_ws("FEED_RESTART_BLOCKED_AUTH_REQUIRED", {"reason": reason})
         return False
     if _RECOVERY_IN_PROGRESS and not _reconnect_recovery_blocked_active():
-        if not reason.startswith("ws1006_recovery_full"):
-            _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
-            return False
+        _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
+        return False
     if _reconnect_recovery_blocked_active() or _reactor_terminal_restart_block_active():
         blocked_reason = str(_RECONNECT_BLOCKED_REASON).strip().lower() or _reactor_not_restartable_block_reason()
         _log_ws(
