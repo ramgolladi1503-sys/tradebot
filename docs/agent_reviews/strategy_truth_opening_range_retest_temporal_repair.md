@@ -16,10 +16,11 @@ The working tree now carries the completed-history propagation fix in the ORB re
 - branch: `fix/opening-range-retest-temporal-implementation`
 - fixture base: `200c04994f718f01c4267f7272b8844353c7a0b9`
 - repair commit: `0ff2ce450922ed39a1ffa989b57e16961bdfebb1`
-- evidence commit: pending at time of this document edit
+- final implementation head before evidence commit: `2b0fc647b0398cd88a5fbf227e2e90bff2d6fd23`
 
 ## Commit Graph
 ```text
+* 2b0fc647 test: align shared contexts with opening range history
 * 0ff2ce45 strategy: salvage opening range temporal repair
 * fe7add39 strategy: salvage opening range temporal repair
 * 200c0499 test: complete opening range retest temporal fixture matrix
@@ -238,15 +239,16 @@ The auth failure remains present. No opening-range-related failures remain in th
 
 ## Gate Decision
 - fixture ancestry: proven
-- committed paths: expected only
-- runtime artifact at repair HEAD: unchanged
-- frozen opening-range tests: pass
-- shared truth tests: pass
-- adjacent temporal tests: pass
+- causal producer: pass
+- completed-history propagation: pass
+- shared truth: pass
+- adjacent temporal: pass
+- ATR proof: pass
 - static checks: pass
-- full suite: fail because of the known auth gate only
-- evidence document: updated to the current post-alignment result set
-- push: blocked until the auth gate is resolved or explicitly accepted as pre-existing
+- opening-range full-suite failures: zero
+- known unrelated auth failure: present and accepted as pre-existing
+- temporal propagation: closed
+- owner integration: not started
 
 ## Explicit Non-Claims
 - No owner integration is complete.
