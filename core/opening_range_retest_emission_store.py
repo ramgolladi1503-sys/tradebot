@@ -38,6 +38,50 @@ IMMUTABLE_LINEAGE_FIELDS = (
     "candidate_fingerprint",
 )
 
+EXPECTED_LINEAGE_COLUMNS = frozenset(
+    {
+        "setup_id",
+        "strategy_id",
+        "contract_version",
+        "schema_version",
+        "source_component",
+        "symbol",
+        "session_date",
+        "direction",
+        "boundary_type",
+        "normalized_boundary_value",
+        "breakout_timestamp_iso",
+        "history_hash",
+        "candidate_fingerprint",
+        "state",
+        "created_at_iso",
+        "emitted_at_iso",
+        "invalidated_at_iso",
+        "expired_at_iso",
+    }
+)
+
+EXPECTED_OUTBOX_COLUMNS = frozenset(
+    {
+        "outbox_id",
+        "setup_id",
+        "candidate_payload_json",
+        "candidate_fingerprint",
+        "publication_state",
+        "publication_attempts",
+        "created_at_iso",
+        "next_attempt_at_iso",
+        "published_at_iso",
+        "last_attempt_at_iso",
+        "last_error",
+        "lease_token",
+        "lease_owner_id",
+        "lease_acquired_at_iso",
+        "lease_expires_at_iso",
+        "schema_version",
+    }
+)
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -344,6 +388,13 @@ class DeliveryResult:
     detail: str | None = None
 
 
+@dataclass(frozen=True)
+class InitializationFailure:
+    classification: str
+    message: str
+    cause_type: str | None = None
+
+
 class OpeningRangeRetestEmissionStoreError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -364,11 +415,29 @@ class OpeningRangeRetestEmissionStore:
             lease_seconds if lease_seconds is not None else self._configured_lease_seconds()
         )
         self._busy_timeout_ms = int(getattr(cfg, "TRADE_DB_BUSY_TIMEOUT_MS", 10000) or 10000)
-        self._startup_error: tuple[str, str] | None = None
+        self._initialization_failure: InitializationFailure | None = None
         try:
             self.init_schema()
         except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
-            self._startup_error = (_classify_sqlite_error(exc), str(exc))
+            self._initialization_failure = InitializationFailure(
+                classification=_classify_sqlite_error(exc),
+                message=str(exc),
+                cause_type=type(exc).__name__,
+            )
+
+    @property
+    def is_available(self) -> bool:
+        return self._initialization_failure is None
+
+    @property
+    def initialization_classification(self) -> str | None:
+        if self._initialization_failure is None:
+            return None
+        return self._initialization_failure.classification
+
+    @property
+    def initialization_error(self) -> InitializationFailure | None:
+        return self._initialization_failure
 
     @staticmethod
     def _configured_lease_seconds() -> Any:
@@ -422,17 +491,26 @@ class OpeningRangeRetestEmissionStore:
         finally:
             conn.close()
 
+    def _require_available(self) -> InitializationFailure | None:
+        return self._initialization_failure
+
     def _unavailable_publication_result(self, setup_id: str) -> PublicationResult:
-        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
-        return PublicationResult(result=code, setup_id=setup_id, detail=detail)
+        failure = self._require_available()
+        if failure is None:
+            return PublicationResult(result="OWNER_UNAVAILABLE", setup_id=setup_id, detail="store_initialization_failed")
+        return PublicationResult(result=failure.classification, setup_id=setup_id, detail=failure.message)
 
     def _unavailable_lease_result(self, setup_id: str) -> LeaseResult:
-        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
-        return LeaseResult(result=code, setup_id=setup_id, detail=detail)
+        failure = self._require_available()
+        if failure is None:
+            return LeaseResult(result="OWNER_UNAVAILABLE", setup_id=setup_id, detail="store_initialization_failed")
+        return LeaseResult(result=failure.classification, setup_id=setup_id, detail=failure.message)
 
     def _unavailable_delivery_result(self, setup_id: str) -> DeliveryResult:
-        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
-        return DeliveryResult(result=code, setup_id=setup_id, detail=detail)
+        failure = self._require_available()
+        if failure is None:
+            return DeliveryResult(result="OWNER_UNAVAILABLE", setup_id=setup_id, detail="store_initialization_failed")
+        return DeliveryResult(result=failure.classification, setup_id=setup_id, detail=failure.message)
 
     def init_schema(self) -> None:
         with self._schema_lock:
@@ -491,6 +569,26 @@ class OpeningRangeRetestEmissionStore:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_orb_retest_outbox_state_lease_expiry ON opening_range_retest_outbox(publication_state, lease_expires_at_iso)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_orb_retest_outbox_lease_expiry ON opening_range_retest_outbox(lease_expires_at_iso)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_orb_retest_outbox_setup_id ON opening_range_retest_outbox(setup_id)")
+                self._verify_schema_shape(conn)
+
+    def _verify_schema_shape(self, conn: sqlite3.Connection) -> None:
+        lineage_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(opening_range_retest_lineage)").fetchall()
+        }
+        outbox_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(opening_range_retest_outbox)").fetchall()
+        }
+        missing_lineage = sorted(EXPECTED_LINEAGE_COLUMNS - lineage_columns)
+        missing_outbox = sorted(EXPECTED_OUTBOX_COLUMNS - outbox_columns)
+        if missing_lineage or missing_outbox:
+            missing_parts = []
+            if missing_lineage:
+                missing_parts.append(f"opening_range_retest_lineage:{','.join(missing_lineage)}")
+            if missing_outbox:
+                missing_parts.append(f"opening_range_retest_outbox:{','.join(missing_outbox)}")
+            raise sqlite3.OperationalError(f"schema mismatch:{';'.join(missing_parts)}")
 
     def _build_outbox_id(self, proposal: OpeningRangeRetestProposal) -> str:
         return f"outbox:{proposal.setup_id}"
@@ -614,7 +712,7 @@ class OpeningRangeRetestEmissionStore:
 
     def get_lineage(self, setup_id: str) -> LineageRecord | None:
         key = _validate_non_empty(setup_id, "setup_id")
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return None
         with self._connection() as conn:
             row = self._lineage_record(conn, key)
@@ -622,14 +720,14 @@ class OpeningRangeRetestEmissionStore:
 
     def get_outbox_record(self, setup_id: str) -> OutboxRecord | None:
         key = _validate_non_empty(setup_id, "setup_id")
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return None
         with self._connection() as conn:
             row = self._outbox_record(conn, key)
         return OutboxRecord.from_row(row) if row is not None else None
 
     def accept_candidate_proposal(self, proposal: OpeningRangeRetestProposal) -> PublicationResult:
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return self._unavailable_publication_result(proposal.setup_id)
         try:
             with self._transaction() as conn:
@@ -679,7 +777,7 @@ class OpeningRangeRetestEmissionStore:
         _parse_iso8601(now, field_name="now_iso")
         lease_expires = (_utc_from_iso(now, field_name="now_iso") + timedelta(seconds=self.lease_seconds)).isoformat().replace("+00:00", "Z")
         lease_token = uuid.uuid4().hex
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return self._unavailable_lease_result(key)
         try:
             with self._transaction() as conn:
@@ -758,7 +856,7 @@ class OpeningRangeRetestEmissionStore:
         owner = _validate_non_empty(lease_owner_id, "lease_owner_id")
         now = now_iso or _utc_now_iso()
         _parse_iso8601(now, field_name="now_iso")
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return self._unavailable_delivery_result(key)
         try:
             with self._transaction() as conn:
@@ -775,7 +873,7 @@ class OpeningRangeRetestEmissionStore:
                 last_attempt_at_iso = str(row["last_attempt_at_iso"] or "")
                 if last_attempt_at_iso and str(row["lease_token"] or "") == token and str(row["lease_owner_id"] or "") == owner:
                     return DeliveryResult(
-                        result="DELIVERY_STARTED",
+                        result="ALREADY_DELIVERY_STARTED",
                         setup_id=key,
                         publication_state="LEASED",
                         publication_attempts=attempts,
@@ -884,7 +982,7 @@ class OpeningRangeRetestEmissionStore:
         _parse_iso8601(now, field_name="now_iso")
         if next_attempt_at_iso is not None:
             _parse_iso8601(next_attempt_at_iso, field_name="next_attempt_at_iso")
-        if self._startup_error is not None:
+        if self._require_available() is not None:
             return self._unavailable_delivery_result(key)
         try:
             with self._transaction() as conn:
