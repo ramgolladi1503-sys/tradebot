@@ -131,6 +131,7 @@ def test_orb_retest_generates_valid_call_candidate_near_retest_level():
     assert candidate.evidence["setup_identity"]["setup_id"]
     assert candidate.evidence["setup_identity"]["history_hash"]
     assert candidate.evidence["setup_identity"]["proposal_ready_at_iso"] == "2026-07-14T09:34:00+05:30"
+    assert candidate.lineage["promotion_state"] == "READY_FOR_PUBLICATION"
     assert candidate.raw_score == pytest.approx(0.42150442477876104, abs=1e-6)
 
 

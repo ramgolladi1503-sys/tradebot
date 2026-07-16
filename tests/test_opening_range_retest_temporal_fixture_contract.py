@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import hashlib
 import json
 from datetime import datetime, timedelta
@@ -519,15 +520,16 @@ def test_canonical_setup_identity_and_history_hash_helper_are_deterministic_for_
     assert _history_hash(causal_rows, cutoff_index=len(causal_rows)) != _history_hash(close_mutated, cutoff_index=len(causal_rows))
 
 
-def test_snapshot_fingerprint_control_preserves_the_accepted_current_output() -> None:
-    result = generate_opening_range_retest_candidates(_current_snapshot_context(), _regime())
+def test_missing_completed_history_fails_closed_without_snapshot_fallback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING):
+        result = generate_opening_range_retest_candidates(_current_snapshot_context(), _regime())
 
-    assert len(result) == 1
-    candidate = result[0]
-    assert candidate.strategy_id == STRATEGY_ID
-    assert candidate.direction == "BUY_CALL"
-    assert candidate.raw_score == pytest.approx(0.45150442477876107, abs=1e-12)
-    assert candidate.evidence.get("setup_identity") is None
+    assert result == ()
+    assert _blocked_messages(caplog) == [
+        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=completed_bar_history invalid_fields=- reason=missing_required_temporal_evidence"
+    ]
 
 
 def test_unrelated_strategy_controls_remain_stable() -> None:
@@ -971,15 +973,14 @@ def test_invalidation_requires_fresh_setup_identity_and_stops_revival(caplog: py
     assert trace.steps[18].candidate_emitted is False
     assert trace.steps[-1].candidate_fingerprints == ()
 
+    caplog.clear()
     with caplog.at_level("WARNING"):
         result = generate_opening_range_retest_candidates(
-            _current_snapshot_context(completed_bar_history=_opening_range_bars()),
+            _current_snapshot_context(completed_bar_history=_opening_range_bars(), orb_low=22500.0),
             _regime(),
         )
     assert result == ()
-    assert _blocked_messages(caplog) == [
-        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=- invalid_fields=orb_low reason=invalid_orb_reconciliation"
-    ]
+    assert _blocked_messages(caplog) == []
 
 
 def test_no_pre_breakout_lineage_and_session_end_behaviour(caplog: pytest.LogCaptureFixture) -> None:
@@ -1004,14 +1005,12 @@ def test_no_pre_breakout_lineage_and_session_end_behaviour(caplog: pytest.LogCap
     assert breakout_only.steps[-1].candidate_emitted is False
     assert retest_only.steps[-1].candidate_emitted is False
 
+    caplog.clear()
     with caplog.at_level("WARNING"):
-        result = generate_opening_range_retest_candidates(
-            _current_snapshot_context(orb_high=None, orb_low=None),
-            _regime(),
-        )
+        result = generate_opening_range_retest_candidates(_current_snapshot_context(), _regime())
     assert result == ()
     assert _blocked_messages(caplog) == [
-        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=orb_high,orb_low invalid_fields=- reason=missing_required_orb_evidence"
+        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=completed_bar_history invalid_fields=- reason=missing_required_temporal_evidence"
     ]
 
 
@@ -1027,18 +1026,20 @@ def test_orb_mismatch_is_blocked_and_supplied_orb_never_overrides_completed_hist
     assert trace.steps[15].candidate_fingerprints == ()
     assert trace.steps[18].candidate_emitted is True
 
+    caplog.clear()
     with caplog.at_level("WARNING"):
         result = generate_opening_range_retest_candidates(
-            _current_snapshot_context(orb_high=OPENING_RANGE_HIGH + 5.0, orb_low=OPENING_RANGE_LOW - 5.0),
+            _current_snapshot_context(
+                completed_bar_history=_opening_range_bars() + _bars(CALL_VALID_ROWS[:4]),
+                orb_high=OPENING_RANGE_HIGH + 5.0,
+                orb_low=OPENING_RANGE_LOW - 5.0,
+            ),
             _regime(),
         )
-    assert len(result) == 1
-    candidate = result[0]
-    assert candidate.raw_score == pytest.approx(0.506821499668215, abs=1e-12)
-    assert candidate.evidence["orb_high"] == OPENING_RANGE_HIGH + 5.0
-    assert candidate.evidence["orb_low"] == OPENING_RANGE_LOW - 5.0
-    assert candidate.evidence.get("setup_identity") is None
-    assert _blocked_messages(caplog) == []
+    assert result == ()
+    assert _blocked_messages(caplog) == [
+        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=- invalid_fields=orb_high,orb_low reason=invalid_orb_reconciliation"
+    ]
 
 
 def test_malformed_history_controls_fail_closed_before_strategy_execution() -> None:

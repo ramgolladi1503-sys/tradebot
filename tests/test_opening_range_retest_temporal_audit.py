@@ -13,6 +13,13 @@ from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.strategy_registry import load_strategy_registry
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    PUT_VALID_ROWS,
+    _history_state_for_rows,
+    _temporal_context,
+)
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -197,11 +204,11 @@ def test_opening_range_retest_is_wired_to_the_real_production_callable() -> None
 @pytest.mark.parametrize(
     ("case_name", "history", "expected_summary"),
     [
-        ("absent", None, BASE_FINGERPRINT),
-        ("empty", [], BASE_FINGERPRINT),
-        ("one_valid", _bars((22590.0,)), BASE_FINGERPRINT),
-        ("multiple_valid", _bars((22590.0, 22630.0, 22615.0, 22635.0)), BASE_FINGERPRINT),
-        ("different_values", _bars((22490.0, 22520.0, 22580.0, 22640.0)), BASE_FINGERPRINT),
+        ("absent", None, ()),
+        ("empty", [], ()),
+        ("one_valid", _bars((22590.0,)), ()),
+        ("multiple_valid", _bars((22590.0, 22630.0, 22615.0, 22635.0)), ()),
+        ("different_values", _bars((22490.0, 22520.0, 22580.0, 22640.0)), ()),
         ("different_order", list(reversed(_bars((22590.0, 22630.0, 22615.0, 22635.0)))), ()),
         (
             "mixed_session",
@@ -272,7 +279,7 @@ def test_history_collapse_false_positives_share_the_same_fingerprint() -> None:
     )
 
     fingerprints = {_summary(no_breakout), _summary(breakout_without_retest), _summary(breakout_then_failure)}
-    assert fingerprints == {BASE_FINGERPRINT}
+    assert fingerprints == {()}
 
 
 def test_future_mutation_paths_collapse_to_same_production_candidate() -> None:
@@ -360,9 +367,9 @@ def test_future_mutation_by_path_remains_non_causal() -> None:
     assert [step.candidate_semantic_fingerprint for step in trace_a.steps] == [
         step.candidate_semantic_fingerprint for step in trace_b.steps
     ] == [step.candidate_semantic_fingerprint for step in trace_c.steps]
-    assert trace_a.emission_count == trace_b.emission_count == trace_c.emission_count == 3
-    assert trace_a.first_emission_checkpoint == trace_b.first_emission_checkpoint == trace_c.first_emission_checkpoint == "2026-07-14T09:18:00+05:30"
-    assert trace_a.repeated_semantic_fingerprint_count == trace_b.repeated_semantic_fingerprint_count == trace_c.repeated_semantic_fingerprint_count == 2
+    assert trace_a.emission_count == trace_b.emission_count == trace_c.emission_count == 0
+    assert trace_a.first_emission_checkpoint == trace_b.first_emission_checkpoint == trace_c.first_emission_checkpoint is None
+    assert trace_a.repeated_semantic_fingerprint_count == trace_b.repeated_semantic_fingerprint_count == trace_c.repeated_semantic_fingerprint_count == 0
 
 
 def test_repeated_emission_scenarios_share_the_same_snapshot_fingerprint() -> None:
@@ -377,15 +384,15 @@ def test_repeated_emission_scenarios_share_the_same_snapshot_fingerprint() -> No
         case_id="repeated_evolving_snapshot",
     )
 
-    assert frozen_trace.emission_count == 5
-    assert frozen_trace.first_emission_checkpoint == "2026-07-14T09:16:00+05:30"
-    assert frozen_trace.repeated_semantic_fingerprint_count == 4
-    assert all(step.candidate_semantic_fingerprint is not None for step in frozen_trace.steps)
+    assert frozen_trace.emission_count == 0
+    assert frozen_trace.first_emission_checkpoint is None
+    assert frozen_trace.repeated_semantic_fingerprint_count == 0
+    assert all(step.candidate_semantic_fingerprint is None for step in frozen_trace.steps)
 
-    assert evolving_trace.emission_count == 5
-    assert evolving_trace.first_emission_checkpoint == "2026-07-14T09:16:00+05:30"
-    assert evolving_trace.repeated_semantic_fingerprint_count == 4
-    assert all(step.candidate_semantic_fingerprint is not None for step in evolving_trace.steps)
+    assert evolving_trace.emission_count == 0
+    assert evolving_trace.first_emission_checkpoint is None
+    assert evolving_trace.repeated_semantic_fingerprint_count == 0
+    assert all(step.candidate_semantic_fingerprint is None for step in evolving_trace.steps)
 
 
 def test_invalidation_is_metadata_only_and_has_no_revival_memory() -> None:
@@ -399,21 +406,23 @@ def test_invalidation_is_metadata_only_and_has_no_revival_memory() -> None:
         _regime(),
     )
 
-    assert _summary(baseline) == BASE_FINGERPRINT
-    assert _summary(inside_range) == BASE_FINGERPRINT
-    assert _summary(revival_like) == BASE_FINGERPRINT
+    assert _summary(baseline) == ()
+    assert _summary(inside_range) == ()
+    assert _summary(revival_like) == ()
 
 
 def test_directional_contract_is_bidirectional_from_the_same_snapshot_contract() -> None:
-    call_result = generate_opening_range_retest_candidates(_snapshot_context(), _regime())
+    call_state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
+    call_result = generate_opening_range_retest_candidates(
+        _temporal_context(call_state),
+        _regime(),
+    )
     put_result = generate_opening_range_retest_candidates(
-        _snapshot_context(
-            spot_ltp=22452.0,
-            vwap=22510.0,
-            orb_low=22460.0,
+        _temporal_context(
+            _history_state_for_rows(OPENING_RANGE_ROWS + PUT_VALID_ROWS[:4]),
+            spot_ltp=22484.0,
             pe_premium_change=11.0,
             ce_premium_change=0.0,
-            minutes_since_open=42,
         ),
         _regime(down=0.72),
     )
@@ -421,7 +430,7 @@ def test_directional_contract_is_bidirectional_from_the_same_snapshot_contract()
     assert len(call_result) == 1
     assert call_result[0].raw_score == pytest.approx(0.45150442477876107, abs=1e-12)
     assert len(put_result) == 1
-    assert put_result[0].raw_score == pytest.approx(0.4509528049866429, abs=1e-12)
+    assert put_result[0].raw_score == pytest.approx(0.45111111111111113, abs=1e-12)
 
 
 def test_unrelated_production_controls_remain_direct_and_stable() -> None:
@@ -478,6 +487,6 @@ def test_opening_range_retest_negative_control_produces_blocking_logs(caplog: py
     assert result == ()
     assert any(
         record.message
-        == "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=minutes_since_open invalid_fields=- reason=missing_required_session_timing"
+        == "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=completed_bar_history invalid_fields=- reason=missing_required_temporal_evidence"
         for record in caplog.records
     )

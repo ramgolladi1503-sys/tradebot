@@ -23,7 +23,6 @@ from core.strategy_parameter_profiles import (
     resolve_required_profile_parameters,
 )
 from strategies.movement._utils import (
-    block_on_required_fields,
     clamp_score,
     emit_strategy_evidence_blocked,
     make_candidate,
@@ -37,6 +36,7 @@ IST = ZoneInfo("Asia/Kolkata")
 STRATEGY_ID = "opening_range_retest_v1"
 MOVEMENT_TYPE = "OPENING_RANGE_RETEST"
 TEMPORAL_CONTRACT_VERSION = "opening_range_retest_temporal_v1"
+TEMPORAL_PROPOSAL_STATE = "READY_FOR_PUBLICATION"
 OPENING_RANGE_BARS = 15
 MAX_BREAKOUT_TO_RETEST_AGE = 5
 MAX_RETEST_TO_CONTINUATION_AGE = 3
@@ -107,127 +107,43 @@ def generate_opening_range_retest_candidates(
         )
         return ()
     history = history_result.bars
-    if history is not None and len(history) >= OPENING_RANGE_BARS:
-        opening_range = history[:OPENING_RANGE_BARS]
-        orb_high = max(bar.high for bar in opening_range)
-        orb_low = min(bar.low for bar in opening_range)
-        orb_invalid_fields = _reconcile_supplied_orb_fields(
-            supplied_orb_high=ctx.orb_high,
-            supplied_orb_low=ctx.orb_low,
-            recomputed_orb_high=orb_high,
-            recomputed_orb_low=orb_low,
+    if history is None or len(history) < OPENING_RANGE_BARS:
+        emit_strategy_evidence_blocked(
+            STRATEGY_ID,
+            reason=history_result.reason,
+            missing_fields=history_result.missing_fields or ("completed_bar_history",),
+            invalid_fields=history_result.invalid_fields,
         )
-        if orb_invalid_fields:
-            emit_strategy_evidence_blocked(
-                STRATEGY_ID,
-                reason="invalid_orb_reconciliation",
-                invalid_fields=orb_invalid_fields,
-            )
-            return ()
-
-        candidates: list[StrategyCandidate] = []
-        for direction in ("BUY_CALL", "BUY_PUT"):
-            setup = _scan_directional_setup(
-                history=history,
-                direction=direction,
-                orb_high=orb_high,
-                orb_low=orb_low,
-            )
-            if setup is not None:
-                candidates.append(_build_temporal_candidate(ctx, regime, profile, setup))
-        return tuple(candidates)
-
-    minutes = safe_float(ctx.minutes_since_open)
-    if block_on_required_fields(
-        STRATEGY_ID,
-        reason="missing_required_session_timing",
-        field_specs=(("minutes_since_open", ctx.minutes_since_open, "non_negative"),),
-    ):
-        return ()
-
-    params = dict(profile.parameters)
-    min_retest_minutes = float(params["MIN_RETEST_MINUTES"])
-    max_retest_minutes = float(params["MAX_RETEST_MINUTES"])
-    if minutes is None or minutes < min_retest_minutes or minutes > max_retest_minutes:
-        return ()
-
-    spot = safe_float(ctx.spot_ltp)
-    vwap = safe_float(ctx.vwap)
-    orb_high = safe_float(ctx.orb_high)
-    orb_low = safe_float(ctx.orb_low)
-    if block_on_required_fields(
-        STRATEGY_ID,
-        reason="missing_required_orb_evidence",
-        field_specs=(
-            ("spot_ltp", ctx.spot_ltp, "positive"),
-            ("vwap", ctx.vwap, "positive"),
-            ("orb_high", ctx.orb_high, "positive"),
-            ("orb_low", ctx.orb_low, "positive"),
-        ),
-    ):
         return ()
 
     candidates: list[StrategyCandidate] = []
-    if _call_retest_confirmed(profile, spot=spot, vwap=vwap, orb_high=orb_high):
-        candidates.append(_build_snapshot_candidate(ctx, regime, profile, "BUY_CALL", orb_high))
-    if _put_retest_confirmed(profile, spot=spot, vwap=vwap, orb_low=orb_low):
-        candidates.append(_build_snapshot_candidate(ctx, regime, profile, "BUY_PUT", orb_low))
+    opening_range = history[:OPENING_RANGE_BARS]
+    orb_high = max(bar.high for bar in opening_range)
+    orb_low = min(bar.low for bar in opening_range)
+    orb_invalid_fields = _reconcile_supplied_orb_fields(
+        supplied_orb_high=ctx.orb_high,
+        supplied_orb_low=ctx.orb_low,
+        recomputed_orb_high=orb_high,
+        recomputed_orb_low=orb_low,
+    )
+    if orb_invalid_fields:
+        emit_strategy_evidence_blocked(
+            STRATEGY_ID,
+            reason="invalid_orb_reconciliation",
+            invalid_fields=orb_invalid_fields,
+        )
+        return ()
+
+    for direction in ("BUY_CALL", "BUY_PUT"):
+        setup = _scan_directional_setup(
+            history=history,
+            direction=direction,
+            orb_high=orb_high,
+            orb_low=orb_low,
+        )
+        if setup is not None:
+            candidates.append(_build_temporal_candidate(ctx, regime, profile, setup))
     return tuple(candidates)
-
-
-def _build_snapshot_candidate(
-    ctx: StrategyContext,
-    regime: MovementRegimeResult,
-    profile: RuntimeProfileResolution,
-    direction: str,
-    retest_level: float,
-) -> StrategyCandidate:
-    params = dict(profile.parameters)
-    max_retest_distance_pct = float(params["MAX_RETEST_DISTANCE_PCT"])
-    min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
-    side = side_evidence(ctx, direction)
-    spot = safe_float(ctx.spot_ltp)
-    retest_distance = pct_distance(spot, retest_level) or 0.0
-    breakout_distance = _breakout_distance(spot, direction, retest_level)
-    price_structure_score = clamp_score(
-        0.45
-        * (1.0 - ratio_score(retest_distance, start=0.0, full=max_retest_distance_pct))
-        + 0.35
-        * ratio_score(breakout_distance, start=min_breakout_distance_pct, full=0.004)
-        + 0.20 * clamp_score(regime.scores.get("VOLATILITY_EXPANSION", 0.0))
-    )
-    evidence = {
-        "spot_ltp": ctx.spot_ltp,
-        "vwap": ctx.vwap,
-        "orb_high": ctx.orb_high,
-        "orb_low": ctx.orb_low,
-        "retest_level": retest_level,
-        "retest_distance_pct": retest_distance,
-        "breakout_distance_pct": breakout_distance,
-        "option_ltp": side.option_ltp,
-        "premium_change": side.premium_change,
-        "spread_pct": side.spread_pct,
-        "depth": side.depth,
-    }
-    return make_candidate(
-        ctx=ctx,
-        regime=regime,
-        strategy_id=STRATEGY_ID,
-        movement_type=MOVEMENT_TYPE,
-        direction=direction,
-        price_structure_score=price_structure_score,
-        side=side,
-        entry_trigger="opening_range_breakout_retest_hold",
-        invalid_if="price_returns_inside_opening_range",
-        rank_reason="opening range breakout retest held",
-        evidence=evidence,
-        warnings=(),
-        confluence_tags=("orb_retest", "vwap_alignment"),
-        strategy_version="v1",
-        params_used=params,
-        params_hash=profile.parameter_hash,
-        promotion_state="ADVISORY_ONLY",
-    )
 
 
 def _build_temporal_candidate(
@@ -298,7 +214,7 @@ def _build_temporal_candidate(
         strategy_version="v1",
         params_used=params,
         params_hash=profile.parameter_hash,
-        promotion_state="ADVISORY_ONLY",
+        promotion_state=TEMPORAL_PROPOSAL_STATE,
     )
 
 

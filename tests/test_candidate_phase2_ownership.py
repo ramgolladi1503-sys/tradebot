@@ -17,6 +17,11 @@ from strategies.movement.compression_breakout import generate_compression_breako
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    _history_state_for_rows,
+)
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -111,6 +116,51 @@ def _full_context(**overrides: object) -> StrategyContext:
     return StrategyContext(**payload)
 
 
+def _opening_range_context(**overrides: object) -> StrategyContext:
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
+    payload = {
+        "symbol": "NIFTY",
+        "ts_epoch": 1721028600.0,
+        "spot_ltp": 22608.0,
+        "open_price": 22500.0,
+        "vwap": 22550.0,
+        "day_high": 22620.0,
+        "day_low": 22460.0,
+        "nearest_support": 22590.0,
+        "nearest_resistance": 22600.0,
+        "orb_high": 22600.0,
+        "orb_low": 22500.0,
+        "range_width_pct": 0.14,
+        "atr": 70.0,
+        "atr_short": 35.0,
+        "atr_long": 100.0,
+        "volume_z": 1.5,
+        "vwap_slope": 0.03,
+        "option_ce_ltp": 120.0,
+        "option_pe_ltp": 90.0,
+        "ce_premium_change": 12.0,
+        "pe_premium_change": 0.0,
+        "ce_spread_pct": 0.8,
+        "pe_spread_pct": 0.8,
+        "ce_depth": 1200.0,
+        "pe_depth": 1200.0,
+        "option_ltp_age_sec": 0.4,
+        "quote_source": "live_option_tick",
+        "fallback_used": False,
+        "minutes_since_open": 35,
+        "minutes_to_close": 280,
+        "completed_bar_history": state.history_payload(),
+        "metadata": {
+            "previous_spot_ltp": 22590.0,
+            "price_reentered_range": True,
+            "previous_break_high": 22685.0,
+            "previous_break_low": 22430.0,
+        },
+    }
+    payload.update(overrides)
+    return StrategyContext(**payload)
+
+
 def _runtime_truth_payload() -> dict:
     warnings: list[str] = []
     return _snapshot_symbol_payload(
@@ -149,12 +199,13 @@ def _runtime_truth_payload() -> dict:
 
 
 def _raw_setup_fingerprint() -> list[tuple[str, str, float, str, str, str]]:
-    ctx = _full_context()
+    opening_ctx = _opening_range_context()
+    directional_ctx = _full_context()
     regime = _regime()
     emitted = (
-        generate_opening_range_retest_candidates(ctx, regime)
-        + generate_compression_breakout_candidates(ctx, regime)
-        + generate_trend_pullback_candidates(ctx, regime)
+        generate_opening_range_retest_candidates(opening_ctx, regime)
+        + generate_compression_breakout_candidates(directional_ctx, regime)
+        + generate_trend_pullback_candidates(directional_ctx, regime)
     )
     return [
         (
@@ -190,7 +241,7 @@ def _blocked_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 def test_directional_generators_emit_raw_candidates_with_unset_phase2_fields():
     candidates = (
-        generate_opening_range_retest_candidates(_full_context(), _regime())
+        generate_opening_range_retest_candidates(_opening_range_context(), _regime())
         + generate_compression_breakout_candidates(_full_context(), _regime())
         + generate_trend_pullback_candidates(_full_context(), _regime())
     )
@@ -212,7 +263,7 @@ def test_generators_preserve_setup_identity_and_pattern_scores():
         (
             "opening_range_retest_v1",
             "BUY_CALL",
-            0.328053,
+            0.451504,
             "opening_range_breakout_retest_hold",
             "price_returns_inside_opening_range",
             "opening range breakout retest held",
@@ -237,14 +288,14 @@ def test_generators_preserve_setup_identity_and_pattern_scores():
 
 
 def test_make_candidate_does_not_fabricate_downstream_truth():
-    candidate = generate_opening_range_retest_candidates(_full_context(), _regime())[0]
+    candidate = generate_opening_range_retest_candidates(_opening_range_context(), _regime())[0]
 
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.option_confirmation_score is None
     assert candidate.liquidity_score is None
     assert candidate.freshness_score is None
     assert candidate.lineage["params_hash"]
-    assert candidate.lineage["promotion_state"] == "ADVISORY_ONLY"
+    assert candidate.lineage["promotion_state"] == "READY_FOR_PUBLICATION"
 
 
 def test_candidate_pool_enriches_directional_candidates_from_real_downstream_quote_truth():
@@ -256,12 +307,11 @@ def test_candidate_pool_enriches_directional_candidates_from_real_downstream_quo
 
     strategy_ids = [candidate.strategy_id for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"}]
     assert strategy_ids == [
-        "opening_range_retest_v1",
         "compression_breakout_v1",
         "trend_pullback_v1",
     ]
-    assert len(report.option_confirmations) == 3
-    assert report.metadata["raw_candidate_count_before_phase2_enrichment"] == 3
+    assert len(report.option_confirmations) == 2
+    assert report.metadata["raw_candidate_count_before_phase2_enrichment"] == 2
     assert all(candidate.status == "VALIDATED_CANDIDATE" for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"})
     assert all(candidate.option_confirmation_score is not None for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"})
     assert all(candidate.liquidity_score is not None for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"})
@@ -280,13 +330,13 @@ def test_option_confirmation_is_not_counted_as_directional_market_thesis_strateg
     assert "option_pressure_confirmation_v1" not in {
         candidate.strategy_id for candidate in report.candidates
     }
-    assert len(report.option_confirmations) == 3
+    assert len(report.option_confirmations) == 2
     assert all(confirmation.candidate_strategy_id != "option_pressure_confirmation_v1" for confirmation in report.option_confirmations)
 
 
 def test_no_directional_generator_marks_itself_tradable_or_executable():
     raw_candidates = (
-        generate_opening_range_retest_candidates(_full_context(), _regime())
+        generate_opening_range_retest_candidates(_opening_range_context(), _regime())
         + generate_compression_breakout_candidates(_full_context(), _regime())
         + generate_trend_pullback_candidates(_full_context(), _regime())
     )
@@ -296,7 +346,7 @@ def test_no_directional_generator_marks_itself_tradable_or_executable():
 
 
 def test_compliant_raw_candidate_passes_boundary_and_violation_is_blocked(caplog: pytest.LogCaptureFixture):
-    good_candidate = generate_opening_range_retest_candidates(_full_context(), _regime())[0]
+    good_candidate = generate_opening_range_retest_candidates(_opening_range_context(), _regime())[0]
 
     violating_candidate = StrategyCandidate(
         schema_version=1,
@@ -351,7 +401,6 @@ def test_ownership_fingerprint_changes_are_truthful_and_setup_identity_is_preser
     )
 
     assert _ownership_fingerprint(report) == [
-        ("opening_range_retest_v1", "VALIDATED_CANDIDATE", 0.81475, 0.8599999999999999, 0.84, True),
         ("compression_breakout_v1", "VALIDATED_CANDIDATE", 0.81475, 0.8599999999999999, 0.84, True),
         ("trend_pullback_v1", "VALIDATED_CANDIDATE", 0.81475, 0.8599999999999999, 0.84, True),
     ]
