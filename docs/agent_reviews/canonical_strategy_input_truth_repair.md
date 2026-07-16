@@ -58,6 +58,7 @@ Requires explicit human sign-off on the physical cutoff methodology.
 - broker_api_called: false
 - source: tests/core/test_canonical_strategy_input_truth.py, tests/test_market_data_warm_seed.py, tests/test_market_data_index_quote_cache.py, and tests/test_time_sanity_staleness.py
 
-
 ## CI Compatibility Closure
 The post-merge fast suite exposed four legacy fixtures that supplied contradictory physical clocks: `now_ist()` represented the current date while `now_utc_epoch()` represented an unrelated historical epoch. The fixtures now derive quote epochs from the frozen IST cutoff. The time-sanity fixture also mocks `get_completed_bars()` rather than the retired raw `get_bars()` strategy-input path. Production code was not changed.
+
+Prepared correction workflow run `29516683745` passed the four previously failing tests plus `tests/core/test_canonical_strategy_input_truth.py` and `tests/test_market_data_warm_seed.py`. This evidence-only commit triggers final required checks on the corrected tree.
