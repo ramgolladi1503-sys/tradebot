@@ -503,3 +503,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    import os
+    os._exit(0)
