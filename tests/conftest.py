@@ -10,6 +10,39 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+_FEED_RESOURCE_SOAK_FILE = "tests/test_feed_reconnect_resource_soak.py"
+_FEED_RESOURCE_SOAK_TESTS = {
+    "test_control_100_has_no_cycle_correlated_fd_growth",
+    "test_reconnect_stress_100_has_bounded_resources",
+    "test_retired_websocket_generations_are_reclaimed",
+}
+_FEED_RESOURCE_CERTIFICATION_TESTS = {
+    "test_control_1000_has_no_cycle_correlated_fd_growth",
+    "test_reconnect_stress_1000_has_bounded_resources",
+}
+
+
+def pytest_collection_modifyitems(items):
+    """Tier feed resource tests so ordinary PR CI never runs soak proofs.
+
+    The entire feed reconnect resource module is a subsystem-specific smoke
+    suite. Tests that execute 50-100 cycles are promoted to ``feed_soak`` and
+    1000-cycle proofs are promoted to ``certification``. Dedicated workflows
+    override the default marker expression when those tiers are required.
+    """
+
+    for item in items:
+        node_path = item.nodeid.split("::", 1)[0].replace("\\", "/")
+        if not node_path.endswith(_FEED_RESOURCE_SOAK_FILE):
+            continue
+
+        item.add_marker(pytest.mark.feed_smoke)
+        if item.name in _FEED_RESOURCE_CERTIFICATION_TESTS:
+            item.add_marker(pytest.mark.certification)
+        elif item.name in _FEED_RESOURCE_SOAK_TESTS:
+            item.add_marker(pytest.mark.feed_soak)
+
+
 # Keep runtime writes outside the repo during tests.
 _TEST_RUNTIME_ROOT = Path(tempfile.gettempdir()) / "trading_bot_runtime_tests"
 os.environ.setdefault("DATA_ROOT", str(_TEST_RUNTIME_ROOT))
