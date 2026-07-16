@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - fix/canonical-strategy-input-truth
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr657-diagnostics-${{ github.ref }}
+  group: pr657-diagnostics-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
