@@ -1,10 +1,11 @@
-"""Read-only candidate-pool orchestrator shell for the opportunity engine.
+"""Candidate-pool orchestrator shell for the opportunity engine.
 
-This module collects movement strategy candidates into one report and attaches
-option-confirmation and no-trade assessment evidence. It is intentionally a
-shell: it does not rank, execute, submit orders, call brokers, touch depth
-subscriptions, mutate candidates, tune strategy thresholds, or change dashboard
-behavior.
+This module collects movement strategy candidates into one report, attaches
+option-confirmation and no-trade assessment evidence, and exposes the durable
+owner acceptance boundary for the temporal ORB retest proposal before a
+candidate is treated as authoritative. It does not rank, execute, submit
+orders, call brokers, touch depth subscriptions, mutate candidates, tune
+strategy thresholds, or change dashboard behavior.
 """
 
 from __future__ import annotations
@@ -17,6 +18,13 @@ from typing import Any, Callable, Iterable
 
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
+from core.opening_range_retest_emission_store import OpeningRangeRetestEmissionStore
+from core.opening_range_retest_publication import (
+    ACCEPTED_PUBLICATION_RESULTS,
+    STRATEGY_ID as OPENING_RANGE_RETEST_STRATEGY_ID,
+    accept_opening_range_retest_candidate,
+    default_owner_db_path,
+)
 from core.no_trade_engine import NoTradeAssessment, assess_no_trade
 from core.option_confirmation import (
     CandidateOptionConfirmation,
@@ -80,6 +88,7 @@ def build_candidate_pool_report(
     *,
     candidate_generators: Iterable[CandidateGenerator] | None = None,
     option_pressure: OptionPressureAssessment | None = None,
+    opening_range_retest_owner_store: OpeningRangeRetestEmissionStore | None = None,
     include_no_trade_candidate: bool = True,
 ) -> CandidatePoolReport:
     """Build a read-only report from strategy candidates.
@@ -103,7 +112,11 @@ def build_candidate_pool_report(
 
     raw_movement_candidates: list[StrategyCandidate] = []
     warnings: list[str] = []
+    owner_blockers: list[str] = []
+    owner_results: list[dict[str, Any]] = []
+    authoritative_setup_ids: set[str] = set()
     failed_generator_count = 0
+    owner_store = opening_range_retest_owner_store
 
     for generator in generators:
         generator_name = _generator_name(generator)
@@ -118,6 +131,24 @@ def build_candidate_pool_report(
                 if _phase2_boundary_violations(candidate):
                     warnings.append(f"candidate_ownership_blocked:{candidate.strategy_id}")
                     continue
+                if candidate.strategy_id == OPENING_RANGE_RETEST_STRATEGY_ID:
+                    if owner_store is None:
+                        owner_store = OpeningRangeRetestEmissionStore(db_path=default_owner_db_path())
+                    owner_summary, owner_blocker = _accept_opening_range_retest_candidate(
+                        candidate,
+                        owner_store=owner_store,
+                    )
+                    owner_results.append(owner_summary)
+                    if owner_blocker is not None:
+                        owner_blockers.append(owner_blocker)
+                        warnings.append(owner_blocker)
+                        continue
+                    setup_id = str(owner_summary["setup_id"])
+                    if setup_id in authoritative_setup_ids:
+                        duplicate_warning = f"opening_range_retest_owner_duplicate:{setup_id}"
+                        warnings.append(duplicate_warning)
+                        continue
+                    authoritative_setup_ids.add(setup_id)
                 raw_movement_candidates.append(candidate)
             else:
                 warnings.append(f"strategy_generator_returned_non_candidate:{generator_name}")
@@ -155,6 +186,7 @@ def build_candidate_pool_report(
             set(
                 tuple(option_assessment.blockers)
                 + tuple(no_trade_assessment.blockers)
+                + tuple(owner_blockers)
                 + tuple(blocker for candidate in candidates for blocker in candidate.blockers)
                 + tuple(blocker for confirmation in option_confirmations_tuple for blocker in confirmation.blockers)
             )
@@ -206,6 +238,9 @@ def build_candidate_pool_report(
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "raw_candidate_count_before_phase2_enrichment": len(raw_movement_candidates),
+            "opening_range_retest_owner_results": tuple(owner_results),
+            "opening_range_retest_owner_authoritative_count": len(authoritative_setup_ids),
+            "opening_range_retest_owner_blocked_count": len(owner_blockers),
         },
     )
 
@@ -252,6 +287,51 @@ def _build_no_trade_candidates(
     from strategies.movement.no_trade_chop import generate_no_trade_candidates  # noqa: PLC0415
 
     return tuple(generate_no_trade_candidates(ctx, regime, movement_candidates) or ())
+
+
+def _accept_opening_range_retest_candidate(
+    candidate: StrategyCandidate,
+    *,
+    owner_store: OpeningRangeRetestEmissionStore,
+) -> tuple[dict[str, Any], str | None]:
+    setup_identity = candidate.evidence.get("setup_identity") if isinstance(candidate.evidence, dict) else None
+    setup_id = ""
+    if isinstance(setup_identity, dict):
+        setup_id = str(setup_identity.get("setup_id") or "")
+    try:
+        publication_result = accept_opening_range_retest_candidate(candidate, store=owner_store)
+    except Exception as exc:
+        blocker = f"opening_range_retest_owner_error:{setup_id or candidate.strategy_id}:{exc.__class__.__name__}"
+        return (
+            {
+                "setup_id": setup_id or candidate.strategy_id,
+                "strategy_id": candidate.strategy_id,
+                "result": "ERROR",
+                "detail": exc.__class__.__name__,
+                "lineage_state": None,
+                "publication_state": None,
+                "publication_attempts": None,
+                "outbox_id": None,
+                "authoritative": False,
+            },
+            blocker,
+        )
+
+    summary = {
+        "setup_id": publication_result.setup_id or setup_id or candidate.strategy_id,
+        "strategy_id": candidate.strategy_id,
+        "result": publication_result.result,
+        "detail": publication_result.detail,
+        "lineage_state": publication_result.lineage_state,
+        "publication_state": publication_result.publication_state,
+        "publication_attempts": publication_result.publication_attempts,
+        "outbox_id": publication_result.outbox_id,
+        "authoritative": publication_result.result in ACCEPTED_PUBLICATION_RESULTS,
+    }
+    if publication_result.result not in ACCEPTED_PUBLICATION_RESULTS:
+        blocker = f"opening_range_retest_owner_blocked:{publication_result.result}:{summary['setup_id']}"
+        return summary, blocker
+    return summary, None
 
 
 def _generator_name(generator: CandidateGenerator) -> str:
