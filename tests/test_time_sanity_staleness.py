@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from zoneinfo import ZoneInfo
 
@@ -44,7 +44,7 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
     monkeypatch.setattr(cfg, "FEED_USE_SUBPROCESS", False, raising=False)
     monkeypatch.setattr("core.tick_store.get_last_tick", lambda token: None, raising=False)
 
-    fixed_now = now_ist().replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    fixed_now = datetime.fromtimestamp(now_epoch, tz=ZoneInfo("Asia/Kolkata"))
     monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
     monkeypatch.setattr(market_data, "now_utc_epoch", lambda: now_epoch)
     monkeypatch.setattr(market_data, "is_open", lambda now_dt=None, segment=None: True)
@@ -54,7 +54,11 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
     monkeypatch.setattr(market_data, "_NEWS_CAL", _DummyNewsCal(), raising=False)
     monkeypatch.setattr(market_data, "_NEWS_TEXT", _DummyNewsText(), raising=False)
     monkeypatch.setattr(market_data, "_CROSS_ASSET", _DummyCross(), raising=False)
-    monkeypatch.setattr(market_data.ohlc_buffer, "get_bars", lambda symbol: [{"close": 25000.0}] * 40)
+    monkeypatch.setattr(
+        market_data.ohlc_buffer,
+        "get_completed_bars",
+        lambda symbol, *, as_of, interval_seconds=60: [{"ts": last_ts, "close": 25000.0}] * 40,
+    )
     monkeypatch.setattr(
         market_data,
         "compute_indicators",
@@ -73,7 +77,7 @@ def _patch_common(monkeypatch, *, now_epoch: float, ltp_ts_epoch: float, last_ts
 
 
 def test_stale_ltp_marks_snapshot_invalid(monkeypatch):
-    reference_now = now_ist()
+    reference_now = datetime.fromtimestamp(170.0, tz=ZoneInfo("Asia/Kolkata"))
     _patch_common(
         monkeypatch,
         now_epoch=200.0,
@@ -90,7 +94,7 @@ def test_stale_ltp_marks_snapshot_invalid(monkeypatch):
 
 
 def test_fresh_timestamps_do_not_block(monkeypatch):
-    reference_now = now_ist()
+    reference_now = datetime.fromtimestamp(170.0, tz=ZoneInfo("Asia/Kolkata"))
     _patch_common(
         monkeypatch,
         now_epoch=200.0,

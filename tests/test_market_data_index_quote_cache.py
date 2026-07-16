@@ -359,8 +359,8 @@ def test_refresh_index_quote_from_rest_populates_bid_ask(monkeypatch):
 def test_index_depth_missing_synthesizes_quote(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     md._DATA_CACHE.clear()
-    fixed_epoch = 1710000000.0
     fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+    fixed_epoch = fixed_now.timestamp()
 
     monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "PAPER", raising=False)
@@ -459,8 +459,8 @@ def test_fetch_live_market_data_uses_tick_buffer_features_and_marks_ready():
 def test_index_depth_missing_live_keeps_quote_false(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     md._DATA_CACHE.clear()
-    fixed_epoch = 1710000000.0
     fixed_now = md.now_ist().replace(hour=10, minute=0, second=0, microsecond=0)
+    fixed_epoch = fixed_now.timestamp()
 
     monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
@@ -497,8 +497,8 @@ def test_index_depth_missing_live_keeps_quote_false(monkeypatch, tmp_path):
 def test_index_depth_missing_live_offhours_allows_synthetic_and_offhours_chain(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     md._DATA_CACHE.clear()
-    fixed_epoch = 1710000000.0
     fixed_now = md.now_ist().replace(hour=6, minute=0, second=0, microsecond=0)
+    fixed_epoch = fixed_now.timestamp()
 
     monkeypatch.setattr(md.cfg, "SYMBOLS", ["NIFTY"], raising=False)
     monkeypatch.setattr(md.cfg, "EXECUTION_MODE", "LIVE", raising=False)
