@@ -71,9 +71,10 @@ def test_warm_seed_from_historical_enables_indicator_compute(tmp_path, monkeypat
     market_data._INSUFFICIENT_OHLC_WARNED.clear()
 
     bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
-        symbol=symbol,
-        bars=[],
-        min_bars=30,
+            symbol=symbol,
+            bars=[],
+            min_bars=30,
+            as_of=market_data.now_ist(),
     )
     assert seeded_ok is True
     assert reason is None
@@ -131,7 +132,7 @@ def test_fetch_live_market_data_seeds_empty_buffer_and_enables_indicators(tmp_pa
     assert snap["ohlc_seeded"] is True
     assert snap["ohlc_bars_count"] >= 30
     assert snap["indicators_ok"] is True
-    bars = market_data.ohlc_buffer.get_bars(symbol)
+    bars = market_data.ohlc_buffer.get_completed_bars(symbol, as_of=fixed_now)
     expected = market_data.compute_indicators(
         bars,
         vwap_window=getattr(cfg, "VWAP_WINDOW", 20),
@@ -312,6 +313,7 @@ def test_insufficient_ohlc_warning_logged_once_when_kite_unavailable(tmp_path, m
             symbol="NIFTY",
             bars=[],
             min_bars=30,
+            as_of=market_data.now_ist(),
         )
         assert seeded_ok is False
         assert reason == "HIST_FETCH_FAILED"
@@ -348,9 +350,10 @@ def test_warm_seed_fallback_to_240m_window(tmp_path, monkeypatch):
     monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
 
     bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
-        symbol="NIFTY_WARMSEED_FALLBACK",
-        bars=[],
-        min_bars=30,
+            symbol="NIFTY_WARMSEED_FALLBACK",
+            bars=[],
+            min_bars=30,
+            as_of=market_data.now_ist(),
     )
     assert seeded_ok is True
     assert reason is None
@@ -535,9 +538,10 @@ def test_warm_seed_retries_before_success(tmp_path, monkeypatch):
     market_data.ohlc_buffer._bars.pop(symbol, None)
 
     bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
-        symbol=symbol,
-        bars=[],
-        min_bars=30,
+            symbol=symbol,
+            bars=[],
+            min_bars=30,
+            as_of=market_data.now_ist(),
     )
     assert seeded_ok is True
     assert reason is None
@@ -664,9 +668,10 @@ def test_startup_warmup_live_hist_empty_keeps_full_retry_budget(tmp_path, monkey
     monkeypatch.setattr(market_data.kite_client, "historical_data", _hist)
 
     bars, seeded_ok, reason = market_data._warm_seed_ohlc_from_history(
-        symbol=symbol,
-        bars=[],
-        min_bars=30,
+            symbol=symbol,
+            bars=[],
+            min_bars=30,
+            as_of=market_data.now_ist(),
         windows_minutes=[60, 120],
         startup_phase=True,
         market_mode="LIVE",

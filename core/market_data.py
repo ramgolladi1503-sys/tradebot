@@ -1505,6 +1505,7 @@ def _warm_seed_ohlc_from_history(
     bars: list,
     min_bars: int,
     *,
+    as_of,
     interval: str | None = None,
     windows_minutes: list[int] | None = None,
     required_seed_bars: int | None = None,
@@ -1572,8 +1573,8 @@ def _warm_seed_ohlc_from_history(
             hist = []
             for attempt in range(retry_attempts):
                 attempts_used += 1
-                from_dt = now_ist() - timedelta(minutes=int(window_min))
-                to_dt = now_ist()
+                from_dt = as_of - timedelta(minutes=int(window_min))
+                to_dt = as_of
                 try:
                     hist = kite_client.historical_data(
                         token,
@@ -1638,8 +1639,12 @@ def _warm_seed_ohlc_from_history(
                     time.sleep(sleep_sec)
             if not hist:
                 continue
-            ohlc_buffer.seed_bars(symbol, hist)
-            bars = ohlc_buffer.get_bars(symbol)
+            seed_result = ohlc_buffer.seed_bars(symbol, hist)
+            if not seed_result.get("accepted"):
+                reason_code = str(seed_result.get("status", "INVALID_SEED_BATCH")).lower()
+                return bars, False, reason_code
+
+            bars = ohlc_buffer.get_completed_bars(symbol, as_of=as_of)
             if len(bars) >= required_bars:
                 _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
                 _WARMUP_SEED_DETAILS.pop(symbol, None)
@@ -1711,6 +1716,7 @@ def seed_ohlc_buffers_on_startup(
             symbol=symbol,
             bars=pre_bars,
             min_bars=min_bars,
+            as_of=now_ist(),
             interval=seed_interval,
             windows_minutes=startup_windows,
             required_seed_bars=target_bars,
@@ -2572,13 +2578,16 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         else:
             shock = {**cal_shock, **text_shock}
 
+    cycle_cutoff = now_ist()
+    cycle_cutoff_epoch = cycle_cutoff.timestamp()
+
     for symbol in symbols:
         segment = coerce_segment_for_market_context(
             getattr(cfg, "DEFAULT_SEGMENT", "NSE_FNO"),
             symbol=str(symbol or "").upper(),
             instrument="OPT",
         )
-        market_open_for_segment = bool(is_open(now_dt=now_ist(), segment=segment))
+        market_open_for_segment = bool(is_open(now_dt=cycle_cutoff, segment=segment))
         runtime_mode = str(
             os.getenv(
                 "TRADING_MODE",
@@ -2601,7 +2610,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             level="INFO",
             source="fetch_live_market_data",
             details={
-                "now_ist": now_ist().isoformat(),
+                "now_ist": cycle_cutoff.isoformat(),
                 "segment": segment,
                 "mode": str(market_ctx.mode),
                 "market_open": bool(market_ctx.is_market_open),
@@ -2633,7 +2642,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 record_price_trace(
                     symbol=symbol,
                     price=ltp,
-                    ts_epoch=ltp_ts_epoch or now_utc_epoch(),
+                    ts_epoch=ltp_ts_epoch or cycle_cutoff_epoch,
                     mode=market_ctx.mode,
                     instrument_id=None,
                 )
@@ -2653,8 +2662,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     "valid": False,
                     "invalid_reason": "invalid_ltp",
                     "invalid_reason_codes": ["invalid_ltp"],
-                    "timestamp": now_utc_epoch(),
-                    "timestamp_ist": now_ist().isoformat(),
+                    "timestamp": cycle_cutoff_epoch,
+                    "timestamp_ist": cycle_cutoff.isoformat(),
                     "instrument": "OPT",
                     "feed_health": {
                         "time_sanity": {
@@ -2671,7 +2680,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             continue
         try:
             if ltp and ltp > 0:
-                ohlc_buffer.update_tick(symbol, ltp, volume=None, ts=now_ist())
+                ohlc_buffer.update_tick(symbol, ltp, volume=None, ts=cycle_cutoff)
         except Exception:
             pass
         vwap = ltp
@@ -2692,15 +2701,13 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         atr = max(1.0, ltp * 0.002)
         # minutes since open (used for ORB bias + day-type)
         try:
-            now = now_ist()
-            minutes_since_open = session_minutes_since_open(now_dt=now, segment=segment)
-            is_market_open = is_open(now_dt=now, segment=segment)
-            today_local = now.date()
+            minutes_since_open = session_minutes_since_open(now_dt=cycle_cutoff, segment=segment)
+            is_market_open = is_open(now_dt=cycle_cutoff, segment=segment)
+            today_local = cycle_cutoff.date()
         except Exception:
-            now = now_ist()
             minutes_since_open = 0
             is_market_open = True
-            today_local = now_ist().date()
+            today_local = cycle_cutoff.date()
         try:
             last_day = _DAYTYPE_LAST_DAY.get(symbol)
             if last_day != today_local:
@@ -2727,7 +2734,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         # Compute indicators from rolling OHLC buffer (no CSV dependency)
         indicators_ok = False
         indicator_inputs_ok = False
-        now_epoch_for_indicators = float(now_utc_epoch())
+        now_epoch_for_indicators = float(cycle_cutoff_epoch)
         indicators_age_sec = float(getattr(cfg, "INDICATORS_NEVER_COMPUTED_AGE_SEC", 1e9))
         candle_ts_epoch = None
         indicator_last_update_epoch = _INDICATOR_LAST_UPDATE_EPOCH.get(symbol)
@@ -2740,7 +2747,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         ohlc_seed_reason = None
         bars = []
         try:
-            bars = ohlc_buffer.get_bars(symbol)
+            bars = ohlc_buffer.get_completed_bars(symbol, as_of=cycle_cutoff)
             if len(bars) < min_bars and bool(allow_history_seed):
                 startup_degraded_row = _startup_hist_empty_degraded_row(symbol)
                 if (
@@ -2760,6 +2767,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                         symbol=symbol,
                         bars=bars,
                         min_bars=min_bars,
+                        as_of=cycle_cutoff,
                         interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
                         market_mode=market_ctx.mode,
                     )
@@ -2889,7 +2897,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             if hist is None:
                 hist = deque(maxlen=300)
                 _LTP_HISTORY[symbol] = hist
-            now_ts = now_utc_epoch()
+            now_ts = cycle_cutoff_epoch
             hist.append((now_ts, ltp))
             # find oldest within window
             for ts, price in list(hist):
@@ -2945,7 +2953,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                         pass
                 if quote_ts_epoch is not None:
                     quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                    quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
+                    quote_age_sec = compute_age_sec(quote_ts_epoch, cycle_cutoff_epoch)
                 if bid and ask:
                     quote_ok = True
                     quote_source = "depth"
@@ -2972,7 +2980,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                             pass
                     if quote_ts_epoch is not None:
                         quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                        quote_age_sec = compute_age_sec(quote_ts_epoch, now_utc_epoch())
+                        quote_age_sec = compute_age_sec(quote_ts_epoch, cycle_cutoff_epoch)
                         if ltp_source == "live":
                             ltp_ts_epoch = quote_ts_epoch
                     if bid and ask:
@@ -2984,7 +2992,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     quote_ok = False
         if is_index(symbol):
             exec_mode = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
-            ltp_age_for_quote = compute_age_sec(ltp_ts_epoch, now_utc_epoch())
+            ltp_age_for_quote = compute_age_sec(ltp_ts_epoch, cycle_cutoff_epoch)
             resolved_quote = resolve_index_quote(
                 symbol=symbol,
                 mode=exec_mode,
@@ -3005,9 +3013,9 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     if isinstance(ltp_ts_epoch, (int, float)):
                         quote_ts_epoch = float(ltp_ts_epoch)
                     else:
-                        quote_ts_epoch = now_utc_epoch()
+                        quote_ts_epoch = cycle_cutoff_epoch
                 quote_ts = datetime.fromtimestamp(float(quote_ts_epoch), tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                quote_age_sec = compute_age_sec(float(quote_ts_epoch), now_utc_epoch())
+                quote_age_sec = compute_age_sec(float(quote_ts_epoch), cycle_cutoff_epoch)
                 if ltp:
                     spread_pct = (ask - bid) / ltp
         if quote_ts_epoch is not None:
@@ -3036,7 +3044,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             quote_feed_health = _classify_index_feed_health(
                 symbol=symbol,
                 execution_mode=str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper(),
-                now_epoch=now_utc_epoch(),
+                now_epoch=cycle_cutoff_epoch,
                 market_open=bool(market_ctx.is_market_open),
                 ltp=ltp,
                 ltp_ts_epoch=ltp_ts_epoch,
@@ -3060,7 +3068,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "OFFHOURS_MAX_CANDLE_AGE_SEC" if offhours_mode else "MAX_CANDLE_AGE_SEC",
                 1800 if offhours_mode else 120,
             ),
-            now_epoch=now_utc_epoch(),
+            now_epoch=cycle_cutoff_epoch,
         )
         if synthetic_index_quote:
             quote_ok = bool(time_sanity.get("ok", False) and ltp is not None and float(ltp) > 0)
@@ -3087,8 +3095,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                     "quote_ts_epoch": quote_ts_epoch,
                     "quote_age_sec": quote_age_sec,
                     "candle_ts_epoch": candle_ts_epoch,
-                    "timestamp": now_utc_epoch(),
-                    "timestamp_ist": now_ist().isoformat(),
+                    "timestamp": cycle_cutoff_epoch,
+                    "timestamp_ist": cycle_cutoff.isoformat(),
                     "instrument": "OPT",
                     "feed_health": {"time_sanity": time_sanity},
                     "quote_health": quote_feed_health,
@@ -3179,7 +3187,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             symbol,
             option_chain,
             chain_source=chain_source,
-            now_epoch=now_utc_epoch(),
+            now_epoch=cycle_cutoff_epoch,
         )
         # Option chain health validation (live NFO/BFO)
         try:
@@ -3215,7 +3223,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 if ts_epoch is not None:
                     latest_depth_ts = ts_epoch if latest_depth_ts is None else max(latest_depth_ts, float(ts_epoch))
             if latest_depth_ts is not None:
-                depth_age_sec = compute_age_sec(float(latest_depth_ts), now_utc_epoch())
+                depth_age_sec = compute_age_sec(float(latest_depth_ts), cycle_cutoff_epoch)
         except Exception:
             depth_age_sec = None
 
@@ -3435,7 +3443,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             if expiry:
                 from datetime import datetime as dt
                 exp_dt = dt.fromisoformat(str(expiry))
-                time_to_expiry_hrs = max(0.0, (exp_dt - now_ist()).total_seconds() / 3600.0)
+                time_to_expiry_hrs = max(0.0, (exp_dt - cycle_cutoff).total_seconds() / 3600.0)
         except Exception:
             time_to_expiry_hrs = None
 
@@ -3792,8 +3800,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             "feed_health": {"time_sanity": time_sanity},
             "quote_health": quote_feed_health,
             "time_sanity": time_sanity,
-            "timestamp": now_utc_epoch(),
-            "timestamp_ist": now_ist().isoformat(),
+            "timestamp": cycle_cutoff_epoch,
+            "timestamp_ist": cycle_cutoff.isoformat(),
             "option_chain": option_chain,
             "chain_source": chain_source,
             "planning_only": bool(market_ctx.mode != "LIVE" and chain_source != "live"),
@@ -3893,8 +3901,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "feed_health": {"time_sanity": time_sanity},
                 "quote_health": quote_feed_health,
                 "time_sanity": time_sanity,
-                "timestamp": now_utc_epoch(),
-                "timestamp_ist": now_ist().isoformat(),
+                "timestamp": cycle_cutoff_epoch,
+                "timestamp_ist": cycle_cutoff.isoformat(),
                 "option_chain": [],
                 "instrument": "FUT",
                 "ltp_change": ltp_change,
@@ -3982,8 +3990,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "feed_health": {"time_sanity": time_sanity},
                 "quote_health": quote_feed_health,
                 "time_sanity": time_sanity,
-                "timestamp": now_utc_epoch(),
-                "timestamp_ist": now_ist().isoformat(),
+                "timestamp": cycle_cutoff_epoch,
+                "timestamp_ist": cycle_cutoff.isoformat(),
                 "option_chain": [],
                 "instrument": "EQ",
                 "ltp_change": ltp_change,
