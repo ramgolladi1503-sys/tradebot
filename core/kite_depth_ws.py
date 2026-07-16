@@ -1524,19 +1524,11 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
             restart_attempted=False,
             reconnect_blocked_reason=None,
         )
-        if (not _reconnect_recovery_blocked_active()
-                and not feed_breaker_tripped()
-                and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
-            _schedule_restart_depth_ws(
-                reason=f"ws1006_recovery_full:{source}",
-                ignore_cooldown=True,
-                force_full_restart=True,
-                source="ws1006_recovery",
-            )
         return True
 
     if _use_native_reconnect():
         soft_ok = _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
+
         if not soft_ok:
             _log_ws(
                 "FEED_WS_1006_RECOVERY_SOFT_RECONNECT_FAILED",
@@ -1563,15 +1555,7 @@ def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str
                 restart_attempted=False,
                 reconnect_blocked_reason=None,
             )
-            if (not _reconnect_recovery_blocked_active()
-                    and not feed_breaker_tripped()
-                    and _restart_count_1h(now_epoch) < _ws_max_recoveries_per_window()):
-                _schedule_restart_depth_ws(
-                    reason=f"ws1006_recovery_full:{source}",
-                    ignore_cooldown=True,
-                    force_full_restart=True,
-                    source="ws1006_recovery",
-                )
+            return True
     else:
         _soft_resubscribe_current(reason=f"ws1006_recoverable:{source}")
     return True
@@ -2078,7 +2062,8 @@ def _latest_db_tick_epoch() -> float | None:
     if not db_path.exists():
         return None
     try:
-        with sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False) as conn:
+        from contextlib import closing
+        with closing(sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)) as conn:
             conn.execute("PRAGMA busy_timeout=30000")
             try:
                 conn.execute("PRAGMA journal_mode=WAL")
@@ -4813,6 +4798,13 @@ def _close_ticker_instance(instance):
                 method()
             except Exception as exc:
                 _log_ws("FEED_CLOSE_ERROR", {"method": method_name, "error": str(exc)})
+    # Break reference cycles by clearing callbacks
+    for cb in ("on_connect", "on_close", "on_error", "on_reconnect", "on_ticks", "on_noreconnect", "on_order_update", "on_message"):
+        if hasattr(instance, cb):
+            try:
+                setattr(instance, cb, None)
+            except Exception:
+                pass
 
 
 def _join_thread_safe(thread_obj, timeout_sec: float) -> None:
@@ -4844,6 +4836,7 @@ def _schedule_restart_depth_ws(
     source: str,
 ) -> bool:
     global _RESTART_ASYNC_THREAD
+
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws(
             "FEED_RECOVERY_ALREADY_IN_PROGRESS",
@@ -5309,6 +5302,7 @@ def restart_depth_ws(reason: str = "unknown", ignore_cooldown: bool = False, for
     global _LAST_FULL_RESTART_EPOCH, _FULL_RESTARTS, _STALE_STRIKES, _STOP_REQUESTED, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
 
     _log_ws("feed_restart_required", {"reason": reason})
+
     if bool(getattr(_FEED_RECOVERY_COORDINATOR.state, "recovery_in_progress", False)):
         _log_ws("FEED_RECOVERY_ALREADY_IN_PROGRESS", {"reason": reason, "source": "restart_depth_ws"})
         return False
@@ -5935,12 +5929,19 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             requested_by_symbol=dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
             subscribed_by_symbol=dict(option_state.get("subscribed_count_by_symbol") or {}),
         )
+        replayed_tokens = sorted(set(int(t) for t in getattr(ws, "tokens", []) if int(t) > 0))
+        exact_subscription_replay = replayed_tokens == desired
+        option_verification_required = any(
+            int(count or 0) > 0 for count in dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}).values()
+        )
         _log_ws(
             "FEED_ON_CONNECT_SUBSCRIBE",
             {
                 "reason": reason,
                 "tokens": len(desired),
                 "final_token_count_before_subscribe": len(desired),
+                "exact_subscription_replay": bool(exact_subscription_replay),
+                "option_verification_required": bool(option_verification_required),
                 "subscription_requested_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "resolved_option_tokens_count_by_symbol": dict(_LAST_OPTION_COUNTS_BY_SYMBOL or {}),
                 "subscribed_option_tokens_count_by_symbol": dict(option_state.get("subscribed_count_by_symbol") or {}),
@@ -5948,6 +5949,13 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 **selection_payload,
             },
         )
+        if exact_subscription_replay and not option_verification_required:
+            _FEED_RECOVERY_COORDINATOR.clear_recovery(
+                source="subscription_replay_exact",
+                reason=reason,
+            )
+            _sync_ws1006_recovery_state_from_coordinator()
+        return exact_subscription_replay
         _log_ws(
             "FEED_RESUBSCRIBE",
             {
@@ -5994,6 +6002,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     book["ts_epoch"] = None
                     book["ts"] = None
             _resubscribe_full(ws, reason="connect")
+
             _RUNTIME_STATE = "RUNNING"
             _LAST_RUNTIME_ERROR = ""
             _persist_runtime_snapshot_row(
@@ -6238,7 +6247,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                 return
             restart_depth_ws(reason=f"ws_close:{code}", ignore_cooldown=ignore_cooldown)
 
-    def _watchdog():
+    def _watchdog(stop_event):
         global _STALE_STRIKES, _WARMUP_PENDING
         max_age = float(getattr(cfg, "MAX_DEPTH_AGE_SEC", getattr(cfg, "MAX_QUOTE_AGE_SEC", 2.0)))
         soft_cooldown = float(getattr(cfg, "FEED_RECONNECT_COOLDOWN_SEC", 30))
@@ -6341,7 +6350,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
             )
 
         while True:
-            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+            if stop_event is None or stop_event.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6349,7 +6358,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked",
                     reason=blocked_reason,
                 )
-                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                while not (stop_event is None or stop_event.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6357,11 +6366,11 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                if stop_event is None or stop_event.is_set():
                     break
                 continue
             time.sleep(max(0.5, watchdog_poll_sec))
-            if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+            if stop_event is None or stop_event.is_set():
                 break
             if _reconnect_recovery_blocked_active():
                 blocked_reason = str(_RECONNECT_BLOCKED_REASON or "").strip().lower() or "unknown_reconnect_block"
@@ -6369,7 +6378,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     source="watchdog:recovery_blocked_after_sleep",
                     reason=blocked_reason,
                 )
-                while not (_WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set()):
+                while not (stop_event is None or stop_event.is_set()):
                     time.sleep(5.0)
                     _emit_reconnect_recovery_blocked_snapshot(
                         source="watchdog:monitoring_fatal",
@@ -6377,7 +6386,7 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
                     )
                     if not _reconnect_recovery_blocked_active():
                         break
-                if _WATCHDOG_STOP is None or _WATCHDOG_STOP.is_set():
+                if stop_event is None or stop_event.is_set():
                     break
                 continue
             now_loop = float(time.time())
@@ -6731,9 +6740,12 @@ def start_depth_ws(instrument_tokens, profile_verified=False, skip_lock: bool = 
     kws.on_error = on_error
     kws.on_close = on_close
     kws.on_ticks = on_ticks
-    watchdog_thread = threading.Thread(target=_watchdog)
+    watchdog_thread = threading.Thread(
+        target=_watchdog,
+        args=(_WATCHDOG_STOP,),
+    )
     try:
-        watchdog_thread.name = "kite-depth-watchdog"
+        watchdog_thread.name = f"kite-depth-watchdog-{kws.generation_id}"
     except Exception:
         pass
     try:
