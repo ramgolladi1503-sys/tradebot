@@ -27,6 +27,7 @@
 
 ## Files changed
 - `tests/test_opening_range_retest_temporal_fixture_contract.py`
+- `docs/agent_reviews/strategy_truth_opening_range_retest_temporal_fixture_evidence.md`
 
 ## Fixture schema
 The new test-only lane uses explicit completed one-minute OHLC rows with visible causal transitions:
@@ -50,15 +51,16 @@ The fixture module defines:
 
 ## Current production observation
 The live callable still behaves like a time-gated snapshot strategy:
-- call-path emissions observed at prefixes `16`, `18`, and `19`
-- put-path emissions observed at prefixes `18` and `19`
+- call-path emissions observed at prefixes `16`, `18`, `19`, and `20`
+- put-path emissions observed at prefixes `16`, `17`, `18`, `19`, and `20`
+- the first emission checkpoint for both directions is still `2026-07-14T09:31:00+05:30`
 - the strategy does not enforce the ordered breakout -> retest -> continuation sequence
 - `setup_identity` is still absent from emitted candidate evidence in the temporal fixture lane
 
 Observed direct probe fingerprints:
 - snapshot control fingerprint remains `opening_range_retest_v1 | BUY_CALL | RAW_CANDIDATE | 0.451504 | opening_range_breakout_retest_hold | price_returns_inside_opening_range | opening range breakout retest held`
-- call causal trace emissions: `16`, `18`, `19`
-- put causal trace emissions: `18`, `19`
+- call causal trace emissions: `16`, `18`, `19`, `20`
+- put causal trace emissions: `16`, `17`, `18`, `19`, `20`
 
 ## Fixture controls
 Passing controls:
@@ -66,13 +68,16 @@ Passing controls:
 - canonical setup ID helper determinism
 - causal history hash helper determinism
 - snapshot fingerprint preservation
+- explicit candidate payload preservation with `proposal_ready_at_iso` still absent
+- future-mutation and physical-truncation equivalence for CALL and PUT
+- malformed-history classification matrix for builder acceptance vs rejection vs no-candidate behavior
 - unrelated strategy controls
 - no-breakout subcase in the session-end test
 - duplicate timestamp rejection by the history builder
 
 Expected red evidence:
-- valid CALL continuation is emitted too early
-- valid PUT continuation is emitted too early
+- valid CALL continuation is emitted too early and multiple prefix emissions still occur
+- valid PUT continuation is emitted too early and multiple prefix emissions still occur
 - wick-only and equality cases are not causally enforced
 - same-bar breakout/retest is not rejected
 - breakout age boundary is not enforced
@@ -89,18 +94,41 @@ Expected red evidence:
 | `test_canonical_setup_identity_and_history_hash_helper_are_deterministic_for_identical_causal_inputs` | PASSING CONTROL | passed |
 | `test_snapshot_fingerprint_control_preserves_the_accepted_current_output` | PASSING CONTROL | passed |
 | `test_unrelated_strategy_controls_remain_stable` | PASSING CONTROL | passed |
+| `test_future_mutation_and_physical_truncation_preserve_candidate_payload_and_history_hash[call_future_mutation-rows0-<lambda>-ORB_HIGH-22600.0-future_rows0]` | PASSING CONTROL | passed |
+| `test_future_mutation_and_physical_truncation_preserve_candidate_payload_and_history_hash[put_future_mutation-rows1-<lambda>-ORB_LOW-22500.0-future_rows1]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[mixed_symbol]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[mixed_session]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[out_of_order]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[duplicate]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[missing_bar]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[cadence_30s]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[nan_ohlc]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[inf_ohlc]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[neg_inf_ohlc]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[high_below_low]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[open_outside]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[close_outside]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[incomplete_current]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[pre_session]` | PASSING CONTROL | passed |
+| `test_malformed_history_controls_record_current_behavior[post_session]` | PASSING CONTROL | passed |
+| `test_orb_reconciliation_matrix_records_current_behavior[orb_match-ctx_overrides0-True-0.385133]` | PASSING CONTROL | passed |
 | `test_valid_sequences_emit_only_after_later_continuation` | EXPECTED TEMPORAL RED | failed |
 | `test_wick_only_and_equality_cases_do_not_qualify` | EXPECTED TEMPORAL RED | failed |
 | `test_same_bar_breakout_and_retest_do_not_qualify` | EXPECTED TEMPORAL RED | failed |
 | `test_breakout_to_retest_age_boundary` | EXPECTED TEMPORAL RED | failed |
 | `test_retest_to_continuation_age_boundary` | EXPECTED TEMPORAL RED | failed |
 | `test_invalidation_requires_fresh_setup_identity_and_stops_revival` | EXPECTED TEMPORAL RED | failed |
+| `test_equality_does_not_invalidate_and_later_valid_sequence_still_emits[call_equality_then_valid-rows0-<lambda>-2026-07-14T09:31:00+05:30]` | EXPECTED TEMPORAL RED | failed |
+| `test_equality_does_not_invalidate_and_later_valid_sequence_still_emits[put_equality_then_valid-rows1-<lambda>-2026-07-14T09:31:00+05:30]` | EXPECTED TEMPORAL RED | failed |
 | `test_no_pre_breakout_lineage_and_session_end_behaviour` | EXPECTED TEMPORAL RED | failed |
-| `test_orb_mismatch_is_blocked_and_supplied_orb_never_overrides_completed_history` | EXPECTED TEMPORAL RED | failed |
+| `test_orb_reconciliation_matrix_records_current_behavior[orb_absent-ctx_overrides1-False-None]` | EXPECTED TEMPORAL RED | failed |
+| `test_orb_reconciliation_matrix_records_current_behavior[orb_high_mismatch-ctx_overrides2-False-None]` | EXPECTED TEMPORAL RED | failed |
+| `test_orb_reconciliation_matrix_records_current_behavior[orb_low_mismatch-ctx_overrides3-False-None]` | EXPECTED TEMPORAL RED | failed |
+| `test_orb_reconciliation_matrix_records_current_behavior[orb_both_mismatch-ctx_overrides4-False-None]` | EXPECTED TEMPORAL RED | failed |
 | `test_malformed_history_controls_fail_closed_before_strategy_execution` | EXPECTED TEMPORAL RED | failed |
 
 ## Exact counts
-- Fixture module: `9 passed, 10 failed`
+- Fixture module: `28 passed, 16 failed`
 - Existing opening-range temporal audit: `20 passed`
 - Nearby strategy slice: `39 passed`
 - Static compilation: passed
@@ -118,6 +146,8 @@ Expected red evidence:
 - The strategy still emits from snapshot fields before the later continuation bar.
 - Mixed-symbol malformed-history rejection is not yet centralized in the fixture lane; the current builder path does not inspect raw bar symbol fields.
 - `setup_identity` and temporal lineage memory are still absent from the production candidate evidence path.
+- ORB mismatch and absent-ORB cases still do not fail closed in the way the desired contract would require.
+- Session-end breakout/retest cases still emit.
 
 ## Explicit non-claims
 - No production strategy repair was made.
