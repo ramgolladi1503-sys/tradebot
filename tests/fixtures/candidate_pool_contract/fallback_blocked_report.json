@@ -1,5 +1,6 @@
 {
   "append": false,
+  "blocked_candidate_count": 1,
   "blockers": [
     "FALLBACK_QUOTE_ONLY",
     "MISSING_DEPTH",
@@ -13,6 +14,7 @@
       "blockers": [
         "FALLBACK_QUOTE_ONLY",
         "MISSING_DEPTH",
+        "OPTION_CONFIRMATION_MISSING",
         "STALE_OPTION_LTP",
         "WIDE_SPREAD"
       ],
@@ -22,7 +24,10 @@
       "status": "BLOCKED_CANDIDATE",
       "strategy_id": "unit_buy_call",
       "warnings": [
-        "depth_missing"
+        "candidate_already_hard_blocked",
+        "depth_missing",
+        "no_dominant_option_pressure",
+        "spread_missing"
       ]
     },
     {
@@ -111,7 +116,6 @@
   "schema_version": 1,
   "symbol": "NIFTY",
   "validated_candidate_count": 0,
-  "blocked_candidate_count": 1,
   "warnings": [
     "candidate_already_hard_blocked",
     "depth_missing",

@@ -57,15 +57,15 @@ def _candidate(
     *,
     direction="BUY_CALL",
     movement_type="COMPRESSION_BREAKOUT",
-    status="VALIDATED_CANDIDATE",
+    status="RAW_CANDIDATE",
     blockers=(),
     warnings=(),
     raw_score=0.75,
     confidence_score=0.75,
     price_structure_score=0.8,
-    option_confirmation_score=0.8,
-    liquidity_score=0.8,
-    freshness_score=0.9,
+    option_confirmation_score=None,
+    liquidity_score=None,
+    freshness_score=None,
     volatility_score=0.5,
     regime_alignment_score=0.8,
     timing_score=0.7,
@@ -126,7 +126,7 @@ def test_ranked_opportunity_report_builds_full_read_only_pipeline():
         _regime(primary="TREND_UP", TREND_UP=0.8),
         candidate_generators=[
             _generator(
-                _candidate("call_high", direction="BUY_CALL", price_structure_score=0.9, option_confirmation_score=0.9),
+                _candidate("call_high", direction="BUY_CALL", price_structure_score=0.9),
                 _candidate("call_mid", direction="BUY_CALL", movement_type="TREND_PULLBACK", price_structure_score=0.7),
             )
         ],
@@ -221,9 +221,6 @@ def test_ranked_pipeline_keeps_suppressed_fallback_visible_below_safer_candidate
         raw_score=1.0,
         confidence_score=1.0,
         price_structure_score=1.0,
-        option_confirmation_score=1.0,
-        liquidity_score=1.0,
-        freshness_score=1.0,
         regime_alignment_score=1.0,
     )
 

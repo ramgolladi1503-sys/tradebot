@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Literal
 
 from core.movement_contract import StrategyCandidate, StrategyContext
@@ -124,8 +124,8 @@ def assess_option_pressure(ctx: StrategyContext) -> OptionPressureAssessment:
         quote_source=ctx.quote_source,
     )
 
-    pe_weakness = 1.0 if (pe.premium_change is None or pe.premium_change <= 0) else clamp_score(1.0 - pe.premium_score)
-    ce_weakness = 1.0 if (ce.premium_change is None or ce.premium_change <= 0) else clamp_score(1.0 - ce.premium_score)
+    pe_weakness = 0.0 if pe.premium_change is None else (1.0 if pe.premium_change <= 0 else clamp_score(1.0 - pe.premium_score))
+    ce_weakness = 0.0 if ce.premium_change is None else (1.0 if ce.premium_change <= 0 else clamp_score(1.0 - ce.premium_score))
     bullish_score = clamp_score(0.75 * ce.pressure_score + 0.25 * pe_weakness)
     bearish_score = clamp_score(0.75 * pe.pressure_score + 0.25 * ce_weakness)
     delta = abs(bullish_score - bearish_score)
@@ -166,13 +166,15 @@ def assess_option_pressure(ctx: StrategyContext) -> OptionPressureAssessment:
 def confirm_candidate_option_pressure(
     candidate: StrategyCandidate,
     ctx: StrategyContext,
+    *,
+    assessment: OptionPressureAssessment | None = None,
 ) -> CandidateOptionConfirmation:
     """Return explainable promotion/demotion evidence for a candidate.
 
     This function does not edit the candidate and cannot make anything executable.
     """
 
-    assessment = assess_option_pressure(ctx)
+    assessment = assessment or assess_option_pressure(ctx)
     direction = candidate.direction
     if direction == "BUY_CALL":
         confirmation_score = assessment.bullish_score
@@ -213,6 +215,55 @@ def confirm_candidate_option_pressure(
         warnings=tuple(sorted(set(warnings))),
         evidence={"assessment": assessment.to_dict(), "candidate_status": candidate.status},
     )
+
+
+def enrich_candidate_with_option_confirmation(
+    candidate: StrategyCandidate,
+    ctx: StrategyContext,
+    *,
+    assessment: OptionPressureAssessment | None = None,
+) -> tuple[StrategyCandidate, CandidateOptionConfirmation]:
+    """Attach downstream-owned confirmation, liquidity, and freshness truth."""
+
+    active_assessment = assessment or assess_option_pressure(ctx)
+    confirmation = confirm_candidate_option_pressure(candidate, ctx, assessment=active_assessment)
+    if candidate.direction == "BUY_CALL":
+        side = active_assessment.ce
+    elif candidate.direction == "BUY_PUT":
+        side = active_assessment.pe
+    else:
+        return candidate, confirmation
+
+    blockers = tuple(sorted(set(candidate.blockers + confirmation.blockers)))
+    warnings = tuple(sorted(set(candidate.warnings + confirmation.warnings)))
+    evidence = dict(candidate.evidence or {})
+    evidence.update(
+        {
+            "quote_source": ctx.quote_source,
+            "fallback_used": ctx.fallback_used,
+            "option_ltp_age_sec": ctx.option_ltp_age_sec,
+            "option_confirmation_truth": confirmation.to_dict(),
+            "liquidity_truth": {
+                "spread_pct": side.spread_pct,
+                "depth": side.depth,
+                "liquidity_score": side.liquidity_score,
+            },
+            "freshness_truth": {
+                "option_ltp_age_sec": side.option_ltp_age_sec,
+                "freshness_score": side.freshness_score,
+            },
+        }
+    )
+    return replace(
+        candidate,
+        status="BLOCKED_CANDIDATE" if blockers else "VALIDATED_CANDIDATE",
+        option_confirmation_score=confirmation.confirmation_score,
+        liquidity_score=side.liquidity_score,
+        freshness_score=side.freshness_score,
+        blockers=blockers,
+        warnings=warnings,
+        evidence=evidence,
+    ), confirmation
 
 
 def _assess_side(
@@ -325,4 +376,5 @@ __all__ = [
     "SuggestedEffect",
     "assess_option_pressure",
     "confirm_candidate_option_pressure",
+    "enrich_candidate_with_option_confirmation",
 ]

@@ -17,7 +17,7 @@
   "normalized_candidate_count": 2,
   "ranked_candidate_count": 2,
   "top_rank_strategy_id": "call_high",
-  "top_rank_score": 0.8005,
+  "top_rank_score": 0.79123,
   "executable_rank_count": 2,
   "near_executable_rank_count": 0,
   "advisory_rank_count": 0,
@@ -95,7 +95,7 @@
     {
       "rank": 1,
       "strategy_id": "call_high",
-      "final_score": 0.8005,
+      "final_score": 0.79123,
       "bucket": "EXECUTABLE_CANDIDATE",
       "score_eligibility": "SCORE_ELIGIBLE",
       "directional_family": "BULLISH",
@@ -108,7 +108,7 @@
     {
       "rank": 2,
       "strategy_id": "call_mid",
-      "final_score": 0.7465,
+      "final_score": 0.75523,
       "bucket": "EXECUTABLE_CANDIDATE",
       "score_eligibility": "SCORE_ELIGIBLE",
       "directional_family": "BULLISH",

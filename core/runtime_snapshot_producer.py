@@ -10,7 +10,6 @@ from collections.abc import Mapping
 
 from config import config as cfg
 from core.advisory_schema import AdvisorySchemaError, log_advisory_schema_error, serialize_advisory_row
-from core.feed_health_truth import classify_feed_health_truth
 from core.learning_paths import canonical_suggestions_log_path
 from core.jsonl_tail_cache import tail_jsonl_rows as cached_tail_jsonl_rows
 from core.market_snapshot_store import DEFAULT_MARKET_SNAPSHOT_PATH, read_market_snapshot
@@ -29,10 +28,7 @@ from core.runtime_snapshot_store import (
     write_snapshot_atomic,
 )
 from core.observability import ObservabilityMetricsRegistry, build_default_metrics_registry
-from core.runtime_snapshot_stages import (
-    build_advisory_latest_payload as stages_build_advisory_latest_payload,
-    build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload,
-)
+from core.runtime_snapshot_stages import build_feed_health_truth_latest_payload as stages_build_feed_health_truth_latest_payload
 
 
 logger = logging.getLogger(__name__)
@@ -80,27 +76,60 @@ def _candidate_decisions_log_path() -> Path:
 
 def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> StrategyContext:
     allowed = {field.name for field in dataclass_fields(StrategyContext)}
+    raw_metadata = dict(data.get("metadata") or {})
+    truth = dict(raw_metadata.get("strategy_context_truth") or {})
+    provenance = dict(raw_metadata.get("strategy_context_provenance") or {})
+    missing = dict(raw_metadata.get("strategy_context_missing") or {})
     payload: dict[str, Any] = {"symbol": str(symbol or "").strip().upper() or "UNKNOWN"}
     payload["spot_ltp"] = data.get("spot_ltp", data.get("ltp", data.get("spot")))
-    payload["vwap"] = (data.get("ohlc") or {}).get("close", data.get("vwap"))
-    payload["day_high"] = (data.get("ohlc") or {}).get("high", data.get("day_high"))
-    payload["day_low"] = (data.get("ohlc") or {}).get("low", data.get("day_low"))
-    payload["open_price"] = (data.get("ohlc") or {}).get("open", data.get("open_price"))
+    payload["vwap"] = truth.get("vwap", data.get("vwap"))
+    payload["day_high"] = truth.get("day_high", data.get("day_high"))
+    payload["day_low"] = truth.get("day_low", data.get("day_low"))
+    payload["previous_completed_close"] = truth.get("previous_completed_close", data.get("previous_completed_close"))
+    payload["nearest_support"] = truth.get("nearest_support", data.get("nearest_support"))
+    payload["nearest_resistance"] = truth.get("nearest_resistance", data.get("nearest_resistance"))
+    payload["completed_bar_history"] = truth.get("completed_bar_history", data.get("completed_bar_history"))
+    payload["open_price"] = truth.get("open_price", data.get("open_price"))
+    payload["orb_high"] = truth.get("orb_high", data.get("orb_high"))
+    payload["orb_low"] = truth.get("orb_low", data.get("orb_low"))
+    payload["atr"] = truth.get("atr", data.get("atr"))
+    payload["atr_short"] = truth.get("atr_short", data.get("atr_short"))
+    payload["atr_long"] = truth.get("atr_long", data.get("atr_long"))
+    payload["range_width_pct"] = truth.get("range_width_pct", data.get("range_width_pct"))
+    payload["volume_z"] = truth.get("volume_z", data.get("volume_z"))
+    payload["vwap_slope"] = truth.get("vwap_slope", data.get("vwap_slope"))
+    payload["minutes_since_open"] = truth.get("minutes_since_open", data.get("minutes_since_open"))
+    payload["minutes_to_close"] = truth.get("minutes_to_close", data.get("minutes_to_close"))
     payload["regime_hint"] = (data.get("regime") or {}).get("primary_regime", data.get("regime_hint"))
     payload["regime_scores"] = dict((data.get("regime") or {}).get("scores") or data.get("regime_scores") or {})
-    payload["ce_spread_pct"] = (data.get("option_chain_summary") or {}).get("ce_spread_pct", data.get("ce_spread_pct"))
-    payload["pe_spread_pct"] = (data.get("option_chain_summary") or {}).get("pe_spread_pct", data.get("pe_spread_pct"))
-    payload["ce_depth"] = (data.get("option_chain_summary") or {}).get("ce_depth", data.get("ce_depth"))
-    payload["pe_depth"] = (data.get("option_chain_summary") or {}).get("pe_depth", data.get("pe_depth"))
-    payload["option_ce_ltp"] = (data.get("option_chain_summary") or {}).get("ce_ltp", data.get("option_ce_ltp"))
-    payload["option_pe_ltp"] = (data.get("option_chain_summary") or {}).get("pe_ltp", data.get("option_pe_ltp"))
-    payload["quote_source"] = (data.get("feed_health") or {}).get("quote_source", data.get("quote_source"))
-    payload["fallback_used"] = (data.get("feed_health") or {}).get("fallback_used", data.get("fallback_used"))
-    payload["option_ltp_age_sec"] = (data.get("feed_health") or {}).get("option_ltp_age_sec", data.get("option_ltp_age_sec"))
-    payload["ts_epoch"] = data.get("ts_epoch")
-    payload["metadata"] = dict(data.get("metadata") or {})
-    payload["evidence"] = dict(data.get("evidence") or {})
-    payload["lineage"] = dict(data.get("lineage") or {})
+    payload["ce_spread_pct"] = truth.get("ce_spread_pct", (data.get("option_chain_summary") or {}).get("ce_spread_pct", data.get("ce_spread_pct")))
+    payload["pe_spread_pct"] = truth.get("pe_spread_pct", (data.get("option_chain_summary") or {}).get("pe_spread_pct", data.get("pe_spread_pct")))
+    payload["ce_depth"] = truth.get("ce_depth", (data.get("option_chain_summary") or {}).get("ce_depth", data.get("ce_depth")))
+    payload["pe_depth"] = truth.get("pe_depth", (data.get("option_chain_summary") or {}).get("pe_depth", data.get("pe_depth")))
+    payload["option_ce_ltp"] = truth.get("option_ce_ltp", (data.get("option_chain_summary") or {}).get("ce_ltp", data.get("option_ce_ltp")))
+    payload["option_pe_ltp"] = truth.get("option_pe_ltp", (data.get("option_chain_summary") or {}).get("pe_ltp", data.get("option_pe_ltp")))
+    payload["ce_premium_change"] = truth.get("ce_premium_change", data.get("ce_premium_change"))
+    payload["pe_premium_change"] = truth.get("pe_premium_change", data.get("pe_premium_change"))
+    payload["quote_source"] = truth.get("quote_source", (data.get("feed_health") or {}).get("quote_source", data.get("quote_source")))
+    payload["fallback_used"] = truth.get("fallback_used", (data.get("feed_health") or {}).get("fallback_used", data.get("fallback_used")))
+    payload["option_ltp_age_sec"] = truth.get("option_ltp_age_sec", (data.get("feed_health") or {}).get("option_quote_age_sec", data.get("option_ltp_age_sec")))
+    payload["ts_epoch"] = truth.get("ts_epoch", data.get("ts_epoch"))
+    merged_metadata = dict(raw_metadata)
+    if provenance:
+        merged_metadata["strategy_context_provenance"] = provenance
+    if missing:
+        merged_metadata["strategy_context_missing"] = missing
+    completed_bar_history = truth.get("completed_bar_history")
+    if isinstance(completed_bar_history, list):
+        payload["completed_bar_history"] = completed_bar_history
+        merged_metadata["completed_bar_history"] = completed_bar_history
+    completed_bar_history_provenance = provenance.get("completed_bar_history")
+    if isinstance(completed_bar_history_provenance, Mapping):
+        merged_metadata["completed_bar_history_provenance"] = dict(completed_bar_history_provenance)
+    previous_completed_close = truth.get("previous_completed_close")
+    if previous_completed_close is not None:
+        merged_metadata["previous_completed_close"] = previous_completed_close
+    payload["metadata"] = merged_metadata
     filtered = {key: value for key, value in payload.items() if key in allowed and value is not None}
     return StrategyContext(**filtered)
 

@@ -66,8 +66,8 @@ def test_vwap_reclaim_generates_call_candidate_after_confirmed_reclaim():
     assert candidate.strategy_id == "vwap_reclaim_rejection_v1"
     assert candidate.movement_type == "VWAP_RECLAIM_REJECTION"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "reclaim_rejection" in candidate.confluence_tags
     assert candidate.evidence["previous_spot_ltp"] == 22590.0
 
@@ -86,8 +86,8 @@ def test_vwap_reclaim_generates_put_candidate_after_confirmed_downside_reclaim()
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 11.0
 
 
@@ -116,14 +116,10 @@ def test_vwap_reclaim_blocks_bad_quote_quality_but_keeps_candidate_visible():
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
 
 
 def test_failed_breakout_trap_generates_put_candidate_after_bull_trap_reentry():
@@ -142,8 +138,8 @@ def test_failed_breakout_trap_generates_put_candidate_after_bull_trap_reentry():
     assert candidate.strategy_id == "failed_breakout_trap_v1"
     assert candidate.movement_type == "FAILED_BREAKOUT_TRAP"
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "suppress_weak_breakout_followthrough" in candidate.suppression_tags
     assert candidate.evidence["trap_type"] == "failed_upside_breakout_reentry"
 
@@ -162,8 +158,8 @@ def test_failed_breakout_trap_generates_call_candidate_after_bear_trap_reentry()
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["trap_type"] == "failed_downside_breakdown_reentry"
 
 
@@ -199,12 +195,8 @@ def test_failed_breakout_trap_blocks_poor_quote_quality_but_keeps_trap_candidate
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
-    assert summary.hard_blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
+    assert summary.hard_blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()

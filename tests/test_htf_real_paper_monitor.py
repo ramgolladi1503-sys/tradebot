@@ -8,6 +8,37 @@ import scripts.run_htf_real_paper_monitor as monitor_module
 from scripts.run_htf_real_paper_monitor import RealPaperMonitor
 from core.candidate_audits.models import Candle, Signal
 
+
+def _base_signal(signal_id, now, *, status="OPEN"):
+    return {
+        "signal_id": signal_id,
+        "timestamp": now.isoformat(),
+        "regime": "VOL_EXPANSION",
+        "volatility_metrics": "VALID",
+        "nifty_spot": 23000.5,
+        "chosen_option": "NFO:MOCK",
+        "strike": 23000,
+        "expiry": "2026-06-26",
+        "instrument_token": "MOCK_TOKEN",
+        "strike_selection_reason": "Closest ATM",
+        "bid_ask_snapshot": "{}",
+        "bid": 150.0,
+        "ask": 151.0,
+        "spread": 1.0,
+        "spread_pct": 0.006,
+        "theoretical_entry": 151.0,
+        "theoretical_stop": 22900,
+        "theoretical_target": 23100,
+        "is_long": True,
+        "status": status,
+        "mfe": 0.0,
+        "mae": 0.0,
+        "realized_R": 0.0,
+        "fill_quality_estimate": "GOOD",
+        "risk": 20.0,
+    }
+
+
 def test_no_order_capability():
     """
     Statically analyzes run_htf_real_paper_monitor.py to prove it does not import
@@ -35,6 +66,7 @@ def test_no_order_capability():
         content = f.read()
         assert "place_" + "order" not in content
 
+
 def test_restart_recovery(tmp_path):
     """
     Prove that if a daemon crashes, it will reload the exact OPEN signal from the CSV log
@@ -49,36 +81,9 @@ def test_restart_recovery(tmp_path):
     
     now = pd.Timestamp.now()
     monitor = RealPaperMonitor()
-    
+
     sig_id = monitor.generate_signal_id(now.isoformat(), "VOL_EXPANSION", 23000)
-    
-    mock_sig = {
-        "signal_id": sig_id,
-        "timestamp": now.isoformat(),
-        "regime": "VOL_EXPANSION",
-        "volatility_metrics": "VALID",
-        "nifty_spot": 23000,
-        "chosen_option": "NFO:MOCK",
-        "strike": 23000,
-        "expiry": "2026-06-26",
-        "instrument_token": "MOCK_TOKEN",
-        "strike_selection_reason": "Closest ATM",
-        "bid_ask_snapshot": "{}",
-        "bid": 150.0,
-        "ask": 151.0,
-        "spread": 1.0,
-        "spread_pct": 0.006,
-        "theoretical_entry": 151.0,
-        "theoretical_stop": 22900,
-        "theoretical_target": 23100,
-        "is_long": True,
-        "status": "OPEN",
-        "mfe": 0.0,
-        "mae": 0.0,
-        "realized_R": 0.0,
-        "fill_quality_estimate": "GOOD",
-        "risk": 20.0
-    }
+    mock_sig = _base_signal(sig_id, now)
     
     monitor.active_signals.append(mock_sig)
     monitor.paper_log.append(mock_sig)
@@ -90,7 +95,80 @@ def test_restart_recovery(tmp_path):
     # Verify exact recovery
     count = len(new_monitor.active_signals)
     assert count == 1
-    assert str(new_monitor.active_signals[0]['signal_id']) == str(sig_id)
+    assert new_monitor.active_signals[0]['signal_id'] == sig_id
+    assert isinstance(new_monitor.active_signals[0]["signal_id"], str)
+    assert new_monitor.active_signals[0]["risk"] == 20.0
+    assert isinstance(new_monitor.active_signals[0]["risk"], float)
+
+
+@pytest.mark.parametrize(
+    "signal_id",
+    [
+        "634119278117",
+        "000634119278117",
+        "signal-634119278117",
+    ],
+)
+def test_signal_id_round_trip_preserves_exact_string(tmp_path, signal_id):
+    test_csv = str(tmp_path / "test_paper_log.csv")
+    monitor_module.CSV_LOG_PATH = test_csv
+
+    now = pd.Timestamp.now()
+    monitor = RealPaperMonitor()
+    mock_sig = _base_signal(signal_id, now)
+    monitor.active_signals.append(mock_sig.copy())
+    monitor.paper_log.append(mock_sig)
+    monitor.save_log()
+
+    reloaded = RealPaperMonitor()
+    assert len(reloaded.active_signals) == 1
+    assert reloaded.active_signals[0]["signal_id"] == signal_id
+    assert isinstance(reloaded.active_signals[0]["signal_id"], str)
+    assert reloaded.active_signals[0]["risk"] == 20.0
+    assert isinstance(reloaded.active_signals[0]["risk"], float)
+
+
+def test_signal_id_missing_value_round_trip(tmp_path):
+    test_csv = str(tmp_path / "test_paper_log.csv")
+    monitor_module.CSV_LOG_PATH = test_csv
+
+    now = pd.Timestamp.now()
+    monitor = RealPaperMonitor()
+    mock_sig = _base_signal(None, now)
+    monitor.active_signals.append(mock_sig.copy())
+    monitor.paper_log.append(mock_sig)
+    monitor.save_log()
+
+    reloaded = RealPaperMonitor()
+    assert len(reloaded.active_signals) == 1
+    assert reloaded.active_signals[0]["signal_id"] is None
+    assert reloaded.active_signals[0]["risk"] == 20.0
+    assert isinstance(reloaded.active_signals[0]["risk"], float)
+
+
+def test_legacy_csv_digit_only_signal_id_loads_as_string(tmp_path):
+    test_csv = tmp_path / "test_paper_log.csv"
+    test_csv.write_text(
+        "signal_id,timestamp,regime,volatility_metrics,nifty_spot,chosen_option,strike,expiry,"
+        "instrument_token,strike_selection_reason,bid_ask_snapshot,bid,ask,spread,spread_pct,"
+        "theoretical_entry,theoretical_stop,theoretical_target,is_long,status,mfe,mae,"
+        "realized_R,fill_quality_estimate,risk\n"
+        "634119278117,2026-06-26T09:15:00,TEST,VALID,23000.5,NFO:MOCK,23000,2026-06-26,"
+        "MOCK_TOKEN,Closest ATM,{},150.0,151.0,1.0,0.006,151.0,22900,23100,True,OPEN,0.0,0.0,"
+        "0.0,GOOD,20.0\n"
+    )
+    monitor_module.CSV_LOG_PATH = str(test_csv)
+
+    monitor = RealPaperMonitor()
+    assert len(monitor.active_signals) == 1
+    loaded = monitor.active_signals[0]
+    assert loaded["signal_id"] == "634119278117"
+    assert isinstance(loaded["signal_id"], str)
+    assert loaded["risk"] == 20.0
+    assert isinstance(loaded["risk"], float)
+    assert loaded["nifty_spot"] == 23000.5
+    assert isinstance(loaded["nifty_spot"], float)
+
 
 def test_candle_causality():
     """
@@ -107,6 +185,7 @@ def test_candle_causality():
     assert not monitor.is_candle_closed(c_15m, now + timedelta(minutes=14), 15)
     assert monitor.is_candle_closed(c_15m, now + timedelta(minutes=15), 15)
 
+
 def test_stale_feed():
     """
     Verify stale feed blocks execution loop.
@@ -117,6 +196,7 @@ def test_stale_feed():
     # Simulate the check inside the run loop
     is_stale = (time.time() - monitor.last_tick_time) > monitor_module.FEED_STALE_THRESHOLD_SEC
     assert is_stale
+
 
 def test_missing_quote_rejection(tmp_path):
     """

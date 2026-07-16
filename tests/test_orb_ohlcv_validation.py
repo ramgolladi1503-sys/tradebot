@@ -5,39 +5,87 @@ from pathlib import Path
 import pandas as pd
 
 from core import orb_ohlcv_validation as mod
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    PUT_VALID_ROWS,
+)
 
 
-def _session_frame(start: str, *, base: float, instrument: str = "NIFTY", rows: int = 375) -> pd.DataFrame:
-    stamps = pd.date_range(start=start, periods=rows, freq="1min", tz="Asia/Kolkata")
-    out = []
-    for idx, ts in enumerate(stamps):
-        if idx < 15:
-            price = base + (idx % 3) * 0.02
-        else:
-            price = base + 0.62 + (idx - 15) * 0.01
+def _session_frame(
+    session_date: str = "2026-07-01",
+    *,
+    rows: int = 375,
+    direction: str = "BUY_CALL",
+    instrument: str = "NIFTY",
+) -> pd.DataFrame:
+    if direction == "BUY_PUT":
+        seed_rows = OPENING_RANGE_ROWS + PUT_VALID_ROWS[:4]
+    else:
+        seed_rows = OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4]
+    base = pd.Timestamp(f"{session_date} 09:15:00", tz="Asia/Kolkata")
+    out: list[dict[str, object]] = []
+    close = float(seed_rows[-1][4])
+    for index, (_, open_, high, low, close_value) in enumerate(seed_rows):
+        stamp = base + pd.Timedelta(minutes=index)
         out.append(
             {
-                "timestamp": ts,
-                "open": price,
-                "high": price + 0.5,
-                "low": price - 0.5,
-                "close": price,
+                "symbol": instrument,
+                "session_date": session_date,
+                "timeframe": "1m",
+                "bar_start_timestamp": stamp.isoformat(),
+                "bar_end_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close_value,
                 "volume": 0,
-                "instrument": instrument,
+                "source": "unit_test",
+                "source_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "receipt_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "is_complete": True,
             }
         )
-    return pd.DataFrame(out)
+    close = float(seed_rows[-1][4])
+    while len(out) < rows:
+        index = len(out)
+        stamp = base + pd.Timedelta(minutes=index)
+        open_ = close
+        close = close + (0.4 if direction == "BUY_CALL" else -0.4)
+        high = max(open_, close) + 0.5
+        low = min(open_, close) - 0.5
+        out.append(
+            {
+                "symbol": instrument,
+                "session_date": session_date,
+                "timeframe": "1m",
+                "bar_start_timestamp": stamp.isoformat(),
+                "bar_end_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": 0,
+                "source": "unit_test",
+                "source_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "receipt_timestamp": (stamp + pd.Timedelta(minutes=1)).isoformat(),
+                "is_complete": True,
+            }
+        )
+    frame = pd.DataFrame(out)
+    frame["timestamp"] = pd.to_datetime(frame["bar_start_timestamp"])
+    return frame
 
 
 def _write_corpus(root: Path) -> Path:
     dates = [
-        ("2026-07-01", 100.0),
-        ("2026-07-02", 110.0),
+        "2026-07-01",
+        "2026-07-02",
     ]
-    for day, base in dates:
+    for day in dates:
         path = root / day.replace("-", "") / "underlying"
         path.mkdir(parents=True, exist_ok=True)
-        _session_frame(f"{day} 09:15:00", base=base).to_parquet(path / f"NIFTY_{day.replace('-', '')}.parquet")
+        _session_frame(day, rows=375, direction="BUY_CALL").to_parquet(path / f"NIFTY_{day.replace('-', '')}.parquet")
     return root
 
 
@@ -126,7 +174,7 @@ def test_next_bar_entry_is_strictly_later_and_missing_next_bar_rejects(tmp_path:
     root = tmp_path / "corpus"
     path = root / "20260701" / "underlying"
     path.mkdir(parents=True, exist_ok=True)
-    _session_frame("2026-07-01 09:15:00", base=100.0, rows=16).to_parquet(path / "NIFTY_20260701.parquet")
+    _session_frame("2026-07-01", rows=19, direction="BUY_CALL").to_parquet(path / "NIFTY_20260701.parquet")
     manifest = _single_file_manifest(root, Path("20260701/underlying/NIFTY_20260701.parquet"))
     manifest_path = tmp_path / "manifest.json"
     mod.save_json(manifest_path, manifest)
@@ -149,7 +197,7 @@ def test_next_bar_entry_is_strictly_later_and_missing_next_bar_rejects(tmp_path:
     extended_root = tmp_path / "corpus2"
     path = extended_root / "20260701" / "underlying"
     path.mkdir(parents=True, exist_ok=True)
-    _session_frame("2026-07-01 09:15:00", base=100.0, rows=18).to_parquet(path / "NIFTY_20260701.parquet")
+    _session_frame("2026-07-01", rows=20, direction="BUY_CALL").to_parquet(path / "NIFTY_20260701.parquet")
     extended_manifest = _single_file_manifest(extended_root, Path("20260701/underlying/NIFTY_20260701.parquet"))
     extended_frames = mod.load_selected_frames(extended_root, extended_manifest)
     extended_signals = mod.build_layer_a_signals(extended_frames, strategy_info=strategy_info)
@@ -171,7 +219,13 @@ def test_non_overlapping_policy_rejects_while_active_and_resets_each_session(tmp
     for day, base in [("2026-07-01", 100.0), ("2026-07-02", 120.0)]:
         path = root / day.replace("-", "") / "underlying"
         path.mkdir(parents=True, exist_ok=True)
-        _session_frame(f"{day} 09:15:00", base=base, rows=18).to_parquet(path / f"NIFTY_{day.replace('-', '')}.parquet")
+        frame = _session_frame(day, rows=24, direction="BUY_CALL")
+        if day == "2026-07-01":
+            frame.loc[19, ["open", "high", "low", "close"]] = [22580.0, 22592.0, 22574.0, 22588.0]
+            frame.loc[20, ["open", "high", "low", "close"]] = [22588.0, 22610.0, 22586.0, 22606.0]
+            frame.loc[21, ["open", "high", "low", "close"]] = [22606.0, 22608.0, 22596.0, 22600.0]
+            frame.loc[22, ["open", "high", "low", "close"]] = [22600.0, 22618.0, 22598.0, 22614.0]
+        frame.to_parquet(path / f"NIFTY_{day.replace('-', '')}.parquet")
     manifest = {
         "selected_files": [
             {
@@ -211,7 +265,7 @@ def test_future_mutation_does_not_change_earlier_signal(tmp_path: Path) -> None:
     root = tmp_path / "corpus"
     path = root / "20260701" / "underlying"
     path.mkdir(parents=True, exist_ok=True)
-    frame = _session_frame("2026-07-01 09:15:00", base=100.0, rows=18)
+    frame = _session_frame("2026-07-01", rows=20, direction="BUY_CALL")
     frame.to_parquet(path / "NIFTY_20260701.parquet")
     manifest = _single_file_manifest(root, Path("20260701/underlying/NIFTY_20260701.parquet"))
     frames = mod.load_selected_frames(root, manifest)
@@ -219,7 +273,12 @@ def test_future_mutation_does_not_change_earlier_signal(tmp_path: Path) -> None:
     signals_a = mod.build_layer_a_signals(frames, strategy_info=strategy_info)
 
     mutated = frame.copy()
-    mutated.loc[17, "close"] += 50.0
+    mutated.loc[19, ["open", "high", "low", "close"]] = [
+        mutated.loc[19, "open"] + 50.0,
+        mutated.loc[19, "high"] + 50.0,
+        mutated.loc[19, "low"] + 50.0,
+        mutated.loc[19, "close"] + 50.0,
+    ]
     mutated.to_parquet(path / "NIFTY_20260701.parquet")
     mutated_frames = mod.load_selected_frames(root, manifest)
     signals_b = mod.build_layer_a_signals(mutated_frames, strategy_info=strategy_info)
@@ -232,7 +291,7 @@ def test_breaking_opening_range_boundary_suppresses_signals(tmp_path: Path) -> N
     root = tmp_path / "corpus"
     path = root / "20260701" / "underlying"
     path.mkdir(parents=True, exist_ok=True)
-    frame = _session_frame("2026-07-01 09:15:00", base=100.0, rows=40)
+    frame = _session_frame("2026-07-01", rows=40, direction="BUY_CALL")
     frame.loc[:14, "high"] = frame.loc[:14, "high"] + 50.0
     frame.loc[:14, "close"] = frame.loc[:14, "high"]
     frame.to_parquet(path / "NIFTY_20260701.parquet")
@@ -248,7 +307,7 @@ def test_runner_writes_stable_json_and_separates_layers(tmp_path: Path) -> None:
     root = tmp_path / "corpus"
     path = root / "20260701" / "underlying"
     path.mkdir(parents=True, exist_ok=True)
-    _session_frame("2026-07-01 09:15:00", base=100.0, rows=40).to_parquet(path / "NIFTY_20260701.parquet")
+    _session_frame("2026-07-01", rows=40, direction="BUY_CALL").to_parquet(path / "NIFTY_20260701.parquet")
     manifest = _single_file_manifest(root, Path("20260701/underlying/NIFTY_20260701.parquet"))
     manifest_path = tmp_path / "manifest.json"
     mod.save_json(manifest_path, manifest)

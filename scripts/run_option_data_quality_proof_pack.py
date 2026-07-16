@@ -32,7 +32,13 @@ def _regime(payload: dict[str, Any]) -> MovementRegimeResult:
 
 
 def _candidate(payload: dict[str, Any]) -> StrategyCandidate:
-    return StrategyCandidate(**payload)
+    normalized = dict(payload)
+    if normalized.get("status") == "VALIDATED_CANDIDATE":
+        normalized["status"] = "RAW_CANDIDATE"
+    normalized["option_confirmation_score"] = None
+    normalized["liquidity_score"] = None
+    normalized["freshness_score"] = None
+    return StrategyCandidate(**normalized)
 
 
 def load_fixture(fixture_dir: Path, name: str) -> dict[str, Any]:
@@ -46,16 +52,24 @@ def _run_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
     context = _context(scenario["context"])
     regime = _regime(scenario["regime"])
     candidate_payload = scenario["candidate"]
-    candidate = _candidate(candidate_payload)
+    raw_candidate = _candidate(candidate_payload)
 
     def _generator(_ctx: StrategyContext, _regime: MovementRegimeResult):
-        return (candidate,)
+        return (raw_candidate,)
 
     report = build_ranked_opportunity_report(
         context,
         regime,
         candidate_generators=[_generator],
         include_strategy_id_in_normalization_key=True,
+    )
+    candidate = next(
+        (
+            row
+            for row in report.candidate_pool.candidates
+            if row.strategy_id == raw_candidate.strategy_id
+        ),
+        raw_candidate,
     )
     execution_grade = assess_execution_grade(
         candidate,

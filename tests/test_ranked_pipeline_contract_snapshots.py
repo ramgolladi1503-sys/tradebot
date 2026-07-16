@@ -53,15 +53,15 @@ def _candidate(
     *,
     direction="BUY_CALL",
     movement_type="COMPRESSION_BREAKOUT",
-    status="VALIDATED_CANDIDATE",
+    status="RAW_CANDIDATE",
     blockers=(),
     warnings=(),
     raw_score=0.75,
     confidence_score=0.75,
     price_structure_score=0.8,
-    option_confirmation_score=0.8,
-    liquidity_score=0.8,
-    freshness_score=0.9,
+    option_confirmation_score=None,
+    liquidity_score=None,
+    freshness_score=None,
     volatility_score=0.5,
     regime_alignment_score=0.8,
     timing_score=0.7,
@@ -204,7 +204,7 @@ def test_clean_bullish_ranked_pipeline_contract_snapshot():
         _regime(primary="TREND_UP", TREND_UP=0.8),
         candidate_generators=[
             _generator(
-                _candidate("call_high", direction="BUY_CALL", price_structure_score=0.9, option_confirmation_score=0.9),
+                _candidate("call_high", direction="BUY_CALL", price_structure_score=0.9),
                 _candidate("call_mid", direction="BUY_CALL", movement_type="TREND_PULLBACK", price_structure_score=0.7),
             )
         ],
@@ -231,9 +231,6 @@ def test_fallback_no_trade_ranked_pipeline_contract_snapshot():
         raw_score=1.0,
         confidence_score=1.0,
         price_structure_score=1.0,
-        option_confirmation_score=1.0,
-        liquidity_score=1.0,
-        freshness_score=1.0,
         regime_alignment_score=1.0,
     )
     report = build_ranked_opportunity_report(

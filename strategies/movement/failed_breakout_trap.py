@@ -9,9 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 from core.movement_contract import StrategyCandidate, StrategyContext
-from core.strategy_parameter_profiles import get_default_profile
 from core.movement_regime import MovementRegimeResult
+from core.strategy_parameter_profiles import (
+    RuntimeProfileResolution,
+    resolve_required_profile_parameters,
+)
 from strategies.movement._utils import (
+    block_on_required_fields,
     clamp_score,
     make_candidate,
     ratio_score,
@@ -21,6 +25,12 @@ from strategies.movement._utils import (
 
 STRATEGY_ID = "failed_breakout_trap_v1"
 MOVEMENT_TYPE = "FAILED_BREAKOUT_TRAP"
+EMBEDDED_PROFILE_DEFAULTS = {
+    "MAX_REENTRY_DISTANCE_PCT": 0.0035,
+    "MIN_FAILED_BREAK_DISTANCE_PCT": 0.0006,
+    "MIN_TRAP_EVIDENCE_SCORE": 0.45,
+}
+REQUIRED_PROFILE_KEYS = tuple(EMBEDDED_PROFILE_DEFAULTS)
 
 
 def generate_failed_breakout_trap_candidates(
@@ -29,33 +39,40 @@ def generate_failed_breakout_trap_candidates(
 ) -> tuple[StrategyCandidate, ...]:
     """Generate opposite-side candidates after failed breakout/breakdown."""
 
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    min_trap_evidence_score = float(params.get("MIN_TRAP_EVIDENCE_SCORE", 0.45))
+    profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
+    if not profile.is_valid:
+        return ()
+    params = dict(profile.parameters)
+    min_trap_evidence_score = float(params["MIN_TRAP_EVIDENCE_SCORE"])
 
-    spot = safe_float(ctx.spot_ltp)
-    if spot is None:
+    if block_on_required_fields(
+        STRATEGY_ID,
+        reason="missing_required_thesis_evidence",
+        field_specs=(("spot_ltp", ctx.spot_ltp, "positive"),),
+    ):
         return ()
 
     candidates: list[StrategyCandidate] = []
-    bull_trap_score = _bull_trap_score(ctx, regime)
+    bull_trap_score = _bull_trap_score(ctx, regime, profile)
     if bull_trap_score >= min_trap_evidence_score:
         candidates.append(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_PUT",
                 bull_trap_score,
                 "failed_upside_breakout_reentry",
             )
         )
 
-    bear_trap_score = _bear_trap_score(ctx, regime)
+    bear_trap_score = _bear_trap_score(ctx, regime, profile)
     if bear_trap_score >= min_trap_evidence_score:
         candidates.append(
             _build_candidate(
                 ctx,
                 regime,
+                profile,
                 "BUY_CALL",
                 bear_trap_score,
                 "failed_downside_breakdown_reentry",
@@ -68,12 +85,12 @@ def generate_failed_breakout_trap_candidates(
 def _build_candidate(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
     direction: str,
     trap_score: float,
     trap_type: str,
 ) -> StrategyCandidate:
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
+    params = dict(profile.parameters)
 
     side = side_evidence(ctx, direction)
     price_structure_score = clamp_score(
@@ -107,28 +124,28 @@ def _build_candidate(
         direction=direction,
         price_structure_score=price_structure_score,
         side=side,
-        entry_trigger="failed_breakout_reentry_with_opposite_option_confirmation",
-        invalid_if="price_rebreaks_failed_level_or_option_quote_degrades",
-        rank_reason="failed breakout/breakdown re-entered range with opposite option confirmation",
+        entry_trigger="failed_breakout_reentry",
+        invalid_if="price_rebreaks_failed_level",
+        rank_reason="failed breakout or breakdown re-entered range",
         evidence=evidence,
         warnings=(),
-        confluence_tags=("trap", "range_reentry", "opposite_option_confirmation"),
+        confluence_tags=("trap", "range_reentry"),
         suppression_tags=suppression_tags,
         strategy_version="v1",
         params_used=params,
-        params_hash=profile.params_hash if profile else None,
+        params_hash=profile.parameter_hash,
         promotion_state="ADVISORY_ONLY",
     )
 
 
-def _bull_trap_score(ctx: StrategyContext, regime: MovementRegimeResult) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_reentry_distance_pct = float(params.get("MAX_REENTRY_DISTANCE_PCT", 0.0035))
-    min_failed_break_distance_pct = float(
-        params.get("MIN_FAILED_BREAK_DISTANCE_PCT", 0.0006)
-    )
+def _bull_trap_score(
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
+) -> float:
+    params = dict(profile.parameters)
+    max_reentry_distance_pct = float(params["MAX_REENTRY_DISTANCE_PCT"])
+    min_failed_break_distance_pct = float(params["MIN_FAILED_BREAK_DISTANCE_PCT"])
     spot = safe_float(ctx.spot_ltp)
     failed_high = _failed_high_level(ctx)
     if spot is None or failed_high is None or spot >= failed_high:
@@ -157,14 +174,14 @@ def _bull_trap_score(ctx: StrategyContext, regime: MovementRegimeResult) -> floa
     )
 
 
-def _bear_trap_score(ctx: StrategyContext, regime: MovementRegimeResult) -> float:
-
-    profile = get_default_profile(STRATEGY_ID, "v1")
-    params = profile.params if profile else {}
-    max_reentry_distance_pct = float(params.get("MAX_REENTRY_DISTANCE_PCT", 0.0035))
-    min_failed_break_distance_pct = float(
-        params.get("MIN_FAILED_BREAK_DISTANCE_PCT", 0.0006)
-    )
+def _bear_trap_score(
+    ctx: StrategyContext,
+    regime: MovementRegimeResult,
+    profile: RuntimeProfileResolution,
+) -> float:
+    params = dict(profile.parameters)
+    max_reentry_distance_pct = float(params["MAX_REENTRY_DISTANCE_PCT"])
+    min_failed_break_distance_pct = float(params["MIN_FAILED_BREAK_DISTANCE_PCT"])
     spot = safe_float(ctx.spot_ltp)
     failed_low = _failed_low_level(ctx)
     if spot is None or failed_low is None or spot <= failed_low:
@@ -212,7 +229,7 @@ def _failed_low_level(ctx: StrategyContext) -> float | None:
 def _option_stall_for_failed_upside(ctx: StrategyContext) -> float:
     ce_change = safe_float(ctx.ce_premium_change)
     pe_change = safe_float(ctx.pe_premium_change)
-    ce_stall = 1.0 if ce_change is None or ce_change <= 0 else 0.0
+    ce_stall = 0.0 if ce_change is None else (1.0 if ce_change <= 0 else 0.0)
     pe_confirm = ratio_score(pe_change, start=0.0, full=15.0)
     return clamp_score(0.55 * ce_stall + 0.45 * pe_confirm)
 
@@ -220,7 +237,7 @@ def _option_stall_for_failed_upside(ctx: StrategyContext) -> float:
 def _option_stall_for_failed_downside(ctx: StrategyContext) -> float:
     pe_change = safe_float(ctx.pe_premium_change)
     ce_change = safe_float(ctx.ce_premium_change)
-    pe_stall = 1.0 if pe_change is None or pe_change <= 0 else 0.0
+    pe_stall = 0.0 if pe_change is None else (1.0 if pe_change <= 0 else 0.0)
     ce_confirm = ratio_score(ce_change, start=0.0, full=15.0)
     return clamp_score(0.55 * pe_stall + 0.45 * ce_confirm)
 

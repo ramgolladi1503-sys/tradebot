@@ -4,7 +4,6 @@ import pytest
 
 from core.movement_contract import (
     HARD_EXECUTION_BLOCKERS,
-    PHASE2_NEUTRAL_SCORE,
     MovementContractError,
     StrategyCandidate,
     StrategyContext,
@@ -194,9 +193,10 @@ def test_strategy_phase2_boundary_rejects_strategy_claimed_execution_truth():
 
 def test_strategy_phase2_boundary_allows_strategy_owned_thesis_only():
     candidate = _candidate(
-        option_confirmation_score=PHASE2_NEUTRAL_SCORE,
-        liquidity_score=PHASE2_NEUTRAL_SCORE,
-        freshness_score=PHASE2_NEUTRAL_SCORE,
+        status="RAW_CANDIDATE",
+        option_confirmation_score=None,
+        liquidity_score=None,
+        freshness_score=None,
         evidence={"range_width_pct": 0.18, "breakout_trigger": "range_high_break"},
     )
 

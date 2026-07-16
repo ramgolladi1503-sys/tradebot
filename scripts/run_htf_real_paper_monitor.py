@@ -4,7 +4,7 @@ import json
 import hashlib
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 # Import the existing HTF strategies and candidate evaluator
 from core.candidate_audits.htf_strategies import HTFStrategy
@@ -55,7 +55,8 @@ class RealPaperMonitor:
     def _load_existing_log(self):
         if os.path.exists(CSV_LOG_PATH):
             try:
-                df = pd.read_csv(CSV_LOG_PATH)
+                # Keep signal_id as an exact string identifier across restarts.
+                df = pd.read_csv(CSV_LOG_PATH, dtype={"signal_id": "string"})
                 self.paper_log = df.to_dict("records")
                 # Rehydrate OPEN signals
                 open_sigs = df[df["status"] == "OPEN"].to_dict("records")
@@ -94,7 +95,7 @@ class RealPaperMonitor:
         if self.kite_enabled and self.kite:
             try:
                 return self.kite.ltp(symbols)
-            except Exception as e:
+            except Exception:
                 self.error_count += 1
                 return None
         return None
@@ -283,9 +284,9 @@ class RealPaperMonitor:
         )
 
         # update in log
-        for l in self.paper_log:
-            if l["signal_id"] == sig["signal_id"]:
-                l.update(sig)
+        for record in self.paper_log:
+            if record["signal_id"] == sig["signal_id"]:
+                record.update(sig)
                 break
 
         self.active_signals.remove(sig)
