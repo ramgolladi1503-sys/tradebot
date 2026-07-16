@@ -23,7 +23,6 @@ from core.opening_range_retest_publication import (
     ACCEPTED_PUBLICATION_RESULTS,
     STRATEGY_ID as OPENING_RANGE_RETEST_STRATEGY_ID,
     accept_opening_range_retest_candidate,
-    default_owner_db_path,
 )
 from core.no_trade_engine import NoTradeAssessment, assess_no_trade
 from core.option_confirmation import (
@@ -133,7 +132,36 @@ def build_candidate_pool_report(
                     continue
                 if candidate.strategy_id == OPENING_RANGE_RETEST_STRATEGY_ID:
                     if owner_store is None:
-                        owner_store = OpeningRangeRetestEmissionStore(db_path=default_owner_db_path())
+                        setup_identity = candidate.evidence.get("setup_identity") if isinstance(candidate.evidence, dict) else None
+                        setup_id = ""
+                        if isinstance(setup_identity, dict):
+                            setup_id = str(setup_identity.get("setup_id") or "")
+                        summary = {
+                            "setup_id": setup_id or candidate.strategy_id,
+                            "strategy_id": candidate.strategy_id,
+                            "result": "OWNER_UNAVAILABLE",
+                            "detail": "missing_owner_store",
+                            "lineage_state": None,
+                            "publication_state": None,
+                            "publication_attempts": None,
+                            "outbox_id": None,
+                            "authoritative": False,
+                            "existing_authoritative_record": False,
+                            "new_authoritative_output": False,
+                            "proposal_count": 0,
+                            "outbox_insert_count": 0,
+                            "durable_record_count": 0,
+                        }
+                        owner_results.append(summary)
+                        owner_blockers.append(f"opening_range_retest_owner_blocked:OWNER_UNAVAILABLE:{summary['setup_id']}")
+                        warnings.append(f"opening_range_retest_owner_blocked:OWNER_UNAVAILABLE:{summary['setup_id']}")
+                        logger.warning(
+                            "event=OPENING_RANGE_RETEST_OWNER_BLOCKED runtime_strategy_id=%s reason=%s setup_id=%s",
+                            candidate.strategy_id,
+                            "missing_owner_store",
+                            summary["setup_id"],
+                        )
+                        continue
                     owner_summary, owner_blocker = _accept_opening_range_retest_candidate(
                         candidate,
                         owner_store=owner_store,

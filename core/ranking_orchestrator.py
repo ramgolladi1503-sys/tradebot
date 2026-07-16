@@ -31,6 +31,7 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.opportunity_scoring import OpportunityScoreReport, score_opportunities
 from core.option_confirmation import OptionPressureAssessment
+from core.opening_range_retest_emission_store import OpeningRangeRetestEmissionStore
 from core.runtime_cycle_context import RuntimeCycleContext
 
 RANKING_ORCHESTRATOR_SCHEMA_VERSION = 1
@@ -153,6 +154,7 @@ def build_ranked_opportunity_report(
     *,
     candidate_generators: Iterable[CandidateGenerator] | None = None,
     option_pressure: OptionPressureAssessment | None = None,
+    opening_range_retest_owner_store: OpeningRangeRetestEmissionStore | None = None,
     include_no_trade_candidate: bool = True,
     include_strategy_id_in_normalization_key: bool = False,
     feed_health: FeedHealthTruthDecision | Mapping[str, Any] | None = None,
@@ -170,6 +172,7 @@ def build_ranked_opportunity_report(
         regime,
         candidate_generators=candidate_generators,
         option_pressure=option_pressure,
+        opening_range_retest_owner_store=opening_range_retest_owner_store,
         include_no_trade_candidate=include_no_trade_candidate,
     )
     normalization = normalize_candidates(

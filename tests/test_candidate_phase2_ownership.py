@@ -4,6 +4,7 @@ import logging
 import socket
 import threading
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from core.candidate_pool_orchestrator import build_candidate_pool_report, get_default_candidate_generators
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
+from core.opening_range_retest_emission_store import OpeningRangeRetestEmissionStore
 from core.orchestrator import _snapshot_symbol_payload
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 from strategies.movement.compression_breakout import generate_compression_breakout_candidates
@@ -345,8 +347,9 @@ def test_no_directional_generator_marks_itself_tradable_or_executable():
     assert all(candidate.status == "RAW_CANDIDATE" for candidate in raw_candidates)
 
 
-def test_compliant_raw_candidate_passes_boundary_and_violation_is_blocked(caplog: pytest.LogCaptureFixture):
+def test_compliant_raw_candidate_passes_boundary_and_violation_is_blocked(caplog: pytest.LogCaptureFixture, tmp_path: Path):
     good_candidate = generate_opening_range_retest_candidates(_opening_range_context(), _regime())[0]
+    owner_store = OpeningRangeRetestEmissionStore(db_path=tmp_path / "opening_range_owner.sqlite")
 
     violating_candidate = StrategyCandidate(
         schema_version=1,
@@ -384,6 +387,7 @@ def test_compliant_raw_candidate_passes_boundary_and_violation_is_blocked(caplog
             _full_context(),
             _regime(),
             candidate_generators=[violating_generator, compliant_generator],
+            opening_range_retest_owner_store=owner_store,
         )
 
     assert [candidate.strategy_id for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"}] == ["opening_range_retest_v1"]

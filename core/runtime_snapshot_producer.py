@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from dataclasses import fields as dataclass_fields
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from collections.abc import Mapping
@@ -18,6 +19,8 @@ from core.time_utils import is_today_local, now_ist
 
 from core.ranking_orchestrator import build_ranked_opportunity_report
 from core.movement_contract import StrategyContext
+from core.opening_range_retest_emission_store import OpeningRangeRetestEmissionStore
+from core.opening_range_retest_publication import default_owner_db_path
 from core.runtime_cycle_context import RuntimeCycleContext, StageTiming
 from core.runtime_snapshot_store import write_ranked_pipeline_snapshot, write_ranked_vs_legacy_snapshot
 from core.runtime_snapshot_store import (
@@ -72,6 +75,11 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
 def _candidate_decisions_log_path() -> Path:
     desk_id = str(getattr(cfg, "DESK_ID", "DEFAULT") or "DEFAULT").strip() or "DEFAULT"
     return logs_dir() / "desks" / desk_id / "candidate_decisions.jsonl"
+
+
+@lru_cache(maxsize=1)
+def _opening_range_retest_owner_store() -> OpeningRangeRetestEmissionStore:
+    return OpeningRangeRetestEmissionStore(db_path=default_owner_db_path())
 
 
 def _strategy_context_from_market_symbol(symbol: str, data: dict[str, Any]) -> StrategyContext:
@@ -399,7 +407,12 @@ def _build_and_write_canonical_ranked_snapshot(
             ctx_data["symbol"] = sym
             ctx_data.setdefault("spot_ltp", (data.get("ohlc") or {}).get("close") or 0.0)
             ctx = _strategy_context_from_market_symbol(sym, ctx_data)
-            report = build_ranked_opportunity_report(ctx=ctx, cycle_context=cycle_context, feed_health=cycle_context.feed_truth if cycle_context else None)
+            report = build_ranked_opportunity_report(
+                ctx=ctx,
+                cycle_context=cycle_context,
+                feed_health=cycle_context.feed_truth if cycle_context else None,
+                opening_range_retest_owner_store=_opening_range_retest_owner_store(),
+            )
             reports.append(report.to_dict())
 
             if not canonical_top_strategy_id and report.top_rank_strategy_id:
