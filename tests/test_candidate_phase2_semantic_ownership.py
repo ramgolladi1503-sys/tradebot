@@ -297,7 +297,6 @@ def test_raw_directional_candidates_keep_setup_owned_semantics():
     candidates = _all_semantic_candidates()
     assert [candidate.strategy_id for candidate in candidates] == [
         "opening_drive_v1",
-        "opening_range_retest_v1",
         "compression_breakout_v1",
         "trend_pullback_v1",
         "vwap_reclaim_rejection_v1",
@@ -331,14 +330,8 @@ def test_raw_directional_candidates_keep_setup_owned_semantics():
         )
         assert all(fragment not in payload for fragment in forbidden_text), candidate.strategy_id
 
-    orb = candidates[1]
-    compression = candidates[2]
-    trend = candidates[3]
-    assert (orb.entry_trigger, orb.invalid_if, orb.rank_reason) == (
-        "opening_range_breakout_retest_hold",
-        "price_returns_inside_opening_range",
-        "opening range breakout retest held",
-    )
+    compression = candidates[1]
+    trend = candidates[2]
     assert (compression.entry_trigger, compression.invalid_if, compression.rank_reason) == (
         "compression_range_breakout_release",
         "price_returns_inside_compression_range",
@@ -360,11 +353,10 @@ def test_enriched_phase2_artifacts_keep_real_confirmation_separate_from_raw_thes
 
     directional = [candidate for candidate in report.candidates if candidate.direction in {"BUY_CALL", "BUY_PUT"}]
     assert [candidate.strategy_id for candidate in directional] == [
-        "opening_range_retest_v1",
         "compression_breakout_v1",
         "trend_pullback_v1",
     ]
-    assert len(report.option_confirmations) == 3
+    assert len(report.option_confirmations) == 2
     assert all(isinstance(item, CandidateOptionConfirmation) for item in report.option_confirmations)
     assert all(item.confirmation_score == pytest.approx(0.81475) for item in report.option_confirmations)
     assert all("option" not in candidate.rank_reason.lower() for candidate in directional)
@@ -430,7 +422,7 @@ def test_execution_eligibility_does_not_bypass_manual_approval_or_risk() -> None
         _regime(),
         candidate_generators=get_default_candidate_generators(),
     )
-    candidate = next(item for item in report.candidates if item.strategy_id == "opening_range_retest_v1")
+    candidate = next(item for item in report.candidates if item.strategy_id == "compression_breakout_v1")
     assert candidate.executable_eligible is True
 
     original_manual = cfg.MANUAL_APPROVAL

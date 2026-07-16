@@ -219,7 +219,7 @@ def test_missing_orb_fields_identify_orb_evidence(caplog: pytest.LogCaptureFixtu
 
     assert result == ()
     assert _blocked_messages(caplog) == [
-        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=orb_high,orb_low invalid_fields=- reason=missing_required_orb_evidence"
+        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=completed_bar_history invalid_fields=- reason=missing_required_temporal_evidence"
     ]
 
 
@@ -364,7 +364,7 @@ def test_one_blocked_component_does_not_abort_other_generators(caplog: pytest.Lo
 
     strategy_ids = [candidate.strategy_id for candidate in report.candidates]
     assert "trend_pullback_v1" not in strategy_ids
-    assert "opening_range_retest_v1" in strategy_ids
+    assert strategy_ids == ["compression_breakout_v1"]
     assert any("runtime_strategy_id=trend_pullback_v1" in message for message in _blocked_messages(caplog))
     assert report.failed_generator_count == 0
 
@@ -384,7 +384,6 @@ def test_no_rejected_or_synthetic_candidate_is_created_for_observability(caplog:
 
 def test_complete_context_candidate_fingerprint_remains_exact():
     assert _fingerprint(_full_context()) == [
-        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
@@ -392,7 +391,7 @@ def test_complete_context_candidate_fingerprint_remains_exact():
 
 def test_raw_scores_remain_exact():
     fingerprint = _fingerprint(_full_context())
-    assert [score for _, score, _, _ in fingerprint] == [0.328053, 0.470676, 0.648584]
+    assert [score for _, score, _, _ in fingerprint] == [0.470676, 0.648584]
 
 
 def test_optional_missing_evidence_retains_phase_2b_zero_contribution_behavior():

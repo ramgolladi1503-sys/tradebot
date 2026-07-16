@@ -9,7 +9,7 @@ Convert `opening_range_retest_v1` from a snapshot-gated candidate generator into
 ## Final Verification Gate
 The committed temporal producer at `0ff2ce450922ed39a1ffa989b57e16961bdfebb1` is present on branch `fix/opening-range-retest-temporal-implementation`, and fixture ancestry from `200c04994f718f01c4267f7272b8844353c7a0b9` is proven.
 
-The working tree now carries the completed-history propagation fix in the ORB research caller and the causal ORB fixture updates needed to exercise it. The opening-range focused slice and the shared truth slice both pass. The full repository still contains older stale phase assertions outside this repair, so repository-wide cleanup is not yet complete.
+The working tree now carries the completed-history propagation fix in the ORB research caller and the causal ORB fixture updates needed to exercise it. The opening-range focused slice, the shared truth slice, the adjacent temporal slice, and the ATR proof slice now pass. The full repository still has the known auth gate in `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`, so repository-wide cleanup is not green yet, but the opening-range-related failures are gone.
 
 ## Worktree And Branch
 - worktree: `/Users/madhuram/tradebot-opening-range-retest-temporal-repair`
@@ -123,9 +123,9 @@ Lower-volatility control:
 
 Validated score `0.328053`:
 - source tests include `tests/test_strategy_context_truth.py`, `tests/test_strategy_profile_fail_closed.py`, `tests/test_strategy_missing_evidence_policy.py`, `tests/test_strategy_missing_evidence_observability.py`, and `tests/test_strategy_registry_integrity.py`
-- current status: not reconciled with the completed-history temporal producer
-- failure mode: those tests still build snapshot-era contexts without `completed_bar_history`, so `opening_range_retest_v1` correctly blocks with `missing_required_temporal_evidence`
-- classification: stale shared fixture/expectation, not a proven current movement-layer temporal score
+- current status: reconciled for the shared truth and semantic-ownership slices
+- failure mode: the old snapshot-era `opening_range_retest_v1` expectation is now preserved only as a legacy comment in `tests/test_strategy_context_truth.py`; the active shared fixtures without ORB history now correctly expect the current compression/trend fingerprint
+- classification: legacy snapshot-era expectation, not a proven current movement-layer temporal score
 
 ## Stage-Specific Fingerprints
 Movement-layer temporal candidate:
@@ -142,8 +142,7 @@ READY_FOR_PUBLICATION
 
 Validated candidate:
 ```text
-0.328053 snapshot-era validated fingerprint remains present in shared tests,
-but is not currently produced by `opening_range_retest_v1` without completed history.
+0.328053 remains only as a legacy comment in the shared truth source and is no longer asserted by the aligned ownership and policy tests.
 ```
 
 ## Verification Results
@@ -182,8 +181,15 @@ python -m pytest -q tests/test_strategy_context_truth.py
 exit code 0
 ```
 
+### Shared Truth and Ownership Alignment
+```text
+python -m pytest -q tests/test_strategy_profile_fail_closed.py tests/test_strategy_missing_evidence_policy.py tests/test_strategy_missing_evidence_observability.py tests/test_candidate_phase2_semantic_ownership.py tests/test_strategy_registry_integrity.py tests/test_strategy_context_truth.py
+83 passed, 1 warning
+exit code 0
+```
+
 First shared-truth failure:
-none in the focused slice; the shared truth file now reflects the actual trend-complete direct context and preserves the historical ORB tuple only as a legacy source comment for phase evidence checks.
+none after alignment; the stale ORB fingerprint expectations were removed from the active shared fixtures.
 
 Root class:
 none in the focused slice.
@@ -217,30 +223,30 @@ exit code 0
 ### Full Suite
 ```text
 python -m pytest -q
-23 failed, 5875 passed, 1 deselected, 935 warnings
+1 failed, 5897 passed, 1 deselected, 935 warnings
 exit code 1
-duration: 865.16s
+duration: 779.52s
 ```
 
 First full-suite failure:
-`tests/test_atr_contract_decision.py::test_candidate_fingerprints_remain_unchanged`
+`tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
 
 Known auth failure:
 `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
 
-The auth failure is present, but the full suite also has multiple opening-range related failures. Therefore the full repository status is not green and cannot be classified as only the known auth failure.
+The auth failure remains present. No opening-range-related failures remain in the current full suite.
 
 ## Gate Decision
 - fixture ancestry: proven
 - committed paths: expected only
 - runtime artifact at repair HEAD: unchanged
 - frozen opening-range tests: pass
-- shared truth tests: fail
-- adjacent temporal tests: fail
+- shared truth tests: pass
+- adjacent temporal tests: pass
 - static checks: pass
-- full suite: fail
-- evidence document: finalized with blocked gate status
-- push: blocked
+- full suite: fail because of the known auth gate only
+- evidence document: updated to the current post-alignment result set
+- push: blocked until the auth gate is resolved or explicitly accepted as pre-existing
 
 ## Explicit Non-Claims
 - No owner integration is complete.

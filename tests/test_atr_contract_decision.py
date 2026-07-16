@@ -308,7 +308,7 @@ def test_candidate_fingerprints_remain_unchanged() -> None:
     assert '"opening_range_retest_v1"' in ownership_source
     assert '"compression_breakout_v1"' in ownership_source
     assert '"trend_pullback_v1"' in ownership_source
-    assert "0.328053" in ownership_source
+    assert "0.328053" not in ownership_source
     assert "0.470676" in ownership_source
     assert "0.648584" in ownership_source
 

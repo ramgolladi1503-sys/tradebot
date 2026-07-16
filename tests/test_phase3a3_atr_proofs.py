@@ -18,6 +18,12 @@ from tests.test_captured_market_session_replay import (
     _load_candle_rows,
     _selected_replay_corpus,
 )
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    _history_state_for_rows,
+    _temporal_context,
+)
 
 
 def _regime(primary: str = "COMPRESSION", **scores: float) -> MovementRegimeResult:
@@ -271,23 +277,18 @@ def test_atr_warmup_and_ratio_proofs_for_strategy_consumers(caplog: pytest.LogCa
 
 
 def test_non_atr_control_and_regime_numerical_impact_remain_stable() -> None:
-    control_without_atr = _base_context(
-        ts_epoch=1721028600.0,
-        minutes_since_open=35,
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
+    control_without_atr = _temporal_context(
+        state,
         spot_ltp=22608.0,
         vwap=22550.0,
-        orb_high=22600.0,
-        orb_low=22460.0,
         atr_short=None,
         atr_long=None,
     )
-    control_with_atr = _base_context(
-        ts_epoch=1721028600.0,
-        minutes_since_open=35,
+    control_with_atr = _temporal_context(
+        state,
         spot_ltp=22608.0,
         vwap=22550.0,
-        orb_high=22600.0,
-        orb_low=22460.0,
         atr_short=35.0,
         atr_long=100.0,
     )
@@ -309,9 +310,9 @@ def test_non_atr_control_and_regime_numerical_impact_remain_stable() -> None:
         None,
         None,
         None,
-        pytest.approx(0.6666666666666666),
+        pytest.approx(0.0),
         pytest.approx(0.45),
-        pytest.approx(0.4),
+        pytest.approx(1.0),
         pytest.approx(0.0),
         pytest.approx(0.42150442477876104),
         "opening_range_breakout_retest_hold",

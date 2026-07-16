@@ -390,15 +390,6 @@ def test_fixed_candidate_fingerprint_matches_phase0_baseline():
 
     assert fingerprint == [
         (
-            "generate_opening_range_retest_candidates",
-            "opening_range_retest_v1",
-            "OPENING_RANGE_RETEST",
-            "BUY_CALL",
-            "RAW_CANDIDATE",
-            0.328053,
-            (),
-        ),
-        (
             "generate_compression_breakout_candidates",
             "compression_breakout_v1",
             "COMPRESSION_BREAKOUT",

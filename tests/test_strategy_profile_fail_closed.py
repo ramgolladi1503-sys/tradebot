@@ -158,7 +158,6 @@ def test_default_generators_preserve_phase1a_fingerprint():
     )
 
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
@@ -218,9 +217,8 @@ def test_missing_alias_target_blocks_only_option_pressure_generator(
     )
 
     assert report.failed_generator_count == 0
-    assert report.movement_candidate_count == 3
+    assert report.movement_candidate_count == 2
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
@@ -275,7 +273,6 @@ def test_candidate_generation_does_not_call_source_parsing(monkeypatch: pytest.M
 
     assert report.failed_generator_count == 0
     assert _fingerprint(report) == [
-        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]

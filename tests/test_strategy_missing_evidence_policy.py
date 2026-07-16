@@ -169,7 +169,6 @@ def _runtime_truth_payload() -> dict:
 
 def test_complete_direct_context_fingerprint_is_unchanged():
     assert _fingerprint(_full_context()) == [
-        ("opening_range_retest_v1", 0.328053, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE"),
         ("trend_pullback_v1", 0.648584, "BUY_CALL", "VALIDATED_CANDIDATE"),
     ]
