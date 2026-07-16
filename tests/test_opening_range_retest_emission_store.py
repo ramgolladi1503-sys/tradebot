@@ -75,6 +75,10 @@ def test_schema_initialization_and_idempotency(tmp_path):
     store.init_schema()
     store.init_schema()
 
+    assert store.is_available is True
+    assert store.initialization_classification is None
+    assert store.initialization_error is None
+
     assert db_path.exists()
     assert {
         "setup_id",

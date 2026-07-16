@@ -8,8 +8,6 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pytest
-
 from core.opening_range_retest_emission_store import (
     OpeningRangeRetestEmissionStore,
     OpeningRangeRetestProposal,
@@ -177,22 +175,37 @@ def test_delivery_start_repeated_call_increments_attempts_only_once(tmp_path):
         assert store.accept_candidate_proposal(proposal).result == "ACCEPTED_FOR_PUBLICATION"
         lease = store.acquire_delivery_lease(setup_id="delivery-repeat-1", lease_owner_id="owner-a", now_iso="2026-07-14T05:00:00Z")
         assert lease.result == "LEASE_GRANTED"
+        downstream_delivery_count = 0
         first = store.record_delivery_start(
             setup_id="delivery-repeat-1",
             lease_token=lease.lease_token or "",
             lease_owner_id="owner-a",
             now_iso="2026-07-14T05:00:01Z",
         )
+        if first.result == "DELIVERY_STARTED":
+            downstream_delivery_count += 1
+        row_after_first = _fetch_row(db_path, "opening_range_retest_outbox", "delivery-repeat-1")
         second = store.record_delivery_start(
             setup_id="delivery-repeat-1",
             lease_token=lease.lease_token or "",
             lease_owner_id="owner-a",
             now_iso="2026-07-14T05:00:02Z",
         )
-        row = _fetch_row(db_path, "opening_range_retest_outbox", "delivery-repeat-1")
+        if second.result == "DELIVERY_STARTED":
+            downstream_delivery_count += 1
+        row_after_second = _fetch_row(db_path, "opening_range_retest_outbox", "delivery-repeat-1")
         assert first.result == "DELIVERY_STARTED"
-        assert second.result in {"OWNER_STATE_CONFLICT", "DELIVERY_STARTED"}
-        assert int(row["publication_attempts"]) == 1
+        assert first.publication_attempts == 1
+        assert first.last_attempt_at_iso == "2026-07-14T05:00:01Z"
+        assert second.result == "ALREADY_DELIVERY_STARTED"
+        assert second.publication_attempts == 1
+        assert second.last_attempt_at_iso == "2026-07-14T05:00:01Z"
+        assert row_after_first is not None and row_after_first["publication_state"] == "LEASED"
+        assert row_after_second is not None and int(row_after_second["publication_attempts"]) == 1
+        assert row_after_second["last_attempt_at_iso"] == "2026-07-14T05:00:01Z"
+        assert row_after_second["lease_token"] == lease.lease_token
+        assert row_after_second["lease_owner_id"] == "owner-a"
+        assert downstream_delivery_count == 1
 
 
 def test_lease_token_and_owner_guards(tmp_path):
@@ -285,23 +298,84 @@ def test_reclaimed_lease_resets_delivery_marker_and_advances_attempt_count(tmp_p
 
 def test_real_owner_busy_and_unavailable_classification(tmp_path):
     db_path = tmp_path / "busy.sqlite"
-    store_a = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
-    proposal = _proposal("busy-1")
-    with store_a._connect() as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    lock_conn = sqlite3.connect(str(db_path))
+    lock_conn.execute("BEGIN EXCLUSIVE")
+    try:
         busy_store = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
-        result = busy_store.accept_candidate_proposal(proposal)
+        assert busy_store.is_available is False
+        assert busy_store.initialization_classification == "OWNER_BUSY"
+        assert busy_store.initialization_error is not None
+        result = busy_store.accept_candidate_proposal(_proposal("busy-1"))
         assert result.result == "OWNER_BUSY"
-        assert _fetch_count(db_path, "opening_range_retest_lineage", "busy-1") == 0
+        assert busy_store.get_lineage("busy-1") is None
+        assert busy_store.get_outbox_record("busy-1") is None
+    finally:
+        lock_conn.rollback()
+        lock_conn.close()
 
     unavailable = tmp_path / "missing-owner-db"
     unavailable.mkdir()
-    try:
-        store = OpeningRangeRetestEmissionStore(db_path=unavailable, lease_seconds=30)
-        result = store.accept_candidate_proposal(_proposal("unavailable-1"))
-    except Exception as exc:
-        pytest.fail(f"unexpected exception: {exc}")
+    store = OpeningRangeRetestEmissionStore(db_path=unavailable, lease_seconds=30)
+    assert store.is_available is False
+    assert store.initialization_classification == "OWNER_UNAVAILABLE"
+    assert store.initialization_error is not None
+    result = store.accept_candidate_proposal(_proposal("unavailable-1"))
     assert result.result in {"OWNER_UNAVAILABLE", "ERROR"}
+    assert store.get_lineage("unavailable-1") is None
+    assert store.get_outbox_record("unavailable-1") is None
+
+
+def test_schema_conflict_initialization_is_explicit(tmp_path):
+    db_path = tmp_path / "schema-conflict.sqlite"
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute("CREATE TABLE opening_range_retest_lineage (setup_id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE opening_range_retest_outbox (setup_id TEXT PRIMARY KEY)")
+        conn.commit()
+
+    store = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
+    assert store.is_available is False
+    assert store.initialization_classification == "OWNER_STATE_CONFLICT"
+    assert store.initialization_error is not None
+    assert "schema mismatch" in store.initialization_error.message or "no such column" in store.initialization_error.message
+
+    calls: list[str] = []
+
+    def _boom(*args, **kwargs):
+        calls.append("called")
+        raise AssertionError("unexpected connection attempt")
+
+    store._connect = _boom  # type: ignore[method-assign]
+    assert store.accept_candidate_proposal(_proposal("schema-conflict-1")).result == "OWNER_STATE_CONFLICT"
+    assert store.acquire_delivery_lease(setup_id="schema-conflict-1", lease_owner_id="owner-a", now_iso="2026-07-14T05:00:00Z").result == "OWNER_STATE_CONFLICT"
+    assert store.record_delivery_start(
+        setup_id="schema-conflict-1",
+        lease_token="t",
+        lease_owner_id="owner-a",
+        now_iso="2026-07-14T05:00:00Z",
+    ).result == "OWNER_STATE_CONFLICT"
+    assert store.record_delivery_success(
+        setup_id="schema-conflict-1",
+        lease_token="t",
+        lease_owner_id="owner-a",
+        now_iso="2026-07-14T05:00:00Z",
+    ).result == "OWNER_STATE_CONFLICT"
+    assert store.record_retryable_failure(
+        setup_id="schema-conflict-1",
+        lease_token="t",
+        lease_owner_id="owner-a",
+        last_error="err",
+        now_iso="2026-07-14T05:00:00Z",
+    ).result == "OWNER_STATE_CONFLICT"
+    assert store.record_terminal_failure(
+        setup_id="schema-conflict-1",
+        lease_token="t",
+        lease_owner_id="owner-a",
+        last_error="err",
+        now_iso="2026-07-14T05:00:00Z",
+    ).result == "OWNER_STATE_CONFLICT"
+    assert store.get_lineage("schema-conflict-1") is None
+    assert store.get_outbox_record("schema-conflict-1") is None
+    assert calls == []
 
 
 def test_schema_and_state_corruption_fail_closed(tmp_path):
