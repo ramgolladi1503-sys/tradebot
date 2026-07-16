@@ -34,6 +34,9 @@ concurrency:
   group: feed-smoke-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   feed_smoke:
     runs-on: ubuntu-latest
