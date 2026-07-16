@@ -1505,6 +1505,7 @@ def _warm_seed_ohlc_from_history(
     bars: list,
     min_bars: int,
     *,
+    as_of,
     interval: str | None = None,
     windows_minutes: list[int] | None = None,
     required_seed_bars: int | None = None,
@@ -1639,7 +1640,7 @@ def _warm_seed_ohlc_from_history(
             if not hist:
                 continue
             ohlc_buffer.seed_bars(symbol, hist)
-            bars = ohlc_buffer.get_bars(symbol)
+            bars = ohlc_buffer.get_completed_bars(symbol, as_of=as_of)
             if len(bars) >= required_bars:
                 _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used
                 _WARMUP_SEED_DETAILS.pop(symbol, None)
@@ -1711,6 +1712,7 @@ def seed_ohlc_buffers_on_startup(
             symbol=symbol,
             bars=pre_bars,
             min_bars=min_bars,
+            as_of=now_ist(),
             interval=seed_interval,
             windows_minutes=startup_windows,
             required_seed_bars=target_bars,
@@ -2761,6 +2763,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                         symbol=symbol,
                         bars=bars,
                         min_bars=min_bars,
+                        as_of=cycle_cutoff,
                         interval=str(getattr(cfg, "OHLC_WARM_SEED_INTERVAL", "minute") or "minute"),
                         market_mode=market_ctx.mode,
                     )

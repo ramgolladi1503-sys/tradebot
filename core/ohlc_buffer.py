@@ -79,30 +79,37 @@ class OhlcBuffer:
         return list(self._bars.get(symbol, []))
 
     def get_completed_bars(self, symbol, *, as_of, interval_seconds=60):
-        if not isinstance(interval_seconds, (int, float)) or interval_seconds <= 0:
-            return []
-        if not isinstance(as_of, datetime):
-            return []
-
-        if as_of.tzinfo is None:
-            as_of = as_of.replace(tzinfo=IST_TZ)
-        else:
-            as_of = as_of.astimezone(IST_TZ)
-
-        completed_bars = []
-        interval_td = timedelta(seconds=interval_seconds)
-        last_ts = None
-        for bar in self._bars.get(symbol, []):
-            ts = bar.get("ts")
-            if not isinstance(ts, datetime):
+        try:
+            if not isinstance(interval_seconds, (int, float)) or interval_seconds <= 0:
                 return []
-            if last_ts is not None and ts <= last_ts:
+            if not isinstance(as_of, datetime):
                 return []
-            if ts + interval_td <= as_of:
-                completed_bars.append(dict(bar))
-            last_ts = ts
-        return completed_bars
 
+            if as_of.tzinfo is None:
+                as_of = as_of.replace(tzinfo=IST_TZ)
+            else:
+                as_of = as_of.astimezone(IST_TZ)
+
+            completed_bars = []
+            interval_td = timedelta(seconds=interval_seconds)
+            last_ts = None
+            for bar in self._bars.get(symbol, []):
+                ts = bar.get("ts")
+                if not isinstance(ts, datetime):
+                    return []
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=IST_TZ)
+                else:
+                    ts = ts.astimezone(IST_TZ)
+                    
+                if last_ts is not None and ts <= last_ts:
+                    return []
+                if ts + interval_td <= as_of:
+                    completed_bars.append(dict(bar))
+                last_ts = ts
+            return completed_bars
+        except Exception:
+            return []
     def last_ts(self, symbol):
         bars = self._bars.get(symbol)
         if not bars:
@@ -115,45 +122,65 @@ class OhlcBuffer:
             for b in bars:
                 ts = b.get("date") or b.get("ts")
                 if not ts:
-                    continue
+                    return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
                 if not isinstance(ts, datetime):
                     try:
                         ts = datetime.fromisoformat(str(ts))
                     except Exception:
-                        continue
+                        return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
                 if isinstance(ts, datetime) and ts.tzinfo is None:
                     ts = ts.replace(tzinfo=IST_TZ)
                 elif isinstance(ts, datetime) and ts.tzinfo is not None:
                     ts = ts.astimezone(IST_TZ)
 
                 bucket = ts.replace(second=0, microsecond=0)
+                
+                # validate required OHLC values
+                try:
+                    open_val = float(b.get("open"))
+                    high_val = float(b.get("high"))
+                    low_val = float(b.get("low"))
+                    close_val = float(b.get("close"))
+                    vol_val = float(b.get("volume", 0) or 0)
+                except (TypeError, ValueError):
+                    return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
+
                 normalized.append({
                     "ts": bucket,
-                    "open": b.get("open"),
-                    "high": b.get("high"),
-                    "low": b.get("low"),
-                    "close": b.get("close"),
-                    "volume": b.get("volume", 0) or 0,
+                    "open": open_val,
+                    "high": high_val,
+                    "low": low_val,
+                    "close": close_val,
+                    "volume": vol_val,
                 })
 
             if not normalized:
-                return
+                return {"accepted": True, "status": "NO_CHANGE", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
 
             normalized.sort(key=lambda x: x["ts"])
 
-            deduped = []
+            deduped = {}
             for b in normalized:
-                if deduped and deduped[-1]["ts"] == b["ts"]:
-                    deduped[-1] = b
-                else:
-                    deduped.append(b)
+                deduped[b["ts"]] = b
 
             q = self._bars[symbol]
             current_bars = list(q)
+            existing_timestamps = {b["ts"] for b in current_bars}
 
-            merged = {}
-            for b in current_bars + deduped:
-                merged[b["ts"]] = b
+            merged = {b["ts"]: dict(b) for b in current_bars}
+            
+            seeded_count = 0
+            overlap_count = 0
+
+            for ts, b in deduped.items():
+                if ts in existing_timestamps:
+                    overlap_count += 1
+                else:
+                    merged[ts] = b
+                    seeded_count += 1
+
+            if seeded_count == 0:
+                return {"accepted": True, "status": "NO_CHANGE", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": overlap_count}
 
             sorted_keys = sorted(merged.keys())
             final_bars = [merged[k] for k in sorted_keys]
@@ -161,8 +188,9 @@ class OhlcBuffer:
             q.clear()
             for b in final_bars:
                 q.append(b)
+                
+            return {"accepted": True, "status": "SEEDED", "symbol": symbol, "seeded_bars": seeded_count, "overlap_preserved": overlap_count}
         except Exception:
-            return
-
+            return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
 
 ohlc_buffer = OhlcBuffer()
