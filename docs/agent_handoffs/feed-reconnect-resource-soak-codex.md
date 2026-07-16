@@ -9,13 +9,124 @@
 ## Base Commit
 - `4235c012874757707a14322e3d5457fe0cb1896a`
 
-## Checkpoint Commit Tested At 1000 Cycles
+## Commit Anchors
+- 1000-cycle checkpoint:
+  - `30b13a55489ed744a257d2c58d18448eddbbd02b`
+- Evidence and cleanup commit:
+  - `d5bf8195275fd2d0aa94369abbd196f994dd8835`
+- Current branch tip:
+  - Resolve with `git rev-parse HEAD` at handoff time.
+
+## Offline Evidence Status
+- `PROVEN`
+
+## Offline Verdict
+- `RECONNECT_RESOURCE_PASS`
+
+## Complete Branch Commit Lineage
+- `43122bdd3c004fe483e8e5024992cd250b302d28`
+  - parent: `4235c012874757707a14322e3d5457fe0cb1896a`
+  - subject: `fix: resolve SQLite FD leaks during feed reconnect loops`
+  - files changed:
+    - `core/feed/runtime_store.py`
+    - `core/kite_depth_ws.py`
+    - `core/storage/snapshots.py`
+    - `core/tick_store.py`
+    - `core/trade_store.py`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+  - purpose: establish the prerequisite storage/FD lifecycle baseline so reconnect churn no longer leaks SQLite descriptors
+  - originating lane: inherited prerequisite lane
+  - classification: prerequisite
+- `d52a5bfc7ef72e16b6f04ad1d6921e3c44e44e69`
+  - parent: `43122bdd3c004fe483e8e5024992cd250b302d28`
+  - subject: `test: add resource soak tests, harness warmup, and documentation`
+  - files changed:
+    - `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+    - `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+    - `tests/test_feed_reconnect_resource_soak.py`
+  - purpose: add the soak harness, baseline/warmup measurement, test coverage, and initial evidence docs
+  - originating lane: inherited reconnect-soak lane before Codex takeover
+  - classification: reconnect-soak-specific
+- `bff9ea2b904578afb9f842a93618976e7a88e857`
+  - parent: `d52a5bfc7ef72e16b6f04ad1d6921e3c44e44e69`
+  - subject: `fix: resolve harness memory leak and verdict engine crashes`
+  - files changed:
+    - `scripts/run_feed_reconnect_resource_soak.py`
+    - `tests/test_feed_reconnect_resource_soak.py`
+  - purpose: fix harness-only memory retention and verdict crash behavior
+  - originating lane: inherited reconnect-soak lane before Codex takeover
+  - classification: reconnect-soak-specific
+- `060e8f1be3c0b2e0f23fa1ba02b3e07c433b7af6`
+  - parent: `bff9ea2b904578afb9f842a93618976e7a88e857`
+  - subject: `fix: resolve memory leak, verdict engine crashes, and SQLite closed connection errors; update evidence`
+  - files changed:
+    - `core/trade_store.py`
+    - `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+    - `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
+  - purpose: continue repairing inherited storage/SQLite lifecycle problems and refresh supporting evidence docs
+  - originating lane: inherited mixed prerequisite plus reconnect-soak lane
+  - classification: prerequisite
+- `1ea92556a57ef83464c1b30c31ffdb50694749a7`
+  - parent: `060e8f1be3c0b2e0f23fa1ba02b3e07c433b7af6`
+  - subject: `Add bounded diagnostic information for retired reachable tickers`
+  - files changed:
+    - `core/trade_store.py`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+  - purpose: add bounded diagnostics for retained websocket generation evidence while still on the inherited branch stack
+  - originating lane: inherited reconnect-soak lane before Codex takeover
+  - classification: reconnect-soak-specific with prerequisite ancestry
+- `e8de8aeb2564ac647a2d5b1c3af1c0f1f997f80c`
+  - parent: `1ea92556a57ef83464c1b30c31ffdb50694749a7`
+  - subject: `fix: enforce strict reconnection verification boundaries and restore trade store`
+  - files changed:
+    - `core/kite_depth_ws.py`
+    - `core/trade_store.py`
+    - `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+    - `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+    - `tests/test_feed_reconnect_resource_soak.py`
+    - `tests/test_kite_depth_ws_stability.py`
+  - purpose: restore strict acceptance boundaries, restore `trade_store`, and harden reconnect verification
+  - originating lane: inherited reconnect-soak lane immediately before Codex checkpoint
+  - classification: reconnect-soak-specific with prerequisite ancestry
 - `30b13a55489ed744a257d2c58d18448eddbbd02b`
+  - parent: `e8de8aeb2564ac647a2d5b1c3af1c0f1f997f80c`
+  - subject: `fix: repair reconnect resource soak evidence contract`
+  - files changed:
+    - `core/kite_depth_ws.py`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+    - `tests/test_feed_reconnect_resource_soak.py`
+    - `tests/test_kite_depth_ws_stability.py`
+  - purpose: Codex checkpoint that repaired the soak evidence contract and produced the accepted 1000-cycle proof
+  - originating lane: Codex-authored reconnect-soak scope
+  - classification: reconnect-soak-specific
+- `d5bf8195275fd2d0aa94369abbd196f994dd8835`
+  - parent: `30b13a55489ed744a257d2c58d18448eddbbd02b`
+  - subject: `test: persist reconnect negative cleanup proof`
+  - files changed:
+    - `docs/agent_handoffs/feed-reconnect-resource-soak-codex.md`
+    - `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
+    - `scripts/run_feed_reconnect_resource_soak.py`
+    - `tests/test_feed_reconnect_resource_soak.py`
+  - purpose: Codex evidence follow-up that persisted explicit post-cleanup negative-control snapshots
+  - originating lane: Codex-authored reconnect-soak scope
+  - classification: reconnect-soak-specific
 
-## Final Commit
-- Pending at document creation time in this file. Update after local commit.
+## Complete Branch Diff Against Main
+- `core/feed/runtime_store.py`
+- `core/kite_depth_ws.py`
+- `core/storage/snapshots.py`
+- `core/tick_store.py`
+- `core/trade_store.py`
+- `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+- `docs/agent_handoffs/feed-reconnect-resource-soak-codex.md`
+- `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
+- `scripts/run_feed_reconnect_resource_soak.py`
+- `tests/test_feed_reconnect_resource_soak.py`
+- `tests/test_kite_depth_ws_stability.py`
 
-## Changed Files
+## Codex Reconnect-Soak Implementation Scope
 - `core/kite_depth_ws.py`
 - `scripts/run_feed_reconnect_resource_soak.py`
 - `tests/test_feed_reconnect_resource_soak.py`
@@ -23,14 +134,33 @@
 - `docs/agent_reviews/feed_reconnect_resource_soak_audit.md`
 - `docs/agent_handoffs/feed-reconnect-resource-soak-codex.md`
 
+## Inherited Prerequisite Scope
+- `core/feed/runtime_store.py`
+- `core/storage/snapshots.py`
+- `core/tick_store.py`
+- `core/trade_store.py`
+- `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+
+## Why The Branch Diff Against Main Includes The Inherited Files
+- `core/feed/runtime_store.py`
+  - inherited prerequisite storage/FD lifecycle fix from `43122bdd`
+- `core/storage/snapshots.py`
+  - inherited prerequisite storage/FD lifecycle fix from `43122bdd`
+- `core/tick_store.py`
+  - inherited prerequisite storage/FD lifecycle fix from `43122bdd`
+- `core/trade_store.py`
+  - inherited prerequisite storage repair and later restoration path across `43122bdd`, `060e8f1b`, `1ea92556`, and `e8de8aeb`
+- `docs/agent_handoffs/feed-reconnect-resource-soak-antigravity.md`
+  - inherited documentation lineage from the pre-Codex reconnect-soak lane beginning in `d52a5bfc`
+
 ## Production Changes And Rationale
 - `core/kite_depth_ws.py`
   - real lifecycle fix in `_resubscribe_full()`
   - zero-count option maps no longer keep recovery uncleared after exact replay
 - `scripts/run_feed_reconnect_resource_soak.py`
-  - reporting-only post-checkpoint change
+  - later Codex change is reporting-only after the 1000-cycle checkpoint
   - negative profiles now persist `post_cleanup_final`
-  - positive reconnect semantics intentionally unchanged after checkpoint
+  - positive reconnect semantics were not changed after the checkpoint
 
 ## Profiles Implemented
 - `control`
@@ -47,8 +177,7 @@
   - `145 passed, 2 deselected in 370.38s`
 
 ## 100-Cycle Result
-- Command:
-  - `/Users/madhuram/tradebot/.venv/bin/python scripts/run_feed_reconnect_resource_soak.py --profile reconnect_unbounded_resource_stress --cycles 100 --sample-every 10 --seed 42 --output-json /tmp/codex_reconnect_unbounded_100.json`
+- Accepted prior evidence only. Not rerun in this handoff.
 - Result:
   - `RECONNECT_RESOURCE_100_CYCLE_PASS`
   - `disconnect_count=100`
@@ -61,19 +190,49 @@
 ## 1000-Cycle Result
 - This 1000-cycle proof applies to checkpoint `30b13a55489ed744a257d2c58d18448eddbbd02b`.
 - The later change affects negative-control cleanup reporting only.
-- Command:
-  - `/Users/madhuram/tradebot/.venv/bin/python scripts/run_feed_reconnect_resource_soak.py --profile reconnect_unbounded_resource_stress --cycles 1000 --sample-every 100 --seed 42 --output-json /tmp/codex_reconnect_unbounded_1000.json`
 - Result:
   - `RECONNECT_RESOURCE_1000_CYCLE_PASS`
-  - `disconnect_count=1000`
-  - `reconnect_attempt_count=1000`
+  - `cycles_requested=1000`
   - `verified_successful_reconnect_count=1000`
   - `generation_transition_count=1000`
   - `websocket_generations_created=1001`
+  - `generation_creation_failures=0`
+  - `terminal_failure_count=0`
+  - `hard_failures=0`
   - `fd_count 7 -> 9 -> 9`
   - `sqlite_fd_count 0 -> 0 -> 0`
   - `retired_websocket_generations_reachable=0`
   - `reconnect_lock_held=false`
+  - `completed_cycle_same_generation_reuse=0`
+
+## Corrected Generation Counter Explanation
+- `same_generation_reused_count` is a legacy and misnamed polling-observation counter.
+- It counts wait-loop observations where the old generation is still visible before transition.
+- It is not a completed-cycle reuse count.
+- It is not an acceptance invariant.
+- The observed value `1557` does not mean 1,557 reconnect cycles reused an old websocket.
+- The accepted generation evidence is:
+  - `cycles_requested=1000`
+  - `verified_successful_reconnect_count=1000`
+  - `generation_transition_count=1000`
+  - `websocket_generations_created=1001`
+  - `generation_creation_failures=0`
+  - `terminal_failure_count=0`
+  - `hard_failures=0`
+- Terminology debt remains for future cleanup, but the harness was not changed and the soak was not rerun for renaming only.
+
+## Corrected RSS Explanation
+- `rss_slope_bytes_per_sample` is endpoint delta across sampled observations.
+- It is not an ordinary least-squares regression slope.
+- RSS was observed, but RSS slope was not used as an independent PASS/FAIL certification gate.
+- The certified offline invariants are:
+  - descriptor bounds
+  - SQLite bounds
+  - thread and watchdog cleanup
+  - exact generation transitions
+  - subscription reconciliation
+  - owner release
+  - negative-control detection and cleanup
 
 ## Guarded-Policy Result
 - `RECONNECT_GUARDED_POLICY_PASS`
@@ -90,8 +249,6 @@
 - `reconnect_lock_held=false`
 
 ## Negative-Control Cleanup Result
-- Command:
-  - `/Users/madhuram/tradebot/.venv/bin/python scripts/run_feed_reconnect_resource_soak.py --profile negative_fd_leak --cycles 20 --sample-every 5 --seed 42 --output-json /tmp/codex_negative_fd_leak_20.json`
 - Result:
   - `RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS`
   - `first_mismatch=fd_leak_detected_final`
@@ -99,23 +256,38 @@
   - `sqlite_fd_count 0 -> 0 -> 0`
 
 ## SQLite Same-Path Result
-- Command:
-  - `/Users/madhuram/tradebot/.venv/bin/python scripts/run_feed_reconnect_resource_soak.py --profile sqlite_same_path_multi_descriptor_negative --cycles 20 --sample-every 5 --seed 42 --output-json /tmp/codex_sqlite_same_path_negative.json`
 - Result:
   - `RECONNECT_RESOURCE_NEGATIVE_CONTROL_PASS`
   - `first_mismatch=fd_leak_detected_final`
   - `fd_count 7 -> 47 -> 7`
   - `sqlite_fd_count 0 -> 40 -> 0`
 
+## Integration Dependency
+The branch was tested as a composite tree whose ancestry includes prerequisite storage/FD lifecycle commits.
+
+The 1000-cycle result applies to that exact checkpoint tree.
+
+The reconnect-soak commits must not be copied onto a different storage baseline and represented as carrying the same 1000-cycle evidence without revalidation.
+
+OPTION A — STACKED INTEGRATION
+- Merge the prerequisite storage/FD lifecycle commits first.
+- Then retarget or rebase the reconnect-soak branch onto that merged baseline.
+
+OPTION B — COMPOSITE REVIEW
+- Open a stacked or dependent PR that explicitly includes and identifies the prerequisite commits.
+- Review the prerequisite storage changes separately from the reconnect-soak changes.
+
+Recommended option:
+- OPTION A is safest because the accepted 1000-cycle proof belongs to checkpoint `30b13a55` and its full tested ancestry. Merging the prerequisite storage baseline first preserves the exact dependency order and avoids representing a copied six-file subset as carrying unchanged scale proof.
+
 ## Storage Result
-- Command:
-  - `/Users/madhuram/tradebot/.venv/bin/python -m pytest -q tests/test_analytics_schema_store.py tests/test_decision_store.py tests/test_depth_store_rate_limit.py tests/test_feed_debug_runtime_store.py tests/test_feed_runtime_store_lifecycle.py tests/test_order_approval_store.py tests/test_order_store_persistence.py tests/test_position_state_store.py tests/test_storage_subsystem.py tests/test_tick_store.py tests/test_tick_store_nonblocking_decision_path.py tests/test_trade_store_depth_snapshot_resilience.py tests/test_trade_store_identity.py tests/test_ws_tick_ingestion_updates_tick_store.py tests/core/test_market_snapshot_store.py tests/core/test_runtime_snapshot_store.py tests/core/test_tick_store_db_truth.py tests/analytics/test_store.py --tb=long`
+- Accepted prior evidence only. Not rerun in this handoff.
 - Result:
   - `66 passed in 2.60s`
 
 ## Remaining Limitations
 - Offline synthetic soak only.
-- No live/paper broker session proof.
+- No live or paper broker session proof.
 - Positive final snapshots are post-stop snapshots.
 - `pre_shutdown_snapshot` and `post_shutdown_snapshot` were not part of the 1000-cycle checkpoint JSON and remain `UNMEASURED`.
 
