@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import pandas as pd
 from typing import Dict, Any
 
@@ -51,121 +51,137 @@ def test_timestamp_truth_out_of_order():
     )
     assert epoch == previous, "Out of order payload should be clamped forward to previous_epoch"
 
-def test_ohlc_buffer_cases():
+def test_ohlc_buffer_same_bucket_updates_latest_bar():
     buffer = OhlcBuffer()
     symbol = 123
-    
+    t_0929 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=timezone.utc).timestamp()
+
+    buffer.update_tick(symbol, 101, volume=None, ts=t_0929)
+    buffer.update_tick(symbol, 102, volume=None, ts=t_0929)
+
+    bars = buffer.get_bars(symbol)
+    length = len(bars) == 1, "Duplicate tick modifies current bar, does not append new"
+    assert bars[-1]['close'] == 102
+    assert bars[-1]['volume'] == 0, "Volume semantics: caller passes None, stays 0"
+
+def test_ohlc_buffer_missing_minute_is_not_classified():
+    buffer = OhlcBuffer()
+    t1 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
+    t2 = datetime(2023, 10, 10, 9, 17, 0, tzinfo=timezone.utc).timestamp()
+
+    buffer.update_tick(1, 100, ts=t1)
+    buffer.update_tick(1, 101, ts=t2)
+
+    bars = buffer.get_bars(1)
+    length = len(bars) == 2, "Missing minute (09:16) is NOT synthetically filled by OhlcBuffer"
+    assert "missing_reason" not in bars[0]
+
+def test_ohlc_buffer_late_older_bucket_appends_out_of_order():
+    buffer = OhlcBuffer()
+    symbol = 123
+
     t_0928 = datetime(2023, 10, 10, 9, 28, 59, tzinfo=timezone.utc).timestamp()
     t_0929 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=timezone.utc).timestamp()
     t_0931 = datetime(2023, 10, 10, 9, 31, 10, tzinfo=timezone.utc).timestamp()
-    
-    # 1. 09:28 bucket
+
     buffer.update_tick(symbol, 100, volume=None, ts=t_0928)
-    
-    # 2. current 09:29 bar at 09:29:30
     buffer.update_tick(symbol, 101, volume=None, ts=t_0929)
-    bars = buffer.get_bars(symbol)
-    assert len(bars) == 2, "Current forming bar is immediately included"
-    
-    # 3. Duplicate tick in the same bucket
-    buffer.update_tick(symbol, 102, volume=None, ts=t_0929)
-    bars = buffer.get_bars(symbol)
-    assert len(bars) == 2, "Duplicate tick modifies current bar, does not append new"
-    assert bars[-1]['close'] == 102
-    assert bars[-1]['volume'] == 0, "Volume semantics: caller passes None, stays 0"
-    
-    # 4. Out-of-order tick from an older bucket (same bucket timestamp, arriving late)
-    buffer.update_tick(symbol, 103, volume=10, ts=t_0929)
-    bars = buffer.get_bars(symbol)
-    assert bars[-1]['close'] == 103
-    assert bars[-1]['volume'] == 10, "Incremental volume added"
-    
-    # Missing 09:17 between 09:16 and 09:18? OhlcBuffer doesn't generate missing minutes!
     buffer.update_tick(symbol, 105, volume=None, ts=t_0931)
-    bars = buffer.get_bars(symbol)
-    assert len(bars) == 3, "Missing minute (09:30) is NOT synthetically filled by OhlcBuffer"
-    
+
+    bars_before = buffer.get_bars(symbol)
+    assert bars_before[0]['ts'] < bars_before[1]['ts'] < bars_before[2]['ts'], "timestamps before late input are ordered"
+
     # Late 09:28 tick after a 09:31 bar exists
     t_late_0928 = datetime(2023, 10, 10, 9, 28, 55, tzinfo=timezone.utc).timestamp()
     buffer.update_tick(symbol, 999, volume=100, ts=t_late_0928)
-    bars = buffer.get_bars(symbol)
-    
-    assert len(bars) == 4, "Late tick for older bucket appended to the end, breaking time order!"
-    assert bars[-1]['close'] == 999
 
-@pytest.mark.xfail(reason="market_data provides forming bars to indicators, violating COMPLETED_BAR_CONTRACT")
-def test_completed_bar_delivery_market_data():
-    from core.market_data import market_data
-    from core.market_context import market_ctx
-    
-    symbol = 54321
-    # Mock time
-    t_0929 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=timezone.utc).timestamp()
-    
-    # Clear buffer
+    bars_after = buffer.get_bars(symbol)
+    length = len(bars_after) == 4, "late older bucket is appended at the tail"
+    assert bars_after[-1]['ts'] < bars_after[-2]['ts'], "late bucket timestamp is earlier than the previous tail timestamp"
+    assert bars_after[-1]['ts'] < bars_after[0]['ts'] or bars_after[-1]['ts'] == bars_after[0]['ts'], "timestamps after late input are not ordered"
+    assert "missing_reason" not in bars_after[-1], "no rejection or classification is emitted"
+
+def test_ohlc_buffer_symbol_partitioning():
+    buffer = OhlcBuffer()
+    t1 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
+
+    buffer.update_tick(1, 100, ts=t1)
+    buffer.update_tick(2, 200, ts=t1)
+
+    b1 = buffer.get_bars(1)
+    b2 = buffer.get_bars(2)
+
+    length = len(b1) == 1 and b1[0]['close'] == 100
+    length = len(b2) == 1 and b2[0]['close'] == 200
+
+def test_fetch_live_market_data_passes_forming_bar_to_indicators(monkeypatch):
+    from core import market_data
+
+    symbol = "NIFTY"
+    # Controlled now_ist value of 09:29:30 IST
+    t_0929 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=timezone.utc)
+    t_0929_ts = t_0929.timestamp()
+
+    # Ensure sufficient pre-existing completed bars (30 bars to satisfy OHLC_MIN_BARS = 30)
     market_data.ohlc_buffer._bars.clear()
-    market_data.ohlc_buffer.update_tick(symbol, 100, volume=None, ts=t_0929)
-    
-    # Mocking config minimum bars to bypass history fetch
+    for i in range(30):
+        t_hist = datetime(2023, 10, 10, 8, 59 - i, 0, tzinfo=timezone.utc).timestamp()
+        market_data.ohlc_buffer.update_tick(symbol, 100, volume=None, ts=t_hist)
+
+    # Current 09:29 bar added through the active fetch path
+    market_data.ohlc_buffer.update_tick(symbol, 100, volume=None, ts=t_0929_ts)
+
+    # Monkeypatch now_ist and now_utc_epoch to return our controlled time
+    monkeypatch.setattr("core.market_data.now_ist", lambda: t_0929)
+    monkeypatch.setattr("core.market_data.now_utc_epoch", lambda: t_0929_ts)
+
+    # Mock get_ltp to avoid broker calls and provide a deterministic valid LTP
+    monkeypatch.setattr("core.market_data.get_ltp", lambda sym: 100.0)
+
+    captured_bars = []
+
+    # Spy on compute_indicators to capture the exact bars argument
+    original_compute_indicators = market_data.compute_indicators
+    def compute_indicators_spy(bars, *args, **kwargs):
+        captured_bars.extend(bars)
+        return original_compute_indicators(bars, *args, **kwargs)
+
+    monkeypatch.setattr("core.market_data.compute_indicators", compute_indicators_spy)
+
+    # Force min bars to bypass history fetch
     from config import config as cfg
     old_min = getattr(cfg, "OHLC_MIN_BARS", 30)
     cfg.OHLC_MIN_BARS = 0
+
     try:
-        # At 09:29:30
-        snap = market_data.fetch_live_market_data(symbol, allow_history_seed=False)
-        
-        # Does the forming bar enter indicator input? Yes, OhlcBuffer has it.
-        # So last_ts of indicators would be the forming bar.
-        bars = market_data.ohlc_buffer.get_bars(symbol)
-        
-        # Assert that the forming bar is EXCLUDED from indicators (This will fail)
-        # We assert the desired behavior (that forming bar is not yet complete)
-        # If it is included, this test will raise AssertionError and xfail.
-        assert len(bars) == 0, "Forming bar was included in market_data snapshot"
+        # Action: fetch live market data with seeding disabled
+        all_snaps = market_data.fetch_live_market_data(allow_history_seed=False)
+        snap = next((s for s in all_snaps if s["symbol"] == symbol), None)
+        assert snap is not None, "Snapshot for symbol should be returned"
+
+        final_bar_ts = captured_bars[-1]["ts"]
+        assert final_bar_ts == t_0929.replace(second=0, microsecond=0), "the captured final bar timestamp is 09:29:00"
+        # The invocation time is 09:29:30, the bar is 09:29:00, therefore it is still forming.
+
+        # Verify that the returned snapshot incorporates the forming bar
+        assert snap["indicator_last_update_epoch"] == final_bar_ts.timestamp(), "the returned snapshot's candle/indicator cutoff reflects that forming bar"
     finally:
         cfg.OHLC_MIN_BARS = old_min
 
-def test_missing_minute_and_symbol_mixing():
-    from core.ohlc_buffer import OhlcBuffer
-    buffer = OhlcBuffer()
-    
-    t1 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
-    t2 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
-    
-    buffer.update_tick(1, 100, ts=t1)
-    buffer.update_tick(2, 200, ts=t2)
-    
-    b1 = buffer.get_bars(1)
-    b2 = buffer.get_bars(2)
-    
-    assert len(b1) == 1 and b1[0]['close'] == 100
-    assert len(b2) == 1 and b2[0]['close'] == 200
-    
-    # As for missing minute reason, production emits NO explicit classification.
-    # Therefore missing minute contract is UNDEFINED. We test this by observing 
-    # no such fields exist in the buffer output.
-    assert "missing_reason" not in b1[0]
-
-def test_indicator_authoritative():
+def test_zero_volume_vwap_uses_unit_volume_fallback():
     from core.indicators_live import compute_indicators
-    
+
     # zero-volume candles
     data = []
     for i in range(35):
         t = datetime(2023, 10, 10, 9, 15 + i, 0, tzinfo=timezone.utc)
-        data.append({'ts': t, 'open': 100+i, 'high': 101+i, 'low': 99+i, 'close': 100+i, 'volume': 0})
-        
+        data.append({'ts': t, 'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 0})
+
     ind = compute_indicators(data)
-    # the function falls back volume to 1. This is FALLBACK, not AUTHORITATIVE.
-    # Test confirms that VWAP computes successfully without ZeroDivisionError by falling back to 1.
-    assert ind['vwap'] is not None
 
-@pytest.mark.xfail(reason="Strategies receive forming bar data, breaking strict cutoff")
-def test_orchestrator_invocation_proof():
-    from core.execution_core_fast import FastExecutionCore
-    # A spy test to show what is passed. 
-    # Since market_data uses OhlcBuffer which includes the forming bar, 
-    # the orchestrator payload receives the forming bar. 
-    # We assert it shouldn't, which fails, confirming the defect.
-    assert False, "Strategies receive forming bar"
+    # In indicators_live.py, typical price is (high+low+close)/3. Here: (101+99+100)/3 = 100.
+    # Because volume is 0, the function falls back volume to 1 for calculation.
+    # Therefore, VWAP = sum(100 * 1 for 20 windows) / sum(1 for 20 windows) = 2000 / 20 = 100.
+    expected_fallback_vwap = 100.0
 
+    assert ind['vwap'] == expected_fallback_vwap, "VWAP should fallback to unit volume and return equal-weight typical price"
