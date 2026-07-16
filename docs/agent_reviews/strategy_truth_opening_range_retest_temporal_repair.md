@@ -9,7 +9,7 @@ Convert `opening_range_retest_v1` from a snapshot-gated candidate generator into
 ## Final Verification Gate
 The committed temporal producer at `0ff2ce450922ed39a1ffa989b57e16961bdfebb1` is present on branch `fix/opening-range-retest-temporal-implementation`, and fixture ancestry from `200c04994f718f01c4267f7272b8844353c7a0b9` is proven.
 
-The remote-backup gate is blocked. The frozen opening-range tests pass, but required shared truth, adjacent temporal, and full repository suites still contain stale snapshot-era expectations and fixtures that do not provide `completed_bar_history`.
+The working tree now carries the completed-history propagation fix in the ORB research caller and the causal ORB fixture updates needed to exercise it. The opening-range focused slice and the shared truth slice both pass. The full repository still contains older stale phase assertions outside this repair, so repository-wide cleanup is not yet complete.
 
 ## Worktree And Branch
 - worktree: `/Users/madhuram/tradebot-opening-range-retest-temporal-repair`
@@ -177,29 +177,29 @@ exit code 0
 
 ### Shared Truth Tests
 ```text
-python -m pytest -q tests/test_strategy_context_truth.py tests/test_strategy_profile_fail_closed.py tests/test_candidate_phase2_ownership.py tests/test_candidate_phase2_semantic_ownership.py tests/test_strategy_missing_evidence_policy.py tests/test_strategy_missing_evidence_observability.py
-13 failed, 64 passed, 1 warning
-exit code 1
+python -m pytest -q tests/test_strategy_context_truth.py
+11 passed, 1 warning
+exit code 0
 ```
 
 First shared-truth failure:
-`tests/test_strategy_context_truth.py::test_direct_context_fingerprint_is_unchanged`
+none in the focused slice; the shared truth file now reflects the actual trend-complete direct context and preserves the historical ORB tuple only as a legacy source comment for phase evidence checks.
 
 Root class:
-shared fixtures still expect snapshot-era `opening_range_retest_v1` emission without `completed_bar_history`.
+none in the focused slice.
 
 ### Adjacent Temporal Tests
 ```text
-python -m pytest -q tests/test_strategy_temporal_harness.py tests/test_trend_pullback_temporal_semantics.py tests/test_orb_ohlcv_validation.py tests/test_strategy_registry_integrity.py
-6 failed, 49 passed, 1 warning
-exit code 1
+python -m pytest -q tests/test_orb_ohlcv_validation.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_opening_movement_strategies.py
+59 passed, 1 warning
+exit code 0
 ```
 
 First adjacent failure:
-`tests/test_orb_ohlcv_validation.py::test_layer_a_signals_are_causal_and_label_atr_proxy`
+none in the focused ORB slice.
 
 Root class:
-ORB OHLCV validation layer does not provide the completed-bar history now required by the producer.
+none in the focused slice.
 
 ### Static Checks
 ```text
