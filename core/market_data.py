@@ -1573,8 +1573,8 @@ def _warm_seed_ohlc_from_history(
             hist = []
             for attempt in range(retry_attempts):
                 attempts_used += 1
-                from_dt = now_ist() - timedelta(minutes=int(window_min))
-                to_dt = now_ist()
+                from_dt = as_of - timedelta(minutes=int(window_min))
+                to_dt = as_of
                 try:
                     hist = kite_client.historical_data(
                         token,
@@ -1639,7 +1639,11 @@ def _warm_seed_ohlc_from_history(
                     time.sleep(sleep_sec)
             if not hist:
                 continue
-            ohlc_buffer.seed_bars(symbol, hist)
+            seed_result = ohlc_buffer.seed_bars(symbol, hist)
+            if not seed_result.get("accepted"):
+                reason_code = str(seed_result.get("status", "INVALID_SEED_BATCH")).lower()
+                return bars, False, reason_code
+
             bars = ohlc_buffer.get_completed_bars(symbol, as_of=as_of)
             if len(bars) >= required_bars:
                 _WARMUP_SEED_ATTEMPTS[symbol] = attempts_used

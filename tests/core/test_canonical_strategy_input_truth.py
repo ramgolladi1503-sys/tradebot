@@ -310,99 +310,188 @@ def test_seed_bars_atomic_batch_invalid_no_mutation():
     buffer = OhlcBuffer()
     ts = now_ist().replace(second=0, microsecond=0)
     buffer.update_tick("RELIANCE", 2500.0, ts=ts)
-    
+
     # invalid batch: missing timestamp
     seed_batch = [
         {"open": 2490, "high": 2500, "low": 2480, "close": 2495, "volume": 100},
         {"ts": ts - timedelta(minutes=1), "open": 2480, "high": 2490, "low": 2470, "close": 2485, "volume": 100}
     ]
     res = buffer.seed_bars("RELIANCE", seed_batch)
-    assert res is not None
-    assert res.get("accepted") is False
-    assert res.get("status") == "INVALID_SEED_BATCH"
-    
+    assert res == {
+        "accepted": False,
+        "status": "INVALID_SEED_BATCH",
+        "symbol": "RELIANCE",
+        "seeded_bars": 0,
+        "overlap_preserved": 0,
+    }
+
     # assert no mutation
     bars = buffer.get_bars("RELIANCE")
-    assert len(bars) == 1
-    assert bars[0]["close"] == 2500.0
+    assert [
+        {
+            "ts": bar["ts"],
+            "open": bar["open"],
+            "high": bar["high"],
+            "low": bar["low"],
+            "close": bar["close"],
+            "volume": bar["volume"],
+        }
+        for bar in bars
+    ] == [
+        {
+            "ts": ts,
+            "open": 2500.0,
+            "high": 2500.0,
+            "low": 2500.0,
+            "close": 2500.0,
+            "volume": 0,
+        }
+    ]
 
 def test_seed_bars_idempotent():
     buffer = OhlcBuffer()
     ts = now_ist().replace(second=0, microsecond=0)
-    
+
     seed_batch = [
         {"ts": ts - timedelta(minutes=2), "open": 2480, "high": 2490, "low": 2470, "close": 2485, "volume": 100},
         {"ts": ts - timedelta(minutes=1), "open": 2485, "high": 2495, "low": 2475, "close": 2490, "volume": 150}
     ]
     res1 = buffer.seed_bars("RELIANCE", seed_batch)
-    assert res1.get("accepted") is True
-    assert res1.get("status") == "SEEDED"
-    assert res1.get("seeded_bars") == 2
-    
+    assert res1 == {
+        "accepted": True,
+        "status": "SEEDED",
+        "symbol": "RELIANCE",
+        "seeded_bars": 2,
+        "overlap_preserved": 0,
+    }
+
     # idempotence
     res2 = buffer.seed_bars("RELIANCE", seed_batch)
-    assert res2.get("accepted") is True
-    assert res2.get("status") == "NO_CHANGE"
-    assert res2.get("overlap_preserved") == 2
+    assert res2 == {
+        "accepted": True,
+        "status": "NO_CHANGE",
+        "symbol": "RELIANCE",
+        "seeded_bars": 0,
+        "overlap_preserved": 2,
+    }
 
 def test_seed_bars_overlap_preserves_runtime_ohlc_volume():
     buffer = OhlcBuffer()
     ts = now_ist().replace(second=0, microsecond=0)
     buffer.update_tick("RELIANCE", 2500.0, volume=100, ts=ts)
     buffer.update_tick("RELIANCE", 2510.0, volume=50, ts=ts)
-    
+
     # overlap
     seed_batch = [
         {"ts": ts - timedelta(minutes=1), "open": 2480, "high": 2490, "low": 2470, "close": 2485, "volume": 100},
-        {"ts": ts, "open": 2000, "high": 2000, "low": 2000, "open": 200, "high": 200, "low": 200, "close": 2000, "volume": 9999}
+        {"ts": ts, "open": 2000, "high": 2000, "low": 2000, "close": 2000, "volume": 9999}
     ]
     res = buffer.seed_bars("RELIANCE", seed_batch)
-    assert res.get("accepted") is True
-    
-    bars = buffer.get_bars("RELIANCE")
-    assert len(bars) == 2
-    # assert existing runtime survived overlapping history seed
-    live_bar = bars[1]
-    assert live_bar["ts"] == ts
-    assert live_bar["high"] == 2510.0
-    assert live_bar["volume"] == 150
-    # backfilled
-    assert bars[0]["ts"] == ts - timedelta(minutes=1)
+    assert res == {
+        "accepted": True,
+        "status": "SEEDED",
+        "symbol": "RELIANCE",
+        "seeded_bars": 1,
+        "overlap_preserved": 1,
+    }
 
-def test_get_completed_bars_naive_mixed_fails_closed():
+    bars = buffer.get_bars("RELIANCE")
+    # assert existing runtime survived overlapping history seed
+    assert [
+        {
+            "ts": bar["ts"],
+            "open": bar["open"],
+            "high": bar["high"],
+            "low": bar["low"],
+            "close": bar["close"],
+            "volume": bar["volume"],
+        }
+        for bar in bars
+    ] == [
+        {
+            "ts": ts - timedelta(minutes=1),
+            "open": 2480.0,
+            "high": 2490.0,
+            "low": 2470.0,
+            "close": 2485.0,
+            "volume": 100.0,
+        },
+        {
+            "ts": ts,
+            "open": 2500.0,
+            "high": 2510.0,
+            "low": 2500.0,
+            "close": 2510.0,
+            "volume": 150.0,
+        }
+    ]
+
+def test_get_completed_bars_naive_internal_timestamp_fails_closed():
     buffer = OhlcBuffer()
-    ts = now_ist().replace(second=0, microsecond=0)
-    buffer.update_tick("RELIANCE", 2500.0, ts=ts)
-    
-    # corrupt with naive ts directly
-    buffer._bars["RELIANCE"].append({"ts": ts.replace(tzinfo=None), "close": 2510.0})
-    
-    # wait, my get_completed_bars normalizes naive explicitly
-    # The requirement: "naive timestamp: either normalize explicitly under the documented IST contract or fail closed"
-    # we chose normalize explicitly.
+    ts = datetime(2023, 10, 10, 9, 28, 0) # naive
+    buffer._bars["RELIANCE"].append({"ts": ts, "close": 100})
+    completed = buffer.get_completed_bars("RELIANCE", as_of=ts.replace(tzinfo=IST_TZ) + timedelta(minutes=5))
+    assert completed == []
+
+def test_get_completed_bars_mixed_timestamps_fails_closed():
+    buffer = OhlcBuffer()
+    ts1 = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ)
+    ts2 = datetime(2023, 10, 10, 9, 29, 0) # naive
+    buffer._bars["RELIANCE"].extend([{"ts": ts1, "close": 100}, {"ts": ts2, "close": 101}])
+    completed = buffer.get_completed_bars("RELIANCE", as_of=ts1 + timedelta(minutes=5))
+    assert completed == []
+
+def test_get_completed_bars_single_utc_aware_timestamp_normalized():
+    buffer = OhlcBuffer()
+    from datetime import timezone
+    ts_utc = datetime(2023, 10, 10, 3, 58, 0, tzinfo=timezone.utc) # 09:28 IST
+    buffer._bars["RELIANCE"].append({"ts": ts_utc, "close": 100})
+
+    as_of = ts_utc + timedelta(minutes=5)
+    completed = buffer.get_completed_bars("RELIANCE", as_of=as_of)
+    expected_ts = ts_utc.astimezone(IST_TZ)
+    assert completed == [{"ts": expected_ts, "close": 100}]
+    assert completed[0]["ts"].tzinfo == IST_TZ
+
+def test_get_completed_bars_single_ist_aware_timestamp():
+    buffer = OhlcBuffer()
+    ts = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ)
+    buffer._bars["RELIANCE"].append({"ts": ts, "close": 100})
     completed = buffer.get_completed_bars("RELIANCE", as_of=ts + timedelta(minutes=5))
-    assert len(completed) == 0
+    assert completed == [{"ts": ts, "close": 100}]
+    assert completed[0]["ts"].tzinfo == IST_TZ
+
+def test_get_completed_bars_duplicate_timestamps_after_normalization():
+    buffer = OhlcBuffer()
+    from datetime import timezone
+    ts_utc = datetime(2023, 10, 10, 3, 58, 0, tzinfo=timezone.utc)
+    ts_ist = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ)
+
+    # same logical time, duplicate after normalization
+    buffer._bars["RELIANCE"].extend([{"ts": ts_utc, "close": 100}, {"ts": ts_ist, "close": 101}])
+    completed = buffer.get_completed_bars("RELIANCE", as_of=ts_ist + timedelta(minutes=5))
+
+    # strictly fails closed because last_ts <= ts
+    assert completed == []
+
 
 def test_warm_seed_active_path(monkeypatch):
     import core.market_data
     from core.market_data import fetch_live_market_data, ohlc_buffer, cfg
-    
+
     monkeypatch.setattr(cfg, "OHLC_MIN_BARS", 5)
     monkeypatch.setattr(cfg, "STARTUP_WARMUP_MIN_BARS", 5, raising=False)
     monkeypatch.setattr(cfg, "SYSTEM_WARMUP_MIN_BARS", 5, raising=False)
     monkeypatch.setattr(cfg, "SYMBOLS", ["RELIANCE"])
-    
-    # Setup state
+
+    original_bars = getattr(ohlc_buffer, "_bars").copy()
     ohlc_buffer._bars.clear()
-    
-    # Current forming bar at 09:29
+
     now_dt = now_ist().replace(hour=9, minute=29, second=30, microsecond=0)
     forming_ts = now_dt.replace(second=0)
-    
-    # update forming bar
+
     ohlc_buffer.update_tick("RELIANCE", 2500.0, volume=100, ts=forming_ts)
-    
-    # historical data provider mock returning 08:59 to 09:28 + 09:29 overlapping
+
     def mock_historical_data(*args, **kwargs):
         hist = []
         for m in range(59, 60):
@@ -416,7 +505,7 @@ def test_warm_seed_active_path(monkeypatch):
                 "open": 2400, "high": 2410, "low": 2390, "close": 2405, "volume": 500
             })
         return hist
-    
+
     class MockKite:
         kite = True
         def ensure(self): pass
@@ -427,36 +516,39 @@ def test_warm_seed_active_path(monkeypatch):
     monkeypatch.setattr(core.market_data, "kite_client", MockKite())
     monkeypatch.setattr(core.market_data, "is_open", lambda **kwargs: True)
     monkeypatch.setattr(core.market_data, "now_ist", lambda: now_dt)
-    
+    monkeypatch.setattr(core.market_data, "get_ltp", lambda sym: 2500.0)
+
+    class MockDepthStore:
+        def get(self, sym): return {}
+    monkeypatch.setattr(core.market_data, "depth_store", MockDepthStore())
+
     captured_compute_bars = []
     def mock_compute_indicators(bars, *args, **kwargs):
         captured_compute_bars.extend(bars)
         return {"rsi": 50, "last_ts": bars[-1]["ts"] if bars else None}
-        
+
     monkeypatch.setattr(core.market_data, "compute_indicators", mock_compute_indicators)
-    
-    res = fetch_live_market_data(allow_history_seed=True)
-    
-    assert len(res) == 1
-    snapshot = res[0]
-    assert snapshot["symbol"] == "RELIANCE"
-    
-    assert len(captured_compute_bars) >= 5
-    last_bar = captured_compute_bars[-1]
-    
-    # Prove forming bar is excluded from indicators
-    assert last_bar["ts"] == forming_ts - timedelta(minutes=1)
-    
-    # Prove buffer still contains live 09:29
-    buffer_bars = ohlc_buffer.get_bars("RELIANCE")
-    assert buffer_bars[-1]["ts"] == forming_ts
-    assert buffer_bars[-1]["volume"] == 100
-    
-    # Prove snapshot timestamp == 09:28 (last completed)
-    # The candle_ts_epoch is from the last completed bar
-    candle_ts = datetime.fromtimestamp(snapshot["candle_ts_epoch"], tz=IST_TZ)
-    assert candle_ts == forming_ts - timedelta(minutes=1)
-    
-    # Prove normal and warm-seed causal cutoff is identical
-    # snapshot["timestamp"] should be from cycle_cutoff_epoch which is 09:29:30
-    assert snapshot["timestamp"] == now_dt.timestamp()
+
+    try:
+        res = fetch_live_market_data(allow_history_seed=True)
+
+        assert [snapshot["symbol"] for snapshot in res] == ["RELIANCE"]
+        snapshot = res[0]
+
+        expected_completed_timestamps = []
+        for m in range(59, 60):
+            expected_completed_timestamps.append(now_dt.replace(hour=8, minute=m, second=0))
+        for m in range(0, 29):
+            expected_completed_timestamps.append(now_dt.replace(hour=9, minute=m, second=0))
+
+        assert [bar["ts"] for bar in captured_compute_bars] == expected_completed_timestamps
+
+        buffer_bars = ohlc_buffer.get_bars("RELIANCE")
+        assert buffer_bars[-1]["ts"] == forming_ts
+        assert buffer_bars[-1]["volume"] == 100
+
+        candle_ts = datetime.fromtimestamp(snapshot["candle_ts_epoch"], tz=IST_TZ)
+        assert candle_ts == forming_ts - timedelta(minutes=1)
+        assert snapshot["timestamp"] == now_dt.timestamp()
+    finally:
+        ohlc_buffer._bars = original_bars

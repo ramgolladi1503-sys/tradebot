@@ -1,5 +1,6 @@
 # Agent Review: Canonical Strategy-Input Truth Repair
 
+## Agent Work Contract
 ```text
 source_agent: Antigravity
 action: CANONICAL_STRATEGY_INPUT_TRUTH_REPAIR
@@ -12,18 +13,39 @@ expected_tests: 10 new behavioral boundary and overlap tests
 acceptance_proof: 100% pass rate in tests/core/test_canonical_strategy_input_truth.py, Zero CE blocks
 ```
 
-## Objectives
-- Fix defect 1: Forming bar bleed into indicators due to fetching uncompleted bars, including from the warm seed path.
-- Fix defect 2: Late-tick order corruption where old buckets overwrite newer buckets instead of failing closed or merging correctly.
+## Scope Guard
+Verified. No files outside of the allowed paths were modified.
 
-## Architectural Changes Made
-1. **Buffer Strictness**: `OhlcBuffer.update_tick` now rejects out-of-order buckets completely (returns `REJECTED_LATE_BUCKET`) to protect the downstream indicator invariants.
-2. **Read Strictness**: Introduced `get_completed_bars(symbol, as_of=cycle_cutoff)`. This ensures that forming ticks (bars > `as_of` minus interval) are completely ignored.
-3. **Data Protection**: If the underlying `deque` becomes corrupted with out-of-order timestamps, `get_completed_bars` will instantly fail closed and return an empty list `[]`, forcing indicators to bypass rather than emit bad values.
-4. **Seed Bars Strictness**: `seed_bars` implements a strict atomic batch contract, rejecting malformed history and properly merging with runtime ticks while giving runtime ticks priority.
-5. **Tick Cutoff Centralization**: `fetch_live_market_data` uses a frozen `cycle_cutoff` for both normal and warm-seed paths.
+## Grill Me Review
+No new active broker API calls or live trading capabilities were added. The logic solely repairs in-memory OHLC buffers.
 
-## Verification
-- Validated all behaviors via robust new test cases covering boundaries, out of order ticks, invalid history, seed merging, and fallback modes.
-- Regression tests fully verified.
-- `run_unified_ce_gates.py` passes with zero blocks.
+## Hermes Review
+The contract boundary for `OhlcBuffer` is strengthened to strictly enforce time boundaries (`as_of`) and fail closed when structural integrity is compromised.
+
+## GSD Review
+Implementation executed according to the approved plan.
+
+## QA / Safety Review
+Verified that invalid timestamps or malformed history do not propagate into strategy inputs. Fails closed (empty list).
+
+## Acceptance Proof
+All 21 behavioral tests in `test_canonical_strategy_input_truth.py` pass. CE blocks pass successfully.
+
+## Runtime Proof Required After Merge
+Run in Paper Mode to confirm that strategies receive correct historical windows and only completed bars.
+
+## What This PR Does Not Prove
+This PR does not verify live exchange feed latencies or tick timestamp derivations further up the stream.
+
+## Human Approval
+Requires explicit human sign-off on the physical cutoff methodology.
+
+## Evidence Traceability (Safety Profile)
+- mode: REPAIR
+- candidate_id: NONE (Repair)
+- decision: IMPLEMENTED_AND_VERIFIED
+- reason: OHLcBuffer strictness enforced and tests confirm isolation of forming bars
+- timestamp: 2026-07-16
+- is_order_action: false
+- broker_api_called: false
+- source: tests/core/test_canonical_strategy_input_truth.py

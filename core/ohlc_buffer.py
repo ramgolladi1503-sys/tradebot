@@ -98,14 +98,16 @@ class OhlcBuffer:
                 if not isinstance(ts, datetime):
                     return []
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=IST_TZ)
-                else:
-                    ts = ts.astimezone(IST_TZ)
-                    
+                    return []
+
+                ts = ts.astimezone(IST_TZ)
+
                 if last_ts is not None and ts <= last_ts:
                     return []
                 if ts + interval_td <= as_of:
-                    completed_bars.append(dict(bar))
+                    completed_bar = dict(bar)
+                    completed_bar["ts"] = ts
+                    completed_bars.append(completed_bar)
                 last_ts = ts
             return completed_bars
         except Exception:
@@ -134,7 +136,7 @@ class OhlcBuffer:
                     ts = ts.astimezone(IST_TZ)
 
                 bucket = ts.replace(second=0, microsecond=0)
-                
+
                 # validate required OHLC values
                 try:
                     open_val = float(b.get("open"))
@@ -168,7 +170,7 @@ class OhlcBuffer:
             existing_timestamps = {b["ts"] for b in current_bars}
 
             merged = {b["ts"]: dict(b) for b in current_bars}
-            
+
             seeded_count = 0
             overlap_count = 0
 
@@ -188,7 +190,7 @@ class OhlcBuffer:
             q.clear()
             for b in final_bars:
                 q.append(b)
-                
+
             return {"accepted": True, "status": "SEEDED", "symbol": symbol, "seeded_bars": seeded_count, "overlap_preserved": overlap_count}
         except Exception:
             return {"accepted": False, "status": "INVALID_SEED_BATCH", "symbol": symbol, "seeded_bars": 0, "overlap_preserved": 0}
