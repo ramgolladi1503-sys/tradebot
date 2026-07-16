@@ -7,6 +7,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from unittest.mock import patch, MagicMock
+import copy
 
 class CanonicalRuntimeProofContext:
     def __init__(self):
@@ -121,6 +122,8 @@ class CanonicalRuntimeProofContext:
 
 class Harness:
     def __init__(self):
+        self.total_broker_calls = 0
+        self.total_router_calls = 0
         self.evidence = {
             "schema_version": "1.0",
             "mode": "PAPER_REPLAY_TEST",
@@ -193,6 +196,10 @@ class Harness:
             if r.get("symbol") == symbol:
                 return r
         return None
+
+    def _aggregate_safety(self, spies):
+        self.total_broker_calls += spies.get("broker_calls", 0)
+        self.total_router_calls += spies.get("router_calls", 0)
 
     def scenario_a(self):
         with CanonicalRuntimeProofContext() as ctx:
@@ -347,9 +354,11 @@ class Harness:
     def scenario_d(self):
         with CanonicalRuntimeProofContext() as ctx:
             dt_base = ctx.set_time("2023-01-01 09:30:05")
-            res_30 = ctx.fresh_buffer.update_tick("NIFTY", 100.0, volume=100, ts=dt_base)
+            ctx.fresh_buffer.update_tick("NIFTY", 100.0, volume=100, ts=dt_base)
+            ctx.fresh_buffer.update_tick("BANKNIFTY", 200.0, volume=100, ts=dt_base)
             
-            buffer_before = list(ctx.fresh_buffer._bars["NIFTY"])
+            buffer_before_nifty = copy.deepcopy(list(ctx.fresh_buffer._bars.get("NIFTY", [])))
+            buffer_before_bank = copy.deepcopy(list(ctx.fresh_buffer._bars.get("BANKNIFTY", [])))
             
             dt_late = dt_base.replace(minute=28, second=30)
             res_late = ctx.fresh_buffer.update_tick("NIFTY", 99.0, volume=100, ts=dt_late)
@@ -357,8 +366,10 @@ class Harness:
             assert res_late["accepted"] == False
             assert res_late["status"] == "REJECTED_LATE_BUCKET"
             
-            buffer_after = list(ctx.fresh_buffer._bars["NIFTY"])
-            assert buffer_before == buffer_after
+            buffer_after_nifty = list(ctx.fresh_buffer._bars.get("NIFTY", []))
+            buffer_after_bank = list(ctx.fresh_buffer._bars.get("BANKNIFTY", []))
+            assert buffer_before_nifty == buffer_after_nifty
+            assert buffer_before_bank == buffer_after_bank
             
             self.evidence["late_tick_result"] = {
                 "accepted": res_late["accepted"],
@@ -421,7 +432,7 @@ class Harness:
             assert buffer_before == buffer_after
             assert metrics.get("ohlc_seeded") == False
             reason = metrics.get("ohlc_seed_reason") or ""
-            assert "INVALID_SEED" in reason or "FAILED" in reason or "DEGRADED" in reason or reason == "" or "invalid_seed" in reason.lower(), f"Unexpected reason: {reason}"
+            assert reason.upper() == "INVALID_SEED_BATCH", f"Unexpected reason: {reason}"
             
             self.evidence["invalid_seed_result"] = {"status": reason, "mutated": False}
 
@@ -455,6 +466,11 @@ class Harness:
             self.evidence["cross_symbol_result"] = {"status": "ISOLATED"}
 
     def finish(self, filepath):
+        self.evidence["broker_api_called"] = self.total_broker_calls > 0
+        self.evidence["is_order_action"] = (self.total_broker_calls + self.total_router_calls) > 0
+        if self.evidence["broker_api_called"] or self.evidence["is_order_action"]:
+            self.evidence["decision"] = "FAIL"
+            
         # Sort and canonicalize for semantic hash
         clean_evidence = {k: v for k, v in self.evidence.items() if k not in ("generated_at", "evidence_hash")}
         canonical = json.dumps(clean_evidence, sort_keys=True, separators=(',', ':'))

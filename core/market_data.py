@@ -3121,7 +3121,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             orb_state = _orb_state_from_candles(
                 symbol,
                 bars,
-                now_dt=now,
+                now_dt=cycle_cutoff,
                 segment=segment,
                 market_open=bool(is_market_open),
                 market_mode=market_ctx.mode,
