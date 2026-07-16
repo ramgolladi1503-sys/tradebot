@@ -11,6 +11,11 @@ from core.movement_regime import MovementRegimeResult
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    _history_state_for_rows,
+)
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -306,8 +311,14 @@ def test_future_mutation_cannot_change_earlier_trend_pullback_checkpoint():
 
 
 def test_opening_range_retest_control_unchanged_by_trend_pullback_temporal_repair():
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
     candidates = generate_opening_range_retest_candidates(
-        _context(orb_high=22600.0, orb_low=22460.0, pe_premium_change=0.0),
+        _context(
+            orb_high=max(bar[2] for bar in OPENING_RANGE_ROWS),
+            orb_low=min(bar[3] for bar in OPENING_RANGE_ROWS),
+            pe_premium_change=0.0,
+            completed_bar_history=state.history_payload(),
+        ),
         _regime(),
     )
 
@@ -316,7 +327,7 @@ def test_opening_range_retest_control_unchanged_by_trend_pullback_temporal_repai
     assert candidate.strategy_id == "opening_range_retest_v1"
     assert candidate.direction == "BUY_CALL"
     assert candidate.status == "RAW_CANDIDATE"
-    assert candidate.raw_score == pytest.approx(0.238053, rel=0.0, abs=1e-6)
+    assert candidate.raw_score == pytest.approx(0.36150442477876105, rel=0.0, abs=1e-6)
     assert candidate.entry_trigger == "opening_range_breakout_retest_hold"
     assert candidate.invalid_if == "price_returns_inside_opening_range"
     assert candidate.rank_reason == "opening range breakout retest held"

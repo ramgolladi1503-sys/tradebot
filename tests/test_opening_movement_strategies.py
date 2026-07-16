@@ -1,8 +1,16 @@
 from core.candidate_pool import build_candidate_pool
 from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
+import pytest
 from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
+from tests.test_opening_range_retest_temporal_fixture_contract import (
+    CALL_VALID_ROWS,
+    OPENING_RANGE_ROWS,
+    PUT_VALID_ROWS,
+    _history_state_for_rows,
+    _temporal_context,
+)
 
 
 def _regime(**scores):
@@ -105,13 +113,8 @@ def test_opening_drive_blocks_fallback_stale_wide_spread_and_missing_depth():
 
 
 def test_orb_retest_generates_valid_call_candidate_near_retest_level():
-    ctx = _base_context(
-        minutes_since_open=35,
-        spot_ltp=22608.0,
-        vwap=22550.0,
-        orb_high=22600.0,
-        ce_premium_change=10.0,
-    )
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
+    ctx = _temporal_context(state, ce_premium_change=10.0)
     result = generate_opening_range_retest_candidates(
         ctx,
         _regime(TREND_UP=0.6, VOLATILITY_EXPANSION=0.3),
@@ -125,17 +128,15 @@ def test_orb_retest_generates_valid_call_candidate_near_retest_level():
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
     assert "orb_retest" in candidate.confluence_tags
+    assert candidate.evidence["setup_identity"]["setup_id"]
+    assert candidate.evidence["setup_identity"]["history_hash"]
+    assert candidate.evidence["setup_identity"]["proposal_ready_at_iso"] == "2026-07-14T09:34:00+05:30"
+    assert candidate.raw_score == pytest.approx(0.42150442477876104, abs=1e-6)
 
 
 def test_orb_retest_generates_valid_put_candidate_near_retest_level():
-    ctx = _base_context(
-        minutes_since_open=42,
-        spot_ltp=22452.0,
-        vwap=22510.0,
-        orb_low=22460.0,
-        pe_premium_change=11.0,
-        ce_premium_change=0.0,
-    )
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + PUT_VALID_ROWS[:4])
+    ctx = _temporal_context(state, pe_premium_change=11.0, ce_premium_change=0.0)
     result = generate_opening_range_retest_candidates(
         ctx,
         _regime(TREND_DOWN=0.6, VOLATILITY_EXPANSION=0.3),
@@ -146,6 +147,8 @@ def test_orb_retest_generates_valid_put_candidate_near_retest_level():
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
+    assert candidate.evidence["setup_identity"]["setup_id"]
+    assert candidate.evidence["setup_identity"]["history_hash"]
 
 
 def test_orb_retest_returns_empty_when_timing_or_retest_evidence_missing():
@@ -158,10 +161,9 @@ def test_orb_retest_returns_empty_when_timing_or_retest_evidence_missing():
 
 
 def test_orb_retest_blocked_candidates_remain_visible_in_pool_summary():
-    ctx = _base_context(
-        minutes_since_open=35,
-        spot_ltp=22608.0,
-        orb_high=22600.0,
+    state = _history_state_for_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS[:4])
+    ctx = _temporal_context(
+        state,
         fallback_used=True,
         quote_source="recovered_fallback",
         ce_premium_change=0.0,

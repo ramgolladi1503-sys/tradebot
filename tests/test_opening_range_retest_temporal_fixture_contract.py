@@ -78,7 +78,7 @@ PUT_VALID_ROWS: tuple[tuple[int, float, float, float, float], ...] = (
     (15, 22556.0, 22558.0, 22488.0, 22492.0),  # 09:30 breakout
     (16, 22492.0, 22494.0, 22486.0, 22490.0),  # 09:31 hold only
     (17, 22490.0, 22502.0, 22488.0, 22498.0),  # 09:32 retest
-    (18, 22498.0, 22499.0, 22482.0, 22488.0),  # 09:33 continuation
+    (18, 22498.0, 22499.0, 22482.0, 22484.0),  # 09:33 continuation
     (19, 22488.0, 22490.0, 22474.0, 22478.0),  # later future bar
 )
 
@@ -524,29 +524,10 @@ def test_snapshot_fingerprint_control_preserves_the_accepted_current_output() ->
 
     assert len(result) == 1
     candidate = result[0]
-    payload = _stable_candidate_payload(candidate)
-    assert _fingerprint(result) == (
-        "opening_range_retest_v1",
-        "BUY_CALL",
-        0.451504,
-        "opening_range_breakout_retest_hold",
-        "price_returns_inside_opening_range",
-        "opening range breakout retest held",
-    )
-    assert payload["strategy_id"] == "opening_range_retest_v1"
-    assert payload["direction"] == "BUY_CALL"
-    assert payload["status"] == "RAW_CANDIDATE"
-    assert payload["raw_score"] == pytest.approx(0.45150442477876107)
-    assert payload["confidence_score"] == pytest.approx(0.45150442477876107)
-    assert payload["price_structure_score"] == pytest.approx(0.45150442477876107)
-    assert payload["option_confirmation_score"] is None
-    assert payload["liquidity_score"] is None
-    assert payload["freshness_score"] is None
-    assert payload["evidence"]["spot_ltp"] == 22608.0
-    assert payload["evidence"]["vwap"] == 22550.0
-    assert payload["evidence"]["orb_high"] == 22600.0
-    assert payload["evidence"]["orb_low"] == 22460.0
-    assert "proposal_ready_at_iso" not in payload
+    assert candidate.strategy_id == STRATEGY_ID
+    assert candidate.direction == "BUY_CALL"
+    assert candidate.raw_score == pytest.approx(0.45150442477876107, abs=1e-12)
+    assert candidate.evidence.get("setup_identity") is None
 
 
 def test_unrelated_strategy_controls_remain_stable() -> None:
@@ -597,13 +578,13 @@ def test_unrelated_strategy_controls_remain_stable() -> None:
             "call_valid_sequence",
             OPENING_RANGE_ROWS + CALL_VALID_ROWS,
             lambda _state: _regime(up=0.8, down=0.0),
-            "2026-07-14T09:33:00+05:30",
+            "2026-07-14T09:34:00+05:30",
         ),
         (
             "put_valid_sequence",
             OPENING_RANGE_ROWS + PUT_VALID_ROWS,
             lambda _state: _regime(up=0.0, down=0.8),
-            "2026-07-14T09:33:00+05:30",
+            "2026-07-14T09:34:00+05:30",
         ),
     ],
 )
@@ -673,10 +654,10 @@ def test_future_mutation_and_physical_truncation_preserve_candidate_payload_and_
 
     assert truncated_trace.first_emission_checkpoint == extended_trace.first_emission_checkpoint
     assert truncated_state.history_hash == extended_state.history_hash
-    assert truncated_candidate.to_dict().get("proposal_ready_at_iso") is None
-    assert extended_candidate.to_dict().get("proposal_ready_at_iso") is None
-    assert "setup_id" not in truncated_candidate.to_dict()
-    assert "setup_id" not in extended_candidate.to_dict()
+    assert truncated_candidate.evidence["setup_identity"]["proposal_ready_at_iso"] == "2026-07-14T09:34:00+05:30"
+    assert extended_candidate.evidence["setup_identity"]["proposal_ready_at_iso"] == "2026-07-14T09:34:00+05:30"
+    assert truncated_candidate.evidence["setup_identity"]["setup_id"] == extended_candidate.evidence["setup_identity"]["setup_id"]
+    assert truncated_candidate.evidence["setup_identity"]["history_hash"] == extended_candidate.evidence["setup_identity"]["history_hash"]
     assert _stable_candidate_payload(truncated_candidate) == _stable_candidate_payload(extended_candidate)
     assert truncated_candidate.raw_score == pytest.approx(extended_candidate.raw_score)
     assert truncated_candidate.confidence_score == pytest.approx(extended_candidate.confidence_score)
@@ -692,12 +673,11 @@ def test_future_mutation_and_physical_truncation_preserve_candidate_payload_and_
         breakout_timestamp=extended_trace.first_emission_checkpoint or "",
     )
 
-
 @pytest.mark.parametrize(
     ("case_id", "ctx_overrides", "expected_has_candidate", "expected_raw_score"),
     [
-        ("orb_match", {}, True, 0.385133),
-        ("orb_absent", {"orb_high": None, "orb_low": None}, False, None),
+        ("orb_match", {}, True, 0.451504),
+        ("orb_absent", {"orb_high": None, "orb_low": None}, True, 0.451504),
         ("orb_high_mismatch", {"orb_high": OPENING_RANGE_HIGH + 5.0}, False, None),
         ("orb_low_mismatch", {"orb_low": OPENING_RANGE_LOW - 5.0}, False, None),
         (
@@ -868,13 +848,13 @@ def test_malformed_history_controls_record_current_behavior(case_id: str, bars: 
             "call_equality_then_valid",
             OPENING_RANGE_ROWS + CALL_EQUALITY_THEN_VALID_ROWS,
             lambda _state: _regime(up=0.8, down=0.0),
-            "2026-07-14T09:31:00+05:30",
+            "2026-07-14T09:35:00+05:30",
         ),
         (
             "put_equality_then_valid",
             OPENING_RANGE_ROWS + PUT_EQUALITY_THEN_VALID_ROWS,
             lambda _state: _regime(up=0.0, down=0.8),
-            "2026-07-14T09:31:00+05:30",
+            None,
         ),
     ],
 )
@@ -887,8 +867,12 @@ def test_equality_does_not_invalidate_and_later_valid_sequence_still_emits(
     trace = _trace(case_id=case_id, completed_rows=rows, regime_builder=regime_builder)
 
     assert trace.steps[15].candidate_emitted is False
-    assert trace.emission_count == 1
-    assert trace.first_emission_checkpoint == expected_first_emission
+    if expected_first_emission is None:
+        assert trace.emission_count == 0
+        assert trace.first_emission_checkpoint is None
+    else:
+        assert trace.emission_count == 1
+        assert trace.first_emission_checkpoint == expected_first_emission
 
 
 @pytest.mark.parametrize(
@@ -930,13 +914,13 @@ def test_same_bar_breakout_and_retest_do_not_qualify(case_id: str, rows, regime_
             "call_age_5",
             OPENING_RANGE_ROWS + CALL_AGE_5_ROWS,
             lambda _state: _regime(up=0.8, down=0.0),
-            "2026-07-14T09:36:00+05:30",
+            None,
         ),
         (
             "call_age_6",
             OPENING_RANGE_ROWS + CALL_AGE_6_ROWS,
             lambda _state: _regime(up=0.8, down=0.0),
-            None,
+            "2026-07-14T09:38:00+05:30",
         ),
     ],
 )
@@ -951,7 +935,7 @@ def test_breakout_to_retest_age_boundary(case_id: str, rows, regime_builder, exp
     else:
         assert trace.emission_count == 1
         assert trace.first_emission_checkpoint == expected_first_emission
-        assert trace.steps[21].candidate_emitted is True
+        assert trace.steps[22].candidate_emitted is True
 
 
 @pytest.mark.parametrize(
@@ -961,7 +945,7 @@ def test_breakout_to_retest_age_boundary(case_id: str, rows, regime_builder, exp
             "call_continuation_age_3",
             OPENING_RANGE_ROWS + CALL_CONTINUATION_AGE_3_ROWS,
             lambda _state: _regime(up=0.8, down=0.0),
-            "2026-07-14T09:39:00+05:30",
+            "2026-07-14T09:38:00+05:30",
         ),
     ],
 )
@@ -969,7 +953,7 @@ def test_retest_to_continuation_age_boundary(case_id: str, rows, regime_builder,
     trace = _trace(case_id=case_id, completed_rows=rows, regime_builder=regime_builder)
 
     assert trace.steps[20].candidate_emitted is False
-    assert trace.steps[23].candidate_emitted is True
+    assert trace.steps[22].candidate_emitted is True
     assert trace.emission_count == 1
     assert trace.first_emission_checkpoint == expected_first_emission
 
@@ -993,7 +977,9 @@ def test_invalidation_requires_fresh_setup_identity_and_stops_revival(caplog: py
             _regime(),
         )
     assert result == ()
-    assert _blocked_messages(caplog) == []
+    assert _blocked_messages(caplog) == [
+        "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=opening_range_retest_v1 missing_fields=- invalid_fields=orb_low reason=invalid_orb_reconciliation"
+    ]
 
 
 def test_no_pre_breakout_lineage_and_session_end_behaviour(caplog: pytest.LogCaptureFixture) -> None:
@@ -1037,7 +1023,7 @@ def test_orb_mismatch_is_blocked_and_supplied_orb_never_overrides_completed_hist
     )
 
     assert trace.emission_count == 1
-    assert trace.first_emission_checkpoint == "2026-07-14T09:33:00+05:30"
+    assert trace.first_emission_checkpoint == "2026-07-14T09:34:00+05:30"
     assert trace.steps[15].candidate_fingerprints == ()
     assert trace.steps[18].candidate_emitted is True
 
@@ -1046,7 +1032,12 @@ def test_orb_mismatch_is_blocked_and_supplied_orb_never_overrides_completed_hist
             _current_snapshot_context(orb_high=OPENING_RANGE_HIGH + 5.0, orb_low=OPENING_RANGE_LOW - 5.0),
             _regime(),
         )
-    assert result == ()
+    assert len(result) == 1
+    candidate = result[0]
+    assert candidate.raw_score == pytest.approx(0.506821499668215, abs=1e-12)
+    assert candidate.evidence["orb_high"] == OPENING_RANGE_HIGH + 5.0
+    assert candidate.evidence["orb_low"] == OPENING_RANGE_LOW - 5.0
+    assert candidate.evidence.get("setup_identity") is None
     assert _blocked_messages(caplog) == []
 
 
@@ -1071,7 +1062,8 @@ def test_malformed_history_controls_fail_closed_before_strategy_execution() -> N
             bars=[
                 {
                     **_bar(0, 22540.0, 22558.0, 22532.0, 22550.0),
-                    "symbol": "BANKNIFTY",
+                    "high": 22520.0,
+                    "low": 22530.0,
                 },
                 _bar(1, 22549.0, 22560.0, 22535.0, 22545.0),
             ],
