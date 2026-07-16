@@ -364,7 +364,11 @@ class OpeningRangeRetestEmissionStore:
             lease_seconds if lease_seconds is not None else self._configured_lease_seconds()
         )
         self._busy_timeout_ms = int(getattr(cfg, "TRADE_DB_BUSY_TIMEOUT_MS", 10000) or 10000)
-        self.init_schema()
+        self._startup_error: tuple[str, str] | None = None
+        try:
+            self.init_schema()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as exc:
+            self._startup_error = (_classify_sqlite_error(exc), str(exc))
 
     @staticmethod
     def _configured_lease_seconds() -> Any:
@@ -417,6 +421,18 @@ class OpeningRangeRetestEmissionStore:
             yield conn
         finally:
             conn.close()
+
+    def _unavailable_publication_result(self, setup_id: str) -> PublicationResult:
+        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
+        return PublicationResult(result=code, setup_id=setup_id, detail=detail)
+
+    def _unavailable_lease_result(self, setup_id: str) -> LeaseResult:
+        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
+        return LeaseResult(result=code, setup_id=setup_id, detail=detail)
+
+    def _unavailable_delivery_result(self, setup_id: str) -> DeliveryResult:
+        code, detail = self._startup_error or ("OWNER_UNAVAILABLE", "store_initialization_failed")
+        return DeliveryResult(result=code, setup_id=setup_id, detail=detail)
 
     def init_schema(self) -> None:
         with self._schema_lock:
@@ -598,17 +614,23 @@ class OpeningRangeRetestEmissionStore:
 
     def get_lineage(self, setup_id: str) -> LineageRecord | None:
         key = _validate_non_empty(setup_id, "setup_id")
+        if self._startup_error is not None:
+            return None
         with self._connection() as conn:
             row = self._lineage_record(conn, key)
         return LineageRecord.from_row(row) if row is not None else None
 
     def get_outbox_record(self, setup_id: str) -> OutboxRecord | None:
         key = _validate_non_empty(setup_id, "setup_id")
+        if self._startup_error is not None:
+            return None
         with self._connection() as conn:
             row = self._outbox_record(conn, key)
         return OutboxRecord.from_row(row) if row is not None else None
 
     def accept_candidate_proposal(self, proposal: OpeningRangeRetestProposal) -> PublicationResult:
+        if self._startup_error is not None:
+            return self._unavailable_publication_result(proposal.setup_id)
         try:
             with self._transaction() as conn:
                 existing_lineage = self._lineage_record(conn, proposal.setup_id)
@@ -657,6 +679,8 @@ class OpeningRangeRetestEmissionStore:
         _parse_iso8601(now, field_name="now_iso")
         lease_expires = (_utc_from_iso(now, field_name="now_iso") + timedelta(seconds=self.lease_seconds)).isoformat().replace("+00:00", "Z")
         lease_token = uuid.uuid4().hex
+        if self._startup_error is not None:
+            return self._unavailable_lease_result(key)
         try:
             with self._transaction() as conn:
                 outbox = self._outbox_record(conn, key)
@@ -733,6 +757,8 @@ class OpeningRangeRetestEmissionStore:
         owner = _validate_non_empty(lease_owner_id, "lease_owner_id")
         now = now_iso or _utc_now_iso()
         _parse_iso8601(now, field_name="now_iso")
+        if self._startup_error is not None:
+            return self._unavailable_delivery_result(key)
         try:
             with self._transaction() as conn:
                 row = self._outbox_record(conn, key)
@@ -744,7 +770,19 @@ class OpeningRangeRetestEmissionStore:
                     return DeliveryResult(result="OWNER_STATE_CONFLICT", setup_id=key, publication_state=str(row["publication_state"]), detail="delivery_start_requires_leased")
                 if str(row["lease_token"] or "") != token or str(row["lease_owner_id"] or "") != owner:
                     return DeliveryResult(result="OWNER_STATE_CONFLICT", setup_id=key, publication_state="LEASED", detail="lease_token_or_owner_mismatch")
-                attempts = int(row["publication_attempts"] or 0) + 1
+                attempts = int(row["publication_attempts"] or 0)
+                last_attempt_at_iso = str(row["last_attempt_at_iso"] or "")
+                if last_attempt_at_iso and str(row["lease_token"] or "") == token and str(row["lease_owner_id"] or "") == owner:
+                    return DeliveryResult(
+                        result="DELIVERY_STARTED",
+                        setup_id=key,
+                        publication_state="LEASED",
+                        publication_attempts=attempts,
+                        lease_token=token,
+                        lease_owner_id=owner,
+                        last_attempt_at_iso=last_attempt_at_iso,
+                    )
+                attempts += 1
                 conn.execute(
                     """
                     UPDATE opening_range_retest_outbox
@@ -845,6 +883,8 @@ class OpeningRangeRetestEmissionStore:
         _parse_iso8601(now, field_name="now_iso")
         if next_attempt_at_iso is not None:
             _parse_iso8601(next_attempt_at_iso, field_name="next_attempt_at_iso")
+        if self._startup_error is not None:
+            return self._unavailable_delivery_result(key)
         try:
             with self._transaction() as conn:
                 row = self._outbox_record(conn, key)
