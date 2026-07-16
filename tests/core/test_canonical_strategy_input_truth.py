@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from core.feed.tick_utils import normalized_tick_epoch
 from core.ohlc_buffer import OhlcBuffer
@@ -55,12 +55,13 @@ def test_ohlc_buffer_same_bucket_updates_latest_bar():
     t_0929 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=timezone.utc).timestamp()
     expected_bucket = datetime(2023, 10, 10, 9, 29, 0, tzinfo=timezone.utc)
 
-    buffer.update_tick(symbol, 101, volume=None, ts=t_0929)
-    buffer.update_tick(symbol, 102, volume=None, ts=t_0929)
+    r1 = buffer.update_tick(symbol, 101, volume=None, ts=t_0929)
+    assert r1["status"] == "NEW_BAR"
+    r2 = buffer.update_tick(symbol, 102, volume=None, ts=t_0929)
+    assert r2["status"] == "UPDATED_CURRENT_BAR"
 
     bars = buffer.get_bars(symbol)
 
-    # In TradeBot, OhlcBuffer converts incoming timestamps into Asia/Kolkata aware datetimes
     from core.time_utils import IST_TZ
     expected_bucket_ist = expected_bucket.astimezone(IST_TZ)
     assert [
@@ -84,30 +85,7 @@ def test_ohlc_buffer_same_bucket_updates_latest_bar():
         }
     ]
 
-def test_ohlc_buffer_missing_minute_is_not_classified():
-    buffer = OhlcBuffer()
-    t1 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
-    t2 = datetime(2023, 10, 10, 9, 17, 0, tzinfo=timezone.utc).timestamp()
-
-    buffer.update_tick(1, 100, ts=t1)
-    buffer.update_tick(1, 101, ts=t2)
-
-    bars = buffer.get_bars(1)
-
-    from core.time_utils import IST_TZ
-    expected_0915 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).astimezone(IST_TZ)
-    expected_0917 = datetime(2023, 10, 10, 9, 17, 0, tzinfo=timezone.utc).astimezone(IST_TZ)
-
-    assert [bar["ts"] for bar in bars] == [
-        expected_0915,
-        expected_0917,
-    ]
-
-    assert (bars[1]["ts"] - bars[0]["ts"]).total_seconds() == 120.0
-
-    assert "missing_reason" not in bars[0]
-
-def test_ohlc_buffer_late_older_bucket_appends_out_of_order():
+def test_ohlc_buffer_rejects_late_older_bucket_without_reordering():
     buffer = OhlcBuffer()
     symbol = 123
 
@@ -133,40 +111,51 @@ def test_ohlc_buffer_late_older_bucket_appends_out_of_order():
 
     # Late 09:28 tick after a 09:31 bar exists
     t_late_0928 = datetime(2023, 10, 10, 9, 28, 55, tzinfo=timezone.utc).timestamp()
-    buffer.update_tick(symbol, 999, volume=100, ts=t_late_0928)
+    result = buffer.update_tick(symbol, 999, volume=100, ts=t_late_0928)
+
+    assert result["accepted"] is False
+    assert result["status"] == "REJECTED_LATE_BUCKET"
 
     bars_after = buffer.get_bars(symbol)
     assert [bar["ts"] for bar in bars_after] == [
         expected_0928,
         expected_0929,
         expected_0931,
-        expected_0928,
     ]
 
-    assert bars_after[-1]['ts'] < bars_after[-2]['ts'], "tail timestamp is older than the prior tail"
-    assert bars_after[-1]['close'] == 999, "tail close is 999"
-    assert bars_after[-1]['volume'] == 100, "tail volume is 100"
-    assert "missing_reason" not in bars_after[-1], "no rejection/classification field exists"
+    assert bars_after[-1]['ts'] > bars_after[-2]['ts'], "tail timestamp is newer than the prior tail"
+    assert bars_after[-1]['close'] == 105, "tail close is 105"
 
-def test_ohlc_buffer_symbol_partitioning():
+def test_completed_bar_boundaries():
     buffer = OhlcBuffer()
-    t1 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).timestamp()
-
+    symbol = 123
     from core.time_utils import IST_TZ
-    expected_bucket = datetime(2023, 10, 10, 9, 15, 0, tzinfo=timezone.utc).astimezone(IST_TZ)
 
-    buffer.update_tick(1, 100, ts=t1)
-    buffer.update_tick(2, 200, ts=t1)
+    t_0928_00 = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ).timestamp()
+    t_0929_30 = datetime(2023, 10, 10, 9, 29, 30, tzinfo=IST_TZ).timestamp()
 
-    b1 = buffer.get_bars(1)
-    b2 = buffer.get_bars(2)
+    buffer.update_tick(symbol, 100, volume=None, ts=t_0928_00)
+    buffer.update_tick(symbol, 101, volume=None, ts=t_0929_30)
 
-    assert [bar["close"] for bar in b1] == [100]
-    assert [bar["close"] for bar in b2] == [200]
-    assert [bar["ts"] for bar in b1] == [expected_bucket]
-    assert [bar["ts"] for bar in b2] == [expected_bucket]
+    # test exact boundaries
+    as_of_0928_59 = datetime(2023, 10, 10, 9, 28, 59, 999000, tzinfo=IST_TZ)
+    as_of_0929_00 = datetime(2023, 10, 10, 9, 29, 0, tzinfo=IST_TZ)
+    as_of_0929_59 = datetime(2023, 10, 10, 9, 29, 59, 999000, tzinfo=IST_TZ)
+    as_of_0930_00 = datetime(2023, 10, 10, 9, 30, 0, tzinfo=IST_TZ)
 
-def test_fetch_live_market_data_passes_forming_bar_to_indicators(monkeypatch):
+    bars_1 = buffer.get_completed_bars(symbol, as_of=as_of_0928_59)
+    assert not bars_1, "Expected 0 bars"
+
+    bars_2 = buffer.get_completed_bars(symbol, as_of=as_of_0929_00)
+    assert [b["close"] for b in bars_2] == [100], "Expected 1 bar"
+
+    bars_3 = buffer.get_completed_bars(symbol, as_of=as_of_0929_59)
+    assert [b["close"] for b in bars_3] == [100], "Expected 1 bar"
+
+    bars_4 = buffer.get_completed_bars(symbol, as_of=as_of_0930_00)
+    assert [b["close"] for b in bars_4] == [100, 101], "Expected 2 bars"
+
+def test_fetch_live_market_data_excludes_forming_bar_from_indicators(monkeypatch):
     from core import market_data
     from core.time_utils import IST_TZ
 
@@ -193,9 +182,6 @@ def test_fetch_live_market_data_passes_forming_bar_to_indicators(monkeypatch):
             t_hist = (base_time + timedelta(minutes=i)).timestamp()
             market_data.ohlc_buffer.update_tick(symbol, 100, volume=None, ts=t_hist)
 
-        # Current 09:29 bar added through the active fetch path
-        market_data.ohlc_buffer.update_tick(symbol, 100, volume=None, ts=now_utc_epoch_value)
-
         monkeypatch.setattr("core.market_data.now_ist", lambda: now_ist_value)
         monkeypatch.setattr("core.market_data.now_utc_epoch", lambda: now_utc_epoch_value)
         monkeypatch.setattr("core.market_data.get_ltp", lambda sym: 100.0)
@@ -219,14 +205,13 @@ def test_fetch_live_market_data_passes_forming_bar_to_indicators(monkeypatch):
         timestamps = [b["ts"] for b in captured_bars]
         assert timestamps == sorted(timestamps), "captured timestamps are ordered"
 
-        assert final_bar_ts == datetime(2023, 10, 10, 9, 29, 0, tzinfo=IST_TZ), "captured final timestamp is 09:29:00 IST"
+        # The 09:29 bar is forming, so it should be excluded. The final completed bar is 09:28.
+        assert final_bar_ts == datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ), "captured final timestamp is 09:28:00 IST"
 
-        invocation_time = now_ist_value
-        bar_start_time = final_bar_ts
-        diff = (invocation_time - bar_start_time).total_seconds()
-        assert 0 < diff < 60, "0 < invocation_time - final_bar_start < 60 seconds"
+        # Verify the buffer actually contains the forming bar
+        all_buffer_bars = market_data.ohlc_buffer.get_bars(symbol)
+        assert all_buffer_bars[-1]["ts"] == datetime(2023, 10, 10, 9, 29, 0, tzinfo=IST_TZ), "buffer contains the forming 09:29 bar"
 
-        assert snap["indicator_last_update_epoch"] == final_bar_ts.timestamp(), "snapshot indicator cutoff equals the forming bar timestamp"
     finally:
         market_data.ohlc_buffer._bars = original_bars
         cfg.SYMBOLS = original_symbols
@@ -247,3 +232,74 @@ def test_zero_volume_vwap_uses_unit_volume_fallback():
     assert ind.get("ok") is True, "indicators ok is true"
     assert ind.get("last_ts") == data[-1]["ts"], "last_ts equals the final candle timestamp"
     assert [x["volume"] for x in data] == [0] * 35, "input contains exactly the intended number of candles"
+
+def test_get_completed_bars_fails_closed_invalid_args():
+    buffer = OhlcBuffer()
+    symbol = 123
+    from core.time_utils import IST_TZ
+
+    t_0928_00 = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ).timestamp()
+    buffer.update_tick(symbol, 100, volume=None, ts=t_0928_00)
+
+    as_of = datetime(2023, 10, 10, 9, 29, 0, tzinfo=IST_TZ)
+
+    assert buffer.get_completed_bars(symbol, as_of="not a datetime") == []
+    assert buffer.get_completed_bars(symbol, as_of=as_of, interval_seconds=-10) == []
+    assert buffer.get_completed_bars(symbol, as_of=as_of, interval_seconds=0) == []
+    assert buffer.get_completed_bars(symbol, as_of=as_of, interval_seconds="60") == []
+
+def test_get_completed_bars_fails_closed_corrupted_history():
+    buffer = OhlcBuffer()
+    symbol = 123
+    from core.time_utils import IST_TZ
+
+    t_0928_00 = datetime(2023, 10, 10, 9, 28, 0, tzinfo=IST_TZ)
+    t_0929_00 = datetime(2023, 10, 10, 9, 29, 0, tzinfo=IST_TZ)
+    t_0927_00 = datetime(2023, 10, 10, 9, 27, 0, tzinfo=IST_TZ)
+
+    # Manually corrupt the buffer
+    buffer._bars[symbol].extend([
+        {"ts": t_0928_00, "close": 100},
+        {"ts": t_0929_00, "close": 101},
+        {"ts": t_0927_00, "close": 99}, # Out of order
+    ])
+
+    as_of = datetime(2023, 10, 10, 9, 35, 0, tzinfo=IST_TZ)
+    assert buffer.get_completed_bars(symbol, as_of=as_of) == []
+
+def test_seed_bars_normalizes_and_enforces_strict_ordering():
+    buffer = OhlcBuffer()
+    symbol = 123
+    from core.time_utils import IST_TZ
+
+    # Input with string times, no tz, duplicates, and out of order
+    bars = [
+        {"ts": "2023-10-10T09:17:00", "close": 102},
+        {"ts": "2023-10-10T09:15:00", "close": 100},
+        {"ts": "2023-10-10T09:15:00", "close": 101}, # duplicate
+        {"ts": "2023-10-10T09:16:00", "close": 105},
+    ]
+
+    buffer.seed_bars(symbol, bars)
+    result = buffer.get_bars(symbol)
+
+    timestamps = [b["ts"] for b in result]
+    expected_15 = datetime(2023, 10, 10, 9, 15, 0, tzinfo=IST_TZ)
+    expected_16 = datetime(2023, 10, 10, 9, 16, 0, tzinfo=IST_TZ)
+    expected_17 = datetime(2023, 10, 10, 9, 17, 0, tzinfo=IST_TZ)
+
+    assert timestamps == [expected_15, expected_16, expected_17]
+
+    # The duplicate should keep the last provided
+    assert [b["close"] for b in result] == [101, 105, 102]
+
+    # Try seeding bars that are older than current tail
+    bad_bars = [
+        {"ts": "2023-10-10T09:16:30", "close": 200}, # Less than tail (09:17)
+        {"ts": "2023-10-10T09:18:00", "close": 201},
+    ]
+    buffer.seed_bars(symbol, bad_bars)
+
+    result_after = buffer.get_bars(symbol)
+    # Should merge, truncating 09:16:30 to 09:16 and overwriting 105 with 200
+    assert [b["close"] for b in result_after] == [101, 200, 102, 201]

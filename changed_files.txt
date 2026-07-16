@@ -1,2 +1,0 @@
-docs/agent_reviews/continuous_architecture_phase2.md
-strategies/trade_builder.py
