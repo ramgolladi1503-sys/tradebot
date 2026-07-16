@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from config import config as cfg
 from core.opening_range_retest_emission_store import (
     OpeningRangeRetestEmissionStore,
     OpeningRangeRetestProposal,
