@@ -728,7 +728,8 @@ class OpeningRangeRetestEmissionStore:
                         lease_token=?,
                         lease_owner_id=?,
                         lease_acquired_at_iso=?,
-                        lease_expires_at_iso=?
+                        lease_expires_at_iso=?,
+                        last_attempt_at_iso=NULL
                     WHERE setup_id=?
                     """,
                     (lease_token, owner, now, lease_expires, key),

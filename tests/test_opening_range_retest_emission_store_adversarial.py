@@ -246,6 +246,43 @@ def test_restart_reopen_states_and_crash_timing(tmp_path):
     assert reopened2.acquire_delivery_lease(setup_id="restart-1", lease_owner_id="owner-c", now_iso="2026-07-14T05:00:12Z").result == "LEASE_HELD"
 
 
+def test_reclaimed_lease_resets_delivery_marker_and_advances_attempt_count(tmp_path):
+    db_path = tmp_path / "reclaim.sqlite"
+    proposal = _proposal("reclaim-1")
+
+    store = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
+    assert store.accept_candidate_proposal(proposal).result == "ACCEPTED_FOR_PUBLICATION"
+    lease1 = store.acquire_delivery_lease(setup_id="reclaim-1", lease_owner_id="owner-a", now_iso="2026-07-14T05:00:00Z")
+    assert lease1.result == "LEASE_GRANTED"
+    first = store.record_delivery_start(
+        setup_id="reclaim-1",
+        lease_token=lease1.lease_token or "",
+        lease_owner_id="owner-a",
+        now_iso="2026-07-14T05:00:01Z",
+    )
+    row_after_first = _fetch_row(db_path, "opening_range_retest_outbox", "reclaim-1")
+    assert first.result == "DELIVERY_STARTED"
+    assert int(row_after_first["publication_attempts"]) == 1
+    assert str(row_after_first["last_attempt_at_iso"]) == "2026-07-14T05:00:01Z"
+
+    reopened = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
+    lease2 = reopened.acquire_delivery_lease(setup_id="reclaim-1", lease_owner_id="owner-b", now_iso="2026-07-14T05:00:40Z")
+    row_after_reclaim = _fetch_row(db_path, "opening_range_retest_outbox", "reclaim-1")
+    assert lease2.result == "LEASE_GRANTED"
+    assert row_after_reclaim is not None and row_after_reclaim["last_attempt_at_iso"] is None
+
+    second = reopened.record_delivery_start(
+        setup_id="reclaim-1",
+        lease_token=lease2.lease_token or "",
+        lease_owner_id="owner-b",
+        now_iso="2026-07-14T05:00:41Z",
+    )
+    row_after_second = _fetch_row(db_path, "opening_range_retest_outbox", "reclaim-1")
+    assert second.result == "DELIVERY_STARTED"
+    assert int(row_after_second["publication_attempts"]) == 2
+    assert str(row_after_second["last_attempt_at_iso"]) == "2026-07-14T05:00:41Z"
+
+
 def test_real_owner_busy_and_unavailable_classification(tmp_path):
     db_path = tmp_path / "busy.sqlite"
     store_a = OpeningRangeRetestEmissionStore(db_path=db_path, lease_seconds=30)
