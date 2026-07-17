@@ -102,14 +102,14 @@ def test_bullish_and_bearish_structural_prefilters_preserve_valid_shapes():
     bearish = pd.DataFrame([
         {"open": 100.2, "high": 100.3, "low": 99.9, "close": 100.1},
         {"open": 100.1, "high": 100.2, "low": 99.5, "close": 99.6},
-        {"open": 99.6, "high": 100.0, "low": 99.5, "close": 99.9},
-        {"open": 99.9, "high": 100.0, "low": 99.4, "close": 99.55},
+        {"open": 99.6, "high": 99.9, "low": 99.5, "close": 99.8},
+        {"open": 99.8, "high": 99.85, "low": 99.4, "close": 99.56},
     ])
-    call, put, support, resistance = _necessary_structure(bearish, spot=99.55, vwap=100.05)
+    call, put, support, resistance = _necessary_structure(bearish, spot=99.56, vwap=100.05)
     assert call is False
     assert put is True
     assert support == 99.4
-    assert resistance == 100.0
+    assert resistance == 99.9
 
 
 def test_next_bar_entry_and_stop_first_same_bar_policy():
