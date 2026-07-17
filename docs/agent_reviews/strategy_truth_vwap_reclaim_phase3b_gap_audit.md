@@ -10,6 +10,7 @@ WHAT WAS ACTUALLY IMPLEMENTED:
 - Rewrote [`strategies/movement/vwap_reclaim.py`](../../strategies/movement/vwap_reclaim.py) to treat `completed_bar_history` as first-class temporal evidence.
 - Added deterministic validation for missing, malformed, out-of-order, mixed-symbol, mixed-session, or inconsistent completed-bar data.
 - Computed per-prefix causal VWAP from completed bars only, with explicit `VWAP_AUTHORITATIVE` versus `VWAP_UNIT_WEIGHT_PROXY` provenance.
+- Corrected sequence-level provenance emission so any zero/missing-volume bar in the validated causal prefix upgrades the reported VWAP provenance to `VWAP_UNIT_WEIGHT_PROXY` instead of inheriting only the final bar's provenance.
 - Required the final 3 completed bars to satisfy the ordered establishment → reclaim → hold sequence before a candidate can emit.
 - Preserved the existing candidate identity, raw-candidate ownership, trigger text, invalidation text, and downstream ownership split.
 - Added shared causal-history fixtures and updated the temporal, lineage, observability, policy, and semantic-ownership tests to exercise the repaired contract.
@@ -62,12 +63,14 @@ The repaired runtime contract is:
 | completed history contract | PROVEN | `completed_bar_history` is required for the causal path |
 | causal sequencing | PROVEN | final 3 completed bars must satisfy establishment → reclaim → hold |
 | runtime/direct agreement | PROVEN | direct and runtime-propagated contexts produce the same fingerprint |
+| runtime path split | PROVEN | canonical ranked snapshots run through `build_ranked_opportunity_report`; live Phase 2 top-opportunity exposure remains downstream-owned through `cycle_ranked_candidates` |
 | missing history | PROVEN | `STRATEGY_EVIDENCE_BLOCKED` is emitted for missing temporal evidence |
 | malformed history | PROVEN | invalid or inconsistent history is blocked deterministically |
 | future mutation safety | PROVEN | future bars after the cutoff do not change the candidate identity |
 | truncation equivalence | PROVEN | physical truncation at the decision prefix matches the full dataset before the cutoff |
 | bearish causal path | PROVEN | a valid bearish sequence emits `BUY_PUT` |
 | previous-spot fallback | PROVEN | `previous_spot_ltp` is supplemental only and cannot fabricate the sequence |
+| aggregate provenance | PROVEN | any zero/missing-volume bar in the causal prefix emits `VWAP_UNIT_WEIGHT_PROXY` |
 | metadata-only confirmation | PROVEN | metadata does not override the completed-bar truth |
 | raw ownership | PROVEN | emitted candidates remain `RAW_CANDIDATE` |
 | downstream ownership | PROVEN | Phase 2 truth remains outside the generator contract |
@@ -88,6 +91,7 @@ The causal history also supports the bearish path when the spot/VWAP relationshi
 - `ts_epoch` is only used as the evaluation cutoff; future bars past the cutoff are ignored.
 - The strategy does not rely on `previous_spot_ltp` or metadata confirmation to manufacture a reclaim.
 - The strategy blocks when the final causal VWAP does not match the runtime `vwap`.
+- VWAP provenance is reported from the validated causal prefix, not only the last bar, so early zero/missing-volume bars keep the proxy provenance visible.
 
 ## Blocked Event Shape
 
@@ -105,10 +109,10 @@ reason=missing_required_temporal_evidence|invalid_completed_history|inconsistent
 
 - Focused VWAP reclaim / adjacent slice:
   - `python -m pytest -q tests/test_vwap_reclaim_temporal_conformance.py tests/test_vwap_trap_movement_strategies.py tests/test_strategy_generators_lineage.py tests/test_strategy_missing_evidence_observability.py tests/test_strategy_missing_evidence_policy.py tests/test_candidate_phase2_semantic_ownership.py`
-  - Result: `67 passed, 1 warning in 9.19s`
+  - Result: `69 passed, 1 warning in 10.88s`
 - Full repository suite:
   - `python -m pytest -q`
-  - Result: `6027 passed, 1 failed, 24 deselected, 935 warnings in 805.31s`
+  - Result: `6029 passed, 1 failed, 24 deselected, 935 warnings in 692.53s`
 
 ## First Failure
 

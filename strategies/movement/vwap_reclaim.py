@@ -270,7 +270,7 @@ def _sequence_from_history(
     return _CausalSequenceResult(
         direction=direction,
         history=sequence,
-        vwap_provenance=sequence[-1].volume_provenance,
+        vwap_provenance=history_result.volume_provenance or sequence[-1].volume_provenance,
         evaluation_cutoff=history_result.evaluation_cutoff or sequence[-1].bar_end_timestamp,
         history_hash=history_result.history_hash or _history_hash(sequence),
     )

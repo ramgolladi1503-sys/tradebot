@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from core.movement_regime import MovementRegimeResult
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
@@ -43,6 +45,23 @@ def _fingerprint(candidates):
     ]
 
 
+def _causal_vwap(history):
+    running_tp_weight = 0.0
+    running_volume = 0.0
+    for bar in history:
+        volume = bar.get("volume")
+        if volume in (None, "", "None"):
+            weight = 1.0
+        else:
+            weight = float(volume)
+            if weight <= 0:
+                weight = 1.0
+        typical_price = (float(bar["high"]) + float(bar["low"]) + float(bar["close"])) / 3.0
+        running_tp_weight += typical_price * weight
+        running_volume += weight
+    return running_tp_weight / running_volume
+
+
 def test_vwap_reclaim_runtime_and_direct_fingerprints_match_for_causal_snapshot():
     direct = vwap_reclaim_context()
     runtime = _strategy_context_from_market_symbol("NIFTY", runtime_truth_payload())
@@ -74,6 +93,31 @@ def test_vwap_reclaim_runtime_and_direct_fingerprints_match_for_causal_snapshot(
         "2026-07-14T09:17:00+05:30",
         "2026-07-14T09:18:00+05:30",
     )
+
+
+@pytest.mark.parametrize("first_bar_volume", [0.0, None])
+def test_vwap_reclaim_sequence_provenance_uses_any_proxy_weighted_bar(first_bar_volume):
+    history = [dict(bar) for bar in bullish_history()]
+    history[0]["volume"] = first_bar_volume
+    causal_vwap = _causal_vwap(history)
+    direct = vwap_reclaim_context(history=history, vwap=causal_vwap)
+    runtime_payload = runtime_truth_payload(history=history)
+    runtime_payload["vwap"] = causal_vwap
+    runtime_payload["metadata"]["strategy_context_truth"]["vwap"] = causal_vwap
+    runtime_payload["metadata"]["strategy_context_truth"]["completed_bar_history"] = history
+    runtime_payload["metadata"]["completed_bar_history"] = history
+    runtime = _strategy_context_from_market_symbol("NIFTY", runtime_payload)
+    regime = _regime(TREND_UP=0.6, CHOP=0.1)
+
+    direct_candidates = generate_vwap_reclaim_rejection_candidates(direct, regime)
+    runtime_candidates = generate_vwap_reclaim_rejection_candidates(runtime, regime)
+
+    assert _fingerprint(runtime_candidates) == _fingerprint(direct_candidates)
+    assert runtime_candidates
+    temporal = runtime_candidates[0].evidence["temporal_evidence"]
+    assert temporal["vwap_provenance"] == "VWAP_UNIT_WEIGHT_PROXY"
+    assert temporal["completed_bar_history_provenance"]["status"] == "VWAP_UNIT_WEIGHT_PROXY"
+    assert temporal["completed_bar_history_provenance"]["complete"] is True
 
 
 def test_vwap_reclaim_completed_history_required_blocks_closed():
