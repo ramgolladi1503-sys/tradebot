@@ -23,6 +23,7 @@ from strategies.movement.option_pressure import generate_option_pressure_candida
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
 import strategies.strategy_registry as strategy_registry
+from tests.vwap_reclaim_test_support import bullish_history
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -365,18 +366,22 @@ def test_missing_vwap_slope_does_not_raise_vwap_reclaim_score():
     favorable = generate_vwap_reclaim_rejection_candidates(
         _full_context(
             spot_ltp=22610.0,
+            completed_bar_history=bullish_history(),
             metadata={"previous_spot_ltp": 22520.0},
             vwap_slope=0.04,
             ce_premium_change=12.0,
+            ts_epoch=1784000880.0,
         ),
         _regime(primary="TREND_UP", TREND_UP=0.6, CHOP=0.1),
     )
     missing = generate_vwap_reclaim_rejection_candidates(
         _full_context(
             spot_ltp=22610.0,
+            completed_bar_history=bullish_history(),
             metadata={"previous_spot_ltp": 22520.0},
             vwap_slope=None,
             ce_premium_change=12.0,
+            ts_epoch=1784000880.0,
         ),
         _regime(primary="TREND_UP", TREND_UP=0.6, CHOP=0.1),
     )

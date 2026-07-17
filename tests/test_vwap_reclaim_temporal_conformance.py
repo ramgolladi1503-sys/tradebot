@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-
-from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
-
-
-IST = ZoneInfo("Asia/Kolkata")
+from tests.vwap_reclaim_test_support import (
+    bearish_history,
+    bullish_history,
+    runtime_truth_payload,
+    vwap_reclaim_context,
+)
 
 
 def _regime(*, primary: str = "TREND_UP", **scores: float) -> MovementRegimeResult:
@@ -29,34 +28,6 @@ def _regime(*, primary: str = "TREND_UP", **scores: float) -> MovementRegimeResu
     return MovementRegimeResult(schema_version=1, primary_regime=primary, scores=base)
 
 
-def _completed_history() -> list[dict[str, object]]:
-    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
-    closes = (22590.0, 22630.0, 22615.0, 22635.0)
-    bars: list[dict[str, object]] = []
-    for index, close in enumerate(closes):
-        bar_start = start + timedelta(minutes=index)
-        bar_end = bar_start + timedelta(minutes=1)
-        bars.append(
-            {
-                "symbol": "NIFTY",
-                "session_date": "2026-07-14",
-                "timeframe": "1m",
-                "bar_start_timestamp": bar_start.isoformat(),
-                "bar_end_timestamp": bar_end.isoformat(),
-                "open": close - 5.0,
-                "high": close + 10.0,
-                "low": close - 10.0,
-                "close": close,
-                "volume": 1000.0 + (index * 100.0),
-                "source": "unit_test",
-                "source_timestamp": bar_end.isoformat(),
-                "receipt_timestamp": (bar_end + timedelta(seconds=1)).isoformat(),
-                "is_complete": True,
-            }
-        )
-    return bars
-
-
 def _fingerprint(candidates):
     return [
         (
@@ -72,92 +43,16 @@ def _fingerprint(candidates):
     ]
 
 
-def _direct_context(*, include_history: bool = False) -> StrategyContext:
-    payload = {
-        "symbol": "NIFTY",
-        "ts_epoch": 1721028600.0,
-        "spot_ltp": 22610.0,
-        "vwap": 22540.0,
-        "vwap_slope": 0.04,
-        "day_high": 22680.0,
-        "day_low": 22480.0,
-        "orb_high": 22660.0,
-        "orb_low": 22490.0,
-        "nearest_resistance": 22670.0,
-        "nearest_support": 22580.0,
-        "range_width_pct": 0.45,
-        "volume_z": 1.2,
-        "option_ce_ltp": 125.0,
-        "option_pe_ltp": 92.0,
-        "ce_premium_change": 10.0,
-        "pe_premium_change": 0.0,
-        "ce_spread_pct": 0.8,
-        "pe_spread_pct": 0.8,
-        "ce_depth": 1200.0,
-        "pe_depth": 1200.0,
-        "option_ltp_age_sec": 0.4,
-        "quote_source": "live_option_tick",
-        "fallback_used": False,
-        "minutes_since_open": 65,
-        "metadata": {"previous_spot_ltp": 22535.0, "vwap_reclaim_up_confirmed": True},
-    }
-    if include_history:
-        payload["completed_bar_history"] = _completed_history()
-    return StrategyContext(**payload)
-
-
-def _runtime_context() -> StrategyContext:
-    return _strategy_context_from_market_symbol(
-        "NIFTY",
-        {
-            "spot": 22610.0,
-            "ltp": 22610.0,
-            "metadata": {
-                "previous_spot_ltp": 22535.0,
-                "vwap_reclaim_up_confirmed": True,
-                "strategy_context_truth": {
-                    "vwap": 22540.0,
-                    "vwap_slope": 0.04,
-                    "day_high": 22680.0,
-                    "day_low": 22480.0,
-                    "orb_high": 22660.0,
-                    "orb_low": 22490.0,
-                    "nearest_resistance": 22670.0,
-                    "nearest_support": 22580.0,
-                    "range_width_pct": 0.45,
-                    "volume_z": 1.2,
-                    "option_ce_ltp": 125.0,
-                    "option_pe_ltp": 92.0,
-                    "ce_premium_change": 10.0,
-                    "pe_premium_change": 0.0,
-                    "ce_spread_pct": 0.8,
-                    "pe_spread_pct": 0.8,
-                    "ce_depth": 1200.0,
-                    "pe_depth": 1200.0,
-                    "option_ltp_age_sec": 0.4,
-                    "quote_source": "live_option_tick",
-                    "fallback_used": False,
-                    "minutes_since_open": 65,
-                },
-                "strategy_context_provenance": {"vwap": {"source_field": "vwap"}},
-                "strategy_context_missing": {},
-            },
-        },
-    )
-
-
-def test_vwap_reclaim_runtime_and_direct_fingerprints_match_for_truthful_snapshot():
+def test_vwap_reclaim_runtime_and_direct_fingerprints_match_for_causal_snapshot():
+    direct = vwap_reclaim_context()
+    runtime = _strategy_context_from_market_symbol("NIFTY", runtime_truth_payload())
     regime = _regime(TREND_UP=0.6, CHOP=0.1)
 
-    runtime = _runtime_context()
-    direct = _direct_context()
-
-    runtime_candidates = generate_vwap_reclaim_rejection_candidates(runtime, regime)
     direct_candidates = generate_vwap_reclaim_rejection_candidates(direct, regime)
+    runtime_candidates = generate_vwap_reclaim_rejection_candidates(runtime, regime)
 
-    assert runtime.metadata["previous_spot_ltp"] == 22535.0
     assert _fingerprint(runtime_candidates) == _fingerprint(direct_candidates)
-    assert _fingerprint(runtime_candidates) == [
+    assert _fingerprint(direct_candidates) == [
         (
             "vwap_reclaim_rejection_v1",
             0.392377,
@@ -168,30 +63,97 @@ def test_vwap_reclaim_runtime_and_direct_fingerprints_match_for_truthful_snapsho
             "confirmed VWAP reclaim/rejection in a non-chop regime",
         )
     ]
+    candidate = direct_candidates[0]
+    temporal = candidate.evidence["temporal_evidence"]
+    assert temporal["contract_version"] == "vwap_reclaim_causal_v1"
+    assert temporal["bar_interval"] == "1m"
+    assert temporal["minimum_bar_count"] == 3
+    assert temporal["vwap_provenance"] == "VWAP_AUTHORITATIVE"
+    assert temporal["sequence_bar_timestamps"] == (
+        "2026-07-14T09:16:00+05:30",
+        "2026-07-14T09:17:00+05:30",
+        "2026-07-14T09:18:00+05:30",
+    )
 
 
-def test_vwap_reclaim_completed_history_does_not_change_the_current_contract():
-    regime = _regime(TREND_UP=0.6, CHOP=0.1)
-
-    with_history = generate_vwap_reclaim_rejection_candidates(_direct_context(include_history=True), regime)
-    without_history = generate_vwap_reclaim_rejection_candidates(_direct_context(include_history=False), regime)
-
-    assert _fingerprint(with_history) == _fingerprint(without_history)
+def test_vwap_reclaim_completed_history_required_blocks_closed():
+    assert generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(history=[]),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    ) == ()
 
 
-def test_vwap_reclaim_snapshot_confirmation_blocks_closed_without_required_context():
-    regime = _regime(TREND_UP=0.6, CHOP=0.1)
+def test_vwap_reclaim_short_history_blocks_closed():
+    short_history = bullish_history()[:2]
+    assert generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(history=short_history),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    ) == ()
 
-    blocked = generate_vwap_reclaim_rejection_candidates(
-        StrategyContext(
-            symbol="NIFTY",
-            spot_ltp=22610.0,
-            vwap=22540.0,
-            vwap_slope=0.04,
-            minutes_since_open=65,
-            metadata={},
+
+def test_previous_spot_only_cross_cannot_fabricate_a_reclaim():
+    assert generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(
+            history=[],
+            metadata={"previous_spot_ltp": 22520.0, "vwap_reclaim_up_confirmed": True},
         ),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    ) == ()
+
+
+def test_metadata_only_confirmation_does_not_overrule_contradictory_completed_history():
+    candidates = generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(
+            history=bearish_history(),
+            bullish=False,
+            metadata={"vwap_reclaim_up_confirmed": True},
+        ),
+        _regime(TREND_DOWN=0.6, CHOP=0.1),
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].direction == "BUY_PUT"
+
+
+def test_future_mutation_after_cutoff_does_not_change_candidate_identity():
+    base = vwap_reclaim_context()
+    with_future = vwap_reclaim_context(history=bullish_history(include_future=True))
+    regime = _regime(TREND_UP=0.6, CHOP=0.1)
+
+    base_candidates = generate_vwap_reclaim_rejection_candidates(base, regime)
+    future_candidates = generate_vwap_reclaim_rejection_candidates(
+        with_future,
         regime,
     )
 
-    assert blocked == ()
+    assert _fingerprint(base_candidates) == _fingerprint(future_candidates)
+
+
+def test_physical_truncation_matches_full_dataset_before_the_cutoff():
+    full_history = bullish_history(include_future=True)
+    truncated_history = full_history[:3]
+
+    full_candidates = generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(history=full_history),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    )
+    truncated_candidates = generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(history=truncated_history),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    )
+
+    assert _fingerprint(full_candidates) == _fingerprint(truncated_candidates)
+
+
+def test_bearish_causal_sequence_emits_put_candidate():
+    candidates = generate_vwap_reclaim_rejection_candidates(
+        vwap_reclaim_context(bullish=False),
+        _regime(TREND_DOWN=0.6, CHOP=0.1),
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.strategy_id == "vwap_reclaim_rejection_v1"
+    assert candidate.direction == "BUY_PUT"
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.evidence["temporal_evidence"]["vwap_provenance"] == "VWAP_AUTHORITATIVE"

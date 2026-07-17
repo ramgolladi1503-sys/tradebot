@@ -23,6 +23,7 @@ from strategies.movement.opening_range_breakout import generate_opening_range_re
 from strategies.movement.option_pressure import generate_option_pressure_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
+from tests.vwap_reclaim_test_support import bullish_history
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -252,7 +253,7 @@ def test_missing_session_timing_identifies_missing_timing_fields(caplog: pytest.
 def test_missing_vwap_identifies_vwap(caplog: pytest.LogCaptureFixture):
     with caplog.at_level(logging.WARNING):
         result = generate_vwap_reclaim_rejection_candidates(
-            _full_context(vwap=None, metadata={"previous_spot_ltp": 22520.0}),
+            _full_context(vwap=None, completed_bar_history=bullish_history(), metadata={"previous_spot_ltp": 22520.0}, ts_epoch=1784000880.0),
             _regime(primary="TREND_UP", TREND_UP=0.6, CHOP=0.1),
         )
 
@@ -396,11 +397,25 @@ def test_raw_scores_remain_exact():
 
 def test_optional_missing_evidence_retains_phase_2b_zero_contribution_behavior():
     favorable = generate_vwap_reclaim_rejection_candidates(
-        _full_context(spot_ltp=22610.0, metadata={"previous_spot_ltp": 22520.0}, vwap_slope=0.04, ce_premium_change=12.0),
+        _full_context(
+            spot_ltp=22610.0,
+            completed_bar_history=bullish_history(),
+            metadata={"previous_spot_ltp": 22495.0},
+            vwap_slope=0.04,
+            ce_premium_change=12.0,
+            ts_epoch=1784000880.0,
+        ),
         _regime(primary="TREND_UP", TREND_UP=0.6, CHOP=0.1),
     )
     missing = generate_vwap_reclaim_rejection_candidates(
-        _full_context(spot_ltp=22610.0, metadata={"previous_spot_ltp": 22520.0}, vwap_slope=None, ce_premium_change=12.0),
+        _full_context(
+            spot_ltp=22610.0,
+            completed_bar_history=bullish_history(),
+            metadata={"previous_spot_ltp": 22495.0},
+            vwap_slope=None,
+            ce_premium_change=12.0,
+            ts_epoch=1784000880.0,
+        ),
         _regime(primary="TREND_UP", TREND_UP=0.6, CHOP=0.1),
     )
 

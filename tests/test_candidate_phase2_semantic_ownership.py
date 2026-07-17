@@ -27,6 +27,7 @@ from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
+from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, bullish_history
 
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -167,10 +168,12 @@ def _all_semantic_candidates():
         + generate_trend_pullback_candidates(_primary_context(), _regime())
         + generate_vwap_reclaim_rejection_candidates(
             _primary_context(
-                spot_ltp=22620.0,
-                vwap=22600.0,
+                spot_ltp=22610.0,
+                vwap=22540.0,
                 vwap_slope=0.04,
-                metadata={"previous_spot_ltp": 22590.0},
+                ts_epoch=EVALUATION_CUTOFF,
+                completed_bar_history=bullish_history(),
+                metadata={"previous_spot_ltp": 22495.0},
             ),
             _regime(TREND_UP=0.6, CHOP=0.1),
         )

@@ -3,6 +3,7 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement.failed_breakout_trap import generate_failed_breakout_trap_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
+from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, bearish_history, bullish_history
 
 
 def _regime(primary="TREND_UP", **scores):
@@ -26,8 +27,9 @@ def _base_context(**overrides):
     payload = {
         "symbol": "NIFTY",
         "spot_ltp": 22620.0,
+        "ts_epoch": EVALUATION_CUTOFF,
         "open_price": 22500.0,
-        "vwap": 22600.0,
+        "vwap": 22540.0,
         "vwap_slope": 0.04,
         "day_high": 22680.0,
         "day_low": 22480.0,
@@ -51,14 +53,15 @@ def _base_context(**overrides):
         "quote_source": "live_option_tick",
         "fallback_used": False,
         "minutes_since_open": 65,
-        "metadata": {},
+        "completed_bar_history": bullish_history(),
+        "metadata": {"previous_spot_ltp": 22495.0, "vwap_reclaim_up_confirmed": True},
     }
     payload.update(overrides)
     return StrategyContext(**payload)
 
 
 def test_vwap_reclaim_generates_call_candidate_after_confirmed_reclaim():
-    ctx = _base_context(metadata={"previous_spot_ltp": 22590.0})
+    ctx = _base_context(spot_ltp=22610.0, vwap=22540.0, vwap_slope=0.04)
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, _regime(TREND_UP=0.6, CHOP=0.1))
 
     assert len(candidates) == 1
@@ -69,17 +72,24 @@ def test_vwap_reclaim_generates_call_candidate_after_confirmed_reclaim():
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
     assert "reclaim_rejection" in candidate.confluence_tags
-    assert candidate.evidence["previous_spot_ltp"] == 22590.0
+    assert candidate.evidence["previous_spot_ltp"] == 22495.0
+    assert candidate.evidence["temporal_evidence"]["vwap_provenance"] == "VWAP_AUTHORITATIVE"
+    assert candidate.evidence["temporal_evidence"]["sequence_bar_timestamps"] == (
+        "2026-07-14T09:16:00+05:30",
+        "2026-07-14T09:17:00+05:30",
+        "2026-07-14T09:18:00+05:30",
+    )
 
 
 def test_vwap_reclaim_generates_put_candidate_after_confirmed_downside_reclaim():
     ctx = _base_context(
-        spot_ltp=22580.0,
-        vwap=22600.0,
+        spot_ltp=22520.0,
+        vwap=22540.0,
         vwap_slope=-0.04,
         pe_premium_change=11.0,
         ce_premium_change=0.0,
-        metadata={"previous_spot_ltp": 22612.0},
+        completed_bar_history=bearish_history(),
+        metadata={"previous_spot_ltp": 22585.0, "vwap_reclaim_down_confirmed": True},
     )
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, _regime(primary="TREND_DOWN", TREND_DOWN=0.6, CHOP=0.1))
 
@@ -89,22 +99,30 @@ def test_vwap_reclaim_generates_put_candidate_after_confirmed_downside_reclaim()
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 11.0
+    assert candidate.evidence["temporal_evidence"]["vwap_provenance"] == "VWAP_AUTHORITATIVE"
 
 
 def test_vwap_reclaim_returns_empty_in_chop_or_without_confirmation():
-    confirmed = _base_context(metadata={"previous_spot_ltp": 22590.0})
+    confirmed = _base_context()
     assert generate_vwap_reclaim_rejection_candidates(confirmed, _regime(CHOP=0.8)) == ()
 
-    no_confirmation = _base_context(metadata={"previous_spot_ltp": 22610.0})
-    assert generate_vwap_reclaim_rejection_candidates(no_confirmation, _regime(TREND_UP=0.5)) == ()
+    no_history = _base_context(completed_bar_history=None, metadata={})
+    assert generate_vwap_reclaim_rejection_candidates(no_history, _regime(TREND_UP=0.5)) == ()
 
-    too_far = _base_context(spot_ltp=22850.0, metadata={"previous_spot_ltp": 22590.0})
+    incomplete_sequence = _base_context(
+        completed_bar_history=bullish_history()[:2],
+        metadata={"previous_spot_ltp": 22495.0},
+    )
+    assert generate_vwap_reclaim_rejection_candidates(incomplete_sequence, _regime(TREND_UP=0.5)) == ()
+
+    too_far = _base_context(spot_ltp=22850.0, metadata={"previous_spot_ltp": 22495.0})
     assert generate_vwap_reclaim_rejection_candidates(too_far, _regime(TREND_UP=0.5)) == ()
 
 
 def test_vwap_reclaim_blocks_bad_quote_quality_but_keeps_candidate_visible():
     ctx = _base_context(
-        metadata={"previous_spot_ltp": 22590.0},
+        spot_ltp=22610.0,
+        metadata={"previous_spot_ltp": 22495.0},
         fallback_used=True,
         quote_source="recovered_fallback",
         ce_premium_change=0.0,
