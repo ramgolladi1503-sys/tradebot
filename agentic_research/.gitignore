@@ -3,3 +3,4 @@ runs/
 __pycache__/
 *.pyc
 eval_results/gemini_*.json
+edge_results/
