@@ -3160,12 +3160,13 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             day_high = session_state.day_high
             day_low = session_state.day_low
             previous_completed_close = session_state.previous_completed_close
+            latest_completed_close = _as_bar_float(session_state.completed_bar_history[-1].close) if session_state.completed_bar_history else None
             range_width_pct = calculate_session_range_width_pct_from_completed_history(
                 symbol=symbol,
                 bars=bars,
                 cutoff_timestamp=cycle_cutoff,
                 segment=segment,
-                reference_price=ltp,
+                reference_price=latest_completed_close,
                 timeframe=session_state.timeframe,
             )
             completed_bar_history = session_state.history_payload()
@@ -3184,6 +3185,8 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 "timeframe": session_state.timeframe,
                 "symbol": session_state.symbol,
                 "session_date": session_state.session_date,
+                "reference_price_source": "latest_completed_close",
+                "reference_price": latest_completed_close,
                 "reason": None if range_width_pct is not None else "missing_or_malformed_completed_bar_history",
             }
             session_atr_state = calculate_session_atr_state(session_state)

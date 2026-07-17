@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+import core.market_data as market_data
 from core.orchestrator import _strategy_context_snapshot_metadata
 from core.ranking_orchestrator import build_ranked_opportunity_report
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
@@ -175,6 +176,130 @@ def test_forming_bar_is_excluded_from_range_width_and_candidate_identity():
 
     assert _fingerprint(runtime_report) == [("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE")]
     assert runtime_report.top_rank_strategy_id == "compression_breakout_v1"
+
+
+def test_runtime_uses_latest_completed_close_not_live_ltp(monkeypatch):
+    fixed_now = datetime(2026, 7, 14, 9, 17, tzinfo=IST)
+    bars = _completed_history()
+    latest_close = float(bars[-1]["close"])
+    live_ltp = 101.0
+
+    class _DummyRegimeModel:
+        def predict(self, _features):
+            return {
+                "primary_regime": "TREND",
+                "regime_probs": {"TREND": 0.8, "RANGE": 0.2},
+                "regime_entropy": 0.2,
+                "unstable_regime_flag": False,
+            }
+
+    monkeypatch.setattr(market_data.cfg, "SYMBOLS", ["NIFTY"], raising=False)
+    monkeypatch.setattr(market_data.cfg, "EXECUTION_MODE", "PAPER", raising=False)
+    monkeypatch.setattr(market_data.cfg, "REQUIRE_LIVE_QUOTES", False, raising=False)
+    monkeypatch.setattr(market_data.cfg, "ALLOW_SYNTHETIC_CHAIN", False, raising=False)
+    monkeypatch.setattr(market_data, "now_ist", lambda: fixed_now)
+    monkeypatch.setattr(market_data, "now_utc_epoch", lambda: fixed_now.timestamp())
+    monkeypatch.setattr(market_data, "is_open", lambda now_dt=None, segment=None: True)
+    monkeypatch.setattr(market_data, "check_market_data_time_sanity", lambda **kwargs: {"ok": True, "reasons": []})
+    monkeypatch.setattr(market_data, "_REGIME_MODEL", _DummyRegimeModel(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_CAL", type("NewsCal", (), {"get_shock": lambda self: {}})(), raising=False)
+    monkeypatch.setattr(market_data, "_NEWS_TEXT", type("NewsText", (), {"encode": lambda self: {}})(), raising=False)
+    monkeypatch.setattr(
+        market_data,
+        "_CROSS_ASSET",
+        type("CrossAsset", (), {"update": lambda self, *_args, **_kwargs: {"features": {}, "data_quality": {}}})(),
+        raising=False,
+    )
+    monkeypatch.setattr(market_data, "fetch_option_chain", lambda *_args, **_kwargs: [])
+
+    def _fake_get_ltp(symbol: str):
+        market_data._DATA_CACHE.setdefault(symbol, {})
+        market_data._DATA_CACHE[symbol]["ltp_source"] = "live"
+        market_data._DATA_CACHE[symbol]["ltp_ts_epoch"] = fixed_now.timestamp()
+        return live_ltp
+
+    monkeypatch.setattr(market_data, "get_ltp", _fake_get_ltp)
+    monkeypatch.setattr(
+        market_data.ohlc_buffer,
+        "get_completed_bars",
+        lambda symbol, *, as_of, interval_seconds=60: list(bars),
+    )
+    monkeypatch.setattr(
+        market_data,
+        "compute_indicators",
+        lambda bars, **kwargs: {
+            "vwap": latest_close,
+            "atr": 50.0,
+            "adx": 25.0,
+            "vol_z": 0.2,
+            "vwap_slope": 0.1,
+            "last_ts": fixed_now,
+            "ok": True,
+        },
+    )
+
+    rows = market_data.fetch_live_market_data(allow_history_seed=False)
+    snap = next(row for row in rows if row.get("symbol") == "NIFTY" and row.get("instrument") == "OPT")
+
+    expected = calculate_session_range_width_pct_from_completed_history(
+        symbol="NIFTY",
+        bars=bars,
+        cutoff_timestamp=fixed_now,
+        segment="DEFAULT",
+        reference_price=latest_close,
+    )
+
+    assert snap["range_width_pct"] == pytest.approx(expected)
+    assert snap["range_width_pct"] == pytest.approx((112.0 - 98.0) / 100.0)
+    assert snap["range_width_pct"] != pytest.approx((112.0 - 98.0) / live_ltp)
+    assert snap["range_width_pct_provenance"]["reference_price_source"] == "latest_completed_close"
+    assert snap["range_width_pct_provenance"]["reference_price"] == pytest.approx(latest_close)
+    assert snap["valid"] is True
+
+
+def test_new_completed_bar_updates_denominator_only_after_completion():
+    session_state = _session_state()
+    base_width = calculate_session_range_width_pct_from_completed_history(
+        symbol="NIFTY",
+        bars=session_state.history_payload(),
+        cutoff_timestamp=datetime(2026, 7, 14, 9, 17, tzinfo=IST),
+        segment="DEFAULT",
+        reference_price=session_state.history_payload()[-1]["close"],
+    )
+    later_state = build_session_bar_history_state(
+        symbol="NIFTY",
+        bars=_completed_history(include_future_bar=True),
+        cutoff_timestamp=datetime(2026, 7, 14, 9, 18, tzinfo=IST),
+        segment="DEFAULT",
+        source="unit_test",
+        timeframe="1m",
+        receipt_timestamp=datetime(2026, 7, 14, 9, 18, 1, tzinfo=IST),
+    )
+    later_width = calculate_session_range_width_pct_from_completed_history(
+        symbol="NIFTY",
+        bars=later_state.history_payload(),
+        cutoff_timestamp=datetime(2026, 7, 14, 9, 18, tzinfo=IST),
+        segment="DEFAULT",
+        reference_price=later_state.history_payload()[-1]["close"],
+    )
+
+    assert base_width == pytest.approx((112.0 - 98.0) / 100.0)
+    assert later_width is not None
+    assert later_width != base_width
+
+
+def test_missing_completed_close_fails_closed():
+    session_state = _session_state()
+    assert (
+        calculate_session_range_width_pct_from_completed_history(
+            symbol="NIFTY",
+            bars=session_state.history_payload(),
+            cutoff_timestamp=datetime(2026, 7, 14, 9, 15, tzinfo=IST),
+            segment="DEFAULT",
+            reference_price=100.0,
+        )
+        is None
+    )
 
 
 def test_future_mutation_and_physical_truncation_do_not_change_range_width():

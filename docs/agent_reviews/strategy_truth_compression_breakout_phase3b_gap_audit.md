@@ -4,8 +4,8 @@
 
 - Worktree: `/Users/madhuram/tradebot-compression-breakout-phase3b-closure`
 - Branch: `fix/compression-breakout-phase3b-closure`
-- Starting head: `3cb70a66f6c16f1f613a52153f9cbbb979c0c06c`
-- Final implementation head before evidence commit: `3cb70a66f6c16f1f613a52153f9cbbb979c0c06c`
+- Starting head: `d125420d3f93df713ab9175fc392578b66ba89d3`
+- Final implementation head before evidence commit: `d125420d3f93df713ab9175fc392578b66ba89d3`
 - Accepted ancestry: `PROVEN`
 - Accepted ancestry evidence: the branch descends from the accepted Trend Pullback closure line and retains the accepted Phase 3B harness, restart, and PR 657/658 ancestry.
 
@@ -14,29 +14,37 @@
 | source file / commit | formula | denominator | timestamp semantics | runtime usage | replay / offline usage | test coverage | authority level |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `core/session_bar_history.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high - day_low) / reference_price` | caller-supplied `reference_price` | completed bars only; forming bars past cutoff are excluded | helper only; denominator is not fixed here | helper only; denominator is not fixed here | `tests/test_compression_breakout_range_width_runtime_contract.py` | helper-only, not canonical |
-| `core/market_data.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `calculate_session_range_width_pct_from_completed_history(... reference_price=ltp)` | live `ltp` | live cycle cutoff / current snapshot | yes | no | `tests/test_compression_breakout_range_width_runtime_contract.py` | live-runtime source only |
+| `core/market_data.py` @ `d125420d3f93df713ab9175fc392578b66ba89d3` | `calculate_session_range_width_pct_from_completed_history(... reference_price=latest_completed_close)` | latest completed 1m close | live cycle cutoff / completed-bar prefix | yes | yes | `tests/test_compression_breakout_range_width_runtime_contract.py` | canonical runtime source |
 | `core/orb_ohlcv_validation.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high_so_far - day_low_so_far) / close` | row `close` | row timestamp / candle close | no | yes | `tests/test_captured_market_session_replay.py` | offline proxy only |
 | `scripts/backtest_all_strategies_available_data.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high_so_far - day_low_so_far) / max(close, 1.0)` | row `close` | candle close | no | yes | script-level proxy only | offline research proxy |
 | `tests/test_compression_breakout_range_width_runtime_contract.py` @ this task | same completed history, two denominator inputs | `100.0` vs `40.0` | same causal completed-bar prefix | proves live-path sensitivity | proves replay/offline proxy sensitivity | added threshold-straddle proof | evidence artifact |
 
-## Contract result
+## Selected canonical contract
 
-`DENOMINATOR_CONTRACT_AMBIGUOUS`
+`CANONICAL_COMPLETED_CLOSE`
 
-The repository does not prove a single canonical denominator for `range_width_pct`.
+`range_width_pct` is now defined as:
+
+```text
+completed session high-low range
+/
+close of the latest authoritative completed 1m bar at or before the cycle cutoff
+```
+
+This is the runtime and replay contract.
 
 What is proven:
 
-- The runtime producer currently passes live `ltp` as the denominator input.
-- Replay/offline proxies currently derive the same ratio from `close`.
-- The helper is denominator-agnostic and does not resolve the contract by itself.
-- The same completed history can produce a candidate on one denominator and fail the compression gate on another.
+- The runtime producer now reads the latest completed close from completed-bar history, not live `ltp`, when producing `range_width_pct`.
+- Replay/offline paths already derive the same ratio from completed 1m candle close.
+- The helper remains denominator-agnostic, but the producer now binds it to the completed-bar close contract.
+- The same completed history now yields the same range width in runtime and replay when the completed prefix is identical.
 
-What is not proven:
+What is not claimed:
 
-- That live `ltp` and final candle `close` are always equal at evaluation cutoff.
-- That the two denominator choices are equivalent across live and replay paths.
-- That one denominator is canonical for both runtime and replay without additional contract evidence.
+- That live LTP is irrelevant for freshness or quote truth.
+- That candle-only replay proves historical edge or execution readiness.
+- That local tick files are needed to define this contract.
 
 ## Evaluation timing
 
@@ -45,7 +53,7 @@ What is not proven:
 - `core/market_data.py` sets `cycle_cutoff = now_ist()` at the top of the cycle and threads that cutoff through LTP capture, quote capture, completed-bar history, and strategy context construction.
 - `ltp_ts_epoch` is carried separately from `cycle_cutoff`; freshness is checked by `check_market_data_time_sanity(...)`.
 - A cycle can occur inside a forming one-minute bar because the loop is not gated to bar completion.
-- The replay-side test harness currently uses completed-bar rows and sets `ltp_ts_epoch` to the replay cutoff, but it still populates `spot`/`ltp` from the last completed candle close.
+- The replay-side test harness uses completed-bar rows and now matches the runtime reference-price contract on the same completed prefix.
 
 ## Evaluation cutoff
 
@@ -56,13 +64,14 @@ What is not proven:
 
 - Live `ltp` is only acceptable when its timestamp is fresh enough relative to the cycle cutoff.
 - Stale LTP fails closed through `check_market_data_time_sanity`.
+- LTP remains relevant for freshness, quote provenance, and other market fields, but not for `range_width_pct`.
 - The stale-LTP regression test in this task proves the fail-closed behavior.
 
 ## Replay cutoff contract
 
 - Current replay paths expose completed bars with `timestamp` and `close`.
 - They do not expose a causal tick stream aligned to the same cutoff in the replay corpus inspected here.
-- Replay therefore still uses the completed-bar close proxy rather than a proven cutoff-aligned tick price.
+- Replay therefore uses the completed-bar close contract directly, which now matches runtime.
 
 ## Threshold-straddle proof
 
@@ -85,9 +94,9 @@ That is a real acceptance-gate divergence, not a cosmetic score shift.
 | canonical strategy identifier | PROVEN | `compression_breakout_v1` in `strategies/strategy_registry.py` and `strategies/movement/compression_breakout.py` |
 | registry entry | PROVEN | registry maps `COMPRESSION_BREAKOUT -> strategies/movement/compression_breakout.py -> generate_compression_breakout_candidates` |
 | production callable | PROVEN | `generate_compression_breakout_candidates(ctx, regime)` |
-| runtime denominator | PROVEN | `core.market_data.fetch_live_market_data` passes `ltp` into the completed-history helper |
+| runtime denominator | PROVEN | `core.market_data.fetch_live_market_data` passes `latest_completed_close` into the completed-history helper |
 | replay / offline denominator | PROVEN | offline proxy code and replay-oriented tests use `close` |
-| canonical denominator | NOT PROVEN | no repository evidence shows live `ltp` and offline `close` are guaranteed equivalent at the strategy cutoff |
+| canonical denominator | PROVEN | runtime and replay now share the latest completed 1m close contract |
 | runtime cutoff | PROVEN | `fetch_live_market_data()` sets `cycle_cutoff = now_ist()` and evaluates inside the live loop |
 | replay cutoff | PROVEN | replay harness uses row-specific prefix cutoffs and completed-bar timestamps |
 | timestamp freshness gate | PROVEN | `check_market_data_time_sanity(...)` fails stale LTP closed |
@@ -126,22 +135,22 @@ Both passed in the focused regression slice and did not change their accepted fi
 
 - Focused compression-breakout slice:
   - `python -m pytest -q tests/test_compression_breakout_range_width_runtime_contract.py tests/test_compression_breakout_phase3b_gap_audit.py tests/test_compression_trend_movement_strategies.py tests/test_candidate_phase2_ownership.py tests/test_candidate_phase2_semantic_ownership.py`
-  - result: `36 passed, 1 warning in 12.45s`
+  - result: `117 passed, 1 warning in 5.27s`
 - Focused timing gate slice:
   - `python -m pytest -q tests/test_compression_breakout_range_width_runtime_contract.py`
-  - result: `37 passed, 1 warning` after adding stale-LTP fail-closed coverage
+  - result: `39 passed, 1 warning` after adding the completed-close runtime proof and stale-LTP fail-closed coverage
 - Full repository suite:
   - `python -m pytest -q`
-  - result: `1 failed, 6015 passed, 24 deselected, 935 warnings in 426.02s`
+  - result: `1 failed, 6019 passed, 24 deselected, 935 warnings in 342.11s`
   - first failure: `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
   - failure cause: pre-existing unrelated auth baseline (`RuntimeError: [AUTH] missing_kite_access_token`)
 
 ## Baseline comparison
 
 - The accepted direct fingerprint remains unchanged.
-- The runtime and replay/offline denominator sources remain split.
-- The new threshold-straddle test proves the split can change candidate acceptance on the same completed history.
-- The local tick capture has event timestamps, but the replay corpus inspected here is candle-only and cannot reconstruct the same causal cutoff price from the same source family.
+- The runtime and replay/offline denominator sources now share the latest completed 1m close contract.
+- The threshold-straddle test still proves the helper is sensitive to denominator choice, which is why the canonical producer needed to be fixed explicitly.
+- The local tick capture has event timestamps, but the replay corpus inspected here is candle-only and is no longer needed to define the denominator contract.
 - The full suite still contains one known unrelated auth failure and no compression-breakout-specific regression.
 
 ## Rollback
