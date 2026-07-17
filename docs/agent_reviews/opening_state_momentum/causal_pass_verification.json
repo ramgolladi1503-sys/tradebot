@@ -1,0 +1,68 @@
+{
+  "verifier_version": "1.0.0",
+  "head": "76054410b2bafaf1e065720d89e3d6b5e0966fe6",
+  "overall_pass": false,
+  "checks": {
+    "git_checkpoint": {
+      "branch": "research/opening-state-momentum-edge",
+      "head": "76054410b2bafaf1e065720d89e3d6b5e0966fe6",
+      "clean": false
+    },
+    "partition": {},
+    "development_only_decisions": {},
+    "minimum_history": {
+      "insufficient_history_count": 0
+    },
+    "oracle_independence": {
+      "mismatch_count": 0
+    },
+    "terminal_reconciliation": {
+      "table": {
+        "count_INSUFFICIENT_PRIOR_HISTORY": 0,
+        "count_REJECTED_SESSION_QUALITY": 0,
+        "count_FAILED_SHOCK_THRESHOLD": 0,
+        "count_FAILED_CLOSE_LOCATION": 0,
+        "count_FAILED_CONFIRMATION": 0,
+        "count_FAILED_RETAINED_MOVE": 0,
+        "count_FAILED_OPENING_MIDPOINT": 0,
+        "count_FAILED_SESSION_ANCHOR": 0,
+        "count_ACCEPTED_LONG": 0,
+        "count_ACCEPTED_SHORT": 0
+      }
+    },
+    "two_directory_determinism": {},
+    "holdout_lock": {},
+    "pytest_evidence": {
+      "live_result": "..............................................                           [100%]\n46 passed in 15.37s\n"
+    },
+    "profitability_non_inspection": {},
+    "commit_scope": {
+      "files": [
+        "docs/agent_reviews/opening_state_momentum/SUPERSEDED_HOLDOUT_CONTAMINATED_CANDIDATE_REPLAY.json",
+        "docs/agent_reviews/opening_state_momentum/candidate_decisions.json",
+        "docs/agent_reviews/opening_state_momentum/candidate_replay_determinism.json",
+        "docs/agent_reviews/opening_state_momentum/causal_replay_audit.json",
+        "docs/agent_reviews/opening_state_momentum/development_session_reconciliation.json",
+        "docs/agent_reviews/opening_state_momentum/holdout_candidate_access_audit.json",
+        "docs/agent_reviews/opening_state_momentum/strategy_test_coverage.md",
+        "docs/agent_reviews/opening_state_momentum/threshold_oracle_comparison.json",
+        "docs/agent_reviews/opening_state_momentum/threshold_replay_audit.json",
+        "scripts/audit_opening_state_causal_replay.py",
+        "scripts/audit_threshold_oracle.py",
+        "scripts/capture_opening_state_test_evidence.py",
+        "scripts/generate_holdout_access_audit.py",
+        "scripts/run_two_directory_determinism.py",
+        "tests/research/opening_state_momentum/test_causal_engine_evidence.py"
+      ]
+    },
+    "arithmetic_consistency": {}
+  },
+  "failures": [
+    "Git: Worktree is not clean",
+    "MinHistory: Min history not 60",
+    "Reconciliation: Category sum != dev count",
+    "Test Evidence: Exit code not 0",
+    "Arithmetic: Terminal sum != dev count",
+    "Arithmetic: Accepted + Rejected != Dev count"
+  ]
+}
