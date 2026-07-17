@@ -30,10 +30,8 @@ PROVEN
 - Worktree: `/Users/madhuram/tradebot-vwap-reclaim-phase3b-closure`
 - Branch: `fix/vwap-reclaim-phase3b-closure`
 - Starting head: `3e21821b211cedff8c1f8c26e8e4d4e88c360be5`
-- Implementation commit: `526bce2c`
-- First evidence commit: `8f2b79f8`
-- Aggregate-provenance follow-up commit: `eb3725794cd8216e0d0b1611b4f526dfa53057ef`
-- Latest documentation commit / final head before this update: `a4264fe91a36cdb13765a900db5ae9f5f3b69a42`
+- Source-proof task starting head: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
+- Final head before finalization: `64ddb80ead530dd668b8cb65840bc61b2aa5e8a1`
 
 ## Files Changed
 
@@ -116,10 +114,13 @@ reason=missing_required_temporal_evidence|invalid_completed_history|inconsistent
 
 - Focused VWAP reclaim / adjacent slice:
   - `python -m pytest -q tests/test_vwap_reclaim_temporal_conformance.py tests/test_vwap_reclaim_runtime_conformance.py tests/test_vwap_trap_movement_strategies.py tests/test_strategy_generators_lineage.py tests/test_strategy_missing_evidence_observability.py tests/test_strategy_missing_evidence_policy.py tests/test_candidate_phase2_semantic_ownership.py`
-  - Result: `70 passed, 1 warning in 4.49s`
+  - Result: `107 passed, 1 warning in 5.55s`
+- Frozen-strategy control slice:
+  - `python -m pytest -q tests/test_opening_range_retest_runtime_owner_enforcement.py tests/test_trend_pullback_temporal_conformance.py tests/test_trend_pullback_temporal_semantics.py tests/test_compression_breakout_range_width_runtime_contract.py tests/test_compression_breakout_phase3b_gap_audit.py`
+  - Result: `43 passed, 1 warning in 8.04s`
 - Full repository suite:
   - `python -m pytest -q`
-  - Result: `6030 passed, 1 failed, 24 deselected, 935 warnings in 355.73s`
+  - Result: `6033 passed, 1 failed, 24 deselected, 935 warnings in 391.78s`
 
 ## First Failure
 
@@ -167,15 +168,17 @@ WHAT WAS ACTUALLY IMPLEMENTED:
 - Proved that the final completed close differs from the canonical VWAP and that the runtime builder consumes the canonical VWAP rather than falling back to OHLC close.
 - Proved that removing the truth VWAP while keeping close present yields `StrategyContext.vwap is None`, and the VWAP reclaim generator fails closed instead of silently substituting close.
 - Proved the default candidate pool and ranked pipeline can still execute the repaired VWAP reclaim generator using the produced runtime truth.
+- Corrected the audit metadata so the source-contract test commit and the evidence-document commit are no longer conflated.
 
 ARCHITECTURE CHANGE:
 NONE
 
 REQUIRED FIXES COMPLETED:
-3
+4
 - Verified the upstream producer path emits canonical VWAP from completed-bar history.
 - Verified the runtime context builder reads the canonical VWAP truth and not the final OHLC close.
 - Verified the ranked pipeline executes the VWAP reclaim generator from produced runtime truth.
+- Corrected the stale commit metadata and separated the source-contract proof from the evidence-finalization record.
 
 REQUIRED FIXES REMAINING:
 0
@@ -222,9 +225,9 @@ When the truth VWAP is removed from snapshot metadata while close remains presen
 
 ## Commit Graph
 
-- starting head: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
-- implementation head before this evidence update: `fb5f94b7`
-- evidence commit: `fb5f94b7`
+- source-contract test commit: `fb5f94b7abe002928b5c0d8d5810a20900b70c14`
+- source-evidence document commit: `64ddb80ead530dd668b8cb65840bc61b2aa5e8a1`
+- final evidence-finalization commit: this documentation update
 
 ## Claim Boundary
 
