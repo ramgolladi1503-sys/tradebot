@@ -1,13 +1,24 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
 from .bundle import BundleError, CertificationBundle
 from .certifier import certify_bundle
 from .knowledge import CuratedKnowledgeBase
+from .mcp import (
+    MCP_CONTRACT_VERSION,
+    MCP_PROTOCOL_VERSION,
+    contract_manifest,
+    get_tool_contract,
+    tool_names,
+    validate_tool_input,
+    validate_tool_output,
+)
 from .policy import CertificationPolicy, default_policy
 from .report import write_report
 from .source_validator import validate_source_index
@@ -65,6 +76,7 @@ def resolve_allowed_bundle(bundle_id: str, evidence_root: str | Path) -> Path:
 
 def inspect_bundle(bundle_id: str, *, evidence_root: str | Path) -> dict[str, Any]:
     bundle = CertificationBundle.load(resolve_allowed_bundle(bundle_id, evidence_root))
+    manifest = contract_manifest()
     return {
         "run_id": bundle.manifest.get("run_id"),
         "strategy_id": bundle.manifest.get("strategy_id"),
@@ -73,6 +85,10 @@ def inspect_bundle(bundle_id: str, *, evidence_root: str | Path) -> dict[str, An
         "artifacts": sorted(bundle.artifacts),
         "bundle_digest": bundle.digest(),
         "available_gates": sorted(_GATE_VALIDATORS),
+        "available_tools": list(tool_names()),
+        "mcp_contract_version": MCP_CONTRACT_VERSION,
+        "mcp_protocol_version": MCP_PROTOCOL_VERSION,
+        "mcp_contract_digest": manifest["contract_digest"],
     }
 
 
@@ -154,22 +170,44 @@ def build_server():
         json_response=True,
     )
 
-    @mcp.tool()
+    def registered_tool(name: str):
+        contract = get_tool_contract(name)
+
+        def decorate(function):
+            signature = inspect.signature(function)
+
+            @wraps(function)
+            def validated(*args, **kwargs):
+                bound = signature.bind(*args, **kwargs)
+                bound.apply_defaults()
+                validate_tool_input(name, bound.arguments)
+                result = function(*args, **kwargs)
+                validate_tool_output(name, result)
+                return result
+
+            return mcp.tool(
+                name=contract.name,
+                annotations=contract.annotations.to_mcp_dict(),
+            )(validated)
+
+        return decorate
+
+    @registered_tool("inspect_certification_bundle")
     def inspect_certification_bundle(bundle_id: str) -> dict[str, Any]:
         """Inspect a frozen bundle and discover the available validation gates."""
         return inspect_bundle(bundle_id, evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_bundle_manifest")
     def validate_bundle_manifest(bundle_id: str) -> dict[str, Any]:
         """Validate schema, policy version, inventory, and safe artifact paths."""
         return evaluate_gate(bundle_id, "bundle_manifest", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_artifact_hashes")
     def validate_artifact_hashes(bundle_id: str) -> dict[str, Any]:
         """Verify that every frozen artifact still matches its SHA-256 identity."""
         return evaluate_gate(bundle_id, "artifact_hashes", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_source_provenance")
     def validate_source_provenance(bundle_id: str) -> dict[str, Any]:
         """Verify the raw WFA, partition, control, test, and dataset source index."""
         return evaluate_gate(
@@ -178,27 +216,27 @@ def build_server():
             evidence_root=evidence_root,
         )
 
-    @mcp.tool()
+    @registered_tool("validate_source_authority_gate")
     def validate_source_authority_gate(bundle_id: str) -> dict[str, Any]:
         """Verify strict engine, WFA, and research-mode ownership."""
         return evaluate_gate(bundle_id, "source_authority", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_data_provenance_gate")
     def validate_data_provenance_gate(bundle_id: str) -> dict[str, Any]:
         """Validate dataset identity, chronology, quotes, and contract metadata."""
         return evaluate_gate(bundle_id, "data_provenance", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_temporal_causality_gate")
     def validate_temporal_causality_gate(bundle_id: str) -> dict[str, Any]:
         """Check signal chronology, legal entry timing, and future-mutation controls."""
         return evaluate_gate(bundle_id, "temporal_causality", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_execution_realism_gate")
     def validate_execution_realism_gate(bundle_id: str) -> dict[str, Any]:
         """Check executable quote sides, strict liquidity, and cost monotonicity."""
         return evaluate_gate(bundle_id, "execution_realism", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_financial_reconciliation_gate")
     def validate_financial_reconciliation_gate(bundle_id: str) -> dict[str, Any]:
         """Reconcile gross P&L, costs, net P&L, trade counts, and ambiguity."""
         return evaluate_gate(
@@ -207,7 +245,7 @@ def build_server():
             evidence_root=evidence_root,
         )
 
-    @mcp.tool()
+    @registered_tool("validate_walk_forward_integrity_gate")
     def validate_walk_forward_integrity_gate(bundle_id: str) -> dict[str, Any]:
         """Check partition chronology, buffers, holdout isolation, and contamination."""
         return evaluate_gate(
@@ -216,17 +254,17 @@ def build_server():
             evidence_root=evidence_root,
         )
 
-    @mcp.tool()
+    @registered_tool("validate_negative_controls_gate")
     def validate_negative_controls_gate(bundle_id: str) -> dict[str, Any]:
         """Check future mutation, timing shift, and cost sensitivity controls."""
         return evaluate_gate(bundle_id, "negative_controls", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_test_evidence_gate")
     def validate_test_evidence_gate(bundle_id: str) -> dict[str, Any]:
         """Check focused test results and repository-commit identity."""
         return evaluate_gate(bundle_id, "test_evidence", evidence_root=evidence_root)
 
-    @mcp.tool()
+    @registered_tool("validate_strategy_result_gate")
     def validate_strategy_result_gate(bundle_id: str) -> dict[str, Any]:
         """Check that the declared strategy conclusion matches policy metrics."""
         return evaluate_gate(
@@ -235,7 +273,7 @@ def build_server():
             evidence_root=evidence_root,
         )
 
-    @mcp.tool()
+    @registered_tool("retrieve_certification_policy_context")
     def retrieve_certification_policy_context(
         query: str,
         limit: int = 4,
@@ -247,7 +285,7 @@ def build_server():
             limit=limit,
         )
 
-    @mcp.tool()
+    @registered_tool("certify_backtest_bundle")
     def certify_backtest_bundle(bundle_id: str) -> dict[str, Any]:
         """Run all deterministic gates and write only the final report."""
         return certify_bundle_tool(
@@ -257,7 +295,7 @@ def build_server():
             repository_root=repository_root,
         )
 
-    @mcp.tool()
+    @registered_tool("get_backtest_certification_policy")
     def get_backtest_certification_policy() -> dict[str, Any]:
         """Return the active deterministic certification policy."""
         return default_policy().to_dict()
@@ -265,6 +303,10 @@ def build_server():
     @mcp.resource("tradebot://certification/policies/backtest-v1")
     def policy_resource() -> str:
         return json.dumps(default_policy().to_dict(), sort_keys=True)
+
+    @mcp.resource("tradebot://certification/mcp/contracts/v1")
+    def contract_manifest_resource() -> str:
+        return json.dumps(contract_manifest(), sort_keys=True, separators=(",", ":"))
 
     return mcp
 
