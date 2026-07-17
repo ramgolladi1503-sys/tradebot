@@ -7,7 +7,7 @@ reason: Additive read-only certification module requires human review before mer
 timestamp: 2026-07-17T21:05:00+05:30
 is_order_action: false
 broker_api_called: false
-source: feature/ai-qa-certification-agent-mvp@a4c0a5d07b1bf8c187258e8be2cca9a2a6d02867
+source: feature/ai-qa-certification-agent-mvp
 
 ## Agent Work Contract
 
