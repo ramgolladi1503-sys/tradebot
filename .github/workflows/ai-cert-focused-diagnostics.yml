@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - feature/ai-qa-certification-agent-mvp
+  pull_request:
+    paths:
+      - "core/ai_certification/**"
+      - "tests/ai_certification/**"
+      - ".github/workflows/ai-cert-focused-diagnostics.yml"
 
 permissions:
   contents: read
