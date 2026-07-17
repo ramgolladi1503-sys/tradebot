@@ -2,8 +2,9 @@
   "gemini_job": "success",
   "gemini_measured": false,
   "historical_campaign": "failure",
-  "schema_version": 1,
+  "historical_job": "success",
+  "schema_version": 2,
   "secret_persisted": false,
   "sidecar_regression": "success",
-  "source_commit": "3c1da239a3412d7f1ff6780976ecc1ea9531cba8"
+  "source_commit": "6b9dd8c4177a17bb5c129150058d45e66fa7d3be"
 }
