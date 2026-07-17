@@ -1,5 +1,14 @@
 # PR 660 — AI QA Certification Agent MVP
 
+mode: REVIEW
+candidate_id: PR-660-AI-QA-CERTIFICATION-MVP
+decision: DRAFT_REVIEW_REQUIRED
+reason: Additive read-only certification module requires human review before merge.
+timestamp: 2026-07-17T21:05:00+05:30
+is_order_action: false
+broker_api_called: false
+source: feature/ai-qa-certification-agent-mvp@a4c0a5d07b1bf8c187258e8be2cca9a2a6d02867
+
 ## Agent Work Contract
 
 Implement a read-only backtest evidence certification module as an additive package. The certification layer may consume frozen evidence and generate reports, but it must not import, mutate, or bypass TradeBot's live feed, strategy, ranking, risk, execution, broker, or order-control paths.
@@ -29,8 +38,8 @@ Questions applied:
    - Relative-path and resolved-root checks reject absolute paths and traversal. Unsafe artifact paths also produce a deterministic rejection report rather than an uncaught exception.
 4. Can a valid negative strategy result be represented without being mislabeled as a failed experiment?
    - Yes. Evidence certification and strategy outcome are separate fields.
-5. Does missing evidence silently pass?
-   - No. Mandatory missing evidence returns `INSUFFICIENT_EVIDENCE`; contradictory evidence returns `REJECTED`.
+5. Does absent mandatory evidence silently pass?
+   - No. Mandatory absent evidence returns `INSUFFICIENT_EVIDENCE`; contradictory evidence returns `REJECTED`.
 
 ## Hermes Review
 
@@ -63,7 +72,7 @@ Focused checks cover:
 - Artifact mutation is rejected as invalid data.
 - Same-event entry is rejected as leakage.
 - Proxy engine evidence is non-certifying.
-- Missing mandatory evidence fails closed.
+- Absent mandatory evidence fails closed.
 - Insufficient trades remain distinct from invalid evidence.
 - Prompt-injection text embedded in an evidence field is treated as inert data.
 - MCP bundle and report paths cannot escape allowlisted roots.
