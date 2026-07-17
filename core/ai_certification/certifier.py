@@ -56,7 +56,9 @@ class BacktestCertificationAgent:
         blockers = tuple(
             f"{gate.gate}:{gate.reason_code}"
             for gate in gates
-            if gate.mandatory and gate.status in (GateStatus.FAIL, GateStatus.UNEVALUATED, GateStatus.ERROR)
+            if gate.mandatory
+            and gate.status
+            in (GateStatus.FAIL, GateStatus.UNEVALUATED, GateStatus.ERROR)
         )
         warnings = tuple(
             f"{gate.gate}:{gate.reason_code}"
@@ -98,17 +100,19 @@ class BacktestCertificationAgent:
             for gate in gates
             if gate.status is not GateStatus.PASS
         ) or "strict option replay certification policy"
-        return tuple(chunk.citation for chunk in self.knowledge_base.retrieve(query, limit=4))
+        return tuple(
+            chunk.citation for chunk in self.knowledge_base.retrieve(query, limit=4)
+        )
 
 
 def _evidence_status(gates: Iterable[GateResult]) -> EvidenceCertification:
     mandatory = [gate for gate in gates if gate.mandatory]
     if any(gate.status is GateStatus.ERROR for gate in mandatory):
         return EvidenceCertification.AGENT_ERROR
-    if any(gate.status is GateStatus.UNEVALUATED for gate in mandatory):
-        return EvidenceCertification.INSUFFICIENT_EVIDENCE
     if any(gate.status is GateStatus.FAIL for gate in mandatory):
         return EvidenceCertification.REJECTED
+    if any(gate.status is GateStatus.UNEVALUATED for gate in mandatory):
+        return EvidenceCertification.INSUFFICIENT_EVIDENCE
     return EvidenceCertification.CERTIFIED
 
 
@@ -130,7 +134,8 @@ def _strategy_verdict(
             "execution_realism",
         )
         if any(
-            gate_map.get(name) is not None and gate_map[name].status is GateStatus.FAIL
+            gate_map.get(name) is not None
+            and gate_map[name].status is GateStatus.FAIL
             for name in data_gates
         ):
             return StrategyVerdict.INVALID_DUE_TO_DATA
@@ -153,6 +158,13 @@ def certify_bundle(
     repository_root: str | Path | None = None,
     policy: CertificationPolicy | None = None,
 ) -> CertificationReport:
-    knowledge = CuratedKnowledgeBase.from_repository(repository_root) if repository_root is not None else None
-    agent = BacktestCertificationAgent(policy=policy or default_policy(), knowledge_base=knowledge)
+    knowledge = (
+        CuratedKnowledgeBase.from_repository(repository_root)
+        if repository_root is not None
+        else None
+    )
+    agent = BacktestCertificationAgent(
+        policy=policy or default_policy(),
+        knowledge_base=knowledge,
+    )
     return agent.certify(bundle_path)
