@@ -12,6 +12,7 @@ WHAT WAS ACTUALLY IMPLEMENTED:
 - Computed per-prefix causal VWAP from completed bars only, with explicit `VWAP_AUTHORITATIVE` versus `VWAP_UNIT_WEIGHT_PROXY` provenance.
 - Corrected sequence-level provenance emission so any zero/missing-volume bar in the validated causal prefix upgrades the reported VWAP provenance to `VWAP_UNIT_WEIGHT_PROXY` instead of inheriting only the final bar's provenance.
 - Required the final 3 completed bars to satisfy the ordered establishment → reclaim → hold sequence before a candidate can emit.
+- Added a runtime conformance proof that `StrategyContext.vwap` resolves to the causal VWAP from completed bars and not the final close of the last bar.
 - Preserved the existing candidate identity, raw-candidate ownership, trigger text, invalidation text, and downstream ownership split.
 - Added shared causal-history fixtures and updated the temporal, lineage, observability, policy, and semantic-ownership tests to exercise the repaired contract.
 
@@ -30,7 +31,9 @@ PROVEN
 - Branch: `fix/vwap-reclaim-phase3b-closure`
 - Starting head: `3e21821b211cedff8c1f8c26e8e4d4e88c360be5`
 - Implementation commit: `526bce2c`
-- Evidence update commit: `eb3725794cd8216e0d0b1611b4f526dfa53057ef`
+- First evidence commit: `8f2b79f8`
+- Aggregate-provenance follow-up commit: `eb3725794cd8216e0d0b1611b4f526dfa53057ef`
+- Latest documentation commit / final head before this update: `a4264fe91a36cdb13765a900db5ae9f5f3b69a42`
 
 ## Files Changed
 
@@ -42,6 +45,8 @@ PROVEN
 - [`tests/test_strategy_missing_evidence_observability.py`](../../tests/test_strategy_missing_evidence_observability.py)
 - [`tests/test_strategy_missing_evidence_policy.py`](../../tests/test_strategy_missing_evidence_policy.py)
 - [`tests/test_candidate_phase2_semantic_ownership.py`](../../tests/test_candidate_phase2_semantic_ownership.py)
+- [`tests/test_vwap_reclaim_runtime_conformance.py`](../../tests/test_vwap_reclaim_runtime_conformance.py)
+- [`docs/agent_reviews/strategy_truth_vwap_reclaim_phase3b_gap_audit.md`](./strategy_truth_vwap_reclaim_phase3b_gap_audit.md)
 
 ## Causal Contract
 
@@ -64,12 +69,13 @@ The repaired runtime contract is:
 | completed history contract | PROVEN | `completed_bar_history` is required for the causal path |
 | causal sequencing | PROVEN | final 3 completed bars must satisfy establishment → reclaim → hold |
 | runtime/direct agreement | PROVEN | direct and runtime-propagated contexts produce the same fingerprint |
+| runtime VWAP truth | PROVEN | `_strategy_context_from_market_symbol()` carries canonical VWAP into `StrategyContext.vwap`; no OHLC-close substitution is used |
 | runtime path split | PROVEN | canonical ranked snapshots run through `build_ranked_opportunity_report`; live Phase 2 top-opportunity exposure remains downstream-owned through `cycle_ranked_candidates` |
 | missing history | PROVEN | `STRATEGY_EVIDENCE_BLOCKED` is emitted for missing temporal evidence |
 | malformed history | PROVEN | invalid or inconsistent history is blocked deterministically |
 | future mutation safety | PROVEN | future bars after the cutoff do not change the candidate identity |
 | truncation equivalence | PROVEN | physical truncation at the decision prefix matches the full dataset before the cutoff |
-| bearish causal path | PROVEN | a valid bearish sequence emits `BUY_PUT` |
+| bearish causal path | PROVEN | a valid bearish sequence emits `BUY_PUT`; the bearish lineage pre-existed the causal repair |
 | previous-spot fallback | PROVEN | `previous_spot_ltp` is supplemental only and cannot fabricate the sequence |
 | aggregate provenance | PROVEN | any zero/missing-volume bar in the causal prefix emits `VWAP_UNIT_WEIGHT_PROXY` |
 | metadata-only confirmation | PROVEN | metadata does not override the completed-bar truth |
@@ -109,11 +115,11 @@ reason=missing_required_temporal_evidence|invalid_completed_history|inconsistent
 ## Tests And Results
 
 - Focused VWAP reclaim / adjacent slice:
-  - `python -m pytest -q tests/test_vwap_reclaim_temporal_conformance.py tests/test_vwap_trap_movement_strategies.py tests/test_strategy_generators_lineage.py tests/test_strategy_missing_evidence_observability.py tests/test_strategy_missing_evidence_policy.py tests/test_candidate_phase2_semantic_ownership.py`
-  - Result: `69 passed, 1 warning in 10.88s`
+  - `python -m pytest -q tests/test_vwap_reclaim_temporal_conformance.py tests/test_vwap_reclaim_runtime_conformance.py tests/test_vwap_trap_movement_strategies.py tests/test_strategy_generators_lineage.py tests/test_strategy_missing_evidence_observability.py tests/test_strategy_missing_evidence_policy.py tests/test_candidate_phase2_semantic_ownership.py`
+  - Result: `70 passed, 1 warning in 4.49s`
 - Full repository suite:
   - `python -m pytest -q`
-  - Result: `6029 passed, 1 failed, 24 deselected, 935 warnings in 692.53s`
+  - Result: `6030 passed, 1 failed, 24 deselected, 935 warnings in 355.73s`
 
 ## First Failure
 
@@ -131,10 +137,11 @@ The failure stack is in the orchestrator auth path, not in the VWAP reclaim stra
 - The repository still has the known auth gate failure in the full suite.
 - The runtime regime timeline log is a generated artifact and can be dirtied by test runs; it was restored after the suite.
 - The causal contract is only as strong as the upstream completed-bar history truth.
+- Runtime VWAP provenance remains labeled at the provenance layer rather than split into separate authoritative-versus-fallback source fields; the value truth is proven, but label granularity is still a documentation-level limitation.
 
 ## Rollback
 
-- Revert commit `526bce2c` to remove the causal VWAP reclaim rewrite and the test fixture updates.
+- Revert commits `526bce2c` and `eb3725794cd8216e0d0b1611b4f526dfa53057ef` to remove the causal VWAP reclaim rewrite, the aggregate-provenance follow-up, and the test fixture updates.
 
 ## Explicit Non-Claims
 
