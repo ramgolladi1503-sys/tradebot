@@ -90,12 +90,11 @@ def test_gate_output_rejects_unknown_status_and_missing_reason():
         )
 
 
-def test_request_payload_budget_is_enforced():
-    oversized = "x" * 40_000
-    with pytest.raises(MCPContractValidationError, match="request payload exceeds"):
-        validate_tool_input(
-            "retrieve_certification_policy_context",
-            {"query": oversized, "limit": 4},
+def test_response_payload_budget_is_enforced():
+    with pytest.raises(MCPContractValidationError, match="response payload exceeds"):
+        validate_tool_output(
+            "get_backtest_certification_policy",
+            {"oversized": "x" * 2_100_000},
         )
 
 
