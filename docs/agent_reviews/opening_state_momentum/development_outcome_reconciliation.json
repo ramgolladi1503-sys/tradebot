@@ -1,0 +1,15 @@
+{
+  "accepted_development_candidates": 0,
+  "labelled_outcomes": 0,
+  "accepted_long_labels": 0,
+  "accepted_short_labels": 0,
+  "count_ENTRY_BAR_MISSING": 0,
+  "count_EXIT_BAR_MISSING": 0,
+  "count_ENTRY_PRICE_INVALID": 0,
+  "count_EXIT_PRICE_INVALID": 0,
+  "count_ENTRY_EXIT_ORDER_INVALID": 0,
+  "count_SOURCE_MANIFEST_MISMATCH": 0,
+  "count_HOLDOUT_LOCKED": 0,
+  "holdout_outcome_count": 0,
+  "unexplained_count": 0
+}
