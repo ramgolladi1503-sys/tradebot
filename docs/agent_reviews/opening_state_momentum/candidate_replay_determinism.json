@@ -1,38 +1,17 @@
 {
-  "run_a": {
-    "decision_json_sha256": "c10f408451c58b21257f90c4e9163e5f591b781e00e2a561fcce0d766baf2c1f",
-    "ordered_fingerprint_sha256": "620aa3fd2d4920959932cee1ebdd285b043ea45cc1f1ba9e5ae27522d3c046ac",
-    "rejection_summary_sha256": "2366652581b428eac2c5774387650eedae0a2f21ccf99dbd646f6a25991c1791",
-    "threshold_audit_sha256": "569ef710ad03e3299a847049e30f1c18b88165ba968bd2ac31e52ce4f87b2712",
-    "partition_sha256": "11ca8a7c209c3c1639d3733953237c9c9fe6d57998016a763c139153d9127d85",
-    "record_count": 396,
-    "accepted_long_count": 12,
-    "accepted_short_count": 18,
-    "rejection_counts": {
-      "FAILED_SHOCK_THRESHOLD": 258,
-      "FAILED_CLOSE_LOCATION": 9,
-      "FAILED_CONFIRMATION": 5
-    }
+  "run_a_hashes": {
+    "candidate_decisions.json": "848b96e5443fdd1ecadfe917adc9448908fcd38c279d371da7919cbd1ac0c069",
+    "development_session_reconciliation.json": "a69cd00ff9ba93d305a978550cfb3fb12cd280a6a96e1da34fb586ff283de178",
+    "threshold_replay_audit.json": "da2728dbc5527083bb951d3c04e114f3e338ae562c1bf2e4ba297de180a32d56",
+    "threshold_oracle_comparison.json": "a3980ded3c65f9a2fddc6df17f13bf8f985590eca5ff69feae0596620a7253d6",
+    "fingerprints": "ab7a1c2ced421cdfc38af1f4e2d73662736d4678ef17161c77405fc798c54877"
   },
-  "run_b": {
-    "decision_json_sha256": "c10f408451c58b21257f90c4e9163e5f591b781e00e2a561fcce0d766baf2c1f",
-    "ordered_fingerprint_sha256": "620aa3fd2d4920959932cee1ebdd285b043ea45cc1f1ba9e5ae27522d3c046ac",
-    "rejection_summary_sha256": "2366652581b428eac2c5774387650eedae0a2f21ccf99dbd646f6a25991c1791",
-    "threshold_audit_sha256": "569ef710ad03e3299a847049e30f1c18b88165ba968bd2ac31e52ce4f87b2712",
-    "partition_sha256": "11ca8a7c209c3c1639d3733953237c9c9fe6d57998016a763c139153d9127d85",
-    "record_count": 396,
-    "accepted_long_count": 12,
-    "accepted_short_count": 18,
-    "rejection_counts": {
-      "FAILED_SHOCK_THRESHOLD": 258,
-      "FAILED_CLOSE_LOCATION": 9,
-      "FAILED_CONFIRMATION": 5
-    }
+  "run_b_hashes": {
+    "candidate_decisions.json": "848b96e5443fdd1ecadfe917adc9448908fcd38c279d371da7919cbd1ac0c069",
+    "development_session_reconciliation.json": "a69cd00ff9ba93d305a978550cfb3fb12cd280a6a96e1da34fb586ff283de178",
+    "threshold_replay_audit.json": "da2728dbc5527083bb951d3c04e114f3e338ae562c1bf2e4ba297de180a32d56",
+    "threshold_oracle_comparison.json": "a3980ded3c65f9a2fddc6df17f13bf8f985590eca5ff69feae0596620a7253d6",
+    "fingerprints": "ab7a1c2ced421cdfc38af1f4e2d73662736d4678ef17161c77405fc798c54877"
   },
-  "decision_json_equal": true,
-  "fingerprint_hash_equal": true,
-  "threshold_audit_equal": true,
-  "rejection_summary_equal": true,
-  "partition_hash_equal": true,
-  "overall_deterministic": true
+  "match": true
 }

@@ -1,0 +1,55 @@
+{
+  "mismatches": 0,
+  "comparisons": [
+    {
+      "session_index": 1,
+      "date": "2024-07-01",
+      "oracle_threshold": null,
+      "replay_threshold": null,
+      "oracle_training_count": 0,
+      "replay_training_count": null,
+      "hash_match": true,
+      "match": true
+    },
+    {
+      "session_index": 60,
+      "date": "2024-09-24",
+      "oracle_threshold": null,
+      "replay_threshold": null,
+      "oracle_training_count": 59,
+      "replay_training_count": null,
+      "hash_match": true,
+      "match": true
+    },
+    {
+      "session_index": 61,
+      "date": "2024-09-25",
+      "oracle_threshold": 0.0023605470370885455,
+      "replay_threshold": 0.0023605470370885455,
+      "oracle_training_count": 60,
+      "replay_training_count": 60,
+      "hash_match": true,
+      "match": true
+    },
+    {
+      "session_index": 200,
+      "date": "2025-04-23",
+      "oracle_threshold": 0.0035714040614270195,
+      "replay_threshold": 0.0035714040614270195,
+      "oracle_training_count": 199,
+      "replay_training_count": 199,
+      "hash_match": true,
+      "match": true
+    },
+    {
+      "session_index": 398,
+      "date": "2026-02-09",
+      "oracle_threshold": 0.003478387070209288,
+      "replay_threshold": 0.003478387070209288,
+      "oracle_training_count": 397,
+      "replay_training_count": 397,
+      "hash_match": true,
+      "match": true
+    }
+  ]
+}

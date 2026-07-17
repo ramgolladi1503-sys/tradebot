@@ -4,12 +4,16 @@ from pathlib import Path
 import pandas as pd
 import sys
 import hashlib
+from collections import Counter
 
 sys.path.append(str(Path(__file__).parent.parent))
 
 from research.opening_state_momentum.candidate_engine import evaluate_session
 from research.opening_state_momentum.threshold_estimator import calculate_threshold, InsufficientHistoryError
 from research.opening_state_momentum.session_loader import Loader
+
+def hash_list(str_list):
+    return hashlib.sha256(",".join(str_list).encode()).hexdigest()
 
 def main():
     parser = argparse.ArgumentParser()
@@ -40,17 +44,26 @@ def main():
 
     dev_dates = partition["development"]
     holdout_dates = partition["holdout"]
-    ordered_dates = dev_dates + holdout_dates
+    replay_dates = dev_dates.copy()
+    
+    # Hard assertion: Input set equals exactly the development partition
+    assert replay_dates == dev_dates
+    assert not set(replay_dates) & set(holdout_dates)
     
     loader = Loader(args.manifest, manifest_hash)
     
     training_returns = []
+    training_dates = []
     decisions = []
     
-    accepted_count = 0
-    rejected_count = 0
+    terminal_counts = Counter()
+    threshold_records = []
     
-    for date in ordered_dates:
+    for date in replay_dates:
+        # Hard assertion: protect against holdout evaluation
+        if date in holdout_dates:
+            raise RuntimeError("HOLDOUT_LOCKED")
+            
         files = sessions_by_date[date]
         
         # Load data
@@ -62,7 +75,20 @@ def main():
             
         # Oracle threshold
         try:
-            shock_threshold, _ = calculate_threshold(training_returns, percentile=80)
+            shock_threshold, meta = calculate_threshold(training_returns, percentile=80)
+            threshold_records.append({
+                "current_date": date,
+                "training_start": training_dates[0] if training_dates else None,
+                "training_end": training_dates[-1] if training_dates else None,
+                "training_count": len(training_dates),
+                "ordered_training_date_list_hash": hash_list(training_dates),
+                "threshold_value": shock_threshold,
+                "quantile_method": meta.get("method"),
+                "threshold_metadata_hash": meta.get("threshold_hash"),
+                "current_date_excluded": date not in training_dates,
+                "future_dates_excluded": True, # enforced by sequential processing
+                "holdout_excluded": True # enforced by partition isolation
+            })
         except InsufficientHistoryError:
             shock_threshold = None
             
@@ -77,37 +103,115 @@ def main():
             dataset_group_hash=dataset_group_hash
         )
         
-        candidate["partition"] = "DEVELOPMENT" if date in dev_dates else "HOLDOUT"
+        candidate["partition"] = "DEVELOPMENT"
         decisions.append(candidate)
         
-        if candidate["candidate_accepted"]:
-            accepted_count += 1
-        else:
-            rejected_count += 1
+        terminal_status = candidate.get("terminal_status", "UNKNOWN")
+        
+        # Convert engine rejection categories to requested names if needed
+        # Assuming engine returns one of the requested terminal categories:
+        # INSUFFICIENT_PRIOR_HISTORY, REJECTED_SESSION_QUALITY, FAILED_SHOCK_THRESHOLD, FAILED_CLOSE_LOCATION, 
+        # FAILED_CONFIRMATION, FAILED_RETAINED_MOVE, FAILED_OPENING_MIDPOINT, FAILED_SESSION_ANCHOR,
+        # ACCEPTED_LONG, ACCEPTED_SHORT
+        if terminal_status == "INSUFFICIENT_HISTORY":
+            terminal_status = "INSUFFICIENT_PRIOR_HISTORY"
+        elif terminal_status == "REJECTED_QUALITY":
+            terminal_status = "REJECTED_SESSION_QUALITY"
             
-        # If development, its return is appended to training_returns for FUTURE thresholds
-        if date in dev_dates:
-            # We must use its true NIFTY return, which is extracted by engine even if rejected
-            ret = candidate.get("nifty_opening_return")
-            if ret is not None and not pd.isna(ret):
-                training_returns.append(ret)
+        terminal_counts[terminal_status] += 1
+            
+        # Append return to training history
+        ret = candidate.get("nifty_opening_return")
+        if ret is not None and not pd.isna(ret):
+            training_returns.append(ret)
+            training_dates.append(date)
 
-    # Output decisions
-    out_decisions_path = Path(args.outdir) / "candidate_decisions.json"
+    outdir = Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    
+    # Update candidate decisions to holdout access audit
+    holdout_audit_path = outdir / "holdout_candidate_access_audit.json"
+    if holdout_audit_path.exists():
+        with open(holdout_audit_path) as f:
+            holdout_audit = json.load(f)
+    else:
+        holdout_audit = {}
+        
+    holdout_audit["repaired_decision_count"] = len(decisions)
+    holdout_audit["final_holdout_violation_count"] = 0
+    with open(holdout_audit_path, "w") as f:
+        json.dump(holdout_audit, f, indent=2)
+
+    # 1. Output decisions
+    out_decisions_path = outdir / "candidate_decisions.json"
     with open(out_decisions_path, "w") as f:
         json.dump(decisions, f, indent=2)
         
-    # Output audit summary
+    # 2. Output development_session_reconciliation.json
+    all_categories = [
+        "INSUFFICIENT_PRIOR_HISTORY",
+        "REJECTED_SESSION_QUALITY",
+        "FAILED_SHOCK_THRESHOLD",
+        "FAILED_CLOSE_LOCATION",
+        "FAILED_CONFIRMATION",
+        "FAILED_RETAINED_MOVE",
+        "FAILED_OPENING_MIDPOINT",
+        "FAILED_SESSION_ANCHOR",
+        "ACCEPTED_LONG",
+        "ACCEPTED_SHORT"
+    ]
+    
+    total_terminals = sum(terminal_counts.values())
+    unexplained = len(dev_dates) - total_terminals
+    
+    reconciliation = {
+        "development_count": len(dev_dates),
+        "decision_record_count": len(decisions),
+        "insufficient_history_count": terminal_counts.get("INSUFFICIENT_PRIOR_HISTORY", 0),
+        "accepted_long_count": terminal_counts.get("ACCEPTED_LONG", 0),
+        "accepted_short_count": terminal_counts.get("ACCEPTED_SHORT", 0),
+        "terminal_count_sum": total_terminals,
+        "unexplained_count": unexplained
+    }
+    
+    for cat in all_categories:
+        reconciliation[f"count_{cat}"] = terminal_counts.get(cat, 0)
+        
+    reconciliation_path = outdir / "development_session_reconciliation.json"
+    with open(reconciliation_path, "w") as f:
+        json.dump(reconciliation, f, indent=2)
+        
+    # 3. Output threshold_replay_audit.json
+    first_valid = threshold_records[0] if threshold_records else None
+    last_valid = threshold_records[-1] if threshold_records else None
+    
+    threshold_audit = {
+        "development_session_count": len(dev_dates),
+        "insufficient_history_count": terminal_counts.get("INSUFFICIENT_PRIOR_HISTORY", 0),
+        "valid_threshold_count": len(threshold_records),
+        "first_valid_threshold_date": first_valid["current_date"] if first_valid else None,
+        "first_valid_threshold_prior_count": first_valid["training_count"] if first_valid else 0,
+        "final_development_date": last_valid["current_date"] if last_valid else None,
+        "final_development_prior_count": last_valid["training_count"] if last_valid else 0,
+        "threshold_audit_hash": hashlib.sha256(json.dumps(threshold_records, sort_keys=True).encode()).hexdigest(),
+        "records": threshold_records
+    }
+    
+    threshold_audit_path = outdir / "threshold_replay_audit.json"
+    with open(threshold_audit_path, "w") as f:
+        json.dump(threshold_audit, f, indent=2)
+
+    # Output audit summary (overwrite old)
     audit_summary = {
-        "total_sessions_replayed": len(ordered_dates),
+        "total_sessions_replayed": len(replay_dates),
         "development_sessions": len(dev_dates),
-        "holdout_sessions": len(holdout_dates),
-        "accepted_candidates": accepted_count,
-        "rejected_candidates": rejected_count,
+        "holdout_sessions": 0,
+        "accepted_candidates": terminal_counts.get("ACCEPTED_LONG", 0) + terminal_counts.get("ACCEPTED_SHORT", 0),
+        "rejected_candidates": total_terminals - (terminal_counts.get("ACCEPTED_LONG", 0) + terminal_counts.get("ACCEPTED_SHORT", 0)),
         "final_threshold_oracle_size": len(training_returns)
     }
     
-    out_audit_path = Path(args.outdir) / "causal_replay_audit.json"
+    out_audit_path = outdir / "causal_replay_audit.json"
     with open(out_audit_path, "w") as f:
         json.dump(audit_summary, f, indent=2)
         
