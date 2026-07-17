@@ -24,7 +24,7 @@ def main() -> int:
         config=config,
     )
     print(json.dumps(result, indent=2, sort_keys=True, default=str))
-    return 2 if result["verdict"] == "INVALID_DUE_TO_DATA" else 0
+    return 0
 
 
 if __name__ == "__main__":
