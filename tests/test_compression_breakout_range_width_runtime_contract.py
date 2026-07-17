@@ -13,7 +13,7 @@ from core.session_bar_history import (
     calculate_session_range_width_pct,
     calculate_session_range_width_pct_from_completed_history,
 )
-from strategies.movement.compression_breakout import generate_compression_breakout_candidates
+from strategies.movement.compression_breakout import _compression_evidence_score, generate_compression_breakout_candidates
 from tests.test_candidate_phase2_ownership import _full_context, _regime
 
 
@@ -451,3 +451,78 @@ def test_runtime_propagation_matches_direct_candidate_fingerprint():
     assert _fingerprint(runtime_report) == [("compression_breakout_v1", 0.470676, "BUY_CALL", "VALIDATED_CANDIDATE")]
     assert _fingerprint(runtime_report) == _fingerprint(direct_report)
     assert runtime_report.top_rank_strategy_id == "compression_breakout_v1"
+
+
+def test_runtime_and_replay_denominators_can_straddle_the_acceptance_gate():
+    session_state = _session_state()
+    close_width = calculate_session_range_width_pct(
+        day_high=session_state.day_high,
+        day_low=session_state.day_low,
+        reference_price=100.0,
+    )
+    live_width = calculate_session_range_width_pct(
+        day_high=session_state.day_high,
+        day_low=session_state.day_low,
+        reference_price=40.0,
+    )
+
+    assert close_width == pytest.approx(0.14)
+    assert live_width == pytest.approx(0.35)
+    assert close_width != live_width
+
+    close_report = build_ranked_opportunity_report(
+        _runtime_context(
+            range_width_pct=close_width,
+            completed_bar_history=session_state.history_payload(),
+        ),
+        _regime(COMPRESSION=0.5),
+        candidate_generators=(generate_compression_breakout_candidates,),
+        include_no_trade_candidate=False,
+    )
+    live_report = build_ranked_opportunity_report(
+        _runtime_context(
+            range_width_pct=live_width,
+            completed_bar_history=session_state.history_payload(),
+        ),
+        _regime(COMPRESSION=0.5),
+        candidate_generators=(generate_compression_breakout_candidates,),
+        include_no_trade_candidate=False,
+    )
+
+    close_fingerprint = _fingerprint(close_report)
+    live_fingerprint = _fingerprint(live_report)
+    close_compression_score = _compression_evidence_score(
+        _runtime_context(
+            range_width_pct=close_width,
+            completed_bar_history=session_state.history_payload(),
+        ),
+        _regime(COMPRESSION=0.5),
+        {
+            "MAX_ATR_RATIO": 0.75,
+            "MAX_RANGE_WIDTH_PCT": 0.35,
+            "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+            "MIN_COMPRESSION_SCORE": 0.5,
+            "MIN_VWAP_ALIGNMENT_PCT": 0.0004,
+        },
+    )
+    live_compression_score = _compression_evidence_score(
+        _runtime_context(
+            range_width_pct=live_width,
+            completed_bar_history=session_state.history_payload(),
+        ),
+        _regime(COMPRESSION=0.5),
+        {
+            "MAX_ATR_RATIO": 0.75,
+            "MAX_RANGE_WIDTH_PCT": 0.35,
+            "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+            "MIN_COMPRESSION_SCORE": 0.5,
+            "MIN_VWAP_ALIGNMENT_PCT": 0.0004,
+        },
+    )
+
+    assert close_fingerprint == [("compression_breakout_v1", close_fingerprint[0][1], "BUY_CALL", "VALIDATED_CANDIDATE")]
+    assert close_report.top_rank_strategy_id == "compression_breakout_v1"
+    assert close_compression_score > 0.5
+    assert live_compression_score < 0.5
+    assert live_fingerprint == []
+    assert live_report.top_rank_strategy_id is None
