@@ -8,6 +8,7 @@ from .contracts import (
     GateStatus,
     StrategyVerdict,
 )
+from .exporter import ExportError, export_option_replay_wfa_bundle
 from .policy import CertificationPolicy, default_policy
 
 __all__ = [
@@ -18,9 +19,11 @@ __all__ = [
     "CertificationReport",
     "EvidenceCertification",
     "EvidenceRef",
+    "ExportError",
     "GateResult",
     "GateStatus",
     "StrategyVerdict",
     "certify_bundle",
     "default_policy",
+    "export_option_replay_wfa_bundle",
 ]
