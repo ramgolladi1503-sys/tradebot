@@ -2,7 +2,7 @@
   "total_sessions_replayed": 398,
   "development_sessions": 398,
   "holdout_sessions": 0,
-  "accepted_candidates": 0,
-  "rejected_candidates": 398,
+  "accepted_candidates": 32,
+  "rejected_candidates": 366,
   "final_threshold_oracle_size": 398
 }

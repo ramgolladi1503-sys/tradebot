@@ -1,12 +1,12 @@
 {
   "verifier_version": "1.0.0",
-  "head": "6c9e832b01640f23922f788ee92b83d8e026a9a6",
+  "head": "5e1620d7a2d62764e800178416da084d88ee2b45",
   "overall_pass": false,
   "checks": {
     "git_checkpoint": {
       "branch": "research/opening-state-momentum-edge",
-      "head": "6c9e832b01640f23922f788ee92b83d8e026a9a6",
-      "clean": true
+      "head": "5e1620d7a2d62764e800178416da084d88ee2b45",
+      "clean": false
     },
     "partition": {},
     "development_only_decisions": {},
@@ -18,22 +18,22 @@
     },
     "terminal_reconciliation": {
       "table": {
-        "count_INSUFFICIENT_PRIOR_HISTORY": 0,
-        "count_REJECTED_SESSION_QUALITY": 0,
-        "count_FAILED_SHOCK_THRESHOLD": 0,
-        "count_FAILED_CLOSE_LOCATION": 0,
-        "count_FAILED_CONFIRMATION": 0,
-        "count_FAILED_RETAINED_MOVE": 0,
-        "count_FAILED_OPENING_MIDPOINT": 0,
-        "count_FAILED_SESSION_ANCHOR": 0,
-        "accepted_long_count": 0,
-        "accepted_short_count": 0
+        "count_INSUFFICIENT_PRIOR_HISTORY": 60,
+        "count_REJECTED_SESSION_QUALITY": 1,
+        "count_FAILED_SHOCK_THRESHOLD": 258,
+        "count_FAILED_CLOSE_LOCATION": 10,
+        "count_FAILED_CONFIRMATION": 5,
+        "count_FAILED_RETAINED_MOVE": 19,
+        "count_FAILED_OPENING_MIDPOINT": 2,
+        "count_FAILED_SESSION_ANCHOR": 11,
+        "accepted_long_count": 13,
+        "accepted_short_count": 19
       }
     },
     "two_directory_determinism": {},
     "holdout_lock": {},
     "pytest_evidence": {
-      "live_result": "..............................................                           [100%]\n46 passed in 15.69s\n"
+      "live_result": "..............................................                           [100%]\n46 passed in 9.10s\n"
     },
     "profitability_non_inspection": {},
     "commit_scope": {
@@ -58,8 +58,6 @@
     "arithmetic_consistency": {}
   },
   "failures": [
-    "Reconciliation: Category sum != dev count",
-    "Arithmetic: Terminal sum != dev count",
-    "Arithmetic: Accepted + Rejected != Dev count"
+    "Git: Worktree is not clean"
   ]
 }
