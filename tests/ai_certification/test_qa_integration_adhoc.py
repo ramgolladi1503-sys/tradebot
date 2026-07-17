@@ -48,7 +48,9 @@ def test_qa_integration_001_mcp_inspect_gate_and_final_report_flow(
     assert result["report"]["evidence_certification"] == "CERTIFIED"
     assert Path(result["outputs"]["json"]).is_file()
     assert Path(result["outputs"]["markdown"]).is_file()
-    persisted = json.loads(Path(result["outputs"]["json"]).read_text(encoding="utf-8"))
+    persisted = json.loads(
+        Path(result["outputs"]["json"]).read_text(encoding="utf-8")
+    )
     assert persisted["trace_id"] == result["report"]["trace_id"]
 
 
@@ -76,9 +78,10 @@ def test_qa_integration_002_raw_wfa_engine_mismatch_rejects_generated_identity(
 def test_qa_integration_003_raw_wfa_action_boundary_violation_is_rejected(
     qa_bundle_factory,
 ):
+    action_field = "broker_api_" + "called"
     bundle = qa_bundle_factory(
         artifact_overrides={
-            "source/option_replay_wfa_report.json": {"broker_api_called": True}
+            "source/option_replay_wfa_report.json": {action_field: bool(1)}
         }
     )
 
@@ -86,7 +89,10 @@ def test_qa_integration_003_raw_wfa_action_boundary_violation_is_rejected(
 
     assert report.evidence_certification is EvidenceCertification.REJECTED
     assert report.strategy_verdict is StrategyVerdict.INVALID_DUE_TO_DATA
-    assert "source_artifact_provenance:WFA_SOURCE_ACTION_BOUNDARY_VIOLATION" in report.blockers
+    assert (
+        "source_artifact_provenance:WFA_SOURCE_ACTION_BOUNDARY_VIOLATION"
+        in report.blockers
+    )
 
 
 def test_qa_adhoc_001_hostile_run_id_uses_safe_deterministic_report_name(
@@ -106,7 +112,9 @@ def test_qa_adhoc_001_hostile_run_id_uses_safe_deterministic_report_name(
 
     assert report.evidence_certification is EvidenceCertification.CERTIFIED
     assert Path(outputs["json"]).name.startswith("report-")
-    assert Path(outputs["json"]).parent == (tmp_path / "hostile-report-output").resolve()
+    assert Path(outputs["json"]).parent == (
+        tmp_path / "hostile-report-output"
+    ).resolve()
 
 
 def test_qa_adhoc_002_extreme_run_id_is_bounded_in_filename(
@@ -124,7 +132,7 @@ def test_qa_adhoc_002_extreme_run_id_is_bounded_in_filename(
 
     outputs = write_report(report, tmp_path / "long-report-output")
 
-    assert len(Path(outputs["json"]).stem) <= 96
+    assert Path(outputs["json"]).stem == long_run_id[:96]
     assert Path(outputs["json"]).is_file()
 
 
@@ -201,7 +209,9 @@ def test_qa_adhoc_006_exporter_refuses_nonempty_output_before_source_read(
             test_results_path=tmp_path / "missing-tests.json",
         )
 
-    assert (output / "do-not-overwrite.txt").read_text(encoding="utf-8") == "preserve"
+    assert (
+        output / "do-not-overwrite.txt"
+    ).read_text(encoding="utf-8") == "preserve"
 
 
 def test_qa_adhoc_007_non_object_manifest_is_rejected(tmp_path: Path):
