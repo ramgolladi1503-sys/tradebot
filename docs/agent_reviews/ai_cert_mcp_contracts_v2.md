@@ -120,6 +120,19 @@ Required CI evidence:
 
 No merge is permitted while any required check is failing or incomplete.
 
+## Runtime Proof Required After Merge
+
+The next MCP conformance phase must run the merged contract server through MCP Inspector and at least one independent client over both local `stdio` and Streamable HTTP. It must prove:
+
+1. the client-visible tool inventory exactly matches the contract manifest;
+2. annotations and structured schemas are exposed consistently;
+3. invalid arguments and malformed structured results fail closed;
+4. cancellation, timeout and server restart behavior are bounded;
+5. no cross-request bundle or report state leaks between clients;
+6. the deterministic certification verdict remains unchanged across transports.
+
+This PR does not claim that runtime transport proof. It freezes the contract required to make that proof meaningful and reproducible.
+
 ## What This PR Does Not Prove
 
 This candidate does not claim:
