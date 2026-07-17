@@ -18,6 +18,11 @@ from .registry import (
     get_tool_contract,
     tool_names,
 )
+from .validation import (
+    MCPContractValidationError,
+    validate_tool_input,
+    validate_tool_output,
+)
 
 __all__ = [
     "GATE_TOOL_TO_GATE",
@@ -25,6 +30,7 @@ __all__ = [
     "MCP_CONTRACT_VERSION",
     "MCP_PROTOCOL_VERSION",
     "MCPContractError",
+    "MCPContractValidationError",
     "SemanticVersion",
     "TOOL_CONTRACTS",
     "ToolAnnotations",
@@ -36,4 +42,6 @@ __all__ = [
     "get_tool_contract",
     "is_backward_compatible",
     "tool_names",
+    "validate_tool_input",
+    "validate_tool_output",
 ]
