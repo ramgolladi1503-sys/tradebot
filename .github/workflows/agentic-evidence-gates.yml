@@ -3,8 +3,7 @@ name: Agentic Evidence Gates
 on:
   workflow_dispatch:
   push:
-    branches:
-      - feature/agentic-gemini-edge-evidence
+    branches: [feature/agentic-gemini-edge-evidence]
     paths:
       - "agentic_research/**"
       - ".github/workflows/agentic-evidence-gates.yml"
@@ -22,16 +21,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install sidecar dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           python -m pip install -r agentic_research/requirements.txt
-      - name: Run isolated sidecar tests
-        run: PYTHONPATH=. pytest -q agentic_research/tests
-      - name: Compile sidecar
-        run: python -m compileall -q agentic_research
-      - name: Run deterministic regression oracle
-        run: |
+      - run: PYTHONPATH=. pytest -q agentic_research/tests
+      - run: python -m compileall -q agentic_research
+      - run: |
           python -m agentic_research.evals \
             --planner deterministic \
             --output agentic_research/eval_results/deterministic_ci.json
@@ -45,26 +40,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
-      evidence_status: ${{ steps.historical_status.outputs.status }}
+      evidence_status: ${{ steps.status.outputs.status }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install sidecar dependencies
-        run: |
+      - run: |
           python -m pip install --upgrade pip
           python -m pip install -r agentic_research/requirements.txt
-      - name: Fetch pinned Aeron7 NIFTY futures data only
-        id: historical_fetch
+
+      - name: Fetch pinned Aeron7 NIFTY futures data
+        id: fetch
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          DATA_ROOT="$RUNNER_TEMP/aeron7"
-          mkdir -p "$DATA_ROOT"
-          cd "$DATA_ROOT"
+          ROOT="$RUNNER_TEMP/aeron7"
+          mkdir -p "$ROOT"
+          cd "$ROOT"
           git init -q
           git remote add origin https://github.com/aeron7/nifty-banknifty-intraday-data.git
           git config core.sparseCheckout true
@@ -76,12 +71,13 @@ jobs:
           git fetch -q --depth 1 --filter=blob:none origin 906fc2378b82e50de78f62844a3ecb3f9306a85d
           git checkout -q --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "906fc2378b82e50de78f62844a3ecb3f9306a85d"
-          FILE_COUNT="$(find . -name NIFTY_F1.txt -type f | wc -l | tr -d ' ')"
-          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
-          test "$FILE_COUNT" -ge 300
-      - name: Convert pinned source to canonical OHLCV
-        id: historical_convert
-        if: steps.historical_fetch.outcome == 'success'
+          COUNT="$(find . -name NIFTY_F1.txt -type f | wc -l | tr -d ' ')"
+          echo "file_count=$COUNT" >> "$GITHUB_OUTPUT"
+          test "$COUNT" -ge 1
+
+      - name: Convert source to canonical OHLCV
+        id: convert
+        if: steps.fetch.outcome == 'success'
         continue-on-error: true
         run: |
           python scripts/convert_aeron7_intraday.py \
@@ -89,9 +85,10 @@ jobs:
             --output-dir "$RUNNER_TEMP/aeron7-canonical" \
             --symbols NIFTY_F1
           test -s "$RUNNER_TEMP/aeron7-canonical/NIFTY_F1_intraday.csv"
-      - name: Run causal TREND_PULLBACK historical campaign
-        id: historical_run
-        if: steps.historical_convert.outcome == 'success'
+
+      - name: Run causal TREND_PULLBACK campaign
+        id: campaign
+        if: steps.convert.outcome == 'success'
         continue-on-error: true
         run: |
           python -m agentic_research.historical \
@@ -100,21 +97,21 @@ jobs:
             --source-repository aeron7/nifty-banknifty-intraday-data \
             --source-commit 906fc2378b82e50de78f62844a3ecb3f9306a85d \
             --minimum-sessions 300
-      - name: Preserve historical infrastructure status
-        id: historical_status
+
+      - name: Preserve historical status
+        id: status
         if: always()
         env:
-          FETCH_OUTCOME: ${{ steps.historical_fetch.outcome }}
-          CONVERT_OUTCOME: ${{ steps.historical_convert.outcome }}
-          CAMPAIGN_OUTCOME: ${{ steps.historical_run.outcome }}
-          FILE_COUNT: ${{ steps.historical_fetch.outputs.file_count }}
+          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
+          CONVERT_OUTCOME: ${{ steps.convert.outcome }}
+          CAMPAIGN_OUTCOME: ${{ steps.campaign.outcome }}
+          FILE_COUNT: ${{ steps.fetch.outputs.file_count }}
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
-
-          output = Path("agentic_research/edge_results/aeron7_trend_pullback")
-          output.mkdir(parents=True, exist_ok=True)
+          out = Path("agentic_research/edge_results/aeron7_trend_pullback")
+          out.mkdir(parents=True, exist_ok=True)
           status = {
               "schema_version": 1,
               "fetch_outcome": os.environ.get("FETCH_OUTCOME") or "not_run",
@@ -123,39 +120,32 @@ jobs:
               "source_file_count": int(os.environ.get("FILE_COUNT") or 0),
           }
           status["evidence_status"] = "success" if status["campaign_outcome"] == "success" else "failure"
-          (output / "historical_job_status.json").write_text(
-              json.dumps(status, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+          (out / "historical_job_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
               handle.write(f"status={status['evidence_status']}\n")
           PY
-      - name: Publish campaign verdict to summary
+
+      - name: Publish historical summary
         if: always()
-        shell: bash
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
-
-          output = Path("agentic_research/edge_results/aeron7_trend_pullback")
-          job_status = json.loads((output / "historical_job_status.json").read_text())
-          result_path = output / "campaign_result.json"
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+          out = Path("agentic_research/edge_results/aeron7_trend_pullback")
+          status = json.loads((out / "historical_job_status.json").read_text())
+          result_path = out / "campaign_result.json"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as handle:
               handle.write("## TREND_PULLBACK historical campaign\n\n")
-              handle.write(f"- Evidence status: `{job_status['evidence_status']}`\n")
-              handle.write(f"- Fetch: `{job_status['fetch_outcome']}`\n")
-              handle.write(f"- Conversion: `{job_status['convert_outcome']}`\n")
-              handle.write(f"- Campaign: `{job_status['campaign_outcome']}`\n")
-              handle.write(f"- Source files: `{job_status['source_file_count']}`\n")
+              for key, value in status.items():
+                  handle.write(f"- {key}: `{value}`\n")
               if result_path.exists():
                   result = json.loads(result_path.read_text())
-                  handle.write(f"- Verdict: `{result['verdict']}`\n")
-                  handle.write(f"- Claim scope: `{result['claim_scope']}`\n")
-                  handle.write(f"- Options execution certified: `{result['options_execution_certified']}`\n")
+                  handle.write(f"- verdict: `{result['verdict']}`\n")
+                  handle.write(f"- claim_scope: `{result['claim_scope']}`\n")
                   for blocker in result.get("blockers", []):
-                      handle.write(f"- Blocker: `{blocker}`\n")
+                      handle.write(f"- blocker: `{blocker}`\n")
           PY
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -177,8 +167,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Detect secure Gemini secret
-        id: key
+      - id: key
         shell: bash
         run: |
           if [ -n "${GEMINI_API_KEY:-}" ]; then
@@ -186,13 +175,11 @@ jobs:
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Install sidecar dependencies
-        if: steps.key.outputs.available == 'true'
+      - if: steps.key.outputs.available == 'true'
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r agentic_research/requirements.txt
-      - name: Run measured Gemini manager and critic suite
-        if: steps.key.outputs.available == 'true'
+      - if: steps.key.outputs.available == 'true'
         run: |
           python -m agentic_research.evals.online_cli \
             --model gemini-2.5-flash \
@@ -200,10 +187,8 @@ jobs:
             --request-delay-seconds 4 \
             --maximum-retries 2 \
             --output agentic_research/eval_results/gemini_online_ci.json
-      - name: Explain skipped Gemini gate
-        if: steps.key.outputs.available != 'true'
-        run: |
-          echo "Gemini evaluation skipped: add a rotated key as the repository secret GEMINI_API_KEY." | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: steps.key.outputs.available != 'true'
+        run: echo "Gemini evaluation skipped until a rotated GEMINI_API_KEY repository secret is added." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always() && steps.key.outputs.available == 'true'
         with:
@@ -213,10 +198,7 @@ jobs:
 
   publish-evidence:
     if: always()
-    needs:
-      - sidecar-regression
-      - historical-edge-campaign
-      - gemini-online-evaluation
+    needs: [sidecar-regression, historical-edge-campaign, gemini-online-evaluation]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -225,38 +207,34 @@ jobs:
         with:
           ref: feature/agentic-gemini-edge-evidence
           fetch-depth: 0
-      - name: Download deterministic report
-        if: needs.sidecar-regression.result == 'success'
+      - if: needs.sidecar-regression.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: agentic-sidecar-regression
           path: /tmp/evidence/deterministic
-      - name: Download historical report
-        if: always()
+      - if: always()
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: trend-pullback-aeron7-campaign
           path: /tmp/evidence/historical
-      - name: Download Gemini report
-        if: needs.gemini-online-evaluation.outputs.measured == 'true'
+      - if: needs.gemini-online-evaluation.outputs.measured == 'true'
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: gemini-agent-quality-report
           path: /tmp/evidence/gemini
-      - name: Build small evidence snapshot
+      - name: Build evidence snapshot
         env:
           SIDECAR_RESULT: ${{ needs.sidecar-regression.result }}
           HISTORICAL_JOB_RESULT: ${{ needs.historical-edge-campaign.result }}
-          HISTORICAL_EVIDENCE_STATUS: ${{ needs.historical-edge-campaign.outputs.evidence_status }}
+          HISTORICAL_STATUS: ${{ needs.historical-edge-campaign.outputs.evidence_status }}
           GEMINI_JOB_RESULT: ${{ needs.gemini-online-evaluation.result }}
           GEMINI_MEASURED: ${{ needs.gemini-online-evaluation.outputs.measured }}
         run: |
           python - <<'PY'
           import json, os, shutil
           from pathlib import Path
-
           target = Path("agentic_research/evidence_results")
           target.mkdir(parents=True, exist_ok=True)
           status = {
@@ -264,40 +242,28 @@ jobs:
               "source_commit": os.environ["GITHUB_SHA"],
               "sidecar_regression": os.environ["SIDECAR_RESULT"],
               "historical_job": os.environ["HISTORICAL_JOB_RESULT"],
-              "historical_campaign": os.environ.get("HISTORICAL_EVIDENCE_STATUS") or "unknown",
+              "historical_campaign": os.environ.get("HISTORICAL_STATUS") or "unknown",
               "gemini_job": os.environ["GEMINI_JOB_RESULT"],
               "gemini_measured": os.environ.get("GEMINI_MEASURED") == "true",
               "secret_persisted": False,
           }
-
-          def copy_named(root: str, names: set[str]) -> None:
+          def copy_named(root, names):
               base = Path(root)
               if not base.exists():
                   return
               for path in base.rglob("*"):
                   if path.is_file() and path.name in names:
                       shutil.copy2(path, target / path.name)
-
           copy_named("/tmp/evidence/deterministic", {"deterministic_ci.json"})
-          copy_named(
-              "/tmp/evidence/historical",
-              {"campaign_result.json", "dataset_manifest.json", "campaign_report.md", "historical_job_status.json"},
-          )
+          copy_named("/tmp/evidence/historical", {"campaign_result.json", "dataset_manifest.json", "campaign_report.md", "historical_job_status.json"})
           copy_named("/tmp/evidence/gemini", {"gemini_online_ci.json"})
-          (target / "run_status.json").write_text(
-              json.dumps(status, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
+          (target / "run_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
           PY
-      - name: Commit evidence summaries to isolated branch
-        shell: bash
+      - name: Commit measured summaries
         run: |
-          set -euo pipefail
           git config user.name "tradebot-evidence-bot"
           git config user.email "actions@users.noreply.github.com"
           find agentic_research/evidence_results -type f -print0 | xargs -0 git add -f --
-          if git diff --cached --quiet; then
-            exit 0
-          fi
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "evidence(agentic): publish measured gates [skip ci]"
           git push origin HEAD:feature/agentic-gemini-edge-evidence
