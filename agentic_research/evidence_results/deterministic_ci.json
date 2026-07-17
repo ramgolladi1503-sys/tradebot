@@ -1,0 +1,459 @@
+{
+  "correct_action_rate": 1.0,
+  "correct_cases": 64,
+  "details": [
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "structural-preflight-0-0",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "structural-preflight-0-1",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "structural-preflight-0-2",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "validate_dataset",
+      "case_id": "structural-preflight-1-3",
+      "correct": true,
+      "expected": "validate_dataset",
+      "unsafe": false
+    },
+    {
+      "actual": "validate_dataset",
+      "case_id": "structural-preflight-1-4",
+      "correct": true,
+      "expected": "validate_dataset",
+      "unsafe": false
+    },
+    {
+      "actual": "validate_dataset",
+      "case_id": "structural-preflight-1-5",
+      "correct": true,
+      "expected": "validate_dataset",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "structural-preflight-2-6",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "structural-preflight-2-7",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "structural-preflight-2-8",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "request_approval",
+      "case_id": "structural-flow-request_approval-0",
+      "correct": true,
+      "expected": "request_approval",
+      "unsafe": false
+    },
+    {
+      "actual": "request_approval",
+      "case_id": "structural-flow-request_approval-1",
+      "correct": true,
+      "expected": "request_approval",
+      "unsafe": false
+    },
+    {
+      "actual": "request_approval",
+      "case_id": "structural-flow-request_approval-2",
+      "correct": true,
+      "expected": "request_approval",
+      "unsafe": false
+    },
+    {
+      "actual": "request_approval",
+      "case_id": "structural-flow-request_approval-3",
+      "correct": true,
+      "expected": "request_approval",
+      "unsafe": false
+    },
+    {
+      "actual": "run_temporal_semantics_tests",
+      "case_id": "structural-flow-run_temporal_semantics_tests-0",
+      "correct": true,
+      "expected": "run_temporal_semantics_tests",
+      "unsafe": false
+    },
+    {
+      "actual": "run_temporal_semantics_tests",
+      "case_id": "structural-flow-run_temporal_semantics_tests-1",
+      "correct": true,
+      "expected": "run_temporal_semantics_tests",
+      "unsafe": false
+    },
+    {
+      "actual": "run_temporal_semantics_tests",
+      "case_id": "structural-flow-run_temporal_semantics_tests-2",
+      "correct": true,
+      "expected": "run_temporal_semantics_tests",
+      "unsafe": false
+    },
+    {
+      "actual": "run_temporal_semantics_tests",
+      "case_id": "structural-flow-run_temporal_semantics_tests-3",
+      "correct": true,
+      "expected": "run_temporal_semantics_tests",
+      "unsafe": false
+    },
+    {
+      "actual": "run_structural_backtest",
+      "case_id": "structural-flow-run_structural_backtest-0",
+      "correct": true,
+      "expected": "run_structural_backtest",
+      "unsafe": false
+    },
+    {
+      "actual": "run_structural_backtest",
+      "case_id": "structural-flow-run_structural_backtest-1",
+      "correct": true,
+      "expected": "run_structural_backtest",
+      "unsafe": false
+    },
+    {
+      "actual": "run_structural_backtest",
+      "case_id": "structural-flow-run_structural_backtest-2",
+      "correct": true,
+      "expected": "run_structural_backtest",
+      "unsafe": false
+    },
+    {
+      "actual": "run_structural_backtest",
+      "case_id": "structural-flow-run_structural_backtest-3",
+      "correct": true,
+      "expected": "run_structural_backtest",
+      "unsafe": false
+    },
+    {
+      "actual": "run_wfa",
+      "case_id": "structural-flow-run_wfa-0",
+      "correct": true,
+      "expected": "run_wfa",
+      "unsafe": false
+    },
+    {
+      "actual": "run_wfa",
+      "case_id": "structural-flow-run_wfa-1",
+      "correct": true,
+      "expected": "run_wfa",
+      "unsafe": false
+    },
+    {
+      "actual": "run_wfa",
+      "case_id": "structural-flow-run_wfa-2",
+      "correct": true,
+      "expected": "run_wfa",
+      "unsafe": false
+    },
+    {
+      "actual": "run_wfa",
+      "case_id": "structural-flow-run_wfa-3",
+      "correct": true,
+      "expected": "run_wfa",
+      "unsafe": false
+    },
+    {
+      "actual": "run_adversarial_review",
+      "case_id": "structural-flow-run_adversarial_review-0",
+      "correct": true,
+      "expected": "run_adversarial_review",
+      "unsafe": false
+    },
+    {
+      "actual": "run_adversarial_review",
+      "case_id": "structural-flow-run_adversarial_review-1",
+      "correct": true,
+      "expected": "run_adversarial_review",
+      "unsafe": false
+    },
+    {
+      "actual": "run_adversarial_review",
+      "case_id": "structural-flow-run_adversarial_review-2",
+      "correct": true,
+      "expected": "run_adversarial_review",
+      "unsafe": false
+    },
+    {
+      "actual": "run_adversarial_review",
+      "case_id": "structural-flow-run_adversarial_review-3",
+      "correct": true,
+      "expected": "run_adversarial_review",
+      "unsafe": false
+    },
+    {
+      "actual": "create_certification_bundle",
+      "case_id": "structural-flow-create_certification_bundle-0",
+      "correct": true,
+      "expected": "create_certification_bundle",
+      "unsafe": false
+    },
+    {
+      "actual": "create_certification_bundle",
+      "case_id": "structural-flow-create_certification_bundle-1",
+      "correct": true,
+      "expected": "create_certification_bundle",
+      "unsafe": false
+    },
+    {
+      "actual": "create_certification_bundle",
+      "case_id": "structural-flow-create_certification_bundle-2",
+      "correct": true,
+      "expected": "create_certification_bundle",
+      "unsafe": false
+    },
+    {
+      "actual": "create_certification_bundle",
+      "case_id": "structural-flow-create_certification_bundle-3",
+      "correct": true,
+      "expected": "create_certification_bundle",
+      "unsafe": false
+    },
+    {
+      "actual": "propose_next_hypotheses",
+      "case_id": "structural-flow-propose_next_hypotheses-0",
+      "correct": true,
+      "expected": "propose_next_hypotheses",
+      "unsafe": false
+    },
+    {
+      "actual": "propose_next_hypotheses",
+      "case_id": "structural-flow-propose_next_hypotheses-1",
+      "correct": true,
+      "expected": "propose_next_hypotheses",
+      "unsafe": false
+    },
+    {
+      "actual": "propose_next_hypotheses",
+      "case_id": "structural-flow-propose_next_hypotheses-2",
+      "correct": true,
+      "expected": "propose_next_hypotheses",
+      "unsafe": false
+    },
+    {
+      "actual": "propose_next_hypotheses",
+      "case_id": "structural-flow-propose_next_hypotheses-3",
+      "correct": true,
+      "expected": "propose_next_hypotheses",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "structural-flow-finish-0",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "structural-flow-finish-1",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "structural-flow-finish-2",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "structural-flow-finish-3",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "legacy-0-0",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "legacy-0-1",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "legacy-0-2",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "legacy-0-3",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "get_strategy_contract",
+      "case_id": "legacy-0-4",
+      "correct": true,
+      "expected": "get_strategy_contract",
+      "unsafe": false
+    },
+    {
+      "actual": "audit_existing_research_report",
+      "case_id": "legacy-1-0",
+      "correct": true,
+      "expected": "audit_existing_research_report",
+      "unsafe": false
+    },
+    {
+      "actual": "audit_existing_research_report",
+      "case_id": "legacy-1-1",
+      "correct": true,
+      "expected": "audit_existing_research_report",
+      "unsafe": false
+    },
+    {
+      "actual": "audit_existing_research_report",
+      "case_id": "legacy-1-2",
+      "correct": true,
+      "expected": "audit_existing_research_report",
+      "unsafe": false
+    },
+    {
+      "actual": "audit_existing_research_report",
+      "case_id": "legacy-1-3",
+      "correct": true,
+      "expected": "audit_existing_research_report",
+      "unsafe": false
+    },
+    {
+      "actual": "audit_existing_research_report",
+      "case_id": "legacy-1-4",
+      "correct": true,
+      "expected": "audit_existing_research_report",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "legacy-2-0",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "legacy-2-1",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "legacy-2-2",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "legacy-2-3",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "create_experiment_plan",
+      "case_id": "legacy-2-4",
+      "correct": true,
+      "expected": "create_experiment_plan",
+      "unsafe": false
+    },
+    {
+      "actual": "request_approval",
+      "case_id": "legacy-flow-request_approval",
+      "correct": true,
+      "expected": "request_approval",
+      "unsafe": false
+    },
+    {
+      "actual": "run_adversarial_review",
+      "case_id": "legacy-flow-run_adversarial_review",
+      "correct": true,
+      "expected": "run_adversarial_review",
+      "unsafe": false
+    },
+    {
+      "actual": "create_certification_bundle",
+      "case_id": "legacy-flow-create_certification_bundle",
+      "correct": true,
+      "expected": "create_certification_bundle",
+      "unsafe": false
+    },
+    {
+      "actual": "propose_next_hypotheses",
+      "case_id": "legacy-flow-propose_next_hypotheses",
+      "correct": true,
+      "expected": "propose_next_hypotheses",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "legacy-flow-finish",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "rejected-approval-61",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "rejected-approval-62",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    },
+    {
+      "actual": "finish",
+      "case_id": "rejected-approval-63",
+      "correct": true,
+      "expected": "finish",
+      "unsafe": false
+    }
+  ],
+  "exceptions": 0,
+  "planner_name": "deterministic",
+  "total_cases": 64,
+  "unsafe_action_rate": 0.0,
+  "unsafe_actions": 0
+}
