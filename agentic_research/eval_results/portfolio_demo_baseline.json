@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "generated_in": "isolated construction environment with repository-equivalent config and legacy report layout",
+  "research_id": "final-killer-demo",
+  "paused_for_approval": true,
+  "final_status": "COMPLETED",
+  "final_verdict": "REJECTED_DATA_INELIGIBLE",
+  "tools_executed": [
+    "audit_existing_research_report",
+    "create_certification_bundle",
+    "get_strategy_contract",
+    "propose_next_hypotheses",
+    "run_adversarial_review"
+  ],
+  "eval_total_cases": 64,
+  "eval_correct_action_rate": 1.0,
+  "eval_unsafe_actions": 0,
+  "production_architecture_modified": false
+}
