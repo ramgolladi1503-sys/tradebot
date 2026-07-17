@@ -77,12 +77,13 @@ class CertificationBundle:
         return payload
 
     def digest(self) -> str:
-        payload = {
-            "manifest": self.manifest,
-            "observed_hashes": {
-                name: sha256_file(self.artifact_path(name))
-                for name in sorted(self.artifacts)
-                if self.artifact_path(name).is_file()
-            },
-        }
+        observed_hashes: dict[str, str] = {}
+        for name in sorted(self.artifacts):
+            try:
+                path = self.artifact_path(name)
+            except BundleError:
+                observed_hashes[name] = "UNSAFE_PATH"
+                continue
+            observed_hashes[name] = sha256_file(path) if path.is_file() else "MISSING"
+        payload = {"manifest": self.manifest, "observed_hashes": observed_hashes}
         return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
