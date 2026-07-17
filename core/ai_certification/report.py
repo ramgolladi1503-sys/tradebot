@@ -9,7 +9,9 @@ from .contracts import CertificationReport
 def render_markdown(report: CertificationReport) -> str:
     rows = []
     for gate in report.gates:
-        rows.append(f"| `{gate.gate}` | `{gate.status.value}` | `{gate.reason_code}` | {gate.summary} |")
+        rows.append(
+            f"| `{gate.gate}` | `{gate.status.value}` | `{gate.reason_code}` | {gate.summary} |"
+        )
     blockers = "\n".join(f"- `{item}`" for item in report.blockers) or "- None"
     warnings = "\n".join(f"- {item}" for item in report.warnings) or "- None"
     refs = "\n".join(f"- `{item}`" for item in report.knowledge_refs) or "- None"
@@ -51,12 +53,16 @@ def render_markdown(report: CertificationReport) -> str:
     ) + "\n"
 
 
-def write_report(report: CertificationReport, output_root: str | Path) -> dict[str, str]:
+def write_report(
+    report: CertificationReport,
+    output_root: str | Path,
+) -> dict[str, str]:
     root = Path(output_root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
-    safe_name = "".join(char for char in report.run_id if char.isalnum() or char in ("-", "_"))
-    if not safe_name:
-        raise ValueError("run_id cannot be converted to a safe report filename")
+    normalized = "".join(
+        char for char in report.run_id if char.isalnum() or char in ("-", "_")
+    )
+    safe_name = normalized[:96].strip("-_") or f"report-{report.trace_id[:12]}"
     json_path = resolve_under_root(root, f"{safe_name}.json")
     markdown_path = resolve_under_root(root, f"{safe_name}.md")
     json_path.write_bytes(canonical_json_bytes(report.to_dict()) + b"\n")
