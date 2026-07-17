@@ -150,3 +150,83 @@ The failure stack is in the orchestrator auth path, not in the VWAP reclaim stra
 - No execution-readiness claim.
 - No live-trading claim.
 - No claim that Phase 2 ownership was changed.
+
+---
+
+## Upstream Runtime VWAP Producer Verification
+
+IMPLEMENTATION DIRECTION:
+RIGHT_WITH_GAPS
+
+APPROVED OBJECTIVE:
+Prove the upstream runtime VWAP producer chain for `StrategyContext.vwap` using the real market-data producer, not a hand-built fixture.
+
+WHAT WAS ACTUALLY IMPLEMENTED:
+- Added [`tests/test_vwap_reclaim_runtime_source_contract.py`](../../tests/test_vwap_reclaim_runtime_source_contract.py) to exercise the real producer chain from `core.market_data.fetch_live_market_data()` through `core.orchestrator._snapshot_symbol_payload()` and `core.runtime_snapshot_producer._strategy_context_from_market_symbol()`.
+- Seeded a valid completed 1-minute bar sequence through the production `core.ohlc_buffer.OhlcBuffer.seed_bars()` path so the upstream producer computes VWAP from completed OHLC history.
+- Proved that the final completed close differs from the canonical VWAP and that the runtime builder consumes the canonical VWAP rather than falling back to OHLC close.
+- Proved that removing the truth VWAP while keeping close present yields `StrategyContext.vwap is None`, and the VWAP reclaim generator fails closed instead of silently substituting close.
+- Proved the default candidate pool and ranked pipeline can still execute the repaired VWAP reclaim generator using the produced runtime truth.
+
+ARCHITECTURE CHANGE:
+NONE
+
+REQUIRED FIXES COMPLETED:
+3
+- Verified the upstream producer path emits canonical VWAP from completed-bar history.
+- Verified the runtime context builder reads the canonical VWAP truth and not the final OHLC close.
+- Verified the ranked pipeline executes the VWAP reclaim generator from produced runtime truth.
+
+REQUIRED FIXES REMAINING:
+0
+
+SCOPE STATUS:
+IN_SCOPE
+
+EVIDENCE STATUS:
+PROVEN
+
+## Upstream Producer Chain
+
+| stage | observed behavior | source truth |
+| --- | --- | --- |
+| completed-bar seed | 35 completed 1-minute bars seeded through `core.ohlc_buffer.OhlcBuffer.seed_bars()` | `core.ohlc_buffer.OhlcBuffer` |
+| indicator compute | `core.indicators_live.compute_indicators()` computes VWAP from completed OHLC bars | completed OHLC history |
+| market-data row | `core.market_data.fetch_live_market_data()` returns `vwap=22540.0`, `completed_bar_history` length 35, and `completed_bar_history_provenance.status=TRUTHFUL` | `core.market_data.fetch_live_market_data` |
+| runtime snapshot payload | `core.orchestrator._snapshot_symbol_payload()` preserves market-data VWAP into the snapshot payload metadata truth | `core.market_data.fetch_live_market_data` |
+| strategy context | `core.runtime_snapshot_producer._strategy_context_from_market_symbol()` resolves `StrategyContext.vwap=22540.0` from metadata truth | `metadata.strategy_context_truth.vwap` |
+| fallback control | removing truth VWAP while keeping close present leaves `StrategyContext.vwap is None` | no close-as-VWAP fallback |
+| ranked pipeline | `build_ranked_opportunity_report()` emits `vwap_reclaim_rejection_v1` from produced runtime truth | ranked candidate path |
+
+## Exact Runtime Proof
+
+Observed fixture values:
+
+- final completed close: `22580.0`
+- canonical VWAP from the producer: `22540.0`
+- `StrategyContext.vwap`: `22540.0`
+- `StrategyContext.vwap != final completed close`
+- completed-bar history length: `35`
+- ranked-path candidate direction: `BUY_CALL`
+- ranked-path candidate status: `VALIDATED_CANDIDATE`
+- ranked-path candidate raw score: `0.600710`
+- ranked-path provenance label: `VWAP_AUTHORITATIVE`
+
+## Control Result
+
+When the truth VWAP is removed from snapshot metadata while close remains present:
+
+- `StrategyContext.vwap` becomes `None`
+- `generate_vwap_reclaim_rejection_candidates()` emits no candidate
+- the blocked evidence path remains observable through `STRATEGY_EVIDENCE_BLOCKED`
+
+## Commit Graph
+
+- starting head: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
+- implementation head before this evidence update: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
+- evidence commit: pending
+
+## Claim Boundary
+
+This update proves the upstream producer chain and runtime builder contract for `StrategyContext.vwap`.
+It does not change VWAP reclaim strategy logic, thresholds, ownership boundaries, or production execution behavior.
