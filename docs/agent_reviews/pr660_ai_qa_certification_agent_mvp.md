@@ -26,7 +26,7 @@ Questions applied:
 2. Can the new package place or modify a trade?
    - No broker, order, risk-override, strategy-mutation, shell, database-mutation, or Git-write capability exists.
 3. Can a bundle escape its configured filesystem root?
-   - Relative-path and resolved-root checks reject absolute paths and traversal.
+   - Relative-path and resolved-root checks reject absolute paths and traversal. Unsafe artifact paths also produce a deterministic rejection report rather than an uncaught exception.
 4. Can a valid negative strategy result be represented without being mislabeled as a failed experiment?
    - Yes. Evidence certification and strategy outcome are separate fields.
 5. Does missing evidence silently pass?
@@ -67,17 +67,18 @@ Focused checks cover:
 - Insufficient trades remain distinct from invalid evidence.
 - Prompt-injection text embedded in an evidence field is treated as inert data.
 - MCP bundle and report paths cannot escape allowlisted roots.
+- Unsafe manifest artifact paths produce a rejection report without reading outside the bundle.
 - Repeated certification produces identical trace and bundle digests.
 
-The exact isolated suite passed with `9 passed`, and the new package plus CLI passed bytecode compilation.
+The exact isolated suite passed with `10 passed`, and the new package plus CLI passed bytecode compilation.
 
 ## Acceptance Proof
 
 - Base commit: `58881fd873c307df3adaa5402ed27936573a1873`
-- Branch before this evidence update: `feature/ai-qa-certification-agent-mvp`
-- Production diff before this evidence update: 15 added files, 0 modified files, 0 deleted files.
+- Branch: `feature/ai-qa-certification-agent-mvp`
+- Diff against main: 16 added files, 0 modified existing files, 0 deleted files.
 - Local isolated command: `python -m pytest -q tests/ai_certification`
-- Result: `9 passed`
+- Result: `10 passed`
 - Compilation command: `python -m compileall -q core/ai_certification scripts/run_ai_backtest_certification.py`
 - Result: passed
 - Main `requirements.txt`: unchanged
