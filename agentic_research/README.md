@@ -1,69 +1,91 @@
-# TradeBot Agentic Strategy Research MVP
+# TradeBot Agentic Strategy Research
 
-A read-only LangGraph sidecar that researches `trend_pullback_v1` without modifying TradeBot production architecture, strategy formulas, execution gates, broker integrations, or live-risk controls.
+A portfolio-grade, read-only agentic research and certification sidecar for `trend_pullback_v1`.
 
-## Phase 0 completed
+The LLM coordinates and critiques. Deterministic TradeBot code owns data validation, strategy execution, metrics, evidence hashes and the final certification verdict.
 
-- Machine-readable strategy contract
-- Dataset eligibility contract
-- Frozen baseline parameters
-- Deterministic certification gates
-- Bounded experiment budget
+## Why this is agentic
 
-## Phase 1 completed
+- LangGraph manager chooses the next bounded action from workflow state.
+- Human approval interrupts pause and resume durable investigations.
+- Nine read-only MCP tools expose real TradeBot research capabilities.
+- An independent critic challenges data, causality, concentration, overfitting and execution assumptions.
+- A deterministic judge can reject both the manager and critic conclusions.
+- SQLite checkpoints and an idempotent execution ledger prevent duplicate expensive work after restart.
+- A hypothesis registry remembers failed proposals and refuses duplicate retests.
+- A 64-case evaluation harness tests tool selection, approval enforcement and hostile instructions.
 
-- Stateful LangGraph Research Manager
-- Human approval interrupt and resume
-- Six read-only research tools
-- Complete six-tool local MCP surface
-- SQLite checkpoint support
-- Deterministic non-LLM certification judge
-- FastAPI and Streamlit surfaces
-- Immutable evidence bundle per research run
-- Gemini action planner with deterministic offline fallback
+## Hard safety boundary
 
-## Safety boundary
+The sidecar has no order, broker, risk-limit, production-promotion or autonomous strategy-mutation tools. Every repository and dataset string is treated as untrusted evidence. The maximum structural verdict is `READY_FOR_OPTION_REPLAY`, never live profitability.
 
-The sidecar has no order, broker, strategy-mutation, risk-limit, or production-promotion tools. The maximum Phase 1 verdict is `READY_FOR_OPTION_REPLAY`; it cannot declare a live options edge.
-
-## Install
+## One-command interview demo
 
 ```bash
 python -m pip install -r agentic_research/requirements.txt
+python -m agentic_research.portfolio_demo --repo-root .
 ```
 
-## Run the research workflow
+The demo audits the real committed June 29 research report, pauses for approval, rejects the report because it used zero-volume data and same-bar proxy entry, runs an independent critic, creates a deterministic certificate, proposes no fake tuning workaround, and produces the 64-case evaluation report.
+
+## Structural research workflow
 
 ```bash
 python -m agentic_research.cli \
   --repo-root . \
-  --research-id tp-mvp-001 \
-  --dataset agentic_research/sample_data/trend_pullback_fixture.jsonl \
+  --research-id tp-structural-001 \
+  --evidence /absolute/path/to/eligible_dataset.jsonl \
+  --mode structural \
   --approve
 ```
 
-Use the Gemini planner after setting `GEMINI_API_KEY`:
+## Legacy evidence audit
 
 ```bash
-python -m agentic_research.cli --repo-root . --research-id tp-gemini-001 --dataset agentic_research/sample_data/trend_pullback_fixture.jsonl --planner gemini --approve
+python -m agentic_research.cli \
+  --repo-root . \
+  --research-id tp-legacy-20260629 \
+  --evidence runtime/backtests/all_strategy_20260629/all_strategy_report_20260629.json \
+  --mode legacy-report \
+  --approve
 ```
 
-Run the MCP server over stdio:
+## Gemini manager and critic
+
+Set `GEMINI_API_KEY`, then run:
+
+```bash
+python -m agentic_research.cli \
+  --repo-root . \
+  --research-id tp-gemini-001 \
+  --evidence /absolute/path/to/evidence.jsonl \
+  --planner gemini \
+  --critic gemini \
+  --approve
+```
+
+Run the model evaluation separately and publish the generated report rather than claiming unmeasured accuracy:
+
+```bash
+python -m agentic_research.evals \
+  --planner gemini \
+  --output agentic_research/eval_results/gemini_latest.json
+```
+
+## Local services
 
 ```bash
 python -m agentic_research.mcp_server --repo-root . --transport stdio
-```
-
-Start the dashboard:
-
-```bash
+uvicorn agentic_research.server:app
 streamlit run agentic_research/dashboard.py
 ```
 
-Start FastAPI:
+## Validation
 
 ```bash
-uvicorn agentic_research.server:app
+PYTHONPATH=. pytest -q agentic_research/tests
+python -m compileall -q agentic_research
+python -m agentic_research.evals --planner deterministic
 ```
 
-The included dataset is only a deterministic workflow fixture. It is not historical-market evidence and cannot support a profitability claim.
+See `agentic_research/KILLER_READINESS.md` and `agentic_research/docs/` for the architecture, threat model, evaluation methodology and interview walkthrough.
