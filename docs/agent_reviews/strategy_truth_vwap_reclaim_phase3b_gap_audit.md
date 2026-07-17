@@ -223,8 +223,8 @@ When the truth VWAP is removed from snapshot metadata while close remains presen
 ## Commit Graph
 
 - starting head: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
-- implementation head before this evidence update: `b02118a4dbbf6189ece5342ce33da6921f1155ee`
-- evidence commit: pending
+- implementation head before this evidence update: `fb5f94b7`
+- evidence commit: `fb5f94b7`
 
 ## Claim Boundary
 
