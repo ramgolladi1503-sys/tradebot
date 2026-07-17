@@ -22,6 +22,11 @@ def _make_bundle(tmp_path: Path, *, overrides: dict[str, dict] | None = None) ->
     artifacts = {
         "source/option_replay_wfa_report.json": {
             "engine_module": "core.option_backtest.engine.OptionBacktestEngine",
+            "run_id": "orb-run-001",
+            "frozen_config_hash": "c" * 64,
+            "frozen_config": {
+                "base_config": {"research_mode": "REAL_EXECUTABLE_RESEARCH"}
+            },
             "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
@@ -63,7 +68,10 @@ def _make_bundle(tmp_path: Path, *, overrides: dict[str, dict] | None = None) ->
             "legacy_or_proxy_path_used": False,
             "hardcoded_metrics_used": False,
         },
-        "run_configuration.json": {"execution_mode": "REAL_EXECUTABLE_RESEARCH"},
+        "run_configuration.json": {
+            "execution_mode": "REAL_EXECUTABLE_RESEARCH",
+            "frozen_config_hash": "c" * 64,
+        },
         "timing_evidence.json": {
             "signals_checked": 120,
             "same_event_entry_count": 0,
