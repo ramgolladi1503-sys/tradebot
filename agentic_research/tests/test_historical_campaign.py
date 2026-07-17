@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from agentic_research.historical import HistoricalCampaignConfig, load_canonical_candles, run_historical_campaign, summarize_returns
+from agentic_research.historical.engine import _necessary_structure, simulate_trade
 
 
 def _write_sessions(path: Path, *, sessions: int, volume: float) -> list[str]:
@@ -83,6 +84,51 @@ def test_fixed_positive_trade_evidence_can_only_reach_structural_candidate(tmp_p
     assert result["verdict"] == "STRUCTURAL_EDGE_CANDIDATE"
     assert result["options_execution_certified"] is False
     assert result["claim_scope"] == "underlying_futures_structural_research_only"
+
+
+def test_bullish_and_bearish_structural_prefilters_preserve_valid_shapes():
+    bullish = pd.DataFrame([
+        {"open": 99.8, "high": 100.1, "low": 99.7, "close": 100.0},
+        {"open": 100.0, "high": 100.5, "low": 99.9, "close": 100.4},
+        {"open": 100.4, "high": 100.4, "low": 100.0, "close": 100.1},
+        {"open": 100.1, "high": 100.5, "low": 100.0, "close": 100.35},
+    ])
+    call, put, support, resistance = _necessary_structure(bullish, spot=100.35, vwap=99.95)
+    assert call is True
+    assert put is False
+    assert support == 100.0
+    assert resistance == 100.5
+
+    bearish = pd.DataFrame([
+        {"open": 100.2, "high": 100.3, "low": 99.9, "close": 100.1},
+        {"open": 100.1, "high": 100.2, "low": 99.5, "close": 99.6},
+        {"open": 99.6, "high": 100.0, "low": 99.5, "close": 99.9},
+        {"open": 99.9, "high": 100.0, "low": 99.4, "close": 99.55},
+    ])
+    call, put, support, resistance = _necessary_structure(bearish, spot=99.55, vwap=100.05)
+    assert call is False
+    assert put is True
+    assert support == 99.4
+    assert resistance == 100.0
+
+
+def test_next_bar_entry_and_stop_first_same_bar_policy():
+    session = pd.DataFrame([
+        {"timestamp": "2020-01-01T09:30:00+05:30", "open": 100.0, "high": 100.2, "low": 99.9, "close": 100.1},
+        {"timestamp": "2020-01-01T09:31:00+05:30", "open": 100.1, "high": 101.0, "low": 99.0, "close": 100.4},
+    ])
+    trade = simulate_trade(
+        session,
+        0,
+        direction="BUY_CALL",
+        anchor=99.5,
+        atr=1.0,
+        config=HistoricalCampaignConfig(target_rr=1.0, stop_atr_buffer=0.0),
+    )
+    assert trade is not None
+    assert trade["entry_index"] == 1
+    assert trade["entry_timestamp"] == "2020-01-01T09:31:00+05:30"
+    assert trade["exit_reason"] == "STOP_AND_TARGET_SAME_BAR_STOP_FIRST"
 
 
 def test_return_summary_reconciles():
