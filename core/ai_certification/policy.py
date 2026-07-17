@@ -23,6 +23,7 @@ class CertificationPolicy:
         "cost_sensitivity",
     )
     required_artifacts: tuple[str, ...] = (
+        "source_index.json",
         "dataset_manifest.json",
         "engine_identity.json",
         "run_configuration.json",
