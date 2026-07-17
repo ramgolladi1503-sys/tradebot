@@ -21,6 +21,7 @@ A negative trading result may be valid evidence. A profitable-looking result may
 - Negative paths
 - Fail-closed behavior
 - Source and derived evidence consistency
+- Required source-role completeness
 - Bundle integrity and filesystem boundaries
 - MCP tool integration
 - Exporter-to-certifier integration
@@ -41,7 +42,7 @@ A negative trading result may be valid evidence. A profitable-looking result may
 
 ## 3. Test Approach
 
-Every QA scenario begins from one shared known-good strict option-replay bundle. A test changes only one authority condition unless the purpose is mixed-failure precedence. This isolates the root cause and prevents invalid test fixtures from creating false positives.
+Every QA scenario begins from one shared known-good strict option-replay bundle shaped like the actual exporter output. A test changes only one authority condition unless the purpose is mixed-failure precedence. This isolates the root cause and prevents invalid test fixtures from creating false positives.
 
 The suite uses the following levels:
 
@@ -60,6 +61,7 @@ The suite uses the following levels:
 - No existing TradeBot production file is modified.
 - Strict option-replay authority names and policy version are frozen.
 - The known-good bundle passes all 12 deterministic gates.
+- Raw WFA, control, test, and completed-partition source roles are present.
 - Test data contains no live credentials, broker tokens, or production secrets.
 
 ## 5. Exit Criteria
@@ -69,10 +71,11 @@ The suite uses the following levels:
 - No test introduces broker, order, shell, database-write, Git-write, or risk-override capability.
 - Every mandatory failure produces `REJECTED`, `INSUFFICIENT_EVIDENCE`, or `AGENT_ERROR`; it must never silently produce `CERTIFIED`.
 - Evidence and strategy outcomes remain separate.
+- Raw source roles and normalized evidence remain mutually consistent.
 
 ## 6. Automated Test Inventory
 
-Current inventory: **43 automated test functions**.
+Current inventory: **45 automated test functions**.
 
 | Category | File | Coverage |
 |---|---|---|
@@ -82,6 +85,7 @@ Current inventory: **43 automated test functions**.
 | Functional and behavioral | `tests/ai_certification/test_qa_functional_behavior.py` | Happy path, positive result, insufficient trades, warnings, deterministic output. |
 | Negative and fail closed | `tests/ai_certification/test_qa_negative_fail_closed.py` | Corruption, missing evidence, fallback fills, WFA reuse, controls, tests, validator crash. |
 | Integration and ad-hoc | `tests/ai_certification/test_qa_integration_adhoc.py` | MCP flow, raw/derived mismatch, hostile IDs, symlinks, prompt injection, exporter misuse. |
+| Source provenance | `tests/ai_certification/test_qa_source_provenance.py` | Required source roles and raw/normalized control consistency. |
 
 ## 7. Functional Test Cases
 
@@ -125,7 +129,7 @@ Current inventory: **43 automated test functions**.
 
 ### QA-BEH-002 — Gate audit contract
 
-- **Expected:** All gates provide status, reason code, summary, details, and evidence references.
+- **Expected:** All gates provide status, reason code, summary, details, and evidence references in the frozen gate order.
 - **Automation:** `test_qa_behavior_002_all_gate_results_have_auditable_contract`.
 
 ### QA-BEH-003 — Determinism
@@ -189,6 +193,16 @@ Current inventory: **43 automated test functions**.
 - **Expected:** Any broker-action marker in raw WFA evidence rejects the bundle.
 - **Automation:** `test_qa_integration_003_raw_wfa_action_boundary_violation_is_rejected`.
 
+### QA-FC-006 — Required source role omitted
+
+- **Expected:** A missing control, test, or completed-partition role rejects source provenance even when the source file still exists and all hashes are valid.
+- **Automation:** `test_qa_source_001_required_control_source_role_cannot_be_omitted`.
+
+### QA-FC-007 — Raw and normalized controls disagree
+
+- **Expected:** Source provenance is rejected with `SOURCE_CONTROLS_MISMATCH`.
+- **Automation:** `test_qa_source_002_raw_and_normalized_controls_must_match`.
+
 ## 12. Integration Test Cases
 
 ### QA-INT-001 — WFA artifacts to bundle
@@ -202,6 +216,18 @@ Current inventory: **43 automated test functions**.
 - **Steps:** Inspect bundle, run source gate, run final certification, write JSON and Markdown reports.
 - **Expected:** Same run ID, bundle digest, trace ID, and persisted report payload.
 - **Automation:** `test_qa_integration_001_mcp_inspect_gate_and_final_report_flow`.
+
+### QA-INT-003 — Source-role completeness
+
+- **Steps:** Remove one required role from the source index and re-freeze all artifact hashes.
+- **Expected:** Source provenance rejects the bundle; hash validity cannot replace semantic role completeness.
+- **Automation:** `test_qa_source_001_required_control_source_role_cannot_be_omitted`.
+
+### QA-INT-004 — Control-source reconciliation
+
+- **Steps:** Change the raw negative-control input while leaving normalized controls unchanged.
+- **Expected:** Source provenance rejects the mismatch.
+- **Automation:** `test_qa_source_002_raw_and_normalized_controls_must_match`.
 
 ## 13. Ad-Hoc and Misuse Test Cases
 
@@ -220,7 +246,7 @@ Current inventory: **43 automated test functions**.
 | Severity | Definition | Examples |
 |---|---|---|
 | Critical | Can falsely certify invalid evidence or cross the broker/order boundary. | Temporal leakage accepted; proxy engine certified; broker action evidence ignored. |
-| High | Produces wrong evidence status, strategy verdict, or non-deterministic audit result. | Rejection downgraded to insufficient; repeated holdout accepted. |
+| High | Produces wrong evidence status, strategy verdict, or non-deterministic audit result. | Rejection downgraded to insufficient; repeated holdout accepted; source role omitted. |
 | Medium | Incorrect warning, report persistence, or compatibility behavior. | Optional strategy contradiction treated as mandatory failure. |
 | Low | Documentation, message clarity, or non-authoritative formatting issue. | Incomplete reason wording with correct status. |
 
