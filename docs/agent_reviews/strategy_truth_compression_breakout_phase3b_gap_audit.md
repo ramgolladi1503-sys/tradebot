@@ -4,8 +4,8 @@
 
 - Worktree: `/Users/madhuram/tradebot-compression-breakout-phase3b-closure`
 - Branch: `fix/compression-breakout-phase3b-closure`
-- Starting head: `1b95bbc9923567ccd1ed52df8f9205c172333539`
-- Final implementation head before evidence commit: `1b95bbc9923567ccd1ed52df8f9205c172333539`
+- Starting head: `3cb70a66f6c16f1f613a52153f9cbbb979c0c06c`
+- Final implementation head before evidence commit: `3cb70a66f6c16f1f613a52153f9cbbb979c0c06c`
 - Accepted ancestry: `PROVEN`
 - Accepted ancestry evidence: the branch descends from the accepted Trend Pullback closure line and retains the accepted Phase 3B harness, restart, and PR 657/658 ancestry.
 
@@ -38,6 +38,32 @@ What is not proven:
 - That the two denominator choices are equivalent across live and replay paths.
 - That one denominator is canonical for both runtime and replay without additional contract evidence.
 
+## Evaluation timing
+
+- Production evaluation is cycle-based, not bar-boundary-only.
+- `core/orchestrator.py` drives `fetch_live_market_data()` inside the live monitoring loop on every cycle.
+- `core/market_data.py` sets `cycle_cutoff = now_ist()` at the top of the cycle and threads that cutoff through LTP capture, quote capture, completed-bar history, and strategy context construction.
+- `ltp_ts_epoch` is carried separately from `cycle_cutoff`; freshness is checked by `check_market_data_time_sanity(...)`.
+- A cycle can occur inside a forming one-minute bar because the loop is not gated to bar completion.
+- The replay-side test harness currently uses completed-bar rows and sets `ltp_ts_epoch` to the replay cutoff, but it still populates `spot`/`ltp` from the last completed candle close.
+
+## Evaluation cutoff
+
+- Runtime cutoff: `now_ist()` at the top of the market-data cycle.
+- Replay cutoff: the chosen row-specific prefix cutoff / bar evaluation point in the replay harness.
+
+## Runtime LTP timestamp contract
+
+- Live `ltp` is only acceptable when its timestamp is fresh enough relative to the cycle cutoff.
+- Stale LTP fails closed through `check_market_data_time_sanity`.
+- The stale-LTP regression test in this task proves the fail-closed behavior.
+
+## Replay cutoff contract
+
+- Current replay paths expose completed bars with `timestamp` and `close`.
+- They do not expose a causal tick stream aligned to the same cutoff in the replay corpus inspected here.
+- Replay therefore still uses the completed-bar close proxy rather than a proven cutoff-aligned tick price.
+
 ## Threshold-straddle proof
 
 The new focused test uses the same completed history with identical strategy context and only changes the denominator input:
@@ -62,6 +88,9 @@ That is a real acceptance-gate divergence, not a cosmetic score shift.
 | runtime denominator | PROVEN | `core.market_data.fetch_live_market_data` passes `ltp` into the completed-history helper |
 | replay / offline denominator | PROVEN | offline proxy code and replay-oriented tests use `close` |
 | canonical denominator | NOT PROVEN | no repository evidence shows live `ltp` and offline `close` are guaranteed equivalent at the strategy cutoff |
+| runtime cutoff | PROVEN | `fetch_live_market_data()` sets `cycle_cutoff = now_ist()` and evaluates inside the live loop |
+| replay cutoff | PROVEN | replay harness uses row-specific prefix cutoffs and completed-bar timestamps |
+| timestamp freshness gate | PROVEN | `check_market_data_time_sanity(...)` fails stale LTP closed |
 | shared `StrategyContext` field | PROVEN | `range_width_pct` is present and propagated through runtime context metadata |
 | candidate fingerprint on accepted direct context | PROVEN | the direct fingerprint remains unchanged in the focused slice |
 | gate divergence on denominator change | PROVEN | the added threshold-straddle test shows emit/block divergence on the same history |
@@ -83,11 +112,24 @@ Both passed in the focused regression slice and did not change their accepted fi
 - `tests/test_compression_breakout_range_width_runtime_contract.py`
 - `docs/agent_reviews/strategy_truth_compression_breakout_phase3b_gap_audit.md`
 
+## Local data files inspected
+
+| path | file type | size | sha256 | row count | columns / data types | timestamp field | timestamp range | suitability |
+| --- | --- | ---: | --- | ---: | --- | --- | --- | --- |
+| `/Users/madhuram/tradebot/.runtime/market_data/upstox_full_ticks_20260717.parquet` | parquet | `1024547` | `2170a7b6d9644d3de229d0516ff43ff50290dc65774d10a90aaa9b3e4bac26b3` | `51858` | `ts=float64, token=object, symbol=object, ltp=float64, bid=float64, ask=float64, vol=float64, oi=float64, depth=object` | `ts` | `2026-07-16 18:29:16.534502983+00:00` to `2026-07-16 21:59:43.772019863+00:00` | tick-like causal price source; event timestamps available; usable as runtime control only |
+| `/Users/madhuram/tradebot/.runtime/market_data/ticks_20260717_095655.parquet` | parquet | `4` | `fbc62d3b511368ee275ddc74117d8689b430e1427220e25d30816201d89ca7b6` | unreadable | malformed stub | none | none | unusable; not a valid market dataset |
+| `/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240618/underlying/NIFTY_20240618.parquet` | parquet | `26176` | `c77ea7e057917f626154d49f5e417c0ea116ec9428da58292f616e4b9a17ae1b` | `375` | `timestamp=datetime64[ns], symbol=object, open=float64, high=float64, low=float64, close=float64, volume=float64, oi=float64, source=object, interval=object, fetch_timestamp=datetime64[ns], fetch_start_date=object, fetch_end_date=object, data_origin=object, synthetic=bool, mock=bool, fallback=bool, provider=object, source_endpoint=object` | `timestamp` | `2024-06-18 09:15:00+00:00` to `2024-06-18 15:29:00+00:00` | candle-only replay source; no tick-level cutoff price |
+| `/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240530/underlying/NIFTY_20240530.parquet` | parquet | `27415` | `946a1f1ca171e9ef03c08a59bdf6e36b76e1937355afba1765470ca0d16d7606` | `375` | same candle schema as above | `timestamp` | `2024-05-30 09:15:00+00:00` to `2024-05-30 15:29:00+00:00` | candle-only replay source; no tick-level cutoff price |
+| `/Users/madhuram/tradebot/.runtime/market_data/manifests/upstox_capture_manifest_20260710.json` | json | `769` | `ce53420a99655ed0c3fee4d8cc61a64ea416dfaf3ef015af36efc8e2bbd49307` | manifest | capture metadata only | none | none | metadata only; not market rows |
+
 ## Tests and results
 
 - Focused compression-breakout slice:
   - `python -m pytest -q tests/test_compression_breakout_range_width_runtime_contract.py tests/test_compression_breakout_phase3b_gap_audit.py tests/test_compression_trend_movement_strategies.py tests/test_candidate_phase2_ownership.py tests/test_candidate_phase2_semantic_ownership.py`
   - result: `36 passed, 1 warning in 12.45s`
+- Focused timing gate slice:
+  - `python -m pytest -q tests/test_compression_breakout_range_width_runtime_contract.py`
+  - result: `37 passed, 1 warning` after adding stale-LTP fail-closed coverage
 - Full repository suite:
   - `python -m pytest -q`
   - result: `1 failed, 6015 passed, 24 deselected, 935 warnings in 426.02s`
@@ -99,11 +141,13 @@ Both passed in the focused regression slice and did not change their accepted fi
 - The accepted direct fingerprint remains unchanged.
 - The runtime and replay/offline denominator sources remain split.
 - The new threshold-straddle test proves the split can change candidate acceptance on the same completed history.
+- The local tick capture has event timestamps, but the replay corpus inspected here is candle-only and cannot reconstruct the same causal cutoff price from the same source family.
 - The full suite still contains one known unrelated auth failure and no compression-breakout-specific regression.
 
 ## Rollback
 
 - Remove the threshold-straddle regression test from `tests/test_compression_breakout_range_width_runtime_contract.py`.
+- Remove the stale-LTP fail-closed regression test from `tests/test_compression_breakout_range_width_runtime_contract.py`.
 - Revert this evidence document to the prior gap-audit version.
 - Do not change production code; no production change was made in this task.
 

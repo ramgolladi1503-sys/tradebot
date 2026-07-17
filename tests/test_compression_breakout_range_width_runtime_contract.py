@@ -8,6 +8,7 @@ import pytest
 from core.orchestrator import _strategy_context_snapshot_metadata
 from core.ranking_orchestrator import build_ranked_opportunity_report
 from core.runtime_snapshot_producer import _strategy_context_from_market_symbol
+from core.market_data import check_market_data_time_sanity
 from core.session_bar_history import (
     build_session_bar_history_state,
     calculate_session_range_width_pct,
@@ -526,3 +527,19 @@ def test_runtime_and_replay_denominators_can_straddle_the_acceptance_gate():
     assert live_compression_score < 0.5
     assert live_fingerprint == []
     assert live_report.top_rank_strategy_id is None
+
+
+def test_stale_runtime_ltp_fails_closed():
+    now_epoch = datetime(2026, 7, 14, 9, 30, tzinfo=IST).timestamp()
+    verdict = check_market_data_time_sanity(
+        ltp_ts_epoch=now_epoch - 10.0,
+        candle_ts_epoch=None,
+        market_open=True,
+        require_live_quotes=True,
+        max_ltp_age_sec=2.5,
+        max_candle_age_sec=120.0,
+        now_epoch=now_epoch,
+    )
+
+    assert verdict["ok"] is False
+    assert "LTP_STALE" in verdict["reasons"]
