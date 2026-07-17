@@ -72,7 +72,7 @@ jobs:
           git fetch -q --depth 1 --filter=blob:none origin 906fc2378b82e50de78f62844a3ecb3f9306a85d
           git checkout -q --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "906fc2378b82e50de78f62844a3ecb3f9306a85d"
-          find . -name NIFTY_F1.txt -type f | wc -l
+          test "$(find . -name NIFTY_F1.txt -type f | wc -l)" -ge 300
       - name: Convert pinned source to canonical OHLCV
         run: |
           python scripts/convert_aeron7_intraday.py \
@@ -104,14 +104,18 @@ jobs:
                   handle.write(f"- Blocker: `{blocker}`\n")
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: trend-pullback-aeron7-campaign
           path: agentic_research/edge_results/aeron7_trend_pullback
+          if-no-files-found: warn
 
   gemini-online-evaluation:
     needs: sidecar-regression
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      measured: ${{ steps.key.outputs.available }}
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
@@ -140,13 +144,98 @@ jobs:
           python -m agentic_research.evals.online_cli \
             --model gemini-2.5-flash \
             --repeats 2 \
+            --request-delay-seconds 4 \
+            --maximum-retries 2 \
             --output agentic_research/eval_results/gemini_online_ci.json
       - name: Explain skipped Gemini gate
         if: steps.key.outputs.available != 'true'
         run: |
           echo "Gemini evaluation skipped: add a rotated key as the repository secret GEMINI_API_KEY." | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
-        if: steps.key.outputs.available == 'true'
+        if: always() && steps.key.outputs.available == 'true'
         with:
           name: gemini-agent-quality-report
           path: agentic_research/eval_results/gemini_online_ci.json
+          if-no-files-found: warn
+
+  publish-evidence:
+    if: always()
+    needs:
+      - sidecar-regression
+      - historical-edge-campaign
+      - gemini-online-evaluation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/agentic-gemini-edge-evidence
+          fetch-depth: 0
+      - name: Download deterministic report
+        if: needs.sidecar-regression.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: agentic-sidecar-regression
+          path: /tmp/evidence/deterministic
+      - name: Download historical report
+        if: needs.historical-edge-campaign.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: trend-pullback-aeron7-campaign
+          path: /tmp/evidence/historical
+      - name: Download Gemini report
+        if: needs.gemini-online-evaluation.outputs.measured == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: gemini-agent-quality-report
+          path: /tmp/evidence/gemini
+      - name: Build small evidence snapshot
+        env:
+          SIDECAR_RESULT: ${{ needs.sidecar-regression.result }}
+          HISTORICAL_RESULT: ${{ needs.historical-edge-campaign.result }}
+          GEMINI_JOB_RESULT: ${{ needs.gemini-online-evaluation.result }}
+          GEMINI_MEASURED: ${{ needs.gemini-online-evaluation.outputs.measured }}
+        run: |
+          python - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+
+          target = Path("agentic_research/evidence_results")
+          target.mkdir(parents=True, exist_ok=True)
+          status = {
+              "schema_version": 1,
+              "source_commit": os.environ["GITHUB_SHA"],
+              "sidecar_regression": os.environ["SIDECAR_RESULT"],
+              "historical_campaign": os.environ["HISTORICAL_RESULT"],
+              "gemini_job": os.environ["GEMINI_JOB_RESULT"],
+              "gemini_measured": os.environ.get("GEMINI_MEASURED") == "true",
+              "secret_persisted": False,
+          }
+
+          def copy_named(root: str, names: set[str]) -> None:
+              base = Path(root)
+              if not base.exists():
+                  return
+              for path in base.rglob("*"):
+                  if path.is_file() and path.name in names:
+                      shutil.copy2(path, target / path.name)
+
+          copy_named("/tmp/evidence/deterministic", {"deterministic_ci.json"})
+          copy_named("/tmp/evidence/historical", {"campaign_result.json", "dataset_manifest.json", "campaign_report.md"})
+          copy_named("/tmp/evidence/gemini", {"gemini_online_ci.json"})
+          (target / "run_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+      - name: Commit evidence summaries to isolated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "tradebot-evidence-bot"
+          git config user.email "actions@users.noreply.github.com"
+          find agentic_research/evidence_results -type f -print0 | xargs -0 git add -f --
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "evidence(agentic): publish measured gates [skip ci]"
+          git push origin HEAD:feature/agentic-gemini-edge-evidence
