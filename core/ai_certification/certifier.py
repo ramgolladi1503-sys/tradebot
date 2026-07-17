@@ -15,7 +15,16 @@ from .contracts import (
 )
 from .knowledge import CuratedKnowledgeBase
 from .policy import CertificationPolicy, default_policy
+from .source_validator import validate_source_index
 from .validators import DEFAULT_VALIDATORS, Validator
+
+
+CERTIFICATION_VALIDATORS: tuple[Validator, ...] = (
+    DEFAULT_VALIDATORS[0],
+    DEFAULT_VALIDATORS[1],
+    validate_source_index,
+    *DEFAULT_VALIDATORS[2:],
+)
 
 
 @dataclass
@@ -23,7 +32,7 @@ class BacktestCertificationAgent:
     """Read-only orchestration layer; deterministic validators own the verdict."""
 
     policy: CertificationPolicy = default_policy()
-    validators: tuple[Validator, ...] = DEFAULT_VALIDATORS
+    validators: tuple[Validator, ...] = CERTIFICATION_VALIDATORS
     knowledge_base: CuratedKnowledgeBase | None = None
 
     def certify(self, bundle_path: str | Path) -> CertificationReport:
@@ -112,8 +121,18 @@ def _strategy_verdict(
         timing = gate_map.get("temporal_causality")
         if timing is not None and timing.status is GateStatus.FAIL:
             return StrategyVerdict.INVALID_DUE_TO_LEAKAGE
-        data_gates = ("bundle_manifest", "artifact_hashes", "source_authority", "data_provenance", "execution_realism")
-        if any(gate_map.get(name) is not None and gate_map[name].status is GateStatus.FAIL for name in data_gates):
+        data_gates = (
+            "bundle_manifest",
+            "artifact_hashes",
+            "source_artifact_provenance",
+            "source_authority",
+            "data_provenance",
+            "execution_realism",
+        )
+        if any(
+            gate_map.get(name) is not None and gate_map[name].status is GateStatus.FAIL
+            for name in data_gates
+        ):
             return StrategyVerdict.INVALID_DUE_TO_DATA
         return StrategyVerdict.WITHHELD
     if evidence_status is not EvidenceCertification.CERTIFIED:
