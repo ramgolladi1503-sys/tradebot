@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "source_id": "backtest-certification-policy-v1",
+      "path": "docs/ai_certification/certification_policy_v1.md",
+      "source_type": "certification_policy",
+      "authority": "canonical",
+      "version": "1.0",
+      "effective_from": "2026-07-17",
+      "effective_until": null,
+      "superseded_by": null,
+      "module": "option_backtest",
+      "strategy_id": null
+    },
+    {
+      "source_id": "certification-mvp-scope-v1",
+      "path": "docs/ai_certification/mvp_scope.md",
+      "source_type": "executable_contract",
+      "authority": "canonical",
+      "version": "1.0",
+      "effective_from": "2026-07-17",
+      "effective_until": null,
+      "superseded_by": null,
+      "module": "ai_certification",
+      "strategy_id": null
+    },
+    {
+      "source_id": "strategy-backtesting-engine-audit",
+      "path": "docs/research/strategy_backtesting_engine_audit.md",
+      "source_type": "audit_report",
+      "authority": "committed_audit",
+      "version": "1.0",
+      "effective_from": "2026-07-14",
+      "effective_until": null,
+      "superseded_by": null,
+      "module": "option_backtest",
+      "strategy_id": null
+    }
+  ]
+}
