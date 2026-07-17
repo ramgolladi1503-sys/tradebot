@@ -1,5 +1,8 @@
 # Candidate Replay Handoff
 
+## Status
+`PREVIOUS_CAUSAL_PASS_INVALIDATED`
+
 ## Summary
 The candidate engine has been implemented and verified as strictly causal.
 * Contract Hash: `65a42e96705fd875814bb54547a8dc4675407ff2ba204bf3c75f91147f353eb4`

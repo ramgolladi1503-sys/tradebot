@@ -1,0 +1,8 @@
+{
+  "total_sessions_replayed": 498,
+  "development_sessions": 398,
+  "holdout_sessions": 100,
+  "accepted_candidates": 41,
+  "rejected_candidates": 457,
+  "final_threshold_oracle_size": 398
+}
