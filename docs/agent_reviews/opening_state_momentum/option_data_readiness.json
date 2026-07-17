@@ -1,1 +1,78 @@
-{"readiness": "UNDERLYING_EDGE_RESEARCH_ONLY_OPTION_CERTIFICATION_BLOCKED"}
+{
+  "tick_groups": {
+    "8faf5750ee6d6cc5f5c63f2d21835f4a2478d01a43bc1f6a64645b351d16d778": {
+      "schema": {
+        "ts": "double",
+        "token": "string",
+        "symbol": "string",
+        "ltp": "double",
+        "bid": "double",
+        "ask": "double",
+        "vol": "double",
+        "oi": "double",
+        "depth": "string"
+      },
+      "readiness": "UNDERLYING_TICK_ONLY",
+      "count": 132
+    },
+    "40e2155e42f438dac79626980b633c9f6112da3444c5afa6ed85ad33567ac89d": {
+      "schema": {
+        "ts": "double",
+        "instrument_key": "string",
+        "ltp": "double",
+        "bid_price": "double",
+        "ask_price": "double",
+        "delta": "double",
+        "theta": "double",
+        "gamma": "double",
+        "vega": "double",
+        "iv": "double",
+        "volume": "int64",
+        "oi": "double"
+      },
+      "readiness": "LTP_ONLY_NOT_EXECUTABLE",
+      "count": 1323
+    },
+    "7458ff964cac134a688c10fcf3d780a69f350d302e39f8abdbee45861db6b3f3": {
+      "schema": {
+        "ts": "double",
+        "token": "string",
+        "symbol": "string",
+        "ltp": "double",
+        "bid": "double",
+        "ask": "double",
+        "vol": "int64",
+        "oi": "double"
+      },
+      "readiness": "UNDERLYING_TICK_ONLY",
+      "count": 8
+    },
+    "688c03f1841f9cd38b093dcf5dfa3ee3b4368ba8567177e5f1e3bf5dbe907252": {
+      "schema": {
+        "ts": "double",
+        "token": "int64",
+        "symbol": "string",
+        "ltp": "double",
+        "bid": "double",
+        "ask": "double",
+        "vol": "int64"
+      },
+      "readiness": "UNDERLYING_TICK_ONLY",
+      "count": 41
+    },
+    "d4537ac99e138dc8bd24c74f8648f222bc8832a02aa95c9af062d95d7ad47829": {
+      "schema": {
+        "ts": "double",
+        "token": "int64",
+        "symbol": "string",
+        "ltp": "double",
+        "bid": "double",
+        "ask": "double",
+        "vol": "double"
+      },
+      "readiness": "UNDERLYING_TICK_ONLY",
+      "count": 1
+    }
+  },
+  "overall_verdict": "UNDERLYING_EDGE_RESEARCH_ONLY_OPTION_CERTIFICATION_BLOCKED"
+}

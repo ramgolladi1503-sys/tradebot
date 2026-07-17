@@ -1,0 +1,47 @@
+{
+  "scan_id": "smoke_scan_001",
+  "scan_mode": "SMOKE",
+  "portable_dataset_hash": "9f664fa6fbd5221b00f85248f83f88b023f1dd2da0045c6ae5873ae688f6ab45",
+  "local_provenance_hash": "b57c315ce6add89b77c73260f8c3dc512b8e8c26fc9126fe426fc95d7a7fbe82",
+  "stable_file_count": 10,
+  "total_rows": 2625,
+  "quality_summary": {
+    "total_files": 10,
+    "total_rows": 2625,
+    "filename_date_mismatch_count": 0,
+    "timezone_naive_count": 7,
+    "mixed_timezone_count": 0,
+    "duplicate_timestamps": 0,
+    "conflicting_duplicates": 0,
+    "non_monotonic_sessions": 0,
+    "ohlc_nulls": 0,
+    "volume_nulls": 0,
+    "zero_volume_count": 2625,
+    "zero_volume_pct": 100.0,
+    "negative_volume_count": 0,
+    "high_lt_low": 0,
+    "high_lt_open": 0,
+    "high_lt_close": 0,
+    "low_gt_open": 0,
+    "low_gt_close": 0,
+    "non_positive_prices": 0,
+    "outside_market_hours": 0,
+    "interval_gaps": 0,
+    "duplicate_session_files": 0,
+    "content_identical_files": 0
+  },
+  "cross_index_summary": {
+    "total_observed_sessions": 3,
+    "eligible_nifty_banknifty": 2,
+    "eligible_all_three": 2,
+    "ineligible_missing_index": 1,
+    "ineligible_interval_mismatch": 0,
+    "ineligible_timestamp_misalignment": 0,
+    "ineligible_data_quality": 0,
+    "first_eligible_date": "2025-07-09",
+    "last_eligible_date": "2026-07-01",
+    "rejection_reasons": {
+      "2024-12-20": "Missing indices"
+    }
+  }
+}

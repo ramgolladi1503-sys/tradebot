@@ -1,3 +1,27 @@
-# Data Quality Report
+# Quantitative Data Quality Report
 
-No major inconsistencies found in sample.
+| Metric | Value |
+| --- | --- |
+| total_files | 3720 |
+| total_rows | 56999458 |
+| filename_date_mismatch_count | 0 |
+| timezone_naive_count | 1547 |
+| mixed_timezone_count | 0 |
+| duplicate_timestamps | 0 |
+| conflicting_duplicates | 0 |
+| non_monotonic_sessions | 0 |
+| ohlc_nulls | 0 |
+| volume_nulls | 0 |
+| zero_volume_count | 578246 |
+| zero_volume_pct | 1.014476313090556 |
+| negative_volume_count | 0 |
+| high_lt_low | 0 |
+| high_lt_open | 0 |
+| high_lt_close | 0 |
+| low_gt_open | 0 |
+| low_gt_close | 0 |
+| non_positive_prices | 0 |
+| outside_market_hours | 202 |
+| interval_gaps | 21 |
+| duplicate_session_files | 0 |
+| content_identical_files | 41 |
