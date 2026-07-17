@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import re
+import argparse
 import subprocess
 from pathlib import Path
 
@@ -289,13 +290,16 @@ def verify_causal_pass(repo_root=None, reviews_dir=None, oracle_path=None):
     }
 
 def main():
+    parser = argparse.ArgumentParser(description="Verify causal pass")
+    parser.add_argument("--report", type=str, help="Path to write the verification report JSON")
+    args = parser.parse_args()
+
     report, md = verify_causal_pass()
     
-    repo_root = Path(__file__).parent.parent
-    reviews_dir = repo_root / "docs" / "agent_reviews" / "opening_state_momentum"
-    
-    with open(reviews_dir / "causal_pass_verification.json", "w") as f:
-        json.dump(report, f, indent=2)
+    if args.report:
+        report_path = Path(args.report)
+        with open(report_path, "w") as f:
+            json.dump(report, f, indent=2)
         
     print(f"VERIFIER EXIT CODE: {0 if report['overall_pass'] else 1}")
     print(f"OVERALL PASS: {report['overall_pass']}")

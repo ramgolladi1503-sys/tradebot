@@ -135,3 +135,42 @@ def test_unknown_placeholder_date(base_evidence, monkeypatch):
     report, _ = verify_causal_pass(repo_root=repo_root, reviews_dir=tmp_reviews, oracle_path=tmp_oracle)
     assert not report["overall_pass"]
     assert any("UNKNOWN date" in f for f in report["failures"])
+
+def test_verifier_idempotence_and_read_only(tmp_path):
+    import subprocess
+    import os
+    
+    if os.environ.get("VERIFIER_TESTING") == "1":
+        pytest.skip("Skipping to avoid infinite recursion")
+        
+    env = os.environ.copy()
+    env["VERIFIER_TESTING"] = "1"
+    
+    repo_root = Path(__file__).parent.parent.parent.parent
+    script = repo_root / "scripts" / "verify_opening_state_causal_pass.py"
+    
+    # 1. Run git status before
+    status_before = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
+    
+    # 2. Run verifier twice
+    run1 = subprocess.run(["python", str(script)], cwd=repo_root, capture_output=True, text=True, env=env)
+    run2 = subprocess.run(["python", str(script)], cwd=repo_root, capture_output=True, text=True, env=env)
+    
+    # 3. Run git status after
+    status_after = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
+    
+    # Assert git status identical (test 3, test 1, test 2, test 7)
+    assert status_before == status_after
+    
+    # Assert two consecutive runs produce same exit code and semantic verdict (test 4)
+    assert run1.returncode == run2.returncode
+    assert ("OPENING_STATE_CAUSAL_PASS_VERIFIED" in run1.stdout) == ("OPENING_STATE_CAUSAL_PASS_VERIFIED" in run2.stdout)
+    assert ("FINAL VERDICT: CONTRACT_FROZEN_CAUSAL_ENGINE_PASS" in run1.stdout) == ("FINAL VERDICT: CONTRACT_FROZEN_CAUSAL_ENGINE_PASS" in run2.stdout)
+    
+    # 4. Run with optional --report outside repo (test 5, test 6)
+    report_path = tmp_path / "report.json"
+    run3 = subprocess.run(["python", str(script), "--report", str(report_path)], cwd=repo_root, capture_output=True, text=True, env=env)
+    assert report_path.exists()
+    
+    status_after_report = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True).stdout
+    assert status_after_report == status_after
