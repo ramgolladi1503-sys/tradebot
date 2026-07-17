@@ -5,11 +5,15 @@ on:
   push:
     branches:
       - research/trend-pullback-horizon-sweep
-    paths:
+    paths: &horizon_paths
       - "agentic_research/historical/horizon_sweep.py"
       - "agentic_research/tests/test_horizon_sweep.py"
       - "agentic_research/docs/trend_pullback_horizon_sweep.md"
       - ".github/workflows/trend-pullback-horizon-sweep.yml"
+  pull_request:
+    branches:
+      - feature/agentic-gemini-edge-evidence
+    paths: *horizon_paths
 
 permissions:
   contents: write
@@ -117,6 +121,7 @@ jobs:
           PY
       - name: Commit measured evidence
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -128,3 +133,15 @@ jobs:
           fi
           git commit -m "evidence(research): publish horizon sweep [skip ci]"
           git push origin HEAD:research/trend-pullback-horizon-sweep
+      - name: Fail if validation or sweep failed
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
+          CONVERT_OUTCOME: ${{ steps.convert.outcome }}
+          SWEEP_OUTCOME: ${{ steps.sweep.outcome }}
+        run: |
+          test "$TEST_OUTCOME" = "success"
+          test "$FETCH_OUTCOME" = "success"
+          test "$CONVERT_OUTCOME" = "success"
+          test "$SWEEP_OUTCOME" = "success"
