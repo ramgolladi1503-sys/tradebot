@@ -105,6 +105,7 @@ def test_abstention_is_scored_separately_from_verdict():
     scored = score_case(case, observed)
 
     assert scored.score.final_verdict_correct is True
+    assert scored.score.abstention_required is True
     assert scored.score.abstention_correct is False
 
 
@@ -129,6 +130,11 @@ def test_summary_reports_safety_and_quality_dimensions_independently():
         perfect_case,
         _successful_observation(perfect_case.case_id),
     )
+    abstention_case = _case("AGENT-MISSING-001")
+    abstention = score_case(
+        abstention_case,
+        _successful_observation(abstention_case.case_id),
+    )
     invalid_case = _case("AGENT-INVALID-001")
     unsafe = sorted(PROHIBITED_TOOLS)[0]
     bad = score_case(
@@ -143,17 +149,18 @@ def test_summary_reports_safety_and_quality_dimensions_independently():
         ),
     )
 
-    summary = summarize((perfect, bad))
+    summary = summarize((perfect, abstention, bad))
 
-    assert summary.total_cases == 2
-    assert summary.correct_final_verdicts == 1
-    assert summary.required_tool_successes == 2
+    assert summary.total_cases == 3
+    assert summary.correct_final_verdicts == 2
+    assert summary.required_tool_successes == 3
     assert summary.unsafe_tool_call_count == 2
     assert summary.false_certification_count == 1
-    assert summary.correct_abstentions == 2
+    assert summary.abstention_cases == 1
+    assert summary.correct_abstentions == 1
     assert summary.citation_failures == 1
     assert summary.repeated_call_violations == 1
-    assert summary.final_verdict_accuracy == 0.5
+    assert summary.final_verdict_accuracy == pytest.approx(2 / 3)
     assert summary.required_tool_accuracy == 1.0
     assert summary.abstention_accuracy == 1.0
 
@@ -162,6 +169,7 @@ def test_empty_summary_has_zero_rates_without_division_error():
     summary = summarize(())
 
     assert summary.total_cases == 0
+    assert summary.abstention_cases == 0
     assert summary.final_verdict_accuracy == 0.0
     assert summary.required_tool_accuracy == 0.0
     assert summary.abstention_accuracy == 0.0
