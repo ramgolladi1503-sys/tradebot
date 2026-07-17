@@ -57,11 +57,26 @@ The bundle is read-only evidence. It is not a runtime config, not a feature flag
 
 The bundle is serialized canonically as UTF-8 JSON with sorted keys, semantic list order, no volatile timestamps, and a trailing newline. The measured SHA-256 for the frozen bundle is:
 
-`18d708201d6d70db987063efc3ce8e8767f3d3e549f549f0ef9167b82f219396`
+`71b01ae3e32044c119692411be1f4d748f03ba50a800ce4d97baca3b853793e9`
 
 The sidecar stores:
 
-`18d708201d6d70db987063efc3ce8e8767f3d3e549f549f0ef9167b82f219396  four_strategy_contract_bundle_v1.json`
+`71b01ae3e32044c119692411be1f4d748f03ba50a800ce4d97baca3b853793e9  four_strategy_contract_bundle_v1.json`
+
+## GAP CLASSIFICATION SUMMARY
+
+| item | status | exact reason |
+| --- | --- | --- |
+| candidate identity contract: `opening_range_retest_v1` | `PROVEN` | durable owner proposal exists with explicit owner file, owner symbol, identity fields, normalization rules, restart behavior, and lifecycle owner store |
+| candidate identity contract: `trend_pullback_v1` | `UNRESOLVED_WITH_EXACT_REASON` | `POOL_DEDUPLICATION_ONLY` because the only stable identity-like mechanism is `candidate_pool_dedupe_key(symbol, direction, movement_type, strategy_id)` and no durable owner store or explicit candidate identity owner exists |
+| candidate identity contract: `compression_breakout_v1` | `UNRESOLVED_WITH_EXACT_REASON` | `POOL_DEDUPLICATION_ONLY` because the only stable identity-like mechanism is `candidate_pool_dedupe_key(symbol, direction, movement_type, strategy_id)` and no durable owner store or explicit candidate identity owner exists |
+| candidate identity contract: `vwap_reclaim_rejection_v1` | `UNRESOLVED_WITH_EXACT_REASON` | `POOL_DEDUPLICATION_ONLY` because the only stable identity-like mechanism is `candidate_pool_dedupe_key(symbol, direction, movement_type, strategy_id)` and no durable owner store or explicit candidate identity owner exists |
+| compression_breakout contract-version ownership | `UNRESOLVED_WITH_EXACT_REASON` | `UNVERSIONED_RUNTIME_CONTRACT`; no explicit semantic contract_version owner exists, so freeze identity is source commit + source-owner hashes + parameter-profile hash |
+| active runtime thresholds vs dormant defaults | `PROVEN` | runtime-enforced thresholds are active; `MIN_RETEST_MINUTES` and `MAX_RETEST_MINUTES` are embedded non-enforced defaults and are not enforced in historical replay |
+| explicit future-phase exclusions | `PROVEN` | all listed future-phase items are marked `FUTURE_PHASE_NOT_FROZEN` |
+| baseline auth-failure evidence metadata | `PROVEN` | exact auth failure command, exit code, failure type, and failure message are recorded |
+| test-residue cleanup evidence | `PROVEN` | pre-test hash, restore command, generated-file cleanup rule, and final clean status are recorded |
+| subagent deployment / exact skip reason | `NOT_APPLICABLE` | primary agent executed the required read-only audit lanes in-thread; no external subagents were required or deployed |
 
 ## OPENING RANGE RETEST CONTRACT
 
@@ -280,7 +295,9 @@ Historical validation is frozen only. No production runtime decision is implied 
 
 ## SUBAGENT RESULTS
 
-No subagents were deployed for this task. The work was completed in the primary agent thread.
+`NOT_APPLICABLE`
+
+Reason: the primary agent executed the required read-only audit lanes in-thread; no external subagents were required or deployed.
 
 ## FOCUSED BUNDLE TEST COMMAND
 
@@ -365,11 +382,12 @@ git diff --check
 python -m json.tool docs/agent_reviews/four_strategy_contract_bundle_v1.json
 ```
 
-## UNRESOLVED GAPS
+## RESIDUAL LIMITS
 
 - Full repository suite is not green because of the known unrelated auth failure.
 - No historical validation, profitability analysis, live-readiness claim, or production certification was started.
 - No Phase 2 authority was claimed or implemented.
+- The three repeatable raw strategies remain classified as `UNRESOLVED_WITH_EXACT_REASON` for durable identity because only pool-level deduplication exists.
 
 ## ROLLBACK
 

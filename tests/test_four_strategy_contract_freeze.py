@@ -131,6 +131,38 @@ EXPECTED_STRATEGIES = {
     },
 }
 
+EXPECTED_FUTURE_PHASE_EXCLUSIONS = [
+    "historical dataset selection",
+    "dataset file paths",
+    "dataset hashes",
+    "data vendor",
+    "instrument universe",
+    "underlying universe",
+    "option-contract resolution policy",
+    "cost model",
+    "brokerage",
+    "taxes and statutory charges",
+    "slippage model",
+    "fill model",
+    "bid/ask execution model",
+    "liquidity simulation",
+    "capital allocation",
+    "position sizing",
+    "portfolio constraints",
+    "risk budget",
+    "WFA windows",
+    "training windows",
+    "validation windows",
+    "holdout windows",
+    "purge",
+    "embargo",
+    "parameter-search space",
+    "profitability thresholds",
+    "certification thresholds",
+    "paper-trading gates",
+    "live-readiness gates",
+]
+
 
 def _load_bundle() -> dict[str, object]:
     return json.loads(BUNDLE_PATH.read_text(encoding="utf-8"))
@@ -331,6 +363,68 @@ def test_bundle_records_identity_and_lifecycle_contracts_honestly() -> None:
             "freshness_score": False,
             "execution_eligible": False,
         }
+
+
+def test_bundle_gap_classification_block_is_explicit_and_machine_checkable() -> None:
+    bundle = _load_bundle()
+    gap = bundle["evidence_gap_classification"]
+
+    identity = gap["candidate_identity_contracts"]
+    assert identity["opening_range_retest_v1"]["status"] == "PROVEN"
+    assert identity["opening_range_retest_v1"]["classification"] == "CANDIDATE_IDENTITY_PROVEN"
+    assert identity["trend_pullback_v1"]["status"] == "UNRESOLVED_WITH_EXACT_REASON"
+    assert identity["trend_pullback_v1"]["classification"] == "POOL_DEDUPLICATION_ONLY"
+    assert identity["compression_breakout_v1"]["status"] == "UNRESOLVED_WITH_EXACT_REASON"
+    assert identity["compression_breakout_v1"]["classification"] == "POOL_DEDUPLICATION_ONLY"
+    assert identity["vwap_reclaim_rejection_v1"]["status"] == "UNRESOLVED_WITH_EXACT_REASON"
+    assert identity["vwap_reclaim_rejection_v1"]["classification"] == "POOL_DEDUPLICATION_ONLY"
+
+    version_gap = gap["compression_breakout_contract_version_ownership"]
+    assert version_gap["status"] == "UNRESOLVED_WITH_EXACT_REASON"
+    assert version_gap["classification"] == "UNVERSIONED_RUNTIME_CONTRACT"
+    assert version_gap["contract_version"] is None
+
+    thresholds = gap["active_runtime_thresholds_vs_dormant_defaults"]
+    assert thresholds["status"] == "PROVEN"
+    assert thresholds["embedded_non_enforced_defaults"] == {
+        "opening_range_retest_v1": ["MIN_RETEST_MINUTES", "MAX_RETEST_MINUTES"],
+    }
+    assert thresholds["historical_replay_treatment"]["MIN_RETEST_MINUTES"] == "DO_NOT_ENFORCE"
+    assert thresholds["historical_replay_treatment"]["MAX_RETEST_MINUTES"] == "DO_NOT_ENFORCE"
+    assert thresholds["historical_replay_treatment"]["MIN_BREAKOUT_DISTANCE_PCT"] == "ENFORCE_AS_RUNTIME_CONTRACT"
+    assert thresholds["historical_replay_treatment"]["MAX_CHOP_SCORE"] == "ENFORCE_AS_RUNTIME_CONTRACT"
+
+    exclusions = gap["explicit_future_phase_exclusions"]
+    assert exclusions["status"] == "PROVEN"
+    assert exclusions["classification"] == "FUTURE_PHASE_NOT_FROZEN"
+    assert exclusions["items"] == EXPECTED_FUTURE_PHASE_EXCLUSIONS
+
+    baseline = gap["baseline_auth_failure_evidence_metadata"]
+    assert baseline == {
+        "status": "PROVEN",
+        "exact_command": "python -m pytest -q tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports",
+        "exit_code": 1,
+        "failure_type": "RuntimeError",
+        "failure_message": "[AUTH] missing_kite_access_token",
+        "failure_scope": "pre-existing unrelated baseline failure",
+    }
+
+    cleanup = gap["test_residue_cleanup_evidence"]
+    assert cleanup["status"] == "PROVEN"
+    assert cleanup["pre_test_hash"] == "97ef1fc8c0eaa4c39c8580c01236256531bcc1c11f35bcb91aefa471fa9d8f31"
+    assert cleanup["tracked_residue_restore"] == (
+        "git show HEAD:runtime/strategy_validation/regime_timeline.jsonl > "
+        "runtime/strategy_validation/regime_timeline.jsonl"
+    )
+    assert cleanup["generated_file_cleanup"].startswith("remove only explicit MagicMock-named files")
+    assert cleanup["final_git_status"] == "clean after cleanup proof"
+
+    subagents = gap["subagent_deployment_or_skip_reason"]
+    assert subagents["status"] == "NOT_APPLICABLE"
+    assert subagents["exact_reason"] == (
+        "primary agent executed the required read-only audit lanes in-thread; "
+        "no external subagents were required or deployed"
+    )
 
 
 def test_bundle_parameter_input_temporal_and_profile_matrices_are_complete() -> None:
