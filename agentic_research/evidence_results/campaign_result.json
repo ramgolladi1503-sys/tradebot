@@ -78,8 +78,9 @@
     "volume_sum": 9367989828.0
   },
   "diagnostics": {
-    "blocked_data_gap": 530,
+    "blocked_data_gap": 31,
     "blocked_invalid_geometry": 0,
+    "prefilter_checkpoints": 11360,
     "signals_total": 4434,
     "trades_total": 4434,
     "unique_setup_ids": 4434
