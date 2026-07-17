@@ -7,13 +7,13 @@
   "terminal_count_sum": 398,
   "unexplained_count": 0,
   "count_INSUFFICIENT_PRIOR_HISTORY": 60,
-  "count_REJECTED_SESSION_QUALITY": 0,
+  "count_REJECTED_SESSION_QUALITY": 1,
   "count_FAILED_SHOCK_THRESHOLD": 258,
   "count_FAILED_CLOSE_LOCATION": 10,
   "count_FAILED_CONFIRMATION": 5,
   "count_FAILED_RETAINED_MOVE": 19,
-  "count_FAILED_OPENING_MIDPOINT": 0,
-  "count_FAILED_SESSION_ANCHOR": 0,
+  "count_FAILED_OPENING_MIDPOINT": 2,
+  "count_FAILED_SESSION_ANCHOR": 11,
   "count_ACCEPTED_LONG": 13,
   "count_ACCEPTED_SHORT": 19
 }

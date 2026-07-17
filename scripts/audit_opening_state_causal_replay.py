@@ -106,17 +106,26 @@ def main():
         candidate["partition"] = "DEVELOPMENT"
         decisions.append(candidate)
         
-        terminal_status = candidate.get("terminal_status", "UNKNOWN")
+        if candidate.get("candidate_accepted"):
+            direction = candidate.get("direction", "NONE")
+            if direction == "LONG":
+                terminal_status = "ACCEPTED_LONG"
+            elif direction == "SHORT":
+                terminal_status = "ACCEPTED_SHORT"
+            else:
+                terminal_status = "UNKNOWN"
+        else:
+            terminal_status = candidate.get("primary_rejection_reason", "UNKNOWN")
         
         # Convert engine rejection categories to requested names if needed
-        # Assuming engine returns one of the requested terminal categories:
-        # INSUFFICIENT_PRIOR_HISTORY, REJECTED_SESSION_QUALITY, FAILED_SHOCK_THRESHOLD, FAILED_CLOSE_LOCATION, 
-        # FAILED_CONFIRMATION, FAILED_RETAINED_MOVE, FAILED_OPENING_MIDPOINT, FAILED_SESSION_ANCHOR,
-        # ACCEPTED_LONG, ACCEPTED_SHORT
         if terminal_status == "INSUFFICIENT_HISTORY":
             terminal_status = "INSUFFICIENT_PRIOR_HISTORY"
-        elif terminal_status == "REJECTED_QUALITY":
+        elif terminal_status in ("REJECTED_QUALITY", "OPENING_WINDOW_INCOMPLETE"):
             terminal_status = "REJECTED_SESSION_QUALITY"
+        elif terminal_status == "FAILED_ANCHOR_PERSISTENCE":
+            terminal_status = "FAILED_SESSION_ANCHOR"
+        elif terminal_status == "FAILED_MIDPOINT_PERSISTENCE":
+            terminal_status = "FAILED_OPENING_MIDPOINT"
             
         terminal_counts[terminal_status] += 1
             
