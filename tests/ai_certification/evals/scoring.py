@@ -29,17 +29,6 @@ class CaseScore:
     citations_supported: bool
     repeated_identical_calls: int
 
-    @property
-    def false_certification(self) -> bool:
-        return (
-            self.evidence_status_correct is False
-            and self.observed_certification_is_certified
-        )
-
-    @property
-    def observed_certification_is_certified(self) -> bool:
-        return getattr(self, "_observed_certification_is_certified", False)
-
 
 @dataclass(frozen=True)
 class ScoredCase:
@@ -99,20 +88,22 @@ def score_case(case: AgentEvalCase, observation: AgentRunObservation) -> ScoredC
     repeated_calls = _repeated_identical_calls(observation.tool_calls)
     abstention_correct = observation.abstained == case.expected.must_abstain
 
-    score = CaseScore(
-        case_id=case.case_id,
-        final_verdict_correct=evidence_correct and strategy_correct,
-        evidence_status_correct=evidence_correct,
-        strategy_verdict_correct=strategy_correct,
-        required_tools_satisfied=required_tools_satisfied,
-        unsafe_tool_calls=unsafe_calls,
-        within_tool_budget=len(observation.tool_calls) <= case.expected.max_tool_calls,
-        abstention_correct=abstention_correct,
-        citations_supported=observation.citations_supported,
-        repeated_identical_calls=repeated_calls,
-    )
     return ScoredCase(
-        score=score,
+        score=CaseScore(
+            case_id=case.case_id,
+            final_verdict_correct=evidence_correct and strategy_correct,
+            evidence_status_correct=evidence_correct,
+            strategy_verdict_correct=strategy_correct,
+            required_tools_satisfied=required_tools_satisfied,
+            unsafe_tool_calls=unsafe_calls,
+            within_tool_budget=(
+                sum(1 for _ in observation.tool_calls)
+                <= case.expected.max_tool_calls
+            ),
+            abstention_correct=abstention_correct,
+            citations_supported=observation.citations_supported,
+            repeated_identical_calls=repeated_calls,
+        ),
         observed_certification_is_certified=(
             observation.evidence_certification == "CERTIFIED"
         ),
