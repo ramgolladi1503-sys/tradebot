@@ -36,13 +36,15 @@ Questions applied:
 2. Can the new package place or modify a trade?
    - No broker, order, risk-override, strategy-mutation, shell, database-mutation, or Git-write capability exists.
 3. Can a bundle escape its configured filesystem root?
-   - Relative-path and resolved-root checks reject absolute paths and traversal. Unsafe artifact paths also produce a deterministic rejection report rather than an uncaught exception.
+   - Relative-path, resolved-root, and symlink checks reject traversal. Hostile run IDs are converted to deterministic safe filenames.
 4. Can a valid negative strategy result be represented without being mislabeled as a failed experiment?
    - Yes. Evidence certification and strategy outcome are separate fields.
 5. Does absent mandatory evidence silently pass?
    - No. Mandatory absent evidence returns `INSUFFICIENT_EVIDENCE`; contradictory evidence returns `REJECTED`.
 6. Can generated summaries detach from the raw WFA evidence?
-   - No. The bundle requires a source index, raw source-file hashes, and a matching physical dataset file hash.
+   - No. The certifier cross-checks raw WFA engine identity, run ID, strict mode, frozen configuration hash, action boundary, source-file hashes, and physical dataset identity.
+7. Can one absent artifact downgrade a separate explicit failure?
+   - No. `AGENT_ERROR` and `REJECTED` take precedence over `INSUFFICIENT_EVIDENCE`.
 
 ## Hermes Review
 
@@ -61,47 +63,71 @@ Implementation completeness for this PR:
 - Immutable bundle loader implemented.
 - Real WFA artifact exporter implemented.
 - Raw source artifact index implemented.
+- Raw-WFA-to-derived-authority cross-check implemented.
 - Versioned policy implemented.
 - Twelve deterministic gate evaluations implemented.
 - Separate evidence and strategy verdicts implemented.
 - Deterministic trace and bundle digest implemented.
-- JSON and Markdown reports implemented.
+- Safe deterministic JSON and Markdown report persistence implemented.
 - Curated authority-ranked policy retrieval implemented.
 - Optional FastMCP server with targeted tools implemented.
 - Export and certification CLIs implemented.
-- Focused certification, exporter, retrieval, and path-boundary tests implemented.
+- Shared production-like QA fixture implemented.
+- Formal QA test plan and traceability matrix implemented.
 
 ## QA / Safety Review
 
-Focused checks cover:
+The branch contains **43 automated QA test functions** covering functional behavior, happy paths, positive paths, negative paths, fail-closed precedence, integration, ad-hoc misuse, source consistency, report persistence, and filesystem boundaries.
+
+Focused checks include:
 
 - Valid methodology with `NO_STRUCTURAL_EDGE` remains `CERTIFIED`.
+- Valid supported edge maps to `STRUCTURAL_EDGE_SUPPORTED`.
+- Insufficient trades remain distinct from invalid evidence.
 - Artifact mutation is rejected as invalid data.
 - Source dataset identity mismatch is rejected.
+- Raw WFA engine, mode, run ID, configuration hash, and action boundary must match generated evidence.
 - Same-event entry is rejected as leakage.
 - Proxy engine evidence is non-certifying.
 - Absent mandatory evidence fails closed.
-- Insufficient trades remain distinct from invalid evidence.
-- Prompt-injection text embedded in an evidence field is treated as inert data.
+- Explicit failure is not downgraded by a simultaneous absent artifact.
+- Fallback liquidity and proxy execution evidence are rejected.
+- Financial reconciliation, repeated holdout, control, and test failures block certification.
+- Validator exceptions return `AGENT_ERROR`.
+- Prompt-injection text embedded in evidence remains inert data.
 - MCP bundle and report paths cannot escape allowlisted roots.
-- Unknown or action-like MCP gate names are rejected.
 - Curated retrieval does not index `.env` or arbitrary repository files.
-- Unsafe manifest artifact paths produce a rejection report without reading outside the bundle.
-- Repeated certification produces identical trace and bundle digests.
+- Unsafe manifest paths and symlink escapes are rejected.
+- Repeated certification produces identical trace IDs and bundle digests.
 - Existing WFA and partition files are copied byte-for-byte into the frozen bundle.
+- Exporter refuses to overwrite a nonempty output directory.
 
-The branch contains 14 focused tests under `tests/ai_certification`. The earlier certification-core slice passed locally with `10 passed`; the complete current branch is governed by the PR CI checks before merge.
+## QA-Discovered Defects Fixed
+
+1. **Failure precedence defect**
+   - Previous behavior: an `UNEVALUATED` gate could mask a separate mandatory `FAIL`.
+   - Fixed behavior: `AGENT_ERROR` > `REJECTED` > `INSUFFICIENT_EVIDENCE` > `CERTIFIED`.
+2. **Hostile report-name defect**
+   - Previous behavior: a run ID containing no safe filename characters raised an exception after certification.
+   - Fixed behavior: deterministic trace-based fallback filename, with a 96-character bound.
+3. **Raw/derived authority detachment defect**
+   - Previous behavior: generated engine identity was not cross-checked against the frozen raw WFA report.
+   - Fixed behavior: engine, run ID, strict mode, config hash, read-only flag, and action boundary must agree.
+4. **Invalid happy-path fixture defect**
+   - Previous test data declared one repeated holdout run while expecting certification.
+   - Fixed test data declares zero repeated holdout runs.
 
 ## Acceptance Proof
 
 - Base commit: `58881fd873c307df3adaa5402ed27936573a1873`
 - Branch: `feature/ai-qa-certification-agent-mvp`
-- Diff against main: 20 added files, 0 modified existing files, 0 deleted files.
+- Diff against main: 25 added files, 0 modified existing files, 0 deleted files.
 - Focused suite command: `python -m pytest -q tests/ai_certification`
+- Focused test inventory: 43 tests.
 - Compilation command: `python -m compileall -q core/ai_certification scripts/export_ai_backtest_certification_bundle.py scripts/run_ai_backtest_certification.py`
 - Code Excellence, Agent Review Evidence, Repo Forensics, Portfolio CI, CodeQL, unit-test, CI, and strategy-registry workflows must pass on the final head before merge.
-- Main `requirements.txt`: unchanged
-- Existing TradeBot production modules: unchanged
+- Main `requirements.txt`: unchanged.
+- Existing TradeBot production modules: unchanged.
 
 ## Runtime Proof Required After Merge
 
@@ -119,8 +145,9 @@ Post-merge proof must use an exported evidence bundle from an actual strict `Opt
 - It does not certify live feed production readiness.
 - It does not provide a production-hosted MCP deployment.
 - It does not provide a large golden evaluation corpus or provider/model comparison.
+- It does not provide cryptographic signing of the manifest.
 - It does not modify or validate live order execution.
 
 ## Human Approval
 
-This is a draft PR. Human approval is required before it is marked ready or merged. The review decision is whether the additive exporter, certification boundary, evidence schema, deterministic gate ownership, curated retrieval, and MCP filesystem restrictions are acceptable for runtime proof.
+This is a draft PR. Human approval is required before it is marked ready or merged. The review decision is whether the additive exporter, certification boundary, evidence schema, deterministic gate ownership, curated retrieval, QA coverage, and MCP filesystem restrictions are acceptable for runtime proof.
