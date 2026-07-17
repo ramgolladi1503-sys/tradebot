@@ -1,5 +1,5 @@
 from agentic_research.certification import DeterministicCertificationJudge
-from agentic_research.contracts import ToolResult
+from agentic_research.contracts import CriticFinding, CriticReport, ToolResult
 
 
 def r(name, payload=None, status="SUCCESS", blockers=None):
@@ -18,36 +18,27 @@ def gates():
     }
 
 
-def test_dataset_failure_is_authoritative():
+def test_legacy_report_failure_is_authoritative():
     results = {
         "get_strategy_contract": r("get_strategy_contract"),
-        "validate_dataset": r("validate_dataset", status="REJECTED", blockers=["missing_field:context"]),
+        "audit_existing_research_report": r("audit_existing_research_report", status="REJECTED", blockers=["legacy_dataset_zero_volume"]),
     }
-    decision = DeterministicCertificationJudge(gates()).decide(results)
-    assert decision.verdict == "REJECTED_DATA_INELIGIBLE"
+    assert DeterministicCertificationJudge(gates()).decide(results).verdict == "REJECTED_DATA_INELIGIBLE"
 
 
-def test_llm_cannot_promote_failed_wfa():
-    results = {
-        "get_strategy_contract": r("get_strategy_contract"),
-        "validate_dataset": r("validate_dataset"),
-        "run_temporal_semantics_tests": r("run_temporal_semantics_tests", {"causality_violations": 0}),
-        "run_structural_backtest": r("run_structural_backtest", {"trades": 10}),
-        "run_wfa": r("run_wfa", {"holdout": {"trades": 3, "net_expectancy_bps": -0.1, "profit_factor": 0.9}, "positive_oos_partition_fraction": 0.0}),
-    }
-    decision = DeterministicCertificationJudge(gates()).decide(results)
-    assert decision.verdict == "REJECTED_OVERFIT"
-    assert not decision.passed
-
-
-def test_valid_structural_evidence_ceiling_is_option_replay():
+def test_critic_can_block_apparently_positive_structural_result():
+    report = CriticReport(
+        critic_id="critic",
+        findings=[CriticFinding(code="option_execution_not_certified", severity="BLOCKER", category="EXECUTION", message="blocked")],
+    )
     results = {
         "get_strategy_contract": r("get_strategy_contract"),
         "validate_dataset": r("validate_dataset"),
         "run_temporal_semantics_tests": r("run_temporal_semantics_tests", {"causality_violations": 0}),
         "run_structural_backtest": r("run_structural_backtest", {"trades": 10}),
         "run_wfa": r("run_wfa", {"holdout": {"trades": 3, "net_expectancy_bps": 1.2, "profit_factor": 1.3}, "positive_oos_partition_fraction": 1.0}),
+        "run_adversarial_review": r("run_adversarial_review", {"report": report.model_dump(mode="json")}),
     }
     decision = DeterministicCertificationJudge(gates()).decide(results)
-    assert decision.verdict == "READY_FOR_OPTION_REPLAY"
-    assert decision.passed
+    assert decision.verdict == "REJECTED_EXECUTION_FRAGILE"
+    assert not decision.passed
