@@ -1329,19 +1329,16 @@ def _build_top_opportunities_payload(
                 fallback_state = "recovered_fallback"
             else:
                 fallback_state = "none"
-        execution_eligibility = bool(row.get("reportable_executable"))
-        if not execution_eligibility and row.get("reportable_executable") is None:
-            execution_eligibility = bool(row.get("execution_allowed") or row.get("eligible_for_execution"))
-        phase2_score = row.get("rank_score")
-        if phase2_score is None:
-            phase2_score = row.get("final_score")
-        if phase2_score is None:
-            phase2_score = row.get("confidence")
-        raw_strategy_score = row.get("raw_score")
-        if raw_strategy_score is None:
-            raw_strategy_score = row.get("rank_score")
-        if raw_strategy_score is None:
-            raw_strategy_score = row.get("final_score")
+        execution_eligibility_value = row.get("reportable_executable")
+        if execution_eligibility_value is None:
+            execution_eligibility_value = row.get("execution_allowed")
+        if execution_eligibility_value is None:
+            execution_eligibility_value = row.get("eligible_for_execution")
+        execution_eligibility = bool(execution_eligibility_value)
+        if fallback_state != "none":
+            execution_eligibility = False
+        phase2_score = row.get("phase2_score") if "phase2_score" in row else None
+        raw_strategy_score = row.get("raw_strategy_score") if "raw_strategy_score" in row else row.get("raw_score") if "raw_score" in row else None
         phase2_status = row.get("candidate_status") or row.get("execution_status") or row.get("visibility_bucket")
         if not phase2_status and execution_truth_context is None:
             phase2_status = row.get("bucket")
@@ -1359,6 +1356,7 @@ def _build_top_opportunities_payload(
             rank_authority=LIVE_PHASE2_RANKING_AUTHORITY,
             execution_eligibility=execution_eligibility,
             execution_eligibility_authority=live_execution_eligibility_authority,
+            rank_score=row.get("rank_score"),
             phase2_status=phase2_status,
             phase2_score=phase2_score,
             raw_strategy_score=raw_strategy_score,

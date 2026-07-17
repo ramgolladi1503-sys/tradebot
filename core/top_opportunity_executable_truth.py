@@ -32,6 +32,7 @@ def annotate_top_opportunity_authority(
     rank_authority: str,
     execution_eligibility: bool | None = None,
     execution_eligibility_authority: str | None = None,
+    rank_score: Any | None = None,
     phase2_status: str | None = None,
     phase2_score: Any | None = None,
     raw_strategy_score: Any | None = None,
@@ -47,6 +48,8 @@ def annotate_top_opportunity_authority(
         out["execution_eligibility"] = bool(execution_eligibility)
     if execution_eligibility_authority is not None:
         out["execution_eligibility_authority"] = str(execution_eligibility_authority or "UNKNOWN")
+    if rank_score is not None:
+        out["rank_score"] = rank_score
     if phase2_status is not None:
         out["phase2_status"] = str(phase2_status or "UNKNOWN")
     if phase2_score is not None:
@@ -236,6 +239,7 @@ def classify_top_opportunity_row(
     display_entry = _positive_float(row.get("display_entry") if row.get("display_entry") is not None else row.get("entry"))
     display_source = _lower(row.get("display_entry_source") or row.get("entry_source")) or "none"
     quote_source = _lower(row.get("quote_source") or row.get("option_ltp_source")) or "unknown"
+    execution_eligibility = _explicit_bool(row.get("execution_eligibility")) if "execution_eligibility" in row else None
     legacy_claims_executable = _legacy_claims_executable(row)
 
     reason = _truth_reason(
@@ -245,6 +249,7 @@ def classify_top_opportunity_row(
         display_entry=display_entry,
         display_source=display_source,
         quote_source=quote_source,
+        execution_eligibility=execution_eligibility,
         legacy_claims_executable=legacy_claims_executable,
     )
     executable_truth = reason == "canonical_execution_entry_truth"
@@ -272,10 +277,13 @@ def _truth_reason(
     display_entry: float | None,
     display_source: str,
     quote_source: str,
+    execution_eligibility: bool | None,
     legacy_claims_executable: bool,
 ) -> str:
     if execution_source in _FALLBACK_SOURCES or display_source in _FALLBACK_SOURCES or quote_source in _FALLBACK_SOURCES:
         return "fallback_source_advisory_only"
+    if execution_eligibility is False:
+        return "execution_not_eligible"
     if execution_entry is None and display_entry is not None:
         return "display_only_missing_execution_entry"
     if execution_entry is None:
@@ -303,6 +311,19 @@ def _legacy_claims_executable(row: Mapping[str, Any]) -> bool:
         or permission == "EXECUTE"
         or status == "READY"
     )
+
+
+def _explicit_bool(value: Any) -> bool | None:
+    if value is True:
+        return True
+    if value is False:
+        return False
+    text = str(value or "").strip().lower()
+    if text in {"true", "false"}:
+        return text == "true"
+    if text in {"1", "0"}:
+        return text == "1"
+    return None
 
 
 def _with_truth_demoted(row: Mapping[str, Any], reason: str) -> dict[str, Any]:
