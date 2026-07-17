@@ -1,8 +1,16 @@
-# Gemini quality and historical edge evidence gates
+# Gemini quality and historical edge evidence closure
+
+## Current status
+
+| Evidence gap | Status | Result |
+| --- | --- | --- |
+| Deterministic agent regression | Closed | 64/64 correct actions, zero unsafe actions |
+| Historical `trend_pullback_v1` edge | Closed with negative evidence | `NO_STRUCTURAL_EDGE` |
+| Gemini manager and critic quality | Secure gate complete; measurement pending | Requires a rotated `GEMINI_API_KEY` repository secret |
 
 ## Security notice
 
-An API key pasted into chat must be treated as exposed. It is never committed, embedded in a workflow input, printed, or persisted by this repository. Rotate it and save the replacement as the GitHub repository secret `GEMINI_API_KEY` or as a local environment variable.
+An API key pasted into chat must be treated as exposed. It was never committed, embedded in a workflow input, printed, or persisted by this repository. Rotate it and save the replacement as the GitHub repository secret `GEMINI_API_KEY` or as a local environment variable.
 
 ## Gemini quality gate
 
@@ -31,19 +39,22 @@ export GEMINI_API_KEY="..."
 python -m agentic_research.evals.online_cli \
   --model gemini-2.5-flash \
   --repeats 2 \
+  --request-delay-seconds 4 \
+  --maximum-retries 2 \
   --output agentic_research/eval_results/gemini_online.json
 ```
 
-The GitHub workflow reads only `secrets.GEMINI_API_KEY`. If the secret is absent, the Gemini job skips safely and makes no quality claim.
+The GitHub workflow reads only `secrets.GEMINI_API_KEY`. Without that secret, the Gemini job skips safely and makes no model-quality claim.
 
 ## Historical edge campaign
 
-The pinned historical campaign uses:
+The pinned historical campaign used:
 
 - source: `aeron7/nifty-banknifty-intraday-data`;
 - commit: `906fc2378b82e50de78f62844a3ecb3f9306a85d`;
 - symbol: `NIFTY_F1`;
-- years: 2012–2014;
+- period: January 2, 2012 through December 31, 2014;
+- 276,466 one-minute rows across 744 sessions;
 - production `trend_pullback_v1` callable;
 - production movement-regime classifier;
 - next-bar-open entry;
@@ -53,10 +64,21 @@ The pinned historical campaign uses:
 - rolling out-of-sample folds and an untouched holdout;
 - session-concentration gates.
 
-Possible verdicts:
+### Measured result
 
-- `INVALID_DUE_TO_DATA`;
-- `NO_STRUCTURAL_EDGE`;
-- `STRUCTURAL_EDGE_CANDIDATE`.
+`NO_STRUCTURAL_EDGE`
 
-Even the strongest verdict is futures-level structural evidence only. It does not certify option fills or live profitability.
+- total causal trades: 4,434;
+- untouched holdout: 583 trades across 147 sessions;
+- holdout expectancy after 2 bps cost: -0.6843 bps per trade;
+- holdout profit factor: 0.8624;
+- positive rolling-OOS folds: 0 of 25;
+- adverse-cost holdout expectancy: -3.6843 bps per trade;
+- severe-cost holdout expectancy: -8.6843 bps per trade;
+- top-five positive-session concentration: 35.73%, below the 70% concentration ceiling.
+
+The strategy failed because expectancy and WFA stability were negative, not because of insufficient trades or concentration. No profitable-edge claim is permitted, and no option-execution or live-trading claim was made.
+
+## Interpretation
+
+The historical evidence gap is closed even though the result is negative. Forcing parameter changes until a profitable result appears would convert the campaign into data mining. Any improvement cycle must use predeclared economic hypotheses and a new untouched holdout period.
