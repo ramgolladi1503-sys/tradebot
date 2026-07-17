@@ -21,16 +21,14 @@ class DeterministicAdversarialCritic:
         legacy = results.get("audit_existing_research_report")
         if legacy is not None:
             for blocker in legacy.blockers:
-                findings.append(
-                    CriticFinding(
-                        code=blocker,
-                        severity="BLOCKER",
-                        category="DATA" if "volume" in blocker or "data" in blocker else "CAUSALITY",
-                        message=f"Legacy evidence cannot certify the strategy: {blocker}",
-                        evidence=legacy.payload,
-                        recommendation="Acquire eligible causal data and rerun the current strategy contract.",
-                    )
-                )
+                findings.append(CriticFinding(
+                    code=blocker,
+                    severity="BLOCKER",
+                    category="DATA" if "volume" in blocker or "data" in blocker else "CAUSALITY",
+                    message=f"Legacy evidence cannot certify the strategy: {blocker}",
+                    evidence=legacy.payload,
+                    recommendation="Acquire eligible causal data and rerun the current strategy contract.",
+                ))
             return CriticReport(
                 critic_id=self.critic_id,
                 findings=findings,
@@ -136,7 +134,7 @@ class GeminiAdversarialCritic:
                             "category": {"type": "string", "enum": ["DATA", "CAUSALITY", "OVERFIT", "EXECUTION", "CONCENTRATION", "SECURITY", "OTHER"]},
                             "message": {"type": "string"},
                             "evidence": {"type": "object"},
-                            "recommendation": {"type": ["string", "null"]},
+                            "recommendation": {"type": "string"},
                         },
                         "required": ["code", "severity", "category", "message", "evidence"],
                     },
