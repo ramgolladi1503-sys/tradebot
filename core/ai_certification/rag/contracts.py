@@ -100,6 +100,10 @@ class CorpusSourceSpec:
             _validate_source_id(self.superseded_by)
             if self.superseded_by == self.source_id:
                 raise RAGContractError(f"source {self.source_id} cannot supersede itself")
+            if self.effective_until is None:
+                raise RAGContractError(
+                    f"source {self.source_id} requires effective_until when superseded"
+                )
         if self.strategy_id is not None and not self.strategy_id.strip():
             raise RAGContractError("strategy_id cannot be blank")
         if self.module is not None and not self.module.strip():
@@ -163,7 +167,7 @@ class CorpusSourceRecord:
             return False
         if self.spec.effective_until is not None and on_date > self.spec.effective_until:
             return False
-        return self.spec.superseded_by is None
+        return True
 
     def to_dict(self) -> dict[str, Any]:
         return {
