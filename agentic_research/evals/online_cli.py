@@ -14,6 +14,8 @@ def main() -> int:
     parser.add_argument("--model", default="gemini-2.5-flash")
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--output", default="agentic_research/eval_results/gemini_online.json")
+    parser.add_argument("--request-delay-seconds", type=float, default=4.0)
+    parser.add_argument("--maximum-retries", type=int, default=2)
     args = parser.parse_args()
     if not os.environ.get("GEMINI_API_KEY"):
         raise SystemExit("GEMINI_API_KEY is required and must be provided through the environment or GitHub secret")
@@ -24,6 +26,8 @@ def main() -> int:
         manager=manager,
         critic=critic,
         manager_repeats=args.repeats,
+        request_delay_seconds=args.request_delay_seconds,
+        maximum_retries=args.maximum_retries,
     )
     write_online_report(args.output, report)
     print(json.dumps({
