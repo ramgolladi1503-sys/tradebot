@@ -1,0 +1,38 @@
+{
+  "run_a": {
+    "decision_json_sha256": "c10f408451c58b21257f90c4e9163e5f591b781e00e2a561fcce0d766baf2c1f",
+    "ordered_fingerprint_sha256": "620aa3fd2d4920959932cee1ebdd285b043ea45cc1f1ba9e5ae27522d3c046ac",
+    "rejection_summary_sha256": "2366652581b428eac2c5774387650eedae0a2f21ccf99dbd646f6a25991c1791",
+    "threshold_audit_sha256": "569ef710ad03e3299a847049e30f1c18b88165ba968bd2ac31e52ce4f87b2712",
+    "partition_sha256": "11ca8a7c209c3c1639d3733953237c9c9fe6d57998016a763c139153d9127d85",
+    "record_count": 396,
+    "accepted_long_count": 12,
+    "accepted_short_count": 18,
+    "rejection_counts": {
+      "FAILED_SHOCK_THRESHOLD": 258,
+      "FAILED_CLOSE_LOCATION": 9,
+      "FAILED_CONFIRMATION": 5
+    }
+  },
+  "run_b": {
+    "decision_json_sha256": "c10f408451c58b21257f90c4e9163e5f591b781e00e2a561fcce0d766baf2c1f",
+    "ordered_fingerprint_sha256": "620aa3fd2d4920959932cee1ebdd285b043ea45cc1f1ba9e5ae27522d3c046ac",
+    "rejection_summary_sha256": "2366652581b428eac2c5774387650eedae0a2f21ccf99dbd646f6a25991c1791",
+    "threshold_audit_sha256": "569ef710ad03e3299a847049e30f1c18b88165ba968bd2ac31e52ce4f87b2712",
+    "partition_sha256": "11ca8a7c209c3c1639d3733953237c9c9fe6d57998016a763c139153d9127d85",
+    "record_count": 396,
+    "accepted_long_count": 12,
+    "accepted_short_count": 18,
+    "rejection_counts": {
+      "FAILED_SHOCK_THRESHOLD": 258,
+      "FAILED_CLOSE_LOCATION": 9,
+      "FAILED_CONFIRMATION": 5
+    }
+  },
+  "decision_json_equal": true,
+  "fingerprint_hash_equal": true,
+  "threshold_audit_equal": true,
+  "rejection_summary_equal": true,
+  "partition_hash_equal": true,
+  "overall_deterministic": true
+}

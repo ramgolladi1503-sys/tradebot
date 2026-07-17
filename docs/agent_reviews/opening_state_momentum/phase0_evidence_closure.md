@@ -78,3 +78,5 @@ We discovered 41 content-identical files across the roots.
 * **Files Inspected**: 3730
 * **Exceptions**: 8 (handled corrupted parquets)
 * **FD Return Range**: Final count returned exactly to baseline of 4, proving no descriptor leaks.
+
+PREVIOUS_ELIGIBLE_COUNT_SUPERSEDED

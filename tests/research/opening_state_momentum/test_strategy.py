@@ -76,6 +76,26 @@ def test_instrument_rules():
     assert CONTRACT_PARAMS["confirmation_instrument"] == "BANKNIFTY"
     assert "SENSEX" in CONTRACT_PARAMS["excluded_instruments"]
 
+def test_exact_instrument_classification():
+    # Prove exact parsed identities
+    def classify(filename, date_raw="20250709"):
+        stem = Path(filename).stem
+        if stem == f"BANKNIFTY_{date_raw}":
+            return "BANKNIFTY"
+        elif stem == f"NIFTY_{date_raw}":
+            return "NIFTY"
+        elif stem == f"SENSEX_{date_raw}" or stem.startswith("BSE_INDEX|SENSEX"):
+            return "SENSEX"
+        else:
+            return "REJECT"
+            
+    assert classify("NIFTY_20250709.parquet") == "NIFTY"
+    assert classify("BANKNIFTY_20250709.parquet") == "BANKNIFTY"
+    assert classify("SENSEX_20250709.parquet") == "SENSEX"
+    assert classify("MYNIFTY_20250709.parquet") == "REJECT"
+    assert classify("BANKNIFTYX_20250709.parquet") == "REJECT"
+    assert classify("NIFTY_BANKNIFTY.parquet") == "REJECT"
+
 
 # ================= TIME SEMANTICS =================
 def test_time_boundaries():

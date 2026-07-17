@@ -14,3 +14,7 @@ We ran `test_causality_and_mutation` where we copied the session data and mutate
 ## 3. Truncated Input Equivalence
 We also verified that truncating the dataframe at `14:45` (i.e. removing all rows > 14:45) produces identical candidate decisions and fingerprints.
 * **Result**: Passed. The candidate fingerprint matches exactly.
+
+## Profitability Non-Inspection Proof
+
+No occurrences of forward_return, pnl, profit_factor, win_rate, target_hit, stop_hit, mfe, mae, sharpe, drawdown, or expectancy were found in the research directory or scripts.

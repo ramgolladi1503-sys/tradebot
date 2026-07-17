@@ -36,6 +36,14 @@ class PartitionGuard:
     def __init__(self, holdout_dates: List[str]):
         self.holdout_dates = set(holdout_dates)
         
-    def check_access(self, date: str, action: str):
-        if date in self.holdout_dates and action in ["evaluate_outcome", "calculate_returns", "backtest"]:
-            raise HoldoutLockedError(f"HOLDOUT_LOCKED: Accessing holdout session {date} for outcome evaluation is prohibited in V1.")
+    def check_access(self, date_val, action: str):
+        if hasattr(date_val, "strftime"):
+            date_str = date_val.strftime("%Y-%m-%d")
+        else:
+            date_str = str(date_val)
+            # handle pd.Timestamp string format if needed, but strftime covers it
+            if " " in date_str:
+                date_str = date_str.split(" ")[0]
+            
+        if date_str in self.holdout_dates and action in ["evaluate_outcome", "calculate_returns", "backtest"]:
+            raise HoldoutLockedError(f"HOLDOUT_LOCKED: Accessing holdout session {date_str} for outcome evaluation is prohibited in V1.")
