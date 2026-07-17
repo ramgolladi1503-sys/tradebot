@@ -60,7 +60,7 @@ def generate_trades(frame: pd.DataFrame, config: HistoricalCampaignConfig) -> tu
 
     prepared = prepare_features(frame, timezone=config.timezone)
     trades: list[dict[str, Any]] = []
-    signal_count = blocked_geometry = 0
+    signal_count = blocked_geometry = blocked_data_gap = 0
     seen_setup_ids: set[str] = set()
     for session_date, session in prepared.groupby("session_date", sort=True):
         session = session.sort_values("timestamp").reset_index(drop=True)
@@ -74,6 +74,11 @@ def generate_trades(frame: pd.DataFrame, config: HistoricalCampaignConfig) -> tu
             if any(pd.isna(row.get(name)) for name in ("vwap", "atr", "atr_short", "atr_long", "vwap_slope")):
                 continue
             history = session.iloc[index - 3 : index + 1]
+            causal_path = session.iloc[index - 3 : min(len(session), index + config.max_hold_bars + 1)]["timestamp"]
+            deltas = pd.to_datetime(causal_path).diff().dropna()
+            if bool((deltas != pd.Timedelta(minutes=1)).any()):
+                blocked_data_gap += 1
+                continue
             support = float(history.iloc[-2:]["low"].min())
             resistance = float(history.iloc[-2:]["high"].max())
             start_ts, current_ts = pd.Timestamp(session.iloc[0]["timestamp"]), pd.Timestamp(row["timestamp"])
@@ -113,4 +118,4 @@ def generate_trades(frame: pd.DataFrame, config: HistoricalCampaignConfig) -> tu
                 })
                 next_available_index = int(simulated["exit_index"]) + 1
                 break
-    return trades, {"signals_total": signal_count, "trades_total": len(trades), "blocked_invalid_geometry": blocked_geometry, "unique_setup_ids": len(seen_setup_ids)}
+    return trades, {"signals_total": signal_count, "trades_total": len(trades), "blocked_invalid_geometry": blocked_geometry, "blocked_data_gap": blocked_data_gap, "unique_setup_ids": len(seen_setup_ids)}
