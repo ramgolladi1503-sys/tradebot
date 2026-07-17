@@ -1,0 +1,130 @@
+name: TREND_PULLBACK Horizon Sweep
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/trend-pullback-horizon-sweep
+    paths:
+      - "agentic_research/historical/horizon_sweep.py"
+      - "agentic_research/tests/test_horizon_sweep.py"
+      - "agentic_research/docs/trend_pullback_horizon_sweep.md"
+      - ".github/workflows/trend-pullback-horizon-sweep.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/trend-pullback-horizon-sweep
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install sidecar dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r agentic_research/requirements.txt
+      - name: Run focused horizon tests
+        id: tests
+        continue-on-error: true
+        run: |
+          PYTHONPATH=. pytest -q \
+            agentic_research/tests/test_horizon_sweep.py \
+            agentic_research/tests/test_historical_campaign.py
+          python -m compileall -q agentic_research/historical
+      - name: Fetch pinned Aeron7 NIFTY futures data
+        id: fetch
+        if: steps.tests.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA_ROOT="$RUNNER_TEMP/aeron7"
+          mkdir -p "$DATA_ROOT"
+          cd "$DATA_ROOT"
+          git init -q
+          git remote add origin https://github.com/aeron7/nifty-banknifty-intraday-data.git
+          git config core.sparseCheckout true
+          cat > .git/info/sparse-checkout <<'EOF'
+          /2012/**/NIFTY_F1.txt
+          /2013/**/NIFTY_F1.txt
+          /2014/**/NIFTY_F1.txt
+          EOF
+          git fetch -q --depth 1 --filter=blob:none origin 906fc2378b82e50de78f62844a3ecb3f9306a85d
+          git checkout -q --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "906fc2378b82e50de78f62844a3ecb3f9306a85d"
+          FILE_COUNT="$(find . -name NIFTY_F1.txt -type f | wc -l | tr -d ' ')"
+          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
+          test "$FILE_COUNT" -ge 1
+      - name: Convert pinned source
+        id: convert
+        if: steps.fetch.outcome == 'success'
+        continue-on-error: true
+        run: |
+          python scripts/convert_aeron7_intraday.py \
+            --source-root "$RUNNER_TEMP/aeron7" \
+            --output-dir "$RUNNER_TEMP/aeron7-canonical" \
+            --symbols NIFTY_F1
+          test -s "$RUNNER_TEMP/aeron7-canonical/NIFTY_F1_intraday.csv"
+      - name: Run 15-to-60-minute fixed-signal sweep
+        id: sweep
+        if: steps.convert.outcome == 'success'
+        continue-on-error: true
+        run: |
+          python -m agentic_research.historical.horizon_sweep \
+            --input "$RUNNER_TEMP/aeron7-canonical/NIFTY_F1_intraday.csv" \
+            --output-dir "$RUNNER_TEMP/horizon-sweep" \
+            --source-repository aeron7/nifty-banknifty-intraday-data \
+            --source-commit 906fc2378b82e50de78f62844a3ecb3f9306a85d \
+            --minimum-sessions 300
+      - name: Build reviewable evidence snapshot
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+          FETCH_OUTCOME: ${{ steps.fetch.outcome }}
+          CONVERT_OUTCOME: ${{ steps.convert.outcome }}
+          SWEEP_OUTCOME: ${{ steps.sweep.outcome }}
+          SOURCE_FILE_COUNT: ${{ steps.fetch.outputs.file_count }}
+        run: |
+          python - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+
+          target = Path("agentic_research/evidence_results/horizon_sweep")
+          target.mkdir(parents=True, exist_ok=True)
+          source = Path(os.environ["RUNNER_TEMP"]) / "horizon-sweep"
+          for name in ("horizon_sweep_result.json", "horizon_sweep_report.md"):
+              path = source / name
+              if path.exists():
+                  shutil.copy2(path, target / name)
+          status = {
+              "schema_version": 1,
+              "source_commit": os.environ["GITHUB_SHA"],
+              "test_outcome": os.environ.get("TEST_OUTCOME") or "not_run",
+              "fetch_outcome": os.environ.get("FETCH_OUTCOME") or "not_run",
+              "convert_outcome": os.environ.get("CONVERT_OUTCOME") or "not_run",
+              "sweep_outcome": os.environ.get("SWEEP_OUTCOME") or "not_run",
+              "source_file_count": int(os.environ.get("SOURCE_FILE_COUNT") or 0),
+          }
+          (target / "run_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
+          PY
+      - name: Commit measured evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "tradebot-evidence-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f agentic_research/evidence_results/horizon_sweep
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "evidence(research): publish horizon sweep [skip ci]"
+          git push origin HEAD:research/trend-pullback-horizon-sweep
