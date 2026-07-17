@@ -56,7 +56,7 @@ def test_volume_and_contract_identity_drive_three_distinct_evidence_lanes(
     assert "futures_identity_unconfirmed" in unconfirmed.blockers
     assert confirmed.eligibility == "FUTURES_VOLUME_ELIGIBLE"
     assert confirmed.volume_sum == 370.0
-    assert confirmed.blockers == ()
+    assert confirmed.instrument_identity == "filename_future_marker"
 
 
 def test_quote_completeness_changes_replay_eligibility(tmp_path: Path):
@@ -86,6 +86,7 @@ def test_quote_completeness_changes_replay_eligibility(tmp_path: Path):
     assert before.eligibility == "TICK_QUOTE_CONTROL"
     assert after.eligibility == "OPTION_QUOTE_REPLAY_CANDIDATE"
     assert before.sha256 != after.sha256
+    assert "ask_qty" in after.columns
 
 
 def test_zip_scan_is_deterministic_read_only_and_blocks_parent_traversal(
@@ -103,18 +104,22 @@ def test_zip_scan_is_deterministic_read_only_and_blocks_parent_traversal(
     first = build_upstox_corpus_manifest(archive)
     second = build_upstox_corpus_manifest(archive)
 
-    invalid = [entry for entry in first.entries if entry.eligibility == "INVALID"]
-    eligible = [
+    invalid_entry = next(
+        entry for entry in first.entries if entry.eligibility == "INVALID"
+    )
+    futures_entry = next(
         entry
         for entry in first.entries
         if entry.eligibility == "FUTURES_VOLUME_ELIGIBLE"
-    ]
+    )
     assert first.to_dict() == second.to_dict()
     assert first.source_sha256 == archive_hash_before
     assert _sha256(archive) == archive_hash_before
     assert not (tmp_path / "escape.json").exists()
-    assert invalid and invalid[0].blockers == ("unsafe_archive_path",)
-    assert len(eligible) == 1
+    assert invalid_entry.path == "../escape.json"
+    assert invalid_entry.blockers == ("unsafe_archive_path",)
+    assert futures_entry.path == "NIFTY_F1_20260710.parquet"
+    assert futures_entry.volume_sum == 30.0
 
 
 def test_missing_timestamp_is_rejected_then_recovers_when_repaired(tmp_path: Path):
@@ -129,6 +134,7 @@ def test_missing_timestamp_is_rejected_then_recovers_when_repaired(tmp_path: Pat
     repaired = build_upstox_corpus_manifest(root).entries[0]
 
     assert rejected.eligibility == "INVALID"
+    assert rejected.timestamp_column is None
     assert "timestamp_missing" in rejected.blockers
     assert repaired.eligibility == "FUTURES_VOLUME_ELIGIBLE"
-    assert repaired.blockers == ()
+    assert repaired.timestamp_column == "timestamp"
