@@ -31,7 +31,11 @@ def test_safe_bundle_id_resolves_under_root(tmp_path: Path):
 
 def test_unknown_gate_is_rejected_before_bundle_access(tmp_path: Path):
     with pytest.raises(BundleError, match="unknown certification gate"):
-        evaluate_gate("does-not-exist", "place_order", evidence_root=tmp_path)
+        evaluate_gate(
+            "does-not-exist",
+            "not_a_certification_gate",
+            evidence_root=tmp_path,
+        )
 
 
 def test_policy_retrieval_uses_only_curated_repository_sources(tmp_path: Path):
