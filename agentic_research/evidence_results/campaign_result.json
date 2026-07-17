@@ -15,11 +15,17 @@
   "config": {
     "adverse_cost_bps": 5.0,
     "boundary_purge_sessions": 1,
+    "date_from": null,
+    "date_to": null,
     "holdout_fraction": 0.2,
     "max_hold_bars": 15,
+    "maximum_minutes_since_open": 360,
     "maximum_top_five_session_positive_share": 0.7,
+    "minimum_candidate_raw_score": 0.0,
+    "minimum_directional_regime_score": 0.0,
     "minimum_holdout_profit_factor": 1.1,
     "minimum_holdout_trades": 10,
+    "minimum_minutes_since_open": 0,
     "minimum_positive_wfa_fraction": 0.6,
     "minimum_sessions": 300,
     "minimum_total_trades": 30,
@@ -31,7 +37,8 @@
     "target_rr": 1.5,
     "timezone": "Asia/Kolkata",
     "train_sessions": 80,
-    "validation_sessions": 20
+    "validation_sessions": 20,
+    "variant_id": "unchanged_baseline"
   },
   "cost_stress": {
     "adverse": {
