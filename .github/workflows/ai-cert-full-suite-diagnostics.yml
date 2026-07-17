@@ -1,0 +1,66 @@
+name: AI Certification Full Suite Diagnostics
+
+on:
+  push:
+    branches:
+      - feature/ai-qa-certification-agent-mvp
+  pull_request:
+    paths:
+      - "core/ai_certification/**"
+      - "tests/ai_certification/**"
+      - ".github/workflows/ai-cert-full-suite-diagnostics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  full-fast-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run exact repository fast suite
+        shell: bash
+        run: |
+          set +e
+          PYTHONPATH=. pytest -vv -o addopts='' \
+            -m "not integration and not feed_smoke and not feed_soak and not certification" \
+            --durations=25 \
+            --junitxml=ai-cert-full-junit.xml \
+            > ai-cert-full.log 2>&1
+          status=$?
+          echo "$status" > ai-cert-full-status.txt
+          tail -n 300 ai-cert-full.log
+          exit 0
+
+      - name: Upload full-suite diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-cert-full-suite-diagnostics
+          if-no-files-found: error
+          path: |
+            ai-cert-full.log
+            ai-cert-full-junit.xml
+            ai-cert-full-status.txt
+
+      - name: Enforce full-suite result
+        shell: bash
+        run: exit "$(cat ai-cert-full-status.txt)"
