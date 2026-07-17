@@ -44,6 +44,8 @@ jobs:
     needs: sidecar-regression
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      evidence_status: ${{ steps.historical_status.outputs.status }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -55,6 +57,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r agentic_research/requirements.txt
       - name: Fetch pinned Aeron7 NIFTY futures data only
+        id: historical_fetch
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -72,8 +76,13 @@ jobs:
           git fetch -q --depth 1 --filter=blob:none origin 906fc2378b82e50de78f62844a3ecb3f9306a85d
           git checkout -q --detach FETCH_HEAD
           test "$(git rev-parse HEAD)" = "906fc2378b82e50de78f62844a3ecb3f9306a85d"
-          test "$(find . -name NIFTY_F1.txt -type f | wc -l)" -ge 300
+          FILE_COUNT="$(find . -name NIFTY_F1.txt -type f | wc -l | tr -d ' ')"
+          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
+          test "$FILE_COUNT" -ge 300
       - name: Convert pinned source to canonical OHLCV
+        id: historical_convert
+        if: steps.historical_fetch.outcome == 'success'
+        continue-on-error: true
         run: |
           python scripts/convert_aeron7_intraday.py \
             --source-root "$RUNNER_TEMP/aeron7" \
@@ -81,6 +90,9 @@ jobs:
             --symbols NIFTY_F1
           test -s "$RUNNER_TEMP/aeron7-canonical/NIFTY_F1_intraday.csv"
       - name: Run causal TREND_PULLBACK historical campaign
+        id: historical_run
+        if: steps.historical_convert.outcome == 'success'
+        continue-on-error: true
         run: |
           python -m agentic_research.historical \
             --input "$RUNNER_TEMP/aeron7-canonical/NIFTY_F1_intraday.csv" \
@@ -88,27 +100,68 @@ jobs:
             --source-repository aeron7/nifty-banknifty-intraday-data \
             --source-commit 906fc2378b82e50de78f62844a3ecb3f9306a85d \
             --minimum-sessions 300
+      - name: Preserve historical infrastructure status
+        id: historical_status
+        if: always()
+        env:
+          FETCH_OUTCOME: ${{ steps.historical_fetch.outcome }}
+          CONVERT_OUTCOME: ${{ steps.historical_convert.outcome }}
+          CAMPAIGN_OUTCOME: ${{ steps.historical_run.outcome }}
+          FILE_COUNT: ${{ steps.historical_fetch.outputs.file_count }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          output = Path("agentic_research/edge_results/aeron7_trend_pullback")
+          output.mkdir(parents=True, exist_ok=True)
+          status = {
+              "schema_version": 1,
+              "fetch_outcome": os.environ.get("FETCH_OUTCOME") or "not_run",
+              "convert_outcome": os.environ.get("CONVERT_OUTCOME") or "not_run",
+              "campaign_outcome": os.environ.get("CAMPAIGN_OUTCOME") or "not_run",
+              "source_file_count": int(os.environ.get("FILE_COUNT") or 0),
+          }
+          status["evidence_status"] = "success" if status["campaign_outcome"] == "success" else "failure"
+          (output / "historical_job_status.json").write_text(
+              json.dumps(status, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"status={status['evidence_status']}\n")
+          PY
       - name: Publish campaign verdict to summary
+        if: always()
         shell: bash
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
-          result = json.loads(Path("agentic_research/edge_results/aeron7_trend_pullback/campaign_result.json").read_text())
+
+          output = Path("agentic_research/edge_results/aeron7_trend_pullback")
+          job_status = json.loads((output / "historical_job_status.json").read_text())
+          result_path = output / "campaign_result.json"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
               handle.write("## TREND_PULLBACK historical campaign\n\n")
-              handle.write(f"- Verdict: `{result['verdict']}`\n")
-              handle.write(f"- Claim scope: `{result['claim_scope']}`\n")
-              handle.write(f"- Options execution certified: `{result['options_execution_certified']}`\n")
-              for blocker in result.get("blockers", []):
-                  handle.write(f"- Blocker: `{blocker}`\n")
+              handle.write(f"- Evidence status: `{job_status['evidence_status']}`\n")
+              handle.write(f"- Fetch: `{job_status['fetch_outcome']}`\n")
+              handle.write(f"- Conversion: `{job_status['convert_outcome']}`\n")
+              handle.write(f"- Campaign: `{job_status['campaign_outcome']}`\n")
+              handle.write(f"- Source files: `{job_status['source_file_count']}`\n")
+              if result_path.exists():
+                  result = json.loads(result_path.read_text())
+                  handle.write(f"- Verdict: `{result['verdict']}`\n")
+                  handle.write(f"- Claim scope: `{result['claim_scope']}`\n")
+                  handle.write(f"- Options execution certified: `{result['options_execution_certified']}`\n")
+                  for blocker in result.get("blockers", []):
+                      handle.write(f"- Blocker: `{blocker}`\n")
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: trend-pullback-aeron7-campaign
           path: agentic_research/edge_results/aeron7_trend_pullback
-          if-no-files-found: warn
+          if-no-files-found: error
 
   gemini-online-evaluation:
     needs: sidecar-regression
@@ -179,7 +232,8 @@ jobs:
           name: agentic-sidecar-regression
           path: /tmp/evidence/deterministic
       - name: Download historical report
-        if: needs.historical-edge-campaign.result == 'success'
+        if: always()
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: trend-pullback-aeron7-campaign
@@ -194,7 +248,8 @@ jobs:
       - name: Build small evidence snapshot
         env:
           SIDECAR_RESULT: ${{ needs.sidecar-regression.result }}
-          HISTORICAL_RESULT: ${{ needs.historical-edge-campaign.result }}
+          HISTORICAL_JOB_RESULT: ${{ needs.historical-edge-campaign.result }}
+          HISTORICAL_EVIDENCE_STATUS: ${{ needs.historical-edge-campaign.outputs.evidence_status }}
           GEMINI_JOB_RESULT: ${{ needs.gemini-online-evaluation.result }}
           GEMINI_MEASURED: ${{ needs.gemini-online-evaluation.outputs.measured }}
         run: |
@@ -205,10 +260,11 @@ jobs:
           target = Path("agentic_research/evidence_results")
           target.mkdir(parents=True, exist_ok=True)
           status = {
-              "schema_version": 1,
+              "schema_version": 2,
               "source_commit": os.environ["GITHUB_SHA"],
               "sidecar_regression": os.environ["SIDECAR_RESULT"],
-              "historical_campaign": os.environ["HISTORICAL_RESULT"],
+              "historical_job": os.environ["HISTORICAL_JOB_RESULT"],
+              "historical_campaign": os.environ.get("HISTORICAL_EVIDENCE_STATUS") or "unknown",
               "gemini_job": os.environ["GEMINI_JOB_RESULT"],
               "gemini_measured": os.environ.get("GEMINI_MEASURED") == "true",
               "secret_persisted": False,
@@ -223,9 +279,15 @@ jobs:
                       shutil.copy2(path, target / path.name)
 
           copy_named("/tmp/evidence/deterministic", {"deterministic_ci.json"})
-          copy_named("/tmp/evidence/historical", {"campaign_result.json", "dataset_manifest.json", "campaign_report.md"})
+          copy_named(
+              "/tmp/evidence/historical",
+              {"campaign_result.json", "dataset_manifest.json", "campaign_report.md", "historical_job_status.json"},
+          )
           copy_named("/tmp/evidence/gemini", {"gemini_online_ci.json"})
-          (target / "run_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          (target / "run_status.json").write_text(
+              json.dumps(status, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
           PY
       - name: Commit evidence summaries to isolated branch
         shell: bash
