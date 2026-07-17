@@ -42,7 +42,7 @@ Questions applied:
 5. Does absent mandatory evidence silently pass?
    - No. Mandatory absent evidence returns `INSUFFICIENT_EVIDENCE`; contradictory evidence returns `REJECTED`.
 6. Can generated summaries detach from the raw WFA evidence?
-   - No. The certifier cross-checks raw WFA engine identity, run ID, strict mode, frozen configuration hash, action boundary, source-file hashes, and physical dataset identity.
+   - No. The certifier cross-checks raw WFA engine identity, run ID, strict mode, frozen configuration hash, action boundary, required source roles, raw controls, raw tests, completed-partition files, source-file hashes, and physical dataset identity.
 7. Can one absent artifact downgrade a separate explicit failure?
    - No. `AGENT_ERROR` and `REJECTED` take precedence over `INSUFFICIENT_EVIDENCE`.
 
@@ -53,6 +53,8 @@ Contract and authority review:
 - Source authority is pinned to `core.option_backtest.engine.OptionBacktestEngine` and `core.option_backtest.wfa.run_option_replay_wfa` in `REAL_EXECUTABLE_RESEARCH` mode.
 - Legacy, vectorized, proxy, synthetic-liquidity, and hardcoded-metric paths are explicitly non-certifying.
 - Artifact hashes, source provenance, repository commit, policy version, dataset provenance, timing, fills, reconciliation, WFA integrity, controls, and tests are represented as typed gate results.
+- Required source roles include the WFA report, control input, test input, and summary/journal/decision artifacts for every completed partition.
+- Raw controls and test results must reconcile with normalized certification artifacts.
 - The curated knowledge layer is explanatory only and cannot change gate outcomes.
 - The exporter remains an explicit adapter and is not imported by the certification package root.
 
@@ -63,7 +65,9 @@ Implementation completeness for this PR:
 - Immutable bundle loader implemented.
 - Real WFA artifact exporter implemented.
 - Raw source artifact index implemented.
+- Required source-role completeness implemented.
 - Raw-WFA-to-derived-authority cross-check implemented.
+- Raw-control and raw-test reconciliation implemented.
 - Versioned policy implemented.
 - Twelve deterministic gate evaluations implemented.
 - Separate evidence and strategy verdicts implemented.
@@ -72,12 +76,12 @@ Implementation completeness for this PR:
 - Curated authority-ranked policy retrieval implemented.
 - Optional FastMCP server with targeted tools implemented.
 - Export and certification CLIs implemented.
-- Shared production-like QA fixture implemented.
+- Shared exporter-shaped QA fixture implemented.
 - Formal QA test plan and traceability matrix implemented.
 
 ## QA / Safety Review
 
-The branch contains **43 automated QA test functions** covering functional behavior, happy paths, positive paths, negative paths, fail-closed precedence, integration, ad-hoc misuse, source consistency, report persistence, and filesystem boundaries.
+The branch contains **45 automated QA test functions** covering functional behavior, happy paths, positive paths, negative paths, fail-closed precedence, integration, ad-hoc misuse, source consistency, report persistence, and filesystem boundaries.
 
 Focused checks include:
 
@@ -87,6 +91,9 @@ Focused checks include:
 - Artifact mutation is rejected as invalid data.
 - Source dataset identity mismatch is rejected.
 - Raw WFA engine, mode, run ID, configuration hash, and action boundary must match generated evidence.
+- Required control, test, and completed-partition source roles cannot be omitted.
+- Raw controls and normalized controls must match.
+- Raw test totals and commit identity must match normalized test evidence.
 - Same-event entry is rejected as leakage.
 - Proxy engine evidence is non-certifying.
 - Absent mandatory evidence fails closed.
@@ -113,7 +120,10 @@ Focused checks include:
 3. **Raw/derived authority detachment defect**
    - Previous behavior: generated engine identity was not cross-checked against the frozen raw WFA report.
    - Fixed behavior: engine, run ID, strict mode, config hash, read-only flag, and action boundary must agree.
-4. **Invalid happy-path fixture defect**
+4. **Incomplete source-index semantics**
+   - Previous behavior: listed files were hash-checked, but required control, test, and completed-partition roles were not mandatory and normalized controls/tests were not reconciled.
+   - Fixed behavior: required roles are enforced and raw control/test evidence must match normalized artifacts.
+5. **Invalid happy-path fixture defect**
    - Previous test data declared one repeated holdout run while expecting certification.
    - Fixed test data declares zero repeated holdout runs.
 
@@ -121,9 +131,9 @@ Focused checks include:
 
 - Base commit: `58881fd873c307df3adaa5402ed27936573a1873`
 - Branch: `feature/ai-qa-certification-agent-mvp`
-- Diff against main: 25 added files, 0 modified existing files, 0 deleted files.
+- Diff against main: 26 added files, 0 modified existing files, 0 deleted files.
 - Focused suite command: `python -m pytest -q tests/ai_certification`
-- Focused test inventory: 43 tests.
+- Focused test inventory: 45 tests.
 - Compilation command: `python -m compileall -q core/ai_certification scripts/export_ai_backtest_certification_bundle.py scripts/run_ai_backtest_certification.py`
 - Code Excellence, Agent Review Evidence, Repo Forensics, Portfolio CI, CodeQL, unit-test, CI, and strategy-registry workflows must pass on the final head before merge.
 - Main `requirements.txt`: unchanged.
