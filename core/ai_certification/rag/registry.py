@@ -133,6 +133,9 @@ def build_registry(
         if specs is not None
         else load_registry_specs(root)
     )
+    _validate_specs_supersession(
+        tuple(sorted(selected, key=lambda spec: spec.source_id))
+    )
     records: list[CorpusSourceRecord] = []
     for spec in selected:
         if not any(spec.path.startswith(prefix) for prefix in _ALLOWED_SOURCE_ROOTS):
@@ -164,12 +167,24 @@ def write_manifest(registry: CorpusRegistry, output_path: str | Path) -> Path:
 
 
 def _validate_specs_supersession(specs: tuple[CorpusSourceSpec, ...]) -> None:
-    identifiers = {spec.source_id for spec in specs}
+    by_id = {spec.source_id: spec for spec in specs}
     for spec in specs:
-        if spec.superseded_by is not None and spec.superseded_by not in identifiers:
+        successor_id = spec.superseded_by
+        if successor_id is None:
+            continue
+        successor = by_id.get(successor_id)
+        if successor is None:
             raise RAGContractError(
                 f"source {spec.source_id} references unknown successor "
-                f"{spec.superseded_by}"
+                f"{successor_id}"
+            )
+        if spec.effective_until is None:
+            raise RAGContractError(
+                f"source {spec.source_id} requires an effective end date"
+            )
+        if successor.effective_from <= spec.effective_until:
+            raise RAGContractError(
+                f"source {spec.source_id} overlaps successor {successor_id}"
             )
     _assert_no_cycles(
         {spec.source_id: spec.superseded_by for spec in specs}
@@ -177,16 +192,9 @@ def _validate_specs_supersession(specs: tuple[CorpusSourceSpec, ...]) -> None:
 
 
 def _validate_supersession(records: tuple[CorpusSourceRecord, ...]) -> None:
-    identifiers = {record.source_id for record in records}
-    links = {
-        record.source_id: record.spec.superseded_by for record in records
-    }
-    for source_id, successor in links.items():
-        if successor is not None and successor not in identifiers:
-            raise RAGContractError(
-                f"source {source_id} references unknown successor {successor}"
-            )
-    _assert_no_cycles(links)
+    _validate_specs_supersession(
+        tuple(record.spec for record in records)
+    )
 
 
 def _assert_no_cycles(links: dict[str, str | None]) -> None:
