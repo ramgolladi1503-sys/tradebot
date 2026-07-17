@@ -1,8 +1,8 @@
 {
-  "campaign_outcome": "skipped",
-  "convert_outcome": "skipped",
-  "evidence_status": "failure",
-  "fetch_outcome": "failure",
+  "campaign_outcome": "success",
+  "convert_outcome": "success",
+  "evidence_status": "success",
+  "fetch_outcome": "success",
   "schema_version": 1,
   "source_file_count": 37
 }

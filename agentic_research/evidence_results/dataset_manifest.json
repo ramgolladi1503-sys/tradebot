@@ -1,0 +1,12 @@
+{
+  "input_path": "/home/runner/work/_temp/aeron7-canonical/NIFTY_F1_intraday.csv",
+  "input_sha256": "0e2b7f4672cb6e406f2b748a9d53c7f85285204838f2b9a22fa071ee7a159f99",
+  "rows": 276466,
+  "sessions": 744,
+  "source_commit": "906fc2378b82e50de78f62844a3ecb3f9306a85d",
+  "source_repository": "aeron7/nifty-banknifty-intraday-data",
+  "symbol": "NIFTY_F1",
+  "timestamp_end": "2014-12-31T15:30:00+05:30",
+  "timestamp_start": "2012-01-02T09:16:00+05:30",
+  "volume_sum": 9367989828.0
+}
