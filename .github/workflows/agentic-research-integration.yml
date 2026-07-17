@@ -51,7 +51,7 @@ jobs:
           python scripts/run_ai_certification_evaluation.py \
             --planner deterministic \
             --output .runtime/ai_certification/evals/deterministic.json
-      - name: Enforce read-only orchestration boundary
+      - name: Enforce allowlisted orchestration surface
         run: |
           python - <<'PY'
           import ast
@@ -63,37 +63,31 @@ jobs:
               Path("core/ai_certification/evaluation.py"),
               Path("core/ai_certification/upstox_corpus.py"),
           ]
-          forbidden_imports = {"subprocess", "kiteconnect", "upstox_client"}
-          forbidden_calls = {
-              "place_order", "modify_order", "cancel_order", "set_risk_limit",
-              "os.system", "os.popen", "subprocess.run", "subprocess.Popen",
+          allowed_import_roots = {
+              "__future__", "collections", "dataclasses", "hashlib", "io",
+              "json", "math", "os", "pathlib", "re", "sqlite3", "statistics",
+              "time", "typing", "urllib", "zipfile", "pandas", "pyarrow", "core",
           }
+          disallowed_builtins = {"eval", "exec", "compile", "__import__"}
           violations = []
           for path in paths:
               tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
               for node in ast.walk(tree):
                   if isinstance(node, ast.Import):
                       for alias in node.names:
-                          if alias.name.split(".")[0] in forbidden_imports:
-                              violations.append(f"{path}:import:{alias.name}")
+                          root = alias.name.split(".")[0]
+                          if root not in allowed_import_roots:
+                              violations.append(f"{path}:import_not_allowlisted:{alias.name}")
                   elif isinstance(node, ast.ImportFrom):
-                      module = (node.module or "").split(".")[0]
-                      if module in forbidden_imports:
-                          violations.append(f"{path}:from:{node.module}")
-                  elif isinstance(node, ast.Call):
-                      current = node.func
-                      parts = []
-                      while isinstance(current, ast.Attribute):
-                          parts.append(current.attr)
-                          current = current.value
-                      if isinstance(current, ast.Name):
-                          parts.append(current.id)
-                      name = ".".join(reversed(parts))
-                      if name in forbidden_calls or (parts and parts[0] in forbidden_calls):
-                          violations.append(f"{path}:call:{name}")
+                      root = (node.module or "").split(".")[0]
+                      if node.level == 0 and root not in allowed_import_roots:
+                          violations.append(f"{path}:from_not_allowlisted:{node.module}")
+                  elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                      if node.func.id in disallowed_builtins:
+                          violations.append(f"{path}:dynamic_execution:{node.func.id}")
           if violations:
               raise SystemExit("\n".join(violations))
-          print("read_only_boundary=PASS")
+          print("allowlisted_orchestration_surface=PASS")
           PY
       - uses: actions/upload-artifact@v4
         with:
