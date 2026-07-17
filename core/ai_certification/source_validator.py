@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from .bundle import BundleError, CertificationBundle
 from .contracts import EvidenceRef, GateResult, GateStatus
 from .policy import CertificationPolicy
@@ -19,6 +17,8 @@ def validate_source_index(
     try:
         source_index = bundle.read_json("source_index.json")
         dataset_manifest = bundle.read_json("dataset_manifest.json")
+        engine_identity = bundle.read_json("engine_identity.json")
+        run_configuration = bundle.read_json("run_configuration.json")
     except BundleError as exc:
         return GateResult(
             gate=gate,
@@ -33,9 +33,15 @@ def validate_source_index(
     if producer != _EXPECTED_PRODUCER:
         problems.append("UNKNOWN_BUNDLE_PRODUCER")
 
-    wfa_report = str(source_index.get("wfa_report") or "")
-    if not _is_frozen_source_artifact(bundle, wfa_report):
+    wfa_report_path = str(source_index.get("wfa_report") or "")
+    raw_wfa: dict = {}
+    if not _is_frozen_source_artifact(bundle, wfa_report_path):
         problems.append("WFA_SOURCE_REPORT_NOT_FROZEN")
+    else:
+        try:
+            raw_wfa = bundle.read_json(wfa_report_path)
+        except BundleError:
+            problems.append("WFA_SOURCE_REPORT_INVALID")
 
     copied_files = source_index.get("copied_files")
     if not isinstance(copied_files, list) or not copied_files:
@@ -60,14 +66,29 @@ def validate_source_index(
         if int(dataset.get("size_bytes", 0) or 0) <= 0:
             problems.append("DATASET_SOURCE_SIZE_INVALID")
 
+    if raw_wfa:
+        _cross_check_wfa_authority(
+            raw_wfa=raw_wfa,
+            engine_identity=engine_identity,
+            run_configuration=run_configuration,
+            bundle=bundle,
+            problems=problems,
+        )
+
     if problems:
         return GateResult(
             gate=gate,
             status=GateStatus.FAIL,
             reason_code=problems[0],
-            summary="Raw WFA, partition, control, test, or dataset provenance is not frozen consistently.",
+            summary=(
+                "Raw WFA, generated authority fields, partition files, controls, tests, "
+                "or dataset provenance are not frozen consistently."
+            ),
             evidence_refs=(
                 EvidenceRef("source_index.json"),
+                EvidenceRef(wfa_report_path),
+                EvidenceRef("engine_identity.json"),
+                EvidenceRef("run_configuration.json"),
                 EvidenceRef("dataset_manifest.json"),
             ),
             details={"problems": problems},
@@ -77,12 +98,48 @@ def validate_source_index(
         gate=gate,
         status=GateStatus.PASS,
         reason_code="SOURCE_ARTIFACTS_FROZEN",
-        summary="The bundle contains a frozen source report index and matching dataset file identity.",
+        summary=(
+            "The raw WFA authority, generated identity fields, source index, and dataset "
+            "file identity are mutually consistent."
+        ),
         evidence_refs=(
             EvidenceRef("source_index.json"),
+            EvidenceRef(wfa_report_path),
+            EvidenceRef("engine_identity.json"),
+            EvidenceRef("run_configuration.json"),
             EvidenceRef("dataset_manifest.json"),
         ),
     )
+
+
+def _cross_check_wfa_authority(
+    *,
+    raw_wfa: dict,
+    engine_identity: dict,
+    run_configuration: dict,
+    bundle: CertificationBundle,
+    problems: list[str],
+) -> None:
+    if str(raw_wfa.get("engine_module") or "") != str(
+        engine_identity.get("engine_module") or ""
+    ):
+        problems.append("WFA_ENGINE_IDENTITY_MISMATCH")
+    if raw_wfa.get("read_only") is not True:
+        problems.append("WFA_SOURCE_NOT_READ_ONLY")
+    if bool(raw_wfa.get("is_order_action")) or bool(raw_wfa.get("broker_api_called")):
+        problems.append("WFA_SOURCE_ACTION_BOUNDARY_VIOLATION")
+    if str(raw_wfa.get("run_id") or "") != str(bundle.manifest.get("run_id") or ""):
+        problems.append("WFA_RUN_ID_MISMATCH")
+
+    frozen = raw_wfa.get("frozen_config")
+    base_config = frozen.get("base_config") if isinstance(frozen, dict) else None
+    raw_mode = base_config.get("research_mode") if isinstance(base_config, dict) else None
+    if str(raw_mode or "") != str(run_configuration.get("execution_mode") or ""):
+        problems.append("WFA_EXECUTION_MODE_MISMATCH")
+    if str(raw_wfa.get("frozen_config_hash") or "") != str(
+        run_configuration.get("frozen_config_hash") or ""
+    ):
+        problems.append("WFA_CONFIG_HASH_MISMATCH")
 
 
 def _is_frozen_source_artifact(bundle: CertificationBundle, artifact: str) -> bool:
