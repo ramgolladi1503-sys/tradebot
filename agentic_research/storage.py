@@ -22,6 +22,12 @@ class ArtifactStore:
         path.write_bytes(encoded + b"\n")
         return path, hashlib.sha256(encoded).hexdigest()
 
+    def append_jsonl(self, research_id: str, filename: str, payload: Any) -> Path:
+        path = self.run_dir(research_id) / filename
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+        return path
+
     def read_json(self, research_id: str, filename: str) -> Any:
         return json.loads((self.run_dir(research_id) / filename).read_text(encoding="utf-8"))
 
