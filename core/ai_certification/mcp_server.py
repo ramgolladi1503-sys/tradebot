@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
+from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,6 +16,8 @@ from .mcp import (
     contract_manifest,
     get_tool_contract,
     tool_names,
+    validate_tool_input,
+    validate_tool_output,
 )
 from .policy import CertificationPolicy, default_policy
 from .report import write_report
@@ -168,10 +172,25 @@ def build_server():
 
     def registered_tool(name: str):
         contract = get_tool_contract(name)
-        return mcp.tool(
-            name=contract.name,
-            annotations=contract.annotations.to_mcp_dict(),
-        )
+
+        def decorate(function):
+            signature = inspect.signature(function)
+
+            @wraps(function)
+            def validated(*args, **kwargs):
+                bound = signature.bind(*args, **kwargs)
+                bound.apply_defaults()
+                validate_tool_input(name, bound.arguments)
+                result = function(*args, **kwargs)
+                validate_tool_output(name, result)
+                return result
+
+            return mcp.tool(
+                name=contract.name,
+                annotations=contract.annotations.to_mcp_dict(),
+            )(validated)
+
+        return decorate
 
     @registered_tool("inspect_certification_bundle")
     def inspect_certification_bundle(bundle_id: str) -> dict[str, Any]:
