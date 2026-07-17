@@ -1,10 +1,10 @@
 {
-  "gemini_job": "success",
+  "gemini_job": "skipped",
   "gemini_measured": false,
-  "historical_campaign": "failure",
-  "historical_job": "success",
+  "historical_campaign": "unknown",
+  "historical_job": "skipped",
   "schema_version": 2,
   "secret_persisted": false,
-  "sidecar_regression": "success",
-  "source_commit": "6b9dd8c4177a17bb5c129150058d45e66fa7d3be"
+  "sidecar_regression": "failure",
+  "source_commit": "3e0bbad509f358a5ecdff1361bc0f6f262801012"
 }
