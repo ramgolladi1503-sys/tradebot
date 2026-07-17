@@ -1,0 +1,127 @@
+name: Agentic Research Integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/ai_certification/**"
+      - "scripts/run_ai_certification_*.py"
+      - "scripts/build_upstox_certification_manifest.py"
+      - "tests/ai_certification/**"
+      - "docs/ai_certification/**"
+      - "docs/agent_reviews/agentic_research_integration_v1.md"
+      - ".github/workflows/agentic-research-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install repository dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run complete certification suite
+        run: PYTHONPATH=. pytest -q -o addopts='' tests/ai_certification
+      - name: Compile certification surfaces
+        run: |
+          python -m compileall -q core/ai_certification
+          python -m compileall -q \
+            scripts/run_ai_backtest_certification.py \
+            scripts/export_ai_backtest_certification_bundle.py \
+            scripts/run_ai_certification_research_manager.py \
+            scripts/run_ai_certification_evaluation.py \
+            scripts/build_upstox_certification_manifest.py
+      - name: Run deterministic agent evaluation
+        run: |
+          python scripts/run_ai_certification_evaluation.py \
+            --planner deterministic \
+            --output .runtime/ai_certification/evals/deterministic.json
+      - name: Enforce allowlisted orchestration surface
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          paths = [
+              Path("core/ai_certification/research_manager.py"),
+              Path("core/ai_certification/gemini_client.py"),
+              Path("core/ai_certification/evaluation.py"),
+              Path("core/ai_certification/upstox_corpus.py"),
+          ]
+          allowed_import_roots = {
+              "__future__", "collections", "dataclasses", "hashlib", "io",
+              "json", "math", "os", "pathlib", "re", "sqlite3", "statistics",
+              "time", "typing", "urllib", "zipfile", "pandas", "pyarrow", "core",
+          }
+          disallowed_builtins = {"eval", "exec", "compile", "__import__"}
+          violations = []
+          for path in paths:
+              tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      for alias in node.names:
+                          root = alias.name.split(".")[0]
+                          if root not in allowed_import_roots:
+                              violations.append(f"{path}:import_not_allowlisted:{alias.name}")
+                  elif isinstance(node, ast.ImportFrom):
+                      root = (node.module or "").split(".")[0]
+                      if node.level == 0 and root not in allowed_import_roots:
+                          violations.append(f"{path}:from_not_allowlisted:{node.module}")
+                  elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                      if node.func.id in disallowed_builtins:
+                          violations.append(f"{path}:dynamic_execution:{node.func.id}")
+          if violations:
+              raise SystemExit("\n".join(violations))
+          print("allowlisted_orchestration_surface=PASS")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentic-deterministic-evaluation
+          path: .runtime/ai_certification/evals/deterministic.json
+
+  gemini-online-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run secure Gemini manager and critic evaluation
+        shell: bash
+        run: |
+          mkdir -p .runtime/ai_certification/evals
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            printf '%s\n' '{"measured":false,"reason":"GEMINI_API_KEY repository secret is absent","secret_persisted":false}' \
+              > .runtime/ai_certification/evals/gemini.json
+            exit 0
+          fi
+          python scripts/run_ai_certification_evaluation.py \
+            --planner gemini \
+            --model gemini-2.5-flash \
+            --repeats 2 \
+            --request-delay-seconds 2 \
+            --maximum-retries 2 \
+            --output .runtime/ai_certification/evals/gemini.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gemini-agent-evaluation
+          path: .runtime/ai_certification/evals/gemini.json
