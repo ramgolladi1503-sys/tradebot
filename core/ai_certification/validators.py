@@ -69,17 +69,24 @@ def validate_hashes(bundle: CertificationBundle, policy: CertificationPolicy) ->
     mismatches: list[dict[str, str]] = []
     invalid_hashes: list[str] = []
     missing: list[str] = []
+    unsafe_paths: list[str] = []
     for name, expected in sorted(bundle.artifacts.items()):
         if not isinstance(expected, str) or not _SHA256_RE.fullmatch(expected):
             invalid_hashes.append(name)
             continue
-        path = bundle.artifact_path(name)
+        try:
+            path = bundle.artifact_path(name)
+        except BundleError:
+            unsafe_paths.append(name)
+            continue
         if not path.is_file():
             missing.append(name)
             continue
         observed = sha256_file(path)
         if observed != expected:
             mismatches.append({"artifact": name, "expected": expected, "observed": observed})
+    if unsafe_paths:
+        return _fail(gate, "UNSAFE_ARTIFACT_PATH", "Manifest contains artifact paths outside the bundle root.", EvidenceRef("bundle_manifest.json", "/artifacts"), details={"paths": unsafe_paths})
     if missing:
         return _unevaluated(gate, "HASHED_ARTIFACT_MISSING", "A hashed artifact is missing.", EvidenceRef("bundle_manifest.json", "/artifacts"), details={"missing": missing})
     if invalid_hashes:
