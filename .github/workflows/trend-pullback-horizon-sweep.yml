@@ -7,7 +7,9 @@ on:
       - research/trend-pullback-horizon-sweep
     paths: &horizon_paths
       - "agentic_research/historical/horizon_sweep.py"
+      - "agentic_research/historical/horizon_postprocess.py"
       - "agentic_research/tests/test_horizon_sweep.py"
+      - "agentic_research/tests/test_horizon_postprocess.py"
       - "agentic_research/docs/trend_pullback_horizon_sweep.md"
       - ".github/workflows/trend-pullback-horizon-sweep.yml"
   pull_request:
@@ -41,6 +43,7 @@ jobs:
         run: |
           PYTHONPATH=. pytest -q \
             agentic_research/tests/test_horizon_sweep.py \
+            agentic_research/tests/test_horizon_postprocess.py \
             agentic_research/tests/test_historical_campaign.py
           python -m compileall -q agentic_research/historical
       - name: Fetch pinned Aeron7 NIFTY futures data
@@ -88,6 +91,15 @@ jobs:
             --source-repository aeron7/nifty-banknifty-intraday-data \
             --source-commit 906fc2378b82e50de78f62844a3ecb3f9306a85d \
             --minimum-sessions 300
+      - name: Add equal-risk and reason-level diagnostics
+        id: postprocess
+        if: steps.sweep.outcome == 'success'
+        continue-on-error: true
+        run: |
+          python -m agentic_research.historical.horizon_postprocess \
+            --result "$RUNNER_TEMP/horizon-sweep/horizon_sweep_result.json" \
+            --traces "$RUNNER_TEMP/horizon-sweep/signal_traces.jsonl" \
+            --output-dir "$RUNNER_TEMP/horizon-sweep"
       - name: Build reviewable evidence snapshot
         if: always()
         env:
@@ -95,6 +107,7 @@ jobs:
           FETCH_OUTCOME: ${{ steps.fetch.outcome }}
           CONVERT_OUTCOME: ${{ steps.convert.outcome }}
           SWEEP_OUTCOME: ${{ steps.sweep.outcome }}
+          POSTPROCESS_OUTCOME: ${{ steps.postprocess.outcome }}
           SOURCE_FILE_COUNT: ${{ steps.fetch.outputs.file_count }}
         run: |
           python - <<'PY'
@@ -104,17 +117,23 @@ jobs:
           target = Path("agentic_research/evidence_results/horizon_sweep")
           target.mkdir(parents=True, exist_ok=True)
           source = Path(os.environ["RUNNER_TEMP"]) / "horizon-sweep"
-          for name in ("horizon_sweep_result.json", "horizon_sweep_report.md"):
+          for name in (
+              "horizon_sweep_result.json",
+              "horizon_sweep_report.md",
+              "horizon_risk_summary.json",
+              "horizon_risk_summary.md",
+          ):
               path = source / name
               if path.exists():
                   shutil.copy2(path, target / name)
           status = {
-              "schema_version": 1,
+              "schema_version": 2,
               "source_commit": os.environ["GITHUB_SHA"],
               "test_outcome": os.environ.get("TEST_OUTCOME") or "not_run",
               "fetch_outcome": os.environ.get("FETCH_OUTCOME") or "not_run",
               "convert_outcome": os.environ.get("CONVERT_OUTCOME") or "not_run",
               "sweep_outcome": os.environ.get("SWEEP_OUTCOME") or "not_run",
+              "postprocess_outcome": os.environ.get("POSTPROCESS_OUTCOME") or "not_run",
               "source_file_count": int(os.environ.get("SOURCE_FILE_COUNT") or 0),
           }
           (target / "run_status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
@@ -140,8 +159,10 @@ jobs:
           FETCH_OUTCOME: ${{ steps.fetch.outcome }}
           CONVERT_OUTCOME: ${{ steps.convert.outcome }}
           SWEEP_OUTCOME: ${{ steps.sweep.outcome }}
+          POSTPROCESS_OUTCOME: ${{ steps.postprocess.outcome }}
         run: |
           test "$TEST_OUTCOME" = "success"
           test "$FETCH_OUTCOME" = "success"
           test "$CONVERT_OUTCOME" = "success"
           test "$SWEEP_OUTCOME" = "success"
+          test "$POSTPROCESS_OUTCOME" = "success"
