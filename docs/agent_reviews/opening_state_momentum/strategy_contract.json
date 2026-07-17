@@ -1,0 +1,21 @@
+{
+  "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
+  "strategy_version": "1.0.0",
+  "contract_hash": "65a42e96705fd875814bb54547a8dc4675407ff2ba204bf3c75f91147f353eb4",
+  "primary_instrument": "NIFTY",
+  "confirmation_instrument": "BANKNIFTY",
+  "excluded_instruments": [
+    "SENSEX"
+  ],
+  "opening_window_start_time": "09:15",
+  "opening_window_end_time": "09:45",
+  "decision_cutoff_time": "14:45",
+  "mandatory_exit_time": "15:15",
+  "max_holding_period_min": 30,
+  "canonical_percentile": 80,
+  "close_location_long_threshold": 0.75,
+  "close_location_short_threshold": 0.25,
+  "retained_move_fraction_threshold": 0.5,
+  "anchor_type": "SESSION_TYPICAL_PRICE_MEAN",
+  "bar_timestamp_semantics": "bar_open"
+}
