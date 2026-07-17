@@ -5,16 +5,22 @@
 - Worktree: `/Users/madhuram/tradebot-compression-breakout-phase3b-closure`
 - Branch: `fix/compression-breakout-phase3b-closure`
 - Starting head: `d125420d3f93df713ab9175fc392578b66ba89d3`
-- Final implementation head before evidence commit: `d125420d3f93df713ab9175fc392578b66ba89d3`
+- Final implementation head before evidence commit: `2125a61897114014c8fc85de7ed42a27040a4134`
 - Accepted ancestry: `PROVEN`
 - Accepted ancestry evidence: the branch descends from the accepted Trend Pullback closure line and retains the accepted Phase 3B harness, restart, and PR 657/658 ancestry.
+
+## Commit graph evidence
+
+- `668a56a5b45b0dac54b9347dadde3a91f84f14f6` is reachable in the branch ancestry.
+- `2b0fc647b0398cd88a5fbf227e2e90bff2d6fd23` is reachable in the branch ancestry.
+- The evidence doc records the actual implementation head as `2125a61897114014c8fc85de7ed42a27040a4134`; the two graph commits remain ancestry evidence, not the implementation head for this branch.
 
 ## Denominator evidence matrix
 
 | source file / commit | formula | denominator | timestamp semantics | runtime usage | replay / offline usage | test coverage | authority level |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `core/session_bar_history.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high - day_low) / reference_price` | caller-supplied `reference_price` | completed bars only; forming bars past cutoff are excluded | helper only; denominator is not fixed here | helper only; denominator is not fixed here | `tests/test_compression_breakout_range_width_runtime_contract.py` | helper-only, not canonical |
-| `core/market_data.py` @ `d125420d3f93df713ab9175fc392578b66ba89d3` | `calculate_session_range_width_pct_from_completed_history(... reference_price=latest_completed_close)` | latest completed 1m close | live cycle cutoff / completed-bar prefix | yes | yes | `tests/test_compression_breakout_range_width_runtime_contract.py` | canonical runtime source |
+| `core/market_data.py` @ `2125a61897114014c8fc85de7ed42a27040a4134` | `calculate_session_range_width_pct_from_completed_history(... reference_price=latest_completed_close)` | latest completed 1m close | live cycle cutoff / completed-bar prefix | yes | yes | `tests/test_compression_breakout_range_width_runtime_contract.py` | canonical runtime source |
 | `core/orb_ohlcv_validation.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high_so_far - day_low_so_far) / close` | row `close` | row timestamp / candle close | no | yes | `tests/test_captured_market_session_replay.py` | offline proxy only |
 | `scripts/backtest_all_strategies_available_data.py` @ `1b95bbc9923567ccd1ed52df8f9205c172333539` | `(day_high_so_far - day_low_so_far) / max(close, 1.0)` | row `close` | candle close | no | yes | script-level proxy only | offline research proxy |
 | `tests/test_compression_breakout_range_width_runtime_contract.py` @ this task | same completed history, two denominator inputs | `100.0` vs `40.0` | same causal completed-bar prefix | proves live-path sensitivity | proves replay/offline proxy sensitivity | added threshold-straddle proof | evidence artifact |
@@ -118,6 +124,7 @@ Both passed in the focused regression slice and did not change their accepted fi
 
 ## Files changed
 
+- `core/market_data.py`
 - `tests/test_compression_breakout_range_width_runtime_contract.py`
 - `docs/agent_reviews/strategy_truth_compression_breakout_phase3b_gap_audit.md`
 
@@ -125,7 +132,7 @@ Both passed in the focused regression slice and did not change their accepted fi
 
 | path | file type | size | sha256 | row count | columns / data types | timestamp field | timestamp range | suitability |
 | --- | --- | ---: | --- | ---: | --- | --- | --- | --- |
-| `/Users/madhuram/tradebot/.runtime/market_data/upstox_full_ticks_20260717.parquet` | parquet | `1024547` | `2170a7b6d9644d3de229d0516ff43ff50290dc65774d10a90aaa9b3e4bac26b3` | `51858` | `ts=float64, token=object, symbol=object, ltp=float64, bid=float64, ask=float64, vol=float64, oi=float64, depth=object` | `ts` | `2026-07-16 18:29:16.534502983+00:00` to `2026-07-16 21:59:43.772019863+00:00` | tick-like causal price source; event timestamps available; usable as runtime control only |
+| `/Users/madhuram/tradebot/.runtime/market_data/upstox_full_ticks_20260717.parquet` | parquet | `1024547` | `2170a7b6d9644d3de229d0516ff43ff50290dc65774d10a90aaa9b3e4bac26b3` | `51858` | `ts=float64, token=object, symbol=object, ltp=float64, bid=float64, ask=float64, vol=float64, oi=float64, depth=object` | `ts` | `2026-07-16 18:29:16.534502983+00:00` to `2026-07-16 21:59:43.772019863+00:00` | timestamp field present; exchange-event semantics unproven; timezone semantics unproven; not used as authority for the canonical denominator decision |
 | `/Users/madhuram/tradebot/.runtime/market_data/ticks_20260717_095655.parquet` | parquet | `4` | `fbc62d3b511368ee275ddc74117d8689b430e1427220e25d30816201d89ca7b6` | unreadable | malformed stub | none | none | unusable; not a valid market dataset |
 | `/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240618/underlying/NIFTY_20240618.parquet` | parquet | `26176` | `c77ea7e057917f626154d49f5e417c0ea116ec9428da58292f616e4b9a17ae1b` | `375` | `timestamp=datetime64[ns], symbol=object, open=float64, high=float64, low=float64, close=float64, volume=float64, oi=float64, source=object, interval=object, fetch_timestamp=datetime64[ns], fetch_start_date=object, fetch_end_date=object, data_origin=object, synthetic=bool, mock=bool, fallback=bool, provider=object, source_endpoint=object` | `timestamp` | `2024-06-18 09:15:00+00:00` to `2024-06-18 15:29:00+00:00` | candle-only replay source; no tick-level cutoff price |
 | `/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240530/underlying/NIFTY_20240530.parquet` | parquet | `27415` | `946a1f1ca171e9ef03c08a59bdf6e36b76e1937355afba1765470ca0d16d7606` | `375` | same candle schema as above | `timestamp` | `2024-05-30 09:15:00+00:00` to `2024-05-30 15:29:00+00:00` | candle-only replay source; no tick-level cutoff price |
@@ -155,10 +162,9 @@ Both passed in the focused regression slice and did not change their accepted fi
 
 ## Rollback
 
-- Remove the threshold-straddle regression test from `tests/test_compression_breakout_range_width_runtime_contract.py`.
-- Remove the stale-LTP fail-closed regression test from `tests/test_compression_breakout_range_width_runtime_contract.py`.
-- Revert this evidence document to the prior gap-audit version.
-- Do not change production code; no production change was made in this task.
+- Revert commit `2125a61897114014c8fc85de7ed42a27040a4134` to remove the completed-close denominator wiring in `core/market_data.py`, the runtime contract tests in `tests/test_compression_breakout_range_width_runtime_contract.py`, and the corrected evidence package in `docs/agent_reviews/strategy_truth_compression_breakout_phase3b_gap_audit.md`.
+- That revert would restore the prior runtime LTP versus replay close split only if an explicit rollback is intentionally requested.
+- No manual partial edit is safer than reverting the single commit that introduced the accepted contract.
 
 ## Explicit non-claims
 
@@ -166,4 +172,5 @@ Both passed in the focused regression slice and did not change their accepted fi
 - No strategy formula, threshold, ranking weight, or owner/outbox change.
 - No claim that the branch was pushed.
 - No claim that historical validation, execution readiness, or live readiness has been proven.
-- No claim that a single canonical denominator was recovered.
+- The canonical completed-close denominator is proven for Strategy Truth Phase 3B.
+- This does not prove historical edge, profitability, execution readiness, broker readiness, paper readiness, live readiness, or production certification.
