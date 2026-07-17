@@ -102,7 +102,7 @@ def _make_bundle(tmp_path: Path, *, overrides: dict[str, dict] | None = None) ->
             "holdout_isolated_from_selection": True,
         },
         "wfa_results.json": {
-            "repeated_holdout_run_count": 1,
+            "repeated_holdout_run_count": 0,
             "contamination_count": 0,
             "known_setup_regime_oos": True,
             "holdout_fraction": 0.25,
