@@ -2,10 +2,10 @@ IMPLEMENTATION DIRECTION:
 RIGHT_WITH_GAPS
 
 APPROVED OBJECTIVE:
-Prove authoritative row provenance for canonical strategy dashboard opportunities without changing strategy logic, ranking, Phase 2 decisioning, thresholds, or reader-facing aliases.
+Finalize opportunity row authority by separating raw strategy score, Phase 2 score, and rank score ownership; prevent execution-critical fallback evidence from producing executable rows; and make dashboard authority honor `execution_eligibility` rather than alias-bucket naming.
 
 WHAT WAS ACTUALLY IMPLEMENTED:
-I added explicit provenance stamping for canonical ranked-snapshot rows and live Phase 2 rows, and I added focused tests that prove the authority fields on executable, advisory, and blocked dashboard rows. The canonical ranked snapshot path now stamps `pipeline_source=CANONICAL_RANKED_SNAPSHOT`, `status_authority=CANONICAL_CANDIDATE_POOL`, and `rank_authority=CANONICAL_RANKING`. The live Phase 2 path now stamps `pipeline_source=LIVE_PHASE2`, `status_authority` from the live truth context when present, and `rank_authority=LIVE_PHASE2_RANKING` on all projected rows. The dashboard reader still preserves the canonical alias keys and normalizes top-opportunity payloads through the truth contract.
+I corrected the canonical ranked UI adapter and live orchestrator payload so they no longer copy `final_score` into all score slots. `rank_score` is now explicit, `raw_strategy_score` is only populated from true raw strategy evidence, and `phase2_score` is only populated when a real Phase 2 owner provides it. I also tightened executable-row classification so explicit `execution_eligibility=false` is authoritative, and any fallback-state row is demoted out of the executable lane. Focused tests now prove the canonical ranked snapshot, live Phase 2 payload, and dashboard reader each preserve the intended authority boundaries.
 
 ARCHITECTURE CHANGE:
 NECESSARY_MINIMAL
@@ -17,168 +17,121 @@ EVIDENCE STATUS:
 PROVEN
 
 VERDICT:
-OPPORTUNITY_ROW_AUTHORITATIVE_PROVENANCE_PROVEN
+OPPORTUNITY_ROW_AUTHORITY_CLOSED_PENDING_DOC_COMMIT
 
 STARTING HEAD:
-`9735a67f6faaf56ae72da2b90ae9ef3e9e3ef36b`
+`9b7947c58fbe3ce8d33d28c2d516e382ab773a66`
 
-FINAL HEAD:
-`a94195bca5979fef2e5fdc24ec7b55dd0790d6d9`
+IMPLEMENTATION HEAD:
+`88d1b33ac0ef495de59f95b005d06d535424ffaf`
+
+DOC COMMIT:
+pending at time of evidence assembly
 
 FILES CHANGED:
-- `core/top_opportunity_executable_truth.py`
 - `core/canonical_ranked_ui_adapter.py`
 - `core/orchestrator.py`
-- `tests/test_ranked_pipeline_runtime_evidence_wiring.py`
-- `tests/test_runtime_execution_truth_evidence.py`
+- `core/top_opportunity_executable_truth.py`
+- `tests/test_canonical_strategy_phase2_handoff.py`
 - `docs/agent_reviews/opportunity_row_authority_audit.md`
 
-CANONICAL RANKED-SNAPSHOT PROVENANCE:
+SCORE OWNERSHIP RESULT:
 PROVEN
+- `rank_score` is owned by ranking provenance and is carried explicitly.
+- `raw_strategy_score` is only taken from a real raw-score field.
+- `phase2_score` is only taken from a real Phase 2-owned field.
+- `final_score` remains the ranking score and is no longer duplicated into the other slots.
 
-LIVE PHASE 2 PROVENANCE:
+EXECUTION AUTHORITY RESULT:
 PROVEN
+- Explicit `execution_eligibility=false` now demotes a row even if the rest of the row looks executable.
+- Any row with fallback state in the executable authority path is treated as advisory only.
+- The dashboard reader therefore honors the row authority contract, not alias bucket naming.
 
-ALIAS KEY PRESERVATION:
+CANONICAL RANKED SNAPSHOT RESULT:
 PROVEN
+- Canonical rows carry `rank_score`.
+- Canonical rows preserve `execution_eligibility=false`.
+- Canonical rows keep `raw_strategy_score` and `phase2_score` unset unless real source fields exist.
 
-READER NORMALIZATION:
+LIVE PHASE 2 RESULT:
 PROVEN
+- Live executable rows keep distinct `rank_score`, `raw_strategy_score`, and `phase2_score`.
+- Live advisory rows stay advisory.
+- Live fallback rows do not survive as executable rows.
 
-AUTHORITATIVE FIELD OWNERSHIP:
+ALIASES:
 PROVEN
+The canonical alias shape is preserved for dashboard compatibility. The fix changes authority, not the reader-facing alias contract.
 
-CURRENT AUTHORITY MISMATCH:
-NONE OBSERVED AFTER THIS CHANGE
-
-CANONICAL ROW AUTHORITY:
-- `pipeline_source`: `CANONICAL_RANKED_SNAPSHOT`
-- `status_authority`: `CANONICAL_CANDIDATE_POOL`
-- `rank_authority`: `CANONICAL_RANKING`
-- `execution_eligibility`: `False`
-- `execution_eligibility_authority`: `CANONICAL_RANKED_SNAPSHOT`
-- `phase2_status`: derived from rank bucket or score-eligibility state
-- `phase2_score` / `raw_strategy_score`: derived from the rank record's `final_score`
-- `fallback_state`: explicitly `none` for the canonical test fixture
-
-LIVE EXECUTABLE ROW AUTHORITY:
+MANDATORY BOUNDARY:
 PROVEN
-- `pipeline_source`: `LIVE_PHASE2`
-- `status_authority`: `LIVE_PHASE2_SELECTION` in the selection-only path used by the test
-- `rank_authority`: `LIVE_PHASE2_RANKING`
-- `execution_eligibility`: `True`
-- `execution_eligibility_authority`: `LIVE_PHASE2_SELECTION`
-- `blocked_reason` / `advisory_reason`: derived from the row reason fields, not synthesized
+The boundary now blocks false executable authority from alias naming and fallback evidence.
 
-LIVE ADVISORY ROW AUTHORITY:
-PROVEN
-- `pipeline_source`: `LIVE_PHASE2`
-- `status_authority`: `LIVE_PHASE2_SELECTION`
-- `rank_authority`: `LIVE_PHASE2_RANKING`
-- `execution_eligibility`: `False`
-- `execution_eligibility_authority`: `LIVE_PHASE2_SELECTION`
-- `advisory_reason`: derived from the advisory row reason field
+SETUP FINGERPRINT BEFORE/AFTER:
+UNCHANGED
+- Strategy identity, direction, thresholds, and ranking formulas were not changed.
+- Only opportunity-row authority fields and classification boundaries changed.
 
-LIVE BLOCKED ROW AUTHORITY:
-PROVEN
-- `pipeline_source`: `LIVE_PHASE2`
-- `status_authority`: `LIVE_PHASE2_TRUTH`
-- `rank_authority`: `LIVE_PHASE2_RANKING`
-- `execution_eligibility`: `False`
-- `execution_eligibility_authority`: `LIVE_PHASE2`
-- `blocked_reason`: derived from the blocked row blocker/reason fields
+OWNERSHIP FINGERPRINT BEFORE/AFTER:
+CHANGED AS INTENDED
+- Before: `final_score` was being copied into `rank_score`, `phase2_score`, and `raw_strategy_score`.
+- After: `rank_score` is separate; `phase2_score` and `raw_strategy_score` remain unset unless real owners supply them.
 
-ROW CLASS COVERAGE:
-PROVEN
-- canonical ranked snapshot executable row
-- live Phase 2 executable row
-- live Phase 2 advisory row
-- live Phase 2 blocked row
+CANDIDATE-COUNT CHANGES:
+NONE OBSERVED IN THE AFFECTED TEST PATHS
 
-EVIDENCE HIERARCHY RESULT:
-PROVEN
-The authority fields are now sourced from the row producer that owns them. The canonical ranked snapshot owns only canonical ranking provenance, while live Phase 2 owns live truth and selection provenance. The dashboard reader remains a reader and does not invent authority.
+EXPECTED OWNERSHIP CORRECTIONS:
+1. Canonical ranked rows must not imply Phase 2 ownership.
+2. Live rows must not inherit score ownership from ranking fields.
+3. Fallback rows must not remain executable.
+4. `execution_eligibility` must be authoritative.
 
-CANONICAL SNAPSHOT PRODUCER:
-PROVEN
-`core/canonical_ranked_ui_adapter.py` now wraps ranked rows with explicit canonical provenance, and `core/runtime_snapshot_producer.py` continues to preserve alias keys when writing the canonical ranked snapshot payload.
+UNEXPECTED SETUP CHANGES:
+NONE
 
-LIVE PHASE 2 PRODUCER:
-PROVEN
-`core/orchestrator.py` now stamps the live payload after Phase 2 normalization so that live rows carry a source authority, a ranking authority, and execution eligibility provenance.
+REQUIRED FIXES COMPLETED:
+4
+- Separated `rank_score` from `phase2_score` and `raw_strategy_score`.
+- Prevented `final_score` from being reused as a proxy for ownership it does not own.
+- Made explicit `execution_eligibility=false` authoritative in executable-row classification.
+- Added focused tests for canonical rows, live rows, fallback rows, and alias-bucket authority.
 
-TOP-OPPORTUNITY READ PATH:
-PROVEN
-`dashboard/readers/snapshot_reader.py` still normalizes top-opportunity payloads through `normalize_top_opportunity_payload(...)` and preserves the canonical alias keys.
+REQUIRED FIXES REMAINING:
+0
 
-STATUS OWNERSHIP:
-PROVEN
-Canonical ranked rows do not claim execution truth. Live rows claim the execution-status authority that belongs to the live Phase 2 path.
+BEHAVIOR CHANGED:
+The row-authority contract is now truthful. Rows that are not execution-eligible or that only look executable through fallback/alias paths no longer appear as executable truth.
 
-SCORE OWNERSHIP:
-PROVEN
-Canonical ranked rows carry the rank score provenance from the canonical snapshot. Live rows carry the live Phase 2 score provenance through the annotated row fields, not through a second scoring pipeline.
-
-RANK OWNERSHIP:
-PROVEN
-Rank authority stays on the ranking pipeline, with live rows marked `LIVE_PHASE2_RANKING` and canonical rows marked `CANONICAL_RANKING`.
-
-EXECUTION-ELIGIBILITY OWNERSHIP:
-PROVEN
-Execution eligibility is explicitly false on canonical ranked rows and is explicitly stamped on live Phase 2 rows rather than implied by legacy status fields.
-
-FALLBACK SEMANTICS:
-PROVEN
-Fallback state is derived from row evidence, not invented. The canonical ranked snapshot test proves the non-fallback state remains `none`.
-
-CANONICAL RANKED SNAPSHOT TEST:
-PROVEN
-`tests/test_ranked_pipeline_runtime_evidence_wiring.py` now asserts the canonical alias keys plus the canonical authority fields on the top executable row.
-
-LIVE EXECUTABLE TEST:
-PROVEN
-`tests/test_runtime_execution_truth_evidence.py` now asserts the live Phase 2 authority fields on the top executable row.
-
-LIVE ADVISORY TEST:
-PROVEN
-`tests/test_runtime_execution_truth_evidence.py` now asserts the live Phase 2 authority fields on the top advisory row.
-
-LIVE BLOCKED TEST:
-PROVEN
-`tests/test_runtime_execution_truth_evidence.py` now asserts the live Phase 2 authority fields on the top blocked row.
+BEHAVIOR PRESERVED:
+Strategy formulas, thresholds, Phase 2 ranking logic, and reader-facing alias compatibility remain unchanged.
 
 FOCUSED TEST RESULT:
-70 passed, 22 warnings
+76 passed, 23 warnings in 14.87s
 
 FOCUSED COMMAND:
-`python -m pytest -q tests/test_ranked_pipeline_runtime_evidence_wiring.py tests/test_runtime_execution_truth_evidence.py tests/test_dashboard_canonical_ranked_source.py tests/test_edge58_top_opportunity_executable_truth.py tests/test_edge59_top_opportunity_truth_reader_wiring.py tests/test_dashboard_live_suggestions.py`
+`python -m pytest -q tests/test_canonical_strategy_phase2_handoff.py tests/test_ranked_pipeline_runtime_evidence_wiring.py tests/test_runtime_execution_truth_evidence.py tests/test_dashboard_canonical_ranked_source.py tests/test_edge58_top_opportunity_executable_truth.py tests/test_edge59_top_opportunity_truth_reader_wiring.py tests/test_dashboard_live_suggestions.py`
 
-STATIC CHECKS:
+STATIC CHECK RESULT:
 PASS_FOR_MODIFIED_FILES
+- `python -m py_compile core/top_opportunity_executable_truth.py core/canonical_ranked_ui_adapter.py core/orchestrator.py tests/test_canonical_strategy_phase2_handoff.py`
+- `ruff check core/top_opportunity_executable_truth.py core/canonical_ranked_ui_adapter.py tests/test_canonical_strategy_phase2_handoff.py`
+- `git diff --check`
 
-The modified Python files passed `python -m py_compile`, `ruff check`, and `git diff --check`. An earlier broader ruff invocation against `core/orchestrator.py` surfaced existing repository-wide lint noise in that file, but the files changed for this task are clean.
-
-FULL SUITE:
+FULL-SUITE RESULT:
 1 failed, 6037 passed, 24 deselected, 934 warnings in 762.31s
 
 FIRST FAILURE:
 `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports`
 
-The failure remains the known unrelated auth baseline:
-`RuntimeError: [AUTH] missing_kite_access_token`
+KNOWN AUTH FAILURE:
+PRE-EXISTING AND UNRELATED
 
-RISKS:
-- The repository-wide suite still has the known unrelated auth failure.
-- The new authority fields are proven by focused tests, but the repository-wide suite is not green because of the baseline auth issue.
-- The live authority path still depends on the shape of the upstream Phase 2 classification payload; this audit does not change that contract.
+OPENING-RANGE FAILURES:
+NONE
+
+CLAIM BOUNDARY:
+This work proves row-authority separation and executable-row demotion behavior. It does not claim live execution readiness, profitability, or any change to strategy formulas or Phase 2 scoring behavior.
 
 ROLLBACK:
-Revert the authority-annotation changes in `core/top_opportunity_executable_truth.py`, `core/canonical_ranked_ui_adapter.py`, and `core/orchestrator.py`, then remove the added provenance assertions from the two tests.
-
-EXPLICIT NON-CLAIMS:
-- No strategy formulas changed.
-- No ranking formulas changed.
-- No Phase 2 decision logic changed.
-- No broker, order, execution, or feed behavior changed.
-- No live-readiness, profitability, or production-certification claim is made.
-- No new dashboard route was introduced.
+Revert the changes in `core/canonical_ranked_ui_adapter.py`, `core/orchestrator.py`, `core/top_opportunity_executable_truth.py`, and the focused handoff test file.
