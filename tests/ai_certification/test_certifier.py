@@ -184,3 +184,15 @@ def test_insufficient_trades_is_not_confused_with_invalid_evidence(tmp_path: Pat
     report = certify_bundle(bundle)
     assert report.evidence_certification is EvidenceCertification.CERTIFIED
     assert report.strategy_verdict is StrategyVerdict.INSUFFICIENT_TRADES
+
+
+def test_unsafe_manifest_path_returns_rejection_report(tmp_path: Path):
+    bundle = _make_bundle(tmp_path)
+    manifest_path = bundle / "bundle_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"]["../.env"] = "b" * 64
+    _write_json(manifest_path, manifest)
+    report = certify_bundle(bundle)
+    assert report.evidence_certification is EvidenceCertification.REJECTED
+    assert report.strategy_verdict is StrategyVerdict.INVALID_DUE_TO_DATA
+    assert report.to_dict()["gates"]["artifact_hashes"]["reason_code"] == "UNSAFE_ARTIFACT_PATH"
