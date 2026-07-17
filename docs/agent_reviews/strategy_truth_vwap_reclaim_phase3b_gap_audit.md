@@ -30,6 +30,7 @@ PROVEN
 - Branch: `fix/vwap-reclaim-phase3b-closure`
 - Starting head: `3e21821b211cedff8c1f8c26e8e4d4e88c360be5`
 - Implementation commit: `526bce2c`
+- Evidence update commit: `eb3725794cd8216e0d0b1611b4f526dfa53057ef`
 
 ## Files Changed
 
