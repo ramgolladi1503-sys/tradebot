@@ -8,6 +8,22 @@ from core.ai_certification import (
 )
 
 
+EXPECTED_GATE_ORDER = (
+    "bundle_manifest",
+    "artifact_hashes",
+    "source_artifact_provenance",
+    "source_authority",
+    "data_provenance",
+    "temporal_causality",
+    "execution_realism",
+    "financial_reconciliation",
+    "walk_forward_integrity",
+    "negative_controls",
+    "test_evidence",
+    "strategy_result_consistency",
+)
+
+
 def test_qa_func_001_happy_path_valid_negative_edge_is_certified(
     qa_bundle_factory,
 ):
@@ -104,8 +120,8 @@ def test_qa_behavior_002_all_gate_results_have_auditable_contract(
     report = certify_bundle(qa_bundle_factory())
     payload = report.to_dict()
 
-    assert len(report.gates) == 12
-    assert set(payload["gates"]) == {gate.gate for gate in report.gates}
+    assert tuple(gate.gate for gate in report.gates) == EXPECTED_GATE_ORDER
+    assert tuple(payload["gates"]) == EXPECTED_GATE_ORDER
     for gate in report.gates:
         assert gate.status is GateStatus.PASS
         assert gate.reason_code
