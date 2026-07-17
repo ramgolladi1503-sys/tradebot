@@ -1,4 +1,4 @@
-langgraph>=0.2
+langgraph>=1.0
 langgraph-checkpoint-sqlite>=2.0
 pydantic>=2.7
 fastapi>=0.110
@@ -8,3 +8,4 @@ google-genai>=1.0
 streamlit>=1.33
 pandas>=2.0
 pyarrow>=14
+pytest>=8.0
