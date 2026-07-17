@@ -11,13 +11,6 @@ from typing import Any
 class HistoricalCampaignConfig:
     symbol: str = "NIFTY_F1"
     timezone: str = "Asia/Kolkata"
-    variant_id: str = "unchanged_baseline"
-    date_from: str | None = None
-    date_to: str | None = None
-    minimum_directional_regime_score: float = 0.0
-    minimum_candidate_raw_score: float = 0.0
-    minimum_minutes_since_open: int = 0
-    maximum_minutes_since_open: int = 360
     round_trip_cost_bps: float = 2.0
     adverse_cost_bps: float = 5.0
     severe_cost_bps: float = 10.0
@@ -35,16 +28,6 @@ class HistoricalCampaignConfig:
     step_sessions: int = 20
     holdout_fraction: float = 0.20
     boundary_purge_sessions: int = 1
-
-    def __post_init__(self) -> None:
-        if not 0.0 <= self.minimum_directional_regime_score <= 1.0:
-            raise ValueError("minimum_directional_regime_score_out_of_range")
-        if not 0.0 <= self.minimum_candidate_raw_score <= 1.0:
-            raise ValueError("minimum_candidate_raw_score_out_of_range")
-        if self.minimum_minutes_since_open < 0:
-            raise ValueError("minimum_minutes_since_open_negative")
-        if self.maximum_minutes_since_open < self.minimum_minutes_since_open:
-            raise ValueError("invalid_minutes_since_open_window")
 
 
 class HistoricalCampaignError(ValueError):
