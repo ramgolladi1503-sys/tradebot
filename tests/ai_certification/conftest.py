@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import itertools
 import json
@@ -30,6 +31,18 @@ def _deep_update(target: dict[str, Any], patch: dict[str, Any]) -> None:
 
 
 def _valid_artifacts() -> dict[str, Any]:
+    controls = {
+        "future_mutation": True,
+        "timing_shift": True,
+        "cost_sensitivity": True,
+    }
+    raw_tests = {
+        "collected": 75,
+        "passed": 75,
+        "failed": 0,
+        "errors": 0,
+        "repository_commit": "qa-commit-001",
+    }
     return {
         "source/option_replay_wfa_report.json": {
             "engine_module": "core.option_backtest.engine.OptionBacktestEngine",
@@ -38,10 +51,19 @@ def _valid_artifacts() -> dict[str, Any]:
             "frozen_config": {
                 "base_config": {"research_mode": "REAL_EXECUTABLE_RESEARCH"}
             },
+            "partitions": {
+                "validation": {"status": "completed"},
+                "holdout": {"status": "skipped_validation_failed"},
+            },
             "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
         },
+        "source/negative_controls_input.json": {"controls": deepcopy(controls)},
+        "source/test_results_input.json": deepcopy(raw_tests),
+        "source/validation/summary.json": {"certifiable": True},
+        "source/validation/trade_journal.json": [],
+        "source/validation/decision_samples.json": [],
         "source_index.json": {
             "producer": "core.ai_certification.exporter.export_option_replay_wfa_bundle",
             "wfa_report": "source/option_replay_wfa_report.json",
@@ -50,7 +72,27 @@ def _valid_artifacts() -> dict[str, Any]:
                 {
                     "artifact": "source/option_replay_wfa_report.json",
                     "role": "wfa_report",
-                }
+                },
+                {
+                    "artifact": "source/negative_controls_input.json",
+                    "role": "controls_input",
+                },
+                {
+                    "artifact": "source/test_results_input.json",
+                    "role": "tests_input",
+                },
+                {
+                    "artifact": "source/validation/summary.json",
+                    "role": "validation_summary.json",
+                },
+                {
+                    "artifact": "source/validation/trade_journal.json",
+                    "role": "validation_trade_journal.json",
+                },
+                {
+                    "artifact": "source/validation/decision_samples.json",
+                    "role": "validation_decision_samples.json",
+                },
             ],
         },
         "dataset_manifest.json": {
@@ -125,19 +167,13 @@ def _valid_artifacts() -> dict[str, Any]:
             "holdout_fraction": 0.25,
         },
         "negative_controls.json": {
-            "controls": {
-                "future_mutation": True,
-                "timing_shift": True,
-                "cost_sensitivity": True,
-            }
+            "controls": deepcopy(controls),
+            "source": "source/negative_controls_input.json",
         },
         "test_results.json": {
-            "collected": 75,
-            "passed": 75,
-            "failed": 0,
-            "errors": 0,
-            "repository_commit": "qa-commit-001",
+            **deepcopy(raw_tests),
             "commit_matches_bundle": True,
+            "source": "source/test_results_input.json",
         },
         "strategy_result.json": {
             "verdict": "NO_STRUCTURAL_EDGE",
@@ -163,12 +199,37 @@ def qa_bundle_factory(tmp_path: Path) -> BundleFactory:
         root = tmp_path / f"qa_bundle_{next(counter)}"
         root.mkdir()
         artifacts = _valid_artifacts()
-        for name, patch in (artifact_overrides or {}).items():
+        overrides = artifact_overrides or {}
+        for name, patch in overrides.items():
             if name not in artifacts:
                 artifacts[name] = {}
             if not isinstance(artifacts[name], dict):
                 raise TypeError(f"artifact is not patchable JSON: {name}")
             _deep_update(artifacts[name], patch)
+
+        if (
+            "negative_controls.json" in overrides
+            and "source/negative_controls_input.json" not in overrides
+        ):
+            artifacts["source/negative_controls_input.json"]["controls"] = deepcopy(
+                artifacts["negative_controls.json"]["controls"]
+            )
+        if (
+            "test_results.json" in overrides
+            and "source/test_results_input.json" not in overrides
+        ):
+            normalized_tests = artifacts["test_results.json"]
+            raw_tests = artifacts["source/test_results_input.json"]
+            for field in (
+                "collected",
+                "passed",
+                "failed",
+                "errors",
+                "repository_commit",
+            ):
+                if field in normalized_tests:
+                    raw_tests[field] = normalized_tests[field]
+
         artifacts.update(extra_artifacts or {})
         for name in omit or set():
             artifacts.pop(name, None)
