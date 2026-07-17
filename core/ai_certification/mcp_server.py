@@ -3,12 +3,44 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .bundle import BundleError, CertificationBundle
 from .certifier import certify_bundle
-from .policy import default_policy
+from .knowledge import CuratedKnowledgeBase
+from .policy import CertificationPolicy, default_policy
 from .report import write_report
+from .source_validator import validate_source_index
+from .validators import (
+    validate_data_provenance,
+    validate_execution_realism,
+    validate_financial_reconciliation,
+    validate_hashes,
+    validate_manifest,
+    validate_negative_controls,
+    validate_source_authority,
+    validate_strategy_result,
+    validate_temporal_causality,
+    validate_test_evidence,
+    validate_wfa_integrity,
+)
+
+
+GateValidator = Callable[[CertificationBundle, CertificationPolicy], Any]
+_GATE_VALIDATORS: dict[str, GateValidator] = {
+    "bundle_manifest": validate_manifest,
+    "artifact_hashes": validate_hashes,
+    "source_artifact_provenance": validate_source_index,
+    "source_authority": validate_source_authority,
+    "data_provenance": validate_data_provenance,
+    "temporal_causality": validate_temporal_causality,
+    "execution_realism": validate_execution_realism,
+    "financial_reconciliation": validate_financial_reconciliation,
+    "walk_forward_integrity": validate_wfa_integrity,
+    "negative_controls": validate_negative_controls,
+    "test_evidence": validate_test_evidence,
+    "strategy_result_consistency": validate_strategy_result,
+}
 
 
 def _configured_root(env_name: str, default: str) -> Path:
@@ -16,7 +48,11 @@ def _configured_root(env_name: str, default: str) -> Path:
 
 
 def resolve_allowed_bundle(bundle_id: str, evidence_root: str | Path) -> Path:
-    if not bundle_id or Path(bundle_id).is_absolute() or any(part in ("..", "") for part in Path(bundle_id).parts):
+    if (
+        not bundle_id
+        or Path(bundle_id).is_absolute()
+        or any(part in ("..", "") for part in Path(bundle_id).parts)
+    ):
         raise BundleError("bundle_id must be a safe relative identifier")
     root = Path(evidence_root).resolve()
     candidate = (root / bundle_id).resolve()
@@ -36,6 +72,44 @@ def inspect_bundle(bundle_id: str, *, evidence_root: str | Path) -> dict[str, An
         "policy_version": bundle.manifest.get("policy_version"),
         "artifacts": sorted(bundle.artifacts),
         "bundle_digest": bundle.digest(),
+        "available_gates": sorted(_GATE_VALIDATORS),
+    }
+
+
+def evaluate_gate(
+    bundle_id: str,
+    gate: str,
+    *,
+    evidence_root: str | Path,
+) -> dict[str, Any]:
+    validator = _GATE_VALIDATORS.get(gate)
+    if validator is None:
+        raise BundleError(f"unknown certification gate: {gate}")
+    bundle = CertificationBundle.load(resolve_allowed_bundle(bundle_id, evidence_root))
+    return validator(bundle, default_policy()).to_dict()
+
+
+def retrieve_policy_context(
+    query: str,
+    *,
+    repository_root: str | Path,
+    limit: int = 4,
+) -> dict[str, Any]:
+    if not query.strip():
+        raise ValueError("retrieval query cannot be empty")
+    knowledge = CuratedKnowledgeBase.from_repository(repository_root)
+    chunks = knowledge.retrieve(query, limit=max(1, min(int(limit), 8)))
+    return {
+        "query": query,
+        "results": [
+            {
+                "citation": chunk.citation,
+                "authority": chunk.authority,
+                "heading": chunk.heading,
+                "text": chunk.text,
+            }
+            for chunk in chunks
+        ],
     }
 
 
@@ -73,20 +147,109 @@ def build_server():
     mcp = FastMCP(
         "TradeBot AI QA Certification",
         instructions=(
-            "Read-only certification tools for frozen TradeBot backtest evidence. "
-            "The server has no broker, order, risk override, shell, or code mutation tools."
+            "Inspect frozen evidence, retrieve authoritative policy context, run targeted "
+            "read-only gates, then request the final deterministic certification. The "
+            "server has no broker, order, risk override, shell, or code mutation tools."
         ),
         json_response=True,
     )
 
     @mcp.tool()
     def inspect_certification_bundle(bundle_id: str) -> dict[str, Any]:
-        """Inspect one frozen evidence bundle under the configured allowlisted root."""
+        """Inspect a frozen bundle and discover the available validation gates."""
         return inspect_bundle(bundle_id, evidence_root=evidence_root)
 
     @mcp.tool()
+    def validate_bundle_manifest(bundle_id: str) -> dict[str, Any]:
+        """Validate schema, policy version, inventory, and safe artifact paths."""
+        return evaluate_gate(bundle_id, "bundle_manifest", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_artifact_hashes(bundle_id: str) -> dict[str, Any]:
+        """Verify that every frozen artifact still matches its SHA-256 identity."""
+        return evaluate_gate(bundle_id, "artifact_hashes", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_source_provenance(bundle_id: str) -> dict[str, Any]:
+        """Verify the raw WFA, partition, control, test, and dataset source index."""
+        return evaluate_gate(
+            bundle_id,
+            "source_artifact_provenance",
+            evidence_root=evidence_root,
+        )
+
+    @mcp.tool()
+    def validate_source_authority_gate(bundle_id: str) -> dict[str, Any]:
+        """Verify strict engine, WFA, and research-mode ownership."""
+        return evaluate_gate(bundle_id, "source_authority", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_data_provenance_gate(bundle_id: str) -> dict[str, Any]:
+        """Validate dataset identity, chronology, quotes, and contract metadata."""
+        return evaluate_gate(bundle_id, "data_provenance", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_temporal_causality_gate(bundle_id: str) -> dict[str, Any]:
+        """Check signal chronology, legal entry timing, and future-mutation controls."""
+        return evaluate_gate(bundle_id, "temporal_causality", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_execution_realism_gate(bundle_id: str) -> dict[str, Any]:
+        """Check executable quote sides, strict liquidity, and cost monotonicity."""
+        return evaluate_gate(bundle_id, "execution_realism", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_financial_reconciliation_gate(bundle_id: str) -> dict[str, Any]:
+        """Reconcile gross P&L, costs, net P&L, trade counts, and ambiguity."""
+        return evaluate_gate(
+            bundle_id,
+            "financial_reconciliation",
+            evidence_root=evidence_root,
+        )
+
+    @mcp.tool()
+    def validate_walk_forward_integrity_gate(bundle_id: str) -> dict[str, Any]:
+        """Check partition chronology, buffers, holdout isolation, and contamination."""
+        return evaluate_gate(
+            bundle_id,
+            "walk_forward_integrity",
+            evidence_root=evidence_root,
+        )
+
+    @mcp.tool()
+    def validate_negative_controls_gate(bundle_id: str) -> dict[str, Any]:
+        """Check future mutation, timing shift, and cost sensitivity controls."""
+        return evaluate_gate(bundle_id, "negative_controls", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_test_evidence_gate(bundle_id: str) -> dict[str, Any]:
+        """Check focused test results and repository-commit identity."""
+        return evaluate_gate(bundle_id, "test_evidence", evidence_root=evidence_root)
+
+    @mcp.tool()
+    def validate_strategy_result_gate(bundle_id: str) -> dict[str, Any]:
+        """Check that the declared strategy conclusion matches policy metrics."""
+        return evaluate_gate(
+            bundle_id,
+            "strategy_result_consistency",
+            evidence_root=evidence_root,
+        )
+
+    @mcp.tool()
+    def retrieve_certification_policy_context(
+        query: str,
+        limit: int = 4,
+    ) -> dict[str, Any]:
+        """Retrieve authority-ranked policy and audit context with citations."""
+        return retrieve_policy_context(
+            query,
+            repository_root=repository_root,
+            limit=limit,
+        )
+
+    @mcp.tool()
     def certify_backtest_bundle(bundle_id: str) -> dict[str, Any]:
-        """Run deterministic certification gates and write only the resulting report."""
+        """Run all deterministic gates and write only the final report."""
         return certify_bundle_tool(
             bundle_id,
             evidence_root=evidence_root,
@@ -107,7 +270,9 @@ def build_server():
 
 
 def main() -> None:
-    build_server().run(transport=os.getenv("TRADEBOT_AI_CERT_MCP_TRANSPORT", "stdio"))
+    build_server().run(
+        transport=os.getenv("TRADEBOT_AI_CERT_MCP_TRANSPORT", "stdio")
+    )
 
 
 if __name__ == "__main__":
