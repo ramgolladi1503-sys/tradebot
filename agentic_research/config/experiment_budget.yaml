@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "maximum_strategy_variants": 3,
+  "maximum_parameter_neighbourhood_runs": 12,
+  "maximum_agent_steps": 16,
+  "maximum_tool_retries": 1,
+  "human_approval_required": true,
+  "production_code_changes": false,
+  "live_trading": false,
+  "broker_credentials_access": false
+}

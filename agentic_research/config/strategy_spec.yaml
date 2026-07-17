@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "strategy_id": "trend_pullback_v1",
+  "display_name": "Trend Pullback v1",
+  "source_path": "strategies/movement/trend_pullback.py",
+  "callable_path": "strategies.movement.trend_pullback.generate_trend_pullback_candidates",
+  "objective": "Join an established trend after a controlled pullback holds VWAP and structure, then resumes causally.",
+  "signal_contract": {
+    "timeframe": "1m",
+    "minimum_completed_bars": 4,
+    "signal_timestamp_owner": "trigger_bar_end_timestamp",
+    "earliest_legal_entry": "after_trigger_bar_end",
+    "cross_session_history_allowed": false,
+    "same_bar_fill_allowed": false
+  },
+  "required_context_fields": [
+    "symbol",
+    "spot_ltp",
+    "vwap",
+    "completed_bar_history"
+  ],
+  "directional_structure_fields": {
+    "BUY_CALL": ["nearest_support"],
+    "BUY_PUT": ["nearest_resistance"]
+  },
+  "known_profile_parameters": [
+    "MIN_TREND_SCORE",
+    "MAX_PULLBACK_DISTANCE_PCT",
+    "MIN_STRUCTURE_RESUME_PCT"
+  ],
+  "expected_regimes": ["TREND_UP", "TREND_DOWN"],
+  "research_only": true,
+  "production_mutation_allowed": false,
+  "broker_access_allowed": false,
+  "live_order_access_allowed": false
+}

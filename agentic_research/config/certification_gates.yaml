@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "minimum_total_trades": 20,
+  "minimum_oos_trades": 5,
+  "minimum_oos_net_expectancy_bps": 0.0,
+  "minimum_oos_profit_factor": 1.0,
+  "minimum_positive_oos_partition_fraction": 0.6,
+  "maximum_causality_violations": 0,
+  "maximum_unresolved_ambiguity_count": 0,
+  "require_deterministic_result_hash": true,
+  "promotion_ceiling": "READY_FOR_OPTION_REPLAY"
+}

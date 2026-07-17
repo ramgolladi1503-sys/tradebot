@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "strategy_id": "trend_pullback_v1",
+  "strategy_variant": "unchanged_production_baseline",
+  "round_trip_cost_bps": 2.0,
+  "maximum_hold_bars": 15,
+  "outcome_field": "forward_return_bps",
+  "parameter_tuning_allowed": false,
+  "source_owned_parameters_must_remain_unchanged": true
+}

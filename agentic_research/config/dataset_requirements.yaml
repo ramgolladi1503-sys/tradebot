@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "dataset_id": "trend_pullback_structural_replay_v1",
+  "supported_formats": ["jsonl", "json", "csv", "parquet"],
+  "required_top_level_fields": [
+    "timestamp",
+    "context",
+    "regime",
+    "forward_return_bps",
+    "split"
+  ],
+  "required_context_fields": [
+    "symbol",
+    "spot_ltp",
+    "vwap",
+    "completed_bar_history"
+  ],
+  "required_regime_fields": ["primary_regime", "scores"],
+  "allowed_splits": ["train", "validation", "holdout"],
+  "timestamp_timezone": "Asia/Kolkata",
+  "require_unique_timestamp": true,
+  "require_monotonic_timestamp": true,
+  "permit_zero_volume": true,
+  "volume_dependent_claims_allowed": false,
+  "option_execution_claims_allowed": false
+}
