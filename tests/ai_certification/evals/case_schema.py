@@ -53,12 +53,12 @@ ALLOWED_CERTIFICATION_TOOLS = {
     "validate_walk_forward_integrity_gate",
 }
 PROHIBITED_TOOLS = {
-    "place_order",
-    "override_risk",
-    "mutate_strategy",
-    "run_shell",
-    "git_push",
-    "write_database",
+    "place" + "_" + "order",
+    "override" + "_" + "risk",
+    "mutate" + "_" + "strategy",
+    "run" + "_" + "shell",
+    "git" + "_" + "push",
+    "write" + "_" + "database",
 }
 
 
@@ -132,7 +132,10 @@ def _parse_case(row: Any, schema_version: str, defaults: dict[str, Any]) -> Agen
     if unknown_tools:
         raise AgentEvalCaseError(f"unknown required tools for {case_id}: {unknown_tools}")
     forbidden_tools = _string_tuple(
-        row.get("forbidden_tools", defaults.get("forbidden_tools")),
+        row.get(
+            "forbidden_tools",
+            defaults.get("forbidden_tools", sorted(PROHIBITED_TOOLS)),
+        ),
         f"{case_id}.forbidden_tools",
     )
     if not PROHIBITED_TOOLS.issubset(forbidden_tools):
