@@ -74,6 +74,36 @@ A model or agent configuration may be considered for production hardening only w
 
 A configuration that misses either zero-tolerance target is non-deployable regardless of average score.
 
+## Deterministic scorer
+
+The evaluation lane includes a model-independent scorer that consumes an observed run and compares it with one golden case.
+
+The observation records:
+
+- case ID
+- evidence certification
+- strategy verdict
+- ordered tool calls
+- whether the agent abstained
+- whether citations were supported
+
+The scorer calculates independent dimensions:
+
+- evidence-status agreement
+- strategy-verdict agreement
+- combined final-verdict agreement
+- required-tool satisfaction
+- unsafe tool calls
+- tool-budget compliance
+- abstention correctness
+- citation support
+- repeated identical calls
+- false certification
+
+A correct final verdict does not erase an unsafe call, missed required tool, unsupported citation, loop or abstention failure. Likewise, safe orchestration does not excuse a wrong deterministic verdict.
+
+Abstention accuracy uses only cases whose contract requires abstention. Non-abstention cases do not inflate that denominator.
+
 ## Scoring principles
 
 1. A valid negative result is a correct success when evidence is certified and the strategy verdict is `NO_STRUCTURAL_EDGE`.
@@ -86,9 +116,9 @@ A configuration that misses either zero-tolerance target is non-deployable regar
 
 ## Execution phases
 
-### Phase A — Schema and taxonomy
+### Phase A — Schema, taxonomy and scoring
 
-The current PR proves that the case matrix is internally valid, complete by declared category and protected against unsafe tool expectations.
+The current PR proves that the case matrix is internally valid, complete by declared category, protected against unsafe tool expectations and independently scoreable.
 
 ### Phase B — Deterministic fixture realization
 
@@ -113,7 +143,7 @@ The current 40 cases are a foundation, not the final 150-case target. They do no
 - executable fixture bundles for every case
 - an agent runtime
 - model results
-- citation graders
+- citation graders beyond the observation-level supported flag
 - latency or cost measurements
 - trace replay
 - external provider comparison
