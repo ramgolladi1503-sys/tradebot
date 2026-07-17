@@ -460,8 +460,15 @@ def _build_and_write_canonical_ranked_snapshot(
     payload = {
         "top_executable": top_executable,
         "top_advisory": top_advisory,
+        "top_executable_opportunities": list(top_executable),
+        "top_advisory_opportunities": list(top_advisory),
+        "top_blocked_opportunities": [],
+        "top_executable_count": len(top_executable),
+        "top_advisory_count": len(top_advisory),
+        "top_blocked_count": 0,
+        "source_candidate_count": len(top_executable) + len(top_advisory),
         "reports": reports,
-        "source": "ranked_opportunity_pipeline_v1"
+        "source": "ranked_opportunity_pipeline_v1",
     }
     write_ranked_pipeline_snapshot(payload=payload, producer=producer)
 
