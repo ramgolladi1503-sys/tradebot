@@ -8,6 +8,7 @@ class ResearchState(TypedDict, total=False):
     objective: dict[str, Any]
     strategy_id: str
     dataset_path: str
+    evidence_mode: str
     experiment_plan: dict[str, Any]
     approval_status: str
     next_action: str
