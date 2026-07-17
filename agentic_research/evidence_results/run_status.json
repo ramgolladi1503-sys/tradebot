@@ -6,5 +6,5 @@
   "schema_version": 2,
   "secret_persisted": false,
   "sidecar_regression": "success",
-  "source_commit": "dd9deac77b5bf149146f9ed4a709f25364f4bb58"
+  "source_commit": "8692648322466260c8e0e8f01230f9b557ac22e9"
 }
