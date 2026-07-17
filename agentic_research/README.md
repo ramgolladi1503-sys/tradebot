@@ -15,7 +15,7 @@ A read-only LangGraph sidecar that researches `trend_pullback_v1` without modify
 - Stateful LangGraph Research Manager
 - Human approval interrupt and resume
 - Six read-only research tools
-- Local MCP server
+- Complete six-tool local MCP surface
 - SQLite checkpoint support
 - Deterministic non-LLM certification judge
 - FastAPI and Streamlit surfaces
@@ -32,7 +32,7 @@ The sidecar has no order, broker, strategy-mutation, risk-limit, or production-p
 python -m pip install -r agentic_research/requirements.txt
 ```
 
-## Run
+## Run the research workflow
 
 ```bash
 python -m agentic_research.cli \
@@ -46,6 +46,12 @@ Use the Gemini planner after setting `GEMINI_API_KEY`:
 
 ```bash
 python -m agentic_research.cli --repo-root . --research-id tp-gemini-001 --dataset agentic_research/sample_data/trend_pullback_fixture.jsonl --planner gemini --approve
+```
+
+Run the MCP server over stdio:
+
+```bash
+python -m agentic_research.mcp_server --repo-root . --transport stdio
 ```
 
 Start the dashboard:
