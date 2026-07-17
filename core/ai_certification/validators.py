@@ -287,7 +287,7 @@ def validate_wfa_integrity(bundle: CertificationBundle, policy: CertificationPol
     for field in bool_fields:
         if not bool(plan.get(field, False)):
             problems.append(field.upper())
-    if int(result.get("repeated_holdout_run_count", 0) or 0) > 1:
+    if int(result.get("repeated_holdout_run_count", 0) or 0) != 0:
         problems.append("REPEATED_HOLDOUT_USE")
     if int(result.get("contamination_count", 0) or 0) > policy.maximum_contamination_count:
         problems.append("WFA_CONTAMINATION")
@@ -360,13 +360,11 @@ def validate_strategy_result(bundle: CertificationBundle, policy: CertificationP
     elif declared == StrategyVerdict.NO_STRUCTURAL_EDGE.value and expectancy is not None and expectancy > 0 and profit_factor is not None and profit_factor >= policy.minimum_profit_factor:
         problems.append("NEGATIVE_VERDICT_CONTRADICTS_METRICS")
     if problems:
-        return _fail(gate, problems[0], "Declared strategy conclusion conflicts with policy-controlled metrics.", _ref(bundle, "strategy_result.json"), mandatory=False, details={"problems": problems, "computed_verdict": computed})
+        return _fail(gate, problems[0], "Declared strategy conclusion conflicts with the recorded metrics or policy.", _ref(bundle, "strategy_result.json"), mandatory=False, details={"problems": problems, "declared": declared})
     return _pass(gate, "STRATEGY_RESULT_CONSISTENT", "Strategy conclusion is consistent with the recorded metrics and policy thresholds.", _ref(bundle, "strategy_result.json"), mandatory=False, details={"computed_verdict": computed})
 
 
 Validator = Callable[[CertificationBundle, CertificationPolicy], GateResult]
-
-
 DEFAULT_VALIDATORS: tuple[Validator, ...] = (
     validate_manifest,
     validate_hashes,
