@@ -2,26 +2,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentic_research.contracts import CertificationDecision, ToolResult
+from agentic_research.contracts import CertificationDecision, CriticReport, ToolResult
 
 
 class DeterministicCertificationJudge:
-    """Non-LLM authority. The manager and critic cannot override this decision."""
+    """Non-LLM authority. Neither manager nor critic can override this decision."""
 
     def __init__(self, gates: dict[str, Any]):
         self.gates = dict(gates)
 
     def decide(self, results: dict[str, ToolResult]) -> CertificationDecision:
         hashes = {name: result.result_hash or "" for name, result in results.items()}
-
         contract = results.get("get_strategy_contract")
         if contract is None or contract.status != "SUCCESS":
             return self._decision("REJECTED_CONTRACT_MISMATCH", ["strategy_contract_not_proven"], hashes)
 
+        legacy = results.get("audit_existing_research_report")
+        if legacy is not None:
+            if legacy.status != "SUCCESS" or legacy.blockers:
+                return self._decision("REJECTED_DATA_INELIGIBLE", legacy.blockers or ["legacy_report_not_certifying"], hashes)
+            critic = self._critic_blockers(results)
+            if critic:
+                return self._decision(self._critic_verdict(critic), [finding.code for finding in critic], hashes)
+            return self._decision("RESEARCH_GRADE_ONLY", ["legacy_report_has_no_execution_certification"], hashes)
+
         dataset = results.get("validate_dataset")
         if dataset is None or dataset.status != "SUCCESS" or dataset.blockers:
-            reasons = dataset.blockers if dataset else ["dataset_evidence_missing"]
-            return self._decision("REJECTED_DATA_INELIGIBLE", reasons, hashes)
+            return self._decision("REJECTED_DATA_INELIGIBLE", dataset.blockers if dataset else ["dataset_evidence_missing"], hashes)
 
         temporal = results.get("run_temporal_semantics_tests")
         if temporal is None or temporal.status != "SUCCESS":
@@ -45,7 +52,6 @@ class DeterministicCertificationJudge:
         expectancy = holdout.get("net_expectancy_bps")
         profit_factor = holdout.get("profit_factor")
         positive_fraction = float(wfa.payload.get("positive_oos_partition_fraction", 0.0))
-
         reasons: list[str] = []
         if oos_trades < int(self.gates.get("minimum_oos_trades", 0)):
             reasons.append(f"insufficient_oos_trades:{oos_trades}")
@@ -58,17 +64,37 @@ class DeterministicCertificationJudge:
         if reasons:
             return self._decision("REJECTED_OVERFIT", reasons, hashes)
 
+        critic = self._critic_blockers(results)
+        if critic:
+            return self._decision(self._critic_verdict(critic), [finding.code for finding in critic], hashes)
         return CertificationDecision(
             verdict="READY_FOR_OPTION_REPLAY",
             passed=True,
-            reasons=["structural_baseline_and_wfa_passed", "option_execution_not_yet_certified"],
+            reasons=["structural_baseline_and_wfa_passed", "independent_critic_found_no_blocker", "option_execution_not_yet_certified"],
             evidence_hashes=hashes,
             promotion_ceiling=str(self.gates.get("promotion_ceiling", "READY_FOR_OPTION_REPLAY")),
         )
 
+    def _critic_blockers(self, results: dict[str, ToolResult]):
+        result = results.get("run_adversarial_review")
+        if result is None or result.status != "SUCCESS":
+            return []
+        return CriticReport.model_validate(result.payload.get("report") or {}).blockers
+
+    @staticmethod
+    def _critic_verdict(findings) -> str:
+        categories = {finding.category for finding in findings}
+        if "DATA" in categories:
+            return "REJECTED_DATA_INELIGIBLE"
+        if "CAUSALITY" in categories:
+            return "REJECTED_CAUSAL_VIOLATION"
+        if "EXECUTION" in categories:
+            return "REJECTED_EXECUTION_FRAGILE"
+        return "REJECTED_OVERFIT"
+
     def _decision(self, verdict: str, reasons: list[str], hashes: dict[str, str]) -> CertificationDecision:
         return CertificationDecision(
-            verdict=verdict,  # type: ignore[arg-type]
+            verdict=verdict,
             passed=False,
             reasons=reasons,
             evidence_hashes=hashes,

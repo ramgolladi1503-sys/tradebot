@@ -1,3 +1,3 @@
-from .research_manager import DeterministicPlanner, GeminiPlanner, ResearchManager
+from .research_manager import ALLOWED_ACTIONS, DeterministicPlanner, GeminiPlanner, ResearchManager
 
-__all__ = ["DeterministicPlanner", "GeminiPlanner", "ResearchManager"]
+__all__ = ["ALLOWED_ACTIONS", "DeterministicPlanner", "GeminiPlanner", "ResearchManager"]
