@@ -33,6 +33,11 @@ def _valid_artifacts() -> dict[str, Any]:
     return {
         "source/option_replay_wfa_report.json": {
             "engine_module": "core.option_backtest.engine.OptionBacktestEngine",
+            "run_id": "qa-run-001",
+            "frozen_config_hash": "c" * 64,
+            "frozen_config": {
+                "base_config": {"research_mode": "REAL_EXECUTABLE_RESEARCH"}
+            },
             "read_only": True,
             "is_order_action": False,
             "broker_api_called": False,
@@ -72,7 +77,8 @@ def _valid_artifacts() -> dict[str, Any]:
             "hardcoded_metrics_used": False,
         },
         "run_configuration.json": {
-            "execution_mode": "REAL_EXECUTABLE_RESEARCH"
+            "execution_mode": "REAL_EXECUTABLE_RESEARCH",
+            "frozen_config_hash": "c" * 64,
         },
         "timing_evidence.json": {
             "signals_checked": 150,
