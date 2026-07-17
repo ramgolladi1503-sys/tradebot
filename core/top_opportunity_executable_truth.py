@@ -14,8 +14,75 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable, Mapping
 
 TOP_OPPORTUNITY_EXECUTABLE_TRUTH_SCHEMA_VERSION = 1
+CANONICAL_RANKED_SNAPSHOT_SOURCE = "CANONICAL_RANKED_SNAPSHOT"
+LIVE_PHASE2_SOURCE = "LIVE_PHASE2"
+CANONICAL_CANDIDATE_POOL_AUTHORITY = "CANONICAL_CANDIDATE_POOL"
+CANONICAL_RANKING_AUTHORITY = "CANONICAL_RANKING"
+LIVE_PHASE2_TRUTH_AUTHORITY = "LIVE_PHASE2_TRUTH"
+LIVE_PHASE2_RANKING_AUTHORITY = "LIVE_PHASE2_RANKING"
 _EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}
 _FALLBACK_SOURCES = {"rest_fallback", "recovered_fallback", "fallback_estimated"}
+
+
+def annotate_top_opportunity_authority(
+    row: Mapping[str, Any] | None,
+    *,
+    pipeline_source: str,
+    status_authority: str,
+    rank_authority: str,
+    execution_eligibility: bool | None = None,
+    execution_eligibility_authority: str | None = None,
+    phase2_status: str | None = None,
+    phase2_score: Any | None = None,
+    raw_strategy_score: Any | None = None,
+    fallback_state: str | None = None,
+    blocked_reason: str | None = None,
+    advisory_reason: str | None = None,
+) -> dict[str, Any]:
+    out = dict(row or {})
+    out["pipeline_source"] = str(pipeline_source or "UNKNOWN")
+    out["status_authority"] = str(status_authority or "UNKNOWN")
+    out["rank_authority"] = str(rank_authority or "UNKNOWN")
+    if execution_eligibility is not None:
+        out["execution_eligibility"] = bool(execution_eligibility)
+    if execution_eligibility_authority is not None:
+        out["execution_eligibility_authority"] = str(execution_eligibility_authority or "UNKNOWN")
+    if phase2_status is not None:
+        out["phase2_status"] = str(phase2_status or "UNKNOWN")
+    if phase2_score is not None:
+        out["phase2_score"] = phase2_score
+    if raw_strategy_score is not None:
+        out["raw_strategy_score"] = raw_strategy_score
+    out["fallback_state"] = fallback_state if fallback_state is not None else _derive_fallback_state(out)
+    if blocked_reason is not None:
+        out["blocked_reason"] = blocked_reason
+    if advisory_reason is not None:
+        out["advisory_reason"] = advisory_reason
+    return out
+
+
+def _derive_fallback_state(row: Mapping[str, Any] | None) -> str:
+    payload = dict(row or {})
+    fallback_state = str(payload.get("fallback_state") or "").strip().lower()
+    if fallback_state:
+        return fallback_state
+    if bool(payload.get("recovered_fallback")) or bool(payload.get("fallback_used")):
+        return "recovered_fallback"
+    source_flags = payload.get("source_flags")
+    if isinstance(source_flags, Mapping):
+        if bool(source_flags.get("recovered_fallback")) or bool(source_flags.get("fallback_used")):
+            return "recovered_fallback"
+        fallback_class = str(source_flags.get("fallback_class") or "").strip().lower()
+        if fallback_class and fallback_class != "none":
+            return fallback_class
+    row_kind = str(payload.get("row_kind") or "").strip().lower()
+    if row_kind in {"fallback", "recovered_fallback"}:
+        return row_kind
+    for source_field in ("execution_entry_source", "display_entry_source", "quote_source", "entry_source"):
+        source_value = str(payload.get(source_field) or "").strip().lower()
+        if source_value in _FALLBACK_SOURCES:
+            return "recovered_fallback" if source_value == "recovered_fallback" else "fallback"
+    return "none"
 
 
 @dataclass(frozen=True)

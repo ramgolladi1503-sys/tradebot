@@ -150,6 +150,12 @@ from core.runtime_execution_truth import (
     build_execution_truth_context,
     normalize_candidate_execution_truth_payload,
 )
+from core.top_opportunity_executable_truth import (
+    LIVE_PHASE2_RANKING_AUTHORITY,
+    LIVE_PHASE2_SOURCE,
+    LIVE_PHASE2_TRUTH_AUTHORITY,
+    annotate_top_opportunity_authority,
+)
 from core.runtime_candidate_handoff import write_runtime_candidate_handoff_evidence
 from core.candidate_lineage_ledger import write_candidate_lineage_ledger
 from core.runtime_candidate_handoff_root_cause import (
@@ -1308,6 +1314,61 @@ def _build_top_opportunities_payload(
         normalize_candidate_execution_truth_payload(row, execution_truth_context=execution_truth_context)
         for row in top_advisory
     ] if execution_truth_context is not None else list(top_advisory)
+
+    live_status_authority = LIVE_PHASE2_TRUTH_AUTHORITY if execution_truth_context is not None else "LIVE_PHASE2_SELECTION"
+    live_execution_eligibility_authority = LIVE_PHASE2_SOURCE if execution_truth_context is not None else "LIVE_PHASE2_SELECTION"
+
+    def _annotate_authority(row: dict) -> dict:
+        blockers = [str(reason) for reason in list(row.get("execution_truth_blockers") or row.get("blockers") or []) if str(reason).strip()]
+        if not blockers:
+            blockers = [str(reason) for reason in list(row.get("hard_blockers") or []) if str(reason).strip()]
+        fallback_state = str(row.get("fallback_state") or "").strip().lower() or None
+        if fallback_state is None:
+            source_flags = row.get("source_flags") if isinstance(row.get("source_flags"), dict) else {}
+            if bool(row.get("recovered_fallback")) or bool(row.get("fallback_used")) or bool(source_flags.get("recovered_fallback")) or bool(source_flags.get("fallback_used")):
+                fallback_state = "recovered_fallback"
+            else:
+                fallback_state = "none"
+        execution_eligibility = bool(row.get("reportable_executable"))
+        if not execution_eligibility and row.get("reportable_executable") is None:
+            execution_eligibility = bool(row.get("execution_allowed") or row.get("eligible_for_execution"))
+        phase2_score = row.get("rank_score")
+        if phase2_score is None:
+            phase2_score = row.get("final_score")
+        if phase2_score is None:
+            phase2_score = row.get("confidence")
+        raw_strategy_score = row.get("raw_score")
+        if raw_strategy_score is None:
+            raw_strategy_score = row.get("rank_score")
+        if raw_strategy_score is None:
+            raw_strategy_score = row.get("final_score")
+        phase2_status = row.get("candidate_status") or row.get("execution_status") or row.get("visibility_bucket")
+        if not phase2_status and execution_truth_context is None:
+            phase2_status = row.get("bucket")
+        blocked_reason = None
+        advisory_reason = None
+        visibility_bucket = str(row.get("visibility_bucket") or "").strip().lower()
+        if visibility_bucket == "blocked" or str(row.get("execution_status") or "").strip().lower() == "blocked":
+            blocked_reason = blockers[0] if blockers else str(row.get("final_emit_block_reason") or row.get("execution_block_reason") or row.get("reason") or "").strip() or None
+        else:
+            advisory_reason = str(row.get("primary_reason") or row.get("execution_block_reason") or row.get("final_emit_block_reason") or row.get("reason") or "").strip() or None
+        return annotate_top_opportunity_authority(
+            row,
+            pipeline_source=LIVE_PHASE2_SOURCE,
+            status_authority=live_status_authority,
+            rank_authority=LIVE_PHASE2_RANKING_AUTHORITY,
+            execution_eligibility=execution_eligibility,
+            execution_eligibility_authority=live_execution_eligibility_authority,
+            phase2_status=phase2_status,
+            phase2_score=phase2_score,
+            raw_strategy_score=raw_strategy_score,
+            fallback_state=fallback_state,
+            blocked_reason=blocked_reason,
+            advisory_reason=advisory_reason,
+        )
+
+    top_executable_evidence = [_annotate_authority(row) for row in top_executable_evidence]
+    top_advisory_evidence = [_annotate_authority(row) for row in top_advisory_evidence]
     if execution_truth_context is None:
         top_executable_truth = list(top_executable_evidence)
         top_advisory_truth = list(top_advisory_evidence)

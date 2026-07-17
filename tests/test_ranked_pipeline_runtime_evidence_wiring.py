@@ -177,6 +177,12 @@ def test_canonical_ranked_snapshot_emits_dashboard_alias_keys_and_reads_back(mon
     assert payload["top_blocked_opportunities"] == []
     assert payload["top_executable_count"] == 1
     assert payload["top_advisory_count"] == 1
+    assert payload["top_executable"][0]["pipeline_source"] == "CANONICAL_RANKED_SNAPSHOT"
+    assert payload["top_executable"][0]["status_authority"] == "CANONICAL_CANDIDATE_POOL"
+    assert payload["top_executable"][0]["rank_authority"] == "CANONICAL_RANKING"
+    assert payload["top_executable"][0]["execution_eligibility"] is False
+    assert payload["top_executable"][0]["execution_eligibility_authority"] == "CANONICAL_RANKED_SNAPSHOT"
+    assert payload["top_executable"][0]["fallback_state"] == "none"
 
     snapshot_path = tmp_path / "ranked_pipeline_latest.json"
     snapshot_path.write_text(

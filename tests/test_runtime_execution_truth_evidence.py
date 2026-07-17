@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import core.orchestrator as orchestrator
 from core.feed_truth_contract import build_feed_truth_contract
-from core.runtime_execution_truth import build_execution_truth_context, normalize_candidate_execution_truth_payload
+from core.runtime_execution_truth import build_execution_truth_context
 from core.runtime_phase2_rejection_evidence import build_phase2_rejection_evidence_payload
 
 
@@ -430,6 +430,186 @@ def test_top_opportunities_payload_suppresses_executable_output_when_feed_truth_
     assert payload["top_blocked_opportunities"][0]["runtime_truth_consistent"] is False
     assert "GLOBAL_FEED_UNHEALTHY" in payload["top_executable_block_reasons"]
     assert payload["selector_outcome"] == "NO_EXECUTABLE_OPPORTUNITY"
+
+
+def test_top_opportunities_payload_carries_live_phase2_authority_fields(monkeypatch):
+    candidate = _candidate()
+
+    class _FakeClassification:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "candidate_status": "executable",
+                "execution_status": "executable",
+                "reportable_executable": True,
+                "execution_allowed": True,
+                "eligible_for_execution": True,
+                "visibility_bucket": "executable",
+                "execution_truth_blocked": False,
+                "execution_truth_advisory": False,
+                "execution_truth_blockers": [],
+            }
+
+    monkeypatch.setattr(
+        orchestrator,
+        "run_engine_phase2",
+        lambda candidates, active_trade=None, top_n=5, min_enter_score=0.70: {
+            "state": "ENTER",
+            "reason": "selected",
+            "ranked": [dict(candidate.__dict__)],
+            "selected": dict(candidate.__dict__),
+            "next_active_trade": None,
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(orchestrator, "project_advisory_row", lambda trade, extra=None: dict(trade), raising=True)
+    monkeypatch.setattr(orchestrator, "classify_candidate_row", lambda *args, **kwargs: _FakeClassification(), raising=True)
+
+    payload = orchestrator._build_top_opportunities_payload(
+        candidates=[dict(candidate.__dict__)],
+        executable_top_n=5,
+        advisory_top_n=5,
+        active_trade=None,
+    )
+
+    row = payload["top_executable_opportunities"][0]
+
+    assert payload["top_executable_count"] == 1
+    assert row["pipeline_source"] == "LIVE_PHASE2"
+    assert row["status_authority"] == "LIVE_PHASE2_SELECTION"
+    assert row["rank_authority"] == "LIVE_PHASE2_RANKING"
+    assert row["execution_eligibility"] is True
+    assert row["execution_eligibility_authority"] == "LIVE_PHASE2_SELECTION"
+    assert row["fallback_state"] == "none"
+
+
+def test_top_opportunities_payload_carries_live_phase2_authority_fields_for_blocked_row(monkeypatch):
+    candidate = _candidate()
+
+    class _FakeBlockedClassification:
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "candidate_status": "blocked",
+                "execution_status": "blocked",
+                "reportable_executable": False,
+                "execution_allowed": False,
+                "eligible_for_execution": False,
+                "visibility_bucket": "blocked",
+                "execution_truth_blocked": True,
+                "execution_truth_advisory": False,
+                "execution_truth_blockers": ["STALE_OPTION_LTP"],
+                "execution_block_reason": "STALE_OPTION_LTP",
+            }
+
+    monkeypatch.setattr(
+        orchestrator,
+        "run_engine_phase2",
+        lambda candidates, active_trade=None, top_n=5, min_enter_score=0.70: {
+            "state": "ENTER",
+            "reason": "selected",
+            "ranked": [dict(candidate.__dict__)],
+            "selected": dict(candidate.__dict__),
+            "next_active_trade": None,
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(orchestrator, "project_advisory_row", lambda trade, extra=None: dict(trade), raising=True)
+    monkeypatch.setattr(orchestrator, "classify_candidate_row", lambda *args, **kwargs: _FakeBlockedClassification(), raising=True)
+
+    payload = orchestrator._build_top_opportunities_payload(
+        candidates=[dict(candidate.__dict__)],
+        executable_top_n=5,
+        advisory_top_n=5,
+        active_trade=None,
+        execution_truth_context=build_execution_truth_context(
+            market_data={
+                "runtime_state": "RUNNING",
+                "ws_connected": True,
+                "feed_truth_state": "LIVE",
+                "quote_health": {"state": "OK", "stale_reasons": []},
+            },
+            latency_guard={},
+        ),
+    )
+
+    row = payload["top_blocked_opportunities"][0]
+
+    assert payload["top_blocked_count"] == 1
+    assert row["pipeline_source"] == "LIVE_PHASE2"
+    assert row["status_authority"] == "LIVE_PHASE2_TRUTH"
+    assert row["rank_authority"] == "LIVE_PHASE2_RANKING"
+    assert row["execution_eligibility"] is False
+    assert row["execution_eligibility_authority"] == "LIVE_PHASE2"
+    assert row["blocked_reason"] == "STALE_OPTION_LTP"
+
+
+def test_top_opportunities_payload_carries_live_phase2_authority_fields_for_advisory_row(monkeypatch):
+    candidate = _candidate()
+    advisory_candidate = _candidate(
+        trade_id="real-2",
+        candidate_status="advisory",
+        execution_status="advisory_only",
+        execution_allowed=False,
+        eligible_for_execution=False,
+        reason="LOW_CONFIDENCE",
+    )
+
+    def _classification_for_row(row, *args, **kwargs):
+        if str(row.get("trade_id")) == "real-2":
+            return {
+                "candidate_status": "advisory",
+                "execution_status": "advisory_only",
+                "reportable_executable": False,
+                "execution_allowed": False,
+                "eligible_for_execution": False,
+                "visibility_bucket": "advisory",
+                "execution_truth_blocked": False,
+                "execution_truth_advisory": True,
+                "execution_truth_blockers": ["LOW_CONFIDENCE"],
+                "execution_block_reason": "LOW_CONFIDENCE",
+            }
+        return {
+            "candidate_status": "executable",
+            "execution_status": "executable",
+            "reportable_executable": True,
+            "execution_allowed": True,
+            "eligible_for_execution": True,
+            "visibility_bucket": "executable",
+            "execution_truth_blocked": False,
+            "execution_truth_advisory": False,
+            "execution_truth_blockers": [],
+        }
+
+    monkeypatch.setattr(
+        orchestrator,
+        "run_engine_phase2",
+        lambda candidates, active_trade=None, top_n=5, min_enter_score=0.70: {
+            "state": "ENTER",
+            "reason": "selected",
+            "ranked": [dict(candidate.__dict__), dict(advisory_candidate.__dict__)],
+            "selected": dict(candidate.__dict__),
+            "next_active_trade": None,
+        },
+        raising=True,
+    )
+    monkeypatch.setattr(orchestrator, "project_advisory_row", lambda trade, extra=None: dict(trade), raising=True)
+    monkeypatch.setattr(orchestrator, "classify_candidate_row", _classification_for_row, raising=True)
+
+    payload = orchestrator._build_top_opportunities_payload(
+        candidates=[dict(candidate.__dict__), dict(advisory_candidate.__dict__)],
+        executable_top_n=5,
+        advisory_top_n=5,
+        active_trade=None,
+    )
+
+    row = payload["top_advisory_opportunities"][0]
+
+    assert payload["top_advisory_count"] == 1
+    assert row["pipeline_source"] == "LIVE_PHASE2"
+    assert row["status_authority"] == "LIVE_PHASE2_SELECTION"
+    assert row["rank_authority"] == "LIVE_PHASE2_RANKING"
+    assert row["execution_eligibility"] is False
+    assert row["execution_eligibility_authority"] == "LIVE_PHASE2_SELECTION"
+    assert row["advisory_reason"] == "LOW_CONFIDENCE"
 
 
 
