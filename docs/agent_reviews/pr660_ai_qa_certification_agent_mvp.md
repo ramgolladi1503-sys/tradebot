@@ -45,6 +45,8 @@ Questions applied:
    - No. The certifier cross-checks raw WFA engine identity, run ID, strict mode, frozen configuration hash, action boundary, required source roles, raw controls, raw tests, completed-partition files, source-file hashes, and physical dataset identity.
 7. Can one absent artifact downgrade a separate explicit failure?
    - No. `AGENT_ERROR` and `REJECTED` take precedence over `INSUFFICIENT_EVIDENCE`.
+8. Can a single repeated holdout use pass because the count is below two?
+   - No. Any nonzero `repeated_holdout_run_count` fails the mandatory walk-forward integrity gate.
 
 ## Hermes Review
 
@@ -55,6 +57,7 @@ Contract and authority review:
 - Artifact hashes, source provenance, repository commit, policy version, dataset provenance, timing, fills, reconciliation, WFA integrity, controls, and tests are represented as typed gate results.
 - Required source roles include the WFA report, control input, test input, and summary/journal/decision artifacts for every completed partition.
 - Raw controls and test results must reconcile with normalized certification artifacts.
+- Repeated holdout use is zero-tolerance: only a count of zero is certifying.
 - The curated knowledge layer is explanatory only and cannot change gate outcomes.
 - The exporter remains an explicit adapter and is not imported by the certification package root.
 
@@ -99,7 +102,7 @@ Focused checks include:
 - Absent mandatory evidence fails closed.
 - Explicit failure is not downgraded by a simultaneous absent artifact.
 - Fallback liquidity and proxy execution evidence are rejected.
-- Financial reconciliation, repeated holdout, control, and test failures block certification.
+- Financial reconciliation, any repeated holdout use, control, and test failures block certification.
 - Validator exceptions return `AGENT_ERROR`.
 - Prompt-injection text embedded in evidence remains inert data.
 - MCP bundle and report paths cannot escape allowlisted roots.
@@ -126,16 +129,20 @@ Focused checks include:
 5. **Invalid happy-path fixture defect**
    - Previous test data declared one repeated holdout run while expecting certification.
    - Fixed test data declares zero repeated holdout runs.
+6. **Repeated-holdout threshold defect**
+   - Previous behavior: `repeated_holdout_run_count=1` passed because rejection was incorrectly limited to counts greater than one.
+   - Fixed behavior: every nonzero repeated-holdout count returns `REJECTED` with `REPEATED_HOLDOUT_USE`.
 
 ## Acceptance Proof
 
 - Base commit: `58881fd873c307df3adaa5402ed27936573a1873`
 - Branch: `feature/ai-qa-certification-agent-mvp`
-- Diff against main: 26 added files, 0 modified existing files, 0 deleted files.
+- Diff against main before temporary diagnostics cleanup: 26 intended additive files plus one temporary diagnostics workflow.
 - Focused suite command: `python -m pytest -q tests/ai_certification`
+- Focused result after repeated-holdout fix: **45 passed** on commit `f53fd32543cdf90fd5a07b07dacbf7b47ed96de1`.
 - Focused test inventory: 45 tests.
 - Compilation command: `python -m compileall -q core/ai_certification scripts/export_ai_backtest_certification_bundle.py scripts/run_ai_backtest_certification.py`
-- Code Excellence, Agent Review Evidence, Repo Forensics, Portfolio CI, CodeQL, unit-test, CI, and strategy-registry workflows must pass on the final head before merge.
+- Code Excellence, Agent Review Evidence, Repo Forensics, Portfolio CI, CodeQL, unit-test, CI, and strategy-registry workflows must pass on the final cleanup head before merge.
 - Main `requirements.txt`: unchanged.
 - Existing TradeBot production modules: unchanged.
 
