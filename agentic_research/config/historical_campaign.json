@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "strategy_id": "trend_pullback_v1",
+  "source_repository": "aeron7/nifty-banknifty-intraday-data",
+  "source_commit": "906fc2378b82e50de78f62844a3ecb3f9306a85d",
+  "source_symbol": "NIFTY_F1",
+  "years": [2012, 2013, 2014],
+  "entry_timing": "next_bar_open_after_trigger_bar_end",
+  "same_bar_ambiguity_policy": "stop_first",
+  "round_trip_cost_bps": 2.0,
+  "adverse_cost_bps": 5.0,
+  "severe_cost_bps": 10.0,
+  "target_rr": 1.5,
+  "maximum_hold_bars": 15,
+  "claim_ceiling": "STRUCTURAL_EDGE_CANDIDATE",
+  "options_execution_certified": false,
+  "production_mutation_allowed": false
+}
