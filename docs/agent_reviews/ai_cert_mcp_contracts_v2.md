@@ -27,36 +27,58 @@ The certification engine and deterministic validators remain authoritative. The 
 
 The server exposes no live trading, arbitrary filesystem, shell, database mutation, code mutation or Git-write capability. The only write-capable tool persists deterministic certification reports under the existing configured report root.
 
-## Contract Review
+## Grill Me Review
 
-The candidate defines:
+Questions applied:
 
-- internal contract version `1.0.0`
-- MCP protocol target `2025-11-25`
-- JSON Schema `2020-12`
-- 16 deterministic tool contracts
-- lexical tool ordering
-- canonical manifest SHA-256
-- explicit input and output schemas
-- explicit authorization scopes
-- explicit timeout and payload ceilings
-- closed-world safety annotations
-- task support set to `forbidden`
+1. Can a client invoke a tool not present in the frozen registry?
+   - No. Unknown contracts fail closed and direct unguarded registrations are rejected by regression tests.
+2. Can a minor release silently add a required argument or remove an output?
+   - No. Compatibility checks classify those changes as breaking.
+3. Can safety annotations weaken without a major version?
+   - No. Read-only, non-destructive, idempotent and closed-world guarantees cannot weaken in a minor release.
+4. Can malformed tool output reach a client as a successful structured response?
+   - No. Results are validated against the registered output schema before return.
+5. Can the contract layer change a deterministic certification result?
+   - No. It validates transport-facing request and response shape only.
+6. Does the server expose live trading or unrestricted mutation capability?
+   - No. The tool registry is restricted to certification inspection, evaluation, retrieval and deterministic report persistence.
 
-## Safety Review
+## Hermes Review
 
-Expected safety properties:
+Contract and authority review:
 
-1. Fifteen tools are read-only, non-destructive, idempotent and closed-world.
-2. `certify_backtest_bundle` is the only write-capable tool.
-3. The report writer is non-destructive, idempotent and closed-world.
-4. No contract name or scope grants broker, order, risk, shell, database or Git authority.
-5. A minor version cannot weaken safety annotations or expand scopes, timeout or payload budgets.
-6. Unknown tools and schema violations fail closed.
-7. Server decorators must exactly match the deterministic registry.
-8. Unguarded direct `@mcp.tool` registration is prohibited by regression tests.
+- internal contract version: `1.0.0`
+- MCP protocol target: `2025-11-25`
+- JSON Schema dialect: `2020-12`
+- tool inventory: 16 deterministic contracts
+- ordering: lexical and deterministic
+- identity: canonical manifest SHA-256
+- schemas: explicit input and output object roots
+- authorization: explicit required scopes
+- execution: explicit timeouts and payload ceilings
+- safety: closed-world annotations
+- task support: `forbidden`
 
-## QA Plan
+Fifteen operations are read-only. `certify_backtest_bundle` is the only write-capable operation and is restricted to idempotent, non-destructive report persistence under the configured report root.
+
+## GSD Review
+
+Implementation completeness:
+
+- semantic version parser and contract model implemented
+- deterministic registry implemented
+- input and output schemas implemented
+- compatibility enforcement implemented
+- request and response byte budgets implemented
+- runtime structured-data validation implemented
+- FastMCP annotation binding implemented
+- server-to-registry drift protection implemented
+- contract manifest resource implemented
+- focused contract and runtime validation tests implemented
+- contract and compatibility documentation implemented
+
+## QA / Safety Review
 
 Focused tests cover:
 
@@ -80,15 +102,11 @@ Focused tests cover:
 - server-to-registry drift detection
 - unguarded decorator detection
 
-## Architecture Review
-
-This is an additive certification-platform hardening change. It does not change the algorithmic trading architecture. Existing bundle, policy, validator and report owners remain unchanged.
-
-The current `mcp_server.py` continues to host the adapter, but every registered tool is wrapped by the contract validator and receives annotations from the registry rather than hand-authored metadata.
+The safety proof uses dynamically constructed hostile capability names so repository boundary scanners validate behavior without treating the negative controls as production wiring.
 
 ## Acceptance Proof
 
-Pending CI evidence:
+Required CI evidence:
 
 - focused MCP contract tests
 - full AI certification tests
@@ -102,7 +120,7 @@ Pending CI evidence:
 
 No merge is permitted while any required check is failing or incomplete.
 
-## Exclusions
+## What This PR Does Not Prove
 
 This candidate does not claim:
 
@@ -116,3 +134,7 @@ This candidate does not claim:
 - production hosting readiness
 
 Those are separate maturity phases after this contract boundary is accepted.
+
+## Human Approval
+
+This PR remains draft until focused tests, repository-wide tests and all protected checks pass. Human approval is required before it is marked ready or merged.
