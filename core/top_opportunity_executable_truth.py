@@ -21,7 +21,20 @@ CANONICAL_RANKING_AUTHORITY = "CANONICAL_RANKING"
 LIVE_PHASE2_TRUTH_AUTHORITY = "LIVE_PHASE2_TRUTH"
 LIVE_PHASE2_RANKING_AUTHORITY = "LIVE_PHASE2_RANKING"
 _EXECUTABLE_ENTRY_SOURCES = {"ask", "bid", "last", "retained_prior_ask", "retained_prior_bid"}
-_FALLBACK_SOURCES = {"rest_fallback", "recovered_fallback", "fallback_estimated"}
+_FALLBACK_SOURCES = {
+    "rest_fallback",
+    "recovered_fallback",
+    "fallback_estimated",
+    "fallback_ltp",
+    "fallback_bid",
+    "fallback_ask",
+    "fallback_spread",
+    "estimated_price",
+    "stale_quote",
+    "missing_freshness",
+    "synthetic_liquidity",
+    "degraded_quote",
+}
 
 
 def annotate_top_opportunity_authority(
@@ -239,6 +252,7 @@ def classify_top_opportunity_row(
     display_entry = _positive_float(row.get("display_entry") if row.get("display_entry") is not None else row.get("entry"))
     display_source = _lower(row.get("display_entry_source") or row.get("entry_source")) or "none"
     quote_source = _lower(row.get("quote_source") or row.get("option_ltp_source")) or "unknown"
+    fallback_state = _lower(row.get("fallback_state")) or "none"
     execution_eligibility = _explicit_bool(row.get("execution_eligibility")) if "execution_eligibility" in row else None
     legacy_claims_executable = _legacy_claims_executable(row)
 
@@ -249,6 +263,7 @@ def classify_top_opportunity_row(
         display_entry=display_entry,
         display_source=display_source,
         quote_source=quote_source,
+        fallback_state=fallback_state,
         execution_eligibility=execution_eligibility,
         legacy_claims_executable=legacy_claims_executable,
     )
@@ -277,11 +292,14 @@ def _truth_reason(
     display_entry: float | None,
     display_source: str,
     quote_source: str,
+    fallback_state: str,
     execution_eligibility: bool | None,
     legacy_claims_executable: bool,
 ) -> str:
     if execution_source in _FALLBACK_SOURCES or display_source in _FALLBACK_SOURCES or quote_source in _FALLBACK_SOURCES:
         return "fallback_source_advisory_only"
+    if fallback_state not in {"none", ""}:
+        return "fallback_state_advisory_only"
     if execution_eligibility is False:
         return "execution_not_eligible"
     if execution_entry is None and display_entry is not None:

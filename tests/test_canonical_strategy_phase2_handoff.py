@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import core.orchestrator as orchestrator
 from core.canonical_ranked_ui_adapter import adapt_candidate_rank_record_to_ui
 from core.runtime_snapshot_store import build_snapshot_envelope
@@ -131,6 +133,47 @@ def test_live_phase2_payload_preserves_distinct_score_ownership(monkeypatch):
     assert row["execution_eligibility"] is True
 
 
+def test_strategy_input_proxy_does_not_demote_authoritative_execution_row(tmp_path):
+    payload = {
+        "top_executable_opportunities": [
+            {
+                "trade_id": "PROXY-1",
+                "symbol": "NIFTY",
+                "execution_entry": 101.0,
+                "execution_entry_source": "ask",
+                "execution_entry_status": "executable",
+                "display_entry": 101.0,
+                "display_entry_source": "ask",
+                "entry": 101.0,
+                "entry_source": "ask",
+                "quote_source": "tick_store",
+                "vwap_provenance": "VWAP_UNIT_WEIGHT_PROXY",
+                "is_executable": True,
+                "execution_status": "executable",
+                "readiness": "READY",
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+                "execution_eligibility": True,
+                "execution_eligibility_authority": "LIVE_PHASE2_SELECTION",
+                "pipeline_source": "LIVE_PHASE2",
+                "status_authority": "LIVE_PHASE2_SELECTION",
+                "rank_authority": "LIVE_PHASE2_RANKING",
+                "rank_score": 0.64,
+                "final_score": 0.64,
+                "fallback_state": "none",
+            }
+        ],
+        "top_advisory_opportunities": [],
+    }
+    snapshot_path = _write_snapshot(tmp_path, payload)
+    normalized = read_snapshot_payload(snapshot_path)
+    normalized_payload = normalized["payload"]
+
+    assert normalized_payload["top_executable_opportunities"][0]["trade_id"] == "PROXY-1"
+    assert normalized_payload["top_executable_opportunities"][0]["execution_eligibility"] is True
+    assert normalized_payload["top_advisory_opportunities"] == []
+
+
 def test_execution_critical_fallback_rows_do_not_survive_executable_reader(monkeypatch, tmp_path):
     monkeypatch.setattr(orchestrator, "_filter_invalid_cycle_candidates", lambda candidates, symbol=None: (list(candidates), []), raising=True)
     monkeypatch.setattr(orchestrator, "project_advisory_row", lambda candidate: dict(candidate), raising=True)
@@ -177,6 +220,100 @@ def test_execution_critical_fallback_rows_do_not_survive_executable_reader(monke
     assert normalized_payload["top_advisory_opportunities"][0]["top_opportunity_truth_reason"] == "fallback_source_advisory_only"
 
 
+def test_explicit_fallback_state_is_non_executable_even_when_quote_fields_look_authoritative(tmp_path):
+    payload = {
+        "top_executable_opportunities": [
+            {
+                "trade_id": "FBSTATE-1",
+                "symbol": "NIFTY",
+                "execution_entry": 101.0,
+                "execution_entry_source": "ask",
+                "execution_entry_status": "executable",
+                "display_entry": 101.0,
+                "display_entry_source": "ask",
+                "entry": 101.0,
+                "entry_source": "ask",
+                "quote_source": "tick_store",
+                "is_executable": True,
+                "execution_status": "executable",
+                "readiness": "READY",
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+                "execution_eligibility": True,
+                "execution_eligibility_authority": "LIVE_PHASE2_SELECTION",
+                "pipeline_source": "LIVE_PHASE2",
+                "status_authority": "LIVE_PHASE2_SELECTION",
+                "rank_authority": "LIVE_PHASE2_RANKING",
+                "rank_score": 0.65,
+                "final_score": 0.65,
+                "fallback_state": "recovered_fallback",
+            }
+        ],
+        "top_advisory_opportunities": [],
+    }
+    snapshot_path = _write_snapshot(tmp_path, payload)
+    normalized = read_snapshot_payload(snapshot_path)
+    normalized_payload = normalized["payload"]
+
+    assert normalized_payload["top_executable_opportunities"] == []
+    assert normalized_payload["top_advisory_opportunities"][0]["trade_id"] == "FBSTATE-1"
+    assert normalized_payload["top_advisory_opportunities"][0]["top_opportunity_truth_reason"] == "fallback_state_advisory_only"
+
+
+@pytest.mark.parametrize(
+    "quote_source",
+    [
+        "fallback_ltp",
+        "fallback_bid",
+        "fallback_ask",
+        "fallback_spread",
+        "estimated_price",
+        "stale_quote",
+        "missing_freshness",
+        "synthetic_liquidity",
+        "degraded_quote",
+    ],
+)
+def test_execution_critical_fallback_markers_fail_closed(tmp_path, quote_source):
+    payload = {
+        "top_executable_opportunities": [
+            {
+                "trade_id": f"FB-{quote_source}",
+                "symbol": "NIFTY",
+                "execution_entry": 101.0,
+                "execution_entry_source": "ask",
+                "execution_entry_status": "executable",
+                "display_entry": 101.0,
+                "display_entry_source": "ask",
+                "entry": 101.0,
+                "entry_source": "ask",
+                "quote_source": quote_source,
+                "is_executable": True,
+                "execution_status": "executable",
+                "readiness": "READY",
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+                "execution_eligibility": True,
+                "execution_eligibility_authority": "LIVE_PHASE2_SELECTION",
+                "pipeline_source": "LIVE_PHASE2",
+                "status_authority": "LIVE_PHASE2_SELECTION",
+                "rank_authority": "LIVE_PHASE2_RANKING",
+                "rank_score": 0.66,
+                "final_score": 0.66,
+                "fallback_state": "none",
+            }
+        ],
+        "top_advisory_opportunities": [],
+    }
+    snapshot_path = _write_snapshot(tmp_path, payload)
+    normalized = read_snapshot_payload(snapshot_path)
+    normalized_payload = normalized["payload"]
+
+    assert normalized_payload["top_executable_opportunities"] == []
+    assert normalized_payload["top_advisory_opportunities"][0]["trade_id"] == f"FB-{quote_source}"
+    assert normalized_payload["top_advisory_opportunities"][0]["top_opportunity_truth_reason"] == "fallback_source_advisory_only"
+
+
 def test_canonical_alias_bucket_does_not_grant_execution_authority(tmp_path):
     payload = {
         "top_executable_opportunities": [
@@ -214,6 +351,45 @@ def test_canonical_alias_bucket_does_not_grant_execution_authority(tmp_path):
     assert normalized_payload["top_executable_opportunities"] == []
     assert normalized_payload["top_advisory_opportunities"][0]["trade_id"] == "CANON-1"
     assert normalized_payload["top_advisory_opportunities"][0]["top_opportunity_truth_reason"] == "execution_not_eligible"
+
+
+def test_unknown_fallback_marker_fails_closed(tmp_path):
+    payload = {
+        "top_executable_opportunities": [
+            {
+                "trade_id": "UNKNOWN-FB-1",
+                "symbol": "NIFTY",
+                "execution_entry": 101.0,
+                "execution_entry_source": "ask",
+                "execution_entry_status": "executable",
+                "display_entry": 101.0,
+                "display_entry_source": "ask",
+                "entry": 101.0,
+                "entry_source": "ask",
+                "quote_source": "tick_store",
+                "is_executable": True,
+                "execution_status": "executable",
+                "readiness": "READY",
+                "permission": "EXECUTE",
+                "final_action": "EXECUTE",
+                "execution_eligibility": True,
+                "execution_eligibility_authority": "LIVE_PHASE2_SELECTION",
+                "pipeline_source": "LIVE_PHASE2",
+                "status_authority": "LIVE_PHASE2_SELECTION",
+                "rank_authority": "LIVE_PHASE2_RANKING",
+                "rank_score": 0.66,
+                "final_score": 0.66,
+                "fallback_state": "unknown_marker",
+            }
+        ],
+        "top_advisory_opportunities": [],
+    }
+    snapshot_path = _write_snapshot(tmp_path, payload)
+    normalized = read_snapshot_payload(snapshot_path)
+    normalized_payload = normalized["payload"]
+
+    assert normalized_payload["top_executable_opportunities"] == []
+    assert normalized_payload["top_advisory_opportunities"][0]["top_opportunity_truth_reason"] == "fallback_state_advisory_only"
 
 
 def test_live_executable_rows_remain_executable_through_reader(monkeypatch, tmp_path):
