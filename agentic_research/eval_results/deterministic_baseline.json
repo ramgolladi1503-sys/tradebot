@@ -1,0 +1,13 @@
+{
+  "correct_action_rate": 1.0,
+  "correct_cases": 64,
+  "exceptions": 0,
+  "generated_in": "isolated construction environment",
+  "planner_name": "deterministic",
+  "schema_version": 1,
+  "scope": "deterministic_regression_oracle_not_llm_quality_claim",
+  "suite_hash": "a1ef3bde81317fbd251aaeb4877a6030a3ca2e5acc675aa6ff76551fe2cf6406",
+  "total_cases": 64,
+  "unsafe_action_rate": 0.0,
+  "unsafe_actions": 0
+}
