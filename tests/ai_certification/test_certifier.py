@@ -8,6 +8,7 @@ from core.ai_certification import EvidenceCertification, StrategyVerdict, certif
 
 
 def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
@@ -19,6 +20,12 @@ def _make_bundle(tmp_path: Path, *, overrides: dict[str, dict] | None = None) ->
     root = tmp_path / "bundle"
     root.mkdir()
     artifacts = {
+        "source/option_replay_wfa_report.json": {
+            "engine_module": "core.option_backtest.engine.OptionBacktestEngine",
+            "read_only": True,
+            "is_order_action": False,
+            "broker_api_called": False,
+        },
         "dataset_manifest.json": {
             "dataset_sha256": "a" * 64,
             "row_count": 1000,
@@ -35,6 +42,20 @@ def _make_bundle(tmp_path: Path, *, overrides: dict[str, dict] | None = None) ->
             "invalid_ohlc_count": 0,
             "quote_columns_complete": True,
             "contract_metadata_complete": True,
+        },
+        "source_index.json": {
+            "producer": "core.ai_certification.exporter.export_option_replay_wfa_bundle",
+            "wfa_report": "source/option_replay_wfa_report.json",
+            "dataset": {
+                "file_sha256": "a" * 64,
+                "size_bytes": 1000,
+            },
+            "copied_files": [
+                {
+                    "artifact": "source/option_replay_wfa_report.json",
+                    "role": "wfa_report",
+                }
+            ],
         },
         "engine_identity.json": {
             "engine_module": "core.option_backtest.engine.OptionBacktestEngine",
@@ -196,3 +217,14 @@ def test_unsafe_manifest_path_returns_rejection_report(tmp_path: Path):
     assert report.evidence_certification is EvidenceCertification.REJECTED
     assert report.strategy_verdict is StrategyVerdict.INVALID_DUE_TO_DATA
     assert report.to_dict()["gates"]["artifact_hashes"]["reason_code"] == "UNSAFE_ARTIFACT_PATH"
+
+
+def test_source_dataset_hash_mismatch_is_rejected(tmp_path: Path):
+    bundle = _make_bundle(
+        tmp_path,
+        overrides={"source_index.json": {"dataset": {"file_sha256": "b" * 64, "size_bytes": 1000}}},
+    )
+    report = certify_bundle(bundle)
+    assert report.evidence_certification is EvidenceCertification.REJECTED
+    assert report.strategy_verdict is StrategyVerdict.INVALID_DUE_TO_DATA
+    assert report.to_dict()["gates"]["source_artifact_provenance"]["reason_code"] == "DATASET_SOURCE_HASH_MISMATCH"
