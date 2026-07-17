@@ -1,0 +1,2359 @@
+{
+  "all_session_first_touch_distribution": {
+    "average_stop_hit_bar": 6.63349131121643,
+    "average_target_hit_bar": 6.6780515117581185,
+    "by_bar": {
+      "1": {
+        "STOP": 353,
+        "TARGET": 295
+      },
+      "10": {
+        "STOP": 61,
+        "TARGET": 40
+      },
+      "11": {
+        "STOP": 42,
+        "TARGET": 35
+      },
+      "12": {
+        "STOP": 38,
+        "TARGET": 29
+      },
+      "13": {
+        "STOP": 42,
+        "TARGET": 26
+      },
+      "14": {
+        "STOP": 33,
+        "TARGET": 27
+      },
+      "15": {
+        "STOP": 27,
+        "TARGET": 22
+      },
+      "16": {
+        "STOP": 23,
+        "TARGET": 20
+      },
+      "17": {
+        "STOP": 24,
+        "TARGET": 18
+      },
+      "18": {
+        "STOP": 13,
+        "TARGET": 9
+      },
+      "19": {
+        "STOP": 11,
+        "TARGET": 16
+      },
+      "2": {
+        "STOP": 467,
+        "TARGET": 302
+      },
+      "20": {
+        "STOP": 13,
+        "TARGET": 13
+      },
+      "21": {
+        "STOP": 11,
+        "TARGET": 17
+      },
+      "22": {
+        "STOP": 12,
+        "TARGET": 6
+      },
+      "23": {
+        "STOP": 9,
+        "TARGET": 9
+      },
+      "24": {
+        "STOP": 6,
+        "TARGET": 6
+      },
+      "25": {
+        "STOP": 4,
+        "TARGET": 10
+      },
+      "26": {
+        "STOP": 7,
+        "TARGET": 4
+      },
+      "27": {
+        "STOP": 8,
+        "TARGET": 6
+      },
+      "28": {
+        "STOP": 10,
+        "TARGET": 7
+      },
+      "29": {
+        "STOP": 3,
+        "TARGET": 4
+      },
+      "3": {
+        "STOP": 390,
+        "TARGET": 235
+      },
+      "30": {
+        "STOP": 6,
+        "TARGET": 4
+      },
+      "31": {
+        "STOP": 10,
+        "TARGET": 5
+      },
+      "32": {
+        "STOP": 5,
+        "TARGET": 3
+      },
+      "33": {
+        "STOP": 1,
+        "TARGET": 2
+      },
+      "34": {
+        "STOP": 1,
+        "TARGET": 3
+      },
+      "35": {
+        "STOP": 3,
+        "TARGET": 6
+      },
+      "36": {
+        "STOP": 2,
+        "TARGET": 1
+      },
+      "37": {
+        "STOP": 4,
+        "TARGET": 2
+      },
+      "38": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "39": {
+        "STOP": 2,
+        "TARGET": 0
+      },
+      "4": {
+        "STOP": 240,
+        "TARGET": 145
+      },
+      "40": {
+        "STOP": 4,
+        "TARGET": 4
+      },
+      "41": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "42": {
+        "STOP": 5,
+        "TARGET": 0
+      },
+      "43": {
+        "STOP": 1,
+        "TARGET": 1
+      },
+      "44": {
+        "STOP": 4,
+        "TARGET": 0
+      },
+      "45": {
+        "STOP": 3,
+        "TARGET": 2
+      },
+      "46": {
+        "STOP": 4,
+        "TARGET": 0
+      },
+      "47": {
+        "STOP": 3,
+        "TARGET": 1
+      },
+      "48": {
+        "STOP": 2,
+        "TARGET": 1
+      },
+      "49": {
+        "STOP": 3,
+        "TARGET": 1
+      },
+      "5": {
+        "STOP": 199,
+        "TARGET": 116
+      },
+      "50": {
+        "STOP": 4,
+        "TARGET": 1
+      },
+      "51": {
+        "STOP": 3,
+        "TARGET": 0
+      },
+      "52": {
+        "STOP": 2,
+        "TARGET": 1
+      },
+      "53": {
+        "STOP": 1,
+        "TARGET": 2
+      },
+      "54": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "55": {
+        "STOP": 2,
+        "TARGET": 1
+      },
+      "56": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "57": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "58": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "59": {
+        "STOP": 2,
+        "TARGET": 0
+      },
+      "6": {
+        "STOP": 145,
+        "TARGET": 121
+      },
+      "60": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "7": {
+        "STOP": 105,
+        "TARGET": 84
+      },
+      "8": {
+        "STOP": 91,
+        "TARGET": 61
+      },
+      "9": {
+        "STOP": 64,
+        "TARGET": 61
+      }
+    },
+    "median_stop_hit_bar": 4.0,
+    "median_target_hit_bar": 4.0,
+    "unresolved_at_maximum_horizon": 49
+  },
+  "baseline_cost_bps": 2.0,
+  "best_holdout_equal_notional": {
+    "horizon_minutes": 15,
+    "metrics": {
+      "average_risk_bps": 8.285149740847581,
+      "gross_expectancy_r": 0.19772639015144342,
+      "losses": 235,
+      "net_expectancy_bps": -0.6097723471392783,
+      "net_expectancy_r": -0.09580843813467443,
+      "net_pnl_bps": -272.5682391712574,
+      "net_r_profit_factor": 0.8479745151979332,
+      "overlapping_signals_skipped": 105,
+      "profit_factor": 0.8776224401149518,
+      "reason_stats": {
+        "STOP": {
+          "average_gross_r_multiple": -1.0,
+          "average_gross_return_bps": -7.910553559392069,
+          "average_net_r_multiple": -1.299894968903472,
+          "average_net_return_bps": -9.910553559392069,
+          "average_risk_bps": 7.910553559392069,
+          "count": 204
+        },
+        "TARGET": {
+          "average_gross_r_multiple": 1.499999999999996,
+          "average_gross_return_bps": 11.276756004482998,
+          "average_net_r_multiple": 1.1857379394568652,
+          "average_net_return_bps": 9.276756004482998,
+          "average_risk_bps": 7.5178373363220174,
+          "count": 190
+        },
+        "TIMEOUT": {
+          "average_gross_r_multiple": 0.13931502637162166,
+          "average_gross_return_bps": 1.7471895489236775,
+          "average_net_r_multiple": -0.05543408842821806,
+          "average_net_return_bps": -0.2528104510763224,
+          "average_risk_bps": 12.477734229088743,
+          "count": 53
+        }
+      },
+      "stop_count": 204,
+      "target_count": 190,
+      "timeout_count": 53,
+      "trades": 447,
+      "win_rate": 0.4742729306487696,
+      "wins": 212
+    }
+  },
+  "best_holdout_equal_risk": {
+    "horizon_minutes": 35,
+    "metrics": {
+      "average_risk_bps": 8.356503228030244,
+      "gross_expectancy_r": 0.1997980939469068,
+      "losses": 225,
+      "net_expectancy_bps": -0.6529715712607619,
+      "net_expectancy_r": -0.09196576950221338,
+      "net_pnl_bps": -282.7366903559099,
+      "net_r_profit_factor": 0.8607938317439948,
+      "overlapping_signals_skipped": 119,
+      "profit_factor": 0.8786169444039953,
+      "reason_stats": {
+        "STOP": {
+          "average_gross_r_multiple": -1.0,
+          "average_gross_return_bps": -8.368601350951934,
+          "average_net_r_multiple": -1.2890850404286576,
+          "average_net_return_bps": -10.368601350951934,
+          "average_risk_bps": 8.368601350951934,
+          "count": 219
+        },
+        "TARGET": {
+          "average_gross_r_multiple": 1.4999999999999993,
+          "average_gross_return_bps": 11.935480217215126,
+          "average_net_r_multiple": 1.198047169778712,
+          "average_net_return_bps": 9.935480217215126,
+          "average_risk_bps": 7.956986811476756,
+          "count": 205
+        },
+        "TIMEOUT": {
+          "average_gross_r_multiple": -0.22082503566547074,
+          "average_gross_return_bps": -3.4207154473930177,
+          "average_net_r_multiple": -0.3456915716909283,
+          "average_net_return_bps": -5.420715447393017,
+          "average_risk_bps": 17.162211725098594,
+          "count": 9
+        }
+      },
+      "stop_count": 219,
+      "target_count": 205,
+      "timeout_count": 9,
+      "trades": 433,
+      "win_rate": 0.48036951501154734,
+      "wins": 208
+    }
+  },
+  "development": {
+    "fixed_signal_count": 3803,
+    "horizons": {
+      "15": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.0061527624054534226,
+          "losses": 2283,
+          "net_expectancy_bps": -2.053419669847355,
+          "net_expectancy_r": -0.2722247643546767,
+          "net_pnl_bps": -7809.155004429491,
+          "net_r_profit_factor": 0.6221880663292199,
+          "profit_factor": 0.6536225446124329,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.264201803312119,
+              "average_net_r_multiple": -1.2857178699025331,
+              "average_net_return_bps": -10.264201803312119,
+              "average_risk_bps": 8.264201803312119,
+              "count": 2034
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.183290119378514,
+              "average_net_r_multiple": 1.203646944141715,
+              "average_net_return_bps": 10.183290119378514,
+              "average_risk_bps": 8.122193412918994,
+              "count": 1361
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.03896802800964151,
+              "average_gross_return_bps": 0.06071963488530034,
+              "average_net_r_multiple": -0.14285324126460158,
+              "average_net_return_bps": -1.9392803651146997,
+              "average_risk_bps": 13.36410981870705,
+              "count": 408
+            }
+          },
+          "stop_count": 2034,
+          "target_count": 1361,
+          "timeout_count": 408,
+          "trades": 3803,
+          "win_rate": 0.39968445963712856,
+          "wins": 1520
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.012609740536478,
+          "gross_expectancy_r": 0.006995944673723118,
+          "losses": 1767,
+          "net_expectancy_bps": -2.0973033149252087,
+          "net_expectancy_r": -0.26599317167752895,
+          "net_pnl_bps": -6163.974442565189,
+          "net_r_profit_factor": 0.626274218305877,
+          "overlapping_signals_skipped": 864,
+          "profit_factor": 0.6517455622750072,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.47283220555052,
+              "average_net_r_multiple": -1.2806020009499788,
+              "average_net_return_bps": -10.47283220555052,
+              "average_risk_bps": 8.47283220555052,
+              "count": 1546
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.365461507200653,
+              "average_net_r_multiple": 1.206469076729223,
+              "average_net_return_bps": 10.365461507200653,
+              "average_risk_bps": 8.24364100480042,
+              "count": 1040
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.018586632850050872,
+              "average_gross_return_bps": -0.13330260700499885,
+              "average_net_r_multiple": -0.1605412971387606,
+              "average_net_return_bps": -2.1333026070049987,
+              "average_risk_bps": 13.642138222841846,
+              "count": 353
+            }
+          },
+          "stop_count": 1546,
+          "target_count": 1040,
+          "timeout_count": 353,
+          "trades": 2939,
+          "win_rate": 0.39877509356924123,
+          "wins": 1172
+        }
+      },
+      "20": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.014137463114468365,
+          "losses": 2269,
+          "net_expectancy_bps": -1.969251139635763,
+          "net_expectancy_r": -0.26424006364566177,
+          "net_pnl_bps": -7489.0620840348065,
+          "net_r_profit_factor": 0.6376113254636118,
+          "profit_factor": 0.6732138949490806,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.364174737735583,
+              "average_net_r_multiple": -1.2831733278090638,
+              "average_net_return_bps": -10.364174737735583,
+              "average_risk_bps": 8.364174737735583,
+              "count": 2106
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.344584297249876,
+              "average_net_r_multiple": 1.207001199246435,
+              "average_net_return_bps": 10.344584297249876,
+              "average_risk_bps": 8.229722864833237,
+              "count": 1425
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.08185578023645979,
+              "average_gross_return_bps": 0.517857684026679,
+              "average_net_r_multiple": -0.08278912722328262,
+              "average_net_return_bps": -1.482142315973321,
+              "average_risk_bps": 14.61007878269698,
+              "count": 272
+            }
+          },
+          "stop_count": 2106,
+          "target_count": 1425,
+          "timeout_count": 272,
+          "trades": 3803,
+          "win_rate": 0.40336576387062845,
+          "wins": 1534
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.027938143535094,
+          "gross_expectancy_r": 0.01422289824396932,
+          "losses": 1732,
+          "net_expectancy_bps": -2.000519243020586,
+          "net_expectancy_r": -0.25843885913769177,
+          "net_pnl_bps": -5797.504766273658,
+          "net_r_profit_factor": 0.641775813428446,
+          "overlapping_signals_skipped": 905,
+          "profit_factor": 0.6736764136231024,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.566386838391669,
+              "average_net_r_multiple": -1.278088673982374,
+              "average_net_return_bps": -10.566386838391669,
+              "average_risk_bps": 8.566386838391669,
+              "count": 1586
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000047,
+              "average_gross_return_bps": 12.56521412133826,
+              "average_net_r_multiple": 1.2104935389075209,
+              "average_net_return_bps": 10.56521412133826,
+              "average_risk_bps": 8.37680941422549,
+              "count": 1074
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.06814268534041214,
+              "average_gross_return_bps": 0.3770789625976383,
+              "average_net_r_multiple": -0.09234133458681927,
+              "average_net_return_bps": -1.6229210374023617,
+              "average_risk_bps": 15.041940770577066,
+              "count": 238
+            }
+          },
+          "stop_count": 1586,
+          "target_count": 1074,
+          "timeout_count": 238,
+          "trades": 2898,
+          "win_rate": 0.4023464458247067,
+          "wins": 1166
+        }
+      },
+      "25": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.015451902227389378,
+          "losses": 2267,
+          "net_expectancy_bps": -1.9645258911554169,
+          "net_expectancy_r": -0.26292562453274076,
+          "net_pnl_bps": -7471.09196406405,
+          "net_r_profit_factor": 0.6434278043921487,
+          "profit_factor": 0.6797176052374345,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.470299265558346,
+              "average_net_r_multiple": -1.2811764339065057,
+              "average_net_return_bps": -10.470299265558346,
+              "average_risk_bps": 8.470299265558346,
+              "count": 2144
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.504970880776963,
+              "average_net_r_multiple": 1.2098498345524957,
+              "average_net_return_bps": 10.504970880776963,
+              "average_risk_bps": 8.336647253851293,
+              "count": 1468
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.003997822883538008,
+              "average_gross_return_bps": -0.32496121302375164,
+              "average_net_r_multiple": -0.15247870641638175,
+              "average_net_return_bps": -2.3249612130237516,
+              "average_risk_bps": 15.276066570373214,
+              "count": 191
+            }
+          },
+          "stop_count": 2144,
+          "target_count": 1468,
+          "timeout_count": 191,
+          "trades": 3803,
+          "win_rate": 0.40389166447541414,
+          "wins": 1536
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.055481732887094,
+          "gross_expectancy_r": 0.016991963472251036,
+          "losses": 1704,
+          "net_expectancy_bps": -1.9871755796768027,
+          "net_expectancy_r": -0.25490977966662687,
+          "net_pnl_bps": -5685.309333455332,
+          "net_r_profit_factor": 0.6504355983478202,
+          "overlapping_signals_skipped": 942,
+          "profit_factor": 0.682404647253907,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.717032619748458,
+              "average_net_r_multiple": -1.275178169649674,
+              "average_net_return_bps": -10.717032619748458,
+              "average_risk_bps": 8.717032619748458,
+              "count": 1597
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000049,
+              "average_gross_return_bps": 12.767831557020504,
+              "average_net_r_multiple": 1.2141962590810802,
+              "average_net_return_bps": 10.767831557020504,
+              "average_risk_bps": 8.51188770468032,
+              "count": 1096
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.009607187464910582,
+              "average_gross_return_bps": -0.21280729887807953,
+              "average_net_r_multiple": -0.14045501576520228,
+              "average_net_return_bps": -2.2128072988780794,
+              "average_risk_bps": 15.819066784059876,
+              "count": 168
+            }
+          },
+          "stop_count": 1597,
+          "target_count": 1096,
+          "timeout_count": 168,
+          "trades": 2861,
+          "win_rate": 0.4044040545263894,
+          "wins": 1157
+        }
+      },
+      "30": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.01394880020562096,
+          "losses": 2268,
+          "net_expectancy_bps": -1.966149600347326,
+          "net_expectancy_r": -0.26442872655450916,
+          "net_pnl_bps": -7477.266930120881,
+          "net_r_profit_factor": 0.6441871090383691,
+          "profit_factor": 0.6829869807567216,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.533998982950813,
+              "average_net_r_multiple": -1.2798817045010367,
+              "average_net_return_bps": -10.533998982950813,
+              "average_risk_bps": 8.533998982950813,
+              "count": 2173
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.500000000000004,
+              "average_gross_return_bps": 12.60269048800403,
+              "average_net_r_multiple": 1.2112217838674715,
+              "average_net_return_bps": 10.60269048800403,
+              "average_risk_bps": 8.401793658669337,
+              "count": 1486
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.020504950125205257,
+              "average_gross_return_bps": -0.3783694815468766,
+              "average_net_r_multiple": -0.16885468078547491,
+              "average_net_return_bps": -2.3783694815468768,
+              "average_risk_bps": 15.880578765398091,
+              "count": 144
+            }
+          },
+          "stop_count": 2173,
+          "target_count": 1486,
+          "timeout_count": 144,
+          "trades": 3803,
+          "win_rate": 0.4036287141730213,
+          "wins": 1535
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.062078544548823,
+          "gross_expectancy_r": 0.015968648930270685,
+          "losses": 1691,
+          "net_expectancy_bps": -1.9924950573804383,
+          "net_expectancy_r": -0.25577713180013906,
+          "net_pnl_bps": -5660.6784580178255,
+          "net_r_profit_factor": 0.6518237492804843,
+          "overlapping_signals_skipped": 962,
+          "profit_factor": 0.6856750620950719,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.81317588252553,
+              "average_net_r_multiple": -1.2730319270086117,
+              "average_net_return_bps": -10.81317588252553,
+              "average_risk_bps": 8.81317588252553,
+              "count": 1608
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000047,
+              "average_gross_return_bps": 12.89204907149348,
+              "average_net_r_multiple": 1.215401601367129,
+              "average_net_return_bps": 10.89204907149348,
+              "average_risk_bps": 8.594699380995635,
+              "count": 1104
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.02041138286128832,
+              "average_gross_return_bps": -0.30940940965563113,
+              "average_net_r_multiple": -0.16613070328417115,
+              "average_net_return_bps": -2.3094094096556312,
+              "average_risk_bps": 16.164575266224634,
+              "count": 129
+            }
+          },
+          "stop_count": 1608,
+          "target_count": 1104,
+          "timeout_count": 129,
+          "trades": 2841,
+          "win_rate": 0.40478704681450195,
+          "wins": 1150
+        }
+      },
+      "35": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.014001027464580065,
+          "losses": 2268,
+          "net_expectancy_bps": -1.9800902982097748,
+          "net_expectancy_r": -0.26437649929555007,
+          "net_pnl_bps": -7530.283404091773,
+          "net_r_profit_factor": 0.6456903955489207,
+          "profit_factor": 0.6831493800922899,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.585535106767317,
+              "average_net_r_multiple": -1.2789314539603935,
+              "average_net_return_bps": -10.585535106767317,
+              "average_risk_bps": 8.585535106767317,
+              "count": 2191
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.647202699493196,
+              "average_net_r_multiple": 1.212180622796311,
+              "average_net_return_bps": 10.647202699493196,
+              "average_risk_bps": 8.431468466328782,
+              "count": 1500
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.05137582635900164,
+              "average_gross_return_bps": -0.7516074500390749,
+              "average_net_r_multiple": -0.19246379810911818,
+              "average_net_return_bps": -2.751607450039075,
+              "average_risk_bps": 16.590521344033167,
+              "count": 112
+            }
+          },
+          "stop_count": 2191,
+          "target_count": 1500,
+          "timeout_count": 112,
+          "trades": 3803,
+          "win_rate": 0.4036287141730213,
+          "wins": 1535
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.075966732141287,
+          "gross_expectancy_r": 0.013056780457972785,
+          "losses": 1690,
+          "net_expectancy_bps": -2.035548315519597,
+          "net_expectancy_r": -0.25831811218061546,
+          "net_pnl_bps": -5760.60173292046,
+          "net_r_profit_factor": 0.6505308974543547,
+          "overlapping_signals_skipped": 973,
+          "profit_factor": 0.6825645203512003,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.874155714067808,
+              "average_net_r_multiple": -1.2718471484296918,
+              "average_net_return_bps": -10.874155714067808,
+              "average_risk_bps": 8.874155714067808,
+              "count": 1618
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000047,
+              "average_gross_return_bps": 12.951293787571105,
+              "average_net_r_multiple": 1.2167572808351843,
+              "average_net_return_bps": 10.951293787571105,
+              "average_risk_bps": 8.63419585838072,
+              "count": 1107
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.05285058384706928,
+              "average_gross_return_bps": -0.7552381942853214,
+              "average_net_r_multiple": -0.19182743996618373,
+              "average_net_return_bps": -2.7552381942853215,
+              "average_risk_bps": 16.843305632101675,
+              "count": 105
+            }
+          },
+          "stop_count": 1618,
+          "target_count": 1107,
+          "timeout_count": 105,
+          "trades": 2830,
+          "win_rate": 0.4028268551236749,
+          "wins": 1140
+        }
+      },
+      "40": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.014545186437400182,
+          "losses": 2265,
+          "net_expectancy_bps": -1.9738024141222015,
+          "net_expectancy_r": -0.26383234032272995,
+          "net_pnl_bps": -7506.370580906732,
+          "net_r_profit_factor": 0.6470180864359577,
+          "profit_factor": 0.6851837993138977,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.622197917559959,
+              "average_net_r_multiple": -1.278303745308649,
+              "average_net_return_bps": -10.622197917559959,
+              "average_risk_bps": 8.622197917559959,
+              "count": 2201
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.500000000000004,
+              "average_gross_return_bps": 12.690037836148086,
+              "average_net_r_multiple": 1.2127690693841076,
+              "average_net_return_bps": 10.690037836148086,
+              "average_risk_bps": 8.46002522409871,
+              "count": 1507
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.04404901030077065,
+              "average_gross_return_bps": -0.4926314045519121,
+              "average_net_r_multiple": -0.18369299352479326,
+              "average_net_return_bps": -2.4926314045519122,
+              "average_risk_bps": 16.7319250493248,
+              "count": 95
+            }
+          },
+          "stop_count": 2201,
+          "target_count": 1507,
+          "timeout_count": 95,
+          "trades": 3803,
+          "win_rate": 0.4044175650801998,
+          "wins": 1538
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.080424807396149,
+          "gross_expectancy_r": 0.01430861022631043,
+          "losses": 1680,
+          "net_expectancy_bps": -2.018402975383128,
+          "net_expectancy_r": -0.25693068868040325,
+          "net_pnl_bps": -5689.8779876050385,
+          "net_r_profit_factor": 0.6529559178017091,
+          "overlapping_signals_skipped": 984,
+          "profit_factor": 0.6863446413774994,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.918232272140243,
+              "average_net_r_multiple": -1.271056902577107,
+              "average_net_return_bps": -10.918232272140243,
+              "average_risk_bps": 8.918232272140243,
+              "count": 1620
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 13.016594900480197,
+              "average_net_r_multiple": 1.2177088793152377,
+              "average_net_return_bps": 11.016594900480197,
+              "average_risk_bps": 8.677729933653449,
+              "count": 1110
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.052404806427367424,
+              "average_gross_return_bps": -0.5928319805715079,
+              "average_net_r_multiple": -0.18912680061862017,
+              "average_net_return_bps": -2.592831980571508,
+              "average_risk_bps": 17.055067694687875,
+              "count": 89
+            }
+          },
+          "stop_count": 1620,
+          "target_count": 1110,
+          "timeout_count": 89,
+          "trades": 2819,
+          "win_rate": 0.404043987229514,
+          "wins": 1139
+        }
+      },
+      "45": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.012429586757895347,
+          "losses": 2267,
+          "net_expectancy_bps": -1.9949309484131421,
+          "net_expectancy_r": -0.26594794000223476,
+          "net_pnl_bps": -7586.722396815179,
+          "net_r_profit_factor": 0.6455484960984158,
+          "profit_factor": 0.683451503727943,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.653243408659497,
+              "average_net_r_multiple": -1.2776114721693013,
+              "average_net_return_bps": -10.653243408659497,
+              "average_risk_bps": 8.653243408659497,
+              "count": 2214
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.500000000000004,
+              "average_gross_return_bps": 12.703643897547868,
+              "average_net_r_multiple": 1.2130062976876264,
+              "average_net_return_bps": 10.703643897547868,
+              "average_risk_bps": 8.469095931698563,
+              "count": 1510
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.0472187539206346,
+              "average_gross_return_bps": -0.06257943468776518,
+              "average_net_r_multiple": -0.18237627789850175,
+              "average_net_return_bps": -2.0625794346877653,
+              "average_risk_bps": 17.337123358419237,
+              "count": 79
+            }
+          },
+          "stop_count": 2214,
+          "target_count": 1510,
+          "timeout_count": 79,
+          "trades": 3803,
+          "win_rate": 0.40389166447541414,
+          "wins": 1536
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.08756388294387,
+          "gross_expectancy_r": 0.011734183646076712,
+          "losses": 1676,
+          "net_expectancy_bps": -2.0455324326442232,
+          "net_expectancy_r": -0.259350762300739,
+          "net_pnl_bps": -5745.900603297623,
+          "net_r_profit_factor": 0.6512138397736025,
+          "overlapping_signals_skipped": 994,
+          "profit_factor": 0.6842186810247437,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.966214851950518,
+              "average_net_r_multiple": -1.2699291644917257,
+              "average_net_return_bps": -10.966214851950518,
+              "average_risk_bps": 8.966214851950518,
+              "count": 1627
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 13.040037636532062,
+              "average_net_r_multiple": 1.2180132199589069,
+              "average_net_return_bps": 11.040037636532062,
+              "average_risk_bps": 8.693358424354694,
+              "count": 1109
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.04847504298870035,
+              "average_gross_return_bps": -0.01740791901627517,
+              "average_net_r_multiple": -0.17970139190638323,
+              "average_net_return_bps": -2.017407919016275,
+              "average_risk_bps": 17.780834115842254,
+              "count": 73
+            }
+          },
+          "stop_count": 1627,
+          "target_count": 1109,
+          "timeout_count": 73,
+          "trades": 2809,
+          "win_rate": 0.40334638661445354,
+          "wins": 1133
+        }
+      },
+      "50": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.01012233345968161,
+          "losses": 2274,
+          "net_expectancy_bps": -2.0357327473697118,
+          "net_expectancy_r": -0.2682551933004485,
+          "net_pnl_bps": -7741.891638247013,
+          "net_r_profit_factor": 0.643707341691877,
+          "profit_factor": 0.6790661617593661,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.697101244635494,
+              "average_net_r_multiple": -1.27678141308262,
+              "average_net_return_bps": -10.697101244635494,
+              "average_risk_bps": 8.697101244635494,
+              "count": 2229
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 12.726089214285155,
+              "average_net_r_multiple": 1.2133273043976025,
+              "average_net_return_bps": 10.726089214285155,
+              "average_risk_bps": 8.484059476190087,
+              "count": 1513
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.03286501398093583,
+              "average_gross_return_bps": -0.07583516668749685,
+              "average_net_r_multiple": -0.16381871990194008,
+              "average_net_return_bps": -2.075835166687497,
+              "average_risk_bps": 17.93488274072068,
+              "count": 61
+            }
+          },
+          "stop_count": 2229,
+          "target_count": 1513,
+          "timeout_count": 61,
+          "trades": 3803,
+          "win_rate": 0.4020510123586642,
+          "wins": 1529
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.09489485812129,
+          "gross_expectancy_r": 0.009804322330492731,
+          "losses": 1678,
+          "net_expectancy_bps": -2.0870700846574044,
+          "net_expectancy_r": -0.2610398492154803,
+          "net_pnl_bps": -5847.9703772100465,
+          "net_r_profit_factor": 0.6501911293141953,
+          "overlapping_signals_skipped": 1001,
+          "profit_factor": 0.6803273888876983,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -9.029990671421503,
+              "average_net_r_multiple": -1.2687829314439174,
+              "average_net_return_bps": -11.029990671421503,
+              "average_risk_bps": 9.029990671421503,
+              "count": 1636
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 13.082044149419112,
+              "average_net_r_multiple": 1.2188943809597947,
+              "average_net_return_bps": 11.082044149419112,
+              "average_risk_bps": 8.721362766279391,
+              "count": 1110
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.027290871963644492,
+              "average_gross_return_bps": 0.14330991750571087,
+              "average_net_r_multiple": -0.15495615223034123,
+              "average_net_return_bps": -1.8566900824942891,
+              "average_risk_bps": 18.3949639900027,
+              "count": 56
+            }
+          },
+          "stop_count": 1636,
+          "target_count": 1110,
+          "timeout_count": 56,
+          "trades": 2802,
+          "win_rate": 0.4011420413990007,
+          "wins": 1124
+        }
+      },
+      "55": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.01041395396214717,
+          "losses": 2267,
+          "net_expectancy_bps": -2.0220697485724664,
+          "net_expectancy_r": -0.26796357279798294,
+          "net_pnl_bps": -7689.93125382109,
+          "net_r_profit_factor": 0.6446588023857294,
+          "profit_factor": 0.6819245834193249,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.714144289327642,
+              "average_net_r_multiple": -1.2763598983074826,
+              "average_net_return_bps": -10.714144289327642,
+              "average_risk_bps": 8.714144289327642,
+              "count": 2237
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.500000000000004,
+              "average_gross_return_bps": 12.749948370700208,
+              "average_net_r_multiple": 1.213638178458724,
+              "average_net_return_bps": 10.749948370700208,
+              "average_risk_bps": 8.49996558046679,
+              "count": 1517
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.022536059551826547,
+              "average_gross_return_bps": 1.3864865929108123,
+              "average_net_r_multiple": -0.10076513385255069,
+              "average_net_return_bps": -0.6135134070891877,
+              "average_risk_bps": 18.94408057465349,
+              "count": 49
+            }
+          },
+          "stop_count": 2237,
+          "target_count": 1517,
+          "timeout_count": 49,
+          "trades": 3803,
+          "win_rate": 0.40389166447541414,
+          "wins": 1536
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.097820297028742,
+          "gross_expectancy_r": 0.011766607124102074,
+          "losses": 1666,
+          "net_expectancy_bps": -2.0557619864068712,
+          "net_expectancy_r": -0.2589654622413316,
+          "net_pnl_bps": -5752.022037966425,
+          "net_r_profit_factor": 0.6531908138731864,
+          "overlapping_signals_skipped": 1005,
+          "profit_factor": 0.6856626642578484,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -9.048692139173708,
+              "average_net_r_multiple": -1.2682017232285838,
+              "average_net_return_bps": -11.048692139173708,
+              "average_risk_bps": 9.048692139173708,
+              "count": 1638
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 13.112330198868946,
+              "average_net_r_multiple": 1.2192360909542554,
+              "average_net_return_bps": 11.112330198868946,
+              "average_risk_bps": 8.741553465912615,
+              "count": 1113
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.030275887941126508,
+              "average_gross_return_bps": 1.525790950190908,
+              "average_net_r_multiple": -0.09107893478535724,
+              "average_net_return_bps": -0.47420904980909206,
+              "average_risk_bps": 19.24669062891799,
+              "count": 47
+            }
+          },
+          "stop_count": 1638,
+          "target_count": 1113,
+          "timeout_count": 47,
+          "trades": 2798,
+          "win_rate": 0.4045746962115797,
+          "wins": 1132
+        }
+      },
+      "60": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.760517620024212,
+          "gross_expectancy_r": 0.010436905375462149,
+          "losses": 2264,
+          "net_expectancy_bps": -2.032433081653702,
+          "net_expectancy_r": -0.267940621384668,
+          "net_pnl_bps": -7729.343009529029,
+          "net_r_profit_factor": 0.6449133260953313,
+          "profit_factor": 0.681077425628906,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.72680614639047,
+              "average_net_r_multiple": -1.2761927534012032,
+              "average_net_return_bps": -10.72680614639047,
+              "average_risk_bps": 8.72680614639047,
+              "count": 2240
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.500000000000004,
+              "average_gross_return_bps": 12.749948370700208,
+              "average_net_r_multiple": 1.213638178458724,
+              "average_net_return_bps": 10.749948370700208,
+              "average_risk_bps": 8.49996558046679,
+              "count": 1517
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.09112067701905144,
+              "average_gross_return_bps": 1.805023478987127,
+              "average_net_r_multiple": -0.030337657153943026,
+              "average_net_return_bps": -0.1949765210128731,
+              "average_risk_bps": 18.994672944984867,
+              "count": 46
+            }
+          },
+          "stop_count": 2240,
+          "target_count": 1517,
+          "timeout_count": 46,
+          "trades": 3803,
+          "win_rate": 0.4046805153825927,
+          "wins": 1539
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 9.096725586431074,
+          "gross_expectancy_r": 0.010565999531119571,
+          "losses": 1664,
+          "net_expectancy_bps": -2.0780790025391136,
+          "net_expectancy_r": -0.26022260108524786,
+          "net_pnl_bps": -5810.308891099361,
+          "net_r_profit_factor": 0.6521490063070667,
+          "overlapping_signals_skipped": 1007,
+          "profit_factor": 0.683480817248909,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -9.061807220630248,
+              "average_net_r_multiple": -1.2680934833707946,
+              "average_net_return_bps": -11.061807220630248,
+              "average_risk_bps": 9.061807220630248,
+              "count": 1641
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000042,
+              "average_gross_return_bps": 13.115116503694829,
+              "average_net_r_multiple": 1.219230855491812,
+              "average_net_return_bps": 11.115116503694829,
+              "average_risk_bps": 8.743411002463201,
+              "count": 1111
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.09187578838649237,
+              "average_gross_return_bps": 1.8459618715891284,
+              "average_net_r_multiple": -0.027419701688234845,
+              "average_net_return_bps": -0.15403812841087158,
+              "average_risk_bps": 19.320215156146098,
+              "count": 44
+            }
+          },
+          "stop_count": 1641,
+          "target_count": 1111,
+          "timeout_count": 44,
+          "trades": 2796,
+          "win_rate": 0.40486409155937053,
+          "wins": 1132
+        }
+      }
+    }
+  },
+  "diagnostic_only": true,
+  "equal_notional_positive_at_any_horizon": false,
+  "equal_risk_positive_at_any_horizon": false,
+  "fresh_holdout_required": true,
+  "holdout": {
+    "fixed_signal_count": 552,
+    "horizons": {
+      "15": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.1914233836535275,
+          "losses": 291,
+          "net_expectancy_bps": -0.6515474198887482,
+          "net_expectancy_r": -0.10268461315295004,
+          "net_pnl_bps": -359.654175778589,
+          "net_r_profit_factor": 0.838229751661115,
+          "profit_factor": 0.8695730539128029,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -7.913853988022896,
+              "average_net_r_multiple": -1.2977847136259497,
+              "average_net_return_bps": -9.913853988022897,
+              "average_risk_bps": 7.913853988022896,
+              "count": 257
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999991,
+              "average_gross_return_bps": 11.301546974291547,
+              "average_net_r_multiple": 1.185836194860303,
+              "average_net_return_bps": 9.301546974291547,
+              "average_risk_bps": 7.534364649527705,
+              "count": 234
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.1912411110942194,
+              "average_gross_return_bps": 2.1908902812962863,
+              "average_net_r_multiple": -0.010441059932298906,
+              "average_net_return_bps": 0.1908902812962863,
+              "average_risk_bps": 12.11974731129123,
+              "count": 61
+            }
+          },
+          "stop_count": 257,
+          "target_count": 234,
+          "timeout_count": 61,
+          "trades": 552,
+          "win_rate": 0.47282608695652173,
+          "wins": 261
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.285149740847581,
+          "gross_expectancy_r": 0.19772639015144342,
+          "losses": 235,
+          "net_expectancy_bps": -0.6097723471392783,
+          "net_expectancy_r": -0.09580843813467443,
+          "net_pnl_bps": -272.5682391712574,
+          "net_r_profit_factor": 0.8479745151979332,
+          "overlapping_signals_skipped": 105,
+          "profit_factor": 0.8776224401149518,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -7.910553559392069,
+              "average_net_r_multiple": -1.299894968903472,
+              "average_net_return_bps": -9.910553559392069,
+              "average_risk_bps": 7.910553559392069,
+              "count": 204
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.499999999999996,
+              "average_gross_return_bps": 11.276756004482998,
+              "average_net_r_multiple": 1.1857379394568652,
+              "average_net_return_bps": 9.276756004482998,
+              "average_risk_bps": 7.5178373363220174,
+              "count": 190
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.13931502637162166,
+              "average_gross_return_bps": 1.7471895489236775,
+              "average_net_r_multiple": -0.05543408842821806,
+              "average_net_return_bps": -0.2528104510763224,
+              "average_risk_bps": 12.477734229088743,
+              "count": 53
+            }
+          },
+          "stop_count": 204,
+          "target_count": 190,
+          "timeout_count": 53,
+          "trades": 447,
+          "win_rate": 0.4742729306487696,
+          "wins": 212
+        }
+      },
+      "20": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.1835396136990434,
+          "losses": 292,
+          "net_expectancy_bps": -0.771283640248918,
+          "net_expectancy_r": -0.11056838310743415,
+          "net_pnl_bps": -425.7485694174028,
+          "net_r_profit_factor": 0.8301986331963621,
+          "profit_factor": 0.8505913848163438,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.110930217305489,
+              "average_net_r_multiple": -1.2936324902437304,
+              "average_net_return_bps": -10.110930217305489,
+              "average_risk_bps": 8.110930217305489,
+              "count": 269
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999987,
+              "average_gross_return_bps": 11.542310288649924,
+              "average_net_r_multiple": 1.1901415076981454,
+              "average_net_return_bps": 9.542310288649924,
+              "average_risk_bps": 7.694873525766627,
+              "count": 246
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.035509912483034214,
+              "average_gross_return_bps": 0.5590088656727685,
+              "average_net_r_multiple": -0.15733563495902508,
+              "average_net_return_bps": -1.4409911343272315,
+              "average_risk_bps": 12.471007381253116,
+              "count": 37
+            }
+          },
+          "stop_count": 269,
+          "target_count": 246,
+          "timeout_count": 37,
+          "trades": 552,
+          "win_rate": 0.47101449275362317,
+          "wins": 260
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.32039870591371,
+          "gross_expectancy_r": 0.1829833583353804,
+          "losses": 234,
+          "net_expectancy_bps": -0.8214485087822547,
+          "net_expectancy_r": -0.10967235552212275,
+          "net_pnl_bps": -362.2587923729743,
+          "net_r_profit_factor": 0.8307409934375473,
+          "overlapping_signals_skipped": 111,
+          "profit_factor": 0.8420788018577905,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.192876152749045,
+              "average_net_r_multiple": -1.2936138603490073,
+              "average_net_return_bps": -10.192876152749045,
+              "average_risk_bps": 8.192876152749045,
+              "count": 213
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999964,
+              "average_gross_return_bps": 11.56254513262176,
+              "average_net_r_multiple": 1.1905028192519995,
+              "average_net_return_bps": 9.56254513262176,
+              "average_risk_bps": 7.708363421747862,
+              "count": 196
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.009510592940516482,
+              "average_gross_return_bps": -0.04484430722789573,
+              "average_net_r_multiple": -0.19263465950967218,
+              "average_net_return_bps": -2.044844307227896,
+              "average_risk_bps": 12.917936815931826,
+              "count": 32
+            }
+          },
+          "stop_count": 213,
+          "target_count": 196,
+          "timeout_count": 32,
+          "trades": 441,
+          "win_rate": 0.46938775510204084,
+          "wins": 207
+        }
+      },
+      "25": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.19158696801448638,
+          "losses": 291,
+          "net_expectancy_bps": -0.7031216572502453,
+          "net_expectancy_r": -0.10252102879199118,
+          "net_pnl_bps": -388.12315480213545,
+          "net_r_profit_factor": 0.8434637931480836,
+          "profit_factor": 0.8653963147422791,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.164724435037844,
+              "average_net_r_multiple": -1.2921123566440331,
+              "average_net_return_bps": -10.164724435037844,
+              "average_risk_bps": 8.164724435037844,
+              "count": 272
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.539514062858998,
+              "average_net_r_multiple": 1.1910372386784844,
+              "average_net_return_bps": 9.539514062858998,
+              "average_risk_bps": 7.693009375239339,
+              "count": 251
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": 0.0433105635860908,
+              "average_gross_return_bps": 1.388409025881018,
+              "average_net_r_multiple": -0.14094461359661176,
+              "average_net_return_bps": -0.6115909741189821,
+              "average_risk_bps": 13.257103082233254,
+              "count": 29
+            }
+          },
+          "stop_count": 272,
+          "target_count": 251,
+          "timeout_count": 29,
+          "trades": 552,
+          "win_rate": 0.47282608695652173,
+          "wins": 261
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.325075408702855,
+          "gross_expectancy_r": 0.19553873016537107,
+          "losses": 231,
+          "net_expectancy_bps": -0.7236339430110762,
+          "net_expectancy_r": -0.09698393469392827,
+          "net_pnl_bps": -317.67530098186245,
+          "net_r_profit_factor": 0.8508457899685983,
+          "overlapping_signals_skipped": 113,
+          "profit_factor": 0.8625221739735228,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.26850333422089,
+              "average_net_r_multiple": -1.2914180067664747,
+              "average_net_return_bps": -10.26850333422089,
+              "average_risk_bps": 8.26850333422089,
+              "count": 214
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999971,
+              "average_gross_return_bps": 11.564457684087778,
+              "average_net_r_multiple": 1.1915159463139295,
+              "average_net_return_bps": 9.564457684087778,
+              "average_risk_bps": 7.709638456058536,
+              "count": 200
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.006339898296061276,
+              "average_gross_return_bps": 0.6757150289541027,
+              "average_net_r_multiple": -0.18062732581579358,
+              "average_net_return_bps": -1.3242849710458973,
+              "average_risk_bps": 13.732827987423011,
+              "count": 25
+            }
+          },
+          "stop_count": 214,
+          "target_count": 200,
+          "timeout_count": 25,
+          "trades": 439,
+          "win_rate": 0.47380410022779046,
+          "wins": 208
+        }
+      },
+      "30": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.1957534157504939,
+          "losses": 286,
+          "net_expectancy_bps": -0.6480566605411063,
+          "net_expectancy_r": -0.09835458105598363,
+          "net_pnl_bps": -357.7272766186907,
+          "net_r_profit_factor": 0.8508808815142526,
+          "profit_factor": 0.877240572852479,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.189126148227553,
+              "average_net_r_multiple": -1.2910227322042813,
+              "average_net_return_bps": -10.189126148227553,
+              "average_risk_bps": 8.189126148227553,
+              "count": 277
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5,
+              "average_gross_return_bps": 11.824658578062213,
+              "average_net_r_multiple": 1.1946847358235115,
+              "average_net_return_bps": 9.824658578062213,
+              "average_risk_bps": 7.883105718708145,
+              "count": 257
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.02467302809596311,
+              "average_gross_return_bps": -1.3486993400915188,
+              "average_net_r_multiple": -0.20624494605330576,
+              "average_net_return_bps": -3.348699340091519,
+              "average_risk_bps": 13.436682007394822,
+              "count": 18
+            }
+          },
+          "stop_count": 277,
+          "target_count": 257,
+          "timeout_count": 18,
+          "trades": 552,
+          "win_rate": 0.48188405797101447,
+          "wins": 266
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.34944331695727,
+          "gross_expectancy_r": 0.19341361711093732,
+          "losses": 226,
+          "net_expectancy_bps": -0.7062032066793005,
+          "net_expectancy_r": -0.0985108751617061,
+          "net_pnl_bps": -307.1983949054957,
+          "net_r_profit_factor": 0.8506090641548493,
+          "overlapping_signals_skipped": 117,
+          "profit_factor": 0.8683812476494248,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.30487037566628,
+              "average_net_r_multiple": -1.2899921009199669,
+              "average_net_return_bps": -10.30487037566628,
+              "average_risk_bps": 8.30487037566628,
+              "count": 218
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999991,
+              "average_gross_return_bps": 11.895857956979832,
+              "average_net_r_multiple": 1.1961352952271544,
+              "average_net_return_bps": 9.895857956979832,
+              "average_risk_bps": 7.930571971319895,
+              "count": 202
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.05767177044947236,
+              "average_gross_return_bps": -1.9799973546781664,
+              "average_net_r_multiple": -0.2168854887116397,
+              "average_net_return_bps": -3.9799973546781664,
+              "average_risk_bps": 14.638037518302989,
+              "count": 15
+            }
+          },
+          "stop_count": 218,
+          "target_count": 202,
+          "timeout_count": 15,
+          "trades": 435,
+          "win_rate": 0.4804597701149425,
+          "wins": 209
+        }
+      },
+      "35": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.2017304754148047,
+          "losses": 287,
+          "net_expectancy_bps": -0.6127964779471058,
+          "net_expectancy_r": -0.09237752139167282,
+          "net_pnl_bps": -338.2636558268024,
+          "net_r_profit_factor": 0.8602719581225597,
+          "profit_factor": 0.8843435194221495,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.242489830183802,
+              "average_net_r_multiple": -1.2900600261265012,
+              "average_net_return_bps": -10.242489830183802,
+              "average_risk_bps": 8.242489830183802,
+              "count": 279
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.83465947806843,
+              "average_net_r_multiple": 1.1958386923644844,
+              "average_net_return_bps": 9.83465947806843,
+              "average_risk_bps": 7.889772985378952,
+              "count": 262
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.24043432463890113,
+              "average_gross_return_bps": -3.2081614963136422,
+              "average_net_r_multiple": -0.3977619925822269,
+              "average_net_return_bps": -5.208161496313642,
+              "average_risk_bps": 15.402836737233267,
+              "count": 11
+            }
+          },
+          "stop_count": 279,
+          "target_count": 262,
+          "timeout_count": 11,
+          "trades": 552,
+          "win_rate": 0.48007246376811596,
+          "wins": 265
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.1997980939469068,
+          "losses": 225,
+          "net_expectancy_bps": -0.6529715712607619,
+          "net_expectancy_r": -0.09196576950221338,
+          "net_pnl_bps": -282.7366903559099,
+          "net_r_profit_factor": 0.8607938317439948,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.8786169444039953,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.368601350951934,
+              "average_net_r_multiple": -1.2890850404286576,
+              "average_net_return_bps": -10.368601350951934,
+              "average_risk_bps": 8.368601350951934,
+              "count": 219
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.935480217215126,
+              "average_net_r_multiple": 1.198047169778712,
+              "average_net_return_bps": 9.935480217215126,
+              "average_risk_bps": 7.956986811476756,
+              "count": 205
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.22082503566547074,
+              "average_gross_return_bps": -3.4207154473930177,
+              "average_net_r_multiple": -0.3456915716909283,
+              "average_net_return_bps": -5.420715447393017,
+              "average_risk_bps": 17.162211725098594,
+              "count": 9
+            }
+          },
+          "stop_count": 219,
+          "target_count": 205,
+          "timeout_count": 9,
+          "trades": 433,
+          "win_rate": 0.48036951501154734,
+          "wins": 208
+        }
+      },
+      "40": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.20013261497116105,
+          "losses": 288,
+          "net_expectancy_bps": -0.6568425635116341,
+          "net_expectancy_r": -0.0939753818353165,
+          "net_pnl_bps": -362.577095058422,
+          "net_r_profit_factor": 0.8583562514990586,
+          "profit_factor": 0.8772545966437574,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.318734724997578,
+              "average_net_r_multiple": -1.28846700353779,
+              "average_net_return_bps": -10.318734724997578,
+              "average_risk_bps": 8.318734724997578,
+              "count": 282
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.83465947806843,
+              "average_net_r_multiple": 1.1958386923644844,
+              "average_net_return_bps": 9.83465947806843,
+              "average_risk_bps": 7.889772985378952,
+              "count": 262
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.06584956698990185,
+              "average_gross_return_bps": -1.6718357328791618,
+              "average_net_r_multiple": -0.22955664686660093,
+              "average_net_return_bps": -3.6718357328791615,
+              "average_risk_bps": 15.400334285191196,
+              "count": 8
+            }
+          },
+          "stop_count": 282,
+          "target_count": 262,
+          "timeout_count": 8,
+          "trades": 552,
+          "win_rate": 0.4782608695652174,
+          "wins": 264
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.19730117274467895,
+          "losses": 227,
+          "net_expectancy_bps": -0.7023915885818744,
+          "net_expectancy_r": -0.09446269070444123,
+          "net_pnl_bps": -304.1355578559516,
+          "net_r_profit_factor": 0.8576893293516615,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.870849484395214,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.456470647109775,
+              "average_net_r_multiple": -1.2874751378333762,
+              "average_net_return_bps": -10.456470647109775,
+              "average_risk_bps": 8.456470647109775,
+              "count": 221
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.935480217215126,
+              "average_net_r_multiple": 1.198047169778712,
+              "average_net_return_bps": 9.935480217215126,
+              "average_risk_bps": 7.956986811476756,
+              "count": 205
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.1526560287934136,
+              "average_gross_return_bps": -2.289855624827439,
+              "average_net_r_multiple": -0.2814299169261229,
+              "average_net_return_bps": -4.289855624827439,
+              "average_risk_bps": 16.900512624728652,
+              "count": 7
+            }
+          },
+          "stop_count": 221,
+          "target_count": 205,
+          "timeout_count": 7,
+          "trades": 433,
+          "win_rate": 0.47575057736720555,
+          "wins": 206
+        }
+      },
+      "45": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.19852262677335597,
+          "losses": 288,
+          "net_expectancy_bps": -0.6753474215783855,
+          "net_expectancy_r": -0.09558537003312158,
+          "net_pnl_bps": -372.79177671126877,
+          "net_r_profit_factor": 0.8561078779398287,
+          "profit_factor": 0.8739895124176071,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.326779233529672,
+              "average_net_r_multiple": -1.288114690437637,
+              "average_net_return_bps": -10.326779233529672,
+              "average_risk_bps": 8.326779233529672,
+              "count": 283
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.83465947806843,
+              "average_net_r_multiple": 1.1958386923644844,
+              "average_net_return_bps": 9.83465947806843,
+              "average_risk_bps": 7.889772985378952,
+              "count": 262
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.059358574443946176,
+              "average_gross_return_bps": -1.856290982328572,
+              "average_net_r_multiple": -0.21948632341810403,
+              "average_net_return_bps": -3.8562909823285723,
+              "average_risk_bps": 16.08676337742136,
+              "count": 7
+            }
+          },
+          "stop_count": 283,
+          "target_count": 262,
+          "timeout_count": 7,
+          "trades": 552,
+          "win_rate": 0.4782608695652174,
+          "wins": 264
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.19638875372787298,
+          "losses": 226,
+          "net_expectancy_bps": -0.720396937847311,
+          "net_expectancy_r": -0.0953751097212472,
+          "net_pnl_bps": -311.93187408788566,
+          "net_r_profit_factor": 0.8563615470448441,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.8676938105507517,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.466105151580361,
+              "average_net_r_multiple": -1.2870304858440118,
+              "average_net_return_bps": -10.466105151580361,
+              "average_risk_bps": 8.466105151580361,
+              "count": 222
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.935480217215126,
+              "average_net_r_multiple": 1.198047169778712,
+              "average_net_return_bps": 9.935480217215126,
+              "average_risk_bps": 7.956986811476756,
+              "count": 205
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.0772782726384802,
+              "average_gross_return_bps": -2.2049958276910147,
+              "average_net_r_multiple": -0.19605407609422645,
+              "average_net_return_bps": -4.204995827691015,
+              "average_risk_bps": 17.951376288920084,
+              "count": 6
+            }
+          },
+          "stop_count": 222,
+          "target_count": 205,
+          "timeout_count": 6,
+          "trades": 433,
+          "win_rate": 0.4780600461893764,
+          "wins": 207
+        }
+      },
+      "50": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.2000954243648683,
+          "losses": 287,
+          "net_expectancy_bps": -0.6739205841527487,
+          "net_expectancy_r": -0.09401257244160925,
+          "net_pnl_bps": -372.0041624523173,
+          "net_r_profit_factor": 0.8586415324697658,
+          "profit_factor": 0.8748699354556178,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.353852110249289,
+              "average_net_r_multiple": -1.2875399176151572,
+              "average_net_return_bps": -10.353852110249289,
+              "average_risk_bps": 8.353852110249289,
+              "count": 284
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.872345197475688,
+              "average_net_r_multiple": 1.1964706502550526,
+              "average_net_return_bps": 9.872345197475688,
+              "average_risk_bps": 7.914896798317125,
+              "count": 263
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.009465150118563364,
+              "average_gross_return_bps": -3.5873900155250564,
+              "average_net_r_multiple": -0.18107688042850587,
+              "average_net_return_bps": -5.587390015525056,
+              "average_risk_bps": 16.418906326386058,
+              "count": 5
+            }
+          },
+          "stop_count": 284,
+          "target_count": 263,
+          "timeout_count": 5,
+          "trades": 552,
+          "win_rate": 0.48007246376811596,
+          "wins": 265
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.196697645519993,
+          "losses": 226,
+          "net_expectancy_bps": -0.72688756512488,
+          "net_expectancy_r": -0.09506621792912719,
+          "net_pnl_bps": -314.742315699073,
+          "net_r_profit_factor": 0.8572194125358773,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.8674175633908702,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.49995883351005,
+              "average_net_r_multiple": -1.2863033500727532,
+              "average_net_return_bps": -10.49995883351005,
+              "average_risk_bps": 8.49995883351005,
+              "count": 223
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.983104117530477,
+              "average_net_r_multiple": 1.1988432690399022,
+              "average_net_return_bps": 9.983104117530477,
+              "average_risk_bps": 7.988736078353657,
+              "count": 206
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.2074798724607277,
+              "average_gross_return_bps": -5.442736009402545,
+              "average_net_r_multiple": -0.31993467982699897,
+              "average_net_return_bps": -7.442736009402545,
+              "average_risk_bps": 19.29886143087532,
+              "count": 4
+            }
+          },
+          "stop_count": 223,
+          "target_count": 206,
+          "timeout_count": 4,
+          "trades": 433,
+          "win_rate": 0.4780600461893764,
+          "wins": 207
+        }
+      },
+      "55": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.19964299661533075,
+          "losses": 288,
+          "net_expectancy_bps": -0.7022136993740828,
+          "net_expectancy_r": -0.09446500019114681,
+          "net_pnl_bps": -387.62196205449374,
+          "net_r_profit_factor": 0.8582671518877852,
+          "profit_factor": 0.8703344142447687,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.353852110249289,
+              "average_net_r_multiple": -1.2875399176151572,
+              "average_net_return_bps": -10.353852110249289,
+              "average_risk_bps": 8.353852110249289,
+              "count": 284
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.855209908328597,
+              "average_net_r_multiple": 1.19607402119316,
+              "average_net_return_bps": 9.855209908328597,
+              "average_risk_bps": 7.903473272219064,
+              "count": 264
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.44926646708438783,
+              "average_gross_return_bps": -10.225844635611317,
+              "average_net_r_multiple": -0.5617212744506591,
+              "average_net_return_bps": -12.225844635611317,
+              "average_risk_bps": 19.29886143087532,
+              "count": 4
+            }
+          },
+          "stop_count": 284,
+          "target_count": 264,
+          "timeout_count": 4,
+          "trades": 552,
+          "win_rate": 0.4782608695652174,
+          "wins": 264
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.19446405111238413,
+          "losses": 227,
+          "net_expectancy_bps": -0.7710733261060233,
+          "net_expectancy_r": -0.09729981233673606,
+          "net_pnl_bps": -333.8747502039081,
+          "net_r_profit_factor": 0.8542652816853037,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.8603264890680941,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.49995883351005,
+              "average_net_r_multiple": -1.2863033500727532,
+              "average_net_return_bps": -10.49995883351005,
+              "average_risk_bps": 8.49995883351005,
+              "count": 223
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.983104117530477,
+              "average_net_r_multiple": 1.1988432690399022,
+              "average_net_return_bps": 9.983104117530477,
+              "average_risk_bps": 7.988736078353657,
+              "count": 206
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.44926646708438783,
+              "average_gross_return_bps": -10.225844635611317,
+              "average_net_r_multiple": -0.5617212744506591,
+              "average_net_return_bps": -12.225844635611317,
+              "average_risk_bps": 19.29886143087532,
+              "count": 4
+            }
+          },
+          "stop_count": 223,
+          "target_count": 206,
+          "timeout_count": 4,
+          "trades": 433,
+          "win_rate": 0.47575057736720555,
+          "wins": 206
+        }
+      },
+      "60": {
+        "fixed_signal_cohort": {
+          "average_risk_bps": 8.217765197282848,
+          "gross_expectancy_r": 0.19809719037575205,
+          "losses": 288,
+          "net_expectancy_bps": -0.7298949263827098,
+          "net_expectancy_r": -0.09601080643072551,
+          "net_pnl_bps": -402.9019993632558,
+          "net_r_profit_factor": 0.8562811893855178,
+          "profit_factor": 0.8659084009051494,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.430776619697538,
+              "average_net_r_multiple": -1.2867627810861233,
+              "average_net_return_bps": -10.430776619697538,
+              "average_risk_bps": 8.430776619697538,
+              "count": 285
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.5000000000000004,
+              "average_gross_return_bps": 11.855209908328597,
+              "average_net_r_multiple": 1.19607402119316,
+              "average_net_return_bps": 9.855209908328597,
+              "average_risk_bps": 7.903473272219064,
+              "count": 264
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.550116970861665,
+              "average_gross_return_bps": -8.635359516068995,
+              "average_net_r_multiple": -0.6780380450698503,
+              "average_net_return_bps": -10.635359516068995,
+              "average_risk_bps": 15.639369473500315,
+              "count": 3
+            }
+          },
+          "stop_count": 285,
+          "target_count": 264,
+          "timeout_count": 3,
+          "trades": 552,
+          "win_rate": 0.4782608695652174,
+          "wins": 264
+        },
+        "one_position_at_a_time": {
+          "average_risk_bps": 8.356503228030244,
+          "gross_expectancy_r": 0.19249341590626995,
+          "losses": 227,
+          "net_expectancy_bps": -0.8063620958722175,
+          "net_expectancy_r": -0.09927044754285023,
+          "net_pnl_bps": -349.15478751267017,
+          "net_r_profit_factor": 0.8517512540793861,
+          "overlapping_signals_skipped": 119,
+          "profit_factor": 0.8548619832528582,
+          "reason_stats": {
+            "STOP": {
+              "average_gross_r_multiple": -1.0,
+              "average_gross_return_bps": -8.597179273105988,
+              "average_net_r_multiple": -1.285320103004752,
+              "average_net_return_bps": -10.597179273105988,
+              "average_risk_bps": 8.597179273105988,
+              "count": 224
+            },
+            "TARGET": {
+              "average_gross_r_multiple": 1.4999999999999993,
+              "average_gross_return_bps": 11.983104117530477,
+              "average_net_r_multiple": 1.1988432690399022,
+              "average_net_return_bps": 9.983104117530477,
+              "average_risk_bps": 7.988736078353657,
+              "count": 206
+            },
+            "TIMEOUT": {
+              "average_gross_r_multiple": -0.550116970861665,
+              "average_gross_return_bps": -8.635359516068995,
+              "average_net_r_multiple": -0.6780380450698503,
+              "average_net_return_bps": -10.635359516068995,
+              "average_risk_bps": 15.639369473500315,
+              "count": 3
+            }
+          },
+          "stop_count": 224,
+          "target_count": 206,
+          "timeout_count": 3,
+          "trades": 433,
+          "win_rate": 0.47575057736720555,
+          "wins": 206
+        }
+      }
+    }
+  },
+  "holdout_15_minute_timeout_transition_to_60": {
+    "later_stop_by_maximum": 28,
+    "later_stop_rate": 0.45901639344262296,
+    "later_target_by_maximum": 30,
+    "later_target_rate": 0.4918032786885246,
+    "still_unresolved_at_maximum": 3,
+    "still_unresolved_rate": 0.04918032786885246,
+    "timeout_cohort": 61
+  },
+  "holdout_first_touch_distribution": {
+    "average_stop_hit_bar": 6.6912280701754385,
+    "average_target_hit_bar": 6.988636363636363,
+    "by_bar": {
+      "1": {
+        "STOP": 35,
+        "TARGET": 32
+      },
+      "10": {
+        "STOP": 10,
+        "TARGET": 2
+      },
+      "11": {
+        "STOP": 4,
+        "TARGET": 7
+      },
+      "12": {
+        "STOP": 3,
+        "TARGET": 5
+      },
+      "13": {
+        "STOP": 7,
+        "TARGET": 2
+      },
+      "14": {
+        "STOP": 1,
+        "TARGET": 7
+      },
+      "15": {
+        "STOP": 2,
+        "TARGET": 3
+      },
+      "16": {
+        "STOP": 4,
+        "TARGET": 3
+      },
+      "17": {
+        "STOP": 4,
+        "TARGET": 3
+      },
+      "18": {
+        "STOP": 2,
+        "TARGET": 0
+      },
+      "19": {
+        "STOP": 1,
+        "TARGET": 2
+      },
+      "2": {
+        "STOP": 51,
+        "TARGET": 49
+      },
+      "20": {
+        "STOP": 1,
+        "TARGET": 4
+      },
+      "21": {
+        "STOP": 2,
+        "TARGET": 3
+      },
+      "22": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "23": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "24": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "25": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "26": {
+        "STOP": 1,
+        "TARGET": 1
+      },
+      "27": {
+        "STOP": 1,
+        "TARGET": 2
+      },
+      "28": {
+        "STOP": 1,
+        "TARGET": 1
+      },
+      "29": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "3": {
+        "STOP": 43,
+        "TARGET": 42
+      },
+      "30": {
+        "STOP": 2,
+        "TARGET": 2
+      },
+      "31": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "32": {
+        "STOP": 2,
+        "TARGET": 1
+      },
+      "33": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "34": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "35": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "36": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "37": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "38": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "39": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "4": {
+        "STOP": 27,
+        "TARGET": 20
+      },
+      "40": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "41": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "42": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "43": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "44": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "45": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "46": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "47": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "48": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "49": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "5": {
+        "STOP": 28,
+        "TARGET": 23
+      },
+      "50": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "51": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "52": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "53": {
+        "STOP": 0,
+        "TARGET": 1
+      },
+      "54": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "55": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "56": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "57": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "58": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "59": {
+        "STOP": 1,
+        "TARGET": 0
+      },
+      "6": {
+        "STOP": 13,
+        "TARGET": 13
+      },
+      "60": {
+        "STOP": 0,
+        "TARGET": 0
+      },
+      "7": {
+        "STOP": 13,
+        "TARGET": 13
+      },
+      "8": {
+        "STOP": 9,
+        "TARGET": 8
+      },
+      "9": {
+        "STOP": 11,
+        "TARGET": 8
+      }
+    },
+    "median_stop_hit_bar": 4,
+    "median_target_hit_bar": 4.0,
+    "unresolved_at_maximum_horizon": 3
+  },
+  "holdout_reused_across_horizons": true,
+  "schema_version": 1,
+  "verdict": "NO_HORIZON_RECOVERY"
+}
