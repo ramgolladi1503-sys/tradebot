@@ -51,7 +51,9 @@ Human approval is still required because the repo policy mandates an agent revie
 
 ## Evidence Traceability
 - mode: OFFLINE_TEST
+- candidate_id: orchestrator_report_test_isolation
 - decision: TEST_ISOLATION_FIX_PASS
+- reason: The test now stubs market-data input, proves `_evaluate_suggestions` invocation, preserves final report writes, and rejects auth-token fallback as the terminal error.
 - timestamp: 2026-07-18T15:58:00+05:30
 - is_order_action: false
 - broker_api_called: false
