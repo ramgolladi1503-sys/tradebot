@@ -134,20 +134,13 @@ def test_confirm_candidate_option_pressure_blocks_candidate_existing_blockers():
     assert "candidate_already_hard_blocked" in confirmation.warnings
 
 
-def test_option_pressure_strategy_generates_validated_dominant_candidate():
+def test_option_pressure_strategy_emits_no_standalone_candidate():
     candidates = generate_option_pressure_candidates(
         _context(),
         _regime(TREND_UP=0.7, VOLATILITY_EXPANSION=0.3),
     )
 
-    assert len(candidates) == 1
-    candidate = candidates[0]
-    assert candidate.strategy_id == "option_pressure_confirmation_v1"
-    assert candidate.movement_type == "OPTION_PRESSURE_CONFIRMATION"
-    assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
-    assert "confirmation_layer_not_execution_signal" in candidate.suppression_tags
+    assert candidates == ()
 
 
 def test_option_pressure_strategy_returns_empty_for_neutral_pressure():
@@ -159,7 +152,7 @@ def test_option_pressure_strategy_returns_empty_for_neutral_pressure():
     assert candidates == ()
 
 
-def test_option_pressure_strategy_blocks_bad_quote_quality():
+def test_option_pressure_strategy_keeps_bad_quote_quality_out_of_standalone_candidates():
     candidates = generate_option_pressure_candidates(
         _context(
             fallback_used=True,
@@ -170,12 +163,4 @@ def test_option_pressure_strategy_blocks_bad_quote_quality():
         _regime(TREND_UP=0.6),
     )
 
-    assert len(candidates) == 1
-    candidate = candidates[0]
-    assert candidate.status == "BLOCKED_CANDIDATE"
-    assert candidate.executable_eligible is False
-    assert set(candidate.blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates == ()

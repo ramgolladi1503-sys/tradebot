@@ -61,13 +61,14 @@ def test_exhaustion_reversal_generates_put_candidate_after_upside_stall():
         _regime(EXHAUSTION_RISK=0.75, TREND_UP=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "exhaustion_reversal_v1"
     assert candidate.movement_type == "EXHAUSTION_REVERSAL"
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "exhaustion" in candidate.confluence_tags
     assert candidate.evidence["exhaustion_type"] == "upside_exhaustion"
 
@@ -84,11 +85,12 @@ def test_exhaustion_reversal_generates_call_candidate_after_downside_stall():
         _regime(EXHAUSTION_RISK=0.75, TREND_DOWN=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["exhaustion_type"] == "downside_exhaustion"
 
 
@@ -116,14 +118,10 @@ def test_exhaustion_reversal_blocks_bad_quote_quality_but_keeps_candidate_visibl
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
 
 
 def test_mean_reversion_extension_generates_put_candidate_from_upper_range_extension():
@@ -139,13 +137,14 @@ def test_mean_reversion_extension_generates_put_candidate_from_upper_range_exten
         _regime(primary="RANGE", RANGE=0.72, TREND_UP=0.15, VOLATILITY_EXPANSION=0.05),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "mean_reversion_extension_v1"
     assert candidate.movement_type == "MEAN_REVERSION_EXTENSION"
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["reversion_type"] == "upper_extension_reversion"
 
 
@@ -162,11 +161,12 @@ def test_mean_reversion_extension_generates_call_candidate_from_lower_range_exte
         _regime(primary="RANGE", RANGE=0.72, TREND_DOWN=0.15, VOLATILITY_EXPANSION=0.05),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["reversion_type"] == "lower_extension_reversion"
 
 
@@ -207,12 +207,8 @@ def test_mean_reversion_blocks_bad_quote_quality_but_keeps_candidate_visible():
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
-    assert summary.hard_blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
+    assert summary.hard_blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()

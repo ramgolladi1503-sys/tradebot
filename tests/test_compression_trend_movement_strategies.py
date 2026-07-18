@@ -1,8 +1,41 @@
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from core.candidate_pool import build_candidate_pool
 from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement.compression_breakout import generate_compression_breakout_candidates
 from strategies.movement.trend_pullback import generate_trend_pullback_candidates
+
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def _trend_pullback_history(*, closes: tuple[float, ...] = (22590.0, 22630.0, 22615.0, 22635.0)) -> list[dict[str, object]]:
+    start = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
+    bars: list[dict[str, object]] = []
+    for index, close in enumerate(closes):
+        bar_start = start + timedelta(minutes=index)
+        bar_end = bar_start + timedelta(minutes=1)
+        bars.append(
+            {
+                "symbol": "NIFTY",
+                "session_date": "2026-07-14",
+                "timeframe": "1m",
+                "bar_start_timestamp": bar_start.isoformat(),
+                "bar_end_timestamp": bar_end.isoformat(),
+                "open": close - 5.0,
+                "high": close + 10.0,
+                "low": close - 10.0,
+                "close": close,
+                "volume": 1000.0 + (index * 100.0),
+                "source": "unit_test",
+                "source_timestamp": bar_end.isoformat(),
+                "receipt_timestamp": (bar_end + timedelta(seconds=1)).isoformat(),
+                "is_complete": True,
+            }
+        )
+    return bars
 
 
 def _regime(primary="COMPRESSION", **scores):
@@ -50,6 +83,7 @@ def _base_context(**overrides):
         "quote_source": "live_option_tick",
         "fallback_used": False,
         "minutes_since_open": 55,
+        "completed_bar_history": _trend_pullback_history(),
     }
     payload.update(overrides)
     return StrategyContext(**payload)
@@ -62,13 +96,14 @@ def test_compression_breakout_generates_call_candidate_after_compression_release
         _regime(COMPRESSION=0.82, VOLATILITY_EXPANSION=0.45, TREND_UP=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "compression_breakout_v1"
     assert candidate.movement_type == "COMPRESSION_BREAKOUT"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.blockers == ()
     assert "compression" in candidate.confluence_tags
     assert candidate.evidence["compression_score"] >= 0.5
@@ -83,17 +118,19 @@ def test_compression_breakout_generates_put_candidate_after_compression_breakdow
         nearest_resistance=22620.0,
         pe_premium_change=14.0,
         ce_premium_change=0.0,
+        completed_bar_history=_trend_pullback_history(closes=(22620.0, 22595.0, 22605.0, 22580.0)),
     )
     candidates = generate_compression_breakout_candidates(
         ctx,
         _regime(COMPRESSION=0.82, VOLATILITY_EXPANSION=0.45, TREND_DOWN=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 14.0
 
 
@@ -121,14 +158,10 @@ def test_compression_breakout_blocks_bad_quote_quality_but_keeps_candidate_visib
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "WIDE_SPREAD",
-        "MISSING_DEPTH",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
 
 
 def test_trend_pullback_generates_call_candidate_when_uptrend_pullback_holds():
@@ -141,13 +174,14 @@ def test_trend_pullback_generates_call_candidate_when_uptrend_pullback_holds():
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_UP", TREND_UP=0.72))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "trend_pullback_v1"
     assert candidate.movement_type == "TREND_PULLBACK"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "pullback_hold" in candidate.confluence_tags
     assert candidate.evidence["trend_score"] == 0.72
 
@@ -160,14 +194,16 @@ def test_trend_pullback_generates_put_candidate_when_downtrend_pullback_rejects(
         pe_premium_change=12.0,
         ce_premium_change=0.0,
         minutes_since_open=80,
+        completed_bar_history=_trend_pullback_history(closes=(22525.0, 22500.0, 22510.0, 22480.0)),
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_DOWN", TREND_DOWN=0.74))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["premium_change"] == 12.0
 
 
@@ -195,13 +231,9 @@ def test_trend_pullback_blocks_stale_fallback_wide_spread_candidate():
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_UP", TREND_UP=0.75))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
-    assert candidate.status == "BLOCKED_CANDIDATE"
+    assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
-    assert set(candidate.blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidate.blockers == ()

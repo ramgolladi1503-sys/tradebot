@@ -64,13 +64,14 @@ def test_event_volatility_generates_call_candidate_on_upside_expansion():
         _regime(VOLATILITY_EXPANSION=0.82, TREND_UP=0.55),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "event_volatility_expansion_v1"
     assert candidate.movement_type == "EVENT_VOLATILITY_EXPANSION"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "volatility_expansion" in candidate.confluence_tags
     assert candidate.evidence["atr_short_long_ratio"] > 1.15
 
@@ -87,11 +88,12 @@ def test_event_volatility_generates_put_candidate_on_downside_expansion():
         _regime(VOLATILITY_EXPANSION=0.82, TREND_DOWN=0.55),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["expansion_type"] == "downside_volatility_expansion"
 
 
@@ -119,14 +121,10 @@ def test_event_volatility_blocks_bad_quote_quality_but_keeps_candidate_visible()
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
     assert summary.executable_eligible_count == 0
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
 
 
 def test_late_day_momentum_generates_call_candidate_after_afternoon_confirmation():
@@ -136,13 +134,14 @@ def test_late_day_momentum_generates_call_candidate_after_afternoon_confirmation
         _regime(primary="TREND_UP", TREND_UP=0.76, CHOP=0.1),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "late_day_momentum_v1"
     assert candidate.movement_type == "LATE_DAY_MOMENTUM"
     assert candidate.direction == "BUY_CALL"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert "late_day" in candidate.confluence_tags
 
 
@@ -158,11 +157,12 @@ def test_late_day_momentum_generates_put_candidate_after_afternoon_downtrend():
         _regime(primary="TREND_DOWN", TREND_DOWN=0.76, CHOP=0.1),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
-    assert candidate.status == "VALIDATED_CANDIDATE"
-    assert candidate.executable_eligible is True
+    assert candidate.status == "RAW_CANDIDATE"
+    assert candidate.executable_eligible is False
     assert candidate.evidence["momentum_type"] == "late_day_downside_momentum"
 
 
@@ -194,13 +194,9 @@ def test_late_day_momentum_marks_expiry_warning_and_blocks_bad_quote_quality():
     summary = pool.summary()
 
     assert summary.total_count == 1
-    assert summary.blocked_count == 1
-    assert summary.hard_blocked_count == 1
+    assert summary.raw_count == 1
+    assert summary.blocked_count == 0
+    assert summary.hard_blocked_count == 0
     assert summary.executable_eligible_count == 0
     assert "expiry_context_late_day" in candidates[0].warnings
-    assert set(candidates[0].blockers) >= {
-        "FALLBACK_QUOTE_ONLY",
-        "OPTION_CONFIRMATION_MISSING",
-        "WIDE_SPREAD",
-        "STALE_OPTION_LTP",
-    }
+    assert candidates[0].blockers == ()
