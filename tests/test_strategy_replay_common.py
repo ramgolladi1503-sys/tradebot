@@ -96,14 +96,29 @@ def test_validate_evidence_envelope_rejects_unsafe_values() -> None:
         "decision": "READY",
         "reason": "ok",
         "timestamp": "2026-07-14T09:19:00+05:30",
+        "read_only": True,
+        "append": False,
         "is_order_action": False,
         "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "source": "test",
     }
     validate_evidence_envelope(payload)
     unsafe = dict(payload)
     unsafe["broker_api_called"] = True
     with pytest.raises(StrategyReplayError, match="broker_call_forbidden"):
+        validate_evidence_envelope(unsafe)
+    unsafe = dict(payload)
+    unsafe["read_only"] = False
+    with pytest.raises(StrategyReplayError, match="read_only_required"):
+        validate_evidence_envelope(unsafe)
+    unsafe = dict(payload)
+    unsafe["append"] = True
+    with pytest.raises(StrategyReplayError, match="append_forbidden"):
+        validate_evidence_envelope(unsafe)
+    unsafe = dict(payload)
+    unsafe["allowed_for_live_execution"] = True
+    with pytest.raises(StrategyReplayError, match="live_execution_forbidden"):
         validate_evidence_envelope(unsafe)
 
 

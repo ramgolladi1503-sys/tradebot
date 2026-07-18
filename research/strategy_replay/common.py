@@ -134,11 +134,29 @@ def load_canonical_json(path: Path) -> Any:
 
 
 def validate_evidence_envelope(payload: Mapping[str, Any]) -> None:
-    required = ("mode", "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source")
+    required = (
+        "mode",
+        "candidate_id",
+        "decision",
+        "reason",
+        "timestamp",
+        "read_only",
+        "append",
+        "is_order_action",
+        "broker_api_called",
+        "allowed_for_live_execution",
+        "source",
+    )
     missing = [field for field in required if field not in payload]
     if missing:
         raise StrategyReplayError(f"evidence_envelope_missing:{','.join(missing)}")
+    if payload["read_only"] is not True:
+        raise StrategyReplayError("evidence_envelope_read_only_required")
+    if payload["append"] is not False:
+        raise StrategyReplayError("evidence_envelope_append_forbidden")
     if payload["is_order_action"] is not False:
         raise StrategyReplayError("evidence_envelope_order_action_forbidden")
     if payload["broker_api_called"] is not False:
         raise StrategyReplayError("evidence_envelope_broker_call_forbidden")
+    if payload["allowed_for_live_execution"] is not False:
+        raise StrategyReplayError("evidence_envelope_live_execution_forbidden")

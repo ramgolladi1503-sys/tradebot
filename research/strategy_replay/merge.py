@@ -78,8 +78,11 @@ def _artifact_evidence_fields(*, artifact_name: str, summary: dict[str, Any], ca
         "decision": decision,
         "reason": _evidence_reason(artifact_name, decision),
         "timestamp": _evidence_timestamp(summary),
+        "read_only": True,
+        "append": False,
         "is_order_action": False,
         "broker_api_called": False,
+        "allowed_for_live_execution": False,
         "source": f"research.strategy_replay.merge:{artifact_name}",
     }
 
@@ -105,7 +108,13 @@ def write_artifact_bundle(
             output_dir / filename,
             {**_artifact_evidence_fields(artifact_name=filename, summary=summary, candidate_id=candidate_id), **payload},
         )
-    write_canonical_json(output_dir / names.ledger, ledger)
+    write_canonical_json(
+        output_dir / names.ledger,
+        {
+            **_artifact_evidence_fields(artifact_name=names.ledger, summary=summary, candidate_id=candidate_id),
+            "entries": ledger,
+        },
+    )
     return names
 
 
@@ -114,9 +123,12 @@ def load_artifact_bundle(*, artifact_dir: Path, prefix: str) -> ArtifactBundle:
     contract = load_canonical_json(artifact_dir / names.contract)
     source_manifest = load_canonical_json(artifact_dir / names.source_manifest)
     summary = load_canonical_json(artifact_dir / names.summary)
-    ledger = load_canonical_json(artifact_dir / names.ledger)
-    for payload in (contract, source_manifest, summary):
+    ledger_payload = load_canonical_json(artifact_dir / names.ledger)
+    if not isinstance(ledger_payload, dict):
+        raise StrategyReplayError("ledger_envelope_missing")
+    for payload in (contract, source_manifest, summary, ledger_payload):
         validate_evidence_envelope(payload)
+    ledger = ledger_payload.get("entries")
     if not isinstance(ledger, list):
         raise StrategyReplayError("ledger_payload_not_list")
     return ArtifactBundle(contract=contract, source_manifest=source_manifest, summary=summary, ledger=ledger)
@@ -147,6 +159,10 @@ def merge_shard_payloads(*, contract: dict[str, Any], shard_payloads: Iterable[d
     contract_hashes = {str(dict(payload["contract"]).get("contract_hash") or "") for payload in payloads}
     if len(contract_hashes) != 1 or next(iter(contract_hashes)) != str(contract.get("contract_hash") or ""):
         raise StrategyReplayError("contract_hash_mismatch")
+
+    verdicts = [str(summary.get("phase1_verdict") or "").strip() for summary in shard_summaries]
+    if any(verdict != "READY" for verdict in verdicts):
+        raise StrategyReplayError(f"shard_phase1_verdict_not_ready:{verdicts}")
 
     shard_count, shard_indexes = _validated_shard_indexes(shard_summaries)
 
@@ -265,5 +281,13 @@ def merge_shard_payloads(*, contract: dict[str, Any], shard_payloads: Iterable[d
         or int(merged_summary["source_immutability_totals"]["mismatched"]) != 0
     ):
         merged_summary["phase1_verdict"] = "AUDIT_INVALID"
+    if (
+        int(merged_summary["oracle_reconciliation_totals"]["checked"]) <= 0
+        or int(merged_summary["future_mutation_control_totals"]["checked"]) <= 0
+        or int(merged_summary["source_immutability_totals"]["checked"]) <= 0
+    ):
+        merged_summary["phase1_verdict"] = "AUDIT_INVALID"
     merged_summary["canonical_summary_semantic_hash"] = recompute_candidate_hash([canonical_summary_payload(merged_summary)])
+    if merged_summary["phase1_verdict"] != "READY":
+        raise StrategyReplayError(f"merged_replay_controls_not_ready:{merged_summary['phase1_verdict']}")
     return ArtifactBundle(contract=contract, source_manifest=combined_manifest, summary=merged_summary, ledger=combined_ledger)
