@@ -241,10 +241,7 @@ def test_adapter_maps_known_gates_without_inventing_missing_controls(tmp_path: P
         "bundle_id": "bundle-1",
         "repository_commit": "abc1234",
         "artifacts": {
-            "certification_report": {
-                "path": report_path.name,
-                "sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
-            }
+            report_path.name: hashlib.sha256(report_path.read_bytes()).hexdigest(),
         },
     }
     (tmp_path / "bundle_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
