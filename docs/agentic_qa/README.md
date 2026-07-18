@@ -14,21 +14,21 @@ This package is a read-only control plane over frozen TradeBot research evidence
 ```bash
 PYTHONPATH=. python scripts/build_agentic_qa_evidence.py \
   /path/to/frozen/certification_bundle \
-  --output /path/to/frozen/certification_bundle/agentic_qa_evidence.json
+  --output-dir .runtime/agentic_qa/source-run-sidecar
 ```
 
-The adapter maps only facts supported by the current certification report. Missing facts stay missing and therefore withhold certification.
+The adapter maps only facts supported by the frozen source artifacts. It creates a separate hashed sidecar bundle and never modifies the source bundle. Missing facts stay missing and therefore withhold certification.
 
 ## Run
 
 ```bash
 PYTHONPATH=. python scripts/run_agentic_qa_audit.py \
-  /path/to/frozen/evidence_bundle \
+  .runtime/agentic_qa/source-run-sidecar \
   --output .runtime/agentic_qa/audit_report.json \
   --evaluation-output .runtime/agentic_qa/agent_evaluation.json
 ```
 
-A bundle must contain `run_manifest.json` or the existing `bundle_manifest.json`. Declared artifacts must be relative paths with SHA-256 values. JSON artifacts are merged into the audit context. The recommended evidence artifact is `agentic_qa_evidence.json`.
+A bundle must contain `run_manifest.json` or the existing `bundle_manifest.json`. The existing exporter format `artifact_path -> sha256` and the explicit `{path, sha256}` format are both supported. Declared artifacts must remain relative to the bundle root. JSON artifacts are merged into the audit context.
 
 ## Verdicts
 
