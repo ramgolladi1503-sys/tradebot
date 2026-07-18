@@ -1,0 +1,105 @@
+{
+  "monthly": {
+    "2024-10": {
+      "trade_count": 3,
+      "mean_return": -0.0016074364765969922
+    },
+    "2024-11": {
+      "trade_count": 3,
+      "mean_return": 0.0007141326611269928
+    },
+    "2025-01": {
+      "trade_count": 3,
+      "mean_return": 1.1958363841900249e-05
+    },
+    "2025-02": {
+      "trade_count": 4,
+      "mean_return": -7.875737655654433e-05
+    },
+    "2025-03": {
+      "trade_count": 3,
+      "mean_return": -0.00026482493980907804
+    },
+    "2025-05": {
+      "trade_count": 4,
+      "mean_return": 0.0002452637863911793
+    },
+    "2025-06": {
+      "trade_count": 2,
+      "mean_return": 0.0017905574378649053
+    },
+    "2025-08": {
+      "trade_count": 1,
+      "mean_return": 0.0032189382549116558
+    },
+    "2025-09": {
+      "trade_count": 1,
+      "mean_return": 0.00033920062396659763
+    },
+    "2025-10": {
+      "trade_count": 2,
+      "mean_return": -0.0005179065926421475
+    },
+    "2025-11": {
+      "trade_count": 1,
+      "mean_return": 0.0009049445482818741
+    },
+    "2026-01": {
+      "trade_count": 2,
+      "mean_return": 0.0016625366967499256
+    },
+    "2026-02": {
+      "trade_count": 3,
+      "mean_return": -0.0003359220639399165
+    }
+  },
+  "quarterly": {
+    "2024-Q4": {
+      "trade_count": 6,
+      "mean_return": -0.00044665190773499975
+    },
+    "2025-Q1": {
+      "trade_count": 10,
+      "mean_return": -0.00010736292341277107
+    },
+    "2025-Q2": {
+      "trade_count": 6,
+      "mean_return": 0.0007603616702157546
+    },
+    "2025-Q3": {
+      "trade_count": 2,
+      "mean_return": 0.0017790694394391267
+    },
+    "2025-Q4": {
+      "trade_count": 3,
+      "mean_return": -4.362287900080697e-05
+    },
+    "2026-Q1": {
+      "trade_count": 5,
+      "mean_return": 0.0004634614403360202
+    }
+  },
+  "yearly": {
+    "2024": {
+      "trade_count": 6,
+      "mean_return": -0.00044665190773499975
+    },
+    "2025": {
+      "trade_count": 21,
+      "mean_return": 0.00032932433471631665
+    },
+    "2026": {
+      "trade_count": 5,
+      "mean_return": 0.0004634614403360202
+    }
+  },
+  "best_fold_contribution": 0.726137801599303,
+  "worst_fold_contribution": -0.36498509843992927,
+  "top_one_trade_contribution": 0.21426847839172672,
+  "top_three_trade_contribution": 0.4787350818016671,
+  "best_month_positive_fraction": 0.21426847839172672,
+  "LONG_vs_SHORT_contribution": {
+    "LONG": -0.00040535075295433545,
+    "SHORT": 0.006958557537267087
+  }
+}

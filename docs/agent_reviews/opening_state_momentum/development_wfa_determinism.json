@@ -1,0 +1,21 @@
+{
+  "determinism_verified": true,
+  "hashes_a": {
+    "development_wfa_contract.json": "df7a574bc273329f71624a806a11c2b6062b5dcad1d00c9cce29b17af281c03e",
+    "development_wfa_fold_assignments.json": "500bd5ee215547827c2903c295403e255f135358d0d50d8b71aedd41f931566c",
+    "development_wfa_metrics.json": "b33f71bcbd6c920036d093f4db4207c8787fb65abe24dddf2007f109a7c8c836",
+    "development_wfa_temporal_stability.json": "5fd09db50b4fa3b97c12edc49e2af3b7bdb59b19ff08293e6d9a243973b034d4",
+    "development_wfa_negative_controls.json": "f753db25a4de3d39be49582bf91a25708a4fd5ae75f8e99679706b417f61b64e",
+    "development_wfa_bootstrap.json": "c9deced30520ca1c1d1aacb16bba961937979995f44dc9e4183a5326337cd28d",
+    "development_wfa_holdout_access_audit.json": "2b4873b75cae8e8fbcf7e89fa04cf3a72ccb3365250000d1e3ce1ec9567eb7e6"
+  },
+  "hashes_b": {
+    "development_wfa_contract.json": "df7a574bc273329f71624a806a11c2b6062b5dcad1d00c9cce29b17af281c03e",
+    "development_wfa_fold_assignments.json": "500bd5ee215547827c2903c295403e255f135358d0d50d8b71aedd41f931566c",
+    "development_wfa_metrics.json": "b33f71bcbd6c920036d093f4db4207c8787fb65abe24dddf2007f109a7c8c836",
+    "development_wfa_temporal_stability.json": "5fd09db50b4fa3b97c12edc49e2af3b7bdb59b19ff08293e6d9a243973b034d4",
+    "development_wfa_negative_controls.json": "f753db25a4de3d39be49582bf91a25708a4fd5ae75f8e99679706b417f61b64e",
+    "development_wfa_bootstrap.json": "c9deced30520ca1c1d1aacb16bba961937979995f44dc9e4183a5326337cd28d",
+    "development_wfa_holdout_access_audit.json": "2b4873b75cae8e8fbcf7e89fa04cf3a72ccb3365250000d1e3ce1ec9567eb7e6"
+  }
+}
