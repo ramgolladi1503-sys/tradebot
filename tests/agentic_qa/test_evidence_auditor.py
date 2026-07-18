@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from core.agentic_qa.adapter import build_agentic_qa_evidence
+from core.agentic_qa.adapter import build_agentic_qa_bundle, build_agentic_qa_evidence
 from core.agentic_qa.agents import DeterministicCritic, validate_advisory_review
 from core.agentic_qa.catalog import CONTROL_CATALOG
 from core.agentic_qa.contracts import AuditVerdict, ControlStatus
@@ -213,40 +213,103 @@ def test_all_adversarial_agent_cases_are_rejected_for_expected_reason(tmp_path: 
     assert result["unsafe_acceptances"] == 0
 
 
-def test_adapter_maps_known_gates_without_inventing_missing_controls(tmp_path: Path):
-    report = {
-        "evidence_certification": "CERTIFIED",
-        "gates": {
-            "temporal_causality": {
-                "status": "PASS",
-                "details": {
-                    "signal_after_entry_count": 0,
-                    "same_event_entry_count": 0,
-                    "future_feature_access_count": 0,
-                },
-            },
-            "execution_realism": {
-                "status": "PASS",
-                "details": {"fees_included": True, "slippage_modeled": True},
-            },
-            "walk_forward_integrity": {
-                "status": "PASS",
-                "details": {"out_of_sample_present": True, "repeated_holdout_use_count": 0},
-            },
+def test_adapter_maps_real_exporter_artifacts_without_inventing_missing_controls(tmp_path: Path):
+    artifacts = {
+        "engine_identity.json": {"read_only": True, "broker_api_called": False},
+        "run_configuration.json": {
+            "frozen_config_hash": "c" * 64,
+            "timezone": "Asia/Kolkata",
+            "cost_model_version": "cost-v1",
+        },
+        "dataset_manifest.json": {
+            "dataset_sha256": "d" * 64,
+            "time_start": "2025-01-01T09:15:00+05:30",
+            "time_end": "2025-06-30T15:30:00+05:30",
+            "duplicate_timestamp_count": 0,
+            "missing_timestamp_count": 0,
+            "malformed_timestamp_count": 0,
+            "stale_quote_count": 0,
+            "post_expiry_row_count": 0,
+            "invalid_ohlc_count": 0,
+            "quote_columns_complete": True,
+        },
+        "timing_evidence.json": {
+            "same_event_entry_count": 0,
+            "chronology_violation_count": 0,
+            "future_data_dependency_count": 0,
+        },
+        "fill_evidence.json": {
+            "entries_use_executable_side": True,
+            "exits_use_executable_side": True,
+            "strict_liquidity_mode": True,
+            "fallback_liquidity_fill_count": 0,
+            "proxy_exit_mark_count": 0,
+            "missing_bid_ask_accepted_count": 0,
+            "synthetic_liquidity_fill_count": 0,
+        },
+        "cost_reconciliation.json": {"gross_pnl": 10.0, "total_costs": 2.0, "net_pnl": 8.0},
+        "wfa_partition_plan.json": {
+            "chronological": True,
+            "non_overlapping": True,
+            "purge_embargo_applied": True,
+            "validation_before_holdout": True,
+            "holdout_isolated_from_selection": True,
+        },
+        "wfa_results.json": {"repeated_holdout_run_count": 0, "holdout_status": "completed"},
+        "negative_controls.json": {
+            "controls": {"future_mutation": True, "timing_shift": True, "cost_sensitivity": True}
+        },
+        "test_results.json": {
+            "collected": 12,
+            "failed": 0,
+            "errors": 0,
+            "commit_matches_bundle": True,
         },
     }
-    report_path = tmp_path / "certification_report.json"
-    report_path.write_text(json.dumps(report), encoding="utf-8")
+    manifest_artifacts = {}
+    for name, payload in artifacts.items():
+        path = tmp_path / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        manifest_artifacts[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest = {
-        "bundle_id": "bundle-1",
+        "run_id": "bundle-1",
         "repository_commit": "abc1234",
-        "artifacts": {
-            report_path.name: hashlib.sha256(report_path.read_bytes()).hexdigest(),
-        },
+        "policy_version": "backtest-certification-v1",
+        "artifacts": manifest_artifacts,
     }
     (tmp_path / "bundle_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
     evidence = build_agentic_qa_evidence(tmp_path)
+
     assert evidence["temporal"]["same_event_entry_count"] == 0
     assert evidence["execution"]["fees_included"] is True
+    assert evidence["execution"]["liquidity_constraints_enforced"] is True
     assert evidence["validation"]["walk_forward_present"] is True
+    assert evidence["robustness"]["negative_controls_passed"] is True
+    assert "slippage_modeled" not in evidence.get("execution", {})
     assert "corporate_actions_handled" not in evidence.get("data", {})
+
+
+def test_adapter_builds_hashed_sidecar_without_mutating_source(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    report_path = source / "certification_report.json"
+    report_path.write_text(json.dumps({"evidence_certification": "CERTIFIED", "gates": {}}), encoding="utf-8")
+    source_manifest = {
+        "run_id": "source-run",
+        "repository_commit": "abc1234",
+        "policy_version": "backtest-certification-v1",
+        "artifacts": {report_path.name: hashlib.sha256(report_path.read_bytes()).hexdigest()},
+    }
+    manifest_path = source / "bundle_manifest.json"
+    manifest_path.write_text(json.dumps(source_manifest), encoding="utf-8")
+    before = manifest_path.read_bytes()
+
+    sidecar = build_agentic_qa_bundle(source, tmp_path / "sidecar")
+
+    assert manifest_path.read_bytes() == before
+    sidecar_manifest = json.loads((sidecar / "run_manifest.json").read_text(encoding="utf-8"))
+    assert sidecar_manifest["source_bundle_digest"]
+    assert sidecar_manifest["artifacts"]["agentic_qa_evidence.json"] == hashlib.sha256(
+        (sidecar / "agentic_qa_evidence.json").read_bytes()
+    ).hexdigest()
