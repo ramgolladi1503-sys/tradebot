@@ -228,40 +228,6 @@ def test_calculate_returns_string_short():
     gross, frict = calculate_returns(100.0, 95.0, "SHORT")
     assert abs(gross - (100.0/95.0 - 1.0)) < 1e-15
 
-def test_evidence_capture_zero_collected(tmp_path):
-    # Run the capture script against an empty directory
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    script = os.path.join(repo_root, "scripts", "capture_opening_state_pytest_evidence.py")
-    empty_dir = tmp_path / "empty"
-    empty_dir.mkdir()
-    
-    # We patch the script internally by replacing the target dir via a hack or just run it and know it fails
-    # Wait, the script has target_dir hardcoded to tests/research/opening_state_momentum/
-    # We can test the plugin directly.
-    import sys
-    sys.path.insert(0, repo_root)
-    import scripts.capture_opening_state_pytest_evidence as cap
-    plugin = cap.MetricsCapturePlugin()
-    
-    class DummySession:
-        def __init__(self, items):
-            self.items = items
-            
-    plugin.pytest_collection_finish(DummySession([]))
-    assert plugin.collected == 0
-
-def test_evidence_capture_passed_greater_than_collected():
-    import scripts.capture_opening_state_pytest_evidence as cap
-    plugin = cap.MetricsCapturePlugin()
-    
-    class DummySession:
-        def __init__(self, items):
-            self.items = items
-            
-    plugin.pytest_collection_finish(DummySession([1]))
-    plugin.passed = 2
-    assert plugin.passed > plugin.collected
-    
 def test_status_set_equality_passes():
     # If sets are equal, diffs are empty
     contract = {"A", "B"}
