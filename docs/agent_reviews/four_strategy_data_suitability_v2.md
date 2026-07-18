@@ -6,6 +6,46 @@ RIGHT_WITH_GAPS
 ## APPROVED OBJECTIVE
 Integrate the approved four-strategy data-suitability dependency closure onto current `main` using read-only local data and immutable JSON evidence, without widening the runtime surface.
 
+## Agent Work Contract
+- source_agent: Codex
+- action: integrate approved four-strategy data-suitability closure
+- scope: read-only evidence and exact source-file transplant only
+- requested_paths: `config/strategy_inventory.yml`, `core/movement_contract.py`, `core/orb_ohlcv_validation.py`, `core/session_bar_history.py`, `core/strategy_parameter_profiles.py`, `core/strategy_temporal_harness.py`, `research/strategy_validation/*`, `scripts/build_four_strategy_dataset_manifest.py`, `strategies/movement/*` limited to the four-strategy contract dependencies, and the frozen tests/evidence files
+- allowed_paths: the files listed in `FILES CHANGED`
+- forbidden_paths: broker, order, risk, execution, feed, credentials, dashboard, backtesting, WFA, and any live-mode wiring
+- expected_tests: frozen four-strategy contract tests, dataset-manifest tests, orb validation tests, and the unchanged orchestrator integrity test
+- acceptance_proof: bundle hashes, JSON evidence hashes, and the repository test suite with the known auth failure called out explicitly
+
+## Scope Guard
+- Do not change production strategy thresholds or formulas.
+- Do not widen the runtime surface beyond the approved dependency closure.
+- Do not modify broker, order, risk, feed, or credential code.
+- Do not claim merge safety, live readiness, or profitability.
+
+## Grill Me Review
+- Scope is narrow but high-risk because it touches strategy source, contract helpers, and evidence artifacts.
+- The integration must fail closed on missing provenance and preserve the unchanged orchestrator auth failure as pre-existing.
+- Any divergence in the frozen bundle hashes or current-main test behavior is a blocker until explained by evidence.
+
+## Hermes Review
+- The correct architecture choice is to keep the evidence package read-only and transplant only the exact source files that the frozen bundle and dependent tests require.
+- The PR must preserve the separation between evidence artifacts and production runtime behavior.
+
+## GSD Review
+- All changed files were staged explicitly.
+- The current-main orchestrator test was left untouched.
+- The source contract and helper files were copied verbatim from the approved integrity commit.
+
+## QA / Safety Review
+- `python -m py_compile` and `ruff check` were run on the transplanted Python files.
+- Focused tests passed apart from the known auth baseline.
+- Full-suite verification passed except for `tests/test_orchestrator_reports_finally.py::test_cycle_exception_still_writes_reports` with `[AUTH] missing_kite_access_token`.
+
+## High-Risk Path Review
+- High-risk paths changed: `config/`, `core/strategy*`, `core/orb_ohlcv_validation.py`, `core/session_bar_history.py`, `core/strategy_temporal_harness.py`, `strategies/movement/`, and the supporting tests/evidence files.
+- The transplant is fail-closed and read-only with respect to market data and evidence; no broker, order, or execution path was modified.
+- The only known live/runtime blocker remaining in validation is the pre-existing auth failure on the unchanged orchestrator test.
+
 ## WHAT WAS ACTUALLY IMPLEMENTED
 - Added explicit source-root authority records to the corpus inventory and manifest.
 - Added the four-strategy inventory contract at `config/strategy_inventory.yml` so the frozen-contract test can hash the real runtime-facing inventory.
@@ -202,6 +242,23 @@ pending commit
 - `tests/test_orchestrator_reports_finally.py` remains on the current-main version and still surfaces the pre-existing `[AUTH] missing_kite_access_token` failure.
 - The four-strategy contract, helper, and dataset-manifest tests were brought over as standalone evidence.
 - The orb validation harness was updated to the source contract and now blocks when completed-bar history is absent.
+
+## Acceptance Proof
+- The frozen bundle source hashes match the transplanted source files.
+- The manifest and corpus inventories are byte-stable JSON evidence.
+- The targeted suite is green except for the known auth baseline, and the full suite shows the same single unrelated failure.
+
+## Runtime Proof Required After Merge
+- Re-run the unchanged orchestrator test with valid credentials to confirm the auth baseline is still isolated from this integration.
+- Re-run the orb validation path with the approved completed-history producer if a runtime propagation follow-up is merged later.
+
+## What This PR Does Not Prove
+- It does not prove strategy edge, profitability, live readiness, or execution certification.
+- It does not repair the orchestrator auth failure.
+- It does not change current-main orchestrator behavior.
+
+## Human Approval
+- Required for merge while the repository continues to report the known `[AUTH] missing_kite_access_token` failure on the unchanged orchestrator test.
 
 ## NEGATIVE CONTROLS
 - No source corpus was mutated in place.
