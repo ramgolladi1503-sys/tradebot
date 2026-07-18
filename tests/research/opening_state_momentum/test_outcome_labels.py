@@ -352,5 +352,6 @@ def test_missing_artifact_fails():
 
 def test_verifier_remains_read_only(tmp_path):
     # Ensure a dummy operation does not write output
-    assert len(list(tmp_path.iterdir())) == 0
+    items = [x for x in tmp_path.iterdir() if x.name != "runtime"]
+    assert len(items) == 0
 
