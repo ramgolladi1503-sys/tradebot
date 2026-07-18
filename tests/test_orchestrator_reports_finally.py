@@ -21,8 +21,11 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.setattr("core.recovery_state_machine.evaluate_feed_state", lambda _: RecoveryState.HEALTHY, raising=False)
     monkeypatch.setattr(orch_mod, "_feed_truth_cycle_gate", lambda x: {"skip": False}, raising=False)
     monkeypatch.setattr(orch_mod, "evaluate_slo_status", lambda **kwargs: {"status": "OK"}, raising=False)
+    monkeypatch.setattr(orch_mod, "fetch_live_market_data", lambda: [], raising=False)
+
     def raise_err(*args, **kwargs):
         raise RuntimeError("forced_cycle_error")
+
     monkeypatch.setattr(orch_mod.Orchestrator, "_evaluate_suggestions", raise_err)
     monkeypatch.setattr(orch_mod.RunLock, "acquire", lambda self: (True, "ok"))
     monkeypatch.setattr(orch_mod.RunLock, "release", lambda self: None)
@@ -55,4 +58,5 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     assert exec_doc.get("reason")
     assert suggestions_status["status"] == "error"
     assert engine_cycle_status["cycle_ok"] is False
-    assert "forced_cycle_error" in engine_cycle_status["last_error"] or "[AUTH] missing_kite_access_token" in engine_cycle_status["last_error"]
+    assert "forced_cycle_error" in engine_cycle_status["last_error"]
+    assert "[AUTH] missing_kite_access_token" not in engine_cycle_status["last_error"]
