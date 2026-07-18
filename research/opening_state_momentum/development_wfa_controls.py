@@ -1,185 +1,105 @@
 import random
-from typing import List, Dict, Any, Tuple
+import math
+from typing import List, Dict, Any
 from research.opening_state_momentum.development_wfa_metrics import calculate_metrics
 
-def bootstrap_confidence_intervals(
-    returns: List[float], 
-    num_resamples: int, 
-    seed: int, 
-    friction: float = 0.0
-) -> Dict[str, Any]:
-    """
-    Deterministic non-parametric bootstrap.
-    Calculates 95% percentile intervals for mean, median, win rate, and profit factor.
-    """
-    n = len(returns)
-    if n == 0:
-        return {}
-        
+def bootstrap_confidence_intervals(returns: List[float], iterations: int, seed: int, friction_bps: float = 0.0) -> Dict[str, Any]:
     rng = random.Random(seed)
-    
+    n = len(returns)
     means = []
-    medians = []
-    win_rates = []
-    profit_factors = []
     
-    for _ in range(num_resamples):
+    for _ in range(iterations):
         sample = [rng.choice(returns) for _ in range(n)]
-        metrics = calculate_metrics(sample, friction)
+        mean = sum(sample) / n
+        means.append(mean)
         
-        means.append(metrics["mean_return"])
-        medians.append(metrics["median_return"])
-        win_rates.append(metrics["win_rate"])
-        
-        pf = metrics["profit_factor"]
-        if isinstance(pf, dict):
-            pass # Skip undefined profit factors from percentile
-        elif pf is not None:
-            profit_factors.append(pf)
-            
     means.sort()
-    medians.sort()
-    win_rates.sort()
-    profit_factors.sort()
+    lower = means[int((iterations - 1) * 0.025)]
+    upper = means[int((iterations - 1) * 0.975)]
     
-    def get_interval(sorted_list):
-        if not sorted_list:
-            return None
-        length = len(sorted_list)
-        p025 = sorted_list[int(length * 0.025)]
-        p975 = sorted_list[int(length * 0.975)]
-        return [p025, p975]
-        
     return {
-        "mean_return_95_ci": get_interval(means),
-        "median_return_95_ci": get_interval(medians),
-        "win_rate_95_ci": get_interval(win_rates),
-        "profit_factor_95_ci": get_interval(profit_factors)
+        "bootstrap_iterations": iterations,
+        "mean_95_percent_interval": [lower, upper]
     }
 
-def calculate_return_from_prices(entry_price: float, exit_price: float, direction: str) -> float:
-    if direction == "LONG":
-        return (exit_price - entry_price) / entry_price
-    elif direction == "SHORT":
-        return (entry_price - exit_price) / entry_price
-    return 0.0
-
-def inverted_direction_control(
-    outcomes: List[Dict[str, Any]], 
-    friction: float = 0.0
-) -> Dict[str, Any]:
-    """
-    Inverts the returns (LONG -> SHORT, SHORT -> LONG) by negating the return before friction.
-    """
+def inverted_direction_control(outcomes: List[Dict[str, Any]], friction_bps: float) -> Dict[str, Any]:
     inverted_returns = []
-    
-    for outcome in outcomes:
-        orig_dir = outcome["direction"]
-        inverted_dir = "SHORT" if orig_dir == "LONG" else ("LONG" if orig_dir == "SHORT" else "NONE")
-        r = calculate_return_from_prices(outcome["entry_price"], outcome["exit_price"], inverted_dir)
-        inverted_returns.append(r)
+    for o in outcomes:
+        direction = o["direction"]
+        entry = o["entry_price"]
+        exit_p = o["exit_price"]
         
-    metrics = calculate_metrics(inverted_returns, friction)
-    return metrics
+        # Invert the original formula
+        if direction == "LONG":
+            inverted_gross = entry / exit_p - 1.0
+        else:
+            inverted_gross = exit_p / entry - 1.0
+            
+        inverted_net = inverted_gross - 2 * friction_bps / 10000.0
+        inverted_returns.append(inverted_net)
+        
+    return calculate_metrics(inverted_returns)
 
-def direction_randomization_control(
-    outcomes: List[Dict[str, Any]], 
-    num_permutations: int,
-    seed: int,
-    friction: float = 0.0,
-    actual_mean: float = 0.0
-) -> Dict[str, Any]:
-    """
-    Randomly permutes direction (LONG or SHORT) while preserving counts.
-    """
-    n = len(outcomes)
-    if n == 0:
-        return {}
-        
-    original_directions = [o["direction"] for o in outcomes]
-    num_long = original_directions.count("LONG")
-    num_short = original_directions.count("SHORT")
-    
+def direction_randomization_control(outcomes: List[Dict[str, Any]], iterations: int, seed: int, friction_bps: float, actual_mean: float) -> Dict[str, Any]:
     rng = random.Random(seed)
     
-    null_means = []
+    # Preserve 13 LONG, 19 SHORT (based on exact assignment)
+    directions = [o["direction"] for o in outcomes]
     
-    # We create a list of exact directions we need to assign
-    fixed_directions = ["LONG"] * num_long + ["SHORT"] * num_short
+    count_greater_equal = 0
     
-    for _ in range(num_permutations):
-        shuffled_dirs = fixed_directions[:]
-        rng.shuffle(shuffled_dirs)
+    for _ in range(iterations):
+        shuffled_directions = directions[:]
+        rng.shuffle(shuffled_directions)
         
         simulated_returns = []
-        for i, outcome in enumerate(outcomes):
-            r = calculate_return_from_prices(outcome["entry_price"], outcome["exit_price"], shuffled_dirs[i])
-            simulated_returns.append(r)
+        for i, o in enumerate(outcomes):
+            direction = shuffled_directions[i]
+            entry = o["entry_price"]
+            exit_p = o["exit_price"]
             
-        metrics = calculate_metrics(simulated_returns, friction)
-        null_means.append(metrics["mean_return"])
-        
-    null_means.sort()
+            if direction == "LONG":
+                gross = exit_p / entry - 1.0
+            else:
+                gross = entry / exit_p - 1.0
+                
+            net = gross - 2 * friction_bps / 10000.0
+            simulated_returns.append(net)
+            
+        sim_mean = sum(simulated_returns) / len(simulated_returns)
+        if sim_mean >= actual_mean:
+            count_greater_equal += 1
+            
+    p_value = (count_greater_equal + 1) / (iterations + 1)
     
-    # Compute one-sided empirical p-value for actual_mean > null_means
-    # How many null_means are >= actual_mean?
-    count_geq = sum(1 for m in null_means if m >= actual_mean)
-    p_value = count_geq / num_permutations
-    
-    percentile_rank = (1.0 - p_value) * 100
-    
-    null_mean_avg = sum(null_means) / num_permutations
-    if num_permutations > 1:
-        variance = sum((m - null_mean_avg)**2 for m in null_means) / (num_permutations - 1)
-        null_std = variance ** 0.5
-    else:
-        null_std = 0.0
-        
     return {
-        "actual_mean": actual_mean,
-        "null_mean": null_mean_avg,
-        "null_standard_deviation": null_std,
-        "empirical_p_value": p_value,
-        "percentile_rank": percentile_rank
+        "iterations": iterations,
+        "count_greater_equal_actual": count_greater_equal,
+        "empirical_p_value": p_value
     }
 
-def chronological_concentration_control(
-    returns: List[float],
-    num_permutations: int,
-    seed: int,
-    friction: float = 0.0,
-    actual_max_drawdown: float = 0.0,
-    actual_longest_losing_streak: int = 0
-) -> Dict[str, Any]:
-    """
-    Randomly permutes the order of the fixed realized returns.
-    """
-    n = len(returns)
-    if n == 0:
-        return {}
-        
+def chronological_concentration_control(returns: List[float], iterations: int, seed: int, friction_bps: float, actual_max_dd: float, actual_max_lose_streak: int) -> Dict[str, Any]:
     rng = random.Random(seed)
     
-    null_drawdowns = []
-    null_streaks = []
+    dd_greater = 0
+    streak_greater = 0
     
-    for _ in range(num_permutations):
-        shuffled_returns = returns[:]
-        rng.shuffle(shuffled_returns)
+    for _ in range(iterations):
+        shuffled = returns[:]
+        rng.shuffle(shuffled)
         
-        metrics = calculate_metrics(shuffled_returns, friction)
-        null_drawdowns.append(metrics["maximum_drawdown"])
-        null_streaks.append(metrics["longest_losing_streak"])
+        sim_metrics = calculate_metrics(shuffled)
         
-    null_drawdowns.sort()
-    null_streaks.sort()
+        if sim_metrics["maximum_drawdown"] >= actual_max_dd:
+            dd_greater += 1
+        if sim_metrics["longest_losing_streak"] >= actual_max_lose_streak:
+            streak_greater += 1
+            
+    p_dd = (dd_greater + 1) / (iterations + 1)
+    p_streak = (streak_greater + 1) / (iterations + 1)
     
-    def p_value_greater_equal(actual, null_dist):
-        return sum(1 for val in null_dist if val >= actual) / num_permutations
-        
     return {
-        "actual_max_drawdown": actual_max_drawdown,
-        "drawdown_p_value": p_value_greater_equal(actual_max_drawdown, null_drawdowns),
-        "actual_longest_losing_streak": actual_longest_losing_streak,
-        "losing_streak_p_value": p_value_greater_equal(actual_longest_losing_streak, null_streaks)
+        "iterations": iterations,
+        "empirical_p_value_max_drawdown": p_dd,
+        "empirical_p_value_longest_losing_streak": p_streak
     }

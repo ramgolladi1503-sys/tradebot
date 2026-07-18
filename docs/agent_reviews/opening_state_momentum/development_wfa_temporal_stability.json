@@ -2,104 +2,104 @@
   "monthly": {
     "2024-10": {
       "trade_count": 3,
-      "mean_return": -0.0016074364765969922
+      "mean_return": -0.002603542381804305
     },
     "2024-11": {
       "trade_count": 3,
-      "mean_return": 0.0007141326611269928
+      "mean_return": -0.00028250006599557883
     },
     "2025-01": {
       "trade_count": 3,
-      "mean_return": 1.1958363841900249e-05
+      "mean_return": -0.0009873457609983103
     },
     "2025-02": {
       "trade_count": 4,
-      "mean_return": -7.875737655654433e-05
+      "mean_return": -0.001077370201229443
     },
     "2025-03": {
       "trade_count": 3,
-      "mean_return": -0.00026482493980907804
+      "mean_return": -0.0012648249398090978
     },
     "2025-05": {
       "trade_count": 4,
-      "mean_return": 0.0002452637863911793
+      "mean_return": -0.0007531381320298727
     },
     "2025-06": {
       "trade_count": 2,
-      "mean_return": 0.0017905574378649053
+      "mean_return": 0.0007927048515344879
     },
     "2025-08": {
       "trade_count": 1,
-      "mean_return": 0.0032189382549116558
+      "mean_return": 0.0022293332793424945
     },
     "2025-09": {
       "trade_count": 1,
-      "mean_return": 0.00033920062396659763
+      "mean_return": -0.0006607993760333599
     },
     "2025-10": {
       "trade_count": 2,
-      "mean_return": -0.0005179065926421475
+      "mean_return": -0.00151790659264217
     },
     "2025-11": {
       "trade_count": 1,
-      "mean_return": 0.0009049445482818741
+      "mean_return": -9.505545171817256e-05
     },
     "2026-01": {
       "trade_count": 2,
-      "mean_return": 0.0016625366967499256
+      "mean_return": 0.0006772742511299565
     },
     "2026-02": {
       "trade_count": 3,
-      "mean_return": -0.0003359220639399165
+      "mean_return": -0.0013353447453417664
     }
   },
   "quarterly": {
     "2024-Q4": {
       "trade_count": 6,
-      "mean_return": -0.00044665190773499975
+      "mean_return": -0.001443021223899942
     },
     "2025-Q1": {
       "trade_count": 10,
-      "mean_return": -0.00010736292341277107
+      "mean_return": -0.0011065992907339996
     },
     "2025-Q2": {
       "trade_count": 6,
-      "mean_return": 0.0007603616702157546
+      "mean_return": -0.00023785713750841918
     },
     "2025-Q3": {
       "trade_count": 2,
-      "mean_return": 0.0017790694394391267
+      "mean_return": 0.0007842669516545673
     },
     "2025-Q4": {
       "trade_count": 3,
-      "mean_return": -4.362287900080697e-05
+      "mean_return": -0.0010436228790008375
     },
     "2026-Q1": {
       "trade_count": 5,
-      "mean_return": 0.0004634614403360202
+      "mean_return": -0.0005302971467530772
     }
   },
   "yearly": {
     "2024": {
       "trade_count": 6,
-      "mean_return": -0.00044665190773499975
+      "mean_return": -0.001443021223899942
     },
     "2025": {
       "trade_count": 21,
-      "mean_return": 0.00032932433471631665
+      "mean_return": -0.0006693081174325662
     },
     "2026": {
       "trade_count": 5,
-      "mean_return": 0.0004634614403360202
+      "mean_return": -0.0005302971467530772
     }
   },
-  "best_fold_contribution": 0.726137801599303,
-  "worst_fold_contribution": -0.36498509843992927,
-  "top_one_trade_contribution": 0.21426847839172672,
-  "top_three_trade_contribution": 0.4787350818016671,
-  "best_month_positive_fraction": 0.21426847839172672,
+  "best_fold_contribution": 0.01318424068342338,
+  "worst_fold_contribution": 0.44817726678933717,
+  "top_one_trade_contribution": 0.32504525192997125,
+  "top_three_trade_contribution": 0.665140841399375,
+  "best_month_positive_fraction": 0.32504525192997125,
   "LONG_vs_SHORT_contribution": {
-    "LONG": -0.00040535075295433545,
-    "SHORT": 0.006958557537267087
+    "LONG": -0.013405350752954449,
+    "SHORT": -0.01195973279029448
   }
 }
