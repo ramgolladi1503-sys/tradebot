@@ -14,7 +14,19 @@ def calculate_returns(entry_price: float, exit_price: float, direction: int) -> 
         
     return gross, frictions
 
+from .timestamp_normalization import normalize_timestamps
+
 def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[str, Any]:
+    df = df.copy()
+    try:
+        df["timestamp"] = normalize_timestamps(df["timestamp"])
+    except ValueError as e:
+        if "Duplicate" in str(e):
+            return {"status": "DUPLICATE_TIMESTAMPS"}
+        return {"status": "UNPARSABLE_TIMESTAMPS"}
+    except Exception as e:
+        return {"status": "UNPARSABLE_TIMESTAMPS"}
+        
     df_sorted = df.sort_values("timestamp").reset_index(drop=True)
     
     entry_time = pd.Timestamp(f"{session_date} {CONTRACT_PARAMS['entry_bar_time']}").tz_localize("Asia/Kolkata")
@@ -23,10 +35,14 @@ def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[s
     entry_row = df_sorted[df_sorted["timestamp"] == entry_time]
     if entry_row.empty:
         return {"status": "ENTRY_BAR_MISSING"}
+    if len(entry_row) > 1:
+        return {"status": "ENTRY_BAR_MULTIPLE_MATCHES"}
         
     exit_row = df_sorted[df_sorted["timestamp"] == exit_time]
     if exit_row.empty:
         return {"status": "EXIT_BAR_MISSING"}
+    if len(exit_row) > 1:
+        return {"status": "EXIT_BAR_MULTIPLE_MATCHES"}
         
     entry_price = float(entry_row.iloc[0]["open"])
     exit_price = float(exit_row.iloc[0]["open"])

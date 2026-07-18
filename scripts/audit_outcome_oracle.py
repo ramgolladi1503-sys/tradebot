@@ -61,7 +61,12 @@ def main():
             continue
             
         # Independent calc
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        parsed_ts = pd.to_datetime(df["timestamp"])
+        if parsed_ts.dt.tz is None:
+            df["timestamp"] = parsed_ts.dt.tz_localize("Asia/Kolkata")
+        else:
+            df["timestamp"] = parsed_ts.dt.tz_convert("Asia/Kolkata")
+            
         df_sorted = df.sort_values("timestamp")
         
         target_entry = pd.Timestamp(f"{cand.session_date} {entry_time_str}").tz_localize("Asia/Kolkata")

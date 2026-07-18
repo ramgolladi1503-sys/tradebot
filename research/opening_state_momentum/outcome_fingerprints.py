@@ -28,7 +28,8 @@ def compute_outcome_fingerprint(outcome: Dict[str, Any]) -> str:
         "net_return_5bps",
         "net_return_10bps",
         "status",
-        "source_logical_identity"
+        "source_logical_identity",
+        "source_provenance_status"
     ]
     
     stable_dict = {}

@@ -161,3 +161,29 @@ def test_source_authority_hash_mismatch(tmp_path):
     sa = SourceAuthority.load(str(p), str(tmp_path))
     with pytest.raises(SourceAuthorityError, match="Hash mismatch"):
         sa.resolve_source("NIFTY_20240101")
+
+def test_label_outcome_multiple_entry_matches():
+    from research.opening_state_momentum.outcome_labeler import label_outcome
+    df = pd.DataFrame({
+        "timestamp": [
+            pd.Timestamp("2024-10-14 14:45:00"),
+            pd.Timestamp("2024-10-14 14:45:00"),
+            pd.Timestamp("2024-10-14 15:15:00")
+        ],
+        "open": [100.0, 101.0, 105.0]
+    })
+    res = label_outcome(df, 1, "2024-10-14")
+    assert res["status"] == "DUPLICATE_TIMESTAMPS"
+
+def test_label_outcome_multiple_exit_matches():
+    from research.opening_state_momentum.outcome_labeler import label_outcome
+    df = pd.DataFrame({
+        "timestamp": [
+            pd.Timestamp("2024-10-14 14:45:00"),
+            pd.Timestamp("2024-10-14 15:15:00"),
+            pd.Timestamp("2024-10-14 15:15:00")
+        ],
+        "open": [100.0, 105.0, 106.0]
+    })
+    res = label_outcome(df, 1, "2024-10-14")
+    assert res["status"] == "DUPLICATE_TIMESTAMPS"

@@ -53,7 +53,8 @@ def main():
             "direction": cand.direction,
             "candidate_fingerprint": cand.fingerprint,
             "feature_cutoff_timestamp": cand.feature_cutoff_timestamp,
-            "source_logical_identity": logical_id
+            "source_logical_identity": logical_id,
+            "source_provenance_status": "CANDIDATE_SOURCE_NOT_RECORDED"
         }
         
         try:

@@ -1,7 +1,200 @@
 {
   "oracle_independence_verified": true,
   "mismatch_count": 0,
-  "longs_tested": 0,
-  "shorts_tested": 0,
-  "comparisons": []
+  "longs_tested": 13,
+  "shorts_tested": 19,
+  "comparisons": [
+    {
+      "session_date": "2024-10-14",
+      "logical_identity": "NIFTY_20241014",
+      "source_hash": "37d025d36422fb2f46b60824749fcb08cf1857d04b669564faf3e7abbf4a20c0",
+      "match": true
+    },
+    {
+      "session_date": "2024-10-17",
+      "logical_identity": "NIFTY_20241017",
+      "source_hash": "3b7390690336b5a754c90bd88159a660ff96867881ea40de2c8e96e178007b21",
+      "match": true
+    },
+    {
+      "session_date": "2024-10-25",
+      "logical_identity": "NIFTY_20241025",
+      "source_hash": "ccaf60a5e07f5301bd813e5833569f2d4130ca0849df1e97a4c35fd5fbb5ca78",
+      "match": true
+    },
+    {
+      "session_date": "2024-11-07",
+      "logical_identity": "NIFTY_20241107",
+      "source_hash": "3cf94be00e8c840a183a4bbcfc4e8f1f11e1912f43dbbd9fc9f4bd5ae9495eba",
+      "match": true
+    },
+    {
+      "session_date": "2024-11-12",
+      "logical_identity": "NIFTY_20241112",
+      "source_hash": "430924082ff15550210fbd90af889288022a907e67bfee8f9f3f82c7c800a74f",
+      "match": true
+    },
+    {
+      "session_date": "2024-11-18",
+      "logical_identity": "NIFTY_20241118",
+      "source_hash": "e17ec81048b94e42b9ad58437e18f5ddb58f71634d76ad12c3f9ced7a84bf669",
+      "match": true
+    },
+    {
+      "session_date": "2025-01-03",
+      "logical_identity": "NIFTY_20250103",
+      "source_hash": "b2b79eabb1f0146165265e63fec855ba55b8190fbb4cb897efb8e5a9dda02ce3",
+      "match": true
+    },
+    {
+      "session_date": "2025-01-06",
+      "logical_identity": "NIFTY_20250106",
+      "source_hash": "efbcf560c3d60f247a7e72fb1b68df8259a222e8074111f9bfb8a4d24b862358",
+      "match": true
+    },
+    {
+      "session_date": "2025-01-21",
+      "logical_identity": "NIFTY_20250121",
+      "source_hash": "c4572f560a19a3170cd120f3601db5af7bb42f290224a78b0a041e5fda7918a1",
+      "match": true
+    },
+    {
+      "session_date": "2025-02-06",
+      "logical_identity": "NIFTY_20250206",
+      "source_hash": "d53a70017c38b805306d10fbf3a6b4ab3568adf698f47df239f1a0c76d33f35c",
+      "match": true
+    },
+    {
+      "session_date": "2025-02-10",
+      "logical_identity": "NIFTY_20250210",
+      "source_hash": "53b42e5b564d0563dd9c030fb5be5a8fdb6becc87d365226af9a09496059b698",
+      "match": true
+    },
+    {
+      "session_date": "2025-02-25",
+      "logical_identity": "NIFTY_20250225",
+      "source_hash": "82f9836cef5300fb640419266ce4ae71326c58f2816d0373201bc17ce108d7ac",
+      "match": true
+    },
+    {
+      "session_date": "2025-02-28",
+      "logical_identity": "NIFTY_20250228",
+      "source_hash": "578d7aa9d8e852b1c4b93771d51b53a836d3df1071561bb17f9f35c722934e85",
+      "match": true
+    },
+    {
+      "session_date": "2025-03-05",
+      "logical_identity": "NIFTY_20250305",
+      "source_hash": "2c129f2bdbdff73735ca908058cc01ee239061bcb97f2152b9562d205e86cab8",
+      "match": true
+    },
+    {
+      "session_date": "2025-03-21",
+      "logical_identity": "NIFTY_20250321",
+      "source_hash": "e66c83a56453aeda449cda0f6daf74320e855a424e27dea9b424c4badf4a1810",
+      "match": true
+    },
+    {
+      "session_date": "2025-03-27",
+      "logical_identity": "NIFTY_20250327",
+      "source_hash": "42252e8261b36c8458344f74aff6e00ebeb45f3b3360294904f447115e8fe725",
+      "match": true
+    },
+    {
+      "session_date": "2025-05-07",
+      "logical_identity": "NIFTY_20250507",
+      "source_hash": "d5aceb6490706b2210522363172cf46280444321db6ead8d3d24d265671137d3",
+      "match": true
+    },
+    {
+      "session_date": "2025-05-12",
+      "logical_identity": "NIFTY_20250512",
+      "source_hash": "ed7d82ac50acfc534d2065a388ad1c36df258a6afd8d3ac09c31c293a495c8d0",
+      "match": true
+    },
+    {
+      "session_date": "2025-05-13",
+      "logical_identity": "NIFTY_20250513",
+      "source_hash": "269247b0d0df57c89fa3e8c54d1dc9e18bf093a93defd604ae488469fd254176",
+      "match": true
+    },
+    {
+      "session_date": "2025-05-22",
+      "logical_identity": "NIFTY_20250522",
+      "source_hash": "e801c3c1b7474a9d03c253451887e5529f837e7f88a9a15d3753a6cfce910494",
+      "match": true
+    },
+    {
+      "session_date": "2025-06-03",
+      "logical_identity": "NIFTY_20250603",
+      "source_hash": "71a1e288a1dbf544dbff9866133ed3845852eb5afc1be46bbf5414ee7307ef89",
+      "match": true
+    },
+    {
+      "session_date": "2025-06-13",
+      "logical_identity": "NIFTY_20250613",
+      "source_hash": "52aa0bd08b5ae6b516b9de9fc04e7bb060366112c868e5862b84deac19247b6f",
+      "match": true
+    },
+    {
+      "session_date": "2025-08-26",
+      "logical_identity": "NIFTY_20250826",
+      "source_hash": "73e2ed164911b8884042c1aad8b1e8f76ee05d7fe9ad72365a04926cac75dac4",
+      "match": true
+    },
+    {
+      "session_date": "2025-09-01",
+      "logical_identity": "NIFTY_20250901",
+      "source_hash": "2e7133c929dfecbb4a792c7bdd5dd8cdc9ac95fc62de04b6c2d61157448cc379",
+      "match": true
+    },
+    {
+      "session_date": "2025-10-10",
+      "logical_identity": "NIFTY_20251010",
+      "source_hash": "f86c27d90402a0ecfd45d706d42f339b4e7c100b78e26d3de13c581f66b7ac44",
+      "match": true
+    },
+    {
+      "session_date": "2025-10-27",
+      "logical_identity": "NIFTY_20251027",
+      "source_hash": "f897199de12f8bfb1b8ed0f07bdec3bef9c36d5288ff1063c1368cd5abd3da11",
+      "match": true
+    },
+    {
+      "session_date": "2025-11-26",
+      "logical_identity": "NIFTY_20251126",
+      "source_hash": "8ad65ef6e167829df307666605aa733847cfb17c0d29e487d4f8af342bc06737",
+      "match": true
+    },
+    {
+      "session_date": "2026-01-13",
+      "logical_identity": "NIFTY_20260113",
+      "source_hash": "d0411677702f6d49ae6b7c586bd5355070ae31b2784ce34a4d49fa68eeb8c4fe",
+      "match": true
+    },
+    {
+      "session_date": "2026-01-20",
+      "logical_identity": "NIFTY_20260120",
+      "source_hash": "2f66869b722e6498e841a6e0d1e6d6f172e917e782ee269e0d737ddbe4e32103",
+      "match": true
+    },
+    {
+      "session_date": "2026-02-03",
+      "logical_identity": "NIFTY_20260203",
+      "source_hash": "716d81c47614596257d789077201f4dbe532841df1b29cd733182b8b0da8986e",
+      "match": true
+    },
+    {
+      "session_date": "2026-02-04",
+      "logical_identity": "NIFTY_20260204",
+      "source_hash": "e89f00f1ae0769cb211a006234c10437769132d275e77bad18eab6a369da7531",
+      "match": true
+    },
+    {
+      "session_date": "2026-02-05",
+      "logical_identity": "NIFTY_20260205",
+      "source_hash": "45ab8affb1652908fb2a9905e5cd9e856b6e5749f611e18f6f37cfedf85ff576",
+      "match": true
+    }
+  ]
 }
