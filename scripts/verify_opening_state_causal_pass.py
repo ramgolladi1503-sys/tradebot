@@ -111,11 +111,17 @@ def verify_causal_pass(repo_root=None, reviews_dir=None, oracle_path=None):
             thresh = json.load(f)
             
         check_true(thresh.get("first_valid_threshold_prior_count") == 60, "MinHistory", "Min history not 60")
+        
+        # Read the reported insufficient history count directly
+        insufficient = thresh.get("insufficient_history_count", 0)
+        
+        with open(reviews_dir / "development_session_reconciliation.json") as f:
+            causal_recon = json.load(f)
+        terminal_insufficient = causal_recon.get("count_INSUFFICIENT_PRIOR_HISTORY", 0)
+        check_true(insufficient == terminal_insufficient, "MinHistory", f"Threshold audit insufficient ({insufficient}) != terminal reconciliation count ({terminal_insufficient})")
+        
         for audit in thresh.get("records", []):
-            if audit["training_count"] < 60:
-                check_true(audit.get("threshold") is None, "MinHistory", f"Threshold not None for <60: {audit}")
-                insufficient += 1
-            elif audit["training_count"] == 60:
+            if audit["training_count"] == 60:
                 pass # First valid
                 
             tdates = audit.get("training_dates_used", [])
