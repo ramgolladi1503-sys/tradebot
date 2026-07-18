@@ -70,6 +70,7 @@
     }
   },
   "read_only": true,
+  "reason": "Dual independent full-corpus outcome runs produced matching semantic hashes and passed strict audit.",
   "run_a_dir": "/tmp/orb-certified-outcomes-648da691-a",
   "run_a_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
   "run_b_dir": "/tmp/orb-certified-outcomes-648da691-b",
