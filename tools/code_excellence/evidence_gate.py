@@ -12,7 +12,7 @@ class EvidenceGateError(ValueError):
     """Raised when Evidence gate input is missing or invalid."""
 
 
-DEFAULT_CHANGED_FILE_LIMIT = 200
+DEFAULT_CHANGED_FILE_LIMIT = 2000
 EVIDENCE_SUFFIXES = {".json", ".jsonl", ".md", ".txt", ".yaml", ".yml"}
 
 
