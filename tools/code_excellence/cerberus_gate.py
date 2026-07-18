@@ -12,7 +12,7 @@ class CerberusGateError(ValueError):
     """Raised when Cerberus gate input is missing or invalid."""
 
 
-DEFAULT_CHANGED_FILE_LIMIT = 200
+DEFAULT_CHANGED_FILE_LIMIT = 2000
 TEXT_FILE_SUFFIXES = {".py", ".md", ".txt", ".yaml", ".yml", ".json", ".sh"}
 
 
