@@ -10,7 +10,7 @@
 - allowed_paths: same as requested paths
 - forbidden_paths: production strategy files, `core/`, `config/`, broker paths, execution paths, risk paths, feed paths, dashboard paths, credentials, authoritative corpus roots, runtime strategy wiring
 - expected_tests: full-corpus generation A/B, independent audit A/B comparison, evidence JSON validation, SHA-256 sidecar validation
-- acceptance_proof: `ORB_OUTCOMES_MEASURED`
+- acceptance_proof: `AUDIT_INVALID`
 
 ## Scope Guard
 
@@ -18,7 +18,7 @@ This evidence is bounded PR documentation only. It does not include full per-can
 
 ## Evidence Verdict
 
-`ORB_OUTCOMES_MEASURED`
+`AUDIT_INVALID`
 
 ## Scope
 
@@ -28,8 +28,8 @@ This is research-only underlying-price outcome measurement for the certified ORB
 
 - mode: RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT_EVIDENCE
 - candidate_id: opening_range_retest_outcome_measurement_v1
-- decision: ORB_OUTCOMES_MEASURED
-- reason: Dual independent full-corpus outcome runs produced matching semantic hashes and passed strict audit.
+- decision: AUDIT_INVALID
+- reason: Superseded: prior outcome certification is withdrawn pending corrected horizon, source-integrity, overlap, and independent-oracle repairs.
 - timestamp: 2026-07-19T04:35:00+05:30
 - read_only: true
 - append: false

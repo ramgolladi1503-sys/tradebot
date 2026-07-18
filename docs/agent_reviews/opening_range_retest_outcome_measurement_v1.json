@@ -1,5 +1,6 @@
 {
   "ab_semantic_hash_equal": true,
+  "active_certification": false,
   "allowed_for_live_execution": false,
   "append": false,
   "audit_failures": [],
@@ -11,7 +12,7 @@
   "certified_merged_main_summary_hash": "34b7c8628e28c436a2b18a1d9598077d2e08e0eab09009748e06c2ed41eb9074",
   "claim_boundary": "underlying_descriptive_outcomes_only",
   "code_sha": "648da6914959925ca1d10775aad3ce3f5c269f93",
-  "decision": "ORB_OUTCOMES_MEASURED",
+  "decision": "AUDIT_INVALID",
   "duplicate_directional_exposure_count": 1,
   "is_order_action": false,
   "mode": "RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT_EVIDENCE",
@@ -70,7 +71,7 @@
     }
   },
   "read_only": true,
-  "reason": "Dual independent full-corpus outcome runs produced matching semantic hashes and passed strict audit.",
+  "reason": "Superseded: prior outcome certification is withdrawn pending corrected horizon, source-integrity, overlap, and independent-oracle repairs.",
   "run_a_dir": "/tmp/orb-certified-outcomes-648da691-a",
   "run_a_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
   "run_b_dir": "/tmp/orb-certified-outcomes-648da691-b",
@@ -83,5 +84,9 @@
     "MEASURED": 2206,
     "NO_LEGAL_ENTRY": 9
   },
+  "superseded_outcome_semantic_hash": "84d031bf046fcc35c4abd2c8554e0042a94873a05d057f45b651fc139426380a",
+  "superseded_run_a_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
+  "superseded_run_b_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
+  "supersedes_prior_verdict": "ORB_OUTCOMES_MEASURED",
   "timestamp": "2026-07-19T04:35:00+05:30"
 }
