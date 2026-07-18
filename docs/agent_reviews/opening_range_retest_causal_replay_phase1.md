@@ -2,8 +2,8 @@
 
 mode: RESEARCH_REPLAY_REVIEW
 candidate_id: opening_range_retest_causal_replay_phase1_review
-decision: AUDIT_INVALID
-reason: Hardening for PR #668 is still in progress, so prior full-ensemble outputs are diagnostic only and not certifying after replay-code changes.
+decision: OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY
+reason: Two full-corpus ensembles on frozen clean commit d977e69efecfe7c9702e6b57290616e491671773 converged on identical replay semantics and both independent audits passed on Saturday, July 18, 2026.
 timestamp: 2026-07-18
 is_order_action: false
 broker_api_called: false
@@ -12,53 +12,54 @@ source: docs/agent_reviews/opening_range_retest_causal_replay_phase1.md
 **Agent Work Contract**
 source_agent: Codex
 action: HARDEN_PR
-title: Close ORB replay proof-contract and evidence gaps for PR #668
-scope: Opening Range Retest replay hardening, certifying artifact structure, independent audit, and final bounded evidence publication only
-requested_paths: research/opening_range_retest, scripts/generate_opening_range_retest_causal_replay.py, scripts/audit_opening_range_retest_causal_replay.py, tests/test_opening_range_retest_causal_replay.py, docs/agent_reviews/opening_range_retest_causal_replay_*
-allowed_paths: docs/agent_reviews, research/opening_range_retest, scripts/generate_opening_range_retest_causal_replay.py, scripts/audit_opening_range_retest_causal_replay.py, tests/test_opening_range_retest_causal_replay.py, tests/test_opening_range_retest_oracle_reconciliation.py, tests/test_opening_range_retest_merge_certification.py
-forbidden_paths: strategies/, core/, config/, broker adapters, runtime execution paths, dashboard, live credentials, shared corpus roots
-expected_tests: pytest ORB replay suites, agent review evidence validation, unified CE gates, final bounded artifact audit
-acceptance_proof: Two authoritative full-corpus ensembles on one frozen clean commit must converge and the republished bounded artifacts must audit clean.
+title: Complete ORB replay certification hardening and bounded evidence publication for PR #668
+scope: Opening Range Retest replay contract hardening, shard certification, oracle reconciliation proof, independent audit strictness, bounded evidence publication, and PR/body/check follow-through only
+requested_paths: research/opening_range_retest, scripts/generate_opening_range_retest_causal_replay.py, scripts/audit_opening_range_retest_causal_replay.py, tests/test_four_strategy_contract_freeze.py, tests/test_opening_range_retest_*.py, docs/agent_reviews/opening_range_retest_causal_replay_*
+allowed_paths: docs/agent_reviews, research/opening_range_retest, scripts/generate_opening_range_retest_causal_replay.py, scripts/audit_opening_range_retest_causal_replay.py, tests/test_four_strategy_contract_freeze.py, tests/test_opening_range_retest_causal_replay.py, tests/test_opening_range_retest_temporal_fixture_contract.py, tests/test_opening_range_retest_oracle_reconciliation.py, tests/test_opening_range_retest_merge_certification.py
+forbidden_paths: strategies/, core/, config/, broker adapters, runtime execution paths, live credentials, shared corpus roots, main.py, run_live.sh
+expected_tests: ORB replay suites three times, ORB contract/oracle/merge/audit coverage, py_compile, ruff, git diff --check, agent review evidence, Minerva, Evidence, Cerberus, unified CE, full repo pytest
+acceptance_proof: Replay artifacts must certify a clean frozen SHA, strict shard completeness, strict oracle reconciliation, ledger sidecars, independent audit recomputation, and cross-topology semantic equality.
 
 **Scope Guard**
-In scope: research-only ORB replay hardening, shard certification, oracle reconciliation, audit strictness, evidence contract compliance, and final bounded artifact regeneration.
-Out of scope: production strategy logic, runtime wiring, broker/risk/feed code, strategy thresholds, live or paper execution behavior, and unrelated preparation branches beyond read-only verification.
-Files not touched: strategies/, core/, config/, credentials, runtime live paths, broker code, and shared authoritative corpus roots.
+In scope: research-only ORB replay contract identity, shard merge strictness, oracle/control proofs, bounded evidence artifacts, and PR evidence updates.
+Out of scope: production strategy logic, broker calls, risk/feed/runtime wiring, live or paper execution behavior, strategy threshold changes, fills, slippage, or profitability claims.
+Files not touched: strategies/, core/, config/, credentials, live runtime paths, broker code, and authoritative corpus roots.
 
 **Grill Me Review**
-Weak assumption: prior 12-shard and 13-shard outputs remained certifying after replay code changed.
-Failure mode: merged artifacts could agree on candidate hashes while hiding shard-identity drift, dirty-worktree execution, incomplete source universe, or ledger tampering.
-Current assessment: not ready until replay identity, source-universe completeness, oracle reconciliation, and independent audit are re-proven on the post-hardening commit.
+Original failure: commit `f743620eda4eafccaff43a1ae70a7a7336f839d2` was diagnostic only because it did not fully certify code SHA/clean-state identity, profile identity resolution, ledger sidecars, or the independent merge/audit proof set.
+Final proof: diagnostic ensembles on `f743620e` were stopped, the missing hardening was added, two new frozen commits were created, and the final clean checkpoint `d977e69efecfe7c9702e6b57290616e491671773` produced matching 12-shard and 13-shard results with successful independent audits.
+Remaining risk: this proves causal replay integrity only for the selected historical corpus and frozen manifest, not execution truth or economic edge.
 
 **Hermes Review**
-Boundary status: pass so far on production isolation, because all current work remains under research/docs/tests/scripts surfaces.
-Boundary risk: evidence files must not imply production readiness, exact VWAP truth, fills, slippage, or profitability.
-Constraint: replay hardening may inspect production strategy outputs but must not edit production strategy files or runtime wiring.
+Boundary status: pass. The work stayed under research, tests, scripts, and `docs/agent_reviews`.
+Architecture result: shard partitioning is deterministic by SHA-256 canonical session key, merge rejects incomplete or mixed identity, and the auditor independently recomputes semantic evidence before accepting READY.
+Constraint kept: Child B oracle hardening was integrated by exact patch equivalence, not by broad file similarity or runtime wiring.
 
 **GSD Review**
-Purpose: convert the current ORB PR from narrative replay evidence into certifying, independently auditable replay proof.
-Files changed so far: ORB replay package, generator/audit scripts, replay tests, bounded ORB artifacts, and this review file.
-Evidence so far: local ORB suites pass, prior ensemble A/B matched on published hashes before this hardening pass, and current PR gates identify exact evidence and test-reality gaps.
-Risks: certifying merge hardening and final rerun are still pending; this document is intentionally not a final acceptance verdict yet.
-Next PR action: integrate merge-owner hardening, rerun authoritative ensembles, republish artifacts, rerun all local gates, then update this review to final READY or explicit failure.
+Implementation result: replay contract identity was completed, merge fail-closed conditions were tightened, ledger sidecars were enforced before parse, the auditor was upgraded to recompute ledger and execution metadata evidence, and negative tests were added for mixed SHA, dirty shard, absent ledger sidecar, ledger count mismatch, and ledger tampering boundaries.
+Frozen implementation commits: `e17b7e54457b508cc0a02948ff42b2f7431d3583` closed the main certification gap set, and `d977e69efecfe7c9702e6b57290616e491671773` fixed the auditor ledger-order defect that invalidated the prior rerun.
+Published evidence: contract, source manifest, summary, and bounded candidate ledger were regenerated from the converged `d977e69e` ensemble output.
 
 **QA / Safety Review**
-Safety boundary: read-only replay only, no order placement, no broker calls, no live execution permission, no write into authoritative corpus roots.
-Current proof gaps: execution identity fields, source-universe completeness, stricter shard merge, and repository evidence contract compliance are not all closed on the current PR head.
-Test-reality gap: `tests/test_opening_range_retest_causal_replay.py` triggered Minerva fake-confidence rules and is being hardened to behavior proof.
+Safety boundary: read-only replay only; no order placement, no broker calls, no live execution permission, and no writes into source corpus roots.
+Certifying identity now recorded and checked: code SHA `d977e69efecfe7c9702e6b57290616e491671773`, clean worktree, production file SHA-256 `06be67cf8bac5b4d4901929b77e638c726a6b4910f646d20780e584327144b2e`, contract hash `6c0a9f1a5bee45e9404b54de86eecadfb1861561a3eee0aa76f03bf217a2e1a8`, requested profile `opening_range_retest_v1`, resolved profile `opening_range_breakout_v1`, resolution source `COMPATIBILITY_ALIAS`, runtime profile hash `80e9589866186bbc73f2a5e4530a96ae2b62d86ec5062e60f7eecbfe11a7a064`, dataset manifest SHA-256 `cdba301fa89cfe428d4fd143dda99595e7f8044e681b393731c0e10e0ae18a88`, inventory SHA-256 `29f29443cf99606081f4276132e9747f1dcc1671a061093af8c8b8dc26c1902e`, and source-universe hash `cf4cc9cacb2db3a2f9cdc006465ebd5f8af6e6146e6a6a59048e1af38f2393bc` over 1512 selected records.
+Cross-topology semantics: both ensembles converged to candidate hash `53c8cf67f33d1e958bc2ffa1730c00c86d222e67ae76d2e865da6962892e1d24` and canonical summary hash `e8012eaa521e6bfa90491cb4d244c49055cc4be21fa2d480a0acc0fb45d9a9eb`.
 
 **Acceptance Proof**
-Current status: not yet satisfied.
-Required final proof: one frozen clean commit, dirty-worktree rejection verified, shard completeness verified, oracle reconciliation upgraded to full temporal identity, independent artifact audit passes, and both authoritative full-corpus ensembles converge on candidate and canonical summary hashes after hardening.
+Current status: satisfied for the stated replay boundary.
+Topology A: 12 shards, root `/tmp/opening-range-retest-certifying-a-d977e69e`, merge READY, audit READY, elapsed runtime `24981.367823582957` seconds.
+Topology B: 13 shards, root `/tmp/opening-range-retest-certifying-b-d977e69e`, merge READY, audit READY, elapsed runtime `25850.240662290133` seconds.
+Independent bounded evidence: `docs/agent_reviews/opening_range_retest_causal_replay_candidate_ledger_v1.json` publishes all 2215 candidate records plus counts by symbol, direction, session, duplicate-setup scan results, and proposal-ready bounds for independent recomputation.
 
 **Runtime Proof Required After Merge**
-Required after merge: rerun the authoritative ORB replay from the merged main branch, re-audit bounded artifacts, and confirm the merged branch still produces the certifying verdict on a clean worktree.
-Not proven yet: runtime behavior after merging into `main`, exact VWAP truth, option execution truth, slippage/fill truth, profitability, paper readiness, or live readiness.
+Required after merge to `main`: rerun the same bounded replay from the merged main branch on a clean worktree, regenerate the bounded evidence set, and confirm the same candidate and canonical summary hashes on that merged head.
+Not proven by this PR state: post-merge runtime stability, regenerated-manifest byte identity from changing source roots, or any live execution property.
 
 **What This PR Does Not Prove**
-This PR does not prove broker safety, live execution safety, exact VWAP provenance, option quote/depth truth, fills, slippage, profitability, paper readiness, or production readiness.
-This PR also does not prove that the stale historical four-strategy manifest can still be regenerated byte-for-byte from today’s live source roots.
+This PR proves causal signal replay integrity only.
+It does not prove structural trading edge, exact VWAP truth, option execution truth, fills, spread behavior, latency, slippage, paper readiness, live readiness, or profitability.
+It also does not prove the historical manifest can be regenerated byte-for-byte from future source roots; reproducibility remains bounded to the published manifest and inventory artifacts used by the certified rerun.
 
 **Human Approval**
-Human approval required before merge because the PR changes certifying replay evidence semantics and repository-published bounded artifacts.
-Current merge recommendation: do not merge PR #668 until the hardening rerun and final independent audit complete.
+Human approval is still required before merge because this PR republishes certifying replay evidence and changes the acceptance boundary for ORB research artifacts.
+Current merge recommendation: do not merge PR #668 automatically; merge only after the exact remote-head workflows are green and the review state is explicitly accepted by a human.

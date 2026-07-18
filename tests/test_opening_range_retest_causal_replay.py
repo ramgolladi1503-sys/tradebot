@@ -600,4 +600,9 @@ def test_different_shard_counts_reconstruct_identical_full_semantics(tmp_path: P
         merged_hashes.add((merged.summary["candidate_semantic_hash"], merged.summary["canonical_summary_semantic_hash"]))
         assert merged.summary["candidate_semantic_hash"] == full_run.summary["candidate_semantic_hash"]
         assert merged.summary["canonical_summary_semantic_hash"] == full_run.summary["canonical_summary_semantic_hash"]
-    assert len(merged_hashes) == 1
+    assert merged_hashes == {
+        (
+            full_run.summary["candidate_semantic_hash"],
+            full_run.summary["canonical_summary_semantic_hash"],
+        )
+    }

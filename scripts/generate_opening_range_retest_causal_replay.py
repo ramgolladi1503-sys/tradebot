@@ -11,18 +11,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from research.opening_range_retest.replay_engine import (
-    LEDGER_ARTIFACT_FILENAME,
-    merge_replay_artifacts,
-    run_replay,
-    write_replay_artifacts,
-)
+
+def _replay_engine_exports():
+    from research.opening_range_retest.replay_engine import (
+        LEDGER_ARTIFACT_FILENAME,
+        merge_replay_artifacts,
+        run_replay,
+        write_replay_artifacts,
+    )
+
+    return (
+        LEDGER_ARTIFACT_FILENAME,
+        merge_replay_artifacts,
+        run_replay,
+        write_replay_artifacts,
+    )
 
 
 def _default_ledger_path(*, output_dir: Path, shard_count: int | None, shard_index: int | None) -> Path:
+    ledger_artifact_filename, _, _, _ = _replay_engine_exports()
     docs_dir = PROJECT_ROOT / "docs" / "agent_reviews"
     if output_dir.resolve() != docs_dir.resolve():
-        return output_dir / LEDGER_ARTIFACT_FILENAME
+        return output_dir / ledger_artifact_filename
     if shard_count is not None and shard_index is not None:
         return (
             PROJECT_ROOT
@@ -35,6 +45,7 @@ def _default_ledger_path(*, output_dir: Path, shard_count: int | None, shard_ind
 
 
 def main() -> int:
+    _, merge_replay_artifacts, run_replay, write_replay_artifacts = _replay_engine_exports()
     parser = argparse.ArgumentParser(description="Generate Phase 1 opening-range-retest causal replay artifacts.")
     parser.add_argument(
         "--manifest",
