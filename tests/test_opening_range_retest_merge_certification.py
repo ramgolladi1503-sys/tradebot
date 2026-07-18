@@ -19,6 +19,38 @@ from research.opening_range_retest.replay_engine import (
 from research.opening_range_retest.replay_controls import ReplaySourceSelectionError
 
 
+def _summary_to_manifest_shard_metadata(summary_metadata: dict[str, object]) -> dict[str, object]:
+    return {
+        "shard_count": summary_metadata.get("shard_count"),
+        "shard_index": summary_metadata.get("shard_index"),
+        "is_sharded_run": summary_metadata.get("is_sharded_run"),
+        "merged_from_shards": summary_metadata.get("merged_from_shards", False),
+        "selected_record_count_before_sharding": summary_metadata.get("selected_file_count_before_sharding"),
+        "selected_record_count_after_sharding": summary_metadata.get("selected_file_count_after_sharding"),
+        "merged_shard_indexes": list(summary_metadata.get("merged_shard_indexes") or []),
+    }
+
+
+def _normalized_for_contract(metadata: dict[str, object], *, kind: str) -> dict[str, object]:
+    if kind == "summary":
+        before = metadata.get("selected_file_count_before_sharding")
+        after = metadata.get("selected_file_count_after_sharding")
+    elif kind == "manifest":
+        before = metadata.get("selected_record_count_before_sharding")
+        after = metadata.get("selected_record_count_after_sharding")
+    else:
+        raise ValueError(kind)
+    return {
+        "shard_count": metadata.get("shard_count"),
+        "shard_index": metadata.get("shard_index"),
+        "is_sharded_run": metadata.get("is_sharded_run"),
+        "merged_from_shards": metadata.get("merged_from_shards", False),
+        "selected_count_before_sharding": before,
+        "selected_count_after_sharding": after,
+        "merged_shard_indexes": list(metadata.get("merged_shard_indexes") or []),
+    }
+
+
 def _write_sidecar(path: Path) -> None:
     sha = hashlib.sha256(path.read_bytes().rstrip(b"\n")).hexdigest()
     path.with_suffix(path.suffix + ".sha256").write_text(f"{sha}  {path.name}\n", encoding="utf-8")
@@ -26,6 +58,31 @@ def _write_sidecar(path: Path) -> None:
 
 def _rewrite_json(path: Path, payload: object) -> None:
     path.write_bytes(canonical_json_bytes(payload) + b"\n")
+
+
+def _align_summary_to_live_git_state(artifact_dir: Path) -> None:
+    summary_path = artifact_dir / SUMMARY_ARTIFACT_FILENAME
+    contract = build_replay_contract_matrix().to_dict()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    live_sha = subprocess.check_output(
+        ["git", "-C", str(Path(__file__).resolve().parents[1]), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+    live_clean = not bool(
+        subprocess.check_output(
+            ["git", "-C", str(Path(__file__).resolve().parents[1]), "status", "--porcelain=v1"],
+            text=True,
+        ).splitlines()
+    )
+    summary["git_commit_sha"] = live_sha
+    summary["worktree_clean"] = live_clean
+    summary["execution_identity"] = {
+        **_execution_identity(contract, inventory_sha256=str(summary["inventory_sha256"])),
+        "git_commit_sha": live_sha,
+        "worktree_clean": live_clean,
+    }
+    _rewrite_json(summary_path, summary)
+    _write_sidecar(summary_path)
 
 
 def _record(*, symbol: str, session_date: str, logical_path: str, source_root: str, sha256: str) -> dict[str, object]:
@@ -169,17 +226,36 @@ def _build_shard_artifacts(tmp_path: Path, *, shard_count: int = 2) -> list[Path
         shard_records = [record for index, record in enumerate(combined_records) if index % shard_count == shard_index]
         ledger = shard_ledgers.get(shard_index, [])
         candidate_hash = hashlib.sha256(canonical_json_bytes(ledger)).hexdigest()
+        is_sharded_run = shard_count > 1
         source_manifest = {
             "schema_version": 1,
             "strategy_id": contract["strategy_id"],
             "inventory_resolution": inventory_resolution,
             "records": shard_records,
+            "partition_assignments": [
+                {
+                    "symbol": record["symbol"],
+                    "session_date": record["session_date"],
+                    "logical_path": record["logical_path"],
+                    "selected_source_sha256": record["sha256"],
+                    "canonical_session_key": canonical_json_bytes(
+                        {
+                            "logical_path": record["logical_path"],
+                            "selected_source_sha256": record["sha256"],
+                            "session_date": record["session_date"],
+                            "symbol": record["symbol"],
+                        }
+                    ).decode("utf-8"),
+                    "shard_index": shard_index,
+                }
+                for record in shard_records
+            ],
             "selection_summary": _selection_summary(shard_records),
             "full_source_universe": dict(full_source_universe),
             "shard_metadata": {
                 "shard_count": shard_count,
                 "shard_index": shard_index,
-                "is_sharded_run": True,
+                "is_sharded_run": is_sharded_run,
                 "selected_record_count_before_sharding": len(combined_records),
                 "selected_record_count_after_sharding": len(shard_records),
                 "merged_from_shards": False,
@@ -189,7 +265,7 @@ def _build_shard_artifacts(tmp_path: Path, *, shard_count: int = 2) -> list[Path
         summary_shard_metadata = {
             "shard_count": shard_count,
             "shard_index": shard_index,
-            "is_sharded_run": True,
+            "is_sharded_run": is_sharded_run,
             "merged_from_shards": False,
             "selected_file_count_before_sharding": len(combined_records),
             "selected_file_count_after_sharding": len(shard_records),
@@ -299,6 +375,59 @@ def test_merge_replay_artifacts_requires_complete_consistent_authoritative_shard
     assert merged.summary["shard_metadata"]["merged_from_shards"] is True
     assert merged.summary["full_source_universe"]["selected_record_count_before_sharding"] == 2
     assert merged.source_manifest["selection_summary"]["selected_file_count"] == 2
+    assert _normalized_for_contract(merged.summary["shard_metadata"], kind="summary") == _normalized_for_contract(
+        merged.source_manifest["shard_metadata"],
+        kind="manifest",
+    )
+
+
+def test_shard_metadata_contract_for_unsharded_child_and_merged_states(tmp_path: Path) -> None:
+    unsharded_summary = {
+        "shard_count": 1,
+        "shard_index": 0,
+        "is_sharded_run": False,
+        "merged_from_shards": False,
+        "selected_file_count_before_sharding": 5,
+        "selected_file_count_after_sharding": 5,
+        "merged_shard_indexes": [0],
+    }
+    unsharded_manifest = _summary_to_manifest_shard_metadata(unsharded_summary)
+    assert _normalized_for_contract(unsharded_summary, kind="summary") == _normalized_for_contract(
+        unsharded_manifest,
+        kind="manifest",
+    )
+
+    child_summary = {
+        "shard_count": 12,
+        "shard_index": 3,
+        "is_sharded_run": True,
+        "merged_from_shards": False,
+        "selected_file_count_before_sharding": 1512,
+        "selected_file_count_after_sharding": 126,
+        "merged_shard_indexes": [3],
+    }
+    child_manifest = _summary_to_manifest_shard_metadata(child_summary)
+    assert _normalized_for_contract(child_summary, kind="summary") == _normalized_for_contract(
+        child_manifest,
+        kind="manifest",
+    )
+
+    artifact_dirs = _build_shard_artifacts(tmp_path, shard_count=2)
+    merged = merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+    assert merged.summary["shard_metadata"] == {
+        "shard_count": 2,
+        "shard_index": None,
+        "is_sharded_run": True,
+        "partition_rule": "sha256(canonical_session_key) mod shard_count",
+        "merged_from_shards": True,
+        "selected_file_count_before_sharding": 2,
+        "selected_file_count_after_sharding": 2,
+        "merged_shard_indexes": [0, 1],
+    }
+    assert _normalized_for_contract(merged.summary["shard_metadata"], kind="summary") == _normalized_for_contract(
+        merged.source_manifest["shard_metadata"],
+        kind="manifest",
+    )
 
 
 def test_merge_replay_artifacts_fails_closed_on_tampered_ledger(tmp_path: Path) -> None:
@@ -369,6 +498,137 @@ def test_merge_replay_artifacts_fails_closed_on_source_universe_mismatch(tmp_pat
 
     with pytest.raises(ReplaySourceSelectionError, match="source_universe_hash_mismatch"):
         merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+
+
+@pytest.mark.parametrize(
+    ("target_file", "metadata_field", "tampered_value", "expected"),
+    (
+        (SOURCE_MANIFEST_ARTIFACT_FILENAME, "shard_count", 2, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "shard_count", 2, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "shard_index", 1, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "is_sharded_run", True, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "merged_from_shards", True, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "merged_shard_indexes", [], "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "merged_shard_indexes", [0, 0], "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "selected_file_count_before_sharding", 99, "summary_manifest_shard_metadata_mismatch"),
+        (SUMMARY_ARTIFACT_FILENAME, "selected_file_count_after_sharding", 99, "summary_manifest_shard_metadata_mismatch"),
+    ),
+)
+def test_artifact_auditor_rejects_shard_metadata_mismatches(
+    tmp_path: Path,
+    target_file: str,
+    metadata_field: str,
+    tampered_value: object,
+    expected: str,
+) -> None:
+    artifact_dir = _build_shard_artifacts(tmp_path, shard_count=1)[0]
+    target_path = artifact_dir / target_file
+    payload = json.loads(target_path.read_text(encoding="utf-8"))
+    payload["shard_metadata"][metadata_field] = tampered_value
+    _rewrite_json(target_path, payload)
+    _write_sidecar(target_path)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "audit_opening_range_retest_causal_replay.py"),
+            "--artifact-dir",
+            str(artifact_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert expected in proc.stderr
+
+
+@pytest.mark.parametrize(
+    ("summary_updates", "expected"),
+    (
+        ({"is_sharded_run": True}, "unsharded_run_must_not_be_marked_sharded"),
+        ({"shard_count": 2, "shard_index": 0, "is_sharded_run": False, "merged_shard_indexes": [0]}, "child_shard_must_be_marked_sharded"),
+        ({"shard_count": 2, "shard_index": 0, "is_sharded_run": True, "merged_shard_indexes": [1]}, "child_shard_merged_indexes_invalid"),
+    ),
+)
+def test_artifact_auditor_rejects_internally_matching_illegal_shard_states(
+    tmp_path: Path,
+    summary_updates: dict[str, object],
+    expected: str,
+) -> None:
+    artifact_dir = _build_shard_artifacts(tmp_path, shard_count=1)[0]
+    summary_path = artifact_dir / SUMMARY_ARTIFACT_FILENAME
+    manifest_path = artifact_dir / SOURCE_MANIFEST_ARTIFACT_FILENAME
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    summary["shard_metadata"].update(summary_updates)
+    manifest["shard_metadata"].update(_summary_to_manifest_shard_metadata(summary["shard_metadata"]))
+    _rewrite_json(summary_path, summary)
+    _write_sidecar(summary_path)
+    _rewrite_json(manifest_path, manifest)
+    _write_sidecar(manifest_path)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "audit_opening_range_retest_causal_replay.py"),
+            "--artifact-dir",
+            str(artifact_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert expected in proc.stderr
+
+
+@pytest.mark.parametrize(
+    ("mutator", "expected"),
+    (
+        (
+            lambda manifest: manifest["partition_assignments"].pop(),
+            "partition_assignment_count_mismatch",
+        ),
+        (
+            lambda manifest: manifest["partition_assignments"][0].update({"canonical_session_key": "{}"}),
+            "partition_assignment_session_key_mismatch",
+        ),
+        (
+            lambda manifest: manifest["partition_assignments"][0].update({"shard_index": 99}),
+            "partition_assignment_shard_index_mismatch",
+        ),
+    ),
+)
+def test_artifact_auditor_rejects_partition_assignment_mismatches(
+    tmp_path: Path,
+    mutator,
+    expected: str,
+) -> None:
+    artifact_dir = _build_shard_artifacts(tmp_path, shard_count=1)[0]
+    _align_summary_to_live_git_state(artifact_dir)
+    manifest_path = artifact_dir / SOURCE_MANIFEST_ARTIFACT_FILENAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mutator(manifest)
+    _rewrite_json(manifest_path, manifest)
+    _write_sidecar(manifest_path)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "audit_opening_range_retest_causal_replay.py"),
+            "--artifact-dir",
+            str(artifact_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode != 0
+    assert expected in proc.stderr
 
 
 def test_artifact_audit_fails_closed_on_tampered_ledger(tmp_path: Path) -> None:

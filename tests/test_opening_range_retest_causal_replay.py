@@ -399,6 +399,7 @@ def test_run_replay_and_write_artifacts_are_deterministic(tmp_path: Path) -> Non
     write_replay_artifacts(run_b, output_dir=out_b, ledger_path=tmp_path / "ledger_b.json")
     summary_a = json.loads((out_a / "opening_range_retest_causal_replay_summary_v1.json").read_text())
     summary_b = json.loads((out_b / "opening_range_retest_causal_replay_summary_v1.json").read_text())
+    source_manifest_a = json.loads((out_a / "opening_range_retest_causal_replay_source_manifest_v1.json").read_text())
     assert summary_a["candidate_semantic_hash"] == summary_b["candidate_semantic_hash"]
     assert summary_a["canonical_summary_semantic_hash"] == summary_b["canonical_summary_semantic_hash"]
     assert (tmp_path / "ledger_a.json.sha256").exists()
@@ -406,6 +407,14 @@ def test_run_replay_and_write_artifacts_are_deterministic(tmp_path: Path) -> Non
     assert isinstance(summary_a["execution_identity"]["worktree_clean"], bool)
     assert summary_a["execution_identity"]["requested_profile_id"] == "opening_range_retest_v1"
     assert summary_a["execution_identity"]["resolved_profile_id"] == "opening_range_breakout_v1"
+    assert source_manifest_a["shard_metadata"]["merged_from_shards"] is False
+    assert source_manifest_a["shard_metadata"]["merged_shard_indexes"] == [0]
+    assert source_manifest_a["shard_metadata"]["selected_record_count_before_sharding"] == (
+        summary_a["shard_metadata"]["selected_file_count_before_sharding"]
+    )
+    assert source_manifest_a["shard_metadata"]["selected_record_count_after_sharding"] == (
+        summary_a["shard_metadata"]["selected_file_count_after_sharding"]
+    )
     for payload in (
         json.loads((out_a / "opening_range_retest_causal_replay_contract_v1.json").read_text()),
         json.loads((out_a / "opening_range_retest_causal_replay_source_manifest_v1.json").read_text()),
