@@ -207,10 +207,12 @@ def main() -> int:
         expected_key = _canonical_session_key(record)
         if str(assignment.get("canonical_session_key") or "") != expected_key:
             raise SystemExit("partition_assignment_session_key_mismatch")
+        assignment_index = assignment.get("shard_index")
+        actual_index = int(assignment_index) if assignment_index is not None else -1
         expected_index = _partition_assignment(record, shard_count=shard_count)
-        if int(assignment.get("shard_index") or -1) != expected_index:
+        if actual_index != expected_index:
             raise SystemExit("partition_assignment_shard_index_mismatch")
-        if not merged_from_shards and int(assignment.get("shard_index") or -1) != int(shard_index):
+        if not merged_from_shards and actual_index != int(shard_index):
             raise SystemExit("record_not_assigned_to_current_shard")
     manifest_selection_summary = dict(source_manifest.get("selection_summary") or {})
     if int(manifest_selection_summary.get("selected_file_count") or 0) != len(records):
