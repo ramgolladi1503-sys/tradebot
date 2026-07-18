@@ -34,6 +34,22 @@ from tests.test_opening_range_retest_temporal_fixture_contract import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _certifying_git_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    from research.opening_range_retest.replay_engine import GitExecutionState
+
+    monkeypatch.setattr(
+        "research.opening_range_retest.replay_engine._git_execution_state",
+        lambda: GitExecutionState(
+            commit_sha="f743620eda4eafccaff43a1ae70a7a7336f839d2",
+            worktree_clean=True,
+            dirty_path_count=0,
+            status_output=(),
+            error=None,
+        ),
+    )
+
+
 def _write_session_parquet(path: Path, rows: tuple[tuple[int, float, float, float, float], ...], *, symbol: str = "NSE_INDEX|NIFTY 50") -> None:
     bars = _bars(rows)
     frame = pd.DataFrame(
@@ -385,6 +401,11 @@ def test_run_replay_and_write_artifacts_are_deterministic(tmp_path: Path) -> Non
     summary_b = json.loads((out_b / "opening_range_retest_causal_replay_summary_v1.json").read_text())
     assert summary_a["candidate_semantic_hash"] == summary_b["candidate_semantic_hash"]
     assert summary_a["canonical_summary_semantic_hash"] == summary_b["canonical_summary_semantic_hash"]
+    assert (tmp_path / "ledger_a.json.sha256").exists()
+    assert summary_a["execution_identity"]["git_commit_sha"]
+    assert isinstance(summary_a["execution_identity"]["worktree_clean"], bool)
+    assert summary_a["execution_identity"]["requested_profile_id"] == "opening_range_retest_v1"
+    assert summary_a["execution_identity"]["resolved_profile_id"] == "opening_range_breakout_v1"
     for payload in (
         json.loads((out_a / "opening_range_retest_causal_replay_contract_v1.json").read_text()),
         json.loads((out_a / "opening_range_retest_causal_replay_source_manifest_v1.json").read_text()),

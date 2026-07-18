@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ SUMMARY_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_summary_v1.json"
 LEDGER_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_ledger_v1.json"
 EVIDENCE_MODE = "RESEARCH_REPLAY_ARTIFACT"
 EVIDENCE_CANDIDATE_ID = "opening_range_retest_causal_replay_phase1"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _neutral_regime() -> MovementRegimeResult:
@@ -175,6 +177,15 @@ class ReplayShardSpec:
         return f"shard-{self.shard_index:02d}-of-{self.shard_count:02d}"
 
 
+@dataclass(frozen=True)
+class GitExecutionState:
+    commit_sha: str | None
+    worktree_clean: bool
+    dirty_path_count: int
+    status_output: tuple[str, ...]
+    error: str | None = None
+
+
 def _record_sort_key(record: SessionFileRecord) -> tuple[str, str, str, str]:
     return (record.symbol, record.session_date, record.logical_path, record.sha256)
 
@@ -310,6 +321,56 @@ def _merged_totals(summaries: list[dict[str, Any]], key: str) -> dict[str, int]:
 
 def _load_canonical_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _git_execution_state() -> GitExecutionState:
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if head.returncode != 0:
+            return GitExecutionState(
+                commit_sha=None,
+                worktree_clean=False,
+                dirty_path_count=0,
+                status_output=(),
+                error=(head.stderr or head.stdout).strip() or "git_rev_parse_failed",
+            )
+        status = subprocess.run(
+            ["git", "status", "--porcelain=v1"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode != 0:
+            return GitExecutionState(
+                commit_sha=head.stdout.strip() or None,
+                worktree_clean=False,
+                dirty_path_count=0,
+                status_output=(),
+                error=(status.stderr or status.stdout).strip() or "git_status_failed",
+            )
+        status_lines = tuple(line for line in status.stdout.splitlines() if line.strip())
+        return GitExecutionState(
+            commit_sha=head.stdout.strip() or None,
+            worktree_clean=not status_lines,
+            dirty_path_count=len(status_lines),
+            status_output=status_lines,
+            error=None,
+        )
+    except Exception as exc:
+        return GitExecutionState(
+            commit_sha=None,
+            worktree_clean=False,
+            dirty_path_count=0,
+            status_output=(),
+            error=str(exc),
+        )
 
 
 def _check_artifact_sidecar(path: Path) -> None:
@@ -564,9 +625,14 @@ def _execution_identity(contract: dict[str, Any], summary: dict[str, Any]) -> di
         "production_module": str(contract["production_module"]),
         "production_callable": str(contract["production_callable"]),
         "production_file_sha256": str(contract["production_file_sha256"]),
+        "requested_profile_id": str(contract["requested_profile_id"]),
+        "resolved_profile_id": str(contract["resolved_profile_id"]),
+        "profile_resolution_source": str(contract["profile_resolution_source"]),
         "runtime_profile_hash": str(contract["runtime_profile_hash"]),
         "dataset_manifest_hash": str(summary["dataset_manifest_hash"]),
         "inventory_sha256": str(summary.get("inventory_sha256")),
+        "git_commit_sha": str(summary.get("git_commit_sha") or ""),
+        "worktree_clean": bool(summary.get("worktree_clean")),
     }
 
 
@@ -651,6 +717,10 @@ def _validate_shard_identity(
     execution_identity = _execution_identity(contract, summary)
     if dict(summary.get("execution_identity") or {}) != execution_identity:
         raise ReplaySourceSelectionError("execution_identity_mismatch")
+    if not str(execution_identity.get("git_commit_sha") or "").strip():
+        raise ReplaySourceSelectionError("missing_code_sha_for_certifying_shard")
+    if not bool(execution_identity.get("worktree_clean")):
+        raise ReplaySourceSelectionError("dirty_shard_cannot_merge")
     full_source_universe = dict(source_manifest.get("full_source_universe") or {})
     if int(full_source_universe.get("selected_record_count_before_sharding") or 0) != int(
         summary_shard_metadata.get("selected_file_count_before_sharding") or 0
@@ -680,6 +750,7 @@ def run_replay(
 ) -> ReplayRunResult:
     started = perf_counter()
     contract = build_replay_contract_matrix().to_dict()
+    git_state = _git_execution_state()
     shard_spec = _coerce_shard_spec(shard_count=shard_count, shard_index=shard_index)
     resolution, selected = select_session_files(
         manifest_path=manifest_path,
@@ -786,6 +857,7 @@ def run_replay(
         },
         "valid_sessions_by_symbol": dict(sorted(Counter(record.symbol for record in selected).items())),
         "malformed_sessions_by_reason": {"rejected": malformed_rejections},
+        "candidate_count": len(sorted_emissions),
         "candidate_counts_by_symbol": dict(sorted(by_symbol.items())),
         "candidate_counts_by_direction": dict(sorted(by_direction.items())),
         "candidate_counts_by_session": dict(sorted(by_session.items())),
@@ -826,9 +898,20 @@ def run_replay(
         "claim_boundary": contract["source_data_claim_boundary"],
         "authoritative_inventory_resolved": authoritative_inventory_resolved,
         "diagnostic_mode": not authoritative_inventory_resolved,
+        "git_commit_sha": git_state.commit_sha,
+        "worktree_clean": git_state.worktree_clean,
+        "git_dirty_path_count": git_state.dirty_path_count,
         "phase1_verdict": "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY",
         "candidate_semantic_hash": candidate_semantic_hash,
-        "execution_identity": _execution_identity(contract, {"dataset_manifest_hash": contract["dataset_manifest_sha256"], "inventory_sha256": source_manifest["inventory_resolution"]["inventory_sha256"]}),
+        "execution_identity": _execution_identity(
+            contract,
+            {
+                "dataset_manifest_hash": contract["dataset_manifest_sha256"],
+                "inventory_sha256": source_manifest["inventory_resolution"]["inventory_sha256"],
+                "git_commit_sha": git_state.commit_sha,
+                "worktree_clean": git_state.worktree_clean,
+            },
+        ),
         "full_source_universe": dict(source_manifest["full_source_universe"]),
         "shard_metadata": {
             "shard_count": shard_spec.shard_count if shard_spec is not None else 1,
@@ -842,10 +925,13 @@ def run_replay(
     }
     if (
         not authoritative_inventory_resolved
+        or not str(git_state.commit_sha or "").strip()
+        or not git_state.worktree_clean
         or malformed_rejections != 0
         or oracle_mismatched != 0
         or (future_mutation_checked - future_mutation_passed) != 0
         or source_immutability["mismatched"] != 0
+        or parquet_read_count != len(selected)
         or int(source_manifest["selection_summary"]["selected_file_count"]) != len(selected)
         or int(source_manifest["full_source_universe"]["selected_record_count_before_sharding"]) != len(all_selected)
     ):
@@ -875,6 +961,7 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
             _check_artifact_sidecar(path)
         if not ledger_path.exists():
             raise ReplaySourceSelectionError(f"missing_ledger:{ledger_path}")
+        _check_artifact_sidecar(ledger_path)
         shard_payloads.append(
             {
                 "contract": _load_canonical_json(contract_path),
@@ -909,6 +996,21 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         raise ReplaySourceSelectionError(f"shard_coverage_incomplete:{shard_indexes}:expected={expected_indexes}")
     dataset_hashes = {str(summary["dataset_manifest_hash"]) for summary in summaries}
     inventory_hashes = {str(summary["inventory_sha256"]) for summary in summaries}
+    code_shas = {str(validation["execution_identity"].get("git_commit_sha") or "") for validation in shard_validations}
+    if len(code_shas) != 1:
+        raise ReplaySourceSelectionError("code_sha_mismatch_across_shards")
+    if not next(iter(code_shas)).strip():
+        raise ReplaySourceSelectionError("missing_code_sha_across_shards")
+    if any(not bool(validation["execution_identity"].get("worktree_clean")) for validation in shard_validations):
+        raise ReplaySourceSelectionError("dirty_shard_cannot_merge")
+    requested_profile_ids = {str(validation["execution_identity"].get("requested_profile_id") or "") for validation in shard_validations}
+    resolved_profile_ids = {str(validation["execution_identity"].get("resolved_profile_id") or "") for validation in shard_validations}
+    resolution_sources = {str(validation["execution_identity"].get("profile_resolution_source") or "") for validation in shard_validations}
+    runtime_profile_hashes = {str(validation["execution_identity"].get("runtime_profile_hash") or "") for validation in shard_validations}
+    if len(requested_profile_ids) != 1 or len(resolved_profile_ids) != 1 or len(resolution_sources) != 1:
+        raise ReplaySourceSelectionError("profile_identity_mismatch_across_shards")
+    if len(runtime_profile_hashes) != 1:
+        raise ReplaySourceSelectionError("profile_hash_mismatch_across_shards")
     execution_identities = {
         canonical_json_bytes(validation["execution_identity"]).decode("utf-8") for validation in shard_validations
     }
@@ -952,6 +1054,8 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
     )
     for payload in shard_payloads:
         shard_emissions = _sorted_emissions(_emission_from_payload(item) for item in payload["ledger"])
+        if len(shard_emissions) != int(payload["summary"].get("candidate_count") or 0):
+            raise ReplaySourceSelectionError("ledger_candidate_count_mismatch")
         _validate_ledger(
             shard_emissions,
             expected_candidate_hash=str(payload["summary"].get("candidate_semantic_hash")),
@@ -1008,6 +1112,7 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         },
         "valid_sessions_by_symbol": dict(sorted(Counter(record.symbol for record in combined_records).items())),
         "malformed_sessions_by_reason": {"rejected": malformed_rejections},
+        "candidate_count": len(combined_emissions),
         "candidate_counts_by_symbol": dict(sorted(by_symbol.items())),
         "candidate_counts_by_direction": dict(sorted(by_direction.items())),
         "candidate_counts_by_session": dict(sorted(by_session.items())),
@@ -1051,6 +1156,9 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         "claim_boundary": summaries[0]["claim_boundary"],
         "authoritative_inventory_resolved": True,
         "diagnostic_mode": False,
+        "git_commit_sha": shard_validations[0]["execution_identity"]["git_commit_sha"],
+        "worktree_clean": bool(shard_validations[0]["execution_identity"]["worktree_clean"]),
+        "git_dirty_path_count": 0,
         "phase1_verdict": "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY",
         "candidate_semantic_hash": candidate_semantic_hash,
         "execution_identity": shard_validations[0]["execution_identity"],
@@ -1071,6 +1179,7 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         or (future_checked - future_passed) != 0
         or source_immutability_mismatched != 0
         or malformed_rejections != 0
+        or len(combined_emissions) != int(merged_summary["candidate_count"])
         or int(source_manifest["selection_summary"]["selected_file_count"]) != len(combined_records)
         or int(source_manifest["full_source_universe"]["selected_record_count_before_sharding"]) != len(combined_records)
     ):
@@ -1112,6 +1221,10 @@ def write_replay_artifacts(run: ReplayRunResult, *, output_dir: Path, ledger_pat
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
         serialized = canonical_json_bytes([item.to_dict() for item in run.emissions]) + b"\n"
         ledger_path.write_bytes(serialized)
+        ledger_path.with_suffix(ledger_path.suffix + ".sha256").write_text(
+            f"{hashlib.sha256(serialized.rstrip(b'\n')).hexdigest()}  {ledger_path.name}\n",
+            encoding="utf-8",
+        )
     _ = perf_counter() - write_started
     return {
         "contract": contract_path,

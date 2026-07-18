@@ -59,6 +59,9 @@ class ReplayContractMatrix:
     production_callable: str
     production_module: str
     production_file_sha256: str
+    requested_profile_id: str
+    resolved_profile_id: str
+    profile_resolution_source: str
     runtime_profile_hash: str
     contract_bundle_sha256: str
     dataset_manifest_sha256: str
@@ -69,7 +72,9 @@ class ReplayContractMatrix:
 
 
 def build_replay_contract_matrix() -> ReplayContractMatrix:
-    profile = get_default_profile("opening_range_breakout_v1")
+    profile = get_default_profile("opening_range_retest_v1")
+    if profile is None:
+        raise RuntimeError("missing_opening_range_retest_profile")
     params = tuple(sorted(opening_range_breakout.REQUIRED_PROFILE_KEYS))
     payload = {
         "strategy_id": opening_range_breakout.STRATEGY_ID,
@@ -138,6 +143,9 @@ def build_replay_contract_matrix() -> ReplayContractMatrix:
         "production_callable": "strategies.movement.opening_range_breakout.generate_opening_range_retest_candidates",
         "production_module": "strategies.movement.opening_range_breakout",
         "production_file_sha256": sha256_file(STRATEGY_PATH),
+        "requested_profile_id": str(profile.requested_profile_id),
+        "resolved_profile_id": str(profile.resolved_profile_id),
+        "profile_resolution_source": str(profile.resolution_source),
         "runtime_profile_hash": str(profile.parameter_hash),
         "contract_bundle_sha256": sha256_file(CONTRACT_BUNDLE_PATH),
         "dataset_manifest_sha256": sha256_file(DATASET_MANIFEST_PATH),

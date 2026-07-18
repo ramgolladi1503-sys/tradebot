@@ -67,9 +67,14 @@ def _execution_identity(contract: dict[str, object], *, inventory_sha256: str) -
         "production_module": str(contract["production_module"]),
         "production_callable": str(contract["production_callable"]),
         "production_file_sha256": str(contract["production_file_sha256"]),
+        "requested_profile_id": str(contract["requested_profile_id"]),
+        "resolved_profile_id": str(contract["resolved_profile_id"]),
+        "profile_resolution_source": str(contract["profile_resolution_source"]),
         "runtime_profile_hash": str(contract["runtime_profile_hash"]),
         "dataset_manifest_hash": str(contract["dataset_manifest_sha256"]),
         "inventory_sha256": inventory_sha256,
+        "git_commit_sha": "f743620eda4eafccaff43a1ae70a7a7336f839d2",
+        "worktree_clean": True,
     }
 
 
@@ -212,6 +217,7 @@ def _build_shard_artifacts(tmp_path: Path, *, shard_count: int = 2) -> list[Path
                 str(record["symbol"]): 1 for record in shard_records
             },
             "malformed_sessions_by_reason": {"rejected": 0},
+            "candidate_count": len(ledger),
             "candidate_counts_by_symbol": {
                 str(entry["symbol"]): 1 for entry in ledger
             },
@@ -251,6 +257,8 @@ def _build_shard_artifacts(tmp_path: Path, *, shard_count: int = 2) -> list[Path
             "claim_boundary": contract["source_data_claim_boundary"],
             "authoritative_inventory_resolved": True,
             "diagnostic_mode": False,
+            "git_commit_sha": "f743620eda4eafccaff43a1ae70a7a7336f839d2",
+            "worktree_clean": True,
             "phase1_verdict": "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY",
             "candidate_semantic_hash": candidate_hash,
             "execution_identity": _execution_identity(contract, inventory_sha256=inventory_sha),
@@ -276,8 +284,7 @@ def _build_shard_artifacts(tmp_path: Path, *, shard_count: int = 2) -> list[Path
         ):
             path = artifact_dir / filename
             _rewrite_json(path, payload)
-            if filename != LEDGER_ARTIFACT_FILENAME:
-                _write_sidecar(path)
+            _write_sidecar(path)
         artifact_dirs.append(artifact_dir)
     return artifact_dirs
 
@@ -301,7 +308,54 @@ def test_merge_replay_artifacts_fails_closed_on_tampered_ledger(tmp_path: Path) 
     ledger[0]["setup_id"] = f"{ledger[0]['setup_id']}-tampered"
     _rewrite_json(ledger_path, ledger)
 
-    with pytest.raises(ReplaySourceSelectionError, match="ledger_candidate_hash_mismatch"):
+    with pytest.raises(ReplaySourceSelectionError, match="artifact_sidecar_hash_mismatch"):
+        merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+
+
+def test_merge_replay_artifacts_fails_closed_on_missing_ledger_sidecar(tmp_path: Path) -> None:
+    artifact_dirs = _build_shard_artifacts(tmp_path)
+    ledger_sidecar = artifact_dirs[0] / f"{LEDGER_ARTIFACT_FILENAME}.sha256"
+    ledger_sidecar.unlink()
+
+    with pytest.raises(ReplaySourceSelectionError, match="missing_sidecar"):
+        merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+
+
+def test_merge_replay_artifacts_fails_closed_on_dirty_certifying_shard(tmp_path: Path) -> None:
+    artifact_dirs = _build_shard_artifacts(tmp_path)
+    summary_path = artifact_dirs[0] / SUMMARY_ARTIFACT_FILENAME
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["worktree_clean"] = False
+    summary["execution_identity"]["worktree_clean"] = False
+    _rewrite_json(summary_path, summary)
+    _write_sidecar(summary_path)
+
+    with pytest.raises(ReplaySourceSelectionError, match="dirty_shard_cannot_merge"):
+        merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+
+
+def test_merge_replay_artifacts_fails_closed_on_mixed_code_sha(tmp_path: Path) -> None:
+    artifact_dirs = _build_shard_artifacts(tmp_path)
+    summary_path = artifact_dirs[1] / SUMMARY_ARTIFACT_FILENAME
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["git_commit_sha"] = "deadbeef"
+    summary["execution_identity"]["git_commit_sha"] = "deadbeef"
+    _rewrite_json(summary_path, summary)
+    _write_sidecar(summary_path)
+
+    with pytest.raises(ReplaySourceSelectionError, match="code_sha_mismatch_across_shards|execution_identity_mismatch"):
+        merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
+
+
+def test_merge_replay_artifacts_fails_closed_on_candidate_count_mismatch(tmp_path: Path) -> None:
+    artifact_dirs = _build_shard_artifacts(tmp_path)
+    summary_path = artifact_dirs[0] / SUMMARY_ARTIFACT_FILENAME
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["candidate_count"] = 99
+    _rewrite_json(summary_path, summary)
+    _write_sidecar(summary_path)
+
+    with pytest.raises(ReplaySourceSelectionError, match="ledger_candidate_count_mismatch|execution_identity_mismatch"):
         merge_replay_artifacts(shard_artifact_dirs=artifact_dirs)
 
 
@@ -337,4 +391,4 @@ def test_artifact_audit_fails_closed_on_tampered_ledger(tmp_path: Path) -> None:
     )
 
     assert proc.returncode != 0
-    assert "ledger_candidate_hash_mismatch" in proc.stderr
+    assert "sha256_mismatch" in proc.stderr or "artifact_sidecar_hash_mismatch" in proc.stderr

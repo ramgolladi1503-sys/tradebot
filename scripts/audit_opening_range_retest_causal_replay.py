@@ -5,6 +5,10 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _canonical_json_bytes(payload: object) -> bytes:
@@ -60,6 +64,28 @@ def _normalized_shard_metadata(metadata: dict[str, object], *, kind: str) -> dic
     }
 
 
+def _git_execution_state() -> tuple[str | None, bool]:
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if head.returncode != 0:
+        return None, False
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if status.returncode != 0:
+        return head.stdout.strip() or None, False
+    return head.stdout.strip() or None, not bool(status.stdout.splitlines())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit bounded opening-range-retest replay artifacts.")
     parser.add_argument("--artifact-dir", type=Path, default=Path("docs/agent_reviews"))
@@ -73,6 +99,7 @@ def main() -> int:
         _check_sha256(path)
     if not ledger_path.exists():
         raise SystemExit(f"missing_ledger:{ledger_path}")
+    _check_sha256(ledger_path)
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     contract = json.loads(contract_path.read_text(encoding="utf-8"))
     source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
@@ -107,12 +134,22 @@ def main() -> int:
         "production_module": str(contract["production_module"]),
         "production_callable": str(contract["production_callable"]),
         "production_file_sha256": str(contract["production_file_sha256"]),
+        "requested_profile_id": str(contract["requested_profile_id"]),
+        "resolved_profile_id": str(contract["resolved_profile_id"]),
+        "profile_resolution_source": str(contract["profile_resolution_source"]),
         "runtime_profile_hash": str(contract["runtime_profile_hash"]),
         "dataset_manifest_hash": str(summary["dataset_manifest_hash"]),
         "inventory_sha256": str(summary.get("inventory_sha256")),
+        "git_commit_sha": str(summary.get("git_commit_sha") or ""),
+        "worktree_clean": bool(summary.get("worktree_clean")),
     }
     if dict(summary.get("execution_identity") or {}) != execution_identity:
         raise SystemExit("execution_identity_mismatch")
+    live_git_sha, live_worktree_clean = _git_execution_state()
+    if str(execution_identity.get("git_commit_sha") or "") != str(live_git_sha or ""):
+        raise SystemExit("git_commit_sha_mismatch")
+    if bool(execution_identity.get("worktree_clean")) is not bool(live_worktree_clean):
+        raise SystemExit("worktree_clean_mismatch")
     records = list(source_manifest.get("records") or [])
     if len(records) != int(summary.get("selected_file_count") or 0):
         raise SystemExit("selected_file_count_mismatch")
@@ -140,9 +177,30 @@ def main() -> int:
         raise SystemExit("ledger_not_canonical_order")
     if len({_ledger_key(entry) for entry in ledger}) != len(ledger):
         raise SystemExit("duplicate_ledger_emission")
+    if len(ledger) != int(summary.get("candidate_count") or 0):
+        raise SystemExit("ledger_candidate_count_mismatch")
     ledger_hash = hashlib.sha256(_canonical_json_bytes(ledger)).hexdigest()
     if ledger_hash != str(summary.get("candidate_semantic_hash") or ""):
         raise SystemExit("ledger_candidate_hash_mismatch")
+    candidate_counts_by_symbol: dict[str, int] = {}
+    candidate_counts_by_direction: dict[str, int] = {}
+    candidate_counts_by_session: dict[str, int] = {}
+    for entry in ledger:
+        candidate_counts_by_symbol[str(entry.get("symbol") or "")] = candidate_counts_by_symbol.get(str(entry.get("symbol") or ""), 0) + 1
+        candidate_counts_by_direction[str(entry.get("direction") or "")] = candidate_counts_by_direction.get(str(entry.get("direction") or ""), 0) + 1
+        candidate_counts_by_session[str(entry.get("session_date") or "")] = candidate_counts_by_session.get(str(entry.get("session_date") or ""), 0) + 1
+    if dict(sorted(candidate_counts_by_symbol.items())) != dict(summary.get("candidate_counts_by_symbol") or {}):
+        raise SystemExit("candidate_counts_by_symbol_mismatch")
+    if dict(sorted(candidate_counts_by_direction.items())) != dict(summary.get("candidate_counts_by_direction") or {}):
+        raise SystemExit("candidate_counts_by_direction_mismatch")
+    if dict(sorted(candidate_counts_by_session.items())) != dict(summary.get("candidate_counts_by_session") or {}):
+        raise SystemExit("candidate_counts_by_session_mismatch")
+    earliest = min((str(entry.get("proposal_ready_at_iso") or "") for entry in ledger), default=None)
+    latest = max((str(entry.get("proposal_ready_at_iso") or "") for entry in ledger), default=None)
+    if earliest != summary.get("earliest_proposal_ready_timestamp"):
+        raise SystemExit("earliest_proposal_ready_timestamp_mismatch")
+    if latest != summary.get("latest_proposal_ready_timestamp"):
+        raise SystemExit("latest_proposal_ready_timestamp_mismatch")
     if bool(summary.get("diagnostic_mode")) and summary.get("phase1_verdict") == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY":
         raise SystemExit("diagnostic_mode_cannot_certify")
     if not bool(summary.get("authoritative_inventory_resolved")) and summary.get("phase1_verdict") == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY":
@@ -151,6 +209,8 @@ def main() -> int:
         raise SystemExit(f"oracle_mismatch_count_nonzero:{summary['oracle_mismatch_count']}")
     if int(summary["future_mutation_control_totals"]["failed"]) != 0:
         raise SystemExit(f"future_mutation_failures_nonzero:{summary['future_mutation_control_totals']['failed']}")
+    if int(summary["future_mutation_control_totals"]["checked"]) != int(summary["future_mutation_control_totals"]["passed"]):
+        raise SystemExit("future_mutation_checked_passed_mismatch")
     if int(summary["source_immutability_totals"]["mismatched"]) != 0:
         raise SystemExit(f"source_immutability_mismatches_nonzero:{summary['source_immutability_totals']['mismatched']}")
     if int(dict(summary.get("malformed_sessions_by_reason") or {}).get("rejected", 0)) != 0:
