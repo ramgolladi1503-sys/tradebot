@@ -1,0 +1,4 @@
+{
+  "status": "SUPERSEDED_WFA_V1_WRONG_SHORT_RETURN_FORMULA_AND_INCOMPLETE_VERIFIER",
+  "reason": "The SHORT return formula in the original WFA was incorrect (entry/exit instead of exit/entry minus 1 or vice versa). Furthermore, the verifier did not thoroughly check outcome integrity."
+}
