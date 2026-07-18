@@ -51,9 +51,18 @@ Topology A: 12 shards, root `/tmp/opening-range-retest-certifying-a-d977e69e`, m
 Topology B: 13 shards, root `/tmp/opening-range-retest-certifying-b-d977e69e`, merge READY, audit READY, elapsed runtime `25850.240662290133` seconds.
 Independent bounded evidence: `docs/agent_reviews/opening_range_retest_causal_replay_candidate_ledger_v1.json` publishes all 2215 candidate records plus counts by symbol, direction, session, duplicate-setup scan results, and proposal-ready bounds for independent recomputation.
 
+**Post-Merge Verification**
+Status: complete for exact merged `origin/main=140025d8fc288c2a1c24351e1b242a54bd6a0576`.
+Post-merge smoke: `/tmp/orb-postmerge-final-140025d8-smoke-1784401556`, verdict READY, independent audit READY.
+Post-merge 12-shard replay: `/tmp/orb-postmerge-final-140025d8-12shard-1784401606`, merged verdict READY, independent audit READY.
+Post-merge invariants: selected source count `1512`, source-universe hash `cf4cc9cacb2db3a2f9cdc006465ebd5f8af6e6146e6a6a59048e1af38f2393bc`, candidate count `2215`, candidate semantic hash `53c8cf67f33d1e958bc2ffa1730c00c86d222e67ae76d2e865da6962892e1d24`, partition assignments `1512`, malformed sessions `0`, oracle mismatches `0`, future-mutation failures `0`, and source mutations `0`.
+New commit-bound canonical summary semantic hash: `34b7c8628e28c436a2b18a1d9598077d2e08e0eab09009748e06c2ed41eb9074`.
+Final ORB Phase 1 verdict: `ORB_POSTMERGE_VERIFIED`.
+
 **Runtime Proof Required After Merge**
-Required after merge to `main`: rerun the same bounded replay from the merged main branch on a clean worktree, regenerate the bounded evidence set, and confirm the same candidate and canonical summary hashes on that merged head.
-Not proven by this PR state: post-merge runtime stability, regenerated-manifest byte identity from changing source roots, or any live execution property.
+No additional ORB Phase 1 replay proof is required for current merged `origin/main=140025d8fc288c2a1c24351e1b242a54bd6a0576`.
+If `origin/main` advances with ORB replay code, source-manifest logic, audit logic, strategy behavior, profile identity, or corpus selection changes, rerun post-merge replay verification for that new exact commit.
+Still not proven by this replay boundary: live runtime stability, regenerated-manifest byte identity from changing source roots, or any live execution property.
 
 **What This PR Does Not Prove**
 This PR proves causal signal replay integrity only.
