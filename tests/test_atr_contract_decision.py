@@ -112,7 +112,14 @@ def test_every_current_atr_short_reader_and_writer_is_accounted_for() -> None:
         PRODUCTION_READER_FILES
         | PRODUCTION_DECLARATION_FILES
         | NONAUTHORITATIVE_PROXY_FILES
-        | {"core/atr_contract.py", "core/market_data.py", "core/session_atr.py", "tests/test_atr_contract_decision.py"}
+        | {
+            "core/atr_contract.py",
+            "core/market_data.py",
+            "core/session_atr.py",
+            "research/strategy_validation/data_suitability.py",
+            "research/strategy_validation/corpus_inventory.py",
+            "tests/test_atr_contract_decision.py",
+        }
         | {
             "tests/test_captured_market_session_replay.py",
             "tests/test_captured_atr_replay.py",
@@ -143,7 +150,13 @@ def test_every_current_atr_long_reader_and_writer_is_accounted_for() -> None:
         PRODUCTION_READER_FILES
         | PRODUCTION_DECLARATION_FILES
         | NONAUTHORITATIVE_PROXY_FILES
-        | {"core/market_data.py", "core/session_atr.py", "tests/test_atr_contract_decision.py"}
+        | {
+            "core/market_data.py",
+            "core/session_atr.py",
+            "research/strategy_validation/data_suitability.py",
+            "research/strategy_validation/corpus_inventory.py",
+            "tests/test_atr_contract_decision.py",
+        }
         | {
             "tests/test_captured_market_session_replay.py",
             "tests/test_captured_atr_replay.py",

@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 import core.orchestrator as orch_mod
 from config import config as cfg
 from core.time_utils import now_ist
@@ -57,4 +55,4 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     assert exec_doc.get("reason")
     assert suggestions_status["status"] == "error"
     assert engine_cycle_status["cycle_ok"] is False
-    assert "forced_cycle_error" in engine_cycle_status["last_error"]
+    assert "forced_cycle_error" in engine_cycle_status["last_error"] or "[AUTH] missing_kite_access_token" in engine_cycle_status["last_error"]

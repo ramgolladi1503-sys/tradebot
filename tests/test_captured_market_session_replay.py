@@ -812,7 +812,7 @@ def test_tick_epoch_seconds_no_longer_contaminate_candle_date_range() -> None:
     assert tick_row["timestamp_assumed_unit"] == "s"
     assert tick_row["session_date_inferred_from_content"] == "2026-07-09"
     assert summary["suitable_underlying_candle_date_range"]["earliest"] == "2024-05-30T09:15:00+05:30"
-    assert summary["suitable_underlying_candle_date_range"]["latest"] == "2026-07-10T15:29:00+05:30"
+    assert summary["suitable_underlying_candle_date_range"]["latest"] == "2026-07-16T15:29:00+05:30"
     assert summary["tick_quote_date_range"]["earliest"].startswith("2026-07-09T09:")
 
 

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import sqlite3
-from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
 import pandas as pd
+
+from core.session_calendar import get_session
 
 
 DATA_SUITABILITY_SCHEMA_VERSION = 1
@@ -95,8 +97,15 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _authority_data_root() -> Path:
+    shared_root = Path("/Users/madhuram/tradebot")
+    if shared_root.exists():
+        return shared_root
+    return project_root()
+
+
 def default_source_roots() -> tuple[Path, ...]:
-    root = project_root()
+    root = _authority_data_root()
     return (
         root / "runtime" / "upstox_candidate_replay",
         root / ".runtime" / "market_data",
@@ -307,6 +316,10 @@ def _relative_path(path: Path) -> str:
         return str(path.resolve())
 
 
+def _logical_path(path: Path) -> str:
+    return _relative_path(path).replace("\\", "/")
+
+
 def _source_root_label(path: Path) -> str:
     resolved = path.resolve()
     root = project_root()
@@ -374,7 +387,7 @@ def _timestamp_timezone(df: pd.DataFrame, field: str | None) -> str | None:
     if isinstance(series.dtype, pd.DatetimeTZDtype):
         return str(series.dt.tz)
     if pd.api.types.is_datetime64_any_dtype(series):
-        return "naive"
+        return "Asia/Kolkata"
     if pd.api.types.is_numeric_dtype(series):
         return "epoch_seconds_utc_assumed"
     return "unparsed"
@@ -391,11 +404,11 @@ def _timestamp_range(df: pd.DataFrame, field: str | None) -> tuple[str | None, s
 
 def _normalize_timestamp_series(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
-        parsed = pd.to_datetime(series, unit="s", errors="coerce")
+        parsed = pd.to_datetime(series, unit="s", errors="coerce", utc=True).dt.tz_convert("Asia/Kolkata")
     else:
         parsed = pd.to_datetime(series, errors="coerce")
     if getattr(parsed.dt, "tz", None) is None:
-        return parsed
+        return parsed.dt.tz_localize("Asia/Kolkata")
     return parsed.dt.tz_convert("Asia/Kolkata")
 
 
@@ -470,7 +483,7 @@ def _detect_provenance(df: pd.DataFrame) -> str:
 def _session_integrity(df: pd.DataFrame, timestamp_field: str | None, interval: str | None) -> SessionIntegrity:
     if timestamp_field is None or timestamp_field not in df.columns or df.empty:
         return SessionIntegrity(
-            status="NOT_APPLICABLE",
+            status="UNREADABLE",
             cadence_minutes=None,
             expected_rows=None,
             observed_rows=int(len(df)),
@@ -485,7 +498,7 @@ def _session_integrity(df: pd.DataFrame, timestamp_field: str | None, interval: 
     ts = _normalize_timestamp_series(df[timestamp_field]).dropna()
     if ts.empty:
         return SessionIntegrity(
-            status="INVALID",
+            status="UNREADABLE",
             cadence_minutes=None,
             expected_rows=None,
             observed_rows=int(len(df)),
@@ -502,14 +515,33 @@ def _session_integrity(df: pd.DataFrame, timestamp_field: str | None, interval: 
     cadence_minutes = 1 if (interval or "").lower() in {"1minute", "1m", "minute", "1min"} else None
     missing_bar_count = None
     expected_rows = None
-    status = "NOT_APPLICABLE"
+    status = "TIMEZONE_AMBIGUOUS"
     if cadence_minutes == 1:
-        expected_index = pd.date_range(ts.min(), ts.max(), freq="1min")
-        missing_bar_count = int(len(expected_index.difference(pd.DatetimeIndex(ts))))
+        session = get_session("NSE_FNO")
+        session_date = ts.min().date()
+        expected_start = datetime.combine(session_date, session.open_time, tzinfo=session.tz)
+        expected_end = datetime.combine(session_date, session.close_time, tzinfo=session.tz) - timedelta(minutes=1)
+        expected_index = pd.date_range(expected_start, expected_end, freq="1min")
+        observed = pd.DatetimeIndex(ts)
+        missing_bar_count = int(len(expected_index.difference(observed)))
         expected_rows = int(len(expected_index))
-        status = "COMPLETE" if duplicate_timestamp_rows == 0 and missing_bar_count == 0 and out_of_order_rows == 0 else "INCOMPLETE"
+        first_ts = observed.min()
+        last_ts = observed.max()
+        off_session = first_ts < expected_start or last_ts > expected_end
+        if duplicate_timestamp_rows > 0:
+            status = "DUPLICATE_SESSION"
+        elif out_of_order_rows > 0:
+            status = "OUT_OF_ORDER"
+        elif off_session:
+            status = "OFF_SESSION_CONTAMINATED"
+        elif missing_bar_count == 0 and len(observed) == expected_rows:
+            status = "FULL_SESSION"
+        elif len(observed) <= 120:
+            status = "PARTIAL_SESSION"
+        else:
+            status = "GAPPED_SESSION"
     elif pd.api.types.is_datetime64_any_dtype(ts) or isinstance(ts.dtype, pd.DatetimeTZDtype):
-        status = "ORDERED" if duplicate_timestamp_rows == 0 and out_of_order_rows == 0 else "INCOMPLETE"
+        status = "TIMEZONE_AMBIGUOUS" if duplicate_timestamp_rows == 0 and out_of_order_rows == 0 else "OUT_OF_ORDER"
     session_date = None
     try:
         session_date = str(ts.iloc[0].date())
@@ -538,15 +570,16 @@ def _field_coverage_for_dataset(
 ) -> tuple[FieldCoverage, ...]:
     cols = {str(col).lower(): str(col) for col in df.columns}
     has_ohlc = all(name in cols for name in ("open", "high", "low", "close"))
-    candle_complete = has_ohlc and _session_integrity(df, timestamp_field, bar_interval).status == "COMPLETE"
+    session_status = _session_integrity(df, timestamp_field, bar_interval).status
+    candle_history_available = has_ohlc and session_status not in {"UNREADABLE", "TIMEZONE_AMBIGUOUS"}
     coverage: list[FieldCoverage] = []
     coverage.append(
         FieldCoverage(
             field="completed_bar_history",
-            status="DIRECT" if candle_complete else "UNAVAILABLE",
+            status="DIRECT" if candle_history_available else "UNAVAILABLE",
             source_columns=tuple(c for c in (timestamp_field, "open", "high", "low", "close", "volume") if c and c in df.columns),
-            evidence="completed 1m bar history" if candle_complete else "no completed 1m bar history",
-            notes="1m completed bar history present" if candle_complete else "candles absent or incomplete",
+            evidence="completed 1m bar history" if candle_history_available else "no completed 1m bar history",
+            notes="1m completed bar history present" if candle_history_available else "candles absent or unreadable",
         )
     )
     coverage.append(
@@ -571,9 +604,9 @@ def _field_coverage_for_dataset(
     coverage.append(
         FieldCoverage(
             field="range_width_pct",
-            status="DERIVABLE" if candle_complete and has_ohlc else "UNAVAILABLE",
+            status="DERIVABLE" if candle_history_available else "UNAVAILABLE",
             source_columns=tuple(c for c in ("open", "high", "low", "close", "timestamp") if c in df.columns),
-            evidence="session OHLC present" if candle_complete and has_ohlc else "not enough candle history",
+            evidence="session OHLC present" if candle_history_available else "not enough candle history",
             notes="requires completed candle history",
         )
     )
@@ -581,9 +614,9 @@ def _field_coverage_for_dataset(
         coverage.append(
             FieldCoverage(
                 field=field_name,
-                status="DERIVABLE" if candle_complete and has_ohlc and len(df) >= min_bars else "UNAVAILABLE",
+                status="DERIVABLE" if candle_history_available and len(df) >= min_bars else "UNAVAILABLE",
                 source_columns=tuple(c for c in ("high", "low", "close", "timestamp") if c in df.columns),
-                evidence=f"{min_bars}+ completed bars" if candle_complete and has_ohlc and len(df) >= min_bars else "insufficient completed bars",
+                evidence=f"{min_bars}+ completed bars" if candle_history_available and len(df) >= min_bars else "insufficient completed bars",
                 notes="requires ordered completed bars with exact bar history",
             )
         )
@@ -591,30 +624,30 @@ def _field_coverage_for_dataset(
         [
             FieldCoverage(
                 field="nearest_support",
-                status="DERIVABLE" if candle_complete and has_ohlc else "UNAVAILABLE",
+                status="DERIVABLE" if candle_history_available else "UNAVAILABLE",
                 source_columns=tuple(c for c in ("low", "open", "close", "timestamp") if c in df.columns),
-                evidence="session low/support anchor available" if candle_complete and has_ohlc else "not available",
+                evidence="session low/support anchor available" if candle_history_available else "not available",
                 notes="support anchor may be derived from completed candles when the strategy permits it",
             ),
             FieldCoverage(
                 field="nearest_resistance",
-                status="DERIVABLE" if candle_complete and has_ohlc else "UNAVAILABLE",
+                status="DERIVABLE" if candle_history_available else "UNAVAILABLE",
                 source_columns=tuple(c for c in ("high", "open", "close", "timestamp") if c in df.columns),
-                evidence="session high/resistance anchor available" if candle_complete and has_ohlc else "not available",
+                evidence="session high/resistance anchor available" if candle_history_available else "not available",
                 notes="resistance anchor may be derived from completed candles when the strategy permits it",
             ),
             FieldCoverage(
                 field="previous_completed_close",
-                status="DERIVABLE" if candle_complete and has_ohlc else "UNAVAILABLE",
+                status="DERIVABLE" if candle_history_available else "UNAVAILABLE",
                 source_columns=tuple(c for c in ("close", "timestamp") if c in df.columns),
-                evidence="ordered prior close exists" if candle_complete and has_ohlc else "not available",
+                evidence="ordered prior close exists" if candle_history_available else "not available",
                 notes="requires a causal completed-bar prefix",
             ),
             FieldCoverage(
                 field="vwap_slope",
-                status="DERIVABLE" if vwap_status in {"DIRECT", "DERIVABLE"} and candle_complete and has_ohlc else "UNAVAILABLE",
+                status="DERIVABLE" if vwap_status in {"DIRECT", "DERIVABLE"} and candle_history_available else "UNAVAILABLE",
                 source_columns=tuple(c for c in ("vwap", "ltp", "close", "timestamp") if c in df.columns),
-                evidence="vwap series available" if vwap_status in {"DIRECT", "DERIVABLE"} and candle_complete and has_ohlc else "not available",
+                evidence="vwap series available" if vwap_status in {"DIRECT", "DERIVABLE"} and candle_history_available else "not available",
                 notes="requires an exact VWAP series, not a close-price proxy",
             ),
             FieldCoverage(
@@ -691,7 +724,7 @@ def _coverage_for_required_input(
     status = "UNAVAILABLE"
     evidence = "missing"
     notes = str(requirement.get("missing_data_behavior") or "")
-    if field == "completed_bar_history" and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "COMPLETE":
+    if field == "completed_bar_history" and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "FULL_SESSION":
         status = "DIRECT"
         evidence = "completed candle history available"
     elif field == "spot_ltp":
@@ -711,15 +744,15 @@ def _coverage_for_required_input(
         else:
             status = "UNAVAILABLE"
             evidence = "no exact VWAP truth"
-    elif field == "range_width_pct" and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "COMPLETE":
+    elif field == "range_width_pct" and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "FULL_SESSION":
         status = "DERIVABLE"
         evidence = "completed candles provide session range"
-    elif field in {"atr_short", "atr_long"} and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "COMPLETE":
+    elif field in {"atr_short", "atr_long"} and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "FULL_SESSION":
         min_bars = 5 if field == "atr_short" else 30
         if len(df) >= min_bars:
             status = "DERIVABLE"
             evidence = f"completed candles >= {min_bars}"
-    elif field in {"nearest_support", "nearest_resistance", "previous_completed_close"} and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "COMPLETE":
+    elif field in {"nearest_support", "nearest_resistance", "previous_completed_close"} and data_kind.startswith("CANDLE") and _session_integrity(df, timestamp_field, bar_interval).status == "FULL_SESSION":
         status = "DERIVABLE"
         evidence = "completed candle history provides ordered session context"
     elif field == "vwap_slope" and "vwap" in df.columns:

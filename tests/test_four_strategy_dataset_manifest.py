@@ -1,135 +1,354 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import subprocess
+import shutil
+import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from research.strategy_validation.data_suitability import (
-    build_four_strategy_dataset_manifest,
-    discover_candidate_datasets,
+from research.strategy_validation import (
+    build_four_strategy_dataset_manifest_v2,
+    build_upstox_corpus_inventory,
     inspect_dataset,
     load_frozen_contract_bundle,
-    write_manifest_and_sidecar,
+    write_inventory_and_sidecar,
+    write_v2_manifest_and_sidecar,
 )
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ROOTS = [
+    Path("/Users/madhuram/tradebot/runtime/upstox_candidate_replay"),
+    Path("/Users/madhuram/tradebot/.runtime/market_data"),
+]
+BUNDLE = REPO_ROOT / "docs" / "agent_reviews" / "four_strategy_contract_bundle_v1.json"
+V1_MANIFEST = REPO_ROOT / "docs" / "agent_reviews" / "four_strategy_dataset_manifest_v1.json"
 REAL_CANDLE = Path("/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260709/underlying/NSE_INDEX|Nifty 50_20260709.parquet")
 REAL_TICK = Path("/Users/madhuram/tradebot/.runtime/market_data/ticks_20260707_132935.parquet")
-REPO_ROOT = Path(__file__).resolve().parents[1]
-BUNDLE = REPO_ROOT / "docs" / "agent_reviews" / "four_strategy_contract_bundle_v1.json"
 
 
-def _write_sample_parquet(path: Path, frame: pd.DataFrame) -> Path:
+def _write_parquet(path: Path, frame: pd.DataFrame) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path, index=False)
     return path
 
 
-def test_load_frozen_contract_bundle_matches_sidecar() -> None:
-    bundle = load_frozen_contract_bundle(BUNDLE)
+def _previous_manifest_for_temp_fixture(temp_dir: Path, current_file: Path, removed_file: Path) -> Path:
+    payload = {
+        "schema_version": 1,
+        "dataset_records": [
+            {
+                "absolute_path": str(current_file.resolve()),
+                "relative_path": str(current_file.resolve()),
+                "sha256": "deadbeef",
+                "file_size_bytes": 1,
+                "quality_status": "INVALID",
+                "suitability_status": "INVALID_DUE_TO_DATA",
+                "timestamp_min": "2026-07-16T09:15:00",
+                "data_kind": "CANDLE_OHLCV",
+                "file_format": "parquet",
+            },
+            {
+                "absolute_path": str(removed_file.resolve()),
+                "relative_path": str(removed_file.resolve()),
+                "sha256": "removed",
+                "file_size_bytes": 1,
+                "quality_status": "ACCEPTED",
+                "suitability_status": "SUITABLE",
+                "timestamp_min": "2026-07-15T09:15:00",
+                "data_kind": "CANDLE_OHLCV",
+                "file_format": "parquet",
+            },
+        ],
+    }
+    prev = temp_dir / "previous_manifest.json"
+    prev.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    return prev
+
+
+@pytest.fixture(scope="module")
+def bundle() -> dict[str, object]:
+    return load_frozen_contract_bundle(BUNDLE)
+
+
+@pytest.fixture(scope="module")
+def live_inventory(bundle: dict[str, object]) -> dict[str, object]:
+    return build_upstox_corpus_inventory(
+        roots=ROOTS,
+        bundle_path=BUNDLE,
+        previous_manifest_path=V1_MANIFEST,
+        code_commit="deadbeef",
+    )
+
+
+@pytest.fixture(scope="module")
+def live_manifest(live_inventory: dict[str, object]) -> dict[str, object]:
+    return build_four_strategy_dataset_manifest_v2(
+        roots=ROOTS,
+        bundle_path=BUNDLE,
+        previous_manifest_path=V1_MANIFEST,
+        inventory=live_inventory,
+        code_commit="deadbeef",
+    )
+
+
+def test_frozen_contract_bundle_matches_sidecar(bundle: dict[str, object]) -> None:
     assert bundle["architecture_decision"] == "KEEP_CANONICAL_AND_LIVE_PHASE2_SEPARATE"
     assert bundle["bundle_id"] == "four_strategy_contract_bundle_v1"
 
 
-def test_real_candle_file_is_complete_but_cannot_prove_vwap_truth() -> None:
-    inspection = inspect_dataset(REAL_CANDLE, bundle=load_frozen_contract_bundle(BUNDLE))
+def test_real_candle_and_tick_truth_prove_current_field_classification(bundle: dict[str, object]) -> None:
+    candle = inspect_dataset(REAL_CANDLE, bundle=bundle)
+    tick = inspect_dataset(REAL_TICK, bundle=bundle)
 
-    assert inspection.data_kind == "CANDLE_OHLCV"
-    assert inspection.session_integrity.status == "COMPLETE"
-    assert inspection.volume_truth_status == "ZERO_VOLUME"
-    assert inspection.field_coverage[2].field == "vwap"
-    assert inspection.field_coverage[2].status == "UNAVAILABLE"
-    opening = next(item for item in inspection.strategy_coverage if item.strategy_id == "opening_range_retest_v1")
-    assert opening.status == "INVALID_DUE_TO_DATA"
-    assert "vwap" in opening.blocking_required_fields
+    assert candle.data_kind == "CANDLE_OHLCV"
+    assert candle.session_integrity.status == "FULL_SESSION"
+    assert candle.volume_truth_status == "ZERO_VOLUME"
+    assert candle.field_coverage[2].field == "vwap"
+    assert candle.field_coverage[2].status == "UNAVAILABLE"
 
-
-def test_real_tick_file_has_volume_but_no_completed_bar_history() -> None:
-    inspection = inspect_dataset(REAL_TICK, bundle=load_frozen_contract_bundle(BUNDLE))
-
-    assert inspection.data_kind == "TICK_QUOTE"
-    completed = next(item for item in inspection.field_coverage if item.field == "completed_bar_history")
-    assert completed.status == "UNAVAILABLE"
-    vwap = next(item for item in inspection.field_coverage if item.field == "vwap")
-    assert vwap.status == "DERIVABLE"
-    assert inspection.volume_truth_status == "HAS_VOLUME"
-    trend = next(item for item in inspection.strategy_coverage if item.strategy_id == "trend_pullback_v1")
-    assert trend.status == "INVALID_DUE_TO_DATA"
-    assert "completed_bar_history" in trend.blocking_required_fields
+    assert tick.data_kind == "TICK_QUOTE"
+    assert tick.volume_truth_status == "HAS_VOLUME"
+    vwap = next(item for item in tick.field_coverage if item.field == "vwap")
+    assert vwap.status in {"DERIVABLE", "DIRECT"}
 
 
-def test_manifest_builder_is_deterministic_and_excludes_metadata_dirs(tmp_path: Path) -> None:
-    candle = _write_sample_parquet(
-        tmp_path / "dataset" / "candles.parquet",
+def test_incremental_inventory_detects_new_session_and_rejects_cache_artifacts(tmp_path: Path) -> None:
+    current = _write_parquet(
+        tmp_path / "dataset" / "20260716" / "underlying" / "NSE_INDEX|Nifty 50_20260716.parquet",
         pd.DataFrame(
             [
                 {
-                    "timestamp": pd.Timestamp("2026-07-09 09:15:00"),
+                    "timestamp": pd.Timestamp("2026-07-16 09:15:00"),
                     "symbol": "NSE_INDEX|Nifty 50",
                     "open": 1.0,
                     "high": 2.0,
                     "low": 0.5,
                     "close": 1.5,
                     "volume": 0.0,
+                    "oi": 0.0,
+                    "source": "upstox",
                     "interval": "1minute",
+                    "fetch_timestamp": pd.Timestamp("2026-07-16 17:00:00"),
+                    "fetch_start_date": "2026-07-16",
+                    "fetch_end_date": "2026-07-16",
+                    "data_origin": "upstox_api",
+                    "synthetic": False,
+                    "mock": False,
+                    "fallback": False,
+                    "provider": "upstox",
+                    "source_endpoint": "/v3/historical-candle/NIFTY/1minute/2026-07-16/2026-07-16",
                 },
                 {
-                    "timestamp": pd.Timestamp("2026-07-09 09:16:00"),
+                    "timestamp": pd.Timestamp("2026-07-16 09:16:00"),
                     "symbol": "NSE_INDEX|Nifty 50",
                     "open": 1.5,
                     "high": 2.5,
                     "low": 1.25,
                     "close": 2.0,
                     "volume": 0.0,
+                    "oi": 0.0,
+                    "source": "upstox",
                     "interval": "1minute",
+                    "fetch_timestamp": pd.Timestamp("2026-07-16 17:00:00"),
+                    "fetch_start_date": "2026-07-16",
+                    "fetch_end_date": "2026-07-16",
+                    "data_origin": "upstox_api",
+                    "synthetic": False,
+                    "mock": False,
+                    "fallback": False,
+                    "provider": "upstox",
+                    "source_endpoint": "/v3/historical-candle/NIFTY/1minute/2026-07-16/2026-07-16",
                 },
             ]
         ),
     )
-    tick = _write_sample_parquet(
-        tmp_path / "dataset" / "ticks.parquet",
+    duplicate = tmp_path / "dataset" / "20260716" / "underlying" / "NSE_INDEX|Nifty 50_20260716_copy.parquet"
+    shutil.copyfile(current, duplicate)
+    removed = tmp_path / "dataset" / "20260715" / "underlying" / "NSE_INDEX|Nifty 50_20260715.parquet"
+    removed.parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "dataset" / ".DS_Store").write_text("cache", encoding="utf-8")
+    (tmp_path / "dataset" / "ticks_20260705.jsonl").write_text("", encoding="utf-8")
+    _option_quote = _write_parquet(
+        tmp_path / "dataset" / "20260709" / "options" / "BANKNIFTY 56400 CE 28 JUL 26.parquet",
         pd.DataFrame(
             [
-                {"ts": 1783411178.0, "symbol": "SENSEX", "ltp": 10.0, "bid": 9.5, "ask": 10.5, "vol": 25.0},
-                {"ts": 1783411179.0, "symbol": "SENSEX", "ltp": 10.5, "bid": 10.0, "ask": 11.0, "vol": 30.0},
+                {"ts": 1783420000.0, "symbol": "BANKNIFTY 56400 CE 28 JUL 26", "ltp": 100.0, "bid": 99.5, "ask": 100.5, "vol": 10.0},
+                {"ts": 1783420060.0, "symbol": "BANKNIFTY 56400 CE 28 JUL 26", "ltp": 101.0, "bid": 100.5, "ask": 101.5, "vol": 12.0},
             ]
         ),
     )
-    (tmp_path / "dataset" / "manifests").mkdir(parents=True)
-    (tmp_path / "dataset" / "manifests" / "skip.json").write_text("{}", encoding="utf-8")
+    _option_depth = _write_parquet(
+        tmp_path / "dataset" / "20260709" / "options" / "BANKNIFTY 56400 CE 28 JUL 26_depth.parquet",
+        pd.DataFrame(
+            [
+                {"ts": 1783420000.0, "symbol": "BANKNIFTY 56400 CE 28 JUL 26", "ltp": 100.0, "bid": 99.5, "ask": 100.5, "vol": 10.0, "depth": 4},
+            ]
+        ),
+    )
+    fetch_manifest = tmp_path / "dataset" / "20260716" / "manifests" / "upstox_fetch_manifest_20260716.json"
+    fetch_manifest.parent.mkdir(parents=True, exist_ok=True)
+    fetch_manifest.write_text(
+        json.dumps(
+            {
+                "date": "20260716",
+                "provider": "upstox",
+                "capture_timestamp": "2026-07-17T23:47:06.572530",
+                "data_type": "UPSTOX_OPTION_CANDLE_ONLY",
+                "fetch_status": "UPSTOX_FETCH_SUCCEEDED_REAL_CANDLES",
+                "data_origin": "upstox_api",
+                "synthetic": False,
+                "mock": False,
+                "fallback": False,
+                "token_logged": False,
+                "certification_eligible": True,
+                "deprecated_endpoint": False,
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    previous_manifest = _previous_manifest_for_temp_fixture(tmp_path, current, removed)
 
-    discovered = discover_candidate_datasets([tmp_path])
-    assert candle in discovered
-    assert tick in discovered
-    assert not any("manifests" in path.parts for path in discovered)
+    inventory_1 = build_upstox_corpus_inventory(
+        roots=[tmp_path / "dataset"],
+        bundle_path=BUNDLE,
+        previous_manifest_path=previous_manifest,
+        code_commit="deadbeef",
+    )
+    inventory_2 = build_upstox_corpus_inventory(
+        roots=[tmp_path / "dataset"],
+        bundle_path=BUNDLE,
+        previous_manifest_path=previous_manifest,
+        code_commit="deadbeef",
+    )
 
-    manifest_1 = build_four_strategy_dataset_manifest(roots=[tmp_path], bundle_path=BUNDLE, code_commit="deadbeef")
-    manifest_2 = build_four_strategy_dataset_manifest(roots=[tmp_path], bundle_path=BUNDLE, code_commit="deadbeef")
-    assert manifest_1 == manifest_2
-    assert manifest_1["corpus_status"] == "INVALID_DUE_TO_DATA"
-    assert manifest_1["dataset_count"] >= 2
-    assert manifest_1["strategy_summary"]["opening_range_retest_v1"]["status"] == "INVALID_DUE_TO_DATA"
-    assert "vwap" in manifest_1["strategy_summary"]["opening_range_retest_v1"]["blocking_required_fields"]
+    assert inventory_1 == inventory_2
+    assert any("20260716" in path for path in inventory_1["diff"]["files_added"])
+    assert any("20260715" in path for path in inventory_1["diff"]["files_removed"])
+    assert any(item["classification"] == "REPAIRED_PREVIOUS_FAILURE" for item in inventory_1["diff"]["files_changed"])
+    assert any(item["file_role"] == "CACHE_ARTIFACT" and not item["accepted_for_snapshot"] for item in inventory_1["source_files"])
+    zero_byte = next(item for item in inventory_1["source_files"] if item["logical_path"].endswith("ticks_20260705.jsonl"))
+    assert zero_byte["file_role"] == "CACHE_ARTIFACT"
+    assert zero_byte["accepted_for_snapshot"] is False
+    assert zero_byte["inspection_error"] == "cache_artifact"
+    assert len({item["sha256"] for item in inventory_1["source_files"] if item["sha256"]}) < len(inventory_1["source_files"])
+    assert any(item["file_role"] == "FETCH_MANIFEST" and item["reconciliation_status"] == "FETCH_SUCCESS_RECONCILED" for item in inventory_1["source_files"])
+    assert any(item["data_role"] == "OPTION_DEPTH" for item in inventory_1["source_files"])
 
-    out_path = tmp_path / "four_strategy_dataset_manifest_v1.json"
-    json_path, sidecar_path = write_manifest_and_sidecar(manifest_1, output_path=out_path)
-    assert json_path.exists()
-    assert sidecar_path.exists()
-    expected_hash = hashlib.sha256((json.dumps(manifest_1, indent=2, sort_keys=True, default=str) + "\n").encode("utf-8")).hexdigest()
-    assert sidecar_path.read_text(encoding="utf-8").split()[0] == expected_hash
+    out_inventory = tmp_path / "inventory.json"
+    out_manifest = tmp_path / "manifest.json"
+    inv_path, inv_sidecar = write_inventory_and_sidecar(inventory_1, output_path=out_inventory)
+    inv_path_2, inv_sidecar_2 = write_inventory_and_sidecar(inventory_2, output_path=tmp_path / "inventory-2.json")
+    man = build_four_strategy_dataset_manifest_v2(
+        roots=[tmp_path / "dataset"],
+        bundle_path=BUNDLE,
+        previous_manifest_path=previous_manifest,
+        inventory=inventory_1,
+        code_commit="deadbeef",
+    )
+    man_path, man_sidecar = write_v2_manifest_and_sidecar(man, output_path=out_manifest)
+    man_path_2, man_sidecar_2 = write_v2_manifest_and_sidecar(man, output_path=tmp_path / "manifest-2.json")
+    assert inv_path.exists()
+    assert inv_sidecar.exists()
+    assert inv_path_2.exists()
+    assert inv_sidecar_2.exists()
+    assert man_path.exists()
+    assert man_sidecar.exists()
+    assert man_path_2.exists()
+    assert man_sidecar_2.exists()
+    assert inv_path.read_bytes() == inv_path_2.read_bytes()
+    assert man_path.read_bytes() == man_path_2.read_bytes()
+    assert inv_sidecar.read_text(encoding="utf-8").split()[0] == inv_sidecar_2.read_text(encoding="utf-8").split()[0]
+    assert man_sidecar.read_text(encoding="utf-8").split()[0] == man_sidecar_2.read_text(encoding="utf-8").split()[0]
+    assert inv_sidecar.read_text(encoding="utf-8").split()[0] == hashlib.sha256(inv_path.read_bytes()).hexdigest()
+    assert man_sidecar.read_text(encoding="utf-8").split()[0] == hashlib.sha256(man_path.read_bytes()).hexdigest()
+    assert inv_path.stat().st_size < 20 * 1024 * 1024
+    assert man_path.stat().st_size < 20 * 1024 * 1024
+
+    compact_inventory = json.loads(inv_path.read_text(encoding="utf-8"))
+    compact_manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    file_ids = set(compact_inventory["files"])
+    family_ids = set(compact_inventory["families"])
+    assert {"files", "families", "composites", "joinability_summary", "duplicate_content_summary"} <= set(compact_inventory)
+    assert {"inventory_summary", "strategy_summary", "composite_corpora", "composite_generation_policy"} <= set(compact_manifest)
+    assert sum(item["file_count"] for item in compact_inventory["source_root_authority"]) == compact_inventory["file_counts"]["total_source_files"]
+    assert compact_inventory["file_counts"]["total_source_files"] - compact_inventory["file_counts"]["unique_file_hashes"] == compact_inventory["duplicate_content_counts"]["duplicate_file_count"]
+    assert len(compact_inventory["duplicate_content_summary"]["duplicate_groups"]) == compact_inventory["duplicate_content_counts"]["duplicate_content_group_count"]
+    assert all("schema_columns" not in item for item in compact_inventory["files"].values())
+    assert all(set(item["component_file_ids"]).issubset(file_ids) for item in compact_inventory["families"].values())
+    assert all(set(item["component_family_ids"]).issubset(family_ids) for item in compact_inventory["composites"].values())
+    assert all(set(item["component_family_ids"]).issubset(family_ids) for item in compact_manifest["composite_corpora"])
+    assert compact_manifest["inventory_summary"]["dataset_family_count"] == len(compact_inventory["families"])
+    assert compact_manifest["inventory_summary"]["composite_corpus_count"] == len(compact_inventory["composites"])
+    assert set(compact_manifest["composite_generation_policy"]["representative_accepted_composites"]).issubset(set(compact_inventory["composites"]))
+    assert set(compact_manifest["composite_generation_policy"]["representative_rejected_composites"]).issubset(set(compact_inventory["composites"]))
 
 
-def test_malformed_parquet_file_is_recorded_as_unverifiable(tmp_path: Path) -> None:
-    bad = tmp_path / "broken.parquet"
-    bad.write_text("not parquet", encoding="utf-8")
+def test_live_inventory_separates_signal_and_execution_suitability(live_inventory: dict[str, object], live_manifest: dict[str, object]) -> None:
+    assert live_inventory["requested_source_roots"] == [str(path) for path in ROOTS]
+    assert len(live_inventory["source_root_authority"]) == 2
+    assert {item["root_status"] for item in live_inventory["source_root_authority"]} == {"AVAILABLE_WITH_DATA"}
+    assert all(item["requested_path"] in {str(path) for path in ROOTS} for item in live_inventory["source_root_authority"])
+    assert all(item["resolved_path"] for item in live_inventory["source_root_authority"])
+    assert live_inventory["file_counts"]["manifest_files"] >= 663
+    assert live_inventory["coverage"]["nifty"]["session_count"] == 521
+    assert live_inventory["coverage"]["banknifty"]["session_count"] == 501
+    assert live_inventory["coverage"]["other_underlyings"]["symbols"] == ["SENSEX"]
+    assert live_inventory["coverage"]["other_underlyings"]["session_count"] >= 1
+    assert live_inventory["coverage"]["option_history"]["option_ltp_session_count"] > 0
+    assert live_inventory["coverage"]["option_history"]["option_quote_session_count"] == 0
+    assert live_inventory["coverage"]["option_history"]["option_depth_session_count"] > 0
+    assert any("20260716" in path for path in live_inventory["diff"]["files_added"])
+    assert live_inventory["reconciliation"]["by_status"]["FETCH_SUCCESS_RECONCILED"] >= 1
 
-    manifest = build_four_strategy_dataset_manifest(roots=[tmp_path], bundle_path=BUNDLE, code_commit="deadbeef")
-    rows = [row for row in manifest["dataset_records"] if row["absolute_path"] == str(bad.resolve())]
+    assert live_manifest["signal_verdict"] in {
+        "COMPOSITE_SIGNAL_DATA_READY_WITH_PROVENANCE_LIMITATIONS",
+        "PARTIAL_COMPOSITE_SIGNAL_COVERAGE",
+    }
+    assert live_manifest["execution_verdict"] in {
+        "PARTIAL_EXECUTION_DATA_COVERAGE",
+        "EXECUTION_DATA_BLOCKED",
+    }
+    assert live_manifest["corpus_status"] == "PARTIAL"
+    assert live_manifest["inventory_summary"]["dataset_family_count"] > 0
+    assert live_manifest["inventory_summary"]["composite_corpus_count"] > 0
+    strategies = {item["strategy_id"]: item for item in live_manifest["strategy_summary"]}
+    assert set(strategies) == {
+        "opening_range_retest_v1",
+        "compression_breakout_v1",
+        "trend_pullback_v1",
+        "vwap_reclaim_rejection_v1",
+    }
+    assert all("signal_suitability" in item and "execution_suitability" in item for item in strategies.values())
 
-    assert len(rows) == 1
-    row = rows[0]
-    assert row["suitability_status"] == "INVALID_OR_UNVERIFIABLE"
-    assert row["inspection_error"]
-    assert row["exclusion_reason"].startswith("read_error:")
+
+def test_missing_explicit_root_fails_closed(tmp_path: Path) -> None:
+    missing = tmp_path / "does-not-exist"
+    with pytest.raises(FileNotFoundError):
+        build_upstox_corpus_inventory(
+            roots=[missing],
+            bundle_path=BUNDLE,
+            previous_manifest_path=V1_MANIFEST,
+            code_commit="deadbeef",
+        )
+
+
+def test_cli_requires_explicit_input_roots() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "build_four_strategy_dataset_manifest.py"),
+            "--contract-bundle",
+            str(BUNDLE),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "--input" in result.stderr
