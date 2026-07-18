@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,9 @@ from typing import Any
 
 class AuditBundleError(ValueError):
     pass
+
+
+_SHA256 = re.compile(r"^[a-fA-F0-9]{64}$")
 
 
 def canonical_json_bytes(value: Any) -> bytes:
@@ -66,7 +70,11 @@ class AuditBundle:
         normalized: dict[str, dict[str, str]] = {}
         for logical_name, value in raw.items():
             if isinstance(value, str):
-                normalized[str(logical_name)] = {"path": value}
+                logical_text = str(logical_name)
+                if _SHA256.fullmatch(value):
+                    normalized[logical_text] = {"path": logical_text, "sha256": value.lower()}
+                else:
+                    normalized[logical_text] = {"path": value}
             elif isinstance(value, dict):
                 path = value.get("path") or value.get("artifact") or logical_name
                 normalized[str(logical_name)] = {
