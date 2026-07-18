@@ -1067,6 +1067,17 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         "strategy_id": base_contract["strategy_id"],
         "inventory_resolution": shard_payloads[0]["source_manifest"]["inventory_resolution"],
         "records": [record.to_dict() for record in combined_records],
+        "partition_assignments": [
+            {
+                "symbol": record.symbol,
+                "session_date": record.session_date,
+                "logical_path": record.logical_path,
+                "selected_source_sha256": record.sha256,
+                "canonical_session_key": _canonical_session_key(record),
+                "shard_index": _partition_assignment(record, shard_count=shard_count),
+            }
+            for record in combined_records
+        ],
         "selection_summary": selection_summary(combined_records),
         "full_source_universe": dict(expected_full_source_universe),
         "shard_metadata": {
