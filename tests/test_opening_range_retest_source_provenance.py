@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -8,11 +9,23 @@ import pandas as pd
 from research.opening_range_retest_source_provenance import audit
 
 
-def _write_session(path: Path, *, symbol: str, rows: int = 375) -> None:
-    start = pd.Timestamp("2026-07-06T09:15:00+05:30")
+def _write_session(
+    path: Path,
+    *,
+    symbol: str,
+    rows: int = 375,
+    start: str = "2026-07-06T09:15:00+05:30",
+    drop_column: str | None = None,
+    cadence_gap: bool = False,
+) -> None:
+    start_ts = pd.Timestamp(start)
+    timestamps = pd.date_range(start=start_ts, periods=rows, freq="min")
+    if cadence_gap and rows > 5:
+        timestamps = timestamps.to_series().reset_index(drop=True)
+        timestamps.iloc[5] = timestamps.iloc[5] + pd.Timedelta(minutes=1)
     frame = pd.DataFrame(
         {
-            "timestamp": pd.date_range(start=start, periods=rows, freq="min"),
+            "timestamp": timestamps,
             "symbol": [symbol] * rows,
             "open": [100.0] * rows,
             "high": [101.0] * rows,
@@ -21,6 +34,8 @@ def _write_session(path: Path, *, symbol: str, rows: int = 375) -> None:
             "volume": [0.0] * rows,
         }
     )
+    if drop_column:
+        frame = frame.drop(columns=[drop_column])
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path, index=False)
 
@@ -38,6 +53,10 @@ def _record(path: Path, logical_path: str, symbol: str = "NIFTY") -> dict[str, o
         "projected_columns": list(audit.EXPECTED_COLUMNS),
         "selected_via": "inventory_verified_repo_relative",
     }
+
+
+def _inventory_row(path: Path, logical_path: str, symbol_value: str, *, data_role: str = "UNDERLYING_CANDLES") -> dict[str, object]:
+    return {"symbol_values": [symbol_value], "data_role": data_role, **_record(path, logical_path, symbol=audit.normalize_symbol(symbol_value) or "NIFTY")}
 
 
 def test_symbol_from_path_normalizes_index_names() -> None:
@@ -82,6 +101,91 @@ def test_manifest_path_mismatch_finds_correct_alternative(tmp_path: Path, monkey
     assert counts["MANIFEST_PATH_MISMATCH"] == 1
 
 
+def test_alternative_metadata_without_file_is_not_correct_source(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    missing = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    missing_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    rows, _ = audit.audit_records(
+        {"records": [wrong_record]},
+        {
+            wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record},
+            missing_logical: {
+                "absolute_path": str(missing),
+                "logical_path": missing_logical,
+                "symbol_values": ["NSE_INDEX|Nifty 50"],
+                "data_role": "UNDERLYING_CANDLES",
+                "sha256": "0" * 64,
+                "row_count": 375,
+                "byte_size": 1,
+            },
+        },
+    )
+    classes = rows[0]["classifications"]
+    assert "ALTERNATIVE_FILE_MISSING" in classes
+    assert "CORRECT_ALTERNATIVE_SOURCE_FOUND" not in classes
+    assert "CORRECT_SOURCE_MISSING" in classes
+
+
+def test_alternative_verification_rejects_hash_size_row_schema_session_symbol_and_history(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    inventory = {wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record}}
+    cases = [
+        ("hash", {"sha256": "0" * 64}, "ALTERNATIVE_HASH_MISMATCH"),
+        ("size", {"byte_size": 1}, "ALTERNATIVE_SIZE_MISMATCH"),
+        ("row", {"row_count": 1}, "ALTERNATIVE_ROW_COUNT_MISMATCH"),
+        ("schema", {"drop_column": "volume"}, "ALTERNATIVE_SCHEMA_INVALID"),
+        ("session", {"start": "2026-07-07T09:15:00+05:30"}, "ALTERNATIVE_SESSION_INVALID"),
+        ("symbol", {"symbol": "SENSEX"}, "ALTERNATIVE_SYMBOL_INVALID"),
+        ("history", {"cadence_gap": True}, "ALTERNATIVE_HISTORY_INVALID"),
+    ]
+    for label, override, expected_class in cases:
+        right = tmp_path / f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        _write_session(
+            right,
+            symbol=str(override.get("symbol", "NSE_INDEX|Nifty 50")),
+            start=str(override.get("start", "2026-07-06T09:15:00+05:30")),
+            drop_column=override.get("drop_column"),
+            cadence_gap=bool(override.get("cadence_gap", False)),
+        )
+        logical = f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        row = _inventory_row(right, logical, "NSE_INDEX|Nifty 50")
+        row.update({key: value for key, value in override.items() if key in {"sha256", "byte_size", "row_count"}})
+        rows, _ = audit.audit_records({"records": [wrong_record]}, {**inventory, logical: row})
+        assert expected_class in rows[0]["classifications"]
+        assert "CORRECT_ALTERNATIVE_SOURCE_FOUND" not in rows[0]["classifications"]
+
+
+def test_two_verified_alternatives_are_ambiguous(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    alt_a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet"
+    alt_b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank")
+    _write_session(alt_a, symbol="NIFTY")
+    _write_session(alt_b, symbol="NSE_INDEX|Nifty 50")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    alt_a_logical = "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet"
+    alt_b_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    rows, _ = audit.audit_records(
+        {"records": [wrong_record]},
+        {
+            wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record},
+            alt_a_logical: _inventory_row(alt_a, alt_a_logical, "NIFTY"),
+            alt_b_logical: _inventory_row(alt_b, alt_b_logical, "NSE_INDEX|Nifty 50"),
+        },
+    )
+    assert "AMBIGUOUS_ALTERNATIVE_SOURCES" in rows[0]["classifications"]
+
+
 def test_duplicate_source_assignment_is_reported(tmp_path: Path, monkeypatch) -> None:
     a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet"
     b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_20260706.parquet"
@@ -95,6 +199,50 @@ def test_duplicate_source_assignment_is_reported(tmp_path: Path, monkeypatch) ->
         {str(record_a["logical_path"]): {"symbol_values": ["NIFTY"], **record_a}, str(record_b["logical_path"]): {"symbol_values": ["NSE_INDEX|Nifty 50"], **record_b}},
     )
     assert counts["DUPLICATE_SOURCE_ASSIGNMENT"] == 2
+
+
+def test_duplicate_identity_audit_distinguishes_duplicate_cases(tmp_path: Path) -> None:
+    a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet"
+    b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_DUP_20260706.parquet"
+    _write_session(a, symbol="NIFTY")
+    _write_session(b, symbol="NIFTY")
+    record_a = _record(a, "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet")
+    record_b = _record(b, "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_DUP_20260706.parquet")
+    same_logical = {**record_b, "logical_path": record_a["logical_path"]}
+    same_physical_cross_symbol = {**record_a, "symbol": "BANKNIFTY"}
+    same_sha_cross_symbol = {**record_b, "symbol": "BANKNIFTY", "sha256": record_a["sha256"]}
+    groups = audit.duplicate_identity_groups(
+        [record_a, record_b, same_logical, same_physical_cross_symbol, same_sha_cross_symbol],
+        {},
+    )
+    assert groups["duplicate_session_symbol_assignment"]
+    assert groups["duplicate_logical_path"]
+    assert groups["duplicate_resolved_physical_path"]
+    assert groups["duplicate_source_sha"]
+    assert groups["cross_symbol_physical_file_reuse"]
+    assert groups["cross_symbol_sha_reuse"]
+
+
+def test_root_cause_is_derived_without_hard_coded_date(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260711/underlying/NSE_INDEX|Nifty Bank_20260711.parquet"
+    right = tmp_path / "runtime/upstox_candidate_replay/20260711/underlying/NSE_INDEX|Nifty 50_20260711.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank", start="2026-07-11T09:15:00+05:30")
+    _write_session(right, symbol="NSE_INDEX|Nifty 50", start="2026-07-11T09:15:00+05:30")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260711/underlying/NSE_INDEX|Nifty Bank_20260711.parquet"
+    right_logical = "runtime/upstox_candidate_replay/20260711/underlying/NSE_INDEX|Nifty 50_20260711.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    wrong_record["session_date"] = "2026-07-11"
+    right_row = _inventory_row(right, right_logical, "NSE_INDEX|Nifty 50")
+    right_row["session_date"] = "2026-07-11"
+    rows, _ = audit.audit_records(
+        {"records": [wrong_record]},
+        {wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record}, right_logical: right_row},
+    )
+    causes = audit.derive_root_causes(rows)
+    assert "2026-07-11" in causes
+    assert causes["2026-07-11"]["terminal_root_cause_case"] == "MULTIPLE_DEFECTS"
+    assert "WRONG_MANIFEST_PATH" in causes["2026-07-11"]["derived_cases"]
 
 
 def test_manifest_semantic_hash_is_order_stable() -> None:
@@ -115,3 +263,55 @@ def test_row_count_mismatch_is_reported(tmp_path: Path, monkeypatch) -> None:
     rows, _ = audit.audit_records({"records": [record]}, {logical: {"symbol_values": ["NIFTY"], **record}})
     assert "SOURCE_ROW_COUNT_MISMATCH" in rows[0]["classifications"]
     assert "SOURCE_HISTORY_INVALID" not in rows[0]["classifications"]
+
+
+def test_blast_radius_separates_exact_emissions_from_upper_bound() -> None:
+    ledger = {
+        "records": [
+            {"session_date": "2026-07-06", "symbol": "NIFTY", "setup_id": "a", "direction": "BUY_CALL"},
+            {"session_date": "2026-07-06", "symbol": "NIFTY", "setup_id": "b", "direction": "BUY_PUT"},
+            {"session_date": "2026-07-06", "symbol": "SENSEX", "setup_id": "c", "direction": "BUY_CALL"},
+        ]
+    }
+    summary = {"file_profiles": [{"path": "/x/runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet", "emission_count": 1}]}
+    mislabeled = [{"logical_path": "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"}]
+    blast = audit.candidate_blast_radius(ledger, summary, {("2026-07-06", "NIFTY")}, mislabeled)
+    assert blast["exact_wrong_source_emission_count"] == 1
+    assert blast["exact_affected_candidate_ids_available"] is False
+    assert blast["exact_affected_candidate_ids"] == []
+    assert blast["session_symbol_candidate_upper_bound_count"] == 2
+    assert blast["session_symbol_candidate_upper_bound_directions"] == {"BUY_CALL": 1, "BUY_PUT": 1}
+    assert blast["unaffected_subset_semantic_hash"] == audit.candidate_blast_radius(ledger, summary, {("2026-07-06", "NIFTY")}, mislabeled)["unaffected_subset_semantic_hash"]
+
+
+def test_evidence_contract_fields_are_machine_detectable(tmp_path: Path) -> None:
+    payload = {
+        "mode": "RESEARCH_ORB_PHASE1_SOURCE_PROVENANCE_AUDIT",
+        "candidate_id": "opening_range_retest_source_provenance_audit_v1",
+        "decision": "ORB_PHASE1_INVALID",
+        "reason": "test reason",
+        "timestamp": "2026-07-18T00:00:00+00:00",
+        "is_order_action": False,
+        "broker_api_called": False,
+        "source": "docs/agent_reviews/opening_range_retest_source_provenance_audit_v1.json",
+        "classification_counts": {},
+        "defective_source_record_count": 0,
+        "mislabeled_source_record_count": 0,
+        "duplicate_contaminated_source_record_count": 0,
+        "affected_session_symbol_keys": [],
+        "records_audited": 0,
+        "observed_invariants": {"selected_source_count": 0, "recomputed_manifest_semantic_hash": "", "candidate_count": 0, "candidate_semantic_hash": ""},
+        "candidate_blast_radius": {
+            "exact_wrong_source_emission_count": 0,
+            "session_symbol_candidate_upper_bound_count": 0,
+            "exact_affected_candidate_ids_available": False,
+            "unaffected_candidate_count": 0,
+            "unaffected_subset_semantic_hash": "",
+        },
+    }
+    digest = audit.write_outputs(payload, json_path=tmp_path / "audit.json", md_path=tmp_path / "audit.md")
+    loaded = json.loads((tmp_path / "audit.json").read_text())
+    assert digest == (tmp_path / "audit.json.sha256").read_text().split()[0]
+    for field in ("mode", "candidate_id", "decision", "reason", "timestamp", "is_order_action", "broker_api_called", "source"):
+        assert field in loaded
+        assert f"- {field}:" in (tmp_path / "audit.md").read_text()

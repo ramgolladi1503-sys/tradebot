@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# is_order_action=false
+# broker_api_called=false
+
 import hashlib
 import json
 import re
@@ -43,6 +46,14 @@ CLASSIFICATIONS = (
     "CORRECT_SOURCE_MISSING",
     "AMBIGUOUS_ALTERNATIVE_SOURCES",
     "DUPLICATE_SOURCE_ASSIGNMENT",
+    "ALTERNATIVE_FILE_MISSING",
+    "ALTERNATIVE_HASH_MISMATCH",
+    "ALTERNATIVE_SIZE_MISMATCH",
+    "ALTERNATIVE_ROW_COUNT_MISMATCH",
+    "ALTERNATIVE_SCHEMA_INVALID",
+    "ALTERNATIVE_SESSION_INVALID",
+    "ALTERNATIVE_SYMBOL_INVALID",
+    "ALTERNATIVE_HISTORY_INVALID",
 )
 
 
@@ -202,6 +213,17 @@ def probe_source(path: Path) -> SourceProbe:
     )
 
 
+def probe_is_valid_for(probe: SourceProbe, *, expected_symbol: str, expected_session: str) -> bool:
+    return (
+        probe.exists
+        and probe.schema_error is None
+        and probe.history_error is None
+        and probe.row_count == 375
+        and expected_session in probe.session_dates
+        and tuple([expected_symbol]) == probe.normalized_symbols
+    )
+
+
 def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -229,9 +251,6 @@ def candidate_blast_radius(
         for record in records
         if (str(record.get("session_date") or ""), str(record.get("symbol") or "")) not in defect_keys
     ]
-    affected_by_session = Counter(str(record.get("session_date") or "") for record in affected_records)
-    affected_by_direction = Counter(str(record.get("direction") or "") for record in affected_records)
-    affected_by_symbol = Counter(str(record.get("symbol") or "") for record in affected_records)
     unaffected_by_symbol = Counter(str(record.get("symbol") or "") for record in unaffected_records)
     unaffected_by_direction = Counter(str(record.get("direction") or "") for record in unaffected_records)
     unaffected_hash = None
@@ -256,27 +275,24 @@ def candidate_blast_radius(
     defective_source_candidate_count = sum(int(profile["emission_count"]) for profile in defective_profiles)
     return {
         "ledger_records_available": bool(records),
-        "affected_candidate_count_from_defective_source_profiles": defective_source_candidate_count,
-        "affected_candidate_count_from_records": len(affected_records),
-        "affected_candidate_count_from_summary": defective_source_candidate_count,
-        "affected_candidate_count_method": "exact_defective_source_profile_emission_count",
-        "affected_candidate_ids": [],
-        "affected_candidate_ids_note": "Candidate ledger entries do not retain source logical_path; session-symbol ledger match is an upper bound.",
-        "affected_candidate_directions": dict(sorted(affected_by_direction.items())),
-        "affected_candidate_sessions": dict(sorted(affected_by_session.items())),
-        "affected_candidate_symbols": dict(sorted(affected_by_symbol.items())),
+        "exact_wrong_source_emission_count": defective_source_candidate_count,
+        "exact_wrong_source_profiles": defective_profiles,
+        "exact_affected_candidate_ids_available": False,
+        "exact_affected_candidate_ids": [],
+        "exact_candidate_linkage_gap_reason": "Candidate ledger records do not retain source logical_path, so exact source-profile emissions cannot be mapped back to candidate ids.",
         "affected_session_symbol_keys": sorted([list(key) for key in defect_keys]),
-        "session_symbol_candidate_upper_bound": len(affected_records),
+        "session_symbol_candidate_upper_bound_count": len(affected_records),
         "session_symbol_candidate_upper_bound_ids": [record.get("setup_id") for record in affected_records],
-        "defective_source_profiles": defective_profiles,
+        "session_symbol_candidate_upper_bound_directions": dict(sorted(Counter(str(record.get("direction") or "") for record in affected_records).items())),
+        "session_symbol_candidate_upper_bound_sessions": dict(sorted(Counter(str(record.get("session_date") or "") for record in affected_records).items())),
+        "session_symbol_candidate_upper_bound_note": "Upper bound only: these candidates share affected (session, symbol) keys, not proven source logical paths.",
         "unaffected_candidate_count": len(unaffected_records) if records else None,
         "unaffected_candidate_symbols": dict(sorted(unaffected_by_symbol.items())),
         "unaffected_candidate_directions": dict(sorted(unaffected_by_direction.items())),
         "unaffected_subset_semantic_hash": unaffected_hash,
-        "old_ids_available": bool(affected_records),
         "corrected_ids_computable": False,
         "candidate_semantic_hash_survives": False,
-        "reason": "wrong-symbol source records fed candidate generation, so affected setup ids and full candidate semantic hash cannot be reused",
+        "reason": "wrong-symbol source records fed candidate generation; the full candidate semantic hash cannot be reused.",
     }
 
 
@@ -287,6 +303,40 @@ def sidecar_status(path: Path) -> dict[str, Any]:
     if sidecar.exists():
         declared = sidecar.read_text(encoding="utf-8").split()[0].strip().lower()
     return {"path": str(path), "sidecar_path": str(sidecar), "actual_sha256": actual, "declared_sha256": declared, "matches": actual == declared}
+
+
+def _resolve_inventory_path(row: dict[str, Any]) -> Path:
+    logical = PROJECT_ROOT / str(row.get("logical_path") or "")
+    if logical.exists():
+        return logical
+    return Path(str(row.get("absolute_path") or "")).expanduser()
+
+
+def _alternative_failure_classes(
+    *,
+    probe: SourceProbe,
+    row: dict[str, Any],
+    expected_symbol: str,
+    expected_session: str,
+) -> list[str]:
+    failures: list[str] = []
+    if not probe.exists:
+        return ["ALTERNATIVE_FILE_MISSING"]
+    if probe.sha256 and probe.sha256 != str(row.get("sha256") or ""):
+        failures.append("ALTERNATIVE_HASH_MISMATCH")
+    if probe.byte_size is not None and probe.byte_size != int(row.get("byte_size") or 0):
+        failures.append("ALTERNATIVE_SIZE_MISMATCH")
+    if probe.row_count is not None and probe.row_count != int(row.get("row_count") or 0):
+        failures.append("ALTERNATIVE_ROW_COUNT_MISMATCH")
+    if probe.schema_error:
+        failures.append("ALTERNATIVE_SCHEMA_INVALID")
+    if expected_session not in probe.session_dates:
+        failures.append("ALTERNATIVE_SESSION_INVALID")
+    if tuple([expected_symbol]) != probe.normalized_symbols:
+        failures.append("ALTERNATIVE_SYMBOL_INVALID")
+    if probe.history_error:
+        failures.append("ALTERNATIVE_HISTORY_INVALID")
+    return failures
 
 
 def _alternative_sources(record: dict[str, Any], inventory_rows: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -301,6 +351,8 @@ def _alternative_sources(record: dict[str, Any], inventory_rows: dict[str, dict[
         inv_symbols = tuple(sorted({value for value in (normalize_symbol(v) for v in (row.get("symbol_values") or [])) if value}))
         if expected_symbol not in inv_symbols:
             continue
+        probe = probe_source(_resolve_inventory_path(row))
+        failures = _alternative_failure_classes(probe=probe, row=row, expected_symbol=expected_symbol, expected_session=session)
         alternatives.append(
             {
                 "logical_path": logical_path,
@@ -310,9 +362,77 @@ def _alternative_sources(record: dict[str, Any], inventory_rows: dict[str, dict[
                 "row_count": row.get("row_count"),
                 "byte_size": row.get("byte_size"),
                 "is_current_manifest_path": logical_path == str(record.get("logical_path") or ""),
+                "verification": {
+                    "passed": not failures,
+                    "failures": failures,
+                    "source_probe": probe.to_dict(),
+                },
             }
         )
     return sorted(alternatives, key=lambda item: str(item["logical_path"]))
+
+
+def duplicate_identity_groups(records: list[dict[str, Any]], inventory_rows: dict[str, dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    definitions = {
+        "duplicate_session_symbol_assignment": lambda item: (item["session_date"], item["symbol"]),
+        "duplicate_logical_path": lambda item: (item["logical_path"],),
+        "duplicate_resolved_physical_path": lambda item: (str(resolve_source_path(item)),),
+        "duplicate_source_sha": lambda item: (item["sha256"],),
+        "duplicate_manifest_record_identity": lambda item: (item["session_date"], item["symbol"], item["logical_path"], item["sha256"]),
+    }
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for name, key_fn in definitions.items():
+        by_key: dict[tuple[Any, ...], list[tuple[int, dict[str, Any]]]] = {}
+        for index, record in enumerate(records):
+            by_key.setdefault(key_fn(record), []).append((index, record))
+        groups[name] = [
+            {
+                "identity": list(key),
+                "member_record_indexes": [index for index, _ in members],
+                "logical_paths": [str(record.get("logical_path") or "") for _, record in members],
+                "symbols": [str(record.get("symbol") or "") for _, record in members],
+                "sessions": [str(record.get("session_date") or "") for _, record in members],
+                "shas": [str(record.get("sha256") or "") for _, record in members],
+                "disposition": "duplicate_identity_detected",
+            }
+            for key, members in sorted(by_key.items())
+            if len(members) > 1
+        ]
+    groups["cross_symbol_logical_path_reuse"] = _cross_symbol_groups(records, lambda item: str(item.get("logical_path") or ""))
+    groups["cross_symbol_physical_file_reuse"] = _cross_symbol_groups(records, lambda item: str(resolve_source_path(item)))
+    groups["cross_symbol_sha_reuse"] = _cross_symbol_groups(records, lambda item: str(item.get("sha256") or ""))
+    inventory_by_identity: dict[tuple[str, str, str], list[str]] = {}
+    for key, row in inventory_rows.items():
+        identity = (str(row.get("logical_path") or key), str(row.get("sha256") or ""), ",".join(map(str, row.get("symbol_values") or [])))
+        inventory_by_identity.setdefault(identity, []).append(key)
+    groups["duplicate_inventory_record_identity"] = [
+        {"identity": list(identity), "inventory_keys": keys, "disposition": "duplicate_inventory_identity_detected"}
+        for identity, keys in sorted(inventory_by_identity.items())
+        if len(keys) > 1
+    ]
+    return groups
+
+
+def _cross_symbol_groups(records: list[dict[str, Any]], key_fn: Any) -> list[dict[str, Any]]:
+    by_key: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for index, record in enumerate(records):
+        by_key.setdefault(key_fn(record), []).append((index, record))
+    out: list[dict[str, Any]] = []
+    for key, members in sorted(by_key.items()):
+        symbols = sorted({str(record.get("symbol") or "") for _, record in members})
+        if len(members) > 1 and len(symbols) > 1:
+            out.append(
+                {
+                    "identity": key,
+                    "member_record_indexes": [index for index, _ in members],
+                    "logical_paths": [str(record.get("logical_path") or "") for _, record in members],
+                    "symbols": symbols,
+                    "sessions": [str(record.get("session_date") or "") for _, record in members],
+                    "shas": [str(record.get("sha256") or "") for _, record in members],
+                    "disposition": "cross_symbol_reuse_detected",
+                }
+            )
+    return out
 
 
 def audit_records(manifest: dict[str, Any], inventory_rows: dict[str, dict[str, Any]]) -> tuple[list[dict[str, Any]], Counter[str]]:
@@ -359,10 +479,29 @@ def audit_records(manifest: dict[str, Any], inventory_rows: dict[str, dict[str, 
             classes.append("DUPLICATE_SOURCE_ASSIGNMENT")
         alternatives = _alternative_sources(record, inventory_rows)
         non_current = [item for item in alternatives if not item["is_current_manifest_path"]]
-        if classes and non_current:
-            classes.append("CORRECT_ALTERNATIVE_SOURCE_FOUND" if len(non_current) == 1 else "AMBIGUOUS_ALTERNATIVE_SOURCES")
-        elif classes and not alternatives:
-            classes.append("CORRECT_SOURCE_MISSING")
+        verified_non_current = [item for item in non_current if item["verification"]["passed"]]
+        needs_alternative = any(
+            item in classes
+            for item in (
+                "MANIFEST_SYMBOL_MISMATCH",
+                "MANIFEST_PATH_MISMATCH",
+                "INVENTORY_SYMBOL_MISMATCH",
+                "SOURCE_CONTENT_SYMBOL_MISMATCH",
+                "SOURCE_HASH_MISMATCH",
+                "SOURCE_SIZE_MISMATCH",
+                "SOURCE_ROW_COUNT_MISMATCH",
+                "SOURCE_SCHEMA_INVALID",
+                "SOURCE_SESSION_INVALID",
+                "SOURCE_HISTORY_INVALID",
+            )
+        )
+        if needs_alternative:
+            for item in non_current:
+                classes.extend(item["verification"]["failures"])
+            if verified_non_current:
+                classes.append("CORRECT_ALTERNATIVE_SOURCE_FOUND" if len(verified_non_current) == 1 else "AMBIGUOUS_ALTERNATIVE_SOURCES")
+            elif not alternatives or not verified_non_current:
+                classes.append("CORRECT_SOURCE_MISSING")
         if not classes:
             classes.append("EXACT_MATCH")
         for name in sorted(set(classes)):
@@ -380,11 +519,70 @@ def audit_records(manifest: dict[str, Any], inventory_rows: dict[str, dict[str, 
                 "inventory_normalized_symbols": list(inventory_symbols),
                 "source_probe": probe.to_dict(),
                 "classifications": sorted(set(classes), key=CLASSIFICATIONS.index),
-                "correct_alternative_sources": non_current,
+                "candidate_alternative_sources": non_current,
+                "verified_correct_alternative_sources": verified_non_current,
                 "manifest_record": record,
             }
         )
     return audited, counts
+
+
+def derive_root_causes(audited: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    by_date: dict[str, list[dict[str, Any]]] = {}
+    for row in audited:
+        if row["classifications"] != ["EXACT_MATCH"]:
+            by_date.setdefault(str(row["session_date"]), []).append(row)
+    out: dict[str, dict[str, Any]] = {}
+    for session, rows in sorted(by_date.items()):
+        defective = [
+            row
+            for row in rows
+            if any(
+                item in row["classifications"]
+                for item in ("MANIFEST_PATH_MISMATCH", "MANIFEST_SYMBOL_MISMATCH", "INVENTORY_SYMBOL_MISMATCH", "SOURCE_CONTENT_SYMBOL_MISMATCH")
+            )
+        ] or rows
+        root_cases = set()
+        for row in defective:
+            classes = set(row["classifications"])
+            if "CORRECT_SOURCE_MISSING" in classes:
+                root_cases.add("CORRECT_SOURCE_MISSING")
+            if "AMBIGUOUS_ALTERNATIVE_SOURCES" in classes:
+                root_cases.add("AMBIGUOUS_CORRECT_SOURCE")
+            if "DUPLICATE_SOURCE_ASSIGNMENT" in classes:
+                root_cases.add("DUPLICATE_SESSION_SYMBOL_ASSIGNMENT")
+            if "MANIFEST_PATH_MISMATCH" in classes:
+                root_cases.add("WRONG_MANIFEST_PATH")
+            if "MANIFEST_SYMBOL_MISMATCH" in classes:
+                root_cases.add("WRONG_MANIFEST_SYMBOL")
+            if "INVENTORY_SYMBOL_MISMATCH" in classes:
+                root_cases.add("WRONG_INVENTORY_SYMBOL")
+            if "SOURCE_CONTENT_SYMBOL_MISMATCH" in classes:
+                root_cases.add("WRONG_SOURCE_CONTENT")
+        terminal = next(iter(root_cases)) if len(root_cases) == 1 else "MULTIPLE_DEFECTS"
+        primary = defective[0]
+        alternative = (primary.get("verified_correct_alternative_sources") or [{}])[0]
+        out[session] = {
+            "terminal_root_cause_case": terminal,
+            "derived_cases": sorted(root_cases),
+            "defective_manifest_record_indexes": [row["record_index"] for row in defective],
+            "defective_logical_paths": [row["logical_path"] for row in defective],
+            "defective_manifest_symbols": [row["manifest_symbol"] for row in defective],
+            "defective_path_symbols": [row["path_symbol"] for row in defective],
+            "defective_inventory_normalized_symbols": [row["inventory_normalized_symbols"] for row in defective],
+            "defective_source_content_symbols": [row["source_probe"]["normalized_symbols"] for row in defective],
+            "defective_actual_sha256": [row["source_probe"]["sha256"] for row in defective],
+            "verified_correct_alternative_logical_path": alternative.get("logical_path"),
+            "verified_correct_alternative_sha256": alternative.get("verification", {}).get("source_probe", {}).get("sha256"),
+            "verified_correct_alternative_symbol": alternative.get("verification", {}).get("source_probe", {}).get("normalized_symbols"),
+            "duplicate_group_members": [
+                {"record_index": row["record_index"], "logical_path": row["logical_path"], "symbol": row["manifest_symbol"]}
+                for row in rows
+                if "DUPLICATE_SOURCE_ASSIGNMENT" in row["classifications"]
+            ],
+            "reason": "Derived from manifest/path, inventory, byte-probed source content, verified alternatives, and duplicate assignment classifications.",
+        }
+    return out
 
 
 def build_audit_payload() -> dict[str, Any]:
@@ -393,6 +591,7 @@ def build_audit_payload() -> dict[str, Any]:
     summary = load_json(SUMMARY_PATH)
     inventory_rows = load_inventory_rows()
     audited, counts = audit_records(manifest, inventory_rows)
+    duplicate_groups = duplicate_identity_groups(manifest.get("records") or [], inventory_rows)
     defect_records = [row for row in audited if row["classifications"] != ["EXACT_MATCH"]]
     mislabeled_records = [
         row
@@ -405,28 +604,24 @@ def build_audit_payload() -> dict[str, Any]:
     duplicate_contaminated_records = [row for row in audited if "DUPLICATE_SOURCE_ASSIGNMENT" in row["classifications"]]
     defect_keys = {(row["session_date"], row["manifest_symbol"]) for row in defect_records}
     recomputed_source_hash = manifest_semantic_hash(manifest.get("records") or [])
-    known_defect = [
-        row
-        for row in audited
-        if row["session_date"] == "2026-07-06" and row["manifest_symbol"] == "NIFTY"
-    ]
-    root_cause = {
-        "case": "B_MANIFEST_PATH_AND_SELECTION_SYMBOL_MISMATCH",
-        "reason": "2026-07-06 contains two NIFTY manifest assignments; one points at Nifty Bank inventory/content while a distinct Nifty 50 source exists.",
-        "records": known_defect,
-    }
-    decision = "AUDIT_INVALID" if defect_records else "READY"
+    decision = "ORB_PHASE1_INVALID" if defect_records else "READY"
+    reason = (
+        "ORB Phase 1 source manifest has verified source identity defects; v1 source and candidate hashes cannot certify Phase 1."
+        if defect_records
+        else "all source records exact-match"
+    )
     payload = {
         "schema_version": 1,
-        "mode": "read_only_source_provenance_audit",
+        "mode": "RESEARCH_ORB_PHASE1_SOURCE_PROVENANCE_AUDIT",
         "candidate_id": "opening_range_retest_source_provenance_audit_v1",
         "decision": decision,
-        "reason": "source provenance defects found; do not certify Phase 1 outcomes" if defect_records else "all source records exact-match",
+        "reason": reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "read_only": True,
         "append": False,
         "is_order_action": False,
         "broker_api_called": False,
+        "source": "docs/agent_reviews/opening_range_retest_source_provenance_audit_v1.json",
         "allowed_for_live_execution": False,
         "production_files_touched": [],
         "source_data_files_mutated": [],
@@ -450,9 +645,32 @@ def build_audit_payload() -> dict[str, Any]:
         "defective_source_record_count": len(defect_records),
         "mislabeled_source_record_count": len(mislabeled_records),
         "duplicate_contaminated_source_record_count": len(duplicate_contaminated_records),
+        "exact_match_count": counts.get("EXACT_MATCH", 0),
+        "verified_correct_alternative_count": counts.get("CORRECT_ALTERNATIVE_SOURCE_FOUND", 0),
+        "ambiguous_alternative_count": counts.get("AMBIGUOUS_ALTERNATIVE_SOURCES", 0),
+        "missing_correct_source_count": counts.get("CORRECT_SOURCE_MISSING", 0),
         "affected_session_symbol_count": len(defect_keys),
         "affected_session_symbol_keys": sorted([list(key) for key in defect_keys]),
-        "root_cause_2026_07_06": root_cause,
+        "root_cause_by_affected_date": derive_root_causes(audited),
+        "duplicate_identity_audit": {
+            "definitions": {
+                "duplicate_session_symbol_assignment": ["session_date", "symbol"],
+                "duplicate_logical_path": ["logical_path"],
+                "duplicate_resolved_physical_path": ["resolved physical path"],
+                "duplicate_source_sha": ["sha256"],
+                "cross_symbol_logical_path_reuse": ["logical_path reused across symbols"],
+                "cross_symbol_physical_file_reuse": ["resolved physical path reused across symbols"],
+                "cross_symbol_sha_reuse": ["sha256 reused across symbols"],
+                "duplicate_manifest_record_identity": ["session_date", "symbol", "logical_path", "sha256"],
+                "duplicate_inventory_record_identity": ["logical_path", "sha256", "symbol_values"],
+            },
+            "groups": duplicate_groups,
+            "counts": {name: len(groups) for name, groups in sorted(duplicate_groups.items())},
+            "record_counts": {
+                name: sum(len(group.get("member_record_indexes", [])) for group in groups)
+                for name, groups in sorted(duplicate_groups.items())
+            },
+        },
         "candidate_blast_radius": candidate_blast_radius(ledger, summary, defect_keys, mislabeled_records),
         "records": audited,
     }
@@ -478,11 +696,24 @@ def write_outputs(payload: dict[str, Any], *, json_path: Path = JSON_OUTPUT_PATH
 def render_markdown(payload: dict[str, Any], digest: str) -> str:
     counts = payload["classification_counts"]
     blast = payload["candidate_blast_radius"]
+    def evidence_line(name: str, value: Any) -> str:
+        if isinstance(value, bool):
+            value = str(value).lower()
+        return f"- {name}: {value}"
+
     return "\n".join(
         [
             "# ORB Phase 1 Source Provenance Audit v1",
             "",
             "## Agent Work Contract",
+            f"- mode: {payload['mode']}",
+            f"- candidate_id: {payload['candidate_id']}",
+            f"- decision: {payload['decision']}",
+            f"- reason: {payload['reason']}",
+            f"- timestamp: {payload['timestamp']}",
+            evidence_line("is_order_action", payload["is_order_action"]),
+            evidence_line("broker_api_called", payload["broker_api_called"]),
+            f"- source: {payload['source']}",
             "- source_agent: Codex",
             "- action: READ_ONLY_SOURCE_PROVENANCE_AUDIT",
             "- title: ORB Phase 1 source-provenance repair and blast-radius certification",
@@ -528,7 +759,11 @@ def render_markdown(payload: dict[str, Any], digest: str) -> str:
             f"- source-universe hash observed: `{payload['observed_invariants']['recomputed_manifest_semantic_hash']}`",
             f"- candidate count observed: {payload['observed_invariants']['candidate_count']}",
             f"- candidate semantic hash observed: `{payload['observed_invariants']['candidate_semantic_hash']}`",
-            f"- candidate blast radius: `{json.dumps(blast, sort_keys=True)}`",
+            f"- exact_wrong_source_emission_count: {blast['exact_wrong_source_emission_count']}",
+            f"- session_symbol_candidate_upper_bound_count: {blast['session_symbol_candidate_upper_bound_count']}",
+            f"- exact_affected_candidate_ids_available: {str(blast['exact_affected_candidate_ids_available']).lower()}",
+            f"- unaffected_candidate_count: {blast['unaffected_candidate_count']}",
+            f"- unaffected_subset_semantic_hash: `{blast['unaffected_subset_semantic_hash']}`",
             "",
             "## Runtime Proof Required After Merge",
             "- No runtime proof is claimed by this PR.",
@@ -551,5 +786,20 @@ def render_markdown(payload: dict[str, Any], digest: str) -> str:
 def main() -> int:
     payload = build_audit_payload()
     write_outputs(payload)
-    print(json.dumps({"decision": payload["decision"], "records_audited": payload["records_audited"], "defective_source_record_count": payload["defective_source_record_count"]}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "cli_exit_contract": {
+                    "0": "no provenance defects",
+                    "1": "auditor execution/configuration failure",
+                    "2": "provenance audit completed and found invalid certification",
+                },
+                "cli_verdict": "AUDIT_INVALID" if payload["decision"] != "READY" else "READY",
+                "decision": payload["decision"],
+                "records_audited": payload["records_audited"],
+                "defective_source_record_count": payload["defective_source_record_count"],
+            },
+            sort_keys=True,
+        )
+    )
     return 0 if payload["decision"] == "READY" else 2
