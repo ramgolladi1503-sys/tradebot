@@ -233,7 +233,6 @@ def build_agentic_qa_evidence(bundle_root: str | Path, *, isolated: bool = True)
             "artifact_hash_gate_passed": _passed(report, "artifact_hashes"),
             "test_evidence_passed": test_evidence_passed,
             "engine_read_only": engine.get("read_only"),
-            "broker_api_called": engine.get("broker_api_called"),
         },
     }
 
