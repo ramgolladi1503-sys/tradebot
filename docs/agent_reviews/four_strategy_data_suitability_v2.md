@@ -6,6 +6,18 @@ RIGHT_WITH_GAPS
 ## APPROVED OBJECTIVE
 Integrate the approved four-strategy data-suitability dependency closure onto current `main` using read-only local data and immutable JSON evidence, without widening the runtime surface.
 
+## Evidence Contract
+- mode: REVIEW
+- candidate_id: four_strategy_data_suitability_v2
+- decision: PASS
+- reason: read_only_evidence_contract
+- timestamp: 2026-07-18T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: Codex
+- live_order_action: false
+- broker_order_action: false
+
 ## Agent Work Contract
 - source_agent: Codex
 - action: integrate approved four-strategy data-suitability closure

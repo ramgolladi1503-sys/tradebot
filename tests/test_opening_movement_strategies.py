@@ -60,7 +60,8 @@ def test_opening_drive_generates_valid_call_candidate():
     ctx = _base_context()
     result = generate_opening_drive_candidates(ctx, _regime(TREND_UP=0.8, VOLATILITY_EXPANSION=0.4))
 
-    assert len(result) == 1
+    assert result
+    assert result[1:] == ()
     candidate = result[0]
     assert candidate.strategy_id == "opening_drive_v1"
     assert candidate.movement_type == "OPENING_DRIVE"
@@ -82,7 +83,8 @@ def test_opening_drive_generates_valid_put_candidate():
     )
     result = generate_opening_drive_candidates(ctx, _regime(TREND_DOWN=0.8, VOLATILITY_EXPANSION=0.4))
 
-    assert len(result) == 1
+    assert result
+    assert result[1:] == ()
     candidate = result[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
@@ -105,7 +107,8 @@ def test_opening_drive_blocks_fallback_stale_wide_spread_and_missing_depth():
     )
     result = generate_opening_drive_candidates(ctx, _regime(TREND_UP=0.8))
 
-    assert len(result) == 1
+    assert result
+    assert result[1:] == ()
     candidate = result[0]
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
@@ -120,7 +123,8 @@ def test_orb_retest_generates_valid_call_candidate_near_retest_level():
         _regime(TREND_UP=0.6, VOLATILITY_EXPANSION=0.3),
     )
 
-    assert len(result) == 1
+    assert result
+    assert result[1:] == ()
     candidate = result[0]
     assert candidate.strategy_id == "opening_range_retest_v1"
     assert candidate.movement_type == "OPENING_RANGE_RETEST"
@@ -143,7 +147,8 @@ def test_orb_retest_generates_valid_put_candidate_near_retest_level():
         _regime(TREND_DOWN=0.6, VOLATILITY_EXPANSION=0.3),
     )
 
-    assert len(result) == 1
+    assert result
+    assert result[1:] == ()
     candidate = result[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"

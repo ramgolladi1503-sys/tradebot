@@ -61,7 +61,8 @@ def test_exhaustion_reversal_generates_put_candidate_after_upside_stall():
         _regime(EXHAUSTION_RISK=0.75, TREND_UP=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "exhaustion_reversal_v1"
     assert candidate.movement_type == "EXHAUSTION_REVERSAL"
@@ -84,7 +85,8 @@ def test_exhaustion_reversal_generates_call_candidate_after_downside_stall():
         _regime(EXHAUSTION_RISK=0.75, TREND_DOWN=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
     assert candidate.status == "RAW_CANDIDATE"
@@ -135,7 +137,8 @@ def test_mean_reversion_extension_generates_put_candidate_from_upper_range_exten
         _regime(primary="RANGE", RANGE=0.72, TREND_UP=0.15, VOLATILITY_EXPANSION=0.05),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "mean_reversion_extension_v1"
     assert candidate.movement_type == "MEAN_REVERSION_EXTENSION"
@@ -158,7 +161,8 @@ def test_mean_reversion_extension_generates_call_candidate_from_lower_range_exte
         _regime(primary="RANGE", RANGE=0.72, TREND_DOWN=0.15, VOLATILITY_EXPANSION=0.05),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
     assert candidate.status == "RAW_CANDIDATE"

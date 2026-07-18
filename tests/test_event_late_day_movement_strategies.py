@@ -64,7 +64,8 @@ def test_event_volatility_generates_call_candidate_on_upside_expansion():
         _regime(VOLATILITY_EXPANSION=0.82, TREND_UP=0.55),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "event_volatility_expansion_v1"
     assert candidate.movement_type == "EVENT_VOLATILITY_EXPANSION"
@@ -87,7 +88,8 @@ def test_event_volatility_generates_put_candidate_on_downside_expansion():
         _regime(VOLATILITY_EXPANSION=0.82, TREND_DOWN=0.55),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
@@ -132,7 +134,8 @@ def test_late_day_momentum_generates_call_candidate_after_afternoon_confirmation
         _regime(primary="TREND_UP", TREND_UP=0.76, CHOP=0.1),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "late_day_momentum_v1"
     assert candidate.movement_type == "LATE_DAY_MOMENTUM"
@@ -154,7 +157,8 @@ def test_late_day_momentum_generates_put_candidate_after_afternoon_downtrend():
         _regime(primary="TREND_DOWN", TREND_DOWN=0.76, CHOP=0.1),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"

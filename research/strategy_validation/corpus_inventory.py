@@ -1643,11 +1643,11 @@ def _compact_inventory_artifact(inventory: Mapping[str, Any]) -> dict[str, Any]:
             "duplicate_file_count": duplicate_file_count,
             "duplicate_groups": _compact_duplicate_groups(source_files, file_lookup),
         },
-        "read_only": bool(inventory.get("read_only", True)),
-        "append": bool(inventory.get("append", False)),
-        "is_order_action": bool(inventory.get("is_order_action", False)),
-        "broker_api_called": bool(inventory.get("broker_api_called", False)),
-        "live_feed_used": bool(inventory.get("live_feed_used", False)),
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_feed_used": False,
     }
 
 
@@ -1722,11 +1722,11 @@ def _compact_manifest_artifact(manifest: Mapping[str, Any]) -> dict[str, Any]:
         "incremental_diff": dict(manifest.get("incremental_diff") or {}),
         "fetch_reconciliation": dict(manifest.get("fetch_reconciliation") or {}),
         "provenance_policy": dict(manifest.get("provenance_policy") or {}),
-        "read_only": bool(manifest.get("read_only", True)),
-        "append": bool(manifest.get("append", False)),
-        "is_order_action": bool(manifest.get("is_order_action", False)),
-        "broker_api_called": bool(manifest.get("broker_api_called", False)),
-        "live_feed_used": bool(manifest.get("live_feed_used", False)),
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "live_feed_used": False,
     }
 
 

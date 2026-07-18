@@ -1,4 +1,5 @@
 from __future__ import annotations
+"""Evidence support helpers for VWAP reclaim tests."""
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -10,6 +11,8 @@ IST = ZoneInfo("Asia/Kolkata")
 SESSION_DATE = "2026-07-14"
 SESSION_OPEN = datetime(2026, 7, 14, 9, 15, tzinfo=IST)
 EVALUATION_CUTOFF = (SESSION_OPEN + timedelta(minutes=3)).timestamp()
+
+assert EVALUATION_CUTOFF > 0
 
 
 def bullish_history(*, include_future: bool = False) -> list[dict[str, object]]:

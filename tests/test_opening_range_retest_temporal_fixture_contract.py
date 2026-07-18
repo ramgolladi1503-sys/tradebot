@@ -358,7 +358,8 @@ def _first_emitting_candidate(
     ctx = _temporal_context(state)
     regime = regime_builder(state)
     candidates = generate_opening_range_retest_candidates(ctx, regime)
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     return trace, state, candidates[0]
 
 
@@ -567,9 +568,11 @@ def test_unrelated_strategy_controls_remain_stable() -> None:
         _regime(up=0.72),
     )
 
-    assert len(opening_drive) == 1
+    assert opening_drive
+    assert opening_drive[1:] == ()
     assert opening_drive[0].strategy_id == "opening_drive_v1"
-    assert len(trend_pullback) == 1
+    assert trend_pullback
+    assert trend_pullback[1:] == ()
     assert trend_pullback[0].strategy_id == "trend_pullback_v1"
 
 
@@ -701,7 +704,8 @@ def test_orb_reconciliation_matrix_records_current_behavior(
     result = generate_opening_range_retest_candidates(ctx, _regime())
 
     if expected_has_candidate:
-        assert len(result) == 1
+        assert result
+        assert result[1:] == ()
         assert _fingerprint(result) == (
             "opening_range_retest_v1",
             "BUY_CALL",

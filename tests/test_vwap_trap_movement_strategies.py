@@ -64,7 +64,8 @@ def test_vwap_reclaim_generates_call_candidate_after_confirmed_reclaim():
     ctx = _base_context(spot_ltp=22610.0, vwap=22540.0, vwap_slope=0.04)
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, _regime(TREND_UP=0.6, CHOP=0.1))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "vwap_reclaim_rejection_v1"
     assert candidate.movement_type == "VWAP_RECLAIM_REJECTION"
@@ -93,7 +94,8 @@ def test_vwap_reclaim_generates_put_candidate_after_confirmed_downside_reclaim()
     )
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, _regime(primary="TREND_DOWN", TREND_DOWN=0.6, CHOP=0.1))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
@@ -151,7 +153,8 @@ def test_failed_breakout_trap_generates_put_candidate_after_bull_trap_reentry():
     )
     candidates = generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.75))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "failed_breakout_trap_v1"
     assert candidate.movement_type == "FAILED_BREAKOUT_TRAP"
@@ -173,7 +176,8 @@ def test_failed_breakout_trap_generates_call_candidate_after_bear_trap_reentry()
     )
     candidates = generate_failed_breakout_trap_candidates(ctx, _regime(primary="TRAP_RISK", TRAP_RISK=0.75))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_CALL"
     assert candidate.status == "RAW_CANDIDATE"

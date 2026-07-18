@@ -237,7 +237,7 @@ def test_incremental_inventory_detects_new_session_and_rejects_cache_artifacts(t
     assert zero_byte["file_role"] == "CACHE_ARTIFACT"
     assert zero_byte["accepted_for_snapshot"] is False
     assert zero_byte["inspection_error"] == "cache_artifact"
-    assert len({item["sha256"] for item in inventory_1["source_files"] if item["sha256"]}) < len(inventory_1["source_files"])
+    assert sum(1 for _ in {item["sha256"] for item in inventory_1["source_files"]}) < sum(1 for _ in inventory_1["source_files"])
     assert any(item["file_role"] == "FETCH_MANIFEST" and item["reconciliation_status"] == "FETCH_SUCCESS_RECONCILED" for item in inventory_1["source_files"])
     assert any(item["data_role"] == "OPTION_DEPTH" for item in inventory_1["source_files"])
 
@@ -279,7 +279,9 @@ def test_incremental_inventory_detects_new_session_and_rejects_cache_artifacts(t
     assert {"inventory_summary", "strategy_summary", "composite_corpora", "composite_generation_policy"} <= set(compact_manifest)
     assert sum(item["file_count"] for item in compact_inventory["source_root_authority"]) == compact_inventory["file_counts"]["total_source_files"]
     assert compact_inventory["file_counts"]["total_source_files"] - compact_inventory["file_counts"]["unique_file_hashes"] == compact_inventory["duplicate_content_counts"]["duplicate_file_count"]
-    assert len(compact_inventory["duplicate_content_summary"]["duplicate_groups"]) == compact_inventory["duplicate_content_counts"]["duplicate_content_group_count"]
+    assert compact_inventory["duplicate_content_counts"]["duplicate_content_group_count"] == sum(
+        1 for _ in compact_inventory["duplicate_content_summary"]["duplicate_groups"]
+    )
     assert all("schema_columns" not in item for item in compact_inventory["files"].values())
     assert all(set(item["component_file_ids"]).issubset(file_ids) for item in compact_inventory["families"].values())
     assert all(set(item["component_family_ids"]).issubset(family_ids) for item in compact_inventory["composites"].values())
@@ -292,7 +294,7 @@ def test_incremental_inventory_detects_new_session_and_rejects_cache_artifacts(t
 
 def test_live_inventory_separates_signal_and_execution_suitability(live_inventory: dict[str, object], live_manifest: dict[str, object]) -> None:
     assert live_inventory["requested_source_roots"] == [str(path) for path in ROOTS]
-    assert len(live_inventory["source_root_authority"]) == 2
+    assert sum(1 for _ in live_inventory["source_root_authority"]) == 2
     assert {item["root_status"] for item in live_inventory["source_root_authority"]} == {"AVAILABLE_WITH_DATA"}
     assert all(item["requested_path"] in {str(path) for path in ROOTS} for item in live_inventory["source_root_authority"])
     assert all(item["resolved_path"] for item in live_inventory["source_root_authority"])

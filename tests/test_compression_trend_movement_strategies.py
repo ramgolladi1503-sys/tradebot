@@ -96,7 +96,8 @@ def test_compression_breakout_generates_call_candidate_after_compression_release
         _regime(COMPRESSION=0.82, VOLATILITY_EXPANSION=0.45, TREND_UP=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "compression_breakout_v1"
     assert candidate.movement_type == "COMPRESSION_BREAKOUT"
@@ -124,7 +125,8 @@ def test_compression_breakout_generates_put_candidate_after_compression_breakdow
         _regime(COMPRESSION=0.82, VOLATILITY_EXPANSION=0.45, TREND_DOWN=0.35),
     )
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
@@ -172,7 +174,8 @@ def test_trend_pullback_generates_call_candidate_when_uptrend_pullback_holds():
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_UP", TREND_UP=0.72))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.strategy_id == "trend_pullback_v1"
     assert candidate.movement_type == "TREND_PULLBACK"
@@ -195,7 +198,8 @@ def test_trend_pullback_generates_put_candidate_when_downtrend_pullback_rejects(
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_DOWN", TREND_DOWN=0.74))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
@@ -227,7 +231,8 @@ def test_trend_pullback_blocks_stale_fallback_wide_spread_candidate():
     )
     candidates = generate_trend_pullback_candidates(ctx, _regime(primary="TREND_UP", TREND_UP=0.75))
 
-    assert len(candidates) == 1
+    assert candidates
+    assert candidates[1:] == ()
     candidate = candidates[0]
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
