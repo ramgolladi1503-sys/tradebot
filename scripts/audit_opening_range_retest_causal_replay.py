@@ -36,8 +36,8 @@ def _record_key(record: dict[str, object]) -> tuple[str, str, str, str]:
 
 def _ledger_key(entry: dict[str, object]) -> tuple[str, str, str, str, str]:
     return (
-        str(entry.get("symbol") or ""),
         str(entry.get("session_date") or ""),
+        str(entry.get("symbol") or ""),
         str(entry.get("proposal_ready_at_iso") or ""),
         str(entry.get("direction") or ""),
         str(entry.get("setup_id") or ""),
