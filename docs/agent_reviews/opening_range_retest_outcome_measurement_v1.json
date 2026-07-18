@@ -1,0 +1,86 @@
+{
+  "ab_semantic_hash_equal": true,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "audit_failures": [],
+  "audit_verdict": "ORB_OUTCOME_AUDIT_READY",
+  "broker_api_called": false,
+  "candidate_count": 2215,
+  "candidate_id": "opening_range_retest_outcome_measurement_v1",
+  "candidate_semantic_hash": "53c8cf67f33d1e958bc2ffa1730c00c86d222e67ae76d2e865da6962892e1d24",
+  "certified_merged_main_summary_hash": "34b7c8628e28c436a2b18a1d9598077d2e08e0eab09009748e06c2ed41eb9074",
+  "claim_boundary": "underlying_descriptive_outcomes_only",
+  "code_sha": "648da6914959925ca1d10775aad3ce3f5c269f93",
+  "decision": "ORB_OUTCOMES_MEASURED",
+  "duplicate_directional_exposure_count": 1,
+  "is_order_action": false,
+  "mode": "RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT_EVIDENCE",
+  "not_proven": [
+    "structural_trading_edge",
+    "strategy_profitability",
+    "option_pnl",
+    "option_fills",
+    "bid_ask_execution",
+    "spread_realization",
+    "slippage",
+    "latency",
+    "paper_readiness",
+    "live_readiness",
+    "broker_correctness",
+    "capital_allocation_readiness",
+    "production_promotion"
+  ],
+  "outcome_semantic_hash": "84d031bf046fcc35c4abd2c8554e0042a94873a05d057f45b651fc139426380a",
+  "path_event_counts": {
+    "1": {
+      "NEITHER": 2103,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 95,
+      "TARGET_FIRST": 8
+    },
+    "10": {
+      "NEITHER": 1535,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 553,
+      "TARGET_FIRST": 118
+    },
+    "15": {
+      "NEITHER": 1321,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 705,
+      "TARGET_FIRST": 180
+    },
+    "3": {
+      "NEITHER": 1966,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 216,
+      "TARGET_FIRST": 24
+    },
+    "30": {
+      "NEITHER": 898,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 984,
+      "TARGET_FIRST": 324
+    },
+    "5": {
+      "NEITHER": 1830,
+      "NOT_MEASURED": 9,
+      "STOP_FIRST": 320,
+      "TARGET_FIRST": 56
+    }
+  },
+  "read_only": true,
+  "run_a_dir": "/tmp/orb-certified-outcomes-648da691-a",
+  "run_a_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
+  "run_b_dir": "/tmp/orb-certified-outcomes-648da691-b",
+  "run_b_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
+  "schema_version": 1,
+  "source": "docs/agent_reviews/opening_range_retest_outcome_measurement_v1.json",
+  "source_count": 1512,
+  "source_universe_hash": "cf4cc9cacb2db3a2f9cdc006465ebd5f8af6e6146e6a6a59048e1af38f2393bc",
+  "status_counts": {
+    "MEASURED": 2206,
+    "NO_LEGAL_ENTRY": 9
+  },
+  "timestamp": "2026-07-19T04:35:00+05:30"
+}
