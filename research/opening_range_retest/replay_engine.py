@@ -224,6 +224,10 @@ def _build_source_manifest(
         "inventory_resolution": _resolution_summary(resolution),
         "records": [record.to_dict() for record in records],
         "selection_summary": selection_summary(records),
+        "full_source_universe": {
+            "selected_record_count_before_sharding": all_record_count,
+            "semantic_hash": "",
+        },
         "shard_metadata": {
             "shard_count": shard_spec.shard_count if shard_spec is not None else 1,
             "shard_index": shard_spec.shard_index if shard_spec is not None else 0,
@@ -483,6 +487,119 @@ def _canonical_summary_payload(summary: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in summary.items() if key not in volatile}
 
 
+def _execution_identity(contract: dict[str, Any], summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "strategy_id": str(contract["strategy_id"]),
+        "contract_hash": str(contract["contract_hash"]),
+        "contract_version": str(contract["temporal_contract_version"]),
+        "production_module": str(contract["production_module"]),
+        "production_callable": str(contract["production_callable"]),
+        "production_file_sha256": str(contract["production_file_sha256"]),
+        "runtime_profile_hash": str(contract["runtime_profile_hash"]),
+        "dataset_manifest_hash": str(summary["dataset_manifest_hash"]),
+        "inventory_sha256": str(summary.get("inventory_sha256")),
+    }
+
+
+def _full_source_universe(records: Iterable[SessionFileRecord]) -> dict[str, Any]:
+    ordered = _sorted_session_records(records)
+    return {
+        "selected_record_count_before_sharding": len(ordered),
+        "semantic_hash": hashlib.sha256(canonical_json_bytes([record.to_dict() for record in ordered])).hexdigest(),
+    }
+
+
+def _ledger_identity_key(emission: ReplayEmission) -> tuple[str, str, str, str, str]:
+    return (
+        emission.symbol,
+        emission.session_date,
+        emission.direction,
+        emission.proposal_ready_at_iso,
+        emission.setup_id,
+    )
+
+
+def _validate_ledger(emissions: tuple[ReplayEmission, ...], *, expected_candidate_hash: str | None = None) -> str:
+    ordered = _sorted_emissions(emissions)
+    if tuple(ordered) != tuple(emissions):
+        raise ReplaySourceSelectionError("ledger_not_canonical_order")
+    identity_keys = [_ledger_identity_key(emission) for emission in emissions]
+    if len(set(identity_keys)) != len(identity_keys):
+        raise ReplaySourceSelectionError("duplicate_ledger_emission")
+    candidate_hash = hashlib.sha256(canonical_json_bytes([item.to_dict() for item in emissions])).hexdigest()
+    if expected_candidate_hash is not None and candidate_hash != str(expected_candidate_hash):
+        raise ReplaySourceSelectionError(
+            f"ledger_candidate_hash_mismatch:expected={expected_candidate_hash}:actual={candidate_hash}"
+        )
+    return candidate_hash
+
+
+def _validate_shard_identity(
+    *,
+    contract: dict[str, Any],
+    source_manifest: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    manifest_shard_metadata = dict(source_manifest.get("shard_metadata") or {})
+    summary_shard_metadata = dict(summary.get("shard_metadata") or {})
+    if bool(summary.get("diagnostic_mode")):
+        raise ReplaySourceSelectionError("diagnostic_shard_cannot_merge")
+    if not bool(summary.get("authoritative_inventory_resolved")):
+        raise ReplaySourceSelectionError("non_authoritative_shard_cannot_merge")
+    if str(summary.get("phase1_verdict")) != "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY":
+        raise ReplaySourceSelectionError("non_ready_shard_cannot_merge")
+    if not bool(summary_shard_metadata.get("is_sharded_run")):
+        raise ReplaySourceSelectionError("non_sharded_summary_cannot_merge")
+    if bool(summary_shard_metadata.get("merged_from_shards")):
+        raise ReplaySourceSelectionError("already_merged_summary_cannot_merge")
+    if not bool(manifest_shard_metadata.get("is_sharded_run")):
+        raise ReplaySourceSelectionError("non_sharded_manifest_cannot_merge")
+    if bool(manifest_shard_metadata.get("merged_from_shards")):
+        raise ReplaySourceSelectionError("already_merged_manifest_cannot_merge")
+    summary_shard_index = int(summary_shard_metadata.get("shard_index") or 0)
+    manifest_shard_index = int(manifest_shard_metadata.get("shard_index") or 0)
+    if summary_shard_index != manifest_shard_index:
+        raise ReplaySourceSelectionError(
+            f"shard_index_mismatch_between_summary_and_manifest:{summary_shard_index}:{manifest_shard_index}"
+        )
+    summary_shard_count = int(summary_shard_metadata.get("shard_count") or 0)
+    manifest_shard_count = int(manifest_shard_metadata.get("shard_count") or 0)
+    if summary_shard_count != manifest_shard_count:
+        raise ReplaySourceSelectionError(
+            f"shard_count_mismatch_between_summary_and_manifest:{summary_shard_count}:{manifest_shard_count}"
+        )
+    manifest_records = [_record_from_payload(record) for record in source_manifest.get("records") or []]
+    if len(manifest_records) != int(summary.get("selected_file_count") or 0):
+        raise ReplaySourceSelectionError("selected_file_count_mismatch_between_summary_and_manifest")
+    manifest_selection_summary = dict(source_manifest.get("selection_summary") or {})
+    if int(manifest_selection_summary.get("selected_file_count") or 0) != len(manifest_records):
+        raise ReplaySourceSelectionError("manifest_selection_summary_count_mismatch")
+    manifest_selection_hash = hashlib.sha256(
+        canonical_json_bytes([record.to_dict() for record in _sorted_session_records(manifest_records)])
+    ).hexdigest()
+    if manifest_selection_hash != str(manifest_selection_summary.get("semantic_hash")):
+        raise ReplaySourceSelectionError("manifest_selection_summary_hash_mismatch")
+    execution_identity = _execution_identity(contract, summary)
+    if dict(summary.get("execution_identity") or {}) != execution_identity:
+        raise ReplaySourceSelectionError("execution_identity_mismatch")
+    full_source_universe = dict(source_manifest.get("full_source_universe") or {})
+    if int(full_source_universe.get("selected_record_count_before_sharding") or 0) != int(
+        summary_shard_metadata.get("selected_file_count_before_sharding") or 0
+    ):
+        raise ReplaySourceSelectionError("source_universe_count_mismatch")
+    if str(full_source_universe.get("semantic_hash") or "").strip() != str(
+        dict(summary.get("full_source_universe") or {}).get("semantic_hash") or ""
+    ).strip():
+        raise ReplaySourceSelectionError("source_universe_hash_mismatch")
+    return {
+        "execution_identity": execution_identity,
+        "full_source_universe": full_source_universe,
+        "manifest_records": manifest_records,
+        "summary_shard_index": summary_shard_index,
+        "summary_shard_count": summary_shard_count,
+    }
+
+
 def run_replay(
     *,
     manifest_path: Path | str | None = None,
@@ -513,6 +630,7 @@ def run_replay(
         all_record_count=len(all_selected),
         shard_spec=shard_spec,
     )
+    source_manifest["full_source_universe"] = _full_source_universe(all_selected)
     all_emissions: list[ReplayEmission] = []
     malformed_rejections = 0
     oracle_checked = oracle_matched = oracle_mismatched = 0
@@ -573,16 +691,9 @@ def run_replay(
     by_direction = Counter(emission.direction for emission in all_emissions)
     by_session = Counter(emission.session_date for emission in all_emissions)
     sorted_emissions = _sorted_emissions(all_emissions)
-    emissions_payload = [item.to_dict() for item in sorted_emissions]
-    candidate_semantic_hash = hashlib.sha256(canonical_json_bytes(emissions_payload)).hexdigest()
+    candidate_semantic_hash = _validate_ledger(sorted_emissions)
     source_immutability = _source_immutability_result(selected)
     total_elapsed_seconds = perf_counter() - started
-    if not authoritative_inventory_resolved:
-        verdict = "AUDIT_INVALID"
-    elif oracle_mismatched != 0 or source_immutability["mismatched"] != 0:
-        verdict = "AUDIT_INVALID"
-    else:
-        verdict = "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY"
     summary = {
         "schema_version": 1,
         "contract_version": contract["temporal_contract_version"],
@@ -646,8 +757,10 @@ def run_replay(
         "claim_boundary": contract["source_data_claim_boundary"],
         "authoritative_inventory_resolved": authoritative_inventory_resolved,
         "diagnostic_mode": not authoritative_inventory_resolved,
-        "phase1_verdict": verdict,
+        "phase1_verdict": "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY",
         "candidate_semantic_hash": candidate_semantic_hash,
+        "execution_identity": _execution_identity(contract, {"dataset_manifest_hash": contract["dataset_manifest_sha256"], "inventory_sha256": source_manifest["inventory_resolution"]["inventory_sha256"]}),
+        "full_source_universe": dict(source_manifest["full_source_universe"]),
         "shard_metadata": {
             "shard_count": shard_spec.shard_count if shard_spec is not None else 1,
             "shard_index": shard_spec.shard_index if shard_spec is not None else 0,
@@ -658,7 +771,15 @@ def run_replay(
             "merged_shard_indexes": [shard_spec.shard_index] if shard_spec is not None else [0],
         },
     }
-    if verdict == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY" and malformed_rejections:
+    if (
+        not authoritative_inventory_resolved
+        or malformed_rejections != 0
+        or oracle_mismatched != 0
+        or (future_mutation_checked - future_mutation_passed) != 0
+        or source_immutability["mismatched"] != 0
+        or int(source_manifest["selection_summary"]["selected_file_count"]) != len(selected)
+        or int(source_manifest["full_source_universe"]["selected_record_count_before_sharding"]) != len(all_selected)
+    ):
         summary["phase1_verdict"] = "AUDIT_INVALID"
     summary["canonical_summary_semantic_hash"] = hashlib.sha256(
         canonical_json_bytes(_canonical_summary_payload(summary))
@@ -700,6 +821,14 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         raise ReplaySourceSelectionError(f"contract_hash_mismatch:{sorted(contract_hashes)}")
     base_contract = contracts[0]
     summaries = [payload["summary"] for payload in shard_payloads]
+    shard_validations = [
+        _validate_shard_identity(
+            contract=payload["contract"],
+            source_manifest=payload["source_manifest"],
+            summary=payload["summary"],
+        )
+        for payload in shard_payloads
+    ]
     shard_metadata = [dict(summary.get("shard_metadata") or {}) for summary in summaries]
     shard_count_values = {int(meta.get("shard_count") or 0) for meta in shard_metadata}
     if len(shard_count_values) != 1:
@@ -709,14 +838,18 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
     expected_indexes = list(range(shard_count))
     if shard_indexes != expected_indexes:
         raise ReplaySourceSelectionError(f"shard_coverage_incomplete:{shard_indexes}:expected={expected_indexes}")
-    if any(bool(summary.get("diagnostic_mode")) for summary in summaries):
-        raise ReplaySourceSelectionError("diagnostic_shard_cannot_merge")
-    if any(not bool(summary.get("authoritative_inventory_resolved")) for summary in summaries):
-        raise ReplaySourceSelectionError("non_authoritative_shard_cannot_merge")
-    if any(str(summary.get("phase1_verdict")) != "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY" for summary in summaries):
-        raise ReplaySourceSelectionError("non_ready_shard_cannot_merge")
     dataset_hashes = {str(summary["dataset_manifest_hash"]) for summary in summaries}
     inventory_hashes = {str(summary["inventory_sha256"]) for summary in summaries}
+    execution_identities = {
+        canonical_json_bytes(validation["execution_identity"]).decode("utf-8") for validation in shard_validations
+    }
+    if len(execution_identities) != 1:
+        raise ReplaySourceSelectionError("execution_identity_mismatch_across_shards")
+    full_source_universes = {
+        canonical_json_bytes(validation["full_source_universe"]).decode("utf-8") for validation in shard_validations
+    }
+    if len(full_source_universes) != 1:
+        raise ReplaySourceSelectionError("source_universe_mismatch_across_shards")
     if len(dataset_hashes) != 1:
         raise ReplaySourceSelectionError(f"dataset_manifest_hash_mismatch:{sorted(dataset_hashes)}")
     if len(inventory_hashes) != 1:
@@ -729,17 +862,38 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
     record_keys = [_record_sort_key(record) for record in combined_records]
     if len(set(record_keys)) != len(record_keys):
         raise ReplaySourceSelectionError("duplicate_source_record_across_shards")
+    expected_full_source_universe = shard_validations[0]["full_source_universe"]
+    if len(combined_records) != int(expected_full_source_universe["selected_record_count_before_sharding"]):
+        raise ReplaySourceSelectionError("merged_source_universe_incomplete")
+    actual_full_source_universe_hash = hashlib.sha256(
+        canonical_json_bytes([record.to_dict() for record in combined_records])
+    ).hexdigest()
+    if actual_full_source_universe_hash != str(expected_full_source_universe["semantic_hash"]):
+        raise ReplaySourceSelectionError("merged_source_universe_hash_mismatch")
     combined_emissions = _sorted_emissions(
         _emission_from_payload(item)
         for payload in shard_payloads
         for item in payload["ledger"]
     )
+    candidate_semantic_hash = _validate_ledger(
+        combined_emissions,
+        expected_candidate_hash=hashlib.sha256(
+            canonical_json_bytes([item.to_dict() for item in combined_emissions])
+        ).hexdigest(),
+    )
+    for payload in shard_payloads:
+        shard_emissions = _sorted_emissions(_emission_from_payload(item) for item in payload["ledger"])
+        _validate_ledger(
+            shard_emissions,
+            expected_candidate_hash=str(payload["summary"].get("candidate_semantic_hash")),
+        )
     source_manifest = {
         "schema_version": 1,
         "strategy_id": base_contract["strategy_id"],
         "inventory_resolution": shard_payloads[0]["source_manifest"]["inventory_resolution"],
         "records": [record.to_dict() for record in combined_records],
         "selection_summary": selection_summary(combined_records),
+        "full_source_universe": dict(expected_full_source_universe),
         "shard_metadata": {
             "shard_count": shard_count,
             "shard_index": None,
@@ -753,8 +907,6 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
     by_symbol = Counter(emission.symbol for emission in combined_emissions)
     by_direction = Counter(emission.direction for emission in combined_emissions)
     by_session = Counter(emission.session_date for emission in combined_emissions)
-    emissions_payload = [item.to_dict() for item in combined_emissions]
-    candidate_semantic_hash = hashlib.sha256(canonical_json_bytes(emissions_payload)).hexdigest()
     oracle_checked = sum(int(summary["oracle_reconciliation_totals"]["checked"]) for summary in summaries)
     oracle_matched = sum(int(summary["oracle_reconciliation_totals"]["matched"]) for summary in summaries)
     oracle_mismatched = sum(int(summary["oracle_reconciliation_totals"]["mismatched"]) for summary in summaries)
@@ -831,6 +983,8 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
         "diagnostic_mode": False,
         "phase1_verdict": "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY",
         "candidate_semantic_hash": candidate_semantic_hash,
+        "execution_identity": shard_validations[0]["execution_identity"],
+        "full_source_universe": dict(expected_full_source_universe),
         "shard_metadata": {
             "shard_count": shard_count,
             "shard_index": None,
@@ -841,7 +995,14 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
             "merged_shard_indexes": shard_indexes,
         },
     }
-    if oracle_mismatched != 0 or source_immutability_mismatched != 0 or malformed_rejections != 0:
+    if (
+        oracle_mismatched != 0
+        or (future_checked - future_passed) != 0
+        or source_immutability_mismatched != 0
+        or malformed_rejections != 0
+        or int(source_manifest["selection_summary"]["selected_file_count"]) != len(combined_records)
+        or int(source_manifest["full_source_universe"]["selected_record_count_before_sharding"]) != len(combined_records)
+    ):
         merged_summary["phase1_verdict"] = "AUDIT_INVALID"
     merged_summary["canonical_summary_semantic_hash"] = hashlib.sha256(
         canonical_json_bytes(_canonical_summary_payload(merged_summary))

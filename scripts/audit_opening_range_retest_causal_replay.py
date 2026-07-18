@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 
 
+def _canonical_json_bytes(payload: object) -> bytes:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+
+
 def _check_sha256(path: Path) -> None:
     sidecar = path.with_suffix(path.suffix + ".sha256")
     if not sidecar.exists():
@@ -17,6 +21,45 @@ def _check_sha256(path: Path) -> None:
         raise SystemExit(f"sha256_mismatch:{path.name}:expected={expected}:actual={actual}")
 
 
+def _record_key(record: dict[str, object]) -> tuple[str, str, str, str]:
+    return (
+        str(record.get("symbol") or ""),
+        str(record.get("session_date") or ""),
+        str(record.get("logical_path") or ""),
+        str(record.get("sha256") or ""),
+    )
+
+
+def _ledger_key(entry: dict[str, object]) -> tuple[str, str, str, str, str]:
+    return (
+        str(entry.get("symbol") or ""),
+        str(entry.get("session_date") or ""),
+        str(entry.get("proposal_ready_at_iso") or ""),
+        str(entry.get("direction") or ""),
+        str(entry.get("setup_id") or ""),
+    )
+
+
+def _normalized_shard_metadata(metadata: dict[str, object], *, kind: str) -> dict[str, object]:
+    if kind == "summary":
+        before = metadata.get("selected_file_count_before_sharding")
+        after = metadata.get("selected_file_count_after_sharding")
+    elif kind == "manifest":
+        before = metadata.get("selected_record_count_before_sharding")
+        after = metadata.get("selected_record_count_after_sharding")
+    else:
+        raise ValueError(f"unsupported_shard_metadata_kind:{kind}")
+    return {
+        "shard_count": metadata.get("shard_count"),
+        "shard_index": metadata.get("shard_index"),
+        "is_sharded_run": metadata.get("is_sharded_run"),
+        "merged_from_shards": metadata.get("merged_from_shards", False),
+        "selected_count_before_sharding": before,
+        "selected_count_after_sharding": after,
+        "merged_shard_indexes": list(metadata.get("merged_shard_indexes") or []),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit bounded opening-range-retest replay artifacts.")
     parser.add_argument("--artifact-dir", type=Path, default=Path("docs/agent_reviews"))
@@ -25,16 +68,27 @@ def main() -> int:
     summary_path = args.artifact_dir / "opening_range_retest_causal_replay_summary_v1.json"
     contract_path = args.artifact_dir / "opening_range_retest_causal_replay_contract_v1.json"
     source_manifest_path = args.artifact_dir / "opening_range_retest_causal_replay_source_manifest_v1.json"
+    ledger_path = args.artifact_dir / "opening_range_retest_causal_replay_ledger_v1.json"
     for path in (summary_path, contract_path, source_manifest_path):
         _check_sha256(path)
+    if not ledger_path.exists():
+        raise SystemExit(f"missing_ledger:{ledger_path}")
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
     shard_metadata = dict(summary.get("shard_metadata") or {})
+    manifest_shard_metadata = dict(source_manifest.get("shard_metadata") or {})
     shard_count = int(shard_metadata.get("shard_count") or 1)
     shard_index = shard_metadata.get("shard_index")
     merged_from_shards = bool(shard_metadata.get("merged_from_shards"))
     merged_indexes = list(shard_metadata.get("merged_shard_indexes") or [])
     if shard_count < 1:
         raise SystemExit(f"invalid_shard_count:{shard_count}")
+    if _normalized_shard_metadata(manifest_shard_metadata, kind="manifest") != _normalized_shard_metadata(
+        shard_metadata, kind="summary"
+    ):
+        raise SystemExit("summary_manifest_shard_metadata_mismatch")
     if merged_from_shards:
         expected = list(range(shard_count))
         if sorted(int(value) for value in merged_indexes) != expected:
@@ -46,6 +100,49 @@ def main() -> int:
             raise SystemExit("non_merged_summary_missing_shard_index")
         if not 0 <= int(shard_index) < shard_count:
             raise SystemExit(f"shard_index_out_of_range:{shard_index}:{shard_count}")
+    execution_identity = {
+        "strategy_id": str(contract["strategy_id"]),
+        "contract_hash": str(contract["contract_hash"]),
+        "contract_version": str(contract["temporal_contract_version"]),
+        "production_module": str(contract["production_module"]),
+        "production_callable": str(contract["production_callable"]),
+        "production_file_sha256": str(contract["production_file_sha256"]),
+        "runtime_profile_hash": str(contract["runtime_profile_hash"]),
+        "dataset_manifest_hash": str(summary["dataset_manifest_hash"]),
+        "inventory_sha256": str(summary.get("inventory_sha256")),
+    }
+    if dict(summary.get("execution_identity") or {}) != execution_identity:
+        raise SystemExit("execution_identity_mismatch")
+    records = list(source_manifest.get("records") or [])
+    if len(records) != int(summary.get("selected_file_count") or 0):
+        raise SystemExit("selected_file_count_mismatch")
+    if len({_record_key(record) for record in records}) != len(records):
+        raise SystemExit("duplicate_source_record")
+    manifest_selection_summary = dict(source_manifest.get("selection_summary") or {})
+    if int(manifest_selection_summary.get("selected_file_count") or 0) != len(records):
+        raise SystemExit("manifest_selection_count_mismatch")
+    ordered_records = sorted(records, key=_record_key)
+    manifest_selection_hash = hashlib.sha256(_canonical_json_bytes(ordered_records)).hexdigest()
+    if manifest_selection_hash != str(manifest_selection_summary.get("semantic_hash") or ""):
+        raise SystemExit("manifest_selection_hash_mismatch")
+    full_source_universe = dict(source_manifest.get("full_source_universe") or {})
+    if dict(summary.get("full_source_universe") or {}) != full_source_universe:
+        raise SystemExit("summary_full_source_universe_mismatch")
+    if int(full_source_universe.get("selected_record_count_before_sharding") or 0) < len(records):
+        raise SystemExit("full_source_universe_count_invalid")
+    if merged_from_shards and int(full_source_universe.get("selected_record_count_before_sharding") or 0) != len(records):
+        raise SystemExit("merged_source_universe_incomplete")
+    full_source_hash = hashlib.sha256(_canonical_json_bytes(ordered_records)).hexdigest()
+    if merged_from_shards and full_source_hash != str(full_source_universe.get("semantic_hash") or ""):
+        raise SystemExit("merged_source_universe_hash_mismatch")
+    ordered_ledger = sorted(ledger, key=_ledger_key)
+    if ordered_ledger != ledger:
+        raise SystemExit("ledger_not_canonical_order")
+    if len({_ledger_key(entry) for entry in ledger}) != len(ledger):
+        raise SystemExit("duplicate_ledger_emission")
+    ledger_hash = hashlib.sha256(_canonical_json_bytes(ledger)).hexdigest()
+    if ledger_hash != str(summary.get("candidate_semantic_hash") or ""):
+        raise SystemExit("ledger_candidate_hash_mismatch")
     if bool(summary.get("diagnostic_mode")) and summary.get("phase1_verdict") == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY":
         raise SystemExit("diagnostic_mode_cannot_certify")
     if not bool(summary.get("authoritative_inventory_resolved")) and summary.get("phase1_verdict") == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY":
@@ -54,6 +151,10 @@ def main() -> int:
         raise SystemExit(f"oracle_mismatch_count_nonzero:{summary['oracle_mismatch_count']}")
     if int(summary["future_mutation_control_totals"]["failed"]) != 0:
         raise SystemExit(f"future_mutation_failures_nonzero:{summary['future_mutation_control_totals']['failed']}")
+    if int(summary["source_immutability_totals"]["mismatched"]) != 0:
+        raise SystemExit(f"source_immutability_mismatches_nonzero:{summary['source_immutability_totals']['mismatched']}")
+    if int(dict(summary.get("malformed_sessions_by_reason") or {}).get("rejected", 0)) != 0:
+        raise SystemExit("malformed_session_rejections_nonzero")
     print(summary["phase1_verdict"])
     print(f"candidate_semantic_hash={summary['candidate_semantic_hash']}")
     return 0
