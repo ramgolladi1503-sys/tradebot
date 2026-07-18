@@ -280,6 +280,8 @@ def _build_source_manifest(
             "partition_rule": "sha256(canonical_session_key) mod shard_count",
             "selected_record_count_before_sharding": all_record_count,
             "selected_record_count_after_sharding": len(records),
+            "merged_from_shards": False,
+            "merged_shard_indexes": [shard_spec.shard_index] if shard_spec is not None else [0],
         },
     }
 
