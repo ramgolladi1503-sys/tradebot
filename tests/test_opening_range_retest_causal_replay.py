@@ -12,6 +12,7 @@ from research.opening_range_retest.replay_controls import (
     PROJECTED_SESSION_COLUMNS,
     SessionFileRecord,
     ReplaySourceSelectionError,
+    normalize_underlying_symbol,
     read_session_bars,
     resolve_inventory_artifact,
     select_session_files,
@@ -133,6 +134,7 @@ def _inventory_payload(paths: list[Path], root: Path) -> dict[str, object]:
         sha = hashlib.sha256(path.read_bytes()).hexdigest()
         logical = str(path.relative_to(root.parent.parent))
         session_date = path.stem.rsplit("_", 1)[-1]
+        symbol_value = path.stem.rsplit("_", 1)[0]
         files[f"file-{index}"] = {
             "absolute_path": str(path),
             "logical_path": logical,
@@ -143,7 +145,7 @@ def _inventory_payload(paths: list[Path], root: Path) -> dict[str, object]:
             "sha256": sha,
             "row_count": 375,
             "byte_size": path.stat().st_size,
-            "symbol_values": ["NIFTY"],
+            "symbol_values": [symbol_value],
             "bar_interval": "1minute",
             "timestamp_min": f"{session_date[:4]}-{session_date[4:6]}-{session_date[6:8]}T09:15:00+05:30",
             "timestamp_max": f"{session_date[:4]}-{session_date[4:6]}-{session_date[6:8]}T15:29:00+05:30",
@@ -252,6 +254,33 @@ def test_select_session_files_uses_inventory_without_fallback_scan(tmp_path: Pat
     resolution, selected = select_session_files(manifest_path=manifest_path, strategy_id="opening_range_retest_v1", require_inventory=True)
     assert resolution.sidecar_verified is True
     assert tuple((row.symbol, row.session_date) for row in selected) == (("NIFTY", "2026-07-14"),)
+
+
+def test_select_session_files_classifies_nifty_bank_as_banknifty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "runtime" / "upstox_candidate_replay"
+    data_path = root / "20260714" / "underlying" / "NSE_INDEX|Nifty Bank_20260714.parquet"
+    _write_session_parquet(data_path, _full_session_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS), symbol="NSE_INDEX|Nifty Bank")
+    docs_dir = tmp_path / "docs" / "agent_reviews"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    inventory_path = docs_dir / "upstox_corpus_inventory_v2.json"
+    inventory_sha = _write_inventory(inventory_path, root, data_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "requested_source_roots": [str(root)],
+                "inventory_path": str(tmp_path / "missing_inventory.json"),
+                "inventory_sha256": inventory_sha,
+                "composite_corpora": [{"strategy_id": "opening_range_retest_v1", "underlying_identity": "BANKNIFTY"}],
+                "source_roots": [str(root)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("research.opening_range_retest.replay_controls.PROJECT_ROOT", tmp_path)
+    _, selected = select_session_files(manifest_path=manifest_path, strategy_id="opening_range_retest_v1", require_inventory=True)
+    assert normalize_underlying_symbol("NSE_INDEX|Nifty Bank") == "BANKNIFTY"
+    assert tuple((row.symbol, row.session_date) for row in selected) == (("BANKNIFTY", "2026-07-14"),)
 
 
 def test_select_session_files_result_independent_of_checkout_directory_name(tmp_path: Path) -> None:
