@@ -379,6 +379,24 @@ def test_merge_replay_artifacts_requires_complete_consistent_authoritative_shard
         merged.source_manifest["shard_metadata"],
         kind="manifest",
     )
+    assert {
+        (
+            assignment["symbol"],
+            assignment["session_date"],
+            assignment["logical_path"],
+            assignment["selected_source_sha256"],
+        )
+        for assignment in merged.source_manifest["partition_assignments"]
+    } == {
+        (
+            record["symbol"],
+            record["session_date"],
+            record["logical_path"],
+            record["sha256"],
+        )
+        for record in merged.source_manifest["records"]
+    }
+    assert sorted(int(assignment["shard_index"]) for assignment in merged.source_manifest["partition_assignments"]) == [0, 1]
 
 
 def test_shard_metadata_contract_for_unsharded_child_and_merged_states(tmp_path: Path) -> None:
