@@ -57,18 +57,23 @@ Safety-sensitive claims:
 
 ## Acceptance Proof
 
-To be filled by the final validation pass before PR:
+Validation completed before PR:
 
-- focused tests repeated three times
-- related ORB suites
-- smoke A audit
-- smoke B audit
-- py_compile
-- ruff
-- git diff --check
-- agent-review evidence validation
-- CE gates
-- full suite
+- focused tests repeated three times: `pytest -q tests/test_opening_range_retest_causal_replay.py tests/test_opening_range_retest_merge_certification.py --maxfail=1`, latest rerun `45 passed in 18.63s`
+- related ORB suite: `pytest -q tests/test_four_strategy_contract_freeze.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_opening_range_retest_causal_replay.py tests/test_opening_range_retest_merge_certification.py tests/test_opening_range_retest_oracle_reconciliation.py --maxfail=1`, `102 passed in 19.31s`
+- smoke A audit: five-session authoritative replay under `/tmp/orb-audit-metadata-fix-smoke-a`, `OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY`, candidate hash `53f826a8b15dec361df67f2da617b285c124e2df91cd022ca0dcd1282379ea7e`
+- smoke B audit: five-session authoritative replay under `/tmp/orb-audit-metadata-fix-smoke-b`, `OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY`, candidate hash `53f826a8b15dec361df67f2da617b285c124e2df91cd022ca0dcd1282379ea7e`
+- py_compile: `python3 -m py_compile research/opening_range_retest/*.py scripts/generate_opening_range_retest_causal_replay.py scripts/audit_opening_range_retest_causal_replay.py tests/test_opening_range_retest*.py`, passed
+- ruff: `ruff check research/opening_range_retest scripts/generate_opening_range_retest_causal_replay.py scripts/audit_opening_range_retest_causal_replay.py tests/test_opening_range_retest*.py`, passed
+- diff check: `git diff --check`, passed
+- agent-review evidence validation: `python3 scripts/validate_agent_review_evidence.py`, passed
+- CE gates: `PYTHONPATH=. python3 scripts/run_unified_ce_gates.py --changed-paths-file /tmp/orb_audit_metadata_fix_changed_paths.txt`, passed with `changed_paths=5`, `total_blocks=0`
+- full suite: attempted with `pytest -q --durations=20`; collection failed before project tests because local `xgboost` could not load `libomp.dylib` from `/opt/homebrew/opt/libomp/lib/libomp.dylib`
+
+Validation residue not included in PR scope:
+
+- `docs/code_excellence/reports/unified_ce_gate_latest.md` was rewritten by the CE gate.
+- `runtime/strategy_validation/regime_timeline.jsonl` was appended by tests.
 
 ## Runtime Proof Required After Merge
 
