@@ -34,6 +34,25 @@ def _record_key(record: dict[str, object]) -> tuple[str, str, str, str]:
     )
 
 
+def _canonical_session_key(record: dict[str, object]) -> str:
+    return json.dumps(
+        {
+            "logical_path": str(record.get("logical_path") or ""),
+            "selected_source_sha256": str(record.get("sha256") or ""),
+            "session_date": str(record.get("session_date") or ""),
+            "symbol": str(record.get("symbol") or ""),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+
+
+def _partition_assignment(record: dict[str, object], *, shard_count: int) -> int:
+    digest = hashlib.sha256(_canonical_session_key(record).encode("utf-8")).hexdigest()
+    return int(digest, 16) % shard_count
+
+
 def _ledger_key(entry: dict[str, object]) -> tuple[str, str, str, str, str]:
     return (
         str(entry.get("session_date") or ""),
@@ -116,7 +135,10 @@ def main() -> int:
         shard_metadata, kind="summary"
     ):
         raise SystemExit("summary_manifest_shard_metadata_mismatch")
+    is_sharded_run = bool(shard_metadata.get("is_sharded_run"))
     if merged_from_shards:
+        if not is_sharded_run:
+            raise SystemExit("merged_run_must_be_sharded")
         expected = list(range(shard_count))
         if sorted(int(value) for value in merged_indexes) != expected:
             raise SystemExit(f"merged_shard_coverage_invalid:{merged_indexes}:expected={expected}")
@@ -127,6 +149,15 @@ def main() -> int:
             raise SystemExit("non_merged_summary_missing_shard_index")
         if not 0 <= int(shard_index) < shard_count:
             raise SystemExit(f"shard_index_out_of_range:{shard_index}:{shard_count}")
+        if shard_count == 1 and int(shard_index) == 0:
+            if is_sharded_run:
+                raise SystemExit("unsharded_run_must_not_be_marked_sharded")
+            if merged_indexes != [0]:
+                raise SystemExit(f"unsharded_merged_indexes_invalid:{merged_indexes}")
+        elif not is_sharded_run:
+            raise SystemExit("child_shard_must_be_marked_sharded")
+        elif merged_indexes != [int(shard_index)]:
+            raise SystemExit(f"child_shard_merged_indexes_invalid:{merged_indexes}:expected={[int(shard_index)]}")
     execution_identity = {
         "strategy_id": str(contract["strategy_id"]),
         "contract_hash": str(contract["contract_hash"]),
@@ -155,6 +186,32 @@ def main() -> int:
         raise SystemExit("selected_file_count_mismatch")
     if len({_record_key(record) for record in records}) != len(records):
         raise SystemExit("duplicate_source_record")
+    assignments = list(source_manifest.get("partition_assignments") or [])
+    if len(assignments) != len(records):
+        raise SystemExit("partition_assignment_count_mismatch")
+    assignment_by_key = {
+        (
+            str(item.get("symbol") or ""),
+            str(item.get("session_date") or ""),
+            str(item.get("logical_path") or ""),
+            str(item.get("selected_source_sha256") or ""),
+        ): item
+        for item in assignments
+    }
+    if len(assignment_by_key) != len(assignments):
+        raise SystemExit("duplicate_partition_assignment")
+    for record in records:
+        assignment = assignment_by_key.get(_record_key(record))
+        if assignment is None:
+            raise SystemExit("partition_assignment_missing_record")
+        expected_key = _canonical_session_key(record)
+        if str(assignment.get("canonical_session_key") or "") != expected_key:
+            raise SystemExit("partition_assignment_session_key_mismatch")
+        expected_index = _partition_assignment(record, shard_count=shard_count)
+        if int(assignment.get("shard_index") or -1) != expected_index:
+            raise SystemExit("partition_assignment_shard_index_mismatch")
+        if not merged_from_shards and int(assignment.get("shard_index") or -1) != int(shard_index):
+            raise SystemExit("record_not_assigned_to_current_shard")
     manifest_selection_summary = dict(source_manifest.get("selection_summary") or {})
     if int(manifest_selection_summary.get("selected_file_count") or 0) != len(records):
         raise SystemExit("manifest_selection_count_mismatch")
