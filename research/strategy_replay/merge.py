@@ -9,12 +9,30 @@ from .common import (
     StrategyReplayError,
     canonical_json_bytes,
     load_canonical_json,
+    partition_assignment,
     recompute_candidate_hash,
     selection_summary,
     sorted_records,
     validate_evidence_envelope,
     validate_ledger,
     write_canonical_json,
+)
+
+
+PROTECTED_EVIDENCE_FIELDS = frozenset(
+    {
+        "mode",
+        "candidate_id",
+        "decision",
+        "reason",
+        "timestamp",
+        "read_only",
+        "append",
+        "is_order_action",
+        "broker_api_called",
+        "allowed_for_live_execution",
+        "source",
+    }
 )
 
 
@@ -87,6 +105,16 @@ def _artifact_evidence_fields(*, artifact_name: str, summary: dict[str, Any], ca
     }
 
 
+def _with_evidence_envelope(*, artifact_name: str, summary: dict[str, Any], candidate_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    protected = sorted(PROTECTED_EVIDENCE_FIELDS.intersection(payload))
+    if protected:
+        raise StrategyReplayError(f"artifact_payload_overrides_evidence_fields:{','.join(protected)}")
+    return {
+        **_artifact_evidence_fields(artifact_name=artifact_name, summary=summary, candidate_id=candidate_id),
+        **payload,
+    }
+
+
 def write_artifact_bundle(
     *,
     output_dir: Path,
@@ -106,14 +134,21 @@ def write_artifact_bundle(
     ):
         write_canonical_json(
             output_dir / filename,
-            {**_artifact_evidence_fields(artifact_name=filename, summary=summary, candidate_id=candidate_id), **payload},
+            _with_evidence_envelope(
+                artifact_name=filename,
+                summary=summary,
+                candidate_id=candidate_id,
+                payload=payload,
+            ),
         )
     write_canonical_json(
         output_dir / names.ledger,
-        {
-            **_artifact_evidence_fields(artifact_name=names.ledger, summary=summary, candidate_id=candidate_id),
-            "entries": ledger,
-        },
+        _with_evidence_envelope(
+            artifact_name=names.ledger,
+            summary=summary,
+            candidate_id=candidate_id,
+            payload={"entries": ledger},
+        ),
     )
     return names
 
@@ -148,6 +183,35 @@ def _validated_shard_indexes(shard_summaries: list[dict[str, Any]]) -> tuple[int
     return shard_count, sorted(indexes)
 
 
+def _normalized_shard_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    raw = dict(payload.get("shard_metadata") or {})
+    return {
+        "shard_count": int(raw.get("shard_count") or 0),
+        "shard_index": None if raw.get("shard_index") is None else int(raw.get("shard_index") or 0),
+        "is_sharded_run": bool(raw.get("is_sharded_run")),
+        "partition_rule": str(raw.get("partition_rule") or ""),
+    }
+
+
+def _validate_shard_manifest_parity(*, summary: dict[str, Any], manifest: dict[str, Any]) -> None:
+    summary_metadata = _normalized_shard_metadata(summary)
+    manifest_metadata = _normalized_shard_metadata(manifest)
+    if summary_metadata != manifest_metadata:
+        raise StrategyReplayError("summary_manifest_shard_metadata_mismatch")
+    shard_count = summary_metadata["shard_count"]
+    shard_index = summary_metadata["shard_index"]
+    if shard_count <= 1 or shard_index is None:
+        raise StrategyReplayError("merge_requires_child_shards")
+    if summary_metadata["is_sharded_run"] is not True:
+        raise StrategyReplayError("child_shard_must_be_marked_sharded")
+    if summary_metadata["partition_rule"] != "sha256(canonical_session_key) mod shard_count":
+        raise StrategyReplayError("unsupported_partition_rule")
+    for record in list(manifest.get("records") or []):
+        actual = partition_assignment(record, shard_count=shard_count)
+        if actual != shard_index:
+            raise StrategyReplayError(f"source_record_partition_mismatch:expected={shard_index}:actual={actual}")
+
+
 def merge_shard_payloads(*, contract: dict[str, Any], shard_payloads: Iterable[dict[str, Any]]) -> ArtifactBundle:
     payloads = list(shard_payloads)
     if not payloads:
@@ -165,6 +229,8 @@ def merge_shard_payloads(*, contract: dict[str, Any], shard_payloads: Iterable[d
         raise StrategyReplayError(f"shard_phase1_verdict_not_ready:{verdicts}")
 
     shard_count, shard_indexes = _validated_shard_indexes(shard_summaries)
+    for summary, manifest in zip(shard_summaries, shard_manifests):
+        _validate_shard_manifest_parity(summary=summary, manifest=manifest)
 
     execution_identities = [dict(summary.get("execution_identity") or {}) for summary in shard_summaries]
     code_shas = {str(identity.get("git_commit_sha") or "") for identity in execution_identities}
@@ -205,7 +271,10 @@ def merge_shard_payloads(*, contract: dict[str, Any], shard_payloads: Iterable[d
     if actual_universe_hash != str(expected_source_universe.get("semantic_hash") or ""):
         raise StrategyReplayError("merged_source_universe_hash_mismatch")
 
-    combined_ledger = [entry for ledger in shard_ledgers for entry in ledger]
+    combined_ledger = sorted(
+        (dict(entry) for ledger in shard_ledgers for entry in ledger),
+        key=lambda entry: canonical_json_bytes(entry).decode("utf-8"),
+    )
     candidate_semantic_hash = validate_ledger(combined_ledger)
     for summary, ledger in zip(shard_summaries, shard_ledgers):
         validate_ledger(ledger, expected_candidate_hash=str(summary.get("candidate_semantic_hash") or ""))

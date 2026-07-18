@@ -87,15 +87,28 @@ def selection_summary(records: Iterable[Any]) -> dict[str, Any]:
 
 def recompute_candidate_hash(entries: Iterable[Any]) -> str:
     materialized = [dict(_mapping_or_dict(entry)) for entry in entries]
-    return sha256_bytes(canonical_json_bytes(materialized))
+    ordered = sorted(materialized, key=lambda entry: canonical_json_bytes(entry).decode("utf-8"))
+    return sha256_bytes(canonical_json_bytes(ordered))
 
 
 def validate_ledger(entries: Iterable[Any], *, expected_candidate_hash: str | None = None) -> str:
     materialized = [dict(_mapping_or_dict(entry)) for entry in entries]
+    identities: set[tuple[str, str, str, str, str, str]] = set()
     for index, entry in enumerate(materialized):
         missing = [field for field in ("symbol", "session_date", "direction", "proposal_ready_at_iso", "setup_id", "history_hash") if not str(entry.get(field) or "").strip()]
         if missing:
             raise StrategyReplayError(f"ledger_entry_missing_fields:{index}:{','.join(missing)}")
+        identity = (
+            str(entry["symbol"]),
+            str(entry["session_date"]),
+            str(entry["direction"]),
+            str(entry["proposal_ready_at_iso"]),
+            str(entry["setup_id"]),
+            str(entry["history_hash"]),
+        )
+        if identity in identities:
+            raise StrategyReplayError(f"ledger_entry_duplicate_identity:{index}:{identity[4]}")
+        identities.add(identity)
     actual_hash = recompute_candidate_hash(materialized)
     if expected_candidate_hash is not None and actual_hash != expected_candidate_hash:
         raise StrategyReplayError(

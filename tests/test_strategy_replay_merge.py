@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from research.strategy_replay.common import StrategyReplayError, recompute_candidate_hash, selection_summary
+from research.strategy_replay.common import StrategyReplayError, partition_assignment, recompute_candidate_hash, selection_summary
 from research.strategy_replay.merge import (
     artifact_names,
     load_artifact_bundle,
@@ -36,6 +36,14 @@ def _record(symbol: str, session_date: str, logical_path: str, sha: str) -> dict
         "byte_size": 1024,
         "selected_via": "inventory_verified_repo_relative",
     }
+
+
+def _record_for_shard(symbol: str, session_date: str, shard_count: int, shard_index: int) -> dict[str, object]:
+    for index in range(100):
+        record = _record(symbol, session_date, f"runtime/{symbol.lower()}-{index}.parquet", f"{index:064x}")
+        if partition_assignment(record, shard_count=shard_count) == shard_index:
+            return record
+    raise AssertionError(f"missing fixture record for shard {shard_index}")
 
 
 def _ledger(symbol: str, session_date: str, setup_id: str) -> list[dict[str, object]]:
@@ -74,10 +82,20 @@ def _payload(*, shard_count: int, shard_index: int, record: dict[str, object], l
             "inventory_resolution": {"inventory_sha256": "i" * 64},
             "records": records,
             "full_source_universe": full_source_universe,
-            "shard_metadata": {"shard_count": shard_count, "shard_index": shard_index},
+            "shard_metadata": {
+                "shard_count": shard_count,
+                "shard_index": shard_index,
+                "is_sharded_run": shard_count > 1,
+                "partition_rule": "sha256(canonical_session_key) mod shard_count",
+            },
         },
         "summary": {
-            "shard_metadata": {"shard_count": shard_count, "shard_index": shard_index},
+            "shard_metadata": {
+                "shard_count": shard_count,
+                "shard_index": shard_index,
+                "is_sharded_run": shard_count > 1,
+                "partition_rule": "sha256(canonical_session_key) mod shard_count",
+            },
             "phase1_verdict": "READY",
             "candidate_semantic_hash": recompute_candidate_hash(ledger),
             "execution_identity": execution_identity,
@@ -91,8 +109,8 @@ def _payload(*, shard_count: int, shard_index: int, record: dict[str, object], l
 
 
 def test_merge_shards_requires_complete_clean_consistent_sets() -> None:
-    record_a = _record("BANKNIFTY", "2026-07-15", "runtime/b.parquet", "b" * 64)
-    record_b = _record("NIFTY", "2026-07-14", "runtime/a.parquet", "a" * 64)
+    record_a = _record_for_shard("BANKNIFTY", "2026-07-15", 2, 0)
+    record_b = _record_for_shard("NIFTY", "2026-07-14", 2, 1)
     payload_a = _payload(shard_count=2, shard_index=0, record=record_a, ledger=_ledger("BANKNIFTY", "2026-07-15", "setup-b"))
     payload_b = _payload(shard_count=2, shard_index=1, record=record_b, ledger=_ledger("NIFTY", "2026-07-14", "setup-a"))
     expected_universe = {
@@ -124,8 +142,8 @@ def test_merge_shards_requires_complete_clean_consistent_sets() -> None:
 
 
 def test_merge_shards_fails_closed_on_non_ready_or_zero_checked_controls() -> None:
-    record_a = _record("BANKNIFTY", "2026-07-15", "runtime/b.parquet", "b" * 64)
-    record_b = _record("NIFTY", "2026-07-14", "runtime/a.parquet", "a" * 64)
+    record_a = _record_for_shard("BANKNIFTY", "2026-07-15", 2, 0)
+    record_b = _record_for_shard("NIFTY", "2026-07-14", 2, 1)
     payload_a = _payload(shard_count=2, shard_index=0, record=record_a, ledger=_ledger("BANKNIFTY", "2026-07-15", "setup-b"))
     payload_b = _payload(shard_count=2, shard_index=1, record=record_b, ledger=_ledger("NIFTY", "2026-07-14", "setup-a"))
     expected_universe = {
@@ -149,6 +167,54 @@ def test_merge_shards_fails_closed_on_non_ready_or_zero_checked_controls() -> No
         merge_shard_payloads(contract=_contract(), shard_payloads=[zero_checked_a, zero_checked_b])
 
 
+def test_merge_shards_rejects_metadata_mismatch_and_wrong_partition() -> None:
+    record_a = _record_for_shard("BANKNIFTY", "2026-07-15", 2, 0)
+    record_b = _record_for_shard("NIFTY", "2026-07-14", 2, 1)
+    payload_a = _payload(shard_count=2, shard_index=0, record=record_a, ledger=_ledger("BANKNIFTY", "2026-07-15", "setup-b"))
+    payload_b = _payload(shard_count=2, shard_index=1, record=record_b, ledger=_ledger("NIFTY", "2026-07-14", "setup-a"))
+    expected_universe = {
+        "selected_record_count_before_sharding": 2,
+        "semantic_hash": selection_summary([record_a, record_b])["semantic_hash"],
+    }
+    for payload in (payload_a, payload_b):
+        payload["source_manifest"]["full_source_universe"] = expected_universe
+        payload["summary"]["full_source_universe"] = expected_universe
+
+    mismatched_metadata = {**payload_b, "source_manifest": {**payload_b["source_manifest"]}}
+    mismatched_metadata["source_manifest"]["shard_metadata"] = {
+        **mismatched_metadata["source_manifest"]["shard_metadata"],
+        "shard_index": 0,
+    }
+    with pytest.raises(StrategyReplayError, match="summary_manifest_shard_metadata_mismatch"):
+        merge_shard_payloads(contract=_contract(), shard_payloads=[payload_a, mismatched_metadata])
+
+    wrong_partition = {**payload_b, "source_manifest": {**payload_b["source_manifest"]}}
+    wrong_partition["source_manifest"]["records"] = [record_a]
+    with pytest.raises(StrategyReplayError, match="source_record_partition_mismatch"):
+        merge_shard_payloads(contract=_contract(), shard_payloads=[payload_a, wrong_partition])
+
+
+def test_merge_shards_is_order_independent() -> None:
+    record_a = _record_for_shard("BANKNIFTY", "2026-07-15", 2, 0)
+    record_b = _record_for_shard("NIFTY", "2026-07-14", 2, 1)
+    payload_a = _payload(shard_count=2, shard_index=0, record=record_a, ledger=_ledger("BANKNIFTY", "2026-07-15", "setup-b"))
+    payload_b = _payload(shard_count=2, shard_index=1, record=record_b, ledger=_ledger("NIFTY", "2026-07-14", "setup-a"))
+    expected_universe = {
+        "selected_record_count_before_sharding": 2,
+        "semantic_hash": selection_summary([record_a, record_b])["semantic_hash"],
+    }
+    for payload in (payload_a, payload_b):
+        payload["source_manifest"]["full_source_universe"] = expected_universe
+        payload["summary"]["full_source_universe"] = expected_universe
+
+    merged_ab = merge_shard_payloads(contract=_contract(), shard_payloads=[payload_a, payload_b])
+    merged_ba = merge_shard_payloads(contract=_contract(), shard_payloads=[payload_b, payload_a])
+
+    assert merged_ab.ledger == merged_ba.ledger
+    assert merged_ab.summary["candidate_semantic_hash"] == merged_ba.summary["candidate_semantic_hash"]
+    assert merged_ab.source_manifest["selection_summary"] == merged_ba.source_manifest["selection_summary"]
+
+
 def test_write_and_load_artifact_bundle_validates_envelope_and_sidecars(tmp_path: Path) -> None:
     names = write_artifact_bundle(
         output_dir=tmp_path,
@@ -168,6 +234,19 @@ def test_write_and_load_artifact_bundle_validates_envelope_and_sidecars(tmp_path
     summary_path.write_text(summary_path.read_text(encoding="utf-8").replace('"READY"', '"AUDIT_INVALID"', 1), encoding="utf-8")
     with pytest.raises(StrategyReplayError, match="artifact_sidecar_hash_mismatch"):
         load_artifact_bundle(artifact_dir=tmp_path, prefix="trend_pullback_causal_replay")
+
+
+def test_write_artifact_bundle_rejects_payload_evidence_field_override(tmp_path: Path) -> None:
+    with pytest.raises(StrategyReplayError, match="artifact_payload_overrides_evidence_fields"):
+        write_artifact_bundle(
+            output_dir=tmp_path,
+            prefix="trend_pullback_causal_replay",
+            contract={**_contract(), "candidate_id": "payload_must_not_override_envelope_identity"},
+            source_manifest={"inventory_resolution": {"inventory_sha256": "i" * 64}, "records": [], "full_source_universe": {"selected_record_count_before_sharding": 0, "semantic_hash": "0" * 64}, "shard_metadata": {"shard_count": 1, "shard_index": 0}},
+            summary={"phase1_verdict": "READY", "latest_session": "2026-07-14", "execution_identity": {"git_commit_sha": "g" * 40, "worktree_clean": True}},
+            ledger=[],
+            candidate_id="trend_pullback_causal_replay_phase1",
+        )
 
 
 def test_load_artifact_bundle_rejects_unsafe_or_legacy_ledger_payload(tmp_path: Path) -> None:

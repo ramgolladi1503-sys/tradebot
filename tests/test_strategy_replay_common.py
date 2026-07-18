@@ -69,7 +69,11 @@ def test_shard_assignment_and_universe_hash_are_order_independent() -> None:
         }
         assert expected_union.isdisjoint(shard)
         expected_union.update(shard)
-    assert len(expected_union) == len(ordered)
+    assert expected_union == {
+        ("BANKNIFTY", "2026-07-15", "runtime/b.parquet", "b" * 64),
+        ("NIFTY", "2026-07-14", "runtime/a.parquet", "a" * 64),
+        ("SENSEX", "2026-07-16", "runtime/c.parquet", "c" * 64),
+    }
 
 
 def test_write_and_load_canonical_json_with_tamper_rejection(tmp_path: Path) -> None:
@@ -87,6 +91,20 @@ def test_validate_ledger_recomputes_hash_and_rejects_missing_fields() -> None:
     assert validate_ledger(ledger, expected_candidate_hash=expected) == expected
     with pytest.raises(StrategyReplayError, match="ledger_entry_missing_fields"):
         validate_ledger([{"symbol": "NIFTY"}])
+
+
+def test_validate_ledger_hash_is_order_independent_and_rejects_duplicate_identity() -> None:
+    ledger = [
+        _ledger_entry("BANKNIFTY", "2026-07-15", "setup-b"),
+        _ledger_entry("NIFTY", "2026-07-14", "setup-a"),
+    ]
+    reversed_ledger = tuple(reversed(ledger))
+    expected = recompute_candidate_hash(ledger)
+
+    assert recompute_candidate_hash(reversed_ledger) == expected
+    assert validate_ledger(reversed_ledger, expected_candidate_hash=expected) == expected
+    with pytest.raises(StrategyReplayError, match="ledger_entry_duplicate_identity"):
+        validate_ledger([ledger[0], dict(ledger[0])])
 
 
 def test_validate_evidence_envelope_rejects_unsafe_values() -> None:

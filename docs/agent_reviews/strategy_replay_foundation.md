@@ -21,7 +21,7 @@ This change is research replay infrastructure only. It does not wire any strateg
 - mode: RESEARCH_REPLAY_ARTIFACT
 - candidate_id: strategy_replay_foundation
 - decision: STRATEGY_REPLAY_FOUNDATION_READY
-- reason: Adds reusable fail-closed replay artifact helpers for downstream strategy replay certification.
+- reason: Adds reusable fail-closed replay artifact helpers for downstream strategy replay certification with deterministic ledger hashing and strict shard metadata validation.
 - timestamp: 2026-07-18T23:20:00+05:30
 - read_only: true
 - append: false
@@ -32,20 +32,21 @@ This change is research replay infrastructure only. It does not wire any strateg
 
 ## Grill Me Review
 
-The initial foundation checkpoint was directionally useful but under-specified for safety evidence. It accepted artifact envelopes without `read_only`, `append`, or `allowed_for_live_execution`, wrote ledger artifacts as bare JSON, and allowed a merged summary to default to `READY` unless explicit negative counts appeared. Those are unsafe defaults for replay certification.
+The initial foundation checkpoint was directionally useful but under-specified for safety evidence. It accepted artifact envelopes without `read_only`, `append`, or `allowed_for_live_execution`, wrote ledger artifacts as bare JSON, allowed a merged summary to default to `READY` unless explicit negative counts appeared, and did not prove order-independent ledger hashing. Those are unsafe defaults for replay certification.
 
 ## Hermes Review
 
-The reusable contract now treats every artifact, including ledgers, as evidence with explicit safety flags. Shard merges must prove shard verdict readiness before combining data, then prove non-zero oracle, future-mutation, and source-immutability checks before returning a certifying merged bundle.
+The reusable contract now treats every artifact, including ledgers, as evidence with explicit safety flags. Shard merges must prove shard verdict readiness before combining data, then prove summary/source-manifest shard metadata parity, deterministic source partition assignment, non-zero oracle checks, future-mutation checks, and source-immutability checks before returning a certifying merged bundle.
 
 ## GSD Review
 
 Changed files remain narrow:
 
 - `research/strategy_replay/common.py`: evidence envelope validation now requires `read_only=true`, `append=false`, and `allowed_for_live_execution=false`.
-- `research/strategy_replay/merge.py`: artifact writer envelopes ledgers; artifact loader rejects legacy bare ledgers; merge rejects missing/non-READY shard verdicts and zero checked controls.
-- `tests/test_strategy_replay_common.py`: unsafe envelope values are rejected.
-- `tests/test_strategy_replay_merge.py`: ledger-envelope, non-ready shard, and zero-control merge failures are covered.
+- `research/strategy_replay/common.py`: candidate hashes are order-independent and duplicate ledger identities are rejected.
+- `research/strategy_replay/merge.py`: artifact writer envelopes ledgers; artifact loader rejects legacy bare ledgers; payloads cannot override protected evidence fields; merge rejects missing/non-READY shard verdicts, zero checked controls, metadata mismatches, and source partition mismatches.
+- `tests/test_strategy_replay_common.py`: unsafe envelope values, order-independent ledger hashes, and duplicate ledger identities are rejected.
+- `tests/test_strategy_replay_merge.py`: ledger-envelope, protected field override, non-ready shard, zero-control, metadata mismatch, partition mismatch, and shard-order independence failures are covered.
 
 ## QA / Safety Review
 
@@ -61,10 +62,11 @@ Safety-sensitive claims:
 
 Validation completed before PR:
 
-- `pytest -q tests/test_strategy_replay_common.py tests/test_strategy_replay_merge.py --maxfail=1`: `10 passed in 1.03s`
+- `pytest -q tests/test_strategy_replay_common.py tests/test_strategy_replay_merge.py --maxfail=1`: `14 passed in 1.07s`
 - `ruff check research/strategy_replay tests/test_strategy_replay_common.py tests/test_strategy_replay_merge.py`: passed
 - `python3 -m py_compile research/strategy_replay/*.py tests/test_strategy_replay_common.py tests/test_strategy_replay_merge.py`: passed
 - `git diff --check`: passed
+- `PYTHONPATH=. python3 scripts/run_unified_ce_gates.py --repo . --config .gsd-forensics.yaml --changed-paths-file /tmp/foundation_pr670_changed_paths.txt --out /tmp/foundation_pr670_ce_report.md`: passed with `total_blocks=0`
 
 ## Runtime Proof Required After Merge
 
