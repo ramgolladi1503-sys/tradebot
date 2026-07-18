@@ -1,0 +1,1 @@
+"""Strategy-specific outcome adapters."""
