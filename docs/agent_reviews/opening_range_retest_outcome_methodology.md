@@ -63,7 +63,7 @@ Safety-sensitive claims:
 
 Focused tests cover unsupported direction rejection, deterministic candidate hashing, no same-bar entry, directional forward return, MFE/MAE, same-bar path ambiguity, duplicate exposure, duplicate timestamp rejection, artifact writing, certified-ledger adapter mapping, OHLCV timestamp canonicalization, and canonical outcome hashing.
 
-## Runtime Proof
+## Runtime Proof Required After Merge
 
 The full certified candidate ledger must be run twice from the same frozen clean commit in independent output directories. The audits must reconcile:
 
