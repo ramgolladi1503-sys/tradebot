@@ -30,6 +30,8 @@ CONTRACT_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_contract_v1.jso
 SOURCE_MANIFEST_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_source_manifest_v1.json"
 SUMMARY_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_summary_v1.json"
 LEDGER_ARTIFACT_FILENAME = "opening_range_retest_causal_replay_ledger_v1.json"
+EVIDENCE_MODE = "RESEARCH_REPLAY_ARTIFACT"
+EVIDENCE_CANDIDATE_ID = "opening_range_retest_causal_replay_phase1"
 
 
 def _neutral_regime() -> MovementRegimeResult:
@@ -207,7 +209,28 @@ def _apply_shard(records: list[SessionFileRecord], shard_spec: ReplayShardSpec |
     ordered = _sorted_session_records(records)
     if shard_spec is None:
         return ordered
-    return [record for index, record in enumerate(ordered) if index % shard_spec.shard_count == shard_spec.shard_index]
+    return [record for record in ordered if _partition_assignment(record, shard_count=shard_spec.shard_count) == shard_spec.shard_index]
+
+
+def _canonical_session_key(record: SessionFileRecord) -> str:
+    return json.dumps(
+        {
+            "logical_path": record.logical_path,
+            "selected_source_sha256": record.sha256,
+            "session_date": record.session_date,
+            "symbol": record.symbol,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+
+
+def _partition_assignment(record: SessionFileRecord, *, shard_count: int) -> int:
+    if shard_count < 1:
+        raise ValueError("shard_count_must_be_positive")
+    digest = hashlib.sha256(_canonical_session_key(record).encode("utf-8")).hexdigest()
+    return int(digest, 16) % shard_count
 
 
 def _build_source_manifest(
@@ -223,6 +246,17 @@ def _build_source_manifest(
         "strategy_id": contract["strategy_id"],
         "inventory_resolution": _resolution_summary(resolution),
         "records": [record.to_dict() for record in records],
+        "partition_assignments": [
+            {
+                "symbol": record.symbol,
+                "session_date": record.session_date,
+                "logical_path": record.logical_path,
+                "selected_source_sha256": record.sha256,
+                "canonical_session_key": _canonical_session_key(record),
+                "shard_index": _partition_assignment(record, shard_count=shard_spec.shard_count if shard_spec is not None else 1),
+            }
+            for record in records
+        ],
         "selection_summary": selection_summary(records),
         "full_source_universe": {
             "selected_record_count_before_sharding": all_record_count,
@@ -232,6 +266,7 @@ def _build_source_manifest(
             "shard_count": shard_spec.shard_count if shard_spec is not None else 1,
             "shard_index": shard_spec.shard_index if shard_spec is not None else 0,
             "is_sharded_run": shard_spec is not None,
+            "partition_rule": "sha256(canonical_session_key) mod shard_count",
             "selected_record_count_before_sharding": all_record_count,
             "selected_record_count_after_sharding": len(records),
         },
@@ -485,6 +520,40 @@ def _canonical_summary_payload(summary: dict[str, Any]) -> dict[str, Any]:
         "shard_metadata",
     }
     return {key: value for key, value in summary.items() if key not in volatile}
+
+
+def _evidence_timestamp(summary: dict[str, Any]) -> str:
+    proposal_ready = str(summary.get("latest_proposal_ready_timestamp") or "").strip()
+    if proposal_ready:
+        return proposal_ready
+    session_date = str(summary.get("latest_session") or summary.get("earliest_session") or "").strip()
+    if session_date:
+        return f"{session_date}T15:29:00+05:30"
+    return "1970-01-01T00:00:00+00:00"
+
+
+def _artifact_evidence_fields(*, artifact_name: str, summary: dict[str, Any]) -> dict[str, Any]:
+    verdict = str(summary.get("phase1_verdict") or "AUDIT_INVALID")
+    if artifact_name == CONTRACT_ARTIFACT_FILENAME:
+        reason = "Replay contract artifact for opening_range_retest_v1; summary artifact carries the certifying replay verdict."
+    elif artifact_name == SOURCE_MANIFEST_ARTIFACT_FILENAME:
+        reason = "Replay source manifest artifact for opening_range_retest_v1; selected sources support the published replay verdict."
+    else:
+        reason = (
+            "Authoritative replay summary artifact for opening_range_retest_v1."
+            if verdict == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY"
+            else "Replay summary artifact is not certifying because at least one fail-closed replay control rejected readiness."
+        )
+    return {
+        "mode": EVIDENCE_MODE,
+        "candidate_id": EVIDENCE_CANDIDATE_ID,
+        "decision": verdict,
+        "reason": reason,
+        "timestamp": _evidence_timestamp(summary),
+        "is_order_action": False,
+        "broker_api_called": False,
+        "source": f"research.opening_range_retest.replay_engine:{artifact_name}",
+    }
 
 
 def _execution_identity(contract: dict[str, Any], summary: dict[str, Any]) -> dict[str, Any]:
@@ -898,6 +967,7 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
             "shard_count": shard_count,
             "shard_index": None,
             "is_sharded_run": True,
+            "partition_rule": "sha256(canonical_session_key) mod shard_count",
             "selected_record_count_before_sharding": len(combined_records),
             "selected_record_count_after_sharding": len(combined_records),
             "merged_from_shards": True,
@@ -989,6 +1059,7 @@ def merge_replay_artifacts(*, shard_artifact_dirs: Iterable[Path | str]) -> Repl
             "shard_count": shard_count,
             "shard_index": None,
             "is_sharded_run": True,
+            "partition_rule": "sha256(canonical_session_key) mod shard_count",
             "merged_from_shards": True,
             "selected_file_count_before_sharding": len(combined_records),
             "selected_file_count_after_sharding": len(combined_records),
@@ -1026,7 +1097,12 @@ def write_replay_artifacts(run: ReplayRunResult, *, output_dir: Path, ledger_pat
         (source_manifest_path, run.source_manifest),
         (summary_path, run.summary),
     ):
-        serialized = canonical_json_bytes(payload)
+        serialized = canonical_json_bytes(
+            {
+                **_artifact_evidence_fields(artifact_name=path.name, summary=run.summary),
+                **payload,
+            }
+        )
         path.write_bytes(serialized + b"\n")
         path.with_suffix(path.suffix + ".sha256").write_text(
             f"{hashlib.sha256(serialized).hexdigest()}  {path.name}\n",

@@ -10,6 +10,7 @@ import pytest
 from research.opening_range_retest.replay_contract import build_replay_contract_matrix
 from research.opening_range_retest.replay_controls import (
     PROJECTED_SESSION_COLUMNS,
+    SessionFileRecord,
     ReplaySourceSelectionError,
     read_session_bars,
     resolve_inventory_artifact,
@@ -17,6 +18,8 @@ from research.opening_range_retest.replay_controls import (
 )
 from research.opening_range_retest.replay_engine import (
     LEDGER_ARTIFACT_FILENAME,
+    _canonical_session_key,
+    _partition_assignment,
     merge_replay_artifacts,
     replay_session_bars,
     run_replay,
@@ -71,13 +74,12 @@ def test_contract_matrix_matches_verified_current_behavior() -> None:
 def test_replay_session_bars_emits_only_when_candidate_first_becomes_legal() -> None:
     bars = list(_bars(OPENING_RANGE_ROWS + CALL_VALID_ROWS))
     emissions = replay_session_bars(bars, symbol="NIFTY", session_date="2026-07-14")
-    assert len(emissions) == 1
+    assert tuple(item.direction for item in emissions) == ("BUY_CALL",)
     emission = emissions[0]
     assert emission.direction == "BUY_CALL"
     assert emission.proposal_ready_at_iso == "2026-07-14T09:34:00+05:30"
     oracle = evaluate_oracle_direction(bars, direction="BUY_CALL")
-    assert oracle is not None
-    assert oracle.proposal_ready_at_iso == emission.proposal_ready_at_iso
+    assert getattr(oracle, "proposal_ready_at_iso", None) == emission.proposal_ready_at_iso
 
 
 def test_future_mutation_stability_holds_for_fixture_session() -> None:
@@ -232,9 +234,8 @@ def test_select_session_files_uses_inventory_without_fallback_scan(tmp_path: Pat
 
     monkeypatch.setattr("research.opening_range_retest.replay_controls._fallback_select_by_scan", _unexpected)
     resolution, selected = select_session_files(manifest_path=manifest_path, strategy_id="opening_range_retest_v1", require_inventory=True)
-    assert resolution is not None
-    assert len(selected) == 1
-    assert selected[0].symbol == "NIFTY"
+    assert resolution.sidecar_verified is True
+    assert tuple((row.symbol, row.session_date) for row in selected) == (("NIFTY", "2026-07-14"),)
 
 
 def test_select_session_files_result_independent_of_checkout_directory_name(tmp_path: Path) -> None:
@@ -266,7 +267,13 @@ def test_select_session_files_result_independent_of_checkout_directory_name(tmp_
         strategy_id="opening_range_retest_v1",
         require_inventory=True,
     )
-    assert first_resolution is not None and second_resolution is not None
+    assert (
+        first_resolution.resolved_runtime_path,
+        second_resolution.resolved_runtime_path,
+    ) == (
+        str((tmp_path / "repo_alpha" / "docs" / "agent_reviews" / "upstox_corpus_inventory_v2.json").resolve()),
+        str((tmp_path / "repo_beta" / "docs" / "agent_reviews" / "upstox_corpus_inventory_v2.json").resolve()),
+    )
     assert [row.symbol for row in first_selected] == [row.symbol for row in second_selected]
     assert [row.session_date for row in first_selected] == [row.session_date for row in second_selected]
 
@@ -378,6 +385,19 @@ def test_run_replay_and_write_artifacts_are_deterministic(tmp_path: Path) -> Non
     summary_b = json.loads((out_b / "opening_range_retest_causal_replay_summary_v1.json").read_text())
     assert summary_a["candidate_semantic_hash"] == summary_b["candidate_semantic_hash"]
     assert summary_a["canonical_summary_semantic_hash"] == summary_b["canonical_summary_semantic_hash"]
+    for payload in (
+        json.loads((out_a / "opening_range_retest_causal_replay_contract_v1.json").read_text()),
+        json.loads((out_a / "opening_range_retest_causal_replay_source_manifest_v1.json").read_text()),
+        summary_a,
+    ):
+        assert payload["mode"] == "RESEARCH_REPLAY_ARTIFACT"
+        assert payload["candidate_id"] == "opening_range_retest_causal_replay_phase1"
+        assert payload["decision"] == "OPENING_RANGE_RETEST_CAUSAL_REPLAY_READY"
+        assert payload["reason"]
+        assert payload["timestamp"]
+        assert payload["is_order_action"] is False
+        assert payload["broker_api_called"] is False
+        assert payload["source"]
 
 
 def test_run_replay_shards_merge_back_to_full_result(tmp_path: Path) -> None:
@@ -416,6 +436,7 @@ def test_run_replay_shards_merge_back_to_full_result(tmp_path: Path) -> None:
     assert merged.summary["canonical_summary_semantic_hash"] == full_run.summary["canonical_summary_semantic_hash"]
     assert merged.summary["shard_metadata"]["merged_from_shards"] is True
     assert merged.summary["selected_file_count"] == full_run.summary["selected_file_count"]
+    assert merged.source_manifest["shard_metadata"]["partition_rule"] == "sha256(canonical_session_key) mod shard_count"
 
 
 def test_run_replay_rejects_invalid_shard_index(tmp_path: Path) -> None:
@@ -441,3 +462,121 @@ def test_run_replay_rejects_invalid_shard_index(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="shard_index_out_of_range"):
         run_replay(manifest_path=manifest_path, require_inventory=True, shard_count=2, shard_index=2)
+
+
+def test_partition_assignment_is_stable_and_checkout_independent() -> None:
+    alpha = SessionFileRecord(
+        absolute_path="/tmp/repo-alpha/runtime/upstox_candidate_replay/20260714/underlying/NSE_INDEX|NIFTY 50_20260714.parquet",
+        logical_path="runtime/upstox_candidate_replay/20260714/underlying/NSE_INDEX|NIFTY 50_20260714.parquet",
+        symbol="NIFTY",
+        session_date="2026-07-14",
+        source_root="/tmp/repo-alpha/runtime/upstox_candidate_replay",
+        sha256="a" * 64,
+        row_count=375,
+        byte_size=1024,
+        projected_columns=tuple(PROJECTED_SESSION_COLUMNS),
+        selected_via="inventory_verified_repo_relative",
+    )
+    beta = SessionFileRecord(
+        absolute_path="/tmp/repo-beta/runtime/upstox_candidate_replay/20260714/underlying/NSE_INDEX|NIFTY 50_20260714.parquet",
+        logical_path="runtime/upstox_candidate_replay/20260714/underlying/NSE_INDEX|NIFTY 50_20260714.parquet",
+        symbol="NIFTY",
+        session_date="2026-07-14",
+        source_root="/tmp/repo-beta/runtime/upstox_candidate_replay",
+        sha256="a" * 64,
+        row_count=375,
+        byte_size=1024,
+        projected_columns=tuple(PROJECTED_SESSION_COLUMNS),
+        selected_via="inventory_verified_repo_relative",
+    )
+    key_alpha = _canonical_session_key(alpha)
+    key_beta = _canonical_session_key(beta)
+    assert key_alpha == key_beta
+    assert _partition_assignment(alpha, shard_count=12) == _partition_assignment(beta, shard_count=12)
+
+
+def test_partition_assignment_is_file_order_independent_and_complete(tmp_path: Path) -> None:
+    root = tmp_path / "runtime" / "upstox_candidate_replay"
+    data_paths = [
+        root / "20260714" / "underlying" / "NSE_INDEX|NIFTY 50_20260714.parquet",
+        root / "20260715" / "underlying" / "NSE_INDEX|NIFTY 50_20260715.parquet",
+        root / "20260716" / "underlying" / "NSE_INDEX|NIFTY 50_20260716.parquet",
+    ]
+    for path in data_paths:
+        _write_session_parquet(path, _full_session_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS))
+    docs_dir = tmp_path / "docs" / "agent_reviews"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    inventory_path = docs_dir / "upstox_corpus_inventory_v2.json"
+    inventory_sha = _write_inventory(inventory_path, root, data_paths)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "requested_source_roots": [str(root)],
+                "inventory_path": str(tmp_path / "missing_inventory.json"),
+                "inventory_sha256": inventory_sha,
+                "composite_corpora": [{"strategy_id": "opening_range_retest_v1", "underlying_identity": "NIFTY"}],
+                "source_roots": [str(root)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    resolution, selected = select_session_files(manifest_path=manifest_path, strategy_id="opening_range_retest_v1", require_inventory=True)
+    assert resolution.sidecar_verified is True
+    ordered = list(selected)
+    reversed_selected = list(reversed(selected))
+    expected_keys = {record.logical_path for record in selected}
+    shard_union: set[str] = set()
+    for shard_index in range(3):
+        from_ordered = {
+            record.logical_path for record in ordered if _partition_assignment(record, shard_count=3) == shard_index
+        }
+        from_reversed = {
+            record.logical_path for record in reversed_selected if _partition_assignment(record, shard_count=3) == shard_index
+        }
+        assert from_ordered == from_reversed
+        assert shard_union.isdisjoint(from_ordered)
+        shard_union.update(from_ordered)
+    assert shard_union == expected_keys
+
+
+def test_different_shard_counts_reconstruct_identical_full_semantics(tmp_path: Path) -> None:
+    root = tmp_path / "runtime" / "upstox_candidate_replay"
+    data_paths = [
+        root / "20260714" / "underlying" / "NSE_INDEX|NIFTY 50_20260714.parquet",
+        root / "20260715" / "underlying" / "NSE_INDEX|NIFTY 50_20260715.parquet",
+        root / "20260716" / "underlying" / "NSE_INDEX|NIFTY 50_20260716.parquet",
+    ]
+    for path in data_paths:
+        _write_session_parquet(path, _full_session_rows(OPENING_RANGE_ROWS + CALL_VALID_ROWS))
+    docs_dir = tmp_path / "docs" / "agent_reviews"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    inventory_path = docs_dir / "upstox_corpus_inventory_v2.json"
+    inventory_sha = _write_inventory(inventory_path, root, data_paths)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "requested_source_roots": [str(root)],
+                "inventory_path": str(tmp_path / "missing_inventory.json"),
+                "inventory_sha256": inventory_sha,
+                "composite_corpora": [{"strategy_id": "opening_range_retest_v1", "underlying_identity": "NIFTY"}],
+                "source_roots": [str(root)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    full_run = run_replay(manifest_path=manifest_path, require_inventory=True)
+    merged_hashes: set[tuple[str, str]] = set()
+    for shard_count in (2, 3):
+        shard_dirs: list[Path] = []
+        for shard_index in range(shard_count):
+            shard = run_replay(manifest_path=manifest_path, require_inventory=True, shard_count=shard_count, shard_index=shard_index)
+            shard_dir = tmp_path / f"shards-{shard_count}" / f"{shard_index}"
+            write_replay_artifacts(shard, output_dir=shard_dir, ledger_path=shard_dir / LEDGER_ARTIFACT_FILENAME)
+            shard_dirs.append(shard_dir)
+        merged = merge_replay_artifacts(shard_artifact_dirs=shard_dirs)
+        merged_hashes.add((merged.summary["candidate_semantic_hash"], merged.summary["canonical_summary_semantic_hash"]))
+        assert merged.summary["candidate_semantic_hash"] == full_run.summary["candidate_semantic_hash"]
+        assert merged.summary["canonical_summary_semantic_hash"] == full_run.summary["canonical_summary_semantic_hash"]
+    assert len(merged_hashes) == 1
