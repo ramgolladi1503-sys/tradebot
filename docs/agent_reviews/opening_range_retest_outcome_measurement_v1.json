@@ -3,8 +3,10 @@
   "active_certification": false,
   "allowed_for_live_execution": false,
   "append": false,
-  "audit_failures": [],
-  "audit_verdict": "ORB_OUTCOME_AUDIT_READY",
+  "audit_failures": [
+    "INVALID_SOURCE_HISTORY:symbol_mismatch:logical_path=runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet:manifest_symbol=NIFTY:source_symbol=BANKNIFTY"
+  ],
+  "audit_verdict": "AUDIT_INVALID",
   "broker_api_called": false,
   "candidate_count": 2215,
   "candidate_id": "opening_range_retest_outcome_measurement_v1",
@@ -12,6 +14,8 @@
   "certified_merged_main_summary_hash": "34b7c8628e28c436a2b18a1d9598077d2e08e0eab09009748e06c2ed41eb9074",
   "claim_boundary": "underlying_descriptive_outcomes_only",
   "code_sha": "648da6914959925ca1d10775aad3ce3f5c269f93",
+  "corrected_horizon_contract": "source timestamps are bar starts; proposal_ready_at is completed bar end; legal entry is first bar start strictly after proposal_ready_at; 1-minute terminal close is the entry bar close",
+  "corrected_verifier_status": "SOURCE_VERIFICATION_FAILED_CLOSED",
   "decision": "AUDIT_INVALID",
   "duplicate_directional_exposure_count": 1,
   "is_order_action": false,
@@ -71,7 +75,7 @@
     }
   },
   "read_only": true,
-  "reason": "Superseded: prior outcome certification is withdrawn pending corrected horizon, source-integrity, overlap, and independent-oracle repairs.",
+  "reason": "Corrected source verifier rejected a certified source record whose manifest symbol is NIFTY while the parquet source symbol is BANKNIFTY.",
   "run_a_dir": "/tmp/orb-certified-outcomes-648da691-a",
   "run_a_summary_hash": "790393a7e3a9ffc615f189f8497eaa9bcf421924d57f61000221bc7ce8ea7a1d",
   "run_b_dir": "/tmp/orb-certified-outcomes-648da691-b",

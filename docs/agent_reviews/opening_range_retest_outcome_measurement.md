@@ -22,14 +22,14 @@ This evidence is bounded PR documentation only. It does not include full per-can
 
 ## Scope
 
-This is research-only underlying-price outcome measurement for the certified ORB candidate ledger. It does not claim strategy edge, profitability, option P&L, fills, slippage, latency, broker correctness, paper readiness, live readiness, capital allocation readiness, or production promotion.
+This is research-only underlying-price outcome measurement for the certified ORB candidate ledger. The corrected source verifier fails closed before certification because one certified source manifest record declares `NIFTY` while the parquet file contains `BANKNIFTY`. It does not claim strategy edge, profitability, option P&L, fills, slippage, latency, broker correctness, paper readiness, live readiness, capital allocation readiness, or production promotion.
 
 ## Repository Evidence Fields
 
 - mode: RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT_EVIDENCE
 - candidate_id: opening_range_retest_outcome_measurement_v1
 - decision: AUDIT_INVALID
-- reason: Superseded: prior outcome certification is withdrawn pending corrected horizon, source-integrity, overlap, and independent-oracle repairs.
+- reason: Corrected source verifier rejected a certified source record whose manifest symbol is NIFTY while the parquet source symbol is BANKNIFTY.
 - timestamp: 2026-07-19T04:35:00+05:30
 - read_only: true
 - append: false
@@ -88,11 +88,11 @@ Safety-sensitive claims:
 
 ## Acceptance Proof
 
-- Run A verdict: `ORB_OUTCOMES_MEASURED`
-- Run B verdict: `ORB_OUTCOMES_MEASURED`
-- Independent audit verdict: `ORB_OUTCOME_AUDIT_READY`
-- A/B semantic equality: `true`
-- Candidate accounting: `2215`
+- Corrected verifier verdict: `AUDIT_INVALID`
+- Blocking source: `runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet`
+- Manifest symbol: `NIFTY`
+- Source symbol: `BANKNIFTY`
+- Previous Run A/B hashes are superseded and not accepted as certification evidence.
 - Published JSON sidecar validation: `opening_range_retest_outcome_measurement_v1.json: OK`
 
 ## Runtime Proof Required After Merge

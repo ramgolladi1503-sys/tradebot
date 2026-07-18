@@ -5,6 +5,7 @@ import argparse
 import json
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -12,20 +13,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd  # noqa: E402
-
-from research.strategy_outcomes.adapters.opening_range_retest import (  # noqa: E402
-    bars_from_ohlcv_rows,
-    candidate_from_orb_ledger_row,
-    canonical_outcome_records_hash,
-)
 from research.strategy_outcomes.artifacts import write_json_artifact  # noqa: E402
-from research.strategy_outcomes.contract import HORIZONS_MINUTES, OutcomeCandidate  # noqa: E402
-from research.strategy_outcomes.exposure import duplicate_directional_exposure  # noqa: E402
-from research.strategy_outcomes.excursions import mfe_mae  # noqa: E402
-from research.strategy_outcomes.forward_returns import forward_returns, legal_entry_index  # noqa: E402
-from research.strategy_outcomes.oracle import validate_bar_sequence  # noqa: E402
-from research.strategy_outcomes.path_events import stop_target_event  # noqa: E402
+from research.strategy_outcomes.contract import HORIZONS_MINUTES, canonical_json_hash  # noqa: E402
+from research.strategy_outcomes.engine import (  # noqa: E402
+    BAR_TIMESTAMP_CONVENTION,
+    CONTRACT_VERSION,
+    apply_overlap,
+    load_candidates,
+    load_verified_sources,
+    measure_candidate,
+    outcome_records_hash,
+)
 
 EXPECTED_CANDIDATE_COUNT = 2215
 EXPECTED_CANDIDATE_HASH = "53c8cf67f33d1e958bc2ffa1730c00c86d222e67ae76d2e865da6962892e1d24"
@@ -46,14 +44,18 @@ def _git_sha() -> str:
 
 def _contract_payload(*, stop_return: float, target_return: float) -> dict[str, Any]:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "contract_version": CONTRACT_VERSION,
         "strategy_id": "opening_range_retest_v1",
         "mode": "RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT",
         "entry_policy": "first_bar_after_proposal_ready_at",
+        "bar_timestamp_convention": BAR_TIMESTAMP_CONVENTION,
+        "horizon_policy": "elapsed_market_time_start_labelled_terminal_close",
         "horizons_minutes": list(HORIZONS_MINUTES),
         "stop_return": stop_return,
         "target_return": target_return,
         "same_bar_stop_target_policy": "AMBIGUOUS_SAME_BAR",
+        "overlap_interval_convention": "[start,end)",
         "claim_boundary": "underlying_descriptive_outcomes_only",
         "read_only": True,
         "append": False,
@@ -63,108 +65,48 @@ def _contract_payload(*, stop_return: float, target_return: float) -> dict[str, 
     }
 
 
-def _source_key(record: dict[str, Any]) -> str:
-    return f"{record.get('session_date')}:{str(record.get('symbol') or '').upper()}"
+def _counter(records: list[dict[str, Any]], key: str) -> dict[str, int]:
+    return dict(sorted(Counter(str(record.get(key)) for record in records).items()))
 
 
-def _load_bars_by_key(source_manifest: dict[str, Any]) -> dict[str, list[Any]]:
-    by_key: dict[str, list[Any]] = {}
-    for source in source_manifest.get("records") or []:
-        path = PROJECT_ROOT / str(source["logical_path"])
-        if not path.exists():
-            path = Path(str(source["absolute_path"]))
-        frame = pd.read_parquet(path, columns=["timestamp", "open", "high", "low", "close"])
-        bars = bars_from_ohlcv_rows(frame.to_dict(orient="records"), session_key=_source_key(source))
-        validate_bar_sequence(bars)
-        by_key[_source_key(source)] = bars
-    return by_key
+def _horizon_status_counts(records: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for horizon in HORIZONS_MINUTES:
+        out[str(horizon)] = dict(
+            sorted(Counter(str(record["horizons"][str(horizon)]["status"]) for record in records).items())
+        )
+    return out
 
 
-def _candidate_status(candidate: OutcomeCandidate, bars_by_key: dict[str, list[Any]]) -> tuple[str, str, list[Any]]:
-    bars = bars_by_key.get(candidate.session_key)
-    if not bars:
-        return "NO_SOURCE_BARS", "source_session_symbol_missing", []
-    if legal_entry_index(bars, candidate.proposal_ready_at) is None:
-        return "NO_LEGAL_ENTRY", "no_bar_strictly_after_proposal_ready_at", bars
-    return "MEASURED", "ok", bars
+def _path_event_counts(records: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for horizon in HORIZONS_MINUTES:
+        out[str(horizon)] = dict(
+            sorted(Counter(str(record["horizons"][str(horizon)]["path_event"]) for record in records).items())
+        )
+    return out
 
 
-def _empty_horizon_map(value: Any) -> dict[str, Any]:
-    return {str(horizon): value for horizon in HORIZONS_MINUTES}
-
-
-def _measure_candidate(
-    candidate: OutcomeCandidate,
-    *,
-    bars_by_key: dict[str, list[Any]],
-    stop_return: float,
-    target_return: float,
-) -> dict[str, Any]:
-    status, reason, bars = _candidate_status(candidate, bars_by_key)
-    entry_index = legal_entry_index(bars, candidate.proposal_ready_at) if bars else None
-    entry_bar = bars[entry_index] if entry_index is not None else None
-    record: dict[str, Any] = {
-        "candidate_id": candidate.candidate_id,
-        "candidate_hash": candidate.candidate_hash,
-        "session_key": candidate.session_key,
-        "symbol": candidate.symbol,
-        "direction": candidate.direction,
-        "proposal_ready_at": candidate.proposal_ready_at,
-        "status": status,
-        "reason": reason,
-        "entry_policy": "first_bar_after_proposal_ready_at",
-        "entry_timestamp": entry_bar.timestamp if entry_bar else None,
-        "entry_price": entry_bar.open if entry_bar else None,
-        "forward_returns": _empty_horizon_map(None),
-        "mfe_mae": _empty_horizon_map({"mfe": None, "mae": None, "time_to_mfe": None, "time_to_mae": None}),
-        "path_events": _empty_horizon_map("NOT_MEASURED"),
+def _write_artifacts(out_dir: Path, *, contract: dict[str, Any], records: list[dict[str, Any]], summary: dict[str, Any]) -> dict[str, str]:
+    out_dir.mkdir(parents=True, exist_ok=False)
+    paths = {
+        "contract": out_dir / "opening_range_retest_outcome_contract_v1.json",
+        "records": out_dir / "opening_range_retest_outcome_records_v1.json",
+        "summary": out_dir / "opening_range_retest_outcome_summary_v1.json",
     }
-    if status != "MEASURED":
-        return record
-    record["forward_returns"] = forward_returns(candidate, bars)
-    record["mfe_mae"] = {str(horizon): mfe_mae(candidate, bars, horizon=horizon) for horizon in HORIZONS_MINUTES}
-    record["path_events"] = {
-        str(horizon): stop_target_event(candidate, bars, stop_return=stop_return, target_return=target_return, horizon=horizon)
-        for horizon in HORIZONS_MINUTES
+    hashes = {
+        "contract_hash": write_json_artifact(paths["contract"], contract),
+        "records_artifact_hash": write_json_artifact(paths["records"], {"records": records}),
+        "summary_hash": write_json_artifact(paths["summary"], summary),
     }
-    return record
-
-
-def _summarize(records: list[dict[str, Any]], *, code_sha: str, stop_return: float, target_return: float) -> dict[str, Any]:
-    statuses: dict[str, int] = {}
-    path_event_counts: dict[str, dict[str, int]] = {str(horizon): {} for horizon in HORIZONS_MINUTES}
-    for record in records:
-        statuses[str(record["status"])] = statuses.get(str(record["status"]), 0) + 1
-        for horizon, event in dict(record["path_events"]).items():
-            bucket = path_event_counts.setdefault(str(horizon), {})
-            bucket[str(event)] = bucket.get(str(event), 0) + 1
-    return {
-        "schema_version": 2,
-        "decision": "ORB_OUTCOMES_MEASURED",
-        "mode": "RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT",
-        "strategy_id": "opening_range_retest_v1",
-        "code_sha": code_sha,
-        "source_count": EXPECTED_SOURCE_COUNT,
-        "source_universe_hash": EXPECTED_SOURCE_HASH,
-        "candidate_count": len(records),
-        "candidate_semantic_hash": EXPECTED_CANDIDATE_HASH,
-        "certified_merged_main_summary_hash": EXPECTED_SUMMARY_HASH,
-        "outcome_semantic_hash": canonical_outcome_records_hash(records),
-        "status_counts": dict(sorted(statuses.items())),
-        "path_event_counts": {key: dict(sorted(value.items())) for key, value in sorted(path_event_counts.items())},
-        "stop_return": stop_return,
-        "target_return": target_return,
-        "claim_boundary": "underlying_descriptive_outcomes_only",
-        "read_only": True,
-        "append": False,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
-    }
+    for path in paths.values():
+        digest = canonical_json_hash(json.loads(path.read_text(encoding="utf-8")))
+        path.with_suffix(path.suffix + ".sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    return hashes
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate ORB underlying outcome artifacts.")
+    parser = argparse.ArgumentParser(description="Generate corrected ORB underlying outcome artifacts.")
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--candidate-ledger", type=Path, default=LEDGER_PATH)
     parser.add_argument("--source-manifest", type=Path, default=SOURCE_MANIFEST_PATH)
@@ -174,7 +116,7 @@ def main() -> int:
 
     ledger = _load_json(args.candidate_ledger)
     source_manifest = _load_json(args.source_manifest)
-    candidates = [candidate_from_orb_ledger_row(row) for row in ledger.get("records") or []]
+    candidates = load_candidates(ledger)
     if ledger.get("candidate_count") != EXPECTED_CANDIDATE_COUNT or len(candidates) != EXPECTED_CANDIDATE_COUNT:
         raise SystemExit("certified_candidate_count_mismatch")
     if ledger.get("candidate_semantic_hash") != EXPECTED_CANDIDATE_HASH:
@@ -184,31 +126,70 @@ def main() -> int:
     if dict(source_manifest.get("selection_summary") or {}).get("semantic_hash") != EXPECTED_SOURCE_HASH:
         raise SystemExit("certified_source_hash_mismatch")
 
-    bars_by_key = _load_bars_by_key(source_manifest)
+    sources = load_verified_sources(PROJECT_ROOT, source_manifest)
     records = [
-        _measure_candidate(candidate, bars_by_key=bars_by_key, stop_return=args.stop_return, target_return=args.target_return)
+        measure_candidate(
+            candidate,
+            source=sources.get(candidate.session_key),
+            stop_return=args.stop_return,
+            target_return=args.target_return,
+        )
         for candidate in candidates
     ]
-    summary = _summarize(records, code_sha=_git_sha(), stop_return=args.stop_return, target_return=args.target_return)
-    duplicates = duplicate_directional_exposure(candidates)
-    summary["duplicate_directional_exposure_count"] = len(duplicates)
-    summary["duplicate_directional_exposures"] = list(duplicates[:100])
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    contract_hash = write_json_artifact(
-        args.out_dir / "opening_range_retest_outcome_contract_v1.json",
-        _contract_payload(stop_return=args.stop_return, target_return=args.target_return),
+    overlap_summary = apply_overlap(records)
+    record_hash = outcome_records_hash(records)
+    summary = {
+        "schema_version": 3,
+        "contract_version": CONTRACT_VERSION,
+        "decision": "ORB_OUTCOMES_MEASURED",
+        "mode": "RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT",
+        "strategy_id": "opening_range_retest_v1",
+        "code_sha": _git_sha(),
+        "candidate_count": len(records),
+        "candidate_semantic_hash": EXPECTED_CANDIDATE_HASH,
+        "source_count": len(sources),
+        "source_universe_hash": EXPECTED_SOURCE_HASH,
+        "certified_merged_main_summary_hash": EXPECTED_SUMMARY_HASH,
+        "source_files_byte_verified": len(sources),
+        "candidate_status_counts": _counter(records, "candidate_status"),
+        "horizon_status_counts": _horizon_status_counts(records),
+        "path_event_counts": _path_event_counts(records),
+        "overlap_counts": overlap_summary,
+        "candidate_record_semantic_hash": record_hash,
+        "strategy_semantic_summary_hash": canonical_json_hash(
+            {
+                "candidate_count": len(records),
+                "candidate_record_semantic_hash": record_hash,
+                "candidate_status_counts": _counter(records, "candidate_status"),
+                "horizon_status_counts": _horizon_status_counts(records),
+                "overlap_counts": overlap_summary,
+                "path_event_counts": _path_event_counts(records),
+            }
+        ),
+        "bar_timestamp_convention": BAR_TIMESTAMP_CONVENTION,
+        "horizon_policy": "elapsed_market_time_start_labelled_terminal_close",
+        "claim_boundary": "underlying_descriptive_outcomes_only",
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+    contract = _contract_payload(stop_return=args.stop_return, target_return=args.target_return)
+    hashes = _write_artifacts(args.out_dir, contract=contract, records=records, summary=summary)
+    summary.update(hashes)
+    write_json_artifact(args.out_dir / "opening_range_retest_outcome_summary_v1.json", summary)
+    (args.out_dir / "opening_range_retest_outcome_summary_v1.json.sha256").write_text(
+        f"{canonical_json_hash(summary)}  opening_range_retest_outcome_summary_v1.json\n", encoding="utf-8"
     )
-    records_hash = write_json_artifact(args.out_dir / "opening_range_retest_outcome_records_v1.json", {"records": records})
-    summary["contract_hash"] = contract_hash
-    summary["records_artifact_hash"] = records_hash
-    summary_hash = write_json_artifact(args.out_dir / "opening_range_retest_outcome_summary_v1.json", summary)
     print(
         json.dumps(
             {
                 "verdict": summary["decision"],
                 "candidate_count": len(records),
-                "outcome_semantic_hash": summary["outcome_semantic_hash"],
-                "summary_hash": summary_hash,
+                "candidate_record_semantic_hash": record_hash,
+                "strategy_semantic_summary_hash": summary["strategy_semantic_summary_hash"],
+                "summary_hash": canonical_json_hash(summary),
             },
             sort_keys=True,
         )

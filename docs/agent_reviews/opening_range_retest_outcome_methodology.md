@@ -10,7 +10,7 @@
 - allowed_paths: same as requested paths
 - forbidden_paths: production strategy files, `core/`, `config/`, broker paths, execution paths, risk paths, feed paths, dashboard paths, credentials, authoritative corpus roots, runtime strategy wiring
 - expected_tests: focused strategy outcome tests, py_compile, diff check, agent-review evidence validation, scoped CE gate
-- acceptance_proof: `ORB_OUTCOMES_MEASURED`
+- acceptance_proof: `AUDIT_INVALID`
 
 ## Scope Guard
 
@@ -20,8 +20,8 @@ This PR is research-only underlying outcome measurement work. It measures the fu
 
 - mode: RESEARCH_UNDERLYING_OUTCOME_MEASUREMENT
 - candidate_id: opening_range_retest_outcome_methodology
-- decision: ORB_OUTCOMES_MEASURED
-- reason: Full certified ORB candidate accounting is implemented with strict read-only source binding, legal-entry enforcement, forward returns, MFE/MAE, path-event classification, duplicate exposure reporting, and deterministic artifact audit.
+- decision: AUDIT_INVALID
+- reason: Corrected source verification fails closed on a certified manifest/source symbol mismatch before outcome certification.
 - timestamp: 2026-07-19T04:20:00+05:30
 - read_only: true
 - append: false
@@ -47,7 +47,7 @@ Contract decisions:
 
 ## GSD Review
 
-The framework includes contract objects, forward returns, excursions, stop/target path events, exposure detection, an ORB adapter, artifact writing, full-corpus generation, and strict independent audit. Candidates without a strictly later bar are retained as `NO_LEGAL_ENTRY`, not dropped or silently treated as measured.
+The framework includes contract objects, forward returns, excursions, stop/target path events, exposure detection, an ORB adapter, artifact writing, full-corpus generation, and strict independent audit. The corrected source verifier currently blocks certification on a manifest/source symbol mismatch; candidates without a strictly later bar remain `NO_LEGAL_ENTRY` only after source verification succeeds.
 
 ## QA / Safety Review
 
@@ -65,7 +65,7 @@ Focused tests cover unsupported direction rejection, deterministic candidate has
 
 ## Runtime Proof Required After Merge
 
-The full certified candidate ledger must be run twice from the same frozen clean commit in independent output directories. The audits must reconcile:
+The full certified candidate ledger must be run twice from the same frozen clean commit in independent output directories only after corrected source verification succeeds. The audits must reconcile:
 
 - certified candidate count: `2215`
 - certified candidate semantic hash: `53c8cf67f33d1e958bc2ffa1730c00c86d222e67ae76d2e865da6962892e1d24`
