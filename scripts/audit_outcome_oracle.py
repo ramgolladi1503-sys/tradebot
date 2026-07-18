@@ -82,7 +82,7 @@ def main():
         exit_p = float(exit_row.iloc[0]["open"])
         
         dir_mult = cand.direction
-        if dir_mult > 0:
+        if str(dir_mult) == "LONG" or dir_mult == 1:
             gross = (exit_p / entry_p) - 1.0
         else:
             gross = (entry_p / exit_p) - 1.0
@@ -105,7 +105,7 @@ def main():
         if not match:
             mismatches += 1
             
-        if dir_mult > 0: long_tested += 1
+        if str(dir_mult) == "LONG" or dir_mult == 1: long_tested += 1
         else: short_tested += 1
         
         details.append({

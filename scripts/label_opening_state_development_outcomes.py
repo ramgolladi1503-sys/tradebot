@@ -12,6 +12,7 @@ from research.opening_state_momentum.decision_authority import DecisionAuthority
 from research.opening_state_momentum.source_authority import SourceAuthority
 from research.opening_state_momentum.outcome_labeler import label_outcome
 from research.opening_state_momentum.outcome_fingerprints import compute_outcome_fingerprint
+from research.opening_state_momentum.outcome_contract import VALID_STATUSES
 
 reviews_dir = os.path.join(repo_root, "docs", "agent_reviews", "opening_state_momentum")
 partition_path = os.path.join(reviews_dir, "research_partition.json")
@@ -19,7 +20,6 @@ decisions_path = os.path.join(reviews_dir, "candidate_decisions.json")
 manifest_path = os.path.join(reviews_dir, "source_manifest.json")
 
 def main():
-    # If the user sets different paths (e.g. for determinism test)
     p_path = os.environ.get("PARTITION_PATH", partition_path)
     d_path = os.environ.get("DECISIONS_PATH", decisions_path)
     m_path = os.environ.get("MANIFEST_PATH", manifest_path)
@@ -72,37 +72,40 @@ def main():
         record["outcome_fingerprint"] = compute_outcome_fingerprint(record)
         outcomes.append(record)
         
-    # Write outcomes
     with open(os.path.join(out_dir, "development_outcome_labels.json"), "w") as f:
         json.dump(outcomes, f, indent=2)
         
-    # Reconciliation
     recon = {
         "accepted_development_candidates": len(decisions.accepted_development_candidates),
-        "rejected_development_candidates": len(decisions.rejected_decision_dates),
-        "total_labelled_outcomes": sum(1 for x in outcomes if x["status"] == "OUTCOME_LABELLED"),
-        "total_source_resolution_failed": sum(1 for x in outcomes if x["status"] == "SOURCE_RESOLUTION_FAILED"),
-        "total_entry_bar_missing": sum(1 for x in outcomes if x["status"] == "ENTRY_BAR_MISSING"),
-        "total_exit_bar_missing": sum(1 for x in outcomes if x["status"] == "EXIT_BAR_MISSING"),
-        "total_entry_price_invalid": sum(1 for x in outcomes if x["status"] == "ENTRY_PRICE_INVALID"),
-        "total_exit_price_invalid": sum(1 for x in outcomes if x["status"] == "EXIT_PRICE_INVALID"),
-        "total_entry_exit_order_invalid": sum(1 for x in outcomes if x["status"] == "ENTRY_EXIT_ORDER_INVALID"),
-        "total_invalid_holding_period": sum(1 for x in outcomes if x["status"] == "INVALID_HOLDING_PERIOD"),
+        "rejected_development_candidates": len(decisions.rejected_decision_dates)
     }
     
-    total_failures = (
-        recon["total_source_resolution_failed"] +
-        recon["total_entry_bar_missing"] +
-        recon["total_exit_bar_missing"] +
-        recon["total_entry_price_invalid"] +
-        recon["total_exit_price_invalid"] +
-        recon["total_entry_exit_order_invalid"] +
-        recon["total_invalid_holding_period"]
-    )
-    recon["unexplained_count"] = recon["accepted_development_candidates"] - (recon["total_labelled_outcomes"] + total_failures)
+    total_failures = 0
+    for st in VALID_STATUSES:
+        key = "total_" + st.lower()
+        cnt = sum(1 for x in outcomes if x["status"] == st)
+        recon[key] = cnt
+        if st != "OUTCOME_LABELLED":
+            total_failures += cnt
+            
+    recon["unexplained_count"] = recon["accepted_development_candidates"] - (recon["total_outcome_labelled"] + total_failures)
     
     with open(os.path.join(out_dir, "development_outcome_reconciliation.json"), "w") as f:
         json.dump(recon, f, indent=2)
+        
+    # Generate fingerprint aggregate
+    fingerprints = sorted([x["outcome_fingerprint"] for x in outcomes])
+    with open(os.path.join(out_dir, "outcome_fingerprint_aggregate.json"), "w") as f:
+        json.dump(fingerprints, f, indent=2)
+        
+    # Generate evidence summary
+    summary = {
+        "total_records": len(outcomes),
+        "success_rate": recon["total_outcome_labelled"] / max(1, len(outcomes)),
+        "contract_hash": out_contract_hash
+    }
+    with open(os.path.join(out_dir, "outcome_evidence_summary.json"), "w") as f:
+        json.dump(summary, f, indent=2)
 
 if __name__ == "__main__":
     main()

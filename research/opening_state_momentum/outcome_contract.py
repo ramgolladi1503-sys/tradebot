@@ -16,6 +16,21 @@ CONTRACT_PARAMS = {
     "friction_bps_tiers": [0, 2, 5, 10]
 }
 
+VALID_STATUSES = [
+    "OUTCOME_LABELLED",
+    "SOURCE_RESOLUTION_FAILED",
+    "ENTRY_BAR_MISSING",
+    "EXIT_BAR_MISSING",
+    "DUPLICATE_TIMESTAMPS",
+    "ENTRY_BAR_MULTIPLE_MATCHES",
+    "EXIT_BAR_MULTIPLE_MATCHES",
+    "ENTRY_PRICE_INVALID",
+    "EXIT_PRICE_INVALID",
+    "ENTRY_EXIT_ORDER_INVALID",
+    "INVALID_HOLDING_PERIOD",
+    "UNPARSABLE_TIMESTAMPS"
+]
+
 def get_outcome_contract_hash() -> str:
     serialized = json.dumps(CONTRACT_PARAMS, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

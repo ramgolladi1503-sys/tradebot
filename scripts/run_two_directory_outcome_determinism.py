@@ -24,9 +24,13 @@ def main():
     with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
         env1 = os.environ.copy()
         env1["OUTCOME_DIR"] = d1
+        # copy outcome_contract.json to d1 so that it is included in hashing
+        contract_path = os.path.join(repo_root, "docs", "agent_reviews", "opening_state_momentum", "outcome_contract.json")
+        shutil.copy2(contract_path, os.path.join(d1, "outcome_contract.json"))
         
         env2 = os.environ.copy()
         env2["OUTCOME_DIR"] = d2
+        shutil.copy2(contract_path, os.path.join(d2, "outcome_contract.json"))
         
         # Run A
         subprocess.run([sys.executable, script1], env=env1, check=True)
@@ -39,7 +43,10 @@ def main():
         files = [
             "development_outcome_labels.json",
             "development_outcome_reconciliation.json",
-            "outcome_oracle_comparison.json"
+            "outcome_contract.json",
+            "outcome_oracle_comparison.json",
+            "outcome_fingerprint_aggregate.json",
+            "outcome_evidence_summary.json"
         ]
         
         hashes1 = {}

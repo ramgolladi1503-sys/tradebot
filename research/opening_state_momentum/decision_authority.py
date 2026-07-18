@@ -9,7 +9,7 @@ class DecisionAuthorityError(Exception):
 @dataclass
 class AcceptedCandidate:
     session_date: str
-    direction: int
+    direction: str
     fingerprint: str
     dataset_group_hash: str
     feature_cutoff_timestamp: str
@@ -42,13 +42,8 @@ class DecisionAuthority:
                 if cand.get("primary_rejection_reason") != "NONE":
                     raise DecisionAuthorityError(f"Accepted candidate {date} has a rejection reason.")
                     
-                direction_str = cand.get("direction")
-                if direction_str == "LONG":
-                    direction = 1
-                elif direction_str == "SHORT":
-                    direction = -1
-                else:
-                    raise DecisionAuthorityError(f"Accepted candidate {date} has invalid direction: {direction_str}")
+                from .direction_authority import normalize_direction
+                direction = normalize_direction(cand.get("direction"))
                     
                 if date in partition.holdout_dates:
                     raise DecisionAuthorityError(f"HOLDOUT_LOCKED")

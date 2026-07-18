@@ -1,13 +1,17 @@
 {
   "accepted_development_candidates": 32,
   "rejected_development_candidates": 366,
-  "total_labelled_outcomes": 32,
+  "total_outcome_labelled": 32,
   "total_source_resolution_failed": 0,
   "total_entry_bar_missing": 0,
   "total_exit_bar_missing": 0,
+  "total_duplicate_timestamps": 0,
+  "total_entry_bar_multiple_matches": 0,
+  "total_exit_bar_multiple_matches": 0,
   "total_entry_price_invalid": 0,
   "total_exit_price_invalid": 0,
   "total_entry_exit_order_invalid": 0,
   "total_invalid_holding_period": 0,
+  "total_unparsable_timestamps": 0,
   "unexplained_count": 0
 }

@@ -2,11 +2,13 @@ import pandas as pd
 from typing import Dict, Any, Tuple
 from .outcome_contract import CONTRACT_PARAMS
 
-def calculate_returns(entry_price: float, exit_price: float, direction: int) -> Tuple[float, Dict[str, float]]:
-    if direction > 0:
+def calculate_returns(entry_price: float, exit_price: float, direction: str) -> Tuple[float, Dict[str, float]]:
+    if direction == "LONG":
         gross = (exit_price / entry_price) - 1.0
-    else:
+    elif direction == "SHORT":
         gross = (entry_price / exit_price) - 1.0
+    else:
+        raise ValueError("Invalid direction")
         
     frictions = {}
     for bps in CONTRACT_PARAMS["friction_bps_tiers"]:
@@ -16,7 +18,7 @@ def calculate_returns(entry_price: float, exit_price: float, direction: int) -> 
 
 from .timestamp_normalization import normalize_timestamps
 
-def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[str, Any]:
+def label_outcome(df: pd.DataFrame, direction: str, session_date: str) -> Dict[str, Any]:
     df = df.copy()
     try:
         df["timestamp"] = normalize_timestamps(df["timestamp"])

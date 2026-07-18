@@ -43,8 +43,8 @@ def test_decision_authority_parsing(tmp_path):
     
     da = DecisionAuthority.load(str(p), pa)
     assert len(da.accepted_development_candidates) == 2
-    assert da.accepted_development_candidates[0].direction == 1
-    assert da.accepted_development_candidates[1].direction == -1
+    assert da.accepted_development_candidates[0].direction == "LONG"
+    assert da.accepted_development_candidates[1].direction == "SHORT"
     assert "2024-01-03" in da.rejected_decision_dates
 
 def test_decision_authority_unknown_status(tmp_path):
@@ -64,19 +64,19 @@ def test_decision_authority_holdout_abort(tmp_path):
         DecisionAuthority.load(str(p), pa)
         
 def test_long_return_formula():
-    gross, frictions = calculate_returns(100.0, 105.0, 1)
+    gross, frictions = calculate_returns(100.0, 105.0, "LONG")
     assert abs(gross - 0.05) < 1e-8
     assert frictions["net_return_10bps"] == gross - 0.002
     
 def test_short_return_formula():
-    gross, frictions = calculate_returns(100.0, 95.0, -1)
+    gross, frictions = calculate_returns(100.0, 95.0, "SHORT")
     # (100 / 95) - 1.0
     assert abs(gross - 0.052631578947) < 1e-8
 
 def test_full_precision_retention():
     # Show they are distinguishable
-    g1, _ = calculate_returns(100.0000001, 105.0, 1)
-    g2, _ = calculate_returns(100.0000002, 105.0, 1)
+    g1, _ = calculate_returns(100.0000001, 105.0, "LONG")
+    g2, _ = calculate_returns(100.0000002, 105.0, "LONG")
     assert g1 != g2
     
 def test_label_outcome_exact_times():
@@ -84,7 +84,7 @@ def test_label_outcome_exact_times():
         "timestamp": pd.to_datetime(["2024-01-01 14:45:00", "2024-01-01 15:15:00"]).tz_localize("Asia/Kolkata"),
         "open": [100.0, 105.0]
     })
-    res = label_outcome(df, 1, "2024-01-01")
+    res = label_outcome(df, "LONG", "2024-01-01")
     assert res["status"] == "OUTCOME_LABELLED"
     assert res["holding_seconds"] == 1800
     
@@ -93,7 +93,7 @@ def test_label_outcome_missing_entry():
         "timestamp": pd.to_datetime(["2024-01-01 15:15:00"]).tz_localize("Asia/Kolkata"),
         "open": [105.0]
     })
-    res = label_outcome(df, 1, "2024-01-01")
+    res = label_outcome(df, "LONG", "2024-01-01")
     assert res["status"] == "ENTRY_BAR_MISSING"
 
 def test_label_outcome_missing_exit():
@@ -101,7 +101,7 @@ def test_label_outcome_missing_exit():
         "timestamp": pd.to_datetime(["2024-01-01 14:45:00"]).tz_localize("Asia/Kolkata"),
         "open": [105.0]
     })
-    res = label_outcome(df, 1, "2024-01-01")
+    res = label_outcome(df, "LONG", "2024-01-01")
     assert res["status"] == "EXIT_BAR_MISSING"
     
 def test_fingerprint_changes():
@@ -109,7 +109,7 @@ def test_fingerprint_changes():
         "strategy_id": "S1", "strategy_version": "1", "strategy_contract_hash": "a",
         "outcome_contract_id": "O1", "outcome_contract_version": "1", "outcome_contract_hash": "b",
         "source_manifest_hash": "c", "dataset_group_hash": "d", "partition_hash": "e",
-        "session_date": "2024-01-01", "direction": 1, "candidate_fingerprint": "f",
+        "session_date": "2024-01-01", "direction": "LONG", "candidate_fingerprint": "f",
         "feature_cutoff_timestamp": "t", "entry_timestamp": "t1", "entry_price": 100.0,
         "exit_timestamp": "t2", "exit_price": 105.0, "holding_seconds": 1800,
         "gross_return": 0.05, "net_return_0bps": 0.05, "net_return_2bps": 0.0496,
@@ -172,7 +172,7 @@ def test_label_outcome_multiple_entry_matches():
         ],
         "open": [100.0, 101.0, 105.0]
     })
-    res = label_outcome(df, 1, "2024-10-14")
+    res = label_outcome(df, "LONG", "2024-10-14")
     assert res["status"] == "DUPLICATE_TIMESTAMPS"
 
 def test_label_outcome_multiple_exit_matches():
@@ -185,5 +185,45 @@ def test_label_outcome_multiple_exit_matches():
         ],
         "open": [100.0, 105.0, 106.0]
     })
-    res = label_outcome(df, 1, "2024-10-14")
+    res = label_outcome(df, "LONG", "2024-10-14")
     assert res["status"] == "DUPLICATE_TIMESTAMPS"
+
+import json
+import subprocess
+import os
+
+def test_direction_normalization_string_long():
+    from research.opening_state_momentum.direction_authority import normalize_direction
+    assert normalize_direction("LONG") == "LONG"
+
+def test_direction_normalization_string_short():
+    from research.opening_state_momentum.direction_authority import normalize_direction
+    assert normalize_direction("SHORT") == "SHORT"
+    
+def test_direction_normalization_int_long():
+    from research.opening_state_momentum.direction_authority import normalize_direction
+    assert normalize_direction(1) == "LONG"
+    
+def test_direction_normalization_int_short():
+    from research.opening_state_momentum.direction_authority import normalize_direction
+    assert normalize_direction(-1) == "SHORT"
+    
+def test_direction_normalization_invalid():
+    from research.opening_state_momentum.direction_authority import normalize_direction, DirectionAuthorityError
+    import pytest
+    with pytest.raises(DirectionAuthorityError):
+        normalize_direction("NONE")
+    with pytest.raises(DirectionAuthorityError):
+        normalize_direction(0)
+    with pytest.raises(DirectionAuthorityError):
+        normalize_direction(None)
+
+def test_calculate_returns_string_long():
+    from research.opening_state_momentum.outcome_labeler import calculate_returns
+    gross, frict = calculate_returns(100.0, 105.0, "LONG")
+    assert abs(gross - 0.05) < 1e-15
+
+def test_calculate_returns_string_short():
+    from research.opening_state_momentum.outcome_labeler import calculate_returns
+    gross, frict = calculate_returns(100.0, 95.0, "SHORT")
+    assert abs(gross - (100.0/95.0 - 1.0)) < 1e-15

@@ -10,7 +10,7 @@
     "dataset_group_hash": "24ecf73a9d6ce17f59b3dba6f3e5b8b32f43e6d2ef5c0c489ea5f6c10ffd7c7c",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-10-14",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "5df43d1e07671918308acfcf51808d96d6dd870552d0f1547f402802a50b3fac",
     "feature_cutoff_timestamp": "2024-10-14T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241014",
@@ -26,7 +26,7 @@
     "net_return_2bps": -0.0009271344968750257,
     "net_return_5bps": -0.0015271344968750258,
     "net_return_10bps": -0.002527134496875026,
-    "outcome_fingerprint": "2d87105015459c5e35d994c70f58a3def0f909f8a5d91886a2696606ab6e870b"
+    "outcome_fingerprint": "82e4c1a9ddbfd16748aa05244501907a5b9033d34b973efdfb820bd360a53960"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -39,7 +39,7 @@
     "dataset_group_hash": "d1c7bf486e99e8d84f368093115e4d613703e485ebd8bcdec483990d1ef01eca",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-10-17",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "75ecab3bcb187f9889856bd3eef5464ff354f50e61ba12ef8e992f40910dd206",
     "feature_cutoff_timestamp": "2024-10-17T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241017",
@@ -55,7 +55,7 @@
     "net_return_2bps": -0.0014298827549162226,
     "net_return_5bps": -0.0020298827549162226,
     "net_return_10bps": -0.0030298827549162227,
-    "outcome_fingerprint": "51ec19f4d7ff05c3280b5b630b6490e8d0610aeb48501125b547ec3e2a05729c"
+    "outcome_fingerprint": "c70f8c08c67f649ef8ccc37d092b71531319cadbac26c82e4715f9aa0e148a2f"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -68,7 +68,7 @@
     "dataset_group_hash": "40e1c95918b0b4a56466d8771a94690c4ac2cd8f211dd551b5cda9b6a1d72e46",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-10-25",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "76851d6728e49bcce7bcd870e28104572332a6cb964846f2b8e68bac6363c221",
     "feature_cutoff_timestamp": "2024-10-25T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241025",
@@ -84,7 +84,7 @@
     "net_return_2bps": -0.0036536098936216675,
     "net_return_5bps": -0.004253609893621667,
     "net_return_10bps": -0.005253609893621667,
-    "outcome_fingerprint": "3bd52ac85fe91c3ae64b9e5c37c570256dc7e4c0e731e9f230d2b76a16a29b89"
+    "outcome_fingerprint": "7c6dcfb16fae190040c73e046a114ecdb788eb5afe2170b87497b6fb3755f080"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -97,7 +97,7 @@
     "dataset_group_hash": "e93750b921607312e9fac2237f05f04e4e5d91e5af5eb0eb4af994919d9339a6",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-11-07",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "078aa611952a0e396319c8fe61432646f2b62fc065436f37ea7207f4ec7d3896",
     "feature_cutoff_timestamp": "2024-11-07T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241107",
@@ -113,7 +113,7 @@
     "net_return_2bps": -0.0007058034469006765,
     "net_return_5bps": -0.0013058034469006765,
     "net_return_10bps": -0.0023058034469006766,
-    "outcome_fingerprint": "4f9a00f83ae9c4b34a012c22e58ab2b250192af1b507d98518c3d1cfd3c78014"
+    "outcome_fingerprint": "8a4bb51104bc1e9be65dd5aa27b6a800cf75c0b3a4151e4b7ed37fc21fb4b6b2"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -126,7 +126,7 @@
     "dataset_group_hash": "313ffb062043e62faaf6574797bd857f03728902f3204b5fa094cf7ca2a502c0",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-11-12",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "37440844c26f1dc791c7971b68bae5e4ba896ccc15911d953f62ccb1a32f42da",
     "feature_cutoff_timestamp": "2024-11-12T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241112",
@@ -142,7 +142,7 @@
     "net_return_2bps": 0.002702135886538404,
     "net_return_5bps": 0.002102135886538404,
     "net_return_10bps": 0.001102135886538404,
-    "outcome_fingerprint": "72747bb24472bd032a95f8665ffb9f445eece76241965768df5b3a13d8b6754f"
+    "outcome_fingerprint": "cc080b4c4f082e29a2cc3ec5f0abcbacc06bb02db51c64ac44ebb7e0d6778643"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -155,7 +155,7 @@
     "dataset_group_hash": "0ccf6fd5627ceafa868f1b1ed27cf02feb8333857ab6ff85a6785a0e222f625e",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2024-11-18",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "3f64ac9167833e2fac1c4970601c30261fa3fc8813ce33e33f77125ad65b2d81",
     "feature_cutoff_timestamp": "2024-11-18T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20241118",
@@ -171,7 +171,7 @@
     "net_return_2bps": -0.001043832637624464,
     "net_return_5bps": -0.001643832637624464,
     "net_return_10bps": -0.002643832637624464,
-    "outcome_fingerprint": "65be7a30ff32b563d4155e64f60519f0a4b8d69601f21a1abafb1b20c1905b40"
+    "outcome_fingerprint": "e436ead7f1f85dfb5811b68c88708c8d8d0fc2ec4ebba180f846f647d4c559c7"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -184,7 +184,7 @@
     "dataset_group_hash": "b822c56ac276266c081a80155e015cfbd83564facbb5ce8e42256c976983446f",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-01-03",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "777689addfffbb8b910f8d16a99f29755e59558a5fd2d01a6964c6a5f1a7f2fd",
     "feature_cutoff_timestamp": "2025-01-03T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250103",
@@ -200,7 +200,7 @@
     "net_return_2bps": 0.000791262133900306,
     "net_return_5bps": 0.00019126213390030598,
     "net_return_10bps": -0.000808737866099694,
-    "outcome_fingerprint": "9204a6c4d61381ea15af0cc07caffa476c1135187e28c09401dd470f4186606c"
+    "outcome_fingerprint": "bd702b990cd5558ce5247bbdfede6609760be06cae08f3f91e9789c328130a98"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -213,7 +213,7 @@
     "dataset_group_hash": "296a18142f7bd91e078b5f889fd50362719157207e5abfdf7ff212358bdd7fb3",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-01-06",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "c2ac58afe699d5a75635a24685b2377ffb0372e8f5c0b6b628e7a61190f0103d",
     "feature_cutoff_timestamp": "2025-01-06T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250106",
@@ -229,7 +229,7 @@
     "net_return_2bps": -0.0009278297717189461,
     "net_return_5bps": -0.0015278297717189462,
     "net_return_10bps": -0.0025278297717189462,
-    "outcome_fingerprint": "95f94e6f8e5ac8c86f823b443b11733135450b70bf23781d667a6ba3d57d4127"
+    "outcome_fingerprint": "8570942888958827a095888a469702ba8d874bf51e2c33fcc7219ce9aa86503b"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -242,7 +242,7 @@
     "dataset_group_hash": "ec811dc2d15391279edd68e24cf5cfe480a2a3792e2b942b090479fe70a8d7a5",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-01-21",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "597d840f6de3e3287e23240ccc598f8ad3de3738353073c2591381687690feb1",
     "feature_cutoff_timestamp": "2025-01-21T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250121",
@@ -258,7 +258,7 @@
     "net_return_2bps": -0.0010254696451762909,
     "net_return_5bps": -0.001625469645176291,
     "net_return_10bps": -0.002625469645176291,
-    "outcome_fingerprint": "2c76557d2730d160552b644b1215a2d8415c45a59b408f4727f2063ea5f6bd7b"
+    "outcome_fingerprint": "21588e56bd8c02fc83a853dd317ec792b2762a134d094baa6090a083f9770e07"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -271,7 +271,7 @@
     "dataset_group_hash": "51bbf39d89b104a15c39a0874c097b51db355f9a9ced7eb59a697cca186c200c",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-02-06",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "ecc54a23f495c376b4278309be42f97dd4f401237a02bf91543ca1363ad56da1",
     "feature_cutoff_timestamp": "2025-02-06T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250206",
@@ -287,7 +287,7 @@
     "net_return_2bps": -0.0012836205983191458,
     "net_return_5bps": -0.0018836205983191459,
     "net_return_10bps": -0.002883620598319146,
-    "outcome_fingerprint": "6871a32f5c49e622838341d508171261cff0e2214bdecee11ac95063132a4e64"
+    "outcome_fingerprint": "c9124f6eef5b8eefd31b7503dedd1098491ab135be73fa35a9dab8e3f8c6aaf0"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -300,7 +300,7 @@
     "dataset_group_hash": "dfd3071705800ef79beefe8b9bde6a4ac22fa0edc2e85d5b168c231d9369e70c",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-02-10",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "efbf50c690efad760c2d17b15d4a0a10eac27cc3de7a4f7e0ebf032a2ed97561",
     "feature_cutoff_timestamp": "2025-02-10T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250210",
@@ -316,7 +316,7 @@
     "net_return_2bps": -0.0008212858413740194,
     "net_return_5bps": -0.0014212858413740195,
     "net_return_10bps": -0.0024212858413740195,
-    "outcome_fingerprint": "7d49165394a30478b355aad2b05e2a523e4e9e0f3e947eba8680880b28e6220c"
+    "outcome_fingerprint": "5babf04bb0180d4b67b28621814a2df629a886a5478cd4be75774f93ae3a09cc"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -329,7 +329,7 @@
     "dataset_group_hash": "6c6df1b2189451f9166c6f51a1cc71c811a05fe88fe4569f3eb6cc44ecc26c9d",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-02-25",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "89b0c467a47462e9df0ecbd66b13128cf872b3b054684ab441f388ad50a6f22f",
     "feature_cutoff_timestamp": "2025-02-25T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250225",
@@ -345,7 +345,7 @@
     "net_return_2bps": -0.0015492216735679017,
     "net_return_5bps": -0.0021492216735679017,
     "net_return_10bps": -0.0031492216735679018,
-    "outcome_fingerprint": "6dff77d9b87bfdcbbf7ab46be6e6b6232a8daa4651e947cac2ad12eb0c313207"
+    "outcome_fingerprint": "5d750c37268fc5d8c64b139b34f429c24c9a522475e61c3a96532e776146a18f"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -358,7 +358,7 @@
     "dataset_group_hash": "fc98d3b76dc80e47fea0702ee266524210924f9f6d9fe9292707841c7ff67645",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-02-28",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "80a4097c8df9ab2ccec9576c3e535e3e0be85b02655881a36c9fe476a399afd7",
     "feature_cutoff_timestamp": "2025-02-28T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250228",
@@ -374,7 +374,7 @@
     "net_return_2bps": 0.001744647308343295,
     "net_return_5bps": 0.0011446473083432948,
     "net_return_10bps": 0.00014464730834329483,
-    "outcome_fingerprint": "8b4e662d15ae3efe098828f2d1a7a9bf60776796ea017aa8f79beb5e25c35802"
+    "outcome_fingerprint": "7296070d2b55555d67514af2cb6739595643ee08e559aa68660479e826e82caf"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -387,7 +387,7 @@
     "dataset_group_hash": "771cb20c29aabe8a44a393338d2494228a480dea907aaf8f4a6eb6683576049c",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-03-05",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "76616270d2c9c6e652d458c9c1274d10036c524dbf603b8d08b91c1a6fbff11a",
     "feature_cutoff_timestamp": "2025-03-05T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250305",
@@ -403,7 +403,7 @@
     "net_return_2bps": -0.000509680538643242,
     "net_return_5bps": -0.001109680538643242,
     "net_return_10bps": -0.002109680538643242,
-    "outcome_fingerprint": "e46cddfe575ea208e3b9f561a9bb803fa2e77cfa2abacbfe9bef983df494fd82"
+    "outcome_fingerprint": "10460e61ead08abab95b994d44cf1b19723b06e3ae49fb5873666b61339ddec1"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -416,7 +416,7 @@
     "dataset_group_hash": "19db0efce2415c58554425af3168f8a8a8b006bf5e3c009a96750e314bbeccfb",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-03-21",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "1b29549d52467ca653cc7052cccab4fc3c1a216ace21c02acfb97bf5201744ec",
     "feature_cutoff_timestamp": "2025-03-21T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250321",
@@ -432,7 +432,7 @@
     "net_return_2bps": -0.00045353330521051804,
     "net_return_5bps": -0.001053533305210518,
     "net_return_10bps": -0.002053533305210518,
-    "outcome_fingerprint": "3ee0457b39a7adba5e12f00fd85fa1e2f986489b6c06b70ee3da7dc3b39c39ac"
+    "outcome_fingerprint": "2fa3d85922a2052574465febe031614ff7226fd85a552e780288b75d0f017acc"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -445,7 +445,7 @@
     "dataset_group_hash": "479bf9f5e214c5c62389a4bb7e698d0b06abfb52b9d590662c4d3bc739a8d461",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-03-27",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "1610fead6763c03177996b2c696cf1316b94a796c1267bc1ca08f762475040cb",
     "feature_cutoff_timestamp": "2025-03-27T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250327",
@@ -461,7 +461,7 @@
     "net_return_2bps": -0.0010312609755735332,
     "net_return_5bps": -0.0016312609755735332,
     "net_return_10bps": -0.0026312609755735333,
-    "outcome_fingerprint": "56ec883e7e5a9168f6e6f2a309b2c59e35517969160f740d70808b4093df8049"
+    "outcome_fingerprint": "fa01db5128cba0057171624dbcd96e99f54d1d093b2fd63f6e7fff4c37a0d73f"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -474,7 +474,7 @@
     "dataset_group_hash": "cca8ac329eee8300d4c3a3d9e258067a4e01c26611c54461f9a2e96463c4ea9d",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-05-07",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "c16f78dca7ae57d275e99534c626911949c2ab6418931e87ddbfa86ba463546d",
     "feature_cutoff_timestamp": "2025-05-07T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250507",
@@ -490,7 +490,7 @@
     "net_return_2bps": -0.0007829432568198676,
     "net_return_5bps": -0.0013829432568198676,
     "net_return_10bps": -0.0023829432568198677,
-    "outcome_fingerprint": "3cc365c3e7a7aa6a4172eb111a56ef1e549ff01676a3f356448486cda45dc4cb"
+    "outcome_fingerprint": "9c7c42d261de804fac62bd879c014f224cc118b242e6908f74dbd6a8b314aaf6"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -503,7 +503,7 @@
     "dataset_group_hash": "6811d5f1e20c89eae26c5d8b7e086ff9f28e898aeaebc5d188167b2c6f903a67",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-05-12",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "8cb9d0a2fc07d955142ae4ccfa31a33fde3c7e82bc03b36a5a86563a3a507b28",
     "feature_cutoff_timestamp": "2025-05-12T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250512",
@@ -519,7 +519,7 @@
     "net_return_2bps": 0.0013637216336445772,
     "net_return_5bps": 0.0007637216336445771,
     "net_return_10bps": -0.00023627836635542292,
-    "outcome_fingerprint": "2807a09845e86f34b88317f892963dfced871bfab202f787e1fa170195d51843"
+    "outcome_fingerprint": "046a623e41cc0c2aa1e33cc2fd1a60d6cc65d31a43ea8e62fb436aeb88240265"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -532,7 +532,7 @@
     "dataset_group_hash": "247278777822b33763785b7e91cc119e63636fd50c053b6ffc0663dffa256f7a",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-05-13",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "11d118e78d5bead916646d338cf9073405dc05dffdb08a20bebf9fe378049786",
     "feature_cutoff_timestamp": "2025-05-13T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250513",
@@ -548,7 +548,7 @@
     "net_return_2bps": 0.0011797370226435792,
     "net_return_5bps": 0.0005797370226435792,
     "net_return_10bps": -0.00042026297735642086,
-    "outcome_fingerprint": "15e0a6922baca6c2cb9d4ab8ca1dc380b820485396f708237a8e61c87d63a478"
+    "outcome_fingerprint": "9317cc375754da785e1a9979198d318c7118e7898604ad939cd24ed6c6a96a8b"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -561,7 +561,7 @@
     "dataset_group_hash": "f1457d4a52f68d1d35aabefd0fd8af4e579005a5ab61f75b15c0528f77aeffbd",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-05-22",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "7472a783bcbd39fc465079572b2fafb5a9cbe50c0da4d9a0885e0de770b82924",
     "feature_cutoff_timestamp": "2025-05-22T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250522",
@@ -577,7 +577,7 @@
     "net_return_2bps": -0.0023730679275877796,
     "net_return_5bps": -0.0029730679275877794,
     "net_return_10bps": -0.003973067927587779,
-    "outcome_fingerprint": "60ec9bdb75f37d7825bdb0f5fac055d00d3f89113e94673ffe176bc7ee3a86cf"
+    "outcome_fingerprint": "c93fa55184808f81bf59490bb8fec8a768352d011b30a03943d2c9d874701b24"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -590,7 +590,7 @@
     "dataset_group_hash": "a19e3b00dd9feaf461176bba697990822f84105a7392a4925112f1f6b1f65ed0",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-06-03",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "a4f6edb4948404351f08db43490e3fd922b25715bd02ef721740b58dfb80ffcf",
     "feature_cutoff_timestamp": "2025-06-03T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250603",
@@ -606,7 +606,7 @@
     "net_return_2bps": 0.0016745450469727978,
     "net_return_5bps": 0.0010745450469727977,
     "net_return_10bps": 7.45450469727977e-05,
-    "outcome_fingerprint": "41382f9cf07c2f8653353130114efb4551e34fec78b00cfa11e0ec9cf68beffa"
+    "outcome_fingerprint": "7aaacd6efccd3b12dbe2a6e4177947fd27fae80837b9def15519adf2d3153bf1"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -619,7 +619,7 @@
     "dataset_group_hash": "85e68c52b39362b3dd09adb5271d706c45eddce24bd49477aac09ad2848a893b",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-06-13",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "584780c98b6046775c1ebd1ddf72ae5b051e31ea729df254c805d3fe411c8109",
     "feature_cutoff_timestamp": "2025-06-13T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250613",
@@ -635,7 +635,7 @@
     "net_return_2bps": 0.001110864656096178,
     "net_return_5bps": 0.000510864656096178,
     "net_return_10bps": -0.000489135343903822,
-    "outcome_fingerprint": "800b45ac172c93ba35d846e6bfe58c54d018eda7a2f7b1dda7505fd54442bfc9"
+    "outcome_fingerprint": "02b5ea96bb8666959dc36b177009ccd6f0f6116b0806e71f09949bb5d811d5c3"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -648,7 +648,7 @@
     "dataset_group_hash": "eedd7c3472a72512d830c8e211c5aa5d3e77d767e87a374bb497490fd7d099f2",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-08-26",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "42e425069f7c0d0b28de25c23a90985a0c669d18233b4d554b204aa72f376b2d",
     "feature_cutoff_timestamp": "2025-08-26T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250826",
@@ -664,7 +664,7 @@
     "net_return_2bps": 0.0028293332793424943,
     "net_return_5bps": 0.0022293332793424945,
     "net_return_10bps": 0.0012293332793424944,
-    "outcome_fingerprint": "8cfff49fce80c0145184253cb328b6607c56039279498fa856cd710f209adb02"
+    "outcome_fingerprint": "2f9d71f08ec165cfdbc871a25b77bd7d38d40eada06383bd5bf3890a030a4240"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -677,7 +677,7 @@
     "dataset_group_hash": "066cce0eb0cc8bd8a00cf3a99ebc4a4bb33d4ab2b3d43f89139dc78fbbcf8059",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-09-01",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "adb1129b3afd0a1a97c7025e00e0ee3c817faef700d13ef845872e34791be1af",
     "feature_cutoff_timestamp": "2025-09-01T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20250901",
@@ -693,7 +693,7 @@
     "net_return_2bps": -6.079937603335994e-05,
     "net_return_5bps": -0.0006607993760333599,
     "net_return_10bps": -0.00166079937603336,
-    "outcome_fingerprint": "a6b467ecd8cc694f7156e1e600b5063865b1f0d8d83016e36895f8eb66e0a965"
+    "outcome_fingerprint": "104a666061064c3dd5e3caf4c872e9ee0bcf59505a3b694522eba95824ef4777"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -706,7 +706,7 @@
     "dataset_group_hash": "7b28d99bd4d50b86ac5eece4ec45b2bab11e9440fb85de141c9aaaca8ee2da4f",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-10-10",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "39566be790d83c2cf273be6ef9528cc1a36b96928f518163e2d0a27e93841eaf",
     "feature_cutoff_timestamp": "2025-10-10T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20251010",
@@ -722,7 +722,7 @@
     "net_return_2bps": -0.0013029532696984699,
     "net_return_5bps": -0.00190295326969847,
     "net_return_10bps": -0.00290295326969847,
-    "outcome_fingerprint": "e4e2090040d48564e8ff0af1c403d96ff5ce6bd6e7d8d0a1ab3af7a67e4f10f1"
+    "outcome_fingerprint": "512c95f7e9069394863957e008570093b818144ba1f4365e7fb58ce9b85f769b"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -735,7 +735,7 @@
     "dataset_group_hash": "731488b83e6d2b89726cae92157184848829593fda6032005e136155f3897a44",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-10-27",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "5f0e4bd4d1677dd798bb64c8a46e0c1048a470549fe9c066c13b23a588151dd6",
     "feature_cutoff_timestamp": "2025-10-27T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20251027",
@@ -751,7 +751,7 @@
     "net_return_2bps": -0.00053285991558587,
     "net_return_5bps": -0.00113285991558587,
     "net_return_10bps": -0.00213285991558587,
-    "outcome_fingerprint": "6f3ba53d5dc4bef746dbe735e496849e0f436f68eaad87f82a032ac9c81bfce1"
+    "outcome_fingerprint": "f99df5a6601879d85f0d5b89d4370fcae09c3d7f48a1682770b3e649f57ab64e"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -764,7 +764,7 @@
     "dataset_group_hash": "3987555e68659f4c1ffe1cf88ebeea48a8b7bad9cedfb1f01a78e356a1989917",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2025-11-26",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "99931a5584c4c06d7fabd501838436764e00af2ac04ad68d45ad34351ee00d24",
     "feature_cutoff_timestamp": "2025-11-26T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20251126",
@@ -780,7 +780,7 @@
     "net_return_2bps": 0.0005049445482818275,
     "net_return_5bps": -9.505545171817256e-05,
     "net_return_10bps": -0.0010950554517181726,
-    "outcome_fingerprint": "fd29c16b83dcec203818a267b3dfb82b2732b07f4e7bfb5a77e44ce4431201dc"
+    "outcome_fingerprint": "626be20ba0842f3f43f1e8dee6ec27f31aeb8c32c3160f0d407a231275fc01c9"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -793,7 +793,7 @@
     "dataset_group_hash": "f10686c5d2c0d7ba9dac5bec28d262bd26578082e683677f31f6e82edf6581e3",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2026-01-13",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "fc7660e0776faef457fa400e3094513c86d40dfe9e3807aaee2bb7e538368d95",
     "feature_cutoff_timestamp": "2026-01-13T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20260113",
@@ -809,7 +809,7 @@
     "net_return_2bps": -0.002185239045256404,
     "net_return_5bps": -0.0027852390452564038,
     "net_return_10bps": -0.003785239045256404,
-    "outcome_fingerprint": "f371f3ccd7e64aa0875462108a2f2b14a1898966c785e30a855efd5b8744d6f5"
+    "outcome_fingerprint": "cad2a6d9b3da851d365ebeb3e93dcc98a3299b2916067eb894bced9cb6c221b9"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -822,7 +822,7 @@
     "dataset_group_hash": "a67657eeb9e9b1f46dc366ef980bd047c06e3e25145550de2568cec1fc4afb09",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2026-01-20",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "78ade1a50ae157f98b0e1485fa6ddf9acd341a826fc32079b29e18ccd2569635",
     "feature_cutoff_timestamp": "2026-01-20T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20260120",
@@ -838,7 +838,7 @@
     "net_return_2bps": 0.004739787547516317,
     "net_return_5bps": 0.004139787547516317,
     "net_return_10bps": 0.003139787547516317,
-    "outcome_fingerprint": "c415ad8eb556023fd7348918a800ba9c703ea4e4bdb071222e173a8e902e7125"
+    "outcome_fingerprint": "15c4140d2c1fa887136e0a5bc138f73b8d4ffff3a4386d0bf01cf7807efb0073"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -851,7 +851,7 @@
     "dataset_group_hash": "4670b2d3e13fa686933b77f177abdb53cad7c283396c24700e3f7855497f7d32",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2026-02-03",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "641aaa2ee432e2b7279eb189ff3c484d794853f6eb21924e8c5fdf73a67a2dda",
     "feature_cutoff_timestamp": "2026-02-03T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20260203",
@@ -867,7 +867,7 @@
     "net_return_2bps": 0.0005447202578347636,
     "net_return_5bps": -5.527974216523648e-05,
     "net_return_10bps": -0.0010552797421652365,
-    "outcome_fingerprint": "0771ab8ee41254d87d0cc70273650d958659633f6a238022b4b17e64b180bc43"
+    "outcome_fingerprint": "49ca558c99ca38d76ebf8711a4c2567325f6aa7ba9b077d035d3631e99bba67d"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -880,7 +880,7 @@
     "dataset_group_hash": "28bb393538bdcc3ad1fe60bdf6239f3b331c4b7371da6caabb9f770ba3114764",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2026-02-04",
-    "direction": 1,
+    "direction": "LONG",
     "candidate_fingerprint": "923cadec74ac231789cbbd5ae2b51fffa57cc110e4e01377ed45bd8b68cd5a7a",
     "feature_cutoff_timestamp": "2026-02-04T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20260204",
@@ -896,7 +896,7 @@
     "net_return_2bps": -0.0014344947829692419,
     "net_return_5bps": -0.002034494782969242,
     "net_return_10bps": -0.003034494782969242,
-    "outcome_fingerprint": "e907f1ea24828d6fe3c6e6265c08215bb3e9c170561b272f4487dfb1e09d6793"
+    "outcome_fingerprint": "174795519e20a109f7790b00b904395cc72ed52dd685ff5ad86102baf8d5162b"
   },
   {
     "strategy_id": "REGIME_CONDITIONED_OPENING_STATE_MOMENTUM_V1",
@@ -909,7 +909,7 @@
     "dataset_group_hash": "a4f8ec0971acc3484e6a5eff0a9cf02b0a7d094af15957487a196302af0988ab",
     "partition_hash": "ee6ffbdc428c81c1edbd7444544dade9c233b72eccef62e8de65fcff3a572cf8",
     "session_date": "2026-02-05",
-    "direction": -1,
+    "direction": "SHORT",
     "candidate_fingerprint": "51c403605ab4ebeb61050f8dd900665c9742a85a7a4c15d420f22267a196a274",
     "feature_cutoff_timestamp": "2026-02-05T14:45:00+05:30",
     "source_logical_identity": "NIFTY_20260205",
@@ -925,6 +925,6 @@
     "net_return_2bps": -0.001316259710890821,
     "net_return_5bps": -0.001916259710890821,
     "net_return_10bps": -0.002916259710890821,
-    "outcome_fingerprint": "c302ecf2800746630e4d4e65496868abe2a34446cd18aba5df44b6f97f9e99dd"
+    "outcome_fingerprint": "0cc92b95179b9f38f601b08a5109eddf46387e1b7f4bca7e565f930b631e5770"
   }
 ]
