@@ -1,146 +1,107 @@
 import os
 import sys
 import json
-import argparse
-from pathlib import Path
+import pandas as pd
+from typing import Dict, Any
 
-repo_root = Path(__file__).parent.parent
-sys.path.insert(0, str(repo_root))
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, repo_root)
 
-from research.opening_state_momentum.contract import STRATEGY_ID, STRATEGY_VERSION, get_contract_hash, CONTRACT_PARAMS as STRAT_PARAMS
-from research.opening_state_momentum.outcome_contract import OUTCOME_ID, OUTCOME_VERSION, get_outcome_contract_hash, CONTRACT_PARAMS as OUTCOME_PARAMS
-from research.opening_state_momentum.session_loader import Loader
+from research.opening_state_momentum.partition_authority import PartitionAuthority
+from research.opening_state_momentum.decision_authority import DecisionAuthority
+from research.opening_state_momentum.source_authority import SourceAuthority
 from research.opening_state_momentum.outcome_labeler import label_outcome
 from research.opening_state_momentum.outcome_fingerprints import compute_outcome_fingerprint
 
+reviews_dir = os.path.join(repo_root, "docs", "agent_reviews", "opening_state_momentum")
+partition_path = os.path.join(reviews_dir, "research_partition.json")
+decisions_path = os.path.join(reviews_dir, "candidate_decisions.json")
+manifest_path = os.path.join(reviews_dir, "source_manifest.json")
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--decisions", required=True)
-    parser.add_argument("--partition", required=True)
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--manifest-hash", required=True)
-    parser.add_argument("--output-dir", required=True)
-    args = parser.parse_args()
+    # If the user sets different paths (e.g. for determinism test)
+    p_path = os.environ.get("PARTITION_PATH", partition_path)
+    d_path = os.environ.get("DECISIONS_PATH", decisions_path)
+    m_path = os.environ.get("MANIFEST_PATH", manifest_path)
+    out_dir = os.environ.get("OUTCOME_DIR", reviews_dir)
     
-    with open(args.partition) as f:
-        partition = json.load(f)
+    partition = PartitionAuthority.load(p_path)
+    decisions = DecisionAuthority.load(d_path, partition)
+    source = SourceAuthority.load(m_path, repo_root)
     
-    with open(args.decisions) as f:
-        decisions = json.load(f)
+    with open(os.path.join(reviews_dir, "strategy_contract.json")) as f:
+        content = f.read(); strat_contract = json.loads(content); strat_contract_hash = __import__("hashlib").sha256(content.encode("utf-8")).hexdigest()
+    with open(os.path.join(reviews_dir, "outcome_contract.json")) as f:
+        content = f.read(); out_contract = json.loads(content); out_contract_hash = __import__("hashlib").sha256(content.encode("utf-8")).hexdigest()
         
-    dev_dates = set(partition.get("development", []))
-    holdout_dates = set(partition.get("holdout", []))
-    part_hash = partition.get("metadata", {}).get("partition_hash", "UNKNOWN")
-    dataset_group_hash = partition.get("metadata", {}).get("dataset_group_hash", "UNKNOWN")
-    
-    loader = Loader(args.manifest, args.manifest_hash)
-    
     outcomes = []
-    recon = {
-        "accepted_development_candidates": 0,
-        "labelled_outcomes": 0,
-        "accepted_long_labels": 0,
-        "accepted_short_labels": 0,
-        "count_ENTRY_BAR_MISSING": 0,
-        "count_EXIT_BAR_MISSING": 0,
-        "count_ENTRY_PRICE_INVALID": 0,
-        "count_EXIT_PRICE_INVALID": 0,
-        "count_ENTRY_EXIT_ORDER_INVALID": 0,
-        "count_SOURCE_MANIFEST_MISMATCH": 0,
-        "count_HOLDOUT_LOCKED": 0,
-        "holdout_outcome_count": 0,
-        "unexplained_count": 0
-    }
     
-    outcome_dates = set()
-    
-    strat_hash = get_contract_hash()
-    out_hash = get_outcome_contract_hash()
-    
-    for cand in decisions:
-        if cand.get("status") != "ACCEPTED":
-            continue
-            
-        date = cand["session_date"]
+    for cand in decisions.accepted_development_candidates:
+        logical_id = f"NIFTY_{cand.session_date.replace('-', '')}"
         
-        if date in holdout_dates:
-            recon["count_HOLDOUT_LOCKED"] += 1
-            recon["holdout_outcome_count"] += 1
-            out = {"status": "HOLDOUT_LOCKED"}
-        elif date not in dev_dates:
-            recon["unexplained_count"] += 1
-            continue
-        else:
-            recon["accepted_development_candidates"] += 1
-            outcome_dates.add(date)
-            
-            # Find NIFTY file
-            file_record = None
-            for f in loader.eligible_files:
-                if f["session_date"] == date and "NIFTY" in f["instruments"]:
-                    file_record = f
-                    break
-                    
-            if not file_record:
-                out = {"status": "SOURCE_MANIFEST_MISMATCH"}
-                recon["count_SOURCE_MANIFEST_MISMATCH"] += 1
-            else:
-                df, errs = loader.load_session_data(file_record)
-                if errs:
-                    out = {"status": "SOURCE_MANIFEST_MISMATCH"}
-                    recon["count_SOURCE_MANIFEST_MISMATCH"] += 1
-                else:
-                    out = label_outcome(df, cand["direction"], date)
-                    
-                    if out["status"] == "OUTCOME_LABELLED":
-                        recon["labelled_outcomes"] += 1
-                        if cand["direction"] > 0:
-                            recon["accepted_long_labels"] += 1
-                        else:
-                            recon["accepted_short_labels"] += 1
-                    else:
-                        recon[f"count_{out['status']}"] += 1
-                        
-        # Construct immutable record
         record = {
-            "strategy_id": STRATEGY_ID,
-            "strategy_version": STRATEGY_VERSION,
-            "strategy_contract_hash": strat_hash,
-            "outcome_id": OUTCOME_ID,
-            "outcome_version": OUTCOME_VERSION,
-            "outcome_contract_hash": out_hash,
-            "source_manifest_hash": args.manifest_hash,
-            "dataset_group_hash": dataset_group_hash,
-            "partition_hash": part_hash,
-            "session_date": cand["session_date"],
-            "direction": cand["direction"],
-            "candidate_fingerprint": cand["candidate_fingerprint"],
-            "feature_cutoff": STRAT_PARAMS["decision_cutoff_time"],
-            "source_logical_identity": file_record["relative_path"] if file_record else "UNKNOWN",
+            "strategy_id": strat_contract["strategy_id"],
+            "strategy_version": strat_contract["strategy_version"],
+            "strategy_contract_hash": strat_contract_hash,
+            "outcome_contract_id": out_contract["outcome_id"],
+            "outcome_contract_version": out_contract["outcome_version"],
+            "outcome_contract_hash": out_contract_hash,
+            "source_manifest_hash": source.manifest_hash,
+            "dataset_group_hash": cand.dataset_group_hash,
+            "partition_hash": partition.partition_hash,
+            "session_date": cand.session_date,
+            "direction": cand.direction,
+            "candidate_fingerprint": cand.fingerprint,
+            "feature_cutoff_timestamp": cand.feature_cutoff_timestamp,
+            "source_logical_identity": logical_id
         }
-        record.update(out)
+        
+        try:
+            full_path = source.resolve_source(logical_id)
+            df = pd.read_parquet(full_path)
+        except Exception as e:
+            record["status"] = "SOURCE_RESOLUTION_FAILED"
+            record["outcome_fingerprint"] = compute_outcome_fingerprint(record)
+            outcomes.append(record)
+            continue
+            
+        result = label_outcome(df, cand.direction, cand.session_date)
+        record.update(result)
+        
         record["outcome_fingerprint"] = compute_outcome_fingerprint(record)
         outcomes.append(record)
         
-    assert outcome_dates.issubset(dev_dates)
-    assert outcome_dates.isdisjoint(holdout_dates)
-    
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    with open(out_dir / "development_outcome_labels.json", "w") as f:
+    # Write outcomes
+    with open(os.path.join(out_dir, "development_outcome_labels.json"), "w") as f:
         json.dump(outcomes, f, indent=2)
         
-    with open(out_dir / "development_outcome_reconciliation.json", "w") as f:
+    # Reconciliation
+    recon = {
+        "accepted_development_candidates": len(decisions.accepted_development_candidates),
+        "rejected_development_candidates": len(decisions.rejected_decision_dates),
+        "total_labelled_outcomes": sum(1 for x in outcomes if x["status"] == "OUTCOME_LABELLED"),
+        "total_source_resolution_failed": sum(1 for x in outcomes if x["status"] == "SOURCE_RESOLUTION_FAILED"),
+        "total_entry_bar_missing": sum(1 for x in outcomes if x["status"] == "ENTRY_BAR_MISSING"),
+        "total_exit_bar_missing": sum(1 for x in outcomes if x["status"] == "EXIT_BAR_MISSING"),
+        "total_entry_price_invalid": sum(1 for x in outcomes if x["status"] == "ENTRY_PRICE_INVALID"),
+        "total_exit_price_invalid": sum(1 for x in outcomes if x["status"] == "EXIT_PRICE_INVALID"),
+        "total_entry_exit_order_invalid": sum(1 for x in outcomes if x["status"] == "ENTRY_EXIT_ORDER_INVALID"),
+        "total_invalid_holding_period": sum(1 for x in outcomes if x["status"] == "INVALID_HOLDING_PERIOD"),
+    }
+    
+    total_failures = (
+        recon["total_source_resolution_failed"] +
+        recon["total_entry_bar_missing"] +
+        recon["total_exit_bar_missing"] +
+        recon["total_entry_price_invalid"] +
+        recon["total_exit_price_invalid"] +
+        recon["total_entry_exit_order_invalid"] +
+        recon["total_invalid_holding_period"]
+    )
+    recon["unexplained_count"] = recon["accepted_development_candidates"] - (recon["total_labelled_outcomes"] + total_failures)
+    
+    with open(os.path.join(out_dir, "development_outcome_reconciliation.json"), "w") as f:
         json.dump(recon, f, indent=2)
-        
-    with open(out_dir / "outcome_contract.json", "w") as f:
-        json.dump(OUTCOME_PARAMS, f, indent=2)
-        
-    with open(out_dir / "outcome_contract.md", "w") as f:
-        f.write(f"# Outcome Contract {OUTCOME_ID} v{OUTCOME_VERSION}\n")
-        
-    print("Labelling complete.")
 
 if __name__ == "__main__":
     main()

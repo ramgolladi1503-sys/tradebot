@@ -5,22 +5,30 @@ from typing import Dict, Any
 def compute_outcome_fingerprint(outcome: Dict[str, Any]) -> str:
     keys = [
         "strategy_id",
-        "outcome_id",
+        "strategy_version",
+        "strategy_contract_hash",
+        "outcome_contract_id",
+        "outcome_contract_version",
+        "outcome_contract_hash",
+        "source_manifest_hash",
+        "dataset_group_hash",
+        "partition_hash",
         "session_date",
         "direction",
         "candidate_fingerprint",
-        "feature_cutoff",
+        "feature_cutoff_timestamp",
         "entry_timestamp",
         "entry_price",
         "exit_timestamp",
         "exit_price",
-        "holding_minutes",
+        "holding_seconds",
         "gross_return",
         "net_return_0bps",
         "net_return_2bps",
         "net_return_5bps",
         "net_return_10bps",
-        "status"
+        "status",
+        "source_logical_identity"
     ]
     
     stable_dict = {}
@@ -28,7 +36,8 @@ def compute_outcome_fingerprint(outcome: Dict[str, Any]) -> str:
         if k in outcome:
             val = outcome[k]
             if isinstance(val, float):
-                stable_dict[k] = round(val, 6)
+                # Deterministic float serialization (scientific notation 10 digits)
+                stable_dict[k] = f"{val:.10e}"
             else:
                 stable_dict[k] = val
                 

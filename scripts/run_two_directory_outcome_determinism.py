@@ -1,78 +1,65 @@
 import os
-import subprocess
-import hashlib
-import json
-import tempfile
-import shutil
-from pathlib import Path
 import sys
+import shutil
+import tempfile
+import subprocess
+import json
+import hashlib
 
-def hash_file(filepath):
-    if not os.path.exists(filepath):
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def hash_file(path: str) -> str:
+    if not os.path.exists(path):
         return None
-    with open(filepath, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
-
-def hash_fingerprints(out_path):
-    if not os.path.exists(out_path):
-        return None
-    with open(out_path) as f:
-        data = json.load(f)
-    fps = [d.get("outcome_fingerprint", "") for d in data]
-    return hashlib.sha256(",".join(fps).encode()).hexdigest()
-
-def extract_portable_hashes(outdir):
-    p = Path(outdir)
-    return {
-        "development_outcome_labels.json": hash_file(p / "development_outcome_labels.json"),
-        "development_outcome_reconciliation.json": hash_file(p / "development_outcome_reconciliation.json"),
-        "outcome_contract.json": hash_file(p / "outcome_contract.json"),
-        "fingerprints": hash_fingerprints(p / "development_outcome_labels.json")
-    }
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
 
 def main():
-    repo_root = Path(__file__).parent.parent
-    reviews_dir = repo_root / "docs" / "agent_reviews" / "opening_state_momentum"
-    
-    with open(reviews_dir / "research_partition.json") as f:
-        part = json.load(f)
-    manifest_path = repo_root / "docs" / "agent_reviews" / "opening_state_momentum" / "source_manifest.json"
-    with open(manifest_path) as mf:
-        manifest_hash = json.load(mf).get("portable_dataset_hash", "")
-    decisions = reviews_dir / "candidate_decisions.json"
-    partition = reviews_dir / "research_partition.json"
+    script1 = os.path.join(repo_root, "scripts", "label_opening_state_development_outcomes.py")
+    script2 = os.path.join(repo_root, "scripts", "audit_outcome_oracle.py")
     
     with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
-        cmd1 = ["python", str(repo_root / "scripts" / "label_opening_state_development_outcomes.py"), 
-                "--decisions", str(decisions),
-                "--partition", str(partition),
-                "--manifest", str(manifest_path),
-                "--manifest-hash", manifest_hash,
-                "--output-dir", d1]
-                
-        cmd2 = ["python", str(repo_root / "scripts" / "label_opening_state_development_outcomes.py"), 
-                "--decisions", str(decisions),
-                "--partition", str(partition),
-                "--manifest", str(manifest_path),
-                "--manifest-hash", manifest_hash,
-                "--output-dir", d2]
-                
-        subprocess.run(cmd1, check=True)
-        subprocess.run(cmd2, check=True)
+        env1 = os.environ.copy()
+        env1["OUTCOME_DIR"] = d1
         
-        hashes_a = extract_portable_hashes(d1)
-        hashes_b = extract_portable_hashes(d2)
+        env2 = os.environ.copy()
+        env2["OUTCOME_DIR"] = d2
         
-        match = hashes_a == hashes_b
+        # Run A
+        subprocess.run([sys.executable, script1], env=env1, check=True)
+        subprocess.run([sys.executable, script2], env=env1, check=True)
         
+        # Run B
+        subprocess.run([sys.executable, script1], env=env2, check=True)
+        subprocess.run([sys.executable, script2], env=env2, check=True)
+        
+        files = [
+            "development_outcome_labels.json",
+            "development_outcome_reconciliation.json",
+            "outcome_oracle_comparison.json"
+        ]
+        
+        hashes1 = {}
+        hashes2 = {}
+        
+        for f in files:
+            hashes1[f] = hash_file(os.path.join(d1, f))
+            hashes2[f] = hash_file(os.path.join(d2, f))
+            
         res = {
-            "match": match,
-            "run_a_hashes": hashes_a,
-            "run_b_hashes": hashes_b
+            "run_a_dir": d1,
+            "run_b_dir": d2,
+            "hashes_a": hashes1,
+            "hashes_b": hashes2,
+            "determinism_verified": hashes1 == hashes2
         }
         
-        with open(reviews_dir / "outcome_label_determinism.json", "w") as f:
+        out_path = os.path.join(repo_root, "docs", "agent_reviews", "opening_state_momentum", "outcome_label_determinism.json")
+        with open(out_path, "w") as f:
             json.dump(res, f, indent=2)
-            
+
 if __name__ == "__main__":
     main()

@@ -10,9 +10,9 @@ def calculate_returns(entry_price: float, exit_price: float, direction: int) -> 
         
     frictions = {}
     for bps in CONTRACT_PARAMS["friction_bps_tiers"]:
-        frictions[f"net_return_{bps}bps"] = round(gross - (2 * bps / 10000.0), 6)
+        frictions[f"net_return_{bps}bps"] = gross - (2 * bps / 10000.0)
         
-    return round(gross, 6), frictions
+    return gross, frictions
 
 def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[str, Any]:
     df_sorted = df.sort_values("timestamp").reset_index(drop=True)
@@ -40,6 +40,10 @@ def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[s
     if exit_time <= entry_time:
         return {"status": "ENTRY_EXIT_ORDER_INVALID"}
         
+    duration_secs = (exit_time - entry_time).total_seconds()
+    if duration_secs != CONTRACT_PARAMS["holding_period_minutes"] * 60:
+        return {"status": "INVALID_HOLDING_PERIOD"}
+        
     gross, frictions = calculate_returns(entry_price, exit_price, direction)
     
     result = {
@@ -48,7 +52,7 @@ def label_outcome(df: pd.DataFrame, direction: int, session_date: str) -> Dict[s
         "exit_timestamp": exit_time.isoformat(),
         "entry_price": entry_price,
         "exit_price": exit_price,
-        "holding_minutes": CONTRACT_PARAMS["holding_period_minutes"],
+        "holding_seconds": duration_secs,
         "gross_return": gross
     }
     result.update(frictions)

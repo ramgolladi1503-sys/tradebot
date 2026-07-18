@@ -1,15 +1,15 @@
 {
-  "match": true,
-  "run_a_hashes": {
-    "development_outcome_labels.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    "development_outcome_reconciliation.json": "03e217a651883198bc584c90c69bf1acb1a22e23ad38fd2c1fe22c0c6fe1a207",
-    "outcome_contract.json": "b5fe38367d9795386f6913a7240cb6ac2bbf4f1796415e80d9a9188207fc8c42",
-    "fingerprints": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  "run_a_dir": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpho0d_ax1",
+  "run_b_dir": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp41hp2tec",
+  "hashes_a": {
+    "development_outcome_labels.json": "32f073ddc53a6943845c80ab89fd99de351ed1d7ddb6e4660df9a4963c9ed95e",
+    "development_outcome_reconciliation.json": "fd7b7fa02327b5c36c0a9a0842fd1014255d98525f683980edfe80420bcd16a1",
+    "outcome_oracle_comparison.json": "da29604215d7a7491aebc5559ede999e346f5e4f5c6a1186b3b8ef5674cb1b1d"
   },
-  "run_b_hashes": {
-    "development_outcome_labels.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    "development_outcome_reconciliation.json": "03e217a651883198bc584c90c69bf1acb1a22e23ad38fd2c1fe22c0c6fe1a207",
-    "outcome_contract.json": "b5fe38367d9795386f6913a7240cb6ac2bbf4f1796415e80d9a9188207fc8c42",
-    "fingerprints": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  }
+  "hashes_b": {
+    "development_outcome_labels.json": "32f073ddc53a6943845c80ab89fd99de351ed1d7ddb6e4660df9a4963c9ed95e",
+    "development_outcome_reconciliation.json": "fd7b7fa02327b5c36c0a9a0842fd1014255d98525f683980edfe80420bcd16a1",
+    "outcome_oracle_comparison.json": "da29604215d7a7491aebc5559ede999e346f5e4f5c6a1186b3b8ef5674cb1b1d"
+  },
+  "determinism_verified": true
 }

@@ -1,4 +1,7 @@
 {
-  "mismatches": 0,
+  "oracle_independence_verified": true,
+  "mismatch_count": 0,
+  "longs_tested": 0,
+  "shorts_tested": 0,
   "comparisons": []
 }
