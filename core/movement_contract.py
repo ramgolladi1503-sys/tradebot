@@ -132,9 +132,6 @@ PHASE2_TRUTH_EVIDENCE_KEYS: frozenset[str] = frozenset(
     }
 )
 
-PHASE2_NEUTRAL_SCORE = 0.5
-
-
 class MovementContractError(ValueError):
     """Raised when a movement candidate violates the contract."""
 
@@ -167,6 +164,15 @@ def _optional_float(value: Any, *, field_name: str) -> float | None:
         raise MovementContractError(f"float_not_numeric:{field_name}") from exc
     if not math.isfinite(out):
         raise MovementContractError(f"float_not_finite:{field_name}")
+    return out
+
+
+def _optional_score(value: Any, *, field_name: str) -> float | None:
+    out = _optional_float(value, field_name=field_name)
+    if out is None:
+        return None
+    if out < 0.0 or out > 1.0:
+        raise MovementContractError(f"score_out_of_range:{field_name}:{out}")
     return out
 
 
@@ -223,7 +229,7 @@ def phase2_boundary_violations(candidate: "StrategyCandidate", *, producer_stage
     violations: list[str] = []
     for field_name in PHASE2_OWNED_SCORE_FIELDS:
         value = getattr(candidate, field_name)
-        if value != PHASE2_NEUTRAL_SCORE:
+        if value is not None:
             violations.append(f"strategy_candidate_claims_phase2_score:{field_name}")
 
     evidence_keys = {str(key).strip().lower() for key in candidate.evidence.keys()}
@@ -231,6 +237,8 @@ def phase2_boundary_violations(candidate: "StrategyCandidate", *, producer_stage
         if key.lower() in evidence_keys:
             violations.append(f"strategy_candidate_claims_phase2_evidence:{key}")
 
+    if candidate.status == "VALIDATED_CANDIDATE":
+        violations.append("strategy_candidate_claims_phase2_status:status")
     if candidate.status == "RANKED_OPPORTUNITY":
         violations.append("strategy_candidate_claims_ranked_opportunity")
     return tuple(violations)
@@ -261,9 +269,9 @@ class StrategyCandidate:
     raw_score: float
     confidence_score: float
     price_structure_score: float
-    option_confirmation_score: float
-    liquidity_score: float
-    freshness_score: float
+    option_confirmation_score: float | None
+    liquidity_score: float | None
+    freshness_score: float | None
     volatility_score: float
     regime_alignment_score: float
     timing_score: float = 0.5
@@ -332,9 +340,9 @@ class StrategyCandidate:
         object.__setattr__(self, "raw_score", _score(self.raw_score, field_name="raw_score"))
         object.__setattr__(self, "confidence_score", _score(self.confidence_score, field_name="confidence_score"))
         object.__setattr__(self, "price_structure_score", _score(self.price_structure_score, field_name="price_structure_score"))
-        object.__setattr__(self, "option_confirmation_score", _score(self.option_confirmation_score, field_name="option_confirmation_score"))
-        object.__setattr__(self, "liquidity_score", _score(self.liquidity_score, field_name="liquidity_score"))
-        object.__setattr__(self, "freshness_score", _score(self.freshness_score, field_name="freshness_score"))
+        object.__setattr__(self, "option_confirmation_score", _optional_score(self.option_confirmation_score, field_name="option_confirmation_score"))
+        object.__setattr__(self, "liquidity_score", _optional_score(self.liquidity_score, field_name="liquidity_score"))
+        object.__setattr__(self, "freshness_score", _optional_score(self.freshness_score, field_name="freshness_score"))
         object.__setattr__(self, "volatility_score", _score(self.volatility_score, field_name="volatility_score"))
         object.__setattr__(self, "regime_alignment_score", _score(self.regime_alignment_score, field_name="regime_alignment_score"))
         object.__setattr__(self, "timing_score", _score(self.timing_score, field_name="timing_score"))
@@ -400,8 +408,10 @@ class StrategyContext:
     orb_low: float | None = None
     prev_day_high: float | None = None
     prev_day_low: float | None = None
+    previous_completed_close: float | None = None
     nearest_support: float | None = None
     nearest_resistance: float | None = None
+    completed_bar_history: tuple[dict[str, Any], ...] | list[dict[str, Any]] | None = None
     atr: float | None = None
     atr_short: float | None = None
     atr_long: float | None = None
@@ -432,6 +442,11 @@ class StrategyContext:
         object.__setattr__(self, "ts_epoch", _optional_float(self.ts_epoch, field_name="ts_epoch"))
         object.__setattr__(self, "regime_scores", _score_map(self.regime_scores, field_name="regime_scores"))
         object.__setattr__(self, "metadata", _jsonable_map(self.metadata, field_name="metadata"))
+        history = self.completed_bar_history
+        if history is not None and not isinstance(history, (list, tuple)):
+            raise MovementContractError("completed_bar_history_not_sequence")
+        if history is not None:
+            object.__setattr__(self, "completed_bar_history", tuple(history))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -461,7 +476,6 @@ __all__ = [
     "HARD_EXECUTION_BLOCKERS",
     "MovementContractError",
     "MovementType",
-    "PHASE2_NEUTRAL_SCORE",
     "PHASE2_OWNED_SCORE_FIELDS",
     "PHASE2_TRUTH_EVIDENCE_KEYS",
     "SCORE_FIELDS",

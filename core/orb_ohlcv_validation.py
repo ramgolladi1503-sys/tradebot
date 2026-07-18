@@ -12,7 +12,7 @@ import hashlib
 import json
 import math
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -21,12 +21,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from core.movement_regime import MovementRegimeClassifier
-from core.session_calendar import get_session
-from strategies.movement.opening_range_breakout import (
-    STRATEGY_ID as ORB_STRATEGY_ID,
-    MOVEMENT_TYPE as ORB_MOVEMENT_TYPE,
-    generate_opening_range_retest_candidates,
-)
+from strategies.movement.opening_range_breakout import generate_opening_range_retest_candidates
 from strategies.strategy_registry import load_strategy_registry
 
 
@@ -127,7 +122,6 @@ def _prepare_session_frame(frame: pd.DataFrame, *, session_date: str, instrument
     data = data.sort_values("timestamp").reset_index(drop=True)
 
     typical = (pd.to_numeric(data["high"], errors="coerce") + pd.to_numeric(data["low"], errors="coerce") + pd.to_numeric(data["close"], errors="coerce")) / 3.0
-    volume = pd.to_numeric(data.get("volume", 0), errors="coerce").fillna(0.0)
     # This is a deterministic price-context proxy. It is not a traded-volume VWAP.
     data["vwap_proxy"] = typical.expanding().mean().ffill().fillna(typical)
     prev_close = pd.to_numeric(data["close"], errors="coerce").shift(1)
@@ -223,6 +217,34 @@ def _orb_context_from_row(row: pd.Series, *, session_date: str) -> dict[str, Any
             "atr_volatility_z_proxy": _safe_float(row.get("atr_volatility_z_proxy")),
         },
     }
+
+
+def _completed_bar_history_from_prefix(frame: pd.DataFrame, *, prefix_index: int) -> list[dict[str, Any]]:
+    prefix = frame.iloc[: prefix_index + 1]
+    history: list[dict[str, Any]] = []
+    for _, row in prefix.iterrows():
+        signal_ts = _to_ist_timestamp(row["timestamp"])
+        bar_end = signal_ts + timedelta(minutes=1)
+        history.append(
+            {
+                "symbol": str(row.get("instrument") or row.get("symbol") or "NIFTY"),
+                "session_date": str(row["session_date"]),
+                "timeframe": "1m",
+                "bar_start_timestamp": signal_ts.isoformat(),
+                "bar_end_timestamp": bar_end.isoformat(),
+                "ts": signal_ts.isoformat(),
+                "open": _safe_float(row.get("open")),
+                "high": _safe_float(row.get("high")),
+                "low": _safe_float(row.get("low")),
+                "close": _safe_float(row.get("close")),
+                "volume": _safe_float(row.get("volume")),
+                "source": "core.orb_ohlcv_validation",
+                "source_timestamp": bar_end.isoformat(),
+                "receipt_timestamp": bar_end.isoformat(),
+                "is_complete": True,
+            }
+        )
+    return history
 
 
 def resolve_orb_strategy() -> dict[str, str]:
@@ -505,10 +527,26 @@ def build_layer_a_signals(frames: dict[str, pd.DataFrame], *, strategy_info: dic
     classifier = MovementRegimeClassifier()
     out: list[dict[str, Any]] = []
     for session_key, frame in frames.items():
-        for _, row in frame.iterrows():
+        for index, row in frame.iterrows():
             if int(row.get("minutes_since_open") or 0) < OPENING_RANGE_MINUTES:
                 continue
             context = _orb_context_from_row(row, session_date=str(row["session_date"]))
+            context["completed_bar_history"] = _completed_bar_history_from_prefix(frame, prefix_index=int(index))
+            context["metadata"] = dict(context.get("metadata") or {})
+            context["metadata"]["completed_bar_history_provenance"] = {
+                "source_component": "core.orb_ohlcv_validation.build_layer_a_signals",
+                "source_field": "completed_bar_history",
+                "status": "TRUTHFUL",
+                "source_event_timestamp": context["completed_bar_history"][-1]["bar_end_timestamp"],
+                "receipt_timestamp": context["completed_bar_history"][-1]["receipt_timestamp"],
+                "timeframe": "1m",
+                "symbol": str(row["symbol"]) if "symbol" in row else str(row.get("instrument") or "NIFTY"),
+                "session_date": str(row["session_date"]),
+                "completed_bar_count": len(context["completed_bar_history"]),
+                "latest_completed_timestamp": context["completed_bar_history"][-1]["bar_end_timestamp"],
+                "partial_session": True,
+                "is_complete": False,
+            }
             regime = classifier.classify(context)
             signals = generate_opening_range_retest_candidates(
                 context_from_orb_context(context),

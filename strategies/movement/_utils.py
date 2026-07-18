@@ -7,6 +7,7 @@ trading behavior.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,8 @@ MAX_OPTION_LTP_AGE_SEC = 2.5
 MAX_OPTION_SPREAD_PCT = 4.0
 MIN_OPTION_DEPTH = 1.0
 MIN_PREMIUM_CONFIRMATION = 0.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,79 @@ def side_evidence(ctx: StrategyContext, direction: str) -> SideEvidence:
     )
 
 
+def missing_evidence_warning(strategy_id: str, *fields: str) -> tuple[str, ...]:
+    strategy = str(strategy_id or "").strip()
+    return tuple(
+        f"missing_optional_evidence:{strategy}:{str(field).strip()}"
+        for field in fields
+        if str(field).strip()
+    )
+
+
+def classify_required_fields(
+    *field_specs: tuple[str, Any, str],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
+    for field_name, value, mode in field_specs:
+        name = str(field_name or "").strip()
+        if not name:
+            continue
+        if value is None:
+            missing_fields.append(name)
+            continue
+        numeric = safe_float(value)
+        if mode == "positive":
+            if numeric is None or numeric <= 0:
+                invalid_fields.append(name)
+        elif mode == "non_negative":
+            if numeric is None or numeric < 0:
+                invalid_fields.append(name)
+        elif mode == "finite":
+            if numeric is None:
+                invalid_fields.append(name)
+        else:
+            raise ValueError(f"unsupported_required_field_mode:{mode}")
+    return tuple(sorted(set(missing_fields))), tuple(sorted(set(invalid_fields)))
+
+
+def emit_strategy_evidence_blocked(
+    strategy_id: str,
+    *,
+    reason: str,
+    missing_fields: tuple[str, ...] = (),
+    invalid_fields: tuple[str, ...] = (),
+) -> None:
+    try:
+        logger.warning(
+            "event=STRATEGY_EVIDENCE_BLOCKED runtime_strategy_id=%s missing_fields=%s invalid_fields=%s reason=%s",
+            str(strategy_id or "").strip(),
+            ",".join(sorted(set(str(field).strip() for field in missing_fields if str(field).strip()))) or "-",
+            ",".join(sorted(set(str(field).strip() for field in invalid_fields if str(field).strip()))) or "-",
+            str(reason or "").strip() or "missing_required_thesis_evidence",
+        )
+    except Exception:
+        return
+
+
+def block_on_required_fields(
+    strategy_id: str,
+    *,
+    reason: str,
+    field_specs: tuple[tuple[str, Any, str], ...],
+) -> bool:
+    missing_fields, invalid_fields = classify_required_fields(*field_specs)
+    if not missing_fields and not invalid_fields:
+        return False
+    emit_strategy_evidence_blocked(
+        strategy_id,
+        reason=reason,
+        missing_fields=missing_fields,
+        invalid_fields=invalid_fields,
+    )
+    return True
+
+
 def volume_score(ctx: StrategyContext) -> float:
     return ratio_score(safe_float(ctx.volume_z), start=0.5, full=2.0)
 
@@ -194,22 +270,16 @@ def make_candidate(
     params_hash: str | None = None,
     promotion_state: str = "ADVISORY_ONLY",
 ) -> StrategyCandidate:
-    blockers = tuple(sorted(set(side.blockers)))
-    merged_warnings = tuple(sorted(set(tuple(side.warnings) + tuple(warnings))))
+    blockers: tuple[str, ...] = ()
+    merged_warnings = tuple(sorted(set(tuple(warnings))))
     vol_score = volume_score(ctx)
     align_score = regime_alignment_score(regime, direction)
     timing_score = opening_timing_score(ctx)
     trap_risk_score = clamp_score(regime.scores.get("TRAP_RISK", 0.0))
-    confluence_score = clamp_score(
-        0.25 * price_structure_score
-        + 0.25 * side.option_confirmation_score
-        + 0.20 * side.liquidity_score
-        + 0.15 * side.freshness_score
-        + 0.15 * align_score
-    )
+    confluence_score = clamp_score(price_structure_score)
     raw_score = confluence_score
     confidence_score = clamp_score(raw_score * (1.0 - (trap_risk_score * 0.25)))
-    status = "BLOCKED_CANDIDATE" if blockers else "VALIDATED_CANDIDATE"
+    status = "RAW_CANDIDATE"
     return StrategyCandidate(
         schema_version=1,
         strategy_id=strategy_id,
@@ -220,9 +290,9 @@ def make_candidate(
         raw_score=raw_score,
         confidence_score=confidence_score,
         price_structure_score=clamp_score(price_structure_score),
-        option_confirmation_score=side.option_confirmation_score,
-        liquidity_score=side.liquidity_score,
-        freshness_score=side.freshness_score,
+        option_confirmation_score=None,
+        liquidity_score=None,
+        freshness_score=None,
         volatility_score=vol_score,
         regime_alignment_score=align_score,
         timing_score=timing_score,
@@ -267,8 +337,12 @@ __all__ = [
     "MAX_OPTION_SPREAD_PCT",
     "MIN_OPTION_DEPTH",
     "SideEvidence",
+    "block_on_required_fields",
     "clamp_score",
+    "classify_required_fields",
+    "emit_strategy_evidence_blocked",
     "make_candidate",
+    "missing_evidence_warning",
     "opening_timing_score",
     "pct_distance",
     "ratio_score",
