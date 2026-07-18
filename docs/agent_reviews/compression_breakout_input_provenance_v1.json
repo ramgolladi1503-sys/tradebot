@@ -1,0 +1,1352 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "baseline_origin_main": "c83c87e3ea22bc8cb172254c483773d96b400260",
+  "broker_api_called": false,
+  "candidate_id": "compression_breakout_input_provenance_v1",
+  "code_evidence_hashes": {
+    "core.indicators_live": "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
+    "core.movement_contract": "3e0025abfb1266a65617082cc09293e084392aa6c6f29d7d18c0381e9f765f95",
+    "core.movement_regime": "39b548b2605809cf336a246bc80f44c02a4d72ec6d1b4bde7dc6dd8817043b33",
+    "core.orb_ohlcv_validation": "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839",
+    "core.runtime_snapshot_producer": "21a461678e1bc8651e7145c2bdf0e7c395f65cc01cbed13d22404812f4e0bf89",
+    "core.session_bar_history": "0068bc71a93bca3cdc4d35709eb8fac2d9b644873c99c15de4e11ad6ef43680b",
+    "core.strategy_parameter_profiles": "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407",
+    "core.strategy_temporal_harness": "77da821ff6cd55ebe7ac81c5d2b0b4c0463c5a5d53c97462719b220d5d244ee6",
+    "scripts.backtest_all_strategies_available_data": "c1c011a21faaef35042065cfeb145f7a41b11f2048a8c1a4ac5899d56da1bc29",
+    "strategies.movement._utils": "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924",
+    "strategies.movement.compression_breakout": "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7",
+    "strategies.movement.trend_pullback": "36a86be053398daaf72b885a9d214f3545df97d5a25d2ca3b3dd7a5aad8b51e1"
+  },
+  "conditional_implementation_gate": "BLOCKED",
+  "corpus_evidence": {
+    "market_data_ticks": {
+      "file_count": 65,
+      "root": "/Users/madhuram/tradebot/.runtime/market_data",
+      "sample_schema": [
+        "ts",
+        "token",
+        "symbol",
+        "ltp",
+        "bid",
+        "ask",
+        "vol",
+        "oi"
+      ]
+    },
+    "upstox_candidate_replay": {
+      "file_count": 2341,
+      "root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+      "sample_rows": 375,
+      "sample_schema": [
+        "timestamp",
+        "symbol",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "oi",
+        "source",
+        "interval",
+        "fetch_timestamp",
+        "fetch_start_date",
+        "fetch_end_date",
+        "data_origin",
+        "synthetic",
+        "mock",
+        "alternate_path",
+        "provider",
+        "source_endpoint"
+      ],
+      "volume_truth": "index underlying sample volume=0.0"
+    }
+  },
+  "decision": "COMPRESSION_INSUFFICIENT_REQUIRED_TRUTH",
+  "final_verdict": "COMPRESSION_INSUFFICIENT_REQUIRED_TRUTH",
+  "gate_reason": "COMPRESSION_EXACT_CONTEXT_REPLAYABLE was not proven",
+  "is_order_action": false,
+  "mode": "RESEARCH_REPLAY_REVIEW",
+  "read_only": true,
+  "reason": "COMPRESSION_EXACT_CONTEXT_REPLAYABLE was not proven",
+  "rows": [
+    {
+      "as_of_rule": "as supplied at context timestamp; research uses current row close",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Underlying close/tick can be non_certifying_surrogated, but exact runtime spot source and as-of receipt state are not persisted per candidate.",
+      "corpus_columns": [
+        "close",
+        "ltp",
+        "ts",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "21a461678e1bc8651e7145c2bdf0e7c395f65cc01cbed13d22404812f4e0bf89",
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay or .runtime/market_data",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "absent blocks candidate",
+      "field": "spot_ltp",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "using final close or later tick would leak",
+      "incomplete_data_rule": "runtime must use snapshot tick/current row; research uses completed row close",
+      "payload_impact": "critical",
+      "production_owner_function": "StrategyContext.spot_ltp",
+      "production_owner_module": "core.movement_contract",
+      "raw_upstream_inputs": [
+        "runtime market data ltp or OHLC close in research adapters"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "per symbol/session row",
+      "unavailable_upstream_state": [
+        "exact production tick-vs-bar selection per candidate not frozen"
+      ]
+    },
+    {
+      "as_of_rule": "rolling typical-price volume VWAP over configured window through last candle",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Owner formula exists, but inspected underlying corpus has zero index volume and runtime alternate_path state is not frozen per candidate.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "ltp",
+        "vol"
+      ],
+      "corpus_evidence_hashes": [
+        "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay; .runtime/market_data",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "core.market_data can synthesize nonlive alternate_path vwap",
+      "field": "vwap",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "end-of-session VWAP or alternate_path would contaminate",
+      "incomplete_data_rule": "requires min bars; returns None before warmup",
+      "payload_impact": "critical",
+      "production_owner_function": "compute_indicators",
+      "production_owner_module": "core.indicators_live",
+      "raw_upstream_inputs": [
+        "high",
+        "low",
+        "close",
+        "volume",
+        "VWAP_WINDOW"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same in-memory candle buffer",
+      "unavailable_upstream_state": [
+        "exact live candle buffer and nonlive alternate_path decisions per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "through completed prefix at proposal",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Can be reconstructed from candles, but production runtime context owner/cutoff is not persisted per candidate.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "0068bc71a93bca3cdc4d35709eb8fac2d9b644873c99c15de4e11ad6ef43680b",
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "None when invalid",
+      "field": "range_width_pct",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future day high/low leaks",
+      "incomplete_data_rule": "reject invalid/nonmonotonic history",
+      "payload_impact": "critical",
+      "production_owner_function": "calculate_session_range_width_pct_from_completed_history / offline adapters",
+      "production_owner_module": "core.session_bar_history",
+      "raw_upstream_inputs": [
+        "completed 1m high/low",
+        "reference_price"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "exact canonical runtime owner per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "through last completed candle in buffer",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Formula owners exist, but runtime state/alternate_path provenance is not frozen per candidate.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
+        "c1c011a21faaef35042065cfeb145f7a41b11f2048a8c1a4ac5899d56da1bc29"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "market_data must apply nonlive feature alternate_path",
+      "field": "atr_short",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future bars or alternate_path contaminate score",
+      "incomplete_data_rule": "None/0 before warmup",
+      "payload_impact": "critical",
+      "production_owner_function": "compute_indicators / offline rolling true range",
+      "production_owner_module": "core.indicators_live",
+      "raw_upstream_inputs": [
+        "high",
+        "low",
+        "close",
+        "ATR periods"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session/warmup-dependent",
+      "unavailable_upstream_state": [
+        "exact runtime candle buffer and alternate_path decisions per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "through last completed candle in buffer",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Formula owners exist, but runtime state/alternate_path provenance is not frozen per candidate.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "bce5db52e9386e8f46e21c23237285f1f43697669dbe5ff48d466df6aa6aad89",
+        "c1c011a21faaef35042065cfeb145f7a41b11f2048a8c1a4ac5899d56da1bc29"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "market_data must apply nonlive feature alternate_path",
+      "field": "atr_long",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future bars or alternate_path contaminate score",
+      "incomplete_data_rule": "None/0 before warmup",
+      "payload_impact": "critical",
+      "production_owner_function": "compute_indicators / offline rolling true range",
+      "production_owner_module": "core.indicators_live",
+      "raw_upstream_inputs": [
+        "high",
+        "low",
+        "close",
+        "ATR periods"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session/warmup-dependent",
+      "unavailable_upstream_state": [
+        "exact runtime candle buffer and alternate_path decisions per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "computed at context timestamp",
+      "candidate_presence_impact": "critical",
+      "classification": "PROVENANCE_LIMITED_PROXY",
+      "classification_reason": "Regime owner is deterministic but depends on limited/surrogate upstream fields.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "close",
+        "volume"
+      ],
+      "corpus_evidence_hashes": [
+        "39b548b2605809cf336a246bc80f44c02a4d72ec6d1b4bde7dc6dd8817043b33"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "alternate_path_used changes evidence",
+      "field": "COMPRESSION",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future range/ATR/VWAP leaks",
+      "incomplete_data_rule": "absent fields lower/invalidate score",
+      "payload_impact": "critical",
+      "production_owner_function": "MovementRegimeClassifier.classify",
+      "production_owner_module": "core.movement_regime",
+      "raw_upstream_inputs": [
+        "range_width_pct",
+        "atr_short",
+        "atr_long",
+        "abs_vwap_dist"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same context/session",
+      "unavailable_upstream_state": [
+        "exact upstream range/ATR/VWAP state"
+      ]
+    },
+    {
+      "as_of_rule": "must be as-of proposal time",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Compression directional anchor precedence consumes this field before ORB/day alternate_path; exact runtime structure-anchor owner was not found.",
+      "corpus_columns": [
+        "low"
+      ],
+      "corpus_evidence_hashes": [
+        "36a86be053398daaf72b885a9d214f3545df97d5a25d2ca3b3dd7a5aad8b51e1"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "no strategy alternate_path; research adapters use row low/day_low_so_far surrogates",
+      "field": "nearest_support",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future day low or hindsight structure level would leak",
+      "incomplete_data_rule": "absent blocks CALL path",
+      "payload_impact": "critical",
+      "production_owner_function": "_pullback_anchor/_call_pullback_result",
+      "production_owner_module": "strategies.movement.trend_pullback",
+      "raw_upstream_inputs": [
+        "StrategyContext.nearest_support"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "canonical production structure-anchor owner/update time not persisted"
+      ]
+    },
+    {
+      "as_of_rule": "must be as-of proposal time",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Compression directional anchor precedence consumes this field before ORB/day alternate_path; exact runtime structure-anchor owner was not found.",
+      "corpus_columns": [
+        "high"
+      ],
+      "corpus_evidence_hashes": [
+        "36a86be053398daaf72b885a9d214f3545df97d5a25d2ca3b3dd7a5aad8b51e1"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "no strategy alternate_path; research adapters use row high/day_high_so_far surrogates",
+      "field": "nearest_resistance",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future day high or hindsight structure level would leak",
+      "incomplete_data_rule": "absent blocks PUT path",
+      "payload_impact": "critical",
+      "production_owner_function": "_pullback_anchor/_put_pullback_result",
+      "production_owner_module": "strategies.movement.trend_pullback",
+      "raw_upstream_inputs": [
+        "StrategyContext.nearest_resistance"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "canonical production structure-anchor owner/update time not persisted"
+      ]
+    },
+    {
+      "as_of_rule": "must be prefix-only at proposal",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_OWNER_RECONSTRUCTABLE",
+      "classification_reason": "Underlying OHLCV can reconstruct prefix ORB/day levels when source session coverage exists.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "None or alternate_path changes anchor precedence",
+      "field": "orb_high",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "final-session high/low leaks",
+      "incomplete_data_rule": "exclude future bars",
+      "payload_impact": "critical",
+      "production_owner_function": "_orb_context_from_row / context fields",
+      "production_owner_module": "core.orb_ohlcv_validation / StrategyContext",
+      "raw_upstream_inputs": [
+        "completed OHLCV prefix"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "must be prefix-only at proposal",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_OWNER_RECONSTRUCTABLE",
+      "classification_reason": "Underlying OHLCV can reconstruct prefix ORB/day levels when source session coverage exists.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "None or alternate_path changes anchor precedence",
+      "field": "orb_low",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "final-session high/low leaks",
+      "incomplete_data_rule": "exclude future bars",
+      "payload_impact": "critical",
+      "production_owner_function": "_orb_context_from_row / context fields",
+      "production_owner_module": "core.orb_ohlcv_validation / StrategyContext",
+      "raw_upstream_inputs": [
+        "completed OHLCV prefix"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "must be prefix-only at proposal",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_OWNER_RECONSTRUCTABLE",
+      "classification_reason": "Underlying OHLCV can reconstruct prefix ORB/day levels when source session coverage exists.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "None or alternate_path changes anchor precedence",
+      "field": "day_high",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "final-session high/low leaks",
+      "incomplete_data_rule": "exclude future bars",
+      "payload_impact": "critical",
+      "production_owner_function": "_orb_context_from_row / context fields",
+      "production_owner_module": "core.orb_ohlcv_validation / StrategyContext",
+      "raw_upstream_inputs": [
+        "completed OHLCV prefix"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "must be prefix-only at proposal",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_OWNER_RECONSTRUCTABLE",
+      "classification_reason": "Underlying OHLCV can reconstruct prefix ORB/day levels when source session coverage exists.",
+      "corpus_columns": [
+        "high",
+        "low",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "53eff313d4e227d9f9d7ad4246e85d28df09b36726ac041e65a7f88c800bf839"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "None or alternate_path changes anchor precedence",
+      "field": "day_low",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "final-session high/low leaks",
+      "incomplete_data_rule": "exclude future bars",
+      "payload_impact": "critical",
+      "production_owner_function": "_orb_context_from_row / context fields",
+      "production_owner_module": "core.orb_ohlcv_validation / StrategyContext",
+      "raw_upstream_inputs": [
+        "completed OHLCV prefix"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "MAX_ATR_RATIO",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "MAX_RANGE_WIDTH_PCT",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "MIN_BREAKOUT_DISTANCE_PCT",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "MIN_COMPRESSION_SCORE",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "MIN_VWAP_ALIGNMENT_PCT",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "requested profile ID",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "resolved profile ID",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "profile-resolution source",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "resolved at generator invocation",
+      "candidate_presence_impact": "critical",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Canonical profile definitions and deterministic parameter hash are stored in code.",
+      "corpus_columns": [
+        "compression_breakout_v1"
+      ],
+      "corpus_evidence_hashes": [
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "embedded alternate_path invalid for required profile",
+      "field": "profile parameter hash",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "profile drift changes candidates",
+      "incomplete_data_rule": "invalid/incomplete profile blocks generator",
+      "payload_impact": "critical",
+      "production_owner_function": "resolve_required_profile_parameters",
+      "production_owner_module": "core.strategy_parameter_profiles",
+      "raw_upstream_inputs": [
+        "canonical profile definitions",
+        "required keys"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "must be quote state at proposal time",
+      "candidate_presence_impact": "affects status/blockers",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "No deterministic candidate-level option LTP join is available in approved historical corpus.",
+      "corpus_columns": [
+        "ltp",
+        "bid",
+        "ask",
+        "vol",
+        "oi",
+        "ts",
+        "token"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924"
+      ],
+      "corpus_files": ".runtime/market_data tick files",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "alternate_path quote blocks candidate",
+      "field": "option_ltp",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "later option quotes contaminate confirmation and score",
+      "incomplete_data_rule": "absent/stale/alternate_path creates blockers",
+      "payload_impact": "critical",
+      "production_owner_function": "side_evidence",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "option_ce_ltp/option_pe_ltp",
+        "ce/pe premium_change",
+        "ce/pe spread",
+        "ce/pe depth",
+        "option_ltp_age_sec",
+        "quote_source",
+        "alternate_path_used"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "option side matching candidate direction",
+      "unavailable_upstream_state": [
+        "exact option instrument selection and quote join per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "must be quote state at proposal time",
+      "candidate_presence_impact": "affects status/blockers",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Premium change requires prior option quote state not frozen per candidate.",
+      "corpus_columns": [
+        "ltp",
+        "bid",
+        "ask",
+        "vol",
+        "oi",
+        "ts",
+        "token"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924"
+      ],
+      "corpus_files": ".runtime/market_data tick files",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "alternate_path quote blocks candidate",
+      "field": "premium_change",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "later option quotes contaminate confirmation and score",
+      "incomplete_data_rule": "absent/stale/alternate_path creates blockers",
+      "payload_impact": "critical",
+      "production_owner_function": "side_evidence",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "option_ce_ltp/option_pe_ltp",
+        "ce/pe premium_change",
+        "ce/pe spread",
+        "ce/pe depth",
+        "option_ltp_age_sec",
+        "quote_source",
+        "alternate_path_used"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "option side matching candidate direction",
+      "unavailable_upstream_state": [
+        "exact option instrument selection and quote join per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "must be quote state at proposal time",
+      "candidate_presence_impact": "affects status/blockers",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Bid/ask spread exists in live tick root samples but no approved deterministic per-candidate option-side join was found.",
+      "corpus_columns": [
+        "ltp",
+        "bid",
+        "ask",
+        "vol",
+        "oi",
+        "ts",
+        "token"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924"
+      ],
+      "corpus_files": ".runtime/market_data tick files",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "alternate_path quote blocks candidate",
+      "field": "spread_pct",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "later option quotes contaminate confirmation and score",
+      "incomplete_data_rule": "absent/stale/alternate_path creates blockers",
+      "payload_impact": "critical",
+      "production_owner_function": "side_evidence",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "option_ce_ltp/option_pe_ltp",
+        "ce/pe premium_change",
+        "ce/pe spread",
+        "ce/pe depth",
+        "option_ltp_age_sec",
+        "quote_source",
+        "alternate_path_used"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "option side matching candidate direction",
+      "unavailable_upstream_state": [
+        "exact option instrument selection and quote join per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "must be quote state at proposal time",
+      "candidate_presence_impact": "affects status/blockers",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Depth/quantity owner is not frozen in the approved historical replay corpus.",
+      "corpus_columns": [
+        "ltp",
+        "bid",
+        "ask",
+        "vol",
+        "oi",
+        "ts",
+        "token"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924"
+      ],
+      "corpus_files": ".runtime/market_data tick files",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "alternate_path quote blocks candidate",
+      "field": "depth",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "later option quotes contaminate confirmation and score",
+      "incomplete_data_rule": "absent/stale/alternate_path creates blockers",
+      "payload_impact": "critical",
+      "production_owner_function": "side_evidence",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "option_ce_ltp/option_pe_ltp",
+        "ce/pe premium_change",
+        "ce/pe spread",
+        "ce/pe depth",
+        "option_ltp_age_sec",
+        "quote_source",
+        "alternate_path_used"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "option side matching candidate direction",
+      "unavailable_upstream_state": [
+        "exact option instrument selection and quote join per candidate"
+      ]
+    },
+    {
+      "as_of_rule": "proposal-time context only",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Derived field depends on absent exact anchor/option-side truth.",
+      "corpus_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "anchor precedence nearest_resistance/orb_high/day_high and nearest_support/orb_low/day_low",
+      "field": "breakout_level",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future anchors/ranges leak",
+      "incomplete_data_rule": "absent range/ATR blocks; absent anchors suppresses side",
+      "payload_impact": "critical",
+      "production_owner_function": "_upper_breakout_level/_lower_breakout_level/_build_candidate",
+      "production_owner_module": "strategies.movement.compression_breakout",
+      "raw_upstream_inputs": [
+        "spot_ltp",
+        "vwap",
+        "range_width_pct",
+        "atr_short",
+        "atr_long",
+        "COMPRESSION score",
+        "anchors",
+        "profile parameters"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "exact nearest support/resistance and option-side state"
+      ]
+    },
+    {
+      "as_of_rule": "proposal-time context only",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Derived field depends on absent exact anchor/option-side truth.",
+      "corpus_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "anchor precedence nearest_resistance/orb_high/day_high and nearest_support/orb_low/day_low",
+      "field": "breakout_distance_pct",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future anchors/ranges leak",
+      "incomplete_data_rule": "absent range/ATR blocks; absent anchors suppresses side",
+      "payload_impact": "critical",
+      "production_owner_function": "_upper_breakout_level/_lower_breakout_level/_build_candidate",
+      "production_owner_module": "strategies.movement.compression_breakout",
+      "raw_upstream_inputs": [
+        "spot_ltp",
+        "vwap",
+        "range_width_pct",
+        "atr_short",
+        "atr_long",
+        "COMPRESSION score",
+        "anchors",
+        "profile parameters"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "exact nearest support/resistance and option-side state"
+      ]
+    },
+    {
+      "as_of_rule": "proposal-time context only",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Derived field depends on absent exact anchor/option-side truth.",
+      "corpus_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "anchor precedence nearest_resistance/orb_high/day_high and nearest_support/orb_low/day_low",
+      "field": "vwap_alignment_abs_pct",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future anchors/ranges leak",
+      "incomplete_data_rule": "absent range/ATR blocks; absent anchors suppresses side",
+      "payload_impact": "critical",
+      "production_owner_function": "_upper_breakout_level/_lower_breakout_level/_build_candidate",
+      "production_owner_module": "strategies.movement.compression_breakout",
+      "raw_upstream_inputs": [
+        "spot_ltp",
+        "vwap",
+        "range_width_pct",
+        "atr_short",
+        "atr_long",
+        "COMPRESSION score",
+        "anchors",
+        "profile parameters"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "exact nearest support/resistance and option-side state"
+      ]
+    },
+    {
+      "as_of_rule": "proposal-time context only",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Derived field depends on absent exact anchor/option-side truth.",
+      "corpus_columns": [
+        "open",
+        "high",
+        "low",
+        "close",
+        "timestamp"
+      ],
+      "corpus_evidence_hashes": [
+        "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7"
+      ],
+      "corpus_files": "runtime/upstox_candidate_replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "anchor precedence nearest_resistance/orb_high/day_high and nearest_support/orb_low/day_low",
+      "field": "price_structure_score",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future anchors/ranges leak",
+      "incomplete_data_rule": "absent range/ATR blocks; absent anchors suppresses side",
+      "payload_impact": "critical",
+      "production_owner_function": "_upper_breakout_level/_lower_breakout_level/_build_candidate",
+      "production_owner_module": "strategies.movement.compression_breakout",
+      "raw_upstream_inputs": [
+        "spot_ltp",
+        "vwap",
+        "range_width_pct",
+        "atr_short",
+        "atr_long",
+        "COMPRESSION score",
+        "anchors",
+        "profile parameters"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same session",
+      "unavailable_upstream_state": [
+        "exact nearest support/resistance and option-side state"
+      ]
+    },
+    {
+      "as_of_rule": "candidate build time",
+      "candidate_presence_impact": "no",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Lineage fields are deterministic from code/profile resolution.",
+      "corpus_columns": [
+        "lineage.params_used",
+        "lineage.params_hash",
+        "lineage.promotion_state"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924",
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "strategies/movement/_utils.py",
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "no alternate_path for required profile",
+      "field": "params_used",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "code/profile drift changes payload",
+      "incomplete_data_rule": "invalid profile blocks upstream",
+      "payload_impact": "critical",
+      "production_owner_function": "make_candidate",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "RuntimeProfileResolution",
+        "strategy_version literal",
+        "promotion_state literal"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "payload",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "candidate build time",
+      "candidate_presence_impact": "no",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Lineage fields are deterministic from code/profile resolution.",
+      "corpus_columns": [
+        "lineage.params_used",
+        "lineage.params_hash",
+        "lineage.promotion_state"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924",
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "strategies/movement/_utils.py",
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "no alternate_path for required profile",
+      "field": "params_hash",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "code/profile drift changes payload",
+      "incomplete_data_rule": "invalid profile blocks upstream",
+      "payload_impact": "critical",
+      "production_owner_function": "make_candidate",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "RuntimeProfileResolution",
+        "strategy_version literal",
+        "promotion_state literal"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "payload",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "candidate build time",
+      "candidate_presence_impact": "no",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Lineage fields are deterministic from code/profile resolution.",
+      "corpus_columns": [
+        "lineage.params_used",
+        "lineage.params_hash",
+        "lineage.promotion_state"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924",
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "strategies/movement/_utils.py",
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "no alternate_path for required profile",
+      "field": "strategy_version",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "code/profile drift changes payload",
+      "incomplete_data_rule": "invalid profile blocks upstream",
+      "payload_impact": "critical",
+      "production_owner_function": "make_candidate",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "RuntimeProfileResolution",
+        "strategy_version literal",
+        "promotion_state literal"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "payload",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "candidate build time",
+      "candidate_presence_impact": "no",
+      "classification": "EXACT_STORED_TRUTH",
+      "classification_reason": "Lineage fields are deterministic from code/profile resolution.",
+      "corpus_columns": [
+        "lineage.params_used",
+        "lineage.params_hash",
+        "lineage.promotion_state"
+      ],
+      "corpus_evidence_hashes": [
+        "f02a0858fba8f6b186be272cfbb6c48a3b07458987d46df5db542d52e6239924",
+        "c40787d570956da03f814dbb6a9fd6bb528c840c42c959ddb544e16e3a861407"
+      ],
+      "corpus_files": [
+        "strategies/movement/_utils.py",
+        "core/strategy_parameter_profiles.py"
+      ],
+      "exact_owner_reconstruction_possible": true,
+      "fallback_rule": "no alternate_path for required profile",
+      "field": "promotion_state",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "code/profile drift changes payload",
+      "incomplete_data_rule": "invalid profile blocks upstream",
+      "payload_impact": "critical",
+      "production_owner_function": "make_candidate",
+      "production_owner_module": "strategies.movement._utils",
+      "raw_upstream_inputs": [
+        "RuntimeProfileResolution",
+        "strategy_version literal",
+        "promotion_state literal"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "payload",
+      "session_rule": "not session-dependent",
+      "unavailable_upstream_state": []
+    },
+    {
+      "as_of_rule": "replay proposal time",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Required replay identity fields are not certified because exact-context gate failed.",
+      "corpus_columns": [],
+      "corpus_evidence_hashes": [],
+      "corpus_files": "none certified for Compression full replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "not applicable",
+      "field": "candidate fingerprint inputs",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future mutation changes replay identity",
+      "incomplete_data_rule": "must reject absent/mutated inputs",
+      "payload_impact": "critical",
+      "production_owner_function": "not production-owned",
+      "production_owner_module": "research/compression replay layer",
+      "raw_upstream_inputs": [
+        "candidate payload",
+        "source prefix",
+        "session key"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same source session",
+      "unavailable_upstream_state": [
+        "Compression exact-context gate failed; replay implementation not started"
+      ]
+    },
+    {
+      "as_of_rule": "replay proposal time",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Required replay identity fields are not certified because exact-context gate failed.",
+      "corpus_columns": [],
+      "corpus_evidence_hashes": [],
+      "corpus_files": "none certified for Compression full replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "not applicable",
+      "field": "replay_record_id",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future mutation changes replay identity",
+      "incomplete_data_rule": "must reject absent/mutated inputs",
+      "payload_impact": "critical",
+      "production_owner_function": "not production-owned",
+      "production_owner_module": "research/compression replay layer",
+      "raw_upstream_inputs": [
+        "candidate payload",
+        "source prefix",
+        "session key"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same source session",
+      "unavailable_upstream_state": [
+        "Compression exact-context gate failed; replay implementation not started"
+      ]
+    },
+    {
+      "as_of_rule": "replay proposal time",
+      "candidate_presence_impact": "critical",
+      "classification": "MISSING_REQUIRED_TRUTH",
+      "classification_reason": "Required replay identity fields are not certified because exact-context gate failed.",
+      "corpus_columns": [],
+      "corpus_evidence_hashes": [],
+      "corpus_files": "none certified for Compression full replay",
+      "exact_owner_reconstruction_possible": false,
+      "fallback_rule": "not applicable",
+      "field": "replay_history_hash",
+      "fingerprint_impact": "critical",
+      "future_data_risk": "future mutation changes replay identity",
+      "incomplete_data_rule": "must reject absent/mutated inputs",
+      "payload_impact": "critical",
+      "production_owner_function": "not production-owned",
+      "production_owner_module": "research/compression replay layer",
+      "raw_upstream_inputs": [
+        "candidate payload",
+        "source prefix",
+        "session key"
+      ],
+      "runtime_construction_path": "canonical runtime adapter observed in core.runtime_snapshot_producer._strategy_context_from_market_symbol; research/offline adapters observed in core.orb_ohlcv_validation and scripts.backtest_all_strategies_available_data",
+      "score_impact": "critical",
+      "session_rule": "same source session",
+      "unavailable_upstream_state": [
+        "Compression exact-context gate failed; replay implementation not started"
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "source": "docs/agent_reviews/compression_breakout_input_provenance_v1.json",
+  "source_commit": "0093a1464294ccfc17da2b1d74db06417ffe2eb9",
+  "strategy": "COMPRESSION_BREAKOUT",
+  "timestamp": "2026-07-19T02:52:00+05:30"
+}
