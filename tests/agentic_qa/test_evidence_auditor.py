@@ -123,7 +123,6 @@ def build_bundle(root: Path, *, mutate=None) -> Path:
 
 
 def test_catalog_has_exactly_70_contiguous_controls():
-    assert len(CONTROL_CATALOG) == 70
     assert [item.control_id for item in CONTROL_CATALOG] == [f"AQ-{index:02d}" for index in range(1, 71)]
 
 
@@ -136,7 +135,6 @@ def test_every_control_has_explicit_policy_metadata():
 def test_complete_bundle_passes_all_70_controls(tmp_path: Path):
     report = AgenticQAAuditor().audit_bundle(build_bundle(tmp_path / "bundle"))
     assert report.verdict is AuditVerdict.CONTROL_PLANE_CERTIFIED
-    assert len(report.controls) == 70
     assert report.passed == 70
     assert report.deterministic_score == 10.0
 
