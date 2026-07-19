@@ -105,7 +105,7 @@ def normalize_underlying_symbol(raw_symbol: Any) -> str | None:
     text = str(raw_symbol or "").strip().upper()
     if not text:
         return None
-    if "BANKNIFTY" in text:
+    if "BANKNIFTY" in text or "NIFTY BANK" in text or "BANK NIFTY" in text or "NIFTYBANK" in text:
         return "BANKNIFTY"
     if "NIFTY" in text and "BANKNIFTY" not in text:
         return "NIFTY"
