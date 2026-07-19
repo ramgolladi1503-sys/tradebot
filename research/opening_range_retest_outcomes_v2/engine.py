@@ -84,14 +84,17 @@ def verify_inputs(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], d
     ledger = _load_json(artifact_dir / INPUT_FILES["candidate_ledger"])
     summary = _load_json(artifact_dir / INPUT_FILES["phase1_summary"])
     reconciliation = _load_json(artifact_dir / INPUT_FILES["reconciliation"])
+    certification_text = (artifact_dir / INPUT_FILES["phase1_certification"]).read_text(encoding="utf-8")
     if summary.get("decision") != "ORB_PHASE1_V2_RECERTIFIED":
         raise ValueError("INPUT_CERTIFICATION_VERDICT_MISMATCH")
+    if "- decision: ORB_PHASE1_V2_RECERTIFIED" not in certification_text or "NOT_ORB_PHASE1_V2_RECERTIFIED" in certification_text:
+        raise ValueError("INPUT_PHASE1_CERTIFICATION_MISMATCH")
     expected = {
         "source": source.get("record_count") == INPUT_SOURCE_COUNT and source.get("source_manifest_semantic_hash") == INPUT_SOURCE_HASH,
         "candidate_count": ledger.get("candidate_count") == INPUT_CANDIDATE_COUNT,
         "candidate_core": ledger.get("candidate_core_semantic_hash") == INPUT_CANDIDATE_CORE_HASH,
         "candidate_provenance": ledger.get("candidate_provenance_semantic_hash") == INPUT_CANDIDATE_PROVENANCE_HASH,
-        "reconciliation": reconciliation.get("decision") == "UNAFFECTED_SUBSET_RECONCILED",
+        "reconciliation": reconciliation.get("decision") == "UNAFFECTED_SUBSET_RECONCILED" and reconciliation.get("v1_unaffected_candidate_count") == 2192 and reconciliation.get("v2_unaffected_candidate_count") == 2192,
     }
     if not all(expected.values()):
         raise ValueError(f"ORB_PHASE1_V2_INPUT_CERTIFICATION_MISMATCH:{expected}")

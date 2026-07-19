@@ -14,6 +14,7 @@ def audit_outputs(
     ledger: dict[str, Any],
     summary: dict[str, Any],
     overlap: dict[str, Any],
+    controls: dict[str, Any] | None,
     paths: dict[str, Path],
     artifact_dir: Path,
     source_project_root: Path,
@@ -25,5 +26,6 @@ def audit_outputs(
         ledger=ledger,
         summary=summary,
         overlap=overlap,
+        controls=controls,
         paths=paths,
     )

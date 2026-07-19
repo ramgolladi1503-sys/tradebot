@@ -29,6 +29,7 @@ def main() -> int:
         "ledger": base / "opening_range_retest_outcome_ledger_v2.json",
         "summary": base / "opening_range_retest_outcome_summary_v2.json",
         "overlap": base / "opening_range_retest_outcome_overlap_v2.json",
+        "controls": base / "opening_range_retest_outcome_negative_controls_v2.json",
         "audit": base / "opening_range_retest_outcome_audit_v2.json",
         "certification": base / "opening_range_retest_outcome_certification_v2.md",
     }
@@ -37,6 +38,7 @@ def main() -> int:
         ledger=_load_json(paths["ledger"]),
         summary=_load_json(paths["summary"]),
         overlap=_load_json(paths["overlap"]),
+        controls=_load_json(paths["controls"]),
         paths={k: v for k, v in paths.items() if k != "audit"},
         artifact_dir=base,
         source_project_root=args.source_project_root,

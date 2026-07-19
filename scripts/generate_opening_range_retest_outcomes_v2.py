@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from research.opening_range_retest_outcomes_v2.artifacts import write_json
 from research.opening_range_retest_outcomes_v2.audit import audit_outputs
 from research.opening_range_retest_outcomes_v2.contract import EVIDENCE_TIMESTAMP, IMPLEMENTATION_TREE_PATHS, build_contract, canonical_json_bytes, sha256_bytes, sha256_file
+from research.opening_range_retest_outcomes_v2.controls import build_negative_control_report
 from research.opening_range_retest_outcomes_v2.engine import build_ledger, summarize
 from research.opening_range_retest_outcomes_v2.overlap import build_overlap
 
@@ -63,19 +64,22 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
     ledger = build_ledger(artifact_dir=artifact_dir, source_project_root=source_project_root, contract=contract)
     summary = summarize(ledger)
     overlap = build_overlap(ledger)
+    controls = build_negative_control_report()
     paths = {
         "contract": output_dir / "opening_range_retest_outcome_contract_v2.json",
         "ledger": output_dir / "opening_range_retest_outcome_ledger_v2.json",
         "summary": output_dir / "opening_range_retest_outcome_summary_v2.json",
         "overlap": output_dir / "opening_range_retest_outcome_overlap_v2.json",
+        "controls": output_dir / "opening_range_retest_outcome_negative_controls_v2.json",
     }
     digests = {name: write_json(path, payload) for name, path, payload in [
         ("contract", paths["contract"], contract),
         ("ledger", paths["ledger"], ledger),
         ("summary", paths["summary"], summary),
         ("overlap", paths["overlap"], overlap),
+        ("controls", paths["controls"], controls),
     ]}
-    audit = audit_outputs(contract=contract, ledger=ledger, summary=summary, overlap=overlap, paths=paths, artifact_dir=artifact_dir, source_project_root=source_project_root)
+    audit = audit_outputs(contract=contract, ledger=ledger, summary=summary, overlap=overlap, controls=controls, paths=paths, artifact_dir=artifact_dir, source_project_root=source_project_root)
     paths["audit"] = output_dir / "opening_range_retest_outcome_audit_v2.json"
     digests["audit"] = write_json(paths["audit"], audit)
     certification = output_dir / "opening_range_retest_outcome_certification_v2.md"
@@ -93,6 +97,8 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
                 f"- contract_verdict: {contract['decision']}",
                 f"- ledger_verdict: {ledger['decision']}",
                 f"- audit_verdict: {audit['verdict']}",
+                f"- negative_control_verdict: {controls['verdict']}",
+                f"- negative_control_count: {controls['control_count']}",
                 f"- candidate_conservation: {audit['candidate_conservation']}",
                 f"- sidecar_verdict: {audit['sidecar_verdict']}",
                 f"- contract_hash: `{contract['contract_hash']}`",
@@ -140,6 +146,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
                 "- implementation: Added isolated `research/opening_range_retest_outcomes_v2` contract, engine, overlap, artifact, and audit modules.",
                 "- implementation: Added generator and audit CLIs plus focused negative-control tests.",
                 "- implementation: Generated contract, ledger, summary, overlap, audit, certification, and sidecar artifacts.",
+                "- implementation: Generated negative-control matrix and sidecar artifact.",
                 "",
                 "## QA / Safety Review",
                 "",
@@ -148,6 +155,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
                 "- focused outcome tests: PASS",
                 "- ORB Phase 1 v2 plus outcome tests: PASS",
                 "- independent audit CLI: PASS",
+                f"- negative controls: {controls['verdict']}",
                 "- read_only: true",
                 "- is_order_action: false",
                 "- broker_api_called: false",
@@ -186,7 +194,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
     digest = sha256_file(certification)
     certification.with_suffix(certification.suffix + ".sha256").write_text(f"{digest}  {certification.name}\n", encoding="utf-8")
     digests["certification"] = digest
-    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "projection_hash": sha256_bytes(canonical_json_bytes(_stable({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "audit": audit})))}
+    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "controls": controls, "projection_hash": sha256_bytes(canonical_json_bytes(_stable({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "controls": controls, "audit": audit})))}
 
 
 def main() -> int:
@@ -207,6 +215,7 @@ def main() -> int:
         if deterministic
         and final["summary"]["decision"] == "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED"
         and final["audit"]["verdict"] == "ORB_OUTCOMES_V2_AUDIT_CERTIFIED"
+        and final["controls"]["verdict"] == "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED"
         else "ORB_OUTCOMES_V2_NOT_CERTIFIED"
     )
     compact = {
@@ -218,6 +227,8 @@ def main() -> int:
         "ledger_decision": final["ledger"]["decision"],
         "summary_decision": final["summary"]["decision"],
         "audit_verdict": final["audit"]["verdict"],
+        "negative_control_verdict": final["controls"]["verdict"],
+        "negative_control_count": final["controls"]["control_count"],
         "candidate_count": final["ledger"]["candidate_count"],
         "source_join_verified_count": final["ledger"]["join_verified_count"],
         "terminal_reason_counts": final["summary"]["terminal_reason_counts"],

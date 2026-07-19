@@ -6,8 +6,10 @@ import pandas as pd
 
 from research.opening_range_retest_outcomes_v2.audit import verify_sidecar
 from research.opening_range_retest_outcomes_v2.artifacts import write_json
+from research.opening_range_retest_outcomes_v2.controls import CATEGORY_MINIMUMS, build_negative_control_report
 from research.opening_range_retest_outcomes_v2.contract import build_contract, canonical_json_bytes, sha256_bytes, sha256_file
-from research.opening_range_retest_outcomes_v2.engine import _read_source, measure_candidate
+from research.opening_range_retest_outcomes_v2.engine import _read_source, measure_candidate, summarize
+from research.opening_range_retest_outcomes_v2.oracle import overlap_failures, recompute_overlap, recompute_summary, summary_failures
 from research.opening_range_retest_outcomes_v2.overlap import build_overlap
 
 
@@ -192,3 +194,57 @@ def test_join_symbol_mismatch_fails_closed(tmp_path: Path) -> None:
     candidate["source_provenance"]["source_symbol"] = "BANKNIFTY"
     outcome = measure_candidate(candidate, source, frame, "contract")
     assert outcome["terminal_reason"] == "SOURCE_PROVENANCE_MISMATCH"
+
+
+def test_negative_control_matrix_meets_required_floor() -> None:
+    report = build_negative_control_report()
+    assert report["verdict"] == "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED"
+    assert report["control_count"] >= 70
+    assert report["duplicate_ids"] == 0
+    assert report["failures"] == []
+    for category, minimum in CATEGORY_MINIMUMS.items():
+        assert report["category_counts"][category] >= minimum
+
+
+def test_oracle_summary_and_overlap_do_not_import_generator_helpers() -> None:
+    source = Path("research/opening_range_retest_outcomes_v2/oracle.py").read_text(encoding="utf-8")
+    assert "engine import summarize" not in source
+    assert "overlap import build_overlap" not in source
+
+
+def test_oracle_summary_matches_generator_summary(tmp_path: Path) -> None:
+    source, frame = _source_file(tmp_path)
+    candidate = _candidate()
+    candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
+    outcome = measure_candidate(candidate, source, frame, "contract")
+    ledger = {"records": [outcome], "decision": "ORB_OUTCOME_LEDGER_V2_NOT_CERTIFIED", "contract_hash": "contract", "outcome_ledger_hash": "ledger", "candidate_count": 1}
+    assert recompute_summary(ledger["records"], ledger["decision"], ledger["contract_hash"], ledger["outcome_ledger_hash"]) == summarize(ledger)
+
+
+def test_oracle_overlap_matches_generator_overlap() -> None:
+    ledger = {
+        "records": [
+            {"candidate_id": "a", "candidate_core": {"symbol": "NIFTY", "direction": "BUY_CALL", "session_date": "2026-07-06"}, "legal_entry": {"status": "LEGAL_ENTRY_FOUND", "start": "2026-07-06T09:21:00+05:30"}, "horizons": {"1": {"status": "MEASURED", "terminal_end": "2026-07-06T09:22:00+05:30"}}},
+            {"candidate_id": "b", "candidate_core": {"symbol": "NIFTY", "direction": "BUY_PUT", "session_date": "2026-07-06"}, "legal_entry": {"status": "LEGAL_ENTRY_FOUND", "start": "2026-07-06T09:22:00+05:30"}, "horizons": {"1": {"status": "MEASURED", "terminal_end": "2026-07-06T09:23:00+05:30"}}},
+            {"candidate_id": "c", "candidate_core": {"symbol": "NIFTY", "direction": "BUY_PUT", "session_date": "2026-07-06"}, "legal_entry": {"status": "LEGAL_ENTRY_FOUND", "start": "2026-07-06T09:22:30+05:30"}, "horizons": {"1": {"status": "MEASURED", "terminal_end": "2026-07-06T09:23:30+05:30"}}},
+        ]
+    }
+    assert recompute_overlap(ledger["records"]) == build_overlap(ledger)
+
+
+def test_summary_tamper_classifies_hash_and_stats() -> None:
+    expected = {"summary_hash": "a", "terminal_reason_counts": {"MEASURED": 1}, "horizon_status_counts": {"1": {"MEASURED": 1}}, "descriptive_directional_return_stats": {"1": {"mean": 1}}}
+    actual = {"summary_hash": "b", "terminal_reason_counts": {"MEASURED": 1}, "horizon_status_counts": {"1": {"MEASURED": 1}}, "descriptive_directional_return_stats": {"1": {"mean": 2}}}
+    failures = summary_failures(expected, actual)
+    assert "SUMMARY_HASH_MISMATCH" in failures
+    assert "SUMMARY_MEAN_MISMATCH" in failures
+
+
+def test_overlap_tamper_classifies_pair_hash_and_sample() -> None:
+    interval = {"candidate_id": "a", "symbol": "NIFTY", "direction": "BUY_CALL", "session_date": "2026-07-06", "start": "2026-07-06T09:21:00+05:30", "end": "2026-07-06T09:22:00+05:30"}
+    expected = {"horizons": {"1": {"complete_interval_set_hash": "a", "overlapping_pair_count": 1, "max_simultaneous_candidates": 2, "direction_counts": {"BUY_CALL": 1}, "complete_session_cluster_counts": {"2026-07-06": 1}, "sample_count": 1, "sample_truncated": False, "sample": [interval]}}}
+    actual = {"horizons": {"1": {"complete_interval_set_hash": "b", "overlapping_pair_count": 0, "max_simultaneous_candidates": 1, "direction_counts": {"BUY_PUT": 1}, "complete_session_cluster_counts": {}, "sample_count": 0, "sample_truncated": True, "sample": []}}}
+    failures = overlap_failures(expected, actual)
+    assert "OVERLAP_INTERVAL_SET_HASH_MISMATCH" in failures
+    assert "OVERLAP_PAIR_COUNT_MISMATCH" in failures
+    assert "OVERLAP_SAMPLE_CONTRACT_MISMATCH" in failures

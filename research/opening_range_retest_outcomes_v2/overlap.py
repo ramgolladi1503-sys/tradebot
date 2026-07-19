@@ -48,10 +48,13 @@ def build_overlap(ledger: dict[str, Any]) -> dict[str, Any]:
             "overlapping_pair_count": pairs,
             "max_simultaneous_candidates": max_open,
             "symbol_counts": dict(Counter(item["symbol"] for item in intervals)),
+            "direction_counts": dict(Counter(item["direction"] for item in intervals)),
             "symbol_direction_counts": dict(Counter(f"{item['symbol']}:{item['direction']}" for item in intervals)),
+            "complete_session_cluster_counts": dict(Counter(item["session_date"] for item in intervals)),
             "session_cluster_counts": dict(Counter(item["session_date"] for item in intervals).most_common(25)),
             "sample_truncated": len(events) > 500,
             "sample_count": min(len(events), 500),
+            "sample": events[:500],
             "overlap_evidence_intervals": events[:500],
         }
     return {

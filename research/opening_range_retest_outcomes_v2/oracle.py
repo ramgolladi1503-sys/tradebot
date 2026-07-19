@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import subprocess
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
@@ -11,7 +12,10 @@ from typing import Any
 import pandas as pd
 
 from research.opening_range_retest_outcomes_v2.contract import (
+    CONTRACT_VERSION,
     HORIZONS_MINUTES,
+    IMPLEMENTATION_TREE_HASH_ALGORITHM,
+    IMPLEMENTATION_TREE_PATHS,
     INPUT_CANDIDATE_COUNT,
     INPUT_CANDIDATE_CORE_HASH,
     INPUT_CANDIDATE_PROVENANCE_HASH,
@@ -49,6 +53,8 @@ SOURCE_COLUMNS = [
     "source_endpoint",
 ]
 CLAIM_BOUNDARY = {"DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL", "NOT_PROFITABILITY", "NOT_PAPER_OR_LIVE_READY"}
+PORTABLE_CONTRACT_EXCLUDE = {"contract_hash", "diagnostic_source_authority_root", "diagnostic_generation_commit_sha"}
+EVIDENCE_PREFIXES = ("docs/agent_reviews/opening_range_retest_outcome_",)
 
 
 def cbytes(payload: Any) -> bytes:
@@ -87,12 +93,18 @@ def verify_input_bundle(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, A
     source = load_json(artifact_dir / INPUT_FILES["source_manifest"])
     ledger = load_json(artifact_dir / INPUT_FILES["candidate_ledger"])
     summary = load_json(artifact_dir / INPUT_FILES["phase1_summary"])
+    reconciliation = load_json(artifact_dir / INPUT_FILES["reconciliation"])
+    certification_text = (artifact_dir / INPUT_FILES["phase1_certification"]).read_text(encoding="utf-8")
     if source.get("record_count") != INPUT_SOURCE_COUNT or source.get("source_manifest_semantic_hash") != INPUT_SOURCE_HASH:
         failures.append("INPUT_SOURCE_MANIFEST_MISMATCH")
     if ledger.get("candidate_count") != INPUT_CANDIDATE_COUNT or ledger.get("candidate_core_semantic_hash") != INPUT_CANDIDATE_CORE_HASH or ledger.get("candidate_provenance_semantic_hash") != INPUT_CANDIDATE_PROVENANCE_HASH:
         failures.append("INPUT_CANDIDATE_LEDGER_MISMATCH")
     if summary.get("decision") != "ORB_PHASE1_V2_RECERTIFIED":
         failures.append("INPUT_SUMMARY_VERDICT_MISMATCH")
+    if reconciliation.get("decision") != "UNAFFECTED_SUBSET_RECONCILED" or reconciliation.get("v1_unaffected_candidate_count") != 2192 or reconciliation.get("v2_unaffected_candidate_count") != 2192:
+        failures.append("INPUT_RECONCILIATION_MISMATCH")
+    if "- decision: ORB_PHASE1_V2_RECERTIFIED" not in certification_text or "NOT_ORB_PHASE1_V2_RECERTIFIED" in certification_text:
+        failures.append("INPUT_CERTIFICATION_MISMATCH")
     return source, ledger, summary, sidecars, failures
 
 
@@ -182,6 +194,56 @@ def join_failure(candidate: dict[str, Any], source: dict[str, Any] | None) -> st
         return "SOURCE_PROVENANCE_MISMATCH"
     checks = [prov.get("source_record_id") == source.get("source_record_id"), prov.get("source_logical_path") == source.get("logical_path"), prov.get("source_actual_sha256") == source.get("actual_sha256"), prov.get("source_symbol") == source.get("symbol"), prov.get("source_session_date") == source.get("session_date"), prov.get("source_manifest_semantic_hash") == INPUT_SOURCE_HASH, prov.get("source_manifest_version") == "v2", core.get("symbol") == source.get("symbol"), core.get("session_date") == source.get("session_date")]
     return None if all(checks) else "SOURCE_PROVENANCE_MISMATCH"
+
+
+def _run_git(repo_root: Path, args: list[str]) -> str:
+    return subprocess.run(["git", *args], cwd=repo_root, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _implementation_tree_hash(repo_root: Path, rev: str) -> str:
+    stdout = _run_git(repo_root, ["ls-tree", "-r", rev, "--", *IMPLEMENTATION_TREE_PATHS])
+    return shab(stdout.encode("utf-8"))
+
+
+def verify_contract_and_lineage(contract: dict[str, Any], repo_root: Path) -> list[str]:
+    failures = []
+    portable = {k: v for k, v in contract.items() if k not in PORTABLE_CONTRACT_EXCLUDE}
+    if shab(cbytes(portable)) != contract.get("contract_hash"):
+        failures.append("CONTRACT_SELF_HASH_MISMATCH")
+    expected = {
+        "contract_version": CONTRACT_VERSION,
+        "implementation_tree_hash_algorithm": IMPLEMENTATION_TREE_HASH_ALGORITHM,
+        "horizons_minutes": list(HORIZONS_MINUTES),
+        "inputs": {
+            "source_count": INPUT_SOURCE_COUNT,
+            "source_semantic_hash": INPUT_SOURCE_HASH,
+            "candidate_count": INPUT_CANDIDATE_COUNT,
+            "candidate_core_semantic_hash": INPUT_CANDIDATE_CORE_HASH,
+            "candidate_provenance_semantic_hash": INPUT_CANDIDATE_PROVENANCE_HASH,
+        },
+    }
+    for key, value in expected.items():
+        if contract.get(key) != value:
+            failures.append("CONTRACT_FIELD_MISMATCH")
+            break
+    frozen = str(contract.get("frozen_code_sha", ""))
+    head = _run_git(repo_root, ["rev-parse", "HEAD"])
+    try:
+        subprocess.run(["git", "merge-base", "--is-ancestor", frozen, head], cwd=repo_root, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError:
+        failures.append("FROZEN_CODE_SHA_NOT_ANCESTOR")
+    try:
+        frozen_tree = _implementation_tree_hash(repo_root, frozen)
+        head_tree = _implementation_tree_hash(repo_root, head)
+    except subprocess.CalledProcessError:
+        failures.append("IMPLEMENTATION_TREE_HASH_MISMATCH")
+    else:
+        if frozen_tree != contract.get("implementation_tree_hash") or head_tree != contract.get("implementation_tree_hash"):
+            failures.append("IMPLEMENTATION_TREE_HASH_MISMATCH")
+    changed = _run_git(repo_root, ["diff", "--name-only", f"{frozen}..HEAD"]).splitlines()
+    if any(not path.startswith(EVIDENCE_PREFIXES) for path in changed):
+        failures.append("POST_FREEZE_UNEXPECTED_PATH")
+    return failures
 
 
 def measure(candidate: dict[str, Any], source: dict[str, Any], frame: pd.DataFrame, contract: dict[str, Any], source_failure: str | None = None) -> dict[str, Any]:
@@ -278,19 +340,181 @@ def recompute_records(artifact_dir: Path, source_root: Path, contract: dict[str,
 
 
 def recompute_summary(records: list[dict[str, Any]], ledger_decision: str, contract_hash: str, ledger_hash: str) -> dict[str, Any]:
-    from research.opening_range_retest_outcomes_v2.engine import summarize  # summary formatting is compared after record recomputation
-
-    return summarize({"records": records, "decision": ledger_decision, "contract_hash": contract_hash, "outcome_ledger_hash": ledger_hash, "candidate_count": len(records)})
+    reason_counts = Counter(record.get("terminal_reason") for record in records)
+    by_horizon: dict[str, Counter[str]] = {str(h): Counter() for h in HORIZONS_MINUTES}
+    values: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
+    mfes: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
+    maes: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
+    breakdowns: dict[str, dict[str, Counter[str]]] = {str(h): {"symbol": Counter(), "direction": Counter(), "symbol_direction": Counter(), "calendar_year": Counter()} for h in HORIZONS_MINUTES}
+    for record in records:
+        core = record["candidate_core"]
+        year = str(core["session_date"])[:4]
+        for horizon in map(str, HORIZONS_MINUTES):
+            payload = record.get("horizons", {}).get(horizon)
+            if not payload:
+                by_horizon[horizon]["MISSING_HORIZON_RECORD"] += 1
+                continue
+            by_horizon[horizon][payload["status"]] += 1
+            if payload["status"] == "MEASURED":
+                values[horizon].append(payload["directional_underlying_return"])
+                mfes[horizon].append(payload["mfe"])
+                maes[horizon].append(payload["mae"])
+                breakdowns[horizon]["symbol"][core["symbol"]] += 1
+                breakdowns[horizon]["direction"][core["direction"]] += 1
+                breakdowns[horizon]["symbol_direction"][f"{core['symbol']}:{core['direction']}"] += 1
+                breakdowns[horizon]["calendar_year"][year] += 1
+    stats = {h: _stats(vals) | {"mfe": _stats(mfes[h]), "mae": _stats(maes[h]), "breakdowns": {k: dict(v) for k, v in breakdowns[h].items()}} for h, vals in values.items()}
+    conservation = {h: sum(c.values()) for h, c in by_horizon.items()}
+    decision = "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED" if ledger_decision == "ORB_OUTCOME_LEDGER_V2_CERTIFIED" and all(v == INPUT_CANDIDATE_COUNT for v in conservation.values()) else "ORB_OUTCOMES_V2_NOT_CERTIFIED"
+    summary = {
+        "schema_version": 2,
+        "mode": "ORB_OUTCOME_SUMMARY_V2",
+        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
+        "decision": decision,
+        "reason": "summarized certified outcome ledger without profitability or execution claims",
+        "timestamp": "2026-07-19T00:00:00Z",
+        "source": "opening_range_retest_outcome_ledger_v2.json",
+        "contract_hash": contract_hash,
+        "outcome_ledger_hash": ledger_hash,
+        "candidate_count": len(records),
+        "terminal_reason_counts": dict(reason_counts),
+        "horizon_status_counts": {h: dict(c) for h, c in by_horizon.items()},
+        "horizon_conservation": conservation,
+        "descriptive_directional_return_stats": stats,
+        "claim_boundary": ["DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL", "NOT_PROFITABILITY", "NOT_PAPER_OR_LIVE_READY"],
+        **safety_fields(),
+    }
+    summary["summary_hash"] = shab(cbytes({k: v for k, v in summary.items() if k != "summary_hash"}))
+    return summary
 
 
 def recompute_overlap(records: list[dict[str, Any]]) -> dict[str, Any]:
-    from research.opening_range_retest_outcomes_v2.overlap import build_overlap
+    by_horizon: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        entry = record.get("legal_entry") or {}
+        if entry.get("status") != "LEGAL_ENTRY_FOUND":
+            continue
+        for horizon, payload in record.get("horizons", {}).items():
+            if payload.get("status") != "MEASURED":
+                continue
+            by_horizon.setdefault(horizon, []).append(
+                {
+                    "candidate_id": record["candidate_id"],
+                    "symbol": record["candidate_core"]["symbol"],
+                    "direction": record["candidate_core"]["direction"],
+                    "session_date": record["candidate_core"]["session_date"],
+                    "start": entry["start"],
+                    "end": payload["terminal_end"],
+                }
+            )
+    horizons = {}
+    for horizon, intervals in by_horizon.items():
+        events = []
+        open_items: list[dict[str, Any]] = []
+        pairs = 0
+        max_open = 0
+        for item in sorted(intervals, key=lambda x: (x["start"], x["end"], x["candidate_id"])):
+            start = pd.Timestamp(item["start"])
+            open_items = [active for active in open_items if pd.Timestamp(active["end"]) > start]
+            pairs += len(open_items)
+            open_items.append(item)
+            max_open = max(max_open, len(open_items))
+            events.append(item)
+        horizons[horizon] = {
+            "interval_count": len(intervals),
+            "complete_interval_count": len(events),
+            "complete_interval_set_hash": shab(cbytes(events)),
+            "overlapping_pair_count": pairs,
+            "max_simultaneous_candidates": max_open,
+            "symbol_counts": dict(Counter(item["symbol"] for item in intervals)),
+            "direction_counts": dict(Counter(item["direction"] for item in intervals)),
+            "symbol_direction_counts": dict(Counter(f"{item['symbol']}:{item['direction']}" for item in intervals)),
+            "complete_session_cluster_counts": dict(Counter(item["session_date"] for item in intervals)),
+            "session_cluster_counts": dict(Counter(item["session_date"] for item in intervals).most_common(25)),
+            "sample_truncated": len(events) > 500,
+            "sample_count": min(len(events), 500),
+            "sample": events[:500],
+            "overlap_evidence_intervals": events[:500],
+        }
+    return {
+        "schema_version": 1,
+        "mode": "ORB_OUTCOME_OVERLAP_V2",
+        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
+        "decision": "ORB_OUTCOME_OVERLAP_REPORTED",
+        "reason": "reported half-open interval overlap diagnostics without filtering descriptive candidates",
+        "timestamp": "2026-07-19T00:00:00Z",
+        "source": "opening_range_retest_outcome_ledger_v2.json",
+        "horizons": horizons,
+        **safety_fields(),
+    }
 
-    return build_overlap({"records": records})
+
+def _quantile(vals: list[float], q: float) -> float | None:
+    if not vals:
+        return None
+    ordered = sorted(vals)
+    pos = (len(ordered) - 1) * q
+    lo = math.floor(pos)
+    hi = math.ceil(pos)
+    if lo == hi:
+        return round(ordered[lo], 12)
+    return round(ordered[lo] * (hi - pos) + ordered[hi] * (pos - lo), 12)
 
 
-def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str, Any], ledger: dict[str, Any], summary: dict[str, Any], overlap: dict[str, Any], paths: dict[str, Path]) -> dict[str, Any]:
+def _stats(vals: list[float]) -> dict[str, Any]:
+    return {
+        "count": len(vals),
+        "mean": round(sum(vals) / len(vals), 12) if vals else None,
+        "median": _quantile(vals, 0.5),
+        "min": round(min(vals), 12) if vals else None,
+        "max": round(max(vals), 12) if vals else None,
+        "p05": _quantile(vals, 0.05),
+        "p25": _quantile(vals, 0.25),
+        "p75": _quantile(vals, 0.75),
+        "p95": _quantile(vals, 0.95),
+        "positive": sum(v > 0 for v in vals),
+        "zero": sum(v == 0 for v in vals),
+        "negative": sum(v < 0 for v in vals),
+    }
+
+
+def summary_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
     failures = []
+    if expected.get("terminal_reason_counts") != actual.get("terminal_reason_counts") or expected.get("horizon_status_counts") != actual.get("horizon_status_counts"):
+        failures.append("SUMMARY_STATUS_COUNT_MISMATCH")
+    if expected.get("summary_hash") != actual.get("summary_hash"):
+        failures.append("SUMMARY_HASH_MISMATCH")
+    if expected.get("descriptive_directional_return_stats") != actual.get("descriptive_directional_return_stats"):
+        failures.extend(["SUMMARY_MEAN_MISMATCH", "SUMMARY_MEDIAN_MISMATCH", "SUMMARY_QUANTILE_MISMATCH", "SUMMARY_SIGN_COUNT_MISMATCH", "SUMMARY_MFE_MISMATCH", "SUMMARY_MAE_MISMATCH", "SUMMARY_BREAKDOWN_MISMATCH"])
+    if {k: v for k, v in expected.items() if k != "summary_hash"} != {k: v for k, v in actual.items() if k != "summary_hash"} and not failures:
+        failures.append("SUMMARY_RECOMPUTE_MISMATCH")
+    return list(dict.fromkeys(failures))
+
+
+def overlap_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
+    failures = []
+    for horizon, item in expected.get("horizons", {}).items():
+        other = actual.get("horizons", {}).get(horizon, {})
+        if item.get("complete_interval_set_hash") != other.get("complete_interval_set_hash"):
+            failures.append("OVERLAP_INTERVAL_SET_HASH_MISMATCH")
+        if item.get("overlapping_pair_count") != other.get("overlapping_pair_count"):
+            failures.append("OVERLAP_PAIR_COUNT_MISMATCH")
+        if item.get("max_simultaneous_candidates") != other.get("max_simultaneous_candidates"):
+            failures.append("OVERLAP_MAX_CONCURRENCY_MISMATCH")
+        if item.get("direction_counts") != other.get("direction_counts"):
+            failures.append("OVERLAP_DIRECTION_COUNT_MISMATCH")
+        if item.get("complete_session_cluster_counts") != other.get("complete_session_cluster_counts"):
+            failures.append("OVERLAP_SESSION_COUNT_MISMATCH")
+        if item.get("sample_count") != other.get("sample_count") or item.get("sample_truncated") != other.get("sample_truncated") or item.get("sample") != other.get("sample"):
+            failures.append("OVERLAP_SAMPLE_CONTRACT_MISMATCH")
+    if expected != actual:
+        failures.append("OVERLAP_RECOMPUTE_MISMATCH")
+    return list(dict.fromkeys(failures))
+
+
+def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str, Any], ledger: dict[str, Any], summary: dict[str, Any], overlap: dict[str, Any], controls: dict[str, Any] | None, paths: dict[str, Path]) -> dict[str, Any]:
+    failures = []
+    failures.extend(verify_contract_and_lineage(contract, Path.cwd()))
     records, joins, source_failures, input_failures = recompute_records(artifact_dir, source_root, contract)
     failures.extend(input_failures)
     if records != ledger.get("records"):
@@ -299,11 +523,11 @@ def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str
     if ledger_hash != ledger.get("outcome_ledger_hash"):
         failures.append("OUTCOME_LEDGER_HASH_MISMATCH")
     expected_summary = recompute_summary(records, ledger.get("decision"), ledger.get("contract_hash"), ledger.get("outcome_ledger_hash"))
-    if {k: v for k, v in expected_summary.items() if k != "summary_hash"} != {k: v for k, v in summary.items() if k != "summary_hash"}:
-        failures.append("SUMMARY_RECOMPUTE_MISMATCH")
+    failures.extend(summary_failures(expected_summary, summary))
     expected_overlap = recompute_overlap(records)
-    if expected_overlap != overlap:
-        failures.append("OVERLAP_RECOMPUTE_MISMATCH")
+    failures.extend(overlap_failures(expected_overlap, overlap))
+    if not controls or controls.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED" or controls.get("control_count", 0) < 70 or controls.get("failures"):
+        failures.append("NEGATIVE_CONTROL_MATRIX_MISMATCH")
     sidecars = {name: verify_sidecar(path) for name, path in paths.items()}
     if not all(v["sidecar_match"] for v in sidecars.values()):
         failures.append("ARTIFACT_SIDECAR_MISMATCH")
@@ -318,4 +542,4 @@ def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str
     if any(key in cbytes(obj).decode("utf-8").lower() for obj in (contract, summary, ledger, overlap) for key in forbidden):
         failures.append("FORBIDDEN_CLAIM_FOUND")
     verdict = "ORB_OUTCOMES_V2_AUDIT_CERTIFIED" if not failures and not source_failures else "ORB_OUTCOMES_V2_AUDIT_NOT_CERTIFIED"
-    return {"schema_version": 2, "mode": "ORB_OUTCOME_AUDIT_V2", "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES", "decision": verdict, "verdict": verdict, "reason": "standalone oracle reopened inputs and sources and recomputed records, summary, overlap, IDs, hashes, and sidecars", "timestamp": "2026-07-19T00:00:00Z", "source": "opening_range_retest_outcome_ledger_v2.json", "failures": failures, "records_recomputed": len(records), "exact_record_matches": len(records) if records == ledger.get("records") else 0, "candidate_conservation": "CANDIDATE_CONSERVATION_PASS" if conservation_passed else "CANDIDATE_CONSERVATION_FAIL", "source_join_verified_count": joins, "source_failure_counts": dict(source_failures), "input_failures": input_failures, "horizon_conservation": horizon_conservation, "recomputed_outcome_ledger_hash": ledger_hash, "summary_recomputed": "SUMMARY_RECOMPUTE_MISMATCH" not in failures, "overlap_recomputed": "OVERLAP_RECOMPUTE_MISMATCH" not in failures, "sidecars": sidecars, "sidecar_verdict": "ARTIFACT_SIDECARS_CERTIFIED" if "ARTIFACT_SIDECAR_MISMATCH" not in failures else "ARTIFACT_SIDECARS_NOT_CERTIFIED", **safety_fields()}
+    return {"schema_version": 2, "mode": "ORB_OUTCOME_AUDIT_V2", "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES", "decision": verdict, "verdict": verdict, "reason": "standalone oracle reopened inputs and sources and recomputed records, summary, overlap, IDs, hashes, controls, and sidecars", "timestamp": "2026-07-19T00:00:00Z", "source": "opening_range_retest_outcome_ledger_v2.json", "failures": list(dict.fromkeys(failures)), "negative_control_verdict": controls.get("verdict") if controls else None, "records_recomputed": len(records), "exact_record_matches": len(records) if records == ledger.get("records") else 0, "candidate_conservation": "CANDIDATE_CONSERVATION_PASS" if conservation_passed else "CANDIDATE_CONSERVATION_FAIL", "source_join_verified_count": joins, "source_failure_counts": dict(source_failures), "input_failures": input_failures, "horizon_conservation": horizon_conservation, "recomputed_outcome_ledger_hash": ledger_hash, "summary_recomputed": not any(f.startswith("SUMMARY_") for f in failures), "overlap_recomputed": "OVERLAP_RECOMPUTE_MISMATCH" not in failures, "sidecars": sidecars, "sidecar_verdict": "ARTIFACT_SIDECARS_CERTIFIED" if "ARTIFACT_SIDECAR_MISMATCH" not in failures else "ARTIFACT_SIDECARS_NOT_CERTIFIED", **safety_fields()}
