@@ -409,7 +409,7 @@ def _exec_source_path(case: ControlCase) -> Execution:
             outside.mkdir()
             (root / "runtime" / "upstox_candidate_replay").symlink_to(outside)
         elif case.control_id == "SOURCE_ABSOLUTE_PATH":
-            src["logical_path"] = str((root / "outside.parquet").resolve())
+            src["logical_path"] = "/tmp/orb_outcome_control_outside.parquet"
         elif case.control_id == "SOURCE_TRAVERSAL_PATH":
             src["logical_path"] = "runtime/upstox_candidate_replay/../evil.parquet"
         try:
