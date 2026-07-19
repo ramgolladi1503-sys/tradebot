@@ -13,6 +13,13 @@ INPUT_CANDIDATE_PROVENANCE_HASH = "b198ebab71cdc4b097360fb2280f2da6ac2ad1595c0da
 INPUT_SOURCE_COUNT = 1512
 INPUT_CANDIDATE_COUNT = 2215
 EVIDENCE_TIMESTAMP = "2026-07-19T00:00:00Z"
+IMPLEMENTATION_TREE_PATHS = (
+    "research/opening_range_retest_outcomes_v2",
+    "scripts/generate_opening_range_retest_outcomes_v2.py",
+    "scripts/audit_opening_range_retest_outcomes_v2.py",
+    "tests/test_opening_range_retest_outcomes_v2.py",
+)
+IMPLEMENTATION_TREE_HASH_ALGORITHM = "sha256(git-ls-tree-r HEAD -- implementation-tree-paths)"
 
 
 def canonical_json_bytes(payload: Any) -> bytes:
@@ -52,9 +59,29 @@ def evidence_fields(*, mode: str, decision: str, reason: str, source: str) -> di
     }
 
 
-def build_contract(*, source_authority_root: str, base_main_sha: str, execution_commit_sha: str) -> dict[str, Any]:
+def portable_contract_payload(contract: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: v
+        for k, v in contract.items()
+        if k
+        not in {
+            "contract_hash",
+            "diagnostic_source_authority_root",
+            "diagnostic_generation_commit_sha",
+        }
+    }
+
+
+def build_contract(
+    *,
+    source_authority_root: str,
+    base_main_sha: str,
+    execution_commit_sha: str,
+    frozen_code_sha: str,
+    implementation_tree_hash: str,
+) -> dict[str, Any]:
     contract = {
-        "schema_version": 1,
+        "schema_version": 2,
         "contract_version": CONTRACT_VERSION,
         **evidence_fields(
             mode="ORB_OUTCOME_CONTRACT_V2",
@@ -63,7 +90,11 @@ def build_contract(*, source_authority_root: str, base_main_sha: str, execution_
             source="opening_range_retest_causal_replay_summary_v2.json",
         ),
         "base_main_sha": base_main_sha,
-        "execution_commit_sha": execution_commit_sha,
+        "frozen_code_sha": frozen_code_sha,
+        "implementation_tree_hash": implementation_tree_hash,
+        "implementation_tree_hash_algorithm": IMPLEMENTATION_TREE_HASH_ALGORITHM,
+        "implementation_tree_paths": list(IMPLEMENTATION_TREE_PATHS),
+        "diagnostic_generation_commit_sha": execution_commit_sha,
         "inputs": {
             "source_count": INPUT_SOURCE_COUNT,
             "source_semantic_hash": INPUT_SOURCE_HASH,
@@ -72,12 +103,12 @@ def build_contract(*, source_authority_root: str, base_main_sha: str, execution_
             "candidate_provenance_semantic_hash": INPUT_CANDIDATE_PROVENANCE_HASH,
         },
         "source_authority": {
-            "root": source_authority_root,
             "logical_prefix": "runtime/upstox_candidate_replay",
             "mutate": False,
             "copy": False,
             "symlink": False,
         },
+        "diagnostic_source_authority_root": source_authority_root,
         "bars": {
             "label": "start-labelled 1-minute bars",
             "session_timezone": "Asia/Kolkata",
@@ -123,5 +154,5 @@ def build_contract(*, source_authority_root: str, base_main_sha: str, execution_
         ],
         **safety_fields(),
     }
-    contract["contract_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in contract.items() if k != "contract_hash"}))
+    contract["contract_hash"] = sha256_bytes(canonical_json_bytes(portable_contract_payload(contract)))
     return contract

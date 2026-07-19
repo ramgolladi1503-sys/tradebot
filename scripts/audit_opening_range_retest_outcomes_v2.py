@@ -12,12 +12,16 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from research.opening_range_retest_outcomes_v2.audit import audit_outputs
-from research.opening_range_retest_outcomes_v2.engine import _load_json
+
+
+def _load_json(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--artifact-dir", type=Path, default=PROJECT_ROOT / "docs" / "agent_reviews")
+    parser.add_argument("--source-project-root", type=Path, default=PROJECT_ROOT)
     args = parser.parse_args()
     base = args.artifact_dir
     paths = {
@@ -34,6 +38,8 @@ def main() -> int:
         summary=_load_json(paths["summary"]),
         overlap=_load_json(paths["overlap"]),
         paths={k: v for k, v in paths.items() if k != "audit"},
+        artifact_dir=base,
+        source_project_root=args.source_project_root,
     )
     print(json.dumps(audit, sort_keys=True))
     return 0 if audit["verdict"] == "ORB_OUTCOMES_V2_AUDIT_CERTIFIED" else 2

@@ -14,13 +14,28 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from research.opening_range_retest_outcomes_v2.artifacts import write_json
 from research.opening_range_retest_outcomes_v2.audit import audit_outputs
-from research.opening_range_retest_outcomes_v2.contract import EVIDENCE_TIMESTAMP, build_contract, canonical_json_bytes, sha256_bytes, sha256_file
+from research.opening_range_retest_outcomes_v2.contract import EVIDENCE_TIMESTAMP, IMPLEMENTATION_TREE_PATHS, build_contract, canonical_json_bytes, sha256_bytes, sha256_file
 from research.opening_range_retest_outcomes_v2.engine import build_ledger, summarize
 from research.opening_range_retest_outcomes_v2.overlap import build_overlap
 
 
 def _git_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _git_status_short() -> str:
+    return subprocess.run(["git", "status", "--short"], cwd=PROJECT_ROOT, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def implementation_tree_hash(rev: str = "HEAD") -> str:
+    proc = subprocess.run(
+        ["git", "ls-tree", "-r", rev, "--", *IMPLEMENTATION_TREE_PATHS],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return sha256_bytes(proc.stdout.encode("utf-8"))
 
 
 def _stable(payload: object) -> object:
@@ -31,12 +46,19 @@ def _stable(payload: object) -> object:
     return payload
 
 
-def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str) -> dict[str, object]:
+def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str, frozen_code_sha: str, require_clean: bool = True) -> dict[str, object]:
+    head = _git_head()
+    if head != frozen_code_sha:
+        raise RuntimeError(f"FROZEN_CODE_SHA_MISMATCH head={head} frozen={frozen_code_sha}")
+    if require_clean and _git_status_short():
+        raise RuntimeError("EVIDENCE_GENERATION_REQUIRES_CLEAN_WORKTREE")
     artifact_dir = PROJECT_ROOT / "docs" / "agent_reviews"
     contract = build_contract(
         source_authority_root=str((source_project_root / "runtime" / "upstox_candidate_replay").resolve()),
         base_main_sha=base_main_sha,
-        execution_commit_sha=_git_head(),
+        execution_commit_sha=head,
+        frozen_code_sha=frozen_code_sha,
+        implementation_tree_hash=implementation_tree_hash(head),
     )
     ledger = build_ledger(artifact_dir=artifact_dir, source_project_root=source_project_root, contract=contract)
     summary = summarize(ledger)
@@ -53,7 +75,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str)
         ("summary", paths["summary"], summary),
         ("overlap", paths["overlap"], overlap),
     ]}
-    audit = audit_outputs(contract=contract, ledger=ledger, summary=summary, overlap=overlap, paths=paths)
+    audit = audit_outputs(contract=contract, ledger=ledger, summary=summary, overlap=overlap, paths=paths, artifact_dir=artifact_dir, source_project_root=source_project_root)
     paths["audit"] = output_dir / "opening_range_retest_outcome_audit_v2.json"
     digests["audit"] = write_json(paths["audit"], audit)
     certification = output_dir / "opening_range_retest_outcome_certification_v2.md"
@@ -75,6 +97,9 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str)
                 f"- sidecar_verdict: {audit['sidecar_verdict']}",
                 f"- contract_hash: `{contract['contract_hash']}`",
                 f"- outcome_ledger_hash: `{ledger['outcome_ledger_hash']}`",
+                f"- summary_hash: `{summary['summary_hash']}`",
+                f"- frozen_code_sha: `{contract['frozen_code_sha']}`",
+                f"- implementation_tree_hash: `{contract['implementation_tree_hash']}`",
                 "",
                 "## Agent Work Contract",
                 "",
@@ -137,6 +162,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str)
                 f"- source_failure_counts: {ledger['source_failure_counts']}",
                 f"- terminal_reason_counts: {summary['terminal_reason_counts']}",
                 f"- horizon_status_counts: {summary['horizon_status_counts']}",
+                f"- horizon_conservation: {summary['horizon_conservation']}",
                 f"- sidecar_verdict: {audit['sidecar_verdict']}",
                 "",
                 "## Runtime Proof Required After Merge",
@@ -147,6 +173,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str)
                 "## What This PR Does Not Prove",
                 "",
                 "- Does not prove structural edge, profitability, option PnL, fill quality, slippage, latency, capital allocation, paper readiness, live readiness, broker correctness, or production promotion.",
+                "- This PR supersedes the implementation direction and stale evidence in PR #674. PR #674 itself was not modified.",
                 "",
                 "## Human Approval",
                 "",
@@ -166,14 +193,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-project-root", type=Path, required=True)
     parser.add_argument("--base-main-sha", required=True)
+    parser.add_argument("--frozen-code-sha", required=True)
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "docs" / "agent_reviews")
     parser.add_argument("--determinism-dir-a", type=Path, default=PROJECT_ROOT / ".runtime" / "orb_outcomes_v2_a")
     parser.add_argument("--determinism-dir-b", type=Path, default=PROJECT_ROOT / ".runtime" / "orb_outcomes_v2_b")
     args = parser.parse_args()
-    a = generate(args.determinism_dir_a, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha)
-    b = generate(args.determinism_dir_b, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha)
+    a = generate(args.determinism_dir_a, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha, frozen_code_sha=args.frozen_code_sha)
+    b = generate(args.determinism_dir_b, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha, frozen_code_sha=args.frozen_code_sha)
     deterministic = a["projection_hash"] == b["projection_hash"]
-    final = generate(args.output_dir, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha)
+    final = generate(args.output_dir, source_project_root=args.source_project_root, base_main_sha=args.base_main_sha, frozen_code_sha=args.frozen_code_sha)
     verdict = (
         "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED"
         if deterministic

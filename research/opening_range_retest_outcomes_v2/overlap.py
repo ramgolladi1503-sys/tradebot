@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 
 from research.opening_range_retest_outcomes_v2.contract import evidence_fields, safety_fields
+from research.opening_range_retest_outcomes_v2.contract import canonical_json_bytes, sha256_bytes
 
 
 def build_overlap(ledger: dict[str, Any]) -> dict[str, Any]:
@@ -42,11 +43,15 @@ def build_overlap(ledger: dict[str, Any]) -> dict[str, Any]:
             events.append(item)
         result[horizon] = {
             "interval_count": len(intervals),
+            "complete_interval_count": len(events),
+            "complete_interval_set_hash": sha256_bytes(canonical_json_bytes(events)),
             "overlapping_pair_count": pairs,
             "max_simultaneous_candidates": max_open,
             "symbol_counts": dict(Counter(item["symbol"] for item in intervals)),
             "symbol_direction_counts": dict(Counter(f"{item['symbol']}:{item['direction']}" for item in intervals)),
             "session_cluster_counts": dict(Counter(item["session_date"] for item in intervals).most_common(25)),
+            "sample_truncated": len(events) > 500,
+            "sample_count": min(len(events), 500),
             "overlap_evidence_intervals": events[:500],
         }
     return {

@@ -12,7 +12,7 @@ from research.opening_range_retest_outcomes_v2.overlap import build_overlap
 
 
 def _frame() -> pd.DataFrame:
-    ts = pd.date_range("2026-07-06 09:15", periods=40, freq="min")
+    ts = pd.date_range("2026-07-06 09:15", periods=375, freq="min")
     return pd.DataFrame(
         {
             "timestamp": ts,
@@ -63,8 +63,12 @@ def _candidate(direction: str = "BUY_CALL", ready: str = "2026-07-06T09:20:00+05
         },
         "source_provenance": {
             "source_record_id": "source",
+            "source_logical_path": "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet",
             "source_actual_sha256": "sha",
-            "source_manifest_semantic_hash": "manifest",
+            "source_manifest_semantic_hash": "243efbbda2dfbe90817408e50a54c5377f45dbb86db460918edb334fc57d3039",
+            "source_manifest_version": "v2",
+            "source_session_date": "2026-07-06",
+            "source_symbol": "NIFTY",
         },
     }
 
@@ -106,10 +110,12 @@ def test_missing_exact_horizon_minute_does_not_fall_forward(tmp_path: Path) -> N
 
 def test_no_legal_entry_for_final_bar_ready(tmp_path: Path) -> None:
     source, frame = _source_file(tmp_path)
-    candidate = _candidate(ready="2026-07-06T09:54:00+05:30")
+    candidate = _candidate(ready="2026-07-06T15:30:00+05:30")
     candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
     outcome = measure_candidate(candidate, source, frame, "contract")
     assert outcome["terminal_reason"] == "NO_LEGAL_ENTRY_BAR"
+    assert set(outcome["horizons"]) == {"1", "3", "5", "15", "30"}
+    assert all(item["status"] == "NO_LEGAL_ENTRY_BAR" for item in outcome["horizons"].values())
 
 
 def test_source_byte_mismatch_fails_before_measurement(tmp_path: Path) -> None:
@@ -144,9 +150,45 @@ def test_overlap_uses_half_open_adjacency() -> None:
 
 
 def test_contract_hash_is_stable() -> None:
-    a = build_contract(source_authority_root="/tmp/root", base_main_sha="base", execution_commit_sha="head")
-    b = build_contract(source_authority_root="/tmp/root", base_main_sha="base", execution_commit_sha="head")
+    a = build_contract(source_authority_root="/tmp/root", base_main_sha="base", execution_commit_sha="head", frozen_code_sha="frozen", implementation_tree_hash="tree")
+    b = build_contract(source_authority_root="/other/root", base_main_sha="base", execution_commit_sha="other", frozen_code_sha="frozen", implementation_tree_hash="tree")
     assert a["contract_hash"] == b["contract_hash"]
     assert a["decision"] == "ORB_OUTCOME_CONTRACT_V2_FROZEN"
-    assert sha256_bytes(canonical_json_bytes({k: v for k, v in a.items() if k != "contract_hash"})) == a["contract_hash"]
+    assert a["diagnostic_source_authority_root"] != b["diagnostic_source_authority_root"]
 
+
+def test_unsupported_direction_fails_closed(tmp_path: Path) -> None:
+    source, frame = _source_file(tmp_path)
+    candidate = _candidate("SELL_CALL")
+    candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
+    outcome = measure_candidate(candidate, source, frame, "contract")
+    assert outcome["terminal_reason"] == "CANDIDATE_DIRECTION_UNSUPPORTED"
+    assert outcome["measured_horizon_count"] == 0
+    assert len(outcome["horizons"]) == 5
+
+
+def test_outcome_id_includes_measured_horizon_count(tmp_path: Path) -> None:
+    source, frame = _source_file(tmp_path)
+    candidate = _candidate()
+    candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
+    outcome = measure_candidate(candidate, source, frame, "contract")
+    changed = dict(outcome)
+    changed["measured_horizon_count"] = 999
+    assert sha256_bytes(canonical_json_bytes({k: v for k, v in changed.items() if k != "outcome_id"})) != outcome["outcome_id"]
+
+
+def test_off_grid_readiness_fails_closed(tmp_path: Path) -> None:
+    source, frame = _source_file(tmp_path)
+    candidate = _candidate(ready="2026-07-06T09:20:30+05:30")
+    candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
+    outcome = measure_candidate(candidate, source, frame, "contract")
+    assert outcome["terminal_reason"] == "CANDIDATE_READY_OFF_GRID"
+
+
+def test_join_symbol_mismatch_fails_closed(tmp_path: Path) -> None:
+    source, frame = _source_file(tmp_path)
+    candidate = _candidate()
+    candidate["source_provenance"]["source_actual_sha256"] = source["actual_sha256"]
+    candidate["source_provenance"]["source_symbol"] = "BANKNIFTY"
+    outcome = measure_candidate(candidate, source, frame, "contract")
+    assert outcome["terminal_reason"] == "SOURCE_PROVENANCE_MISMATCH"

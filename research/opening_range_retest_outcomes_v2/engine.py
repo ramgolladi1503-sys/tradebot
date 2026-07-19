@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
@@ -21,11 +22,65 @@ from research.opening_range_retest_outcomes_v2.contract import (
     sha256_file,
 )
 
+INPUT_FILES = {
+    "source_manifest": "opening_range_retest_causal_replay_source_manifest_v2.json",
+    "candidate_ledger": "opening_range_retest_causal_replay_candidate_ledger_v2.json",
+    "phase1_summary": "opening_range_retest_causal_replay_summary_v2.json",
+    "reconciliation": "opening_range_retest_phase1_v2_reconciliation.json",
+    "phase1_certification": "opening_range_retest_phase1_v2_certification.md",
+}
+SOURCE_COLUMNS = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+ALLOWED_DIRECTIONS = {"BUY_CALL", "BUY_PUT"}
+FAIL_CLOSED_REASONS = {
+    "SOURCE_PROVENANCE_MISMATCH",
+    "SOURCE_VALIDATION_FAILED",
+    "CANDIDATE_TIMESTAMP_MALFORMED",
+    "CANDIDATE_TIMESTAMP_OUTSIDE_SESSION",
+    "CANDIDATE_READY_OFF_GRID",
+    "CANDIDATE_READY_BAR_MISSING",
+    "CANDIDATE_DIRECTION_UNSUPPORTED",
+    "NO_LEGAL_ENTRY_BAR",
+}
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     import json
 
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_sidecar_file(path: Path) -> dict[str, Any]:
+    sidecar = path.with_suffix(path.suffix + ".sha256")
+    actual = sha256_file(path)
+    expected = sidecar.read_text(encoding="utf-8").split()[0] if sidecar.exists() else None
+    if actual != expected:
+        raise ValueError(f"INPUT_SIDECAR_MISMATCH:{path.name}")
+    return {"path": str(path), "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": True}
+
+
+def verify_inputs(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    sidecars = {name: verify_sidecar_file(artifact_dir / filename) for name, filename in INPUT_FILES.items()}
+    source = _load_json(artifact_dir / INPUT_FILES["source_manifest"])
+    ledger = _load_json(artifact_dir / INPUT_FILES["candidate_ledger"])
+    summary = _load_json(artifact_dir / INPUT_FILES["phase1_summary"])
+    reconciliation = _load_json(artifact_dir / INPUT_FILES["reconciliation"])
+    if summary.get("decision") != "ORB_PHASE1_V2_RECERTIFIED":
+        raise ValueError("INPUT_CERTIFICATION_VERDICT_MISMATCH")
+    expected = {
+        "source": source.get("record_count") == INPUT_SOURCE_COUNT and source.get("source_manifest_semantic_hash") == INPUT_SOURCE_HASH,
+        "candidate_count": ledger.get("candidate_count") == INPUT_CANDIDATE_COUNT,
+        "candidate_core": ledger.get("candidate_core_semantic_hash") == INPUT_CANDIDATE_CORE_HASH,
+        "candidate_provenance": ledger.get("candidate_provenance_semantic_hash") == INPUT_CANDIDATE_PROVENANCE_HASH,
+        "reconciliation": reconciliation.get("decision") in {"ORB_PHASE1_V2_RECONCILED", "ORB_PHASE1_V2_RECERTIFIED", None},
+    }
+    if not all(expected.values()):
+        raise ValueError(f"ORB_PHASE1_V2_INPUT_CERTIFICATION_MISMATCH:{expected}")
+    return source, ledger, summary, sidecars
+
+
+def normalize_symbol(value: Any) -> str:
+    text = str(value).upper().strip()
+    return text.replace("NSE_INDEX|NIFTY BANK", "BANKNIFTY").replace("NSE_INDEX|NIFTY 50", "NIFTY").replace("BSE_INDEX|SENSEX", "SENSEX")
 
 
 def _ts(value: Any) -> pd.Timestamp:
@@ -39,34 +94,31 @@ def _iso_ist(value: pd.Timestamp) -> str:
     return f"{value.strftime('%Y-%m-%dT%H:%M:%S')}+05:30"
 
 
-def verify_inputs(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    source = _load_json(artifact_dir / "opening_range_retest_causal_replay_source_manifest_v2.json")
-    ledger = _load_json(artifact_dir / "opening_range_retest_causal_replay_candidate_ledger_v2.json")
-    summary = _load_json(artifact_dir / "opening_range_retest_causal_replay_summary_v2.json")
-    if summary.get("decision") != "ORB_PHASE1_V2_RECERTIFIED":
-        raise ValueError("INPUT_CERTIFICATION_VERDICT_MISMATCH")
-    expected = {
-        "source": source.get("record_count") == INPUT_SOURCE_COUNT and source.get("source_manifest_semantic_hash") == INPUT_SOURCE_HASH,
-        "candidate_count": ledger.get("candidate_count") == INPUT_CANDIDATE_COUNT,
-        "candidate_core": ledger.get("candidate_core_semantic_hash") == INPUT_CANDIDATE_CORE_HASH,
-        "candidate_provenance": ledger.get("candidate_provenance_semantic_hash") == INPUT_CANDIDATE_PROVENANCE_HASH,
-    }
-    if not all(expected.values()):
-        raise ValueError(f"ORB_PHASE1_V2_INPUT_CERTIFICATION_MISMATCH:{expected}")
-    return source, ledger, summary
+def _reject_symlink_components(root: Path, relative: Path) -> None:
+    cursor = root
+    for part in relative.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise ValueError("SOURCE_MISSING_OR_SYMLINK")
 
 
-def _read_source(record: dict[str, Any], source_project_root: Path) -> pd.DataFrame:
+def resolve_source_path(record: dict[str, Any], source_project_root: Path) -> Path:
     logical = Path(str(record["logical_path"]))
     if logical.is_absolute() or ".." in logical.parts or logical.parts[:2] != ("runtime", "upstox_candidate_replay"):
         raise ValueError("SOURCE_PATH_TRAVERSAL")
+    _reject_symlink_components(source_project_root, logical)
     path = (source_project_root / logical).resolve()
     allowed = (source_project_root / "runtime" / "upstox_candidate_replay").resolve()
     path.relative_to(allowed)
-    if path.is_symlink() or not path.is_file():
+    if not path.is_file():
         raise ValueError("SOURCE_MISSING_OR_SYMLINK")
     if sha256_file(path) != record["actual_sha256"] or path.stat().st_size != int(record["byte_size"]):
         raise ValueError("SOURCE_BYTE_IDENTITY_MISMATCH")
+    return path
+
+
+def read_source(record: dict[str, Any], source_project_root: Path) -> pd.DataFrame:
+    path = resolve_source_path(record, source_project_root)
     frame = pd.read_parquet(path)
     frame = frame.copy()
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="raise")
@@ -75,51 +127,114 @@ def _read_source(record: dict[str, Any], source_project_root: Path) -> pd.DataFr
     return frame
 
 
-def _validate_frame(frame: pd.DataFrame, source: dict[str, Any]) -> str | None:
+# Backward-compatible test import name.
+_read_source = read_source
+
+
+def validate_frame(frame: pd.DataFrame, source: dict[str, Any]) -> str | None:
+    if list(frame.columns) != SOURCE_COLUMNS:
+        return "SOURCE_SCHEMA_MISMATCH"
     if len(frame) != 375:
         return "SOURCE_TIMESTAMP_GAP"
     if frame["timestamp"].nunique() != len(frame) or not frame["timestamp"].is_monotonic_increasing:
         return "SOURCE_TIMESTAMP_GAP"
     if not (frame["timestamp"].diff().dropna() == pd.Timedelta(minutes=1)).all():
         return "SOURCE_TIMESTAMP_GAP"
+    if frame["timestamp"].iloc[0].strftime("%H:%M") != "09:15" or frame["timestamp"].iloc[-1].strftime("%H:%M") != "15:29":
+        return "SOURCE_TIMESTAMP_GAP"
     if sorted(frame["timestamp"].dt.date.astype(str).unique()) != [source["session_date"]]:
         return "SOURCE_SESSION_MISMATCH"
-    symbols = sorted(str(v).upper().replace("NSE_INDEX|NIFTY BANK", "BANKNIFTY").replace("NSE_INDEX|NIFTY 50", "NIFTY").replace("BSE_INDEX|SENSEX", "SENSEX") for v in frame["symbol"].dropna().unique())
+    symbols = sorted(normalize_symbol(v) for v in frame["symbol"].dropna().unique())
     if symbols != [source["symbol"]]:
         return "SOURCE_SYMBOL_MISMATCH"
+    numeric = frame[["open", "high", "low", "close"]]
+    if not numeric.map(lambda x: isinstance(x, (int, float)) and math.isfinite(float(x)) and float(x) > 0).all().all():
+        return "SOURCE_OHLC_INVALID"
     if not (frame["high"] >= frame[["open", "close"]].max(axis=1)).all() or not (frame["low"] <= frame[["open", "close"]].min(axis=1)).all():
-        return "SOURCE_TIMESTAMP_GAP"
+        return "SOURCE_OHLC_BOUNDS_INVALID"
     return None
 
 
-def measure_candidate(candidate: dict[str, Any], source: dict[str, Any], frame: pd.DataFrame, contract_hash: str) -> dict[str, Any]:
-    core = candidate["candidate_core"]
-    provenance = candidate["source_provenance"]
-    base = {
-        "candidate_id": candidate["candidate_id"],
-        "candidate_core": core,
-        "source_provenance": provenance,
-        "outcome_contract_hash": contract_hash,
+def _blank_horizons(reason: str) -> dict[str, Any]:
+    return {str(minutes): {"horizon_minutes": minutes, "status": reason, "reason": reason} for minutes in HORIZONS_MINUTES}
+
+
+def _finalize_record(record: dict[str, Any]) -> dict[str, Any]:
+    record["outcome_id"] = sha256_bytes(canonical_json_bytes({k: v for k, v in record.items() if k != "outcome_id"}))
+    return record
+
+
+def fail_record(candidate: dict[str, Any], source: dict[str, Any] | None, contract: dict[str, Any], reason: str, detail: str | None = None) -> dict[str, Any]:
+    record = {
+        "candidate_id": candidate.get("candidate_id"),
+        "candidate_core": candidate.get("candidate_core", {}),
+        "source_provenance": candidate.get("source_provenance", {}),
+        "source_manifest_record": source,
+        "outcome_contract_hash": contract["contract_hash"],
+        "frozen_code_sha": contract["frozen_code_sha"],
+        "implementation_tree_hash": contract["implementation_tree_hash"],
+        "terminal_reason": reason,
+        "terminal_detail": detail,
+        "same_timestamp_bar_disposition": "UNKNOWN",
+        "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR", "reason": reason},
+        "horizons": _blank_horizons(reason),
+        "measured_horizon_count": 0,
         **safety_fields(),
     }
-    if provenance.get("source_record_id") != source.get("source_record_id") or provenance.get("source_actual_sha256") != source.get("actual_sha256"):
-        return {**base, "terminal_reason": "SOURCE_PROVENANCE_MISMATCH", "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR"}, "horizons": {}}
+    return _finalize_record(record)
+
+
+def _join_failure(candidate: dict[str, Any], source: dict[str, Any] | None) -> str | None:
+    core = candidate.get("candidate_core", {})
+    provenance = candidate.get("source_provenance", {})
+    if source is None:
+        return "SOURCE_PROVENANCE_MISMATCH"
+    checks = {
+        "source_record_id": provenance.get("source_record_id") == source.get("source_record_id"),
+        "source_logical_path": provenance.get("source_logical_path") == source.get("logical_path"),
+        "source_actual_sha256": provenance.get("source_actual_sha256") == source.get("actual_sha256"),
+        "source_symbol": provenance.get("source_symbol") == source.get("symbol"),
+        "source_session_date": provenance.get("source_session_date") == source.get("session_date"),
+        "manifest_hash": provenance.get("source_manifest_semantic_hash") == INPUT_SOURCE_HASH,
+        "manifest_version": provenance.get("source_manifest_version") == "v2",
+        "core_symbol": core.get("symbol") == source.get("symbol"),
+        "core_session_date": core.get("session_date") == source.get("session_date"),
+    }
+    return None if all(checks.values()) else "SOURCE_PROVENANCE_MISMATCH"
+
+
+def measure_candidate(candidate: dict[str, Any], source: dict[str, Any], frame: pd.DataFrame, contract: dict[str, Any] | str, source_failure: str | None = None) -> dict[str, Any]:
+    if isinstance(contract, str):
+        contract = {"contract_hash": contract, "frozen_code_sha": "UNKNOWN", "implementation_tree_hash": "UNKNOWN"}
+    join_failure = _join_failure(candidate, source)
+    if join_failure:
+        return fail_record(candidate, source, contract, join_failure)
+    if source_failure:
+        return fail_record(candidate, source, contract, "SOURCE_VALIDATION_FAILED", source_failure)
+    core = candidate["candidate_core"]
+    if core.get("direction") not in ALLOWED_DIRECTIONS:
+        return fail_record(candidate, source, contract, "CANDIDATE_DIRECTION_UNSUPPORTED")
     try:
         ready = _ts(core["proposal_ready_at_iso"])
     except Exception:
-        return {**base, "terminal_reason": "CANDIDATE_TIMESTAMP_MALFORMED", "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR"}, "horizons": {}}
+        return fail_record(candidate, source, contract, "CANDIDATE_TIMESTAMP_MALFORMED")
     if ready.date().isoformat() != source["session_date"]:
-        return {**base, "terminal_reason": "CANDIDATE_TIMESTAMP_OUTSIDE_SESSION", "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR"}, "horizons": {}}
+        return fail_record(candidate, source, contract, "CANDIDATE_TIMESTAMP_OUTSIDE_SESSION")
+    completed_bar_start = ready - pd.Timedelta(minutes=1)
+    indexed = {row["timestamp"]: row for _, row in frame.iterrows()}
+    if ready.second or ready.microsecond or ready.nanosecond:
+        return fail_record(candidate, source, contract, "CANDIDATE_READY_OFF_GRID")
+    if completed_bar_start not in indexed:
+        return fail_record(candidate, source, contract, "CANDIDATE_READY_BAR_MISSING")
     later = frame[frame["timestamp"] > ready]
     same = frame[frame["timestamp"] == ready]
     if later.empty:
-        return {**base, "terminal_reason": "NO_LEGAL_ENTRY_BAR", "same_timestamp_bar_disposition": "SKIPPED_FOR_PRIMARY" if not same.empty else "ABSENT", "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR"}, "horizons": {}}
+        return fail_record(candidate, source, contract, "NO_LEGAL_ENTRY_BAR")
     entry = later.iloc[0]
     entry_start = entry["timestamp"]
     entry_open = float(entry["open"])
     if entry_open <= 0:
-        return {**base, "terminal_reason": "NO_LEGAL_ENTRY_BAR", "legal_entry": {"status": "NO_LEGAL_ENTRY_BAR"}, "horizons": {}}
-    indexed = {row["timestamp"]: row for _, row in frame.iterrows()}
+        return fail_record(candidate, source, contract, "NO_LEGAL_ENTRY_BAR", "ENTRY_OPEN_NON_POSITIVE")
     horizons: dict[str, Any] = {}
     measured = 0
     terminal_reason = "MEASURED"
@@ -167,94 +282,158 @@ def measure_candidate(candidate: dict[str, Any], source: dict[str, Any], frame: 
         }
         measured += 1
     record = {
-        **base,
+        "candidate_id": candidate["candidate_id"],
+        "candidate_core": core,
+        "source_provenance": candidate["source_provenance"],
+        "source_manifest_record": source,
+        "outcome_contract_hash": contract["contract_hash"],
+        "frozen_code_sha": contract["frozen_code_sha"],
+        "implementation_tree_hash": contract["implementation_tree_hash"],
         "terminal_reason": terminal_reason,
+        "terminal_detail": None,
         "same_timestamp_bar_disposition": "SKIPPED_FOR_PRIMARY" if not same.empty else "ABSENT",
-        "legal_entry": {
-            "status": "LEGAL_ENTRY_FOUND",
-            "start": _iso_ist(entry_start),
-            "end": _iso_ist(entry_start + timedelta(minutes=1)),
-            "open": round(entry_open, 8),
-        },
+        "legal_entry": {"status": "LEGAL_ENTRY_FOUND", "start": _iso_ist(entry_start), "end": _iso_ist(entry_start + timedelta(minutes=1)), "open": round(entry_open, 8)},
         "horizons": horizons,
+        "measured_horizon_count": measured,
+        **safety_fields(),
     }
-    record["outcome_id"] = sha256_bytes(canonical_json_bytes({k: v for k, v in record.items() if k != "outcome_id"}))
-    record["measured_horizon_count"] = measured
-    return record
+    return _finalize_record(record)
 
 
 def build_ledger(*, artifact_dir: Path, source_project_root: Path, contract: dict[str, Any]) -> dict[str, Any]:
-    source_manifest, candidate_ledger, _summary = verify_inputs(artifact_dir)
+    source_manifest, candidate_ledger, _summary, input_sidecars = verify_inputs(artifact_dir)
     source_by_id = {record["source_record_id"]: record for record in source_manifest["records"]}
-    frames: dict[str, pd.DataFrame] = {}
+    frame_cache: dict[str, tuple[pd.DataFrame | None, str | None]] = {}
     records = []
     source_failures = Counter()
     join_verified = 0
     for candidate in candidate_ledger["records"]:
-        source_id = candidate["source_provenance"].get("source_record_id")
+        source_id = candidate.get("source_provenance", {}).get("source_record_id")
         source = source_by_id.get(source_id)
-        if source is None:
-            source_failures["SOURCE_PROVENANCE_MISMATCH"] += 1
-            records.append({**candidate, "terminal_reason": "SOURCE_PROVENANCE_MISMATCH", "horizons": {}})
+        join_failure = _join_failure(candidate, source)
+        if join_failure:
+            source_failures[join_failure] += 1
+            records.append(fail_record(candidate, source, contract, join_failure))
             continue
-        if source_id not in frames:
-            frame = _read_source(source, source_project_root)
-            failure = _validate_frame(frame, source)
+        assert source is not None
+        if source_id not in frame_cache:
+            try:
+                frame = read_source(source, source_project_root)
+                failure = validate_frame(frame, source)
+            except Exception as exc:
+                frame = None
+                failure = str(exc)
             if failure:
                 source_failures[failure] += 1
-            frames[source_id] = frame
+            frame_cache[source_id] = (frame, failure)
+        frame, failure = frame_cache[source_id]
+        if failure or frame is None:
+            records.append(fail_record(candidate, source, contract, "SOURCE_VALIDATION_FAILED", failure))
+            continue
         join_verified += 1
-        records.append(measure_candidate(candidate, source, frames[source_id], contract["contract_hash"]))
+        records.append(measure_candidate(candidate, source, frame, contract))
     records = sorted(records, key=lambda item: item["candidate_id"])
+    ids = [record["candidate_id"] for record in records]
+    horizon_conservation = {str(h): sum(1 for record in records if str(h) in record.get("horizons", {})) for h in HORIZONS_MINUTES}
     ledger_hash = sha256_bytes(canonical_json_bytes(records))
-    decision = "ORB_OUTCOME_LEDGER_V2_CERTIFIED" if len(records) == INPUT_CANDIDATE_COUNT and not source_failures else "ORB_OUTCOME_LEDGER_V2_NOT_CERTIFIED"
+    certified = (
+        len(records) == INPUT_CANDIDATE_COUNT
+        and len(ids) == len(set(ids))
+        and not source_failures
+        and all(v == INPUT_CANDIDATE_COUNT for v in horizon_conservation.values())
+    )
     return {
-        "schema_version": 1,
-        **evidence_fields(
-            mode="ORB_OUTCOME_LEDGER_V2",
-            decision=decision,
-            reason="measured every Phase 1 v2 candidate against certified source bars with strict fail-closed joins",
-            source="opening_range_retest_causal_replay_candidate_ledger_v2.json",
-        ),
+        "schema_version": 2,
+        **evidence_fields(mode="ORB_OUTCOME_LEDGER_V2", decision="ORB_OUTCOME_LEDGER_V2_CERTIFIED" if certified else "ORB_OUTCOME_LEDGER_V2_NOT_CERTIFIED", reason="measured every Phase 1 v2 candidate against certified source bars with strict fail-closed joins", source="opening_range_retest_causal_replay_candidate_ledger_v2.json"),
         "contract_hash": contract["contract_hash"],
+        "frozen_code_sha": contract["frozen_code_sha"],
+        "implementation_tree_hash": contract["implementation_tree_hash"],
+        "input_sidecars": input_sidecars,
         "source_manifest_semantic_hash": INPUT_SOURCE_HASH,
         "candidate_core_semantic_hash": INPUT_CANDIDATE_CORE_HASH,
         "candidate_provenance_semantic_hash": INPUT_CANDIDATE_PROVENANCE_HASH,
         "candidate_count": len(records),
-        "duplicate_candidate_ids": len(records) - len({record["candidate_id"] for record in records}),
+        "duplicate_candidate_ids": len(records) - len(set(ids)),
+        "missing_candidate_ids": [],
+        "unexpected_candidate_ids": [],
         "join_verified_count": join_verified,
         "source_failure_counts": dict(source_failures),
+        "horizon_conservation": horizon_conservation,
         "outcome_ledger_hash": ledger_hash,
         "records": records,
         **safety_fields(),
     }
 
 
+def _quantile(vals: list[float], q: float) -> float | None:
+    if not vals:
+        return None
+    s = sorted(vals)
+    pos = (len(s) - 1) * q
+    lo = math.floor(pos)
+    hi = math.ceil(pos)
+    if lo == hi:
+        return round(s[lo], 12)
+    return round(s[lo] * (hi - pos) + s[hi] * (pos - lo), 12)
+
+
+def _stats(vals: list[float]) -> dict[str, Any]:
+    return {
+        "count": len(vals),
+        "mean": round(sum(vals) / len(vals), 12) if vals else None,
+        "median": _quantile(vals, 0.5),
+        "min": round(min(vals), 12) if vals else None,
+        "max": round(max(vals), 12) if vals else None,
+        "p05": _quantile(vals, 0.05),
+        "p25": _quantile(vals, 0.25),
+        "p75": _quantile(vals, 0.75),
+        "p95": _quantile(vals, 0.95),
+        "positive": sum(v > 0 for v in vals),
+        "zero": sum(v == 0 for v in vals),
+        "negative": sum(v < 0 for v in vals),
+    }
+
+
 def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
-    reason_counts = Counter(record.get("terminal_reason") for record in ledger["records"])
+    records = ledger["records"]
+    reason_counts = Counter(record.get("terminal_reason") for record in records)
     by_horizon: dict[str, Counter[str]] = {str(h): Counter() for h in HORIZONS_MINUTES}
     values: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
-    for record in ledger["records"]:
-        for h, payload in record.get("horizons", {}).items():
+    mfes: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
+    maes: dict[str, list[float]] = {str(h): [] for h in HORIZONS_MINUTES}
+    breakdowns: dict[str, dict[str, Counter[str]]] = {str(h): {"symbol": Counter(), "direction": Counter(), "symbol_direction": Counter(), "calendar_year": Counter()} for h in HORIZONS_MINUTES}
+    for record in records:
+        core = record["candidate_core"]
+        year = str(core["session_date"])[:4]
+        for h in map(str, HORIZONS_MINUTES):
+            payload = record.get("horizons", {}).get(h)
+            if not payload:
+                by_horizon[h]["MISSING_HORIZON_RECORD"] += 1
+                continue
             by_horizon[h][payload["status"]] += 1
             if payload["status"] == "MEASURED":
                 values[h].append(payload["directional_underlying_return"])
-    stats = {}
-    for h, vals in values.items():
-        stats[h] = {"count": len(vals), "mean": round(sum(vals) / len(vals), 12) if vals else None, "positive": sum(v > 0 for v in vals), "zero": sum(v == 0 for v in vals), "negative": sum(v < 0 for v in vals)}
-    decision = "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED" if ledger["decision"] == "ORB_OUTCOME_LEDGER_V2_CERTIFIED" else "ORB_OUTCOMES_V2_NOT_CERTIFIED"
-    return {
-        "schema_version": 1,
-        **evidence_fields(
-            mode="ORB_OUTCOME_SUMMARY_V2",
-            decision=decision,
-            reason="summarized certified outcome ledger without profitability or execution claims",
-            source="opening_range_retest_outcome_ledger_v2.json",
-        ),
+                mfes[h].append(payload["mfe"])
+                maes[h].append(payload["mae"])
+                breakdowns[h]["symbol"][core["symbol"]] += 1
+                breakdowns[h]["direction"][core["direction"]] += 1
+                breakdowns[h]["symbol_direction"][f"{core['symbol']}:{core['direction']}"] += 1
+                breakdowns[h]["calendar_year"][year] += 1
+    stats = {h: _stats(vals) | {"mfe": _stats(mfes[h]), "mae": _stats(maes[h]), "breakdowns": {k: dict(v) for k, v in breakdowns[h].items()}} for h, vals in values.items()}
+    conservation = {h: sum(c.values()) for h, c in by_horizon.items()}
+    decision = "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED" if ledger["decision"] == "ORB_OUTCOME_LEDGER_V2_CERTIFIED" and all(v == INPUT_CANDIDATE_COUNT for v in conservation.values()) else "ORB_OUTCOMES_V2_NOT_CERTIFIED"
+    summary = {
+        "schema_version": 2,
+        **evidence_fields(mode="ORB_OUTCOME_SUMMARY_V2", decision=decision, reason="summarized certified outcome ledger without profitability or execution claims", source="opening_range_retest_outcome_ledger_v2.json"),
+        "contract_hash": ledger["contract_hash"],
+        "outcome_ledger_hash": ledger["outcome_ledger_hash"],
         "candidate_count": ledger["candidate_count"],
         "terminal_reason_counts": dict(reason_counts),
         "horizon_status_counts": {h: dict(c) for h, c in by_horizon.items()},
+        "horizon_conservation": conservation,
         "descriptive_directional_return_stats": stats,
-        "claim_labels": ["DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL"],
+        "claim_boundary": ["DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL", "NOT_PROFITABILITY", "NOT_PAPER_OR_LIVE_READY"],
         **safety_fields(),
     }
+    summary["summary_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in summary.items() if k != "summary_hash"}))
+    return summary
