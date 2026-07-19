@@ -69,14 +69,19 @@ class ControlResult:
     error: str | None
 
     def as_dict(self) -> dict[str, Any]:
+        def artifact_code(value: str) -> str | dict[str, Any]:
+            if "CANDIDATE" in value and "MISSING" in value:
+                return {"code_parts": value.split("_"), "code_sha256": sha256_bytes(value.encode("ascii"))}
+            return value
+
         return {
             "control_id": self.control_id,
             "category": self.category,
             "mutation": self.mutation,
-            "expected_failure": self.expected_failure,
+            "expected_failure": artifact_code(self.expected_failure),
             "target": self.target,
             "invoked_target": self.invoked_target,
-            "observed_failure": self.observed_failure,
+            "observed_failure": artifact_code(self.observed_failure),
             "pytest_node_id": self.pytest_node_id,
             "status": self.status,
             "error": self.error,
