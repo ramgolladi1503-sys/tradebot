@@ -12,6 +12,7 @@ INPUT_CANDIDATE_CORE_HASH = "8f28637e86095884b76ff931bf4f8b1606301895a226f783994
 INPUT_CANDIDATE_PROVENANCE_HASH = "b198ebab71cdc4b097360fb2280f2da6ac2ad1595c0da917dbd5a0b7a2dbba48"
 INPUT_SOURCE_COUNT = 1512
 INPUT_CANDIDATE_COUNT = 2215
+EVIDENCE_TIMESTAMP = "2026-07-19T00:00:00Z"
 
 
 def canonical_json_bytes(payload: Any) -> bytes:
@@ -40,11 +41,27 @@ def safety_fields() -> dict[str, bool]:
     }
 
 
+def evidence_fields(*, mode: str, decision: str, reason: str, source: str) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
+        "decision": decision,
+        "reason": reason,
+        "timestamp": EVIDENCE_TIMESTAMP,
+        "source": source,
+    }
+
+
 def build_contract(*, source_authority_root: str, base_main_sha: str, execution_commit_sha: str) -> dict[str, Any]:
     contract = {
         "schema_version": 1,
         "contract_version": CONTRACT_VERSION,
-        "decision": "ORB_OUTCOME_CONTRACT_V2_FROZEN",
+        **evidence_fields(
+            mode="ORB_OUTCOME_CONTRACT_V2",
+            decision="ORB_OUTCOME_CONTRACT_V2_FROZEN",
+            reason="strict offline underlying-outcome contract frozen after PR 676 merge",
+            source="opening_range_retest_causal_replay_summary_v2.json",
+        ),
         "base_main_sha": base_main_sha,
         "execution_commit_sha": execution_commit_sha,
         "inputs": {
@@ -108,4 +125,3 @@ def build_contract(*, source_authority_root: str, base_main_sha: str, execution_
     }
     contract["contract_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in contract.items() if k != "contract_hash"}))
     return contract
-

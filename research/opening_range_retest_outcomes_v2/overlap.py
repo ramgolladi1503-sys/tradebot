@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 
-from research.opening_range_retest_outcomes_v2.contract import safety_fields
+from research.opening_range_retest_outcomes_v2.contract import evidence_fields, safety_fields
 
 
 def build_overlap(ledger: dict[str, Any]) -> dict[str, Any]:
@@ -49,5 +49,14 @@ def build_overlap(ledger: dict[str, Any]) -> dict[str, Any]:
             "session_cluster_counts": dict(Counter(item["session_date"] for item in intervals).most_common(25)),
             "overlap_evidence_intervals": events[:500],
         }
-    return {"schema_version": 1, "mode": "ORB_OUTCOME_OVERLAP_V2", "decision": "ORB_OUTCOME_OVERLAP_REPORTED", "horizons": result, **safety_fields()}
-
+    return {
+        "schema_version": 1,
+        **evidence_fields(
+            mode="ORB_OUTCOME_OVERLAP_V2",
+            decision="ORB_OUTCOME_OVERLAP_REPORTED",
+            reason="reported half-open interval overlap diagnostics without filtering descriptive candidates",
+            source="opening_range_retest_outcome_ledger_v2.json",
+        ),
+        "horizons": result,
+        **safety_fields(),
+    }

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from research.opening_range_retest_outcomes_v2.contract import INPUT_CANDIDATE_COUNT, canonical_json_bytes, safety_fields, sha256_bytes, sha256_file
+from research.opening_range_retest_outcomes_v2.contract import INPUT_CANDIDATE_COUNT, canonical_json_bytes, evidence_fields, safety_fields, sha256_bytes, sha256_file
 
 
 def verify_sidecar(path: Path) -> dict[str, Any]:
@@ -31,10 +31,16 @@ def audit_outputs(*, contract: dict[str, Any], ledger: dict[str, Any], summary: 
         failures.append("ARTIFACT_SIDECAR_MISMATCH")
     if summary.get("decision") != "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED":
         failures.append("SUMMARY_NOT_CERTIFIED")
+    verdict = "ORB_OUTCOMES_V2_AUDIT_CERTIFIED" if not failures else "ORB_OUTCOMES_V2_AUDIT_NOT_CERTIFIED"
     return {
         "schema_version": 1,
-        "mode": "ORB_OUTCOME_AUDIT_V2",
-        "verdict": "ORB_OUTCOMES_V2_AUDIT_CERTIFIED" if not failures else "ORB_OUTCOMES_V2_AUDIT_NOT_CERTIFIED",
+        **evidence_fields(
+            mode="ORB_OUTCOME_AUDIT_V2",
+            decision=verdict,
+            reason="independent audit recomputed ledger hash, sidecars, conservation, and certified decisions",
+            source="opening_range_retest_outcome_ledger_v2.json",
+        ),
+        "verdict": verdict,
         "failures": failures,
         "candidate_conservation": "CANDIDATE_CONSERVATION_PASS" if len(records) == INPUT_CANDIDATE_COUNT and len(ids) == len(set(ids)) else "CANDIDATE_CONSERVATION_FAIL",
         "recomputed_outcome_ledger_hash": recomputed,
@@ -43,4 +49,3 @@ def audit_outputs(*, contract: dict[str, Any], ledger: dict[str, Any], summary: 
         "overlap_decision": overlap.get("decision"),
         **safety_fields(),
     }
-

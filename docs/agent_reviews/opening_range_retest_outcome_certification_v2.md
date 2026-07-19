@@ -1,13 +1,18 @@
 # ORB Underlying Outcomes v2 Certification
 
+- mode: ORB_OUTCOME_CERTIFICATION_V2
+- candidate_id: ALL_ORB_PHASE1_V2_CANDIDATES
 - decision: ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED
+- reason: certified descriptive underlying outcomes after PR 676 merge using strict file-backed source authority
+- timestamp: 2026-07-19T00:00:00Z
+- source: opening_range_retest_outcome_summary_v2.json
 - contract_verdict: ORB_OUTCOME_CONTRACT_V2_FROZEN
 - ledger_verdict: ORB_OUTCOME_LEDGER_V2_CERTIFIED
 - audit_verdict: ORB_OUTCOMES_V2_AUDIT_CERTIFIED
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `d84c08681cc15eb499fac1d75b4968bfef1b078bf873a2af57e3bc7523168494`
-- outcome_ledger_hash: `3b736db0b9ef631d165b8fb20a6ea140f6cc4de613cf35097b09cb915d6bb245`
+- contract_hash: `28d2101bf6760f012250c32e156175d6f0863671228b2f0691a6f08d07befe83`
+- outcome_ledger_hash: `2d49eba4acd246c3a37bcdbfb0b51354345c5edebe4d67a119cce5a923314d50`
 
 ## Agent Work Contract
 

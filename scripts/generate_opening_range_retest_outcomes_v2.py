@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from research.opening_range_retest_outcomes_v2.artifacts import write_json
 from research.opening_range_retest_outcomes_v2.audit import audit_outputs
-from research.opening_range_retest_outcomes_v2.contract import build_contract, canonical_json_bytes, sha256_bytes, sha256_file
+from research.opening_range_retest_outcomes_v2.contract import EVIDENCE_TIMESTAMP, build_contract, canonical_json_bytes, sha256_bytes, sha256_file
 from research.opening_range_retest_outcomes_v2.engine import build_ledger, summarize
 from research.opening_range_retest_outcomes_v2.overlap import build_overlap
 
@@ -62,7 +62,12 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str)
             [
                 "# ORB Underlying Outcomes v2 Certification",
                 "",
+                "- mode: ORB_OUTCOME_CERTIFICATION_V2",
+                "- candidate_id: ALL_ORB_PHASE1_V2_CANDIDATES",
                 f"- decision: {summary['decision']}",
+                "- reason: certified descriptive underlying outcomes after PR 676 merge using strict file-backed source authority",
+                f"- timestamp: {EVIDENCE_TIMESTAMP}",
+                "- source: opening_range_retest_outcome_summary_v2.json",
                 f"- contract_verdict: {contract['decision']}",
                 f"- ledger_verdict: {ledger['decision']}",
                 f"- audit_verdict: {audit['verdict']}",

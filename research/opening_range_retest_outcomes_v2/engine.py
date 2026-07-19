@@ -15,6 +15,7 @@ from research.opening_range_retest_outcomes_v2.contract import (
     INPUT_SOURCE_COUNT,
     INPUT_SOURCE_HASH,
     canonical_json_bytes,
+    evidence_fields,
     safety_fields,
     sha256_bytes,
     sha256_file,
@@ -206,10 +207,15 @@ def build_ledger(*, artifact_dir: Path, source_project_root: Path, contract: dic
         records.append(measure_candidate(candidate, source, frames[source_id], contract["contract_hash"]))
     records = sorted(records, key=lambda item: item["candidate_id"])
     ledger_hash = sha256_bytes(canonical_json_bytes(records))
+    decision = "ORB_OUTCOME_LEDGER_V2_CERTIFIED" if len(records) == INPUT_CANDIDATE_COUNT and not source_failures else "ORB_OUTCOME_LEDGER_V2_NOT_CERTIFIED"
     return {
         "schema_version": 1,
-        "mode": "ORB_OUTCOME_LEDGER_V2",
-        "decision": "ORB_OUTCOME_LEDGER_V2_CERTIFIED" if len(records) == INPUT_CANDIDATE_COUNT and not source_failures else "ORB_OUTCOME_LEDGER_V2_NOT_CERTIFIED",
+        **evidence_fields(
+            mode="ORB_OUTCOME_LEDGER_V2",
+            decision=decision,
+            reason="measured every Phase 1 v2 candidate against certified source bars with strict fail-closed joins",
+            source="opening_range_retest_causal_replay_candidate_ledger_v2.json",
+        ),
         "contract_hash": contract["contract_hash"],
         "source_manifest_semantic_hash": INPUT_SOURCE_HASH,
         "candidate_core_semantic_hash": INPUT_CANDIDATE_CORE_HASH,
@@ -236,10 +242,15 @@ def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
     stats = {}
     for h, vals in values.items():
         stats[h] = {"count": len(vals), "mean": round(sum(vals) / len(vals), 12) if vals else None, "positive": sum(v > 0 for v in vals), "zero": sum(v == 0 for v in vals), "negative": sum(v < 0 for v in vals)}
+    decision = "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED" if ledger["decision"] == "ORB_OUTCOME_LEDGER_V2_CERTIFIED" else "ORB_OUTCOMES_V2_NOT_CERTIFIED"
     return {
         "schema_version": 1,
-        "mode": "ORB_OUTCOME_SUMMARY_V2",
-        "decision": "ORB_OUTCOMES_V2_MEASURED_AND_CERTIFIED" if ledger["decision"] == "ORB_OUTCOME_LEDGER_V2_CERTIFIED" else "ORB_OUTCOMES_V2_NOT_CERTIFIED",
+        **evidence_fields(
+            mode="ORB_OUTCOME_SUMMARY_V2",
+            decision=decision,
+            reason="summarized certified outcome ledger without profitability or execution claims",
+            source="opening_range_retest_outcome_ledger_v2.json",
+        ),
         "candidate_count": ledger["candidate_count"],
         "terminal_reason_counts": dict(reason_counts),
         "horizon_status_counts": {h: dict(c) for h, c in by_horizon.items()},
