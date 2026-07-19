@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import math
 import subprocess
@@ -207,7 +208,7 @@ def _implementation_tree_hash(repo_root: Path, rev: str) -> str:
     return shab(proc.stdout.encode("utf-8"))
 
 
-def verify_contract_and_lineage(contract: dict[str, Any], repo_root: Path) -> list[str]:
+def verify_contract_payload(contract: dict[str, Any]) -> list[str]:
     failures = []
     portable = {k: v for k, v in contract.items() if k not in PORTABLE_CONTRACT_EXCLUDE}
     if shab(cbytes(portable)) != contract.get("contract_hash"):
@@ -228,24 +229,60 @@ def verify_contract_and_lineage(contract: dict[str, Any], repo_root: Path) -> li
         if contract.get(key) != value:
             failures.append("CONTRACT_FIELD_MISMATCH")
             break
+    return failures
+
+
+def verify_lineage_snapshot(
+    *,
+    frozen_sha: str,
+    head_sha: str,
+    is_ancestor: bool,
+    expected_tree_hash: str,
+    frozen_tree_hash: str | None,
+    head_tree_hash: str | None,
+    changed_paths: list[str],
+) -> list[str]:
+    failures = []
+    if not frozen_sha or not head_sha or not is_ancestor:
+        failures.append("FROZEN_CODE_SHA_NOT_ANCESTOR")
+    if frozen_tree_hash != expected_tree_hash or head_tree_hash != expected_tree_hash:
+        failures.append("IMPLEMENTATION_TREE_HASH_MISMATCH")
+    if any(not path.startswith(EVIDENCE_PREFIXES) for path in changed_paths):
+        failures.append("POST_FREEZE_UNEXPECTED_PATH")
+    return failures
+
+
+def verify_contract_and_lineage(contract: dict[str, Any], repo_root: Path) -> list[str]:
+    failures = verify_contract_payload(contract)
     frozen = str(contract.get("frozen_code_sha", ""))
     head = _run_git(repo_root, ["rev-parse", "HEAD"])
+    is_ancestor = True
     try:
         subprocess.run(["git", "merge-base", "--is-ancestor", frozen, head], cwd=repo_root, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError:
-        failures.append("FROZEN_CODE_SHA_NOT_ANCESTOR")
+        is_ancestor = False
+    frozen_tree = None
+    head_tree = None
     try:
         frozen_tree = _implementation_tree_hash(repo_root, frozen)
         head_tree = _implementation_tree_hash(repo_root, head)
     except subprocess.CalledProcessError:
-        failures.append("IMPLEMENTATION_TREE_HASH_MISMATCH")
-    else:
-        if frozen_tree != contract.get("implementation_tree_hash") or head_tree != contract.get("implementation_tree_hash"):
-            failures.append("IMPLEMENTATION_TREE_HASH_MISMATCH")
+        pass
     changed = _run_git(repo_root, ["diff", "--name-only", f"{frozen}..HEAD"]).splitlines()
+    failures.extend(
+        verify_lineage_snapshot(
+            frozen_sha=frozen,
+            head_sha=head,
+            is_ancestor=is_ancestor,
+            expected_tree_hash=contract.get("implementation_tree_hash"),
+            frozen_tree_hash=frozen_tree,
+            head_tree_hash=head_tree,
+            changed_paths=changed,
+        )
+    )
     if any(not path.startswith(EVIDENCE_PREFIXES) for path in changed):
         failures.append("POST_FREEZE_UNEXPECTED_PATH")
-    return failures
+    return list(dict.fromkeys(failures))
 
 
 def measure(candidate: dict[str, Any], source: dict[str, Any], frame: pd.DataFrame, contract: dict[str, Any], source_failure: str | None = None) -> dict[str, Any]:
@@ -514,6 +551,69 @@ def overlap_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[s
     return list(dict.fromkeys(failures))
 
 
+def ledger_record_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
+    failures = []
+    if expected.get("candidate_id") != actual.get("candidate_id"):
+        failures.append("CANDIDATE_ID_MISMATCH")
+    if expected.get("outcome_id") != actual.get("outcome_id"):
+        failures.append("OUTCOME_ID_MISMATCH")
+    if expected.get("measured_horizon_count") != actual.get("measured_horizon_count"):
+        failures.append("MEASURED_HORIZON_COUNT_MISMATCH")
+    if expected.get("legal_entry", {}).get("open") != actual.get("legal_entry", {}).get("open"):
+        failures.append("ENTRY_PRICE_MISMATCH")
+    for horizon, item in expected.get("horizons", {}).items():
+        other = actual.get("horizons", {}).get(horizon)
+        if other is None:
+            failures.append("MISSING_HORIZON_RECORD")
+            continue
+        if item.get("terminal_close") != other.get("terminal_close"):
+            failures.append("TERMINAL_CLOSE_MISMATCH")
+        if item.get("directional_underlying_return") != other.get("directional_underlying_return"):
+            failures.append("DIRECTIONAL_RETURN_MISMATCH")
+        if item.get("mfe") != other.get("mfe"):
+            failures.append("MFE_MISMATCH")
+        if item.get("mae") != other.get("mae"):
+            failures.append("MAE_MISMATCH")
+        if item.get("mfe_timestamp") != other.get("mfe_timestamp") or item.get("mae_timestamp") != other.get("mae_timestamp"):
+            failures.append("EXTREMA_TIMESTAMP_MISMATCH")
+    if expected != actual and not failures:
+        failures.append("LEDGER_RECORD_FIELD_MISMATCH")
+    return list(dict.fromkeys(failures))
+
+
+def ledger_conservation_failures(records: list[dict[str, Any]], *, expected_candidate_count: int = INPUT_CANDIDATE_COUNT) -> list[str]:
+    ids = [record.get("candidate_id") for record in records]
+    horizon_conservation = {str(h): sum(1 for record in records if str(h) in record.get("horizons", {})) for h in HORIZONS_MINUTES}
+    failures = []
+    if len(ids) != len(set(ids)):
+        failures.append("DUPLICATE_CANDIDATE_ID")
+    if len(records) != expected_candidate_count or any(value != expected_candidate_count for value in horizon_conservation.values()):
+        failures.append("CANDIDATE_OR_HORIZON_CONSERVATION_FAIL")
+    return failures
+
+
+def oracle_independence_failures(source: str) -> list[str]:
+    tree = ast.parse(source)
+    forbidden_modules = {
+        "research.opening_range_retest_outcomes_v2.engine",
+        "research.opening_range_retest_outcomes_v2.overlap",
+    }
+    forbidden_names = {"summarize", "build_ledger", "measure_candidate", "build_overlap"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in forbidden_modules:
+            if any(alias.name in forbidden_names or alias.name == "*" for alias in node.names):
+                return ["ORACLE_FORBIDDEN_IMPORT"]
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in forbidden_modules:
+                    return ["ORACLE_FORBIDDEN_IMPORT"]
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            root = node.func.value
+            if isinstance(root, ast.Name) and root.id in {"engine", "overlap"} and node.func.attr in forbidden_names:
+                return ["ORACLE_FORBIDDEN_IMPORT"]
+    return []
+
+
 def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha: str, implementation_tree_hash: str) -> list[str]:
     if not controls:
         return ["NEGATIVE_CONTROL_REPORT_MISSING"]
@@ -523,7 +623,7 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
     nodes = [row.get("pytest_node_id") for row in rows]
     if controls.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED":
         failures.append("NEGATIVE_CONTROL_VERDICT_MISMATCH")
-    if controls.get("collected", 0) < 70 or controls.get("executed") != controls.get("collected") or controls.get("passed") != controls.get("executed"):
+    if controls.get("collected", 0) < 75 or controls.get("executed") != controls.get("collected") or controls.get("passed") != controls.get("executed"):
         failures.append("NEGATIVE_CONTROL_EXECUTION_COUNTS_MISMATCH")
     if controls.get("failed") or controls.get("skipped") or controls.get("xfailed") or controls.get("xpassed"):
         failures.append("NEGATIVE_CONTROL_NON_PASSING_RESULT")
@@ -537,9 +637,19 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
         failures.append("NEGATIVE_CONTROL_IMPLEMENTATION_TREE_MISMATCH")
     for row in rows:
         mutation = str(row.get("mutation", "")).lower()
-        if "negative mutation" in mutation or not row.get("invoked_target") or row.get("status") != "PASS":
+        if "negative mutation" in mutation or not row.get("target_invoked") or not row.get("mutation_applied") or row.get("status") != "PASS":
             failures.append("NEGATIVE_CONTROL_SYNTHETIC_ROW")
             break
+    if controls.get("expected_result_leak_count") != 0:
+        failures.append("CONTROL_EXECUTOR_EXPECTED_RESULT_LEAK")
+    if controls.get("non_invoked_target_count") != 0:
+        failures.append("NEGATIVE_CONTROL_TARGET_NOT_INVOKED")
+    if controls.get("non_mutating_control_count") != 0:
+        failures.append("NEGATIVE_CONTROL_MUTATION_NOT_APPLIED")
+    if controls.get("duplicate_control_fingerprint_count") != 0:
+        failures.append("NEGATIVE_CONTROL_DUPLICATE_FINGERPRINT")
+    if controls.get("unique_control_fingerprint_count") != len(rows):
+        failures.append("NEGATIVE_CONTROL_FINGERPRINT_COUNT_MISMATCH")
     return list(dict.fromkeys(failures))
 
 

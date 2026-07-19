@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from research.opening_range_retest_outcomes_v2.controls import CONTROL_CASES, build_negative_control_report, execute_control_case
+from research.opening_range_retest_outcomes_v2.controls import CONTROL_CASES, build_negative_control_report, execute_control_case, executor_expected_result_leaks
 
 
 @pytest.mark.parametrize("case", CONTROL_CASES, ids=lambda case: case.control_id)
@@ -10,7 +10,10 @@ def test_orb_outcome_negative_control(case) -> None:
     result = execute_control_case(case)
     assert result.status == "PASS", result.error
     assert result.observed_failure == case.expected_failure
-    assert result.pytest_node_id.endswith(f"[{case.control_id}]")
+    assert result.case.node_id.endswith(f"[{case.control_id}]")
+    assert result.target_invoked is True
+    assert result.mutation_applied is True
+    assert result.fixture_hash_before != result.fixture_hash_after
 
 
 def test_executable_control_report_is_bound_to_real_nodes() -> None:
@@ -24,6 +27,15 @@ def test_executable_control_report_is_bound_to_real_nodes() -> None:
     assert report["xfailed"] == 0
     assert report["xpassed"] == 0
     assert report["duplicate_ids"] == 0
+    assert report["expected_result_leak_count"] == 0
+    assert report["non_invoked_target_count"] == 0
+    assert report["non_mutating_control_count"] == 0
+    assert report["duplicate_control_fingerprint_count"] == 0
+    assert report["unique_control_fingerprint_count"] == report["control_count"]
     assert report["failures"] == []
-    assert all(row["pytest_node_id"].endswith(f"[{row['control_id']}]") for row in report["controls"])
-    assert all("negative mutation" not in row["mutation"].lower() for row in report["controls"])
+    assert executor_expected_result_leaks() == []
+    assert all(row["test_node_id"].endswith(f"[{row['control_id']}]") for row in report["controls"])
+    assert all(row["target_invoked"] is True for row in report["controls"])
+    assert all(row["mutation_applied"] is True for row in report["controls"])
+    assert all(row["fixture_hash_before"] != row["fixture_hash_after"] for row in report["controls"])
+    assert all(row["executor_function"].startswith("_exec_") for row in report["controls"])
