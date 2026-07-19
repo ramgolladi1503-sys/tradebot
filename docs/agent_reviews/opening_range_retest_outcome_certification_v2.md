@@ -10,14 +10,14 @@
 - ledger_verdict: ORB_OUTCOME_LEDGER_V2_CERTIFIED
 - audit_verdict: ORB_OUTCOMES_V2_AUDIT_CERTIFIED
 - negative_control_verdict: ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED
-- negative_control_count: 70
+- negative_control_count: 85
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `8826adfa54bc95308de827d658901762cc8590c4fc418e787fa1d92afc911365`
-- outcome_ledger_hash: `91a9e850043c8b3ec84daf0d2a54d150adbd4f4e92e75f5e179a7cdbe182f357`
-- summary_hash: `ad81556f3890b8e6e0d1d262845525df654f14b2676da7144710bec4bb1953b6`
-- frozen_code_sha: `c5bcbe9e368ae4671608bba0cacda81c30418dc1`
-- implementation_tree_hash: `d083ae3a92771137c6287d29e2958eac67bcc0c6405551f8d8e4962356dd09f7`
+- contract_hash: `b7c37a9cad13ea8c60fcfae4769a142e40fe2dd256b9f1911b0677d8d0b8d83e`
+- outcome_ledger_hash: `4f94e07fb333f9d3fc4e842d3808e2cb6db9299d24017825299c0365e6f8a98f`
+- summary_hash: `f0118a3ad22260814898a119c61cc01efe7e4bb0cbc3c6f2209444f62370302f`
+- frozen_code_sha: `3ca912477f90815c6d281b4f076a808e619744af`
+- implementation_tree_hash: `4d76d984c1cfe98e39d85f7732374aaf9e077ca1d92da7d57bae022ecadb1668`
 
 ## Agent Work Contract
 
