@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import copy
 
 import pandas as pd
 
@@ -185,14 +186,19 @@ def test_candidate_core_subset_hash_uses_v2_candidate_core_payload() -> None:
 
 def test_file_backed_source_oracle_accepts_contained_exact_file(tmp_path: Path) -> None:
     manifest = _file_backed_manifest(tmp_path)
-    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
     assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
     assert audit["source_files_byte_probed"] == 1
+    assert audit["source_files_resolved"] == 1
+    assert audit["source_files_parquet_read"] == 1
+    assert audit["source_sha_matches"] == 1
+    assert audit["source_record_id_matches"] == 1
 
 
 def test_file_backed_source_oracle_rejects_missing_file(tmp_path: Path) -> None:
+    (tmp_path / "runtime" / "upstox_candidate_replay").mkdir(parents=True)
     manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
-    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
     assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
     assert "SOURCE_FILE_MISSING" in audit["failures"]
 
@@ -201,9 +207,86 @@ def test_file_backed_source_oracle_rejects_changed_bytes(tmp_path: Path) -> None
     manifest = _file_backed_manifest(tmp_path)
     record = manifest["records"][0]
     record["actual_sha256"] = "0" * 64
-    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
     assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
     assert "SOURCE_ACTUAL_SHA_MISMATCH" in audit["failures"]
+
+
+def test_source_oracle_requires_explicit_authority(tmp_path: Path) -> None:
+    manifest = _file_backed_manifest(tmp_path)
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=None)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_AUTHORITY_NOT_SUPPLIED" in audit["failures"]
+    assert audit["source_files_byte_probed"] == 0
+
+
+def test_source_oracle_rejects_missing_authority_root(tmp_path: Path) -> None:
+    manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path / "missing")
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_AUTHORITY_ROOT_MISSING" in audit["failures"]
+    assert audit["source_files_byte_probed"] == 0
+
+
+def test_source_oracle_rejects_file_authority_root(tmp_path: Path) -> None:
+    manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
+    root_file = tmp_path / "runtime" / "upstox_candidate_replay"
+    root_file.parent.mkdir(parents=True, exist_ok=True)
+    root_file.write_text("not a directory", encoding="utf-8")
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_AUTHORITY_ROOT_NOT_DIRECTORY" in audit["failures"]
+    assert audit["source_files_byte_probed"] == 0
+
+
+def test_source_oracle_rejects_absolute_traversal_and_wrong_prefix(tmp_path: Path) -> None:
+    (tmp_path / "runtime" / "upstox_candidate_replay").mkdir(parents=True)
+    for logical_path, failure in [
+        ("/tmp/source.parquet", "SOURCE_ABSOLUTE_PATH"),
+        ("runtime/upstox_candidate_replay/../source.parquet", "SOURCE_PATH_TRAVERSAL"),
+        ("runtime/other/source.parquet", "SOURCE_LOGICAL_PREFIX_INVALID"),
+    ]:
+        run = _Run(source_manifest={"records": [_record(logical_path=logical_path)]}, emissions=(), summary={})
+        manifest = v2.build_source_manifest_v2(run, base_main_sha="base", execution_commit_sha="head")
+        audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
+        assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+        assert failure in audit["failures"]
+        assert audit["source_files_byte_probed"] == 0
+
+
+def test_source_oracle_rejects_symlink_component(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    source_root = tmp_path / "runtime" / "upstox_candidate_replay"
+    source_root.parent.mkdir(parents=True, exist_ok=True)
+    source_root.symlink_to(outside, target_is_directory=True)
+    manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_SYMLINK_COMPONENT" in audit["failures"]
+    assert audit["source_files_byte_probed"] == 0
+
+
+def test_source_oracle_ignores_diagnostic_absolute_path(tmp_path: Path) -> None:
+    manifest = _file_backed_manifest(tmp_path)
+    manifest["records"][0]["diagnostic_absolute_path"] = "/tmp/not-authoritative.parquet"
+    before = v2.sha256_bytes(v2.canonical_json_bytes(v2.source_semantic_payload(manifest)))
+    audit = audit_source_manifest_file_backed(manifest, source_project_root=tmp_path)
+    after = v2.sha256_bytes(v2.canonical_json_bytes(v2.source_semantic_payload(manifest)))
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
+    assert before == after == manifest["source_manifest_semantic_hash"]
+
+
+def test_source_oracle_portable_hash_unchanged_across_authorities(tmp_path: Path) -> None:
+    manifest_a = _file_backed_manifest(tmp_path / "a")
+    manifest_b = copy.deepcopy(manifest_a)
+    _write_source_file(tmp_path / "b")
+    manifest_b["records"][0]["diagnostic_absolute_path"] = "/different/root/source.parquet"
+    audit_a = audit_source_manifest_file_backed(manifest_a, source_project_root=tmp_path / "a")
+    audit_b = audit_source_manifest_file_backed(manifest_b, source_project_root=tmp_path / "b")
+    assert audit_a["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
+    assert audit_b["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
+    assert manifest_a["source_manifest_semantic_hash"] == manifest_b["source_manifest_semantic_hash"]
 
 
 def test_standalone_candidate_oracle_rejects_candidate_id_drift() -> None:

@@ -3,9 +3,9 @@
 ## Agent Work Contract
 - mode: ORB_PHASE1_V2_RECERTIFICATION_SUMMARY
 - candidate_id: opening_range_retest_causal_replay_summary_v2
-- decision: ORB_PHASE1_V2_NOT_CERTIFIED
+- decision: ORB_PHASE1_V2_RECERTIFIED
 - reason: Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.
-- timestamp: 2026-07-19T10:24:29.150286+00:00
+- timestamp: 2026-07-19T12:17:27.418476+00:00
 - source: research.opening_range_retest_v2.recertification
 - is_order_action: false
 - broker_api_called: false
@@ -28,10 +28,13 @@
 - allowed_for_live_execution=false
 - PRODUCTION FILES TOUCHED: NONE
 - SOURCE DATA FILES MUTATED: NONE
+- SOURCE DATA FILES COPIED: NONE
+- SOURCE SYMLINKS CREATED: NONE
+- PR #674 MODIFIED: NO
 
 ## Grill Me Review
-- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, reconciliation is proven, but overall recertification remains not certified because the independent source oracle could not byte-probe contained source files in this isolated worktree.
-- The report does not soften this into a pass.
+- Safety conclusion: certified only under explicit read-only source authority.
+- The independent source oracle resolves portable logical paths beneath the supplied authority root and rejects missing authority, absolute paths, traversal, wrong prefixes, symlink components, non-files, and byte/schema/session drift before certifying.
 
 ## Hermes Review
 - The v2 contract separates portable source identity from diagnostic absolute paths.
@@ -48,12 +51,27 @@
 ## Source Manifest
 - version: v2
 - record_count: 1512
+- selected_source_count: 1512
 - semantic_hash: `a2790d859e7c613c7da70da9ada5aaf2a33b29e23bfdbd41ab81395780db7466`
-- independent_source_oracle_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED`
-- source_files_byte_probed: 0
-- source_oracle_failures: `["SOURCE_FILE_MISSING"]`
+- source_authority_root: `/Users/madhuram/tradebot/runtime/upstox_candidate_replay`
+- independent_source_oracle_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED`
+- source_files_resolved: 1512
+- source_files_byte_probed: 1512
+- source_files_parquet_read: 1512
+- source_sha_matches: 1512
+- source_byte_size_matches: 1512
+- source_row_count_matches: 1512
+- source_schema_matches: 1512
+- source_symbol_matches: 1512
+- source_session_matches: 1512
+- source_record_id_matches: 1512
+- source_oracle_failures: `[]`
 - source_root_containment_failures: 0
 - complete_session_failures: 0
+- source_symbol_failures: 0
+- source_schema_failures: 0
+- source_ohlc_failures: 0
+- source_uniqueness_failures: 0
 
 ## Candidate Ledger
 - candidate_count: 2215
@@ -74,28 +92,32 @@
 - unaffected_subset_reconciliation: `UNAFFECTED_SUBSET_RECONCILED`
 
 ## Acceptance Proof
-- source_manifest_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED`
+- source_manifest_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED`
 - candidate_ledger_verdict: `ORB_PHASE1_V2_CANDIDATE_LEDGER_CERTIFIED`
 - two_directory_determinism: `TWO_DIRECTORY_DETERMINISM_PASS`
-- overall_decision: `ORB_PHASE1_V2_NOT_CERTIFIED`
+- overall_decision: `ORB_PHASE1_V2_RECERTIFIED`
 
 ## Runtime Proof Required After Merge
-- A human must provide or mount the selected source parquet corpus inside the isolated worktree before any future recertification or outcome-measurement task.
+- Post-merge runtime proof for this PR is the explicit read-only source authority supplied by CLI and certified by the independent source oracle.
+
+## Source Authority
+- The authority path is read-only input supplied by CLI; physical absolute paths are diagnostics only and are excluded from portable semantic hashes.
+- The source oracle byte-probes files in place and does not mutate, copy, or symlink the source corpus.
 
 ## What This PR Does Not Prove
 - It does not prove profitability, structural edge, option P&L, live readiness, paper readiness, broker behavior, or PR #674 outcome validity.
 
 ## Human Approval
-- Required before interpreting any v2 artifact as certification evidence because the current overall verdict is fail-closed.
+- Required before merging this PR or using these research artifacts for downstream outcome work.
 
 ## Artifact Digests
-- source_manifest: `75c3af56f89fdd4a95dc65c61243a3b26cd0e3a8faf0da9302b0840d81e7312d`
-- candidate_ledger: `67a77e7a03e91b778d716a2bb39beea1766dc6af6dac54a1c50e1e29626ba92c`
-- summary: `539fab92f6be2da01d032c1544f257e56370ef95a9c2599a733359329e237b33`
-- reconciliation: `d5db372bc3661c801469e9379ef9c977bfcd4a26c50728ad3dc7ea9d6f6721c7`
+- source_manifest: `fce9d2b2f13cd24f190bde31e2f0885f91356b848fb8b1e2a94dacfe8fe2a411`
+- candidate_ledger: `0fbbbaa3e381c5a3d38e16a86559e23ce6d50408e3e918036e050a5be1c5cd5c`
+- summary: `14fa684a25b1cd54bbe93206cbe02bbf31e2e912293b0351f136dad009539453`
+- reconciliation: `9f6b834e87be596caf87a379898b20c7b031cebebfd80a731a22ce10e05064a0`
 
 ## Claims Not Proven
 - No profitability, structural edge, option P&L, paper readiness, live readiness, or PR #674 outcome validity is claimed.
 
 ## Final Verdict
-`ORB_PHASE1_V2_NOT_CERTIFIED`
+`ORB_PHASE1_V2_RECERTIFIED`

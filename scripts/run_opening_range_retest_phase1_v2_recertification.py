@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -37,14 +38,16 @@ def _determinism_projection(artifacts: V2Artifacts) -> dict[str, object]:
             return [stable(value) for value in payload]
         return payload
 
+    source_record_ids = [record["source_record_id"] for record in artifacts.source_manifest["records"]]
+    candidate_ids = [record["candidate_id"] for record in artifacts.candidate_ledger["records"]]
     return {
         "source_manifest_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.source_manifest))),
         "source_manifest_semantic_hash": artifacts.source_manifest["source_manifest_semantic_hash"],
         "source_record_count": artifacts.source_manifest["record_count"],
-        "source_record_ids": [record["source_record_id"] for record in artifacts.source_manifest["records"]],
+        "source_record_ids_hash": sha256_bytes(canonical_json_bytes(source_record_ids)),
         "candidate_ledger_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.candidate_ledger))),
         "candidate_count": artifacts.candidate_ledger["candidate_count"],
-        "candidate_ids": [record["candidate_id"] for record in artifacts.candidate_ledger["records"]],
+        "candidate_ids_hash": sha256_bytes(canonical_json_bytes(candidate_ids)),
         "candidate_core_semantic_hash": artifacts.candidate_ledger["candidate_core_semantic_hash"],
         "candidate_provenance_semantic_hash": artifacts.candidate_ledger["candidate_provenance_semantic_hash"],
         "source_oracle_verdict": artifacts.source_oracle["verdict"],
@@ -63,6 +66,7 @@ def _determinism_projection(artifacts: V2Artifacts) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run ORB Phase 1 v2 source-provenance recertification.")
     parser.add_argument("--base-main-sha", required=True)
+    parser.add_argument("--source-project-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "docs" / "agent_reviews")
     parser.add_argument("--determinism-dir-a", type=Path, default=PROJECT_ROOT / ".runtime" / "orb_phase1_v2_determinism_a")
     parser.add_argument("--determinism-dir-b", type=Path, default=PROJECT_ROOT / ".runtime" / "orb_phase1_v2_determinism_b")
@@ -70,16 +74,20 @@ def main() -> int:
     args = parser.parse_args()
 
     execution_commit_sha = _git_head()
+    shutil.rmtree(args.determinism_dir_a, ignore_errors=True)
+    shutil.rmtree(args.determinism_dir_b, ignore_errors=True)
     artifacts_a = build_v2_artifacts(
         base_main_sha=args.base_main_sha,
         execution_commit_sha=execution_commit_sha,
         max_workers=args.max_workers,
+        source_project_root=args.source_project_root,
     )
     write_artifacts(artifacts_a, args.determinism_dir_a)
     artifacts_b = build_v2_artifacts(
         base_main_sha=args.base_main_sha,
         execution_commit_sha=execution_commit_sha,
         max_workers=args.max_workers,
+        source_project_root=args.source_project_root,
     )
     write_artifacts(artifacts_b, args.determinism_dir_b)
     projection_a = _determinism_projection(artifacts_a)
@@ -93,6 +101,7 @@ def main() -> int:
             {
                 "verdict": artifacts_a.summary["decision"],
                 "source_verdict": artifacts_a.source_oracle["verdict"],
+                "source_authority_root": artifacts_a.source_oracle.get("source_authority_root"),
                 "candidate_verdict": artifacts_a.candidate_oracle["verdict"],
                 "two_directory_verdict": "TWO_DIRECTORY_DETERMINISM_PASS",
                 "projection": projection_a,

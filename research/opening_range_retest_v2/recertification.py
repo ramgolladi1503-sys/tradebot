@@ -220,7 +220,7 @@ def build_source_manifest_v2(run: ReplayRunResult, *, base_main_sha: str, execut
         "schema_version": 2,
         "mode": "ORB_PHASE1_V2_SOURCE_MANIFEST",
         "candidate_id": "opening_range_retest_causal_replay_source_manifest_v2",
-        "decision": "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED",
+        "decision": "ORB_PHASE1_V2_SOURCE_MANIFEST_PENDING_INDEPENDENT_ORACLE",
         "reason": "Fresh v2 source manifest generated from merged main with corrected source identity.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "research.opening_range_retest_v2.recertification",
@@ -496,6 +496,8 @@ def build_summary(
         "execution_commit_sha": execution_commit_sha,
         "source_manifest_version": SOURCE_MANIFEST_VERSION,
         "source_manifest_semantic_hash": source_manifest["source_manifest_semantic_hash"],
+        "source_authority_root": source_oracle.get("source_authority_root"),
+        "selected_source_count": source_manifest["record_count"],
         "candidate_count": candidate_ledger["candidate_count"],
         "candidate_core_semantic_hash": candidate_ledger["candidate_core_semantic_hash"],
         "candidate_provenance_semantic_hash": candidate_ledger["candidate_provenance_semantic_hash"],
@@ -520,11 +522,24 @@ def build_summary(
     }
 
 
-def build_v2_artifacts(*, base_main_sha: str, execution_commit_sha: str, max_workers: int) -> V2Artifacts:
+def build_v2_artifacts(
+    *,
+    base_main_sha: str,
+    execution_commit_sha: str,
+    max_workers: int,
+    source_project_root: Path | None,
+) -> V2Artifacts:
     run = run_replay(max_workers=max_workers)
     source_manifest = build_source_manifest_v2(run, base_main_sha=base_main_sha, execution_commit_sha=execution_commit_sha)
     candidate_ledger = build_candidate_ledger_v2(run, source_manifest)
-    source_oracle = audit_source_manifest_file_backed(source_manifest, project_root=PROJECT_ROOT)
+    source_oracle = audit_source_manifest_file_backed(source_manifest, source_project_root=source_project_root)
+    source_manifest["decision"] = source_oracle["verdict"]
+    source_manifest["source_authority_root"] = source_oracle.get("source_authority_root")
+    source_manifest["source_generator_validation"] = (
+        "SOURCE_GENERATOR_VALIDATED"
+        if source_oracle["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
+        else "SOURCE_GENERATOR_NOT_VALIDATED"
+    )
     candidate_oracle = audit_candidate_ledger_standalone(candidate_ledger, source_manifest)
     reconciliation = reconcile_v1_v2(source_manifest, candidate_ledger)
     summary = build_summary(
@@ -549,9 +564,10 @@ def build_v2_artifacts(*, base_main_sha: str, execution_commit_sha: str, max_wor
 
 def write_json_with_sidecar(payload: dict[str, Any], path: Path) -> str:
     serialized = canonical_json_bytes(payload)
+    content = serialized + b"\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(serialized + b"\n")
-    digest = sha256_bytes(serialized)
+    path.write_bytes(content)
+    digest = sha256_bytes(content)
     path.with_suffix(path.suffix + ".sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
     return digest
 
@@ -570,6 +586,10 @@ def write_artifacts(artifacts: V2Artifacts, output_dir: Path) -> dict[str, str]:
     cert_path = output_dir / V2_CERTIFICATION_NAME
     cert_path.write_text(render_markdown(artifacts, digests), encoding="utf-8")
     digests["certification_md"] = sha256_file(cert_path)
+    cert_path.with_suffix(cert_path.suffix + ".sha256").write_text(
+        f"{digests['certification_md']}  {cert_path.name}\n",
+        encoding="utf-8",
+    )
     return {name: str(path) for name, path in paths.items()} | {"certification": str(cert_path), "digests": json.dumps(digests, sort_keys=True)}
 
 
@@ -608,10 +628,13 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             "- allowed_for_live_execution=false",
             "- PRODUCTION FILES TOUCHED: NONE",
             "- SOURCE DATA FILES MUTATED: NONE",
+            "- SOURCE DATA FILES COPIED: NONE",
+            "- SOURCE SYMLINKS CREATED: NONE",
+            "- PR #674 MODIFIED: NO",
             "",
             "## Grill Me Review",
-            "- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, reconciliation is proven, but overall recertification remains not certified because the independent source oracle could not byte-probe contained source files in this isolated worktree.",
-            "- The report does not soften this into a pass.",
+            "- Safety conclusion: certified only under explicit read-only source authority.",
+            "- The independent source oracle resolves portable logical paths beneath the supplied authority root and rejects missing authority, absolute paths, traversal, wrong prefixes, symlink components, non-files, and byte/schema/session drift before certifying.",
             "",
             "## Hermes Review",
             "- The v2 contract separates portable source identity from diagnostic absolute paths.",
@@ -628,12 +651,27 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             "## Source Manifest",
             f"- version: {SOURCE_MANIFEST_VERSION}",
             f"- record_count: {artifacts.source_manifest['record_count']}",
+            f"- selected_source_count: {summary['selected_source_count']}",
             f"- semantic_hash: `{artifacts.source_manifest['source_manifest_semantic_hash']}`",
+            f"- source_authority_root: `{artifacts.source_oracle['source_authority_root']}`",
             f"- independent_source_oracle_verdict: `{artifacts.source_oracle['verdict']}`",
+            f"- source_files_resolved: {artifacts.source_oracle['source_files_resolved']}",
             f"- source_files_byte_probed: {artifacts.source_oracle['source_files_byte_probed']}",
+            f"- source_files_parquet_read: {artifacts.source_oracle['source_files_parquet_read']}",
+            f"- source_sha_matches: {artifacts.source_oracle['source_sha_matches']}",
+            f"- source_byte_size_matches: {artifacts.source_oracle['source_byte_size_matches']}",
+            f"- source_row_count_matches: {artifacts.source_oracle['source_row_count_matches']}",
+            f"- source_schema_matches: {artifacts.source_oracle['source_schema_matches']}",
+            f"- source_symbol_matches: {artifacts.source_oracle['source_symbol_matches']}",
+            f"- source_session_matches: {artifacts.source_oracle['source_session_matches']}",
+            f"- source_record_id_matches: {artifacts.source_oracle['source_record_id_matches']}",
             f"- source_oracle_failures: `{json.dumps(artifacts.source_oracle['failures'], sort_keys=True)}`",
             f"- source_root_containment_failures: {artifacts.source_oracle['source_root_containment_failures']}",
             f"- complete_session_failures: {artifacts.source_oracle['complete_session_failures']}",
+            f"- source_symbol_failures: {artifacts.source_oracle['source_symbol_failures']}",
+            f"- source_schema_failures: {artifacts.source_oracle['source_schema_failures']}",
+            f"- source_ohlc_failures: {artifacts.source_oracle['source_ohlc_failures']}",
+            f"- source_uniqueness_failures: {artifacts.source_oracle['source_uniqueness_failures']}",
             "",
             "## Candidate Ledger",
             f"- candidate_count: {artifacts.candidate_ledger['candidate_count']}",
@@ -660,13 +698,17 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             f"- overall_decision: `{summary['decision']}`",
             "",
             "## Runtime Proof Required After Merge",
-            "- A human must provide or mount the selected source parquet corpus inside the isolated worktree before any future recertification or outcome-measurement task.",
+            "- Post-merge runtime proof for this PR is the explicit read-only source authority supplied by CLI and certified by the independent source oracle.",
+            "",
+            "## Source Authority",
+            "- The authority path is read-only input supplied by CLI; physical absolute paths are diagnostics only and are excluded from portable semantic hashes.",
+            "- The source oracle byte-probes files in place and does not mutate, copy, or symlink the source corpus.",
             "",
             "## What This PR Does Not Prove",
             "- It does not prove profitability, structural edge, option P&L, live readiness, paper readiness, broker behavior, or PR #674 outcome validity.",
             "",
             "## Human Approval",
-            "- Required before interpreting any v2 artifact as certification evidence because the current overall verdict is fail-closed.",
+            "- Required before merging this PR or using these research artifacts for downstream outcome work.",
             "",
             "## Artifact Digests",
             f"- source_manifest: `{digests['source_manifest']}`",
