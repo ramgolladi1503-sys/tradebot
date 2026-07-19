@@ -9,13 +9,15 @@
 - contract_verdict: ORB_OUTCOME_CONTRACT_V2_FROZEN
 - ledger_verdict: ORB_OUTCOME_LEDGER_V2_CERTIFIED
 - audit_verdict: ORB_OUTCOMES_V2_AUDIT_CERTIFIED
+- negative_control_verdict: ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED
+- negative_control_count: 70
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `94c9a14b0b165ea65cdc20003a78036fe4c14e69ecfac3994904150d2d124989`
-- outcome_ledger_hash: `2b0372a3502527b7c0ca6018a628c55822c23a6e7873cd5d19afcd49e32c6411`
-- summary_hash: `0a0339d076cc62ef5c9219a7870fed8e7efef77c772c1a434f9a0655776940c5`
-- frozen_code_sha: `7aa8c18bfa3f93d5c1729aa86a62a9094864b894`
-- implementation_tree_hash: `c96090797ef6358052c69744f4e76ffcbf20c25d4007fddf9080700b67eda36f`
+- contract_hash: `8826adfa54bc95308de827d658901762cc8590c4fc418e787fa1d92afc911365`
+- outcome_ledger_hash: `91a9e850043c8b3ec84daf0d2a54d150adbd4f4e92e75f5e179a7cdbe182f357`
+- summary_hash: `ad81556f3890b8e6e0d1d262845525df654f14b2676da7144710bec4bb1953b6`
+- frozen_code_sha: `c5bcbe9e368ae4671608bba0cacda81c30418dc1`
+- implementation_tree_hash: `d083ae3a92771137c6287d29e2958eac67bcc0c6405551f8d8e4962356dd09f7`
 
 ## Agent Work Contract
 
@@ -56,6 +58,7 @@
 - implementation: Added isolated `research/opening_range_retest_outcomes_v2` contract, engine, overlap, artifact, and audit modules.
 - implementation: Added generator and audit CLIs plus focused negative-control tests.
 - implementation: Generated contract, ledger, summary, overlap, audit, certification, and sidecar artifacts.
+- implementation: Generated negative-control matrix and sidecar artifact.
 
 ## QA / Safety Review
 
@@ -64,6 +67,7 @@
 - focused outcome tests: PASS
 - ORB Phase 1 v2 plus outcome tests: PASS
 - independent audit CLI: PASS
+- negative controls: ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED
 - read_only: true
 - is_order_action: false
 - broker_api_called: false
