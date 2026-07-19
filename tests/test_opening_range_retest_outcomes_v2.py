@@ -164,7 +164,7 @@ def test_unsupported_direction_fails_closed(tmp_path: Path) -> None:
     outcome = measure_candidate(candidate, source, frame, "contract")
     assert outcome["terminal_reason"] == "CANDIDATE_DIRECTION_UNSUPPORTED"
     assert outcome["measured_horizon_count"] == 0
-    assert len(outcome["horizons"]) == 5
+    assert set(outcome["horizons"]) == {"1", "3", "5", "15", "30"}
 
 
 def test_outcome_id_includes_measured_horizon_count(tmp_path: Path) -> None:
