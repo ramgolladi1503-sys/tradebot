@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -17,9 +18,10 @@ def _write_session(
     start: str = "2026-07-06T09:15:00+05:30",
     drop_column: str | None = None,
     cadence_gap: bool = False,
+    timestamps: object | None = None,
 ) -> None:
     start_ts = pd.Timestamp(start)
-    timestamps = pd.date_range(start=start_ts, periods=rows, freq="min")
+    timestamps = timestamps if timestamps is not None else pd.date_range(start=start_ts, periods=rows, freq="min")
     if cadence_gap and rows > 5:
         timestamps = timestamps.to_series().reset_index(drop=True)
         timestamps.iloc[5] = timestamps.iloc[5] + pd.Timedelta(minutes=1)
@@ -201,7 +203,8 @@ def test_duplicate_source_assignment_is_reported(tmp_path: Path, monkeypatch) ->
     assert counts["DUPLICATE_SOURCE_ASSIGNMENT"] == 2
 
 
-def test_duplicate_identity_audit_distinguishes_duplicate_cases(tmp_path: Path) -> None:
+def test_duplicate_identity_audit_distinguishes_duplicate_cases(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
     a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_20260706.parquet"
     b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_DUP_20260706.parquet"
     _write_session(a, symbol="NIFTY")
@@ -211,16 +214,56 @@ def test_duplicate_identity_audit_distinguishes_duplicate_cases(tmp_path: Path) 
     same_logical = {**record_b, "logical_path": record_a["logical_path"]}
     same_physical_cross_symbol = {**record_a, "symbol": "BANKNIFTY"}
     same_sha_cross_symbol = {**record_b, "symbol": "BANKNIFTY", "sha256": record_a["sha256"]}
+    rows, _ = audit.audit_records(
+        {"records": [record_a, record_b, same_logical, same_physical_cross_symbol, same_sha_cross_symbol]},
+        {},
+    )
     groups = audit.duplicate_identity_groups(
         [record_a, record_b, same_logical, same_physical_cross_symbol, same_sha_cross_symbol],
         {},
+        rows,
     )
-    assert groups["duplicate_session_symbol_assignment"]
-    assert groups["duplicate_logical_path"]
-    assert groups["duplicate_resolved_physical_path"]
-    assert groups["duplicate_source_sha"]
-    assert groups["cross_symbol_physical_file_reuse"]
-    assert groups["cross_symbol_sha_reuse"]
+    assert groups["declared"]["declared_duplicate_session_symbol_assignment"]
+    assert groups["declared"]["declared_duplicate_logical_path"]
+    assert groups["declared"]["declared_duplicate_resolved_path"]
+    assert groups["declared"]["declared_duplicate_sha"]
+    assert groups["observed"]["observed_duplicate_resolved_path"]
+    assert groups["observed"]["observed_duplicate_actual_sha"]
+    assert groups["observed"]["observed_cross_symbol_physical_file_reuse"]
+    assert groups["observed"]["observed_cross_symbol_actual_sha_reuse"]
+
+
+def test_observed_duplicate_sha_uses_actual_bytes_not_declared_sha(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_A_20260706.parquet"
+    b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_B_20260706.parquet"
+    _write_session(a, symbol="NIFTY")
+    b.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(a, b)
+    logical_a = "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_A_20260706.parquet"
+    logical_b = "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_B_20260706.parquet"
+    record_a = _record(a, logical_a)
+    record_b = {**_record(b, logical_b), "sha256": "1" * 64}
+    rows, _ = audit.audit_records({"records": [record_a, record_b]}, {logical_a: {"symbol_values": ["NIFTY"], **record_a}, logical_b: {"symbol_values": ["NIFTY"], **record_b}})
+    groups = audit.duplicate_identity_groups([record_a, record_b], {}, rows)
+    assert not groups["declared"]["declared_duplicate_sha"]
+    assert groups["observed"]["observed_duplicate_actual_sha"]
+
+
+def test_declared_sha_duplicate_does_not_prove_actual_byte_duplicate(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    a = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_A_20260706.parquet"
+    b = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_B_20260706.parquet"
+    _write_session(a, symbol="NIFTY")
+    _write_session(b, symbol="NIFTY", start="2026-07-06T09:16:00+05:30")
+    logical_a = "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_A_20260706.parquet"
+    logical_b = "runtime/upstox_candidate_replay/20260706/underlying/NIFTY_B_20260706.parquet"
+    record_a = _record(a, logical_a)
+    record_b = {**_record(b, logical_b), "sha256": record_a["sha256"]}
+    rows, _ = audit.audit_records({"records": [record_a, record_b]}, {logical_a: {"symbol_values": ["NIFTY"], **record_a}, logical_b: {"symbol_values": ["NIFTY"], **record_b}})
+    groups = audit.duplicate_identity_groups([record_a, record_b], {}, rows)
+    assert groups["declared"]["declared_duplicate_sha"]
+    assert not groups["observed"]["observed_duplicate_actual_sha"]
 
 
 def test_root_cause_is_derived_without_hard_coded_date(tmp_path: Path, monkeypatch) -> None:
@@ -241,8 +284,10 @@ def test_root_cause_is_derived_without_hard_coded_date(tmp_path: Path, monkeypat
     )
     causes = audit.derive_root_causes(rows)
     assert "2026-07-11" in causes
-    assert causes["2026-07-11"]["terminal_root_cause_case"] == "MULTIPLE_DEFECTS"
-    assert "WRONG_MANIFEST_PATH" in causes["2026-07-11"]["derived_cases"]
+    assert causes["2026-07-11"]["causal_root_cause"] == "SELECTOR_SYMBOL_NORMALIZATION_MISCLASSIFIED_BANKNIFTY_AS_NIFTY"
+    assert "DUPLICATE_NIFTY_SESSION_ASSIGNMENT" in causes["2026-07-11"]["causal_consequences"]
+    assert "MANIFEST_PATH_MISMATCH" in causes["2026-07-11"]["observed_consistency_findings"]
+    assert "WRONG_INVENTORY_SYMBOL" not in json.dumps(causes["2026-07-11"])
 
 
 def test_manifest_semantic_hash_is_order_stable() -> None:
@@ -262,7 +307,87 @@ def test_row_count_mismatch_is_reported(tmp_path: Path, monkeypatch) -> None:
     record["row_count"] = 375
     rows, _ = audit.audit_records({"records": [record]}, {logical: {"symbol_values": ["NIFTY"], **record}})
     assert "SOURCE_ROW_COUNT_MISMATCH" in rows[0]["classifications"]
-    assert "SOURCE_HISTORY_INVALID" not in rows[0]["classifications"]
+    assert "SOURCE_HISTORY_INVALID" in rows[0]["classifications"]
+
+
+def test_source_root_containment_rejects_external_absolute_and_traversal_before_probe(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    outside = tmp_path / "outside.parquet"
+    _write_session(outside, symbol="NIFTY")
+    cases = [
+        {"logical_path": "../outside.parquet", "absolute_path": str(outside)},
+        {"logical_path": "runtime/upstox_candidate_replay/20260706/underlying/missing.parquet", "absolute_path": str(outside)},
+        {"logical_path": str(outside), "absolute_path": str(outside)},
+    ]
+    for case in cases:
+        record = {
+            **case,
+            "symbol": "NIFTY",
+            "session_date": "2026-07-06",
+            "sha256": "0" * 64,
+            "row_count": 375,
+            "byte_size": 1,
+        }
+        rows, _ = audit.audit_records({"records": [record]}, {})
+        assert "SOURCE_OUTSIDE_ALLOWED_ROOT" in rows[0]["classifications"]
+        assert rows[0]["source_probe"]["sha256"] is None
+
+
+def test_source_root_containment_rejects_symlink_escape(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    outside = tmp_path / "outside/source.parquet"
+    _write_session(outside, symbol="NIFTY")
+    link = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/LINK_20260706.parquet"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(outside)
+    logical = "runtime/upstox_candidate_replay/20260706/underlying/LINK_20260706.parquet"
+    record = {"logical_path": logical, "absolute_path": str(link), "symbol": "NIFTY", "session_date": "2026-07-06", "sha256": "0" * 64, "row_count": 375, "byte_size": 1}
+    rows, _ = audit.audit_records({"records": [record]}, {})
+    assert "SOURCE_OUTSIDE_ALLOWED_ROOT" in rows[0]["classifications"]
+    assert rows[0]["source_probe"]["sha256"] is None
+
+
+def test_alternative_full_session_contract_rejects_inventory_matched_incomplete_and_wrong_bounds(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    cases = [
+        ("short", {"rows": 374, "row_count": 374}, "ALTERNATIVE_INCOMPLETE_SESSION"),
+        ("shifted", {"start": "2026-07-06T09:16:00+05:30"}, "ALTERNATIVE_WRONG_SESSION_BOUNDS"),
+    ]
+    for label, kwargs, expected in cases:
+        right = tmp_path / f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        _write_session(right, symbol="NSE_INDEX|Nifty 50", rows=int(kwargs.get("rows", 375)), start=str(kwargs.get("start", "2026-07-06T09:15:00+05:30")))
+        logical = f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        row = _inventory_row(right, logical, "NSE_INDEX|Nifty 50")
+        if "row_count" in kwargs:
+            row["row_count"] = kwargs["row_count"]
+        rows, _ = audit.audit_records({"records": [wrong_record]}, {wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record}, logical: row})
+        assert expected in rows[0]["classifications"]
+        assert "CORRECT_ALTERNATIVE_SOURCE_FOUND" not in rows[0]["classifications"]
+
+
+def test_alternative_full_session_contract_rejects_duplicate_and_missing_extra_minute(tmp_path: Path, monkeypatch) -> None:
+    wrong = tmp_path / "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    _write_session(wrong, symbol="NSE_INDEX|Nifty Bank")
+    monkeypatch.setattr(audit, "PROJECT_ROOT", tmp_path)
+    wrong_logical = "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet"
+    wrong_record = _record(wrong, wrong_logical, symbol="NIFTY")
+    base = pd.date_range(start=pd.Timestamp("2026-07-06T09:15:00+05:30"), periods=375, freq="min").to_series().reset_index(drop=True)
+    cases = [
+        ("duplicate", base.mask(base.index == 5, base.iloc[4])),
+        ("missing_extra", base.mask(base.index == 5, base.iloc[5] + pd.Timedelta(minutes=1))),
+    ]
+    for label, timestamps in cases:
+        right = tmp_path / f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        _write_session(right, symbol="NSE_INDEX|Nifty 50", timestamps=timestamps)
+        logical = f"runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty 50_{label}_20260706.parquet"
+        row = _inventory_row(right, logical, "NSE_INDEX|Nifty 50")
+        rows, _ = audit.audit_records({"records": [wrong_record]}, {wrong_logical: {"symbol_values": ["NSE_INDEX|Nifty Bank"], "data_role": "UNDERLYING_CANDLES", **wrong_record}, logical: row})
+        assert "ALTERNATIVE_HISTORY_INVALID" in rows[0]["classifications"]
+        assert "CORRECT_ALTERNATIVE_SOURCE_FOUND" not in rows[0]["classifications"]
 
 
 def test_blast_radius_separates_exact_emissions_from_upper_bound() -> None:
@@ -300,6 +425,15 @@ def test_evidence_contract_fields_are_machine_detectable(tmp_path: Path) -> None
         "duplicate_contaminated_source_record_count": 0,
         "affected_session_symbol_keys": [],
         "records_audited": 0,
+        "causal_root_cause_count": 0,
+        "causal_root_cause_by_date": {},
+        "source_root_containment_failures": 0,
+        "alternative_session_contract_failures": 0,
+        "duplicate_identity_audit": {
+            "declared_duplicate_identity_counts": {},
+            "observed_duplicate_identity_counts": {},
+            "groups": {"declared": {}, "observed": {}},
+        },
         "observed_invariants": {"selected_source_count": 0, "recomputed_manifest_semantic_hash": "", "candidate_count": 0, "candidate_semantic_hash": ""},
         "candidate_blast_radius": {
             "exact_wrong_source_emission_count": 0,

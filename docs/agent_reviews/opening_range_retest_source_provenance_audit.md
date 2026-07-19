@@ -5,7 +5,7 @@
 - candidate_id: opening_range_retest_source_provenance_audit_v1
 - decision: ORB_PHASE1_INVALID
 - reason: ORB Phase 1 source manifest has verified source identity defects; v1 source and candidate hashes cannot certify Phase 1.
-- timestamp: 2026-07-18T22:58:13.947246+00:00
+- timestamp: 2026-07-19T06:32:14.326335+00:00
 - is_order_action: false
 - broker_api_called: false
 - source: docs/agent_reviews/opening_range_retest_source_provenance_audit_v1.json
@@ -40,13 +40,37 @@
 - Source roots are treated as mutable local paths; immutable identity comes from logical path, session, symbol, size, row count, and SHA-256.
 
 ## GSD Review
-- JSON artifact SHA-256: `62c1fa5d6590642df11a1260b8e472bd2890f7a8207978548813d96d3cc982c5`
+- JSON artifact SHA-256: `bdcac1d8a175b3dff999d3496c8c3563e75616a1a0d7bd3f841d7e3cb1267e9d`
 - Decision: `ORB_PHASE1_INVALID`
 - Classification counts: `{"CORRECT_ALTERNATIVE_SOURCE_FOUND": 5, "DUPLICATE_SOURCE_ASSIGNMENT": 10, "EXACT_MATCH": 1502, "INVENTORY_SYMBOL_MISMATCH": 5, "MANIFEST_PATH_MISMATCH": 5, "SOURCE_CONTENT_SYMBOL_MISMATCH": 5}`
 
 ## QA / Safety Review
 - The auditor reads all manifest records and continues after per-record failures.
 - It checks manifest path identity, inventory symbol identity, file content symbol identity, size, row count, hash, schema, session, history, duplicate assignments, and alternatives.
+- Observed consistency findings mean the named component does not agree with the manifest record's declared symbol; they do not imply the component itself is corrupt.
+
+## Historical Causality
+- causal_root_cause: SELECTOR_SYMBOL_NORMALIZATION_MISCLASSIFIED_BANKNIFTY_AS_NIFTY
+- causal_consequences: MANIFEST_SELECTED_WRONG_SYMBOL_SOURCE, DUPLICATE_NIFTY_SESSION_ASSIGNMENT, WRONG_SYMBOL_BARS_FED_REPLAY
+- inventory/parquet internal agreement: filename, inventory metadata, and byte-probed parquet content agree the five defective files are BANKNIFTY.
+- non-causal observed findings: MANIFEST_PATH_MISMATCH, INVENTORY_SYMBOL_MISMATCH, SOURCE_CONTENT_SYMBOL_MISMATCH, DUPLICATE_SOURCE_ASSIGNMENT are relative to the incorrect NIFTY manifest assignment.
+- causal_root_cause_count: 5
+- affected_dates: ['2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09', '2026-07-10']
+
+## Source Root Containment
+- allowed_source_roots: ['/Users/madhuram/tradebot-orb-source-provenance-repair/runtime/upstox_candidate_replay', '/Users/madhuram/tradebot/runtime/upstox_candidate_replay']
+- source_root_containment_failures: 0
+- containment policy: candidate source paths must resolve under an allowed source root before hashing, stat, or parquet reads.
+
+## Duplicate Identity Audit
+- declared identity duplicates are computed from manifest/inventory metadata.
+- observed identity duplicates are computed only from contained, successfully probed files.
+- declared_duplicate_identity_counts: `{"declared_cross_symbol_path_reuse": 0, "declared_cross_symbol_sha_reuse": 0, "declared_duplicate_inventory_record_identity": 0, "declared_duplicate_logical_path": 0, "declared_duplicate_manifest_record_identity": 0, "declared_duplicate_resolved_path": 0, "declared_duplicate_session_symbol_assignment": 5, "declared_duplicate_sha": 0}`
+- observed_duplicate_identity_counts: `{"observed_cross_symbol_actual_sha_reuse": 0, "observed_cross_symbol_physical_file_reuse": 0, "observed_duplicate_actual_sha": 0, "observed_duplicate_resolved_path": 0}`
+
+## Alternative Session Contract
+- complete-session alternative contract: 375 unique, strictly increasing one-minute bars from 09:15 through 15:29 local IST representation.
+- alternative_session_contract_failures: 0
 
 ## Acceptance Proof
 - records_audited: 1512
