@@ -327,10 +327,7 @@ def _exec_input_bundle(case: ControlCase) -> Execution:
             return Execution(clean_failures[0], True, before, before, {"clean_failures": clean_failures})
         if case.control_id.startswith("INPUT_SIDECAR_"):
             key = case.control_id.removeprefix("INPUT_SIDECAR_").lower()
-            if key == "phase1_certification":
-                target = root / INPUT_FILES[key]
-            else:
-                target = root / INPUT_FILES[key]
+            target = root / INPUT_FILES[key]
             target.with_suffix(target.suffix + ".sha256").write_text("0" * 64 + f"  {target.name}\n", encoding="utf-8")
         elif case.control_id == "INPUT_SOURCE_MANIFEST_HASH":
             path = root / INPUT_FILES["source_manifest"]
