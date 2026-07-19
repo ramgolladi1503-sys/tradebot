@@ -29,7 +29,27 @@ INPUT_FILES = {
     "reconciliation": "opening_range_retest_phase1_v2_reconciliation.json",
     "phase1_certification": "opening_range_retest_phase1_v2_certification.md",
 }
-SOURCE_COLUMNS = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+SOURCE_COLUMNS = [
+    "timestamp",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "oi",
+    "source",
+    "interval",
+    "fetch_timestamp",
+    "fetch_start_date",
+    "fetch_end_date",
+    "data_origin",
+    "synthetic",
+    "mock",
+    "fallback",
+    "provider",
+    "source_endpoint",
+]
 ALLOWED_DIRECTIONS = {"BUY_CALL", "BUY_PUT"}
 FAIL_CLOSED_REASONS = {
     "SOURCE_PROVENANCE_MISMATCH",

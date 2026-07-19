@@ -27,7 +27,27 @@ INPUT_FILES = {
     "reconciliation": "opening_range_retest_phase1_v2_reconciliation.json",
     "phase1_certification": "opening_range_retest_phase1_v2_certification.md",
 }
-SOURCE_COLUMNS = ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+SOURCE_COLUMNS = [
+    "timestamp",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "oi",
+    "source",
+    "interval",
+    "fetch_timestamp",
+    "fetch_start_date",
+    "fetch_end_date",
+    "data_origin",
+    "synthetic",
+    "mock",
+    "fallback",
+    "provider",
+    "source_endpoint",
+]
 CLAIM_BOUNDARY = {"DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL", "NOT_PROFITABILITY", "NOT_PAPER_OR_LIVE_READY"}
 
 
