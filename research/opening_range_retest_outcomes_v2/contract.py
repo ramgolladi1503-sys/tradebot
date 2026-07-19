@@ -18,6 +18,7 @@ IMPLEMENTATION_TREE_PATHS = (
     "scripts/generate_opening_range_retest_outcomes_v2.py",
     "scripts/audit_opening_range_retest_outcomes_v2.py",
     "tests/test_opening_range_retest_outcomes_v2.py",
+    "tests/test_opening_range_retest_outcome_controls_v2.py",
 )
 IMPLEMENTATION_TREE_HASH_ALGORITHM = "sha256(git-ls-tree-r HEAD -- implementation-tree-paths)"
 

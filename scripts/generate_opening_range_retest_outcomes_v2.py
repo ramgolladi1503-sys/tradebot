@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -54,17 +56,24 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
     if require_clean and _git_status_short():
         raise RuntimeError("EVIDENCE_GENERATION_REQUIRES_CLEAN_WORKTREE")
     artifact_dir = PROJECT_ROOT / "docs" / "agent_reviews"
+    impl_hash = implementation_tree_hash(head)
     contract = build_contract(
         source_authority_root=str((source_project_root / "runtime" / "upstox_candidate_replay").resolve()),
         base_main_sha=base_main_sha,
         execution_commit_sha=head,
         frozen_code_sha=frozen_code_sha,
-        implementation_tree_hash=implementation_tree_hash(head),
+        implementation_tree_hash=impl_hash,
     )
     ledger = build_ledger(artifact_dir=artifact_dir, source_project_root=source_project_root, contract=contract)
     summary = summarize(ledger)
     overlap = build_overlap(ledger)
-    controls = build_negative_control_report()
+    controls = build_negative_control_report(
+        frozen_code_sha=frozen_code_sha,
+        implementation_tree_hash=impl_hash,
+        pytest_version=pytest.__version__,
+        pytest_command="python -m pytest -q tests/test_opening_range_retest_outcome_controls_v2.py",
+        test_file_hashes={"tests/test_opening_range_retest_outcome_controls_v2.py": sha256_file(PROJECT_ROOT / "tests" / "test_opening_range_retest_outcome_controls_v2.py")},
+    )
     paths = {
         "contract": output_dir / "opening_range_retest_outcome_contract_v2.json",
         "ledger": output_dir / "opening_range_retest_outcome_ledger_v2.json",

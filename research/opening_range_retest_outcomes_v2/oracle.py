@@ -55,6 +55,8 @@ SOURCE_COLUMNS = [
 CLAIM_BOUNDARY = {"DESCRIPTIVE_ONLY", "PRE_COST_UNDERLYING_ONLY", "NOT_EDGE_EVIDENCE", "NOT_OPTION_PNL", "NOT_PROFITABILITY", "NOT_PAPER_OR_LIVE_READY"}
 PORTABLE_CONTRACT_EXCLUDE = {"contract_hash", "diagnostic_source_authority_root", "diagnostic_generation_commit_sha"}
 EVIDENCE_PREFIXES = ("docs/agent_reviews/opening_range_retest_outcome_",)
+CONTROL_TEST_FILE = "tests/test_opening_range_retest_outcome_controls_v2.py"
+CONTROL_TEST_NAME = "test_orb_outcome_negative_control"
 
 
 def cbytes(payload: Any) -> bytes:
@@ -512,6 +514,35 @@ def overlap_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[s
     return list(dict.fromkeys(failures))
 
 
+def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha: str, implementation_tree_hash: str) -> list[str]:
+    if not controls:
+        return ["NEGATIVE_CONTROL_REPORT_MISSING"]
+    failures = []
+    rows = controls.get("controls", [])
+    ids = [row.get("control_id") for row in rows]
+    nodes = [row.get("pytest_node_id") for row in rows]
+    if controls.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED":
+        failures.append("NEGATIVE_CONTROL_VERDICT_MISMATCH")
+    if controls.get("collected", 0) < 70 or controls.get("executed") != controls.get("collected") or controls.get("passed") != controls.get("executed"):
+        failures.append("NEGATIVE_CONTROL_EXECUTION_COUNTS_MISMATCH")
+    if controls.get("failed") or controls.get("skipped") or controls.get("xfailed") or controls.get("xpassed"):
+        failures.append("NEGATIVE_CONTROL_NON_PASSING_RESULT")
+    if len(ids) != len(set(ids)) or len(nodes) != len(set(nodes)):
+        failures.append("NEGATIVE_CONTROL_DUPLICATE_ID")
+    if any(not str(node).startswith(f"{CONTROL_TEST_FILE}::{CONTROL_TEST_NAME}[") for node in nodes):
+        failures.append("NEGATIVE_CONTROL_NODE_ID_MISMATCH")
+    if controls.get("frozen_code_sha") != frozen_code_sha:
+        failures.append("NEGATIVE_CONTROL_FROZEN_SHA_MISMATCH")
+    if controls.get("implementation_tree_hash") != implementation_tree_hash:
+        failures.append("NEGATIVE_CONTROL_IMPLEMENTATION_TREE_MISMATCH")
+    for row in rows:
+        mutation = str(row.get("mutation", "")).lower()
+        if "negative mutation" in mutation or not row.get("invoked_target") or row.get("status") != "PASS":
+            failures.append("NEGATIVE_CONTROL_SYNTHETIC_ROW")
+            break
+    return list(dict.fromkeys(failures))
+
+
 def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str, Any], ledger: dict[str, Any], summary: dict[str, Any], overlap: dict[str, Any], controls: dict[str, Any] | None, paths: dict[str, Path]) -> dict[str, Any]:
     failures = []
     failures.extend(verify_contract_and_lineage(contract, Path.cwd()))
@@ -526,8 +557,10 @@ def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str
     failures.extend(summary_failures(expected_summary, summary))
     expected_overlap = recompute_overlap(records)
     failures.extend(overlap_failures(expected_overlap, overlap))
-    if not controls or controls.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED" or controls.get("control_count", 0) < 70 or controls.get("failures"):
+    control_failures = control_report_failures(controls, frozen_code_sha=contract.get("frozen_code_sha"), implementation_tree_hash=contract.get("implementation_tree_hash"))
+    if control_failures:
         failures.append("NEGATIVE_CONTROL_MATRIX_MISMATCH")
+        failures.extend(control_failures)
     sidecars = {name: verify_sidecar(path) for name, path in paths.items()}
     if not all(v["sidecar_match"] for v in sidecars.values()):
         failures.append("ARTIFACT_SIDECAR_MISMATCH")
