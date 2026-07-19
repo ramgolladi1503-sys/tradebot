@@ -11,8 +11,11 @@
 - audit_verdict: ORB_OUTCOMES_V2_AUDIT_CERTIFIED
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `28d2101bf6760f012250c32e156175d6f0863671228b2f0691a6f08d07befe83`
-- outcome_ledger_hash: `2d49eba4acd246c3a37bcdbfb0b51354345c5edebe4d67a119cce5a923314d50`
+- contract_hash: `94c9a14b0b165ea65cdc20003a78036fe4c14e69ecfac3994904150d2d124989`
+- outcome_ledger_hash: `2b0372a3502527b7c0ca6018a628c55822c23a6e7873cd5d19afcd49e32c6411`
+- summary_hash: `0a0339d076cc62ef5c9219a7870fed8e7efef77c772c1a434f9a0655776940c5`
+- frozen_code_sha: `7aa8c18bfa3f93d5c1729aa86a62a9094864b894`
+- implementation_tree_hash: `c96090797ef6358052c69744f4e76ffcbf20c25d4007fddf9080700b67eda36f`
 
 ## Agent Work Contract
 
@@ -74,7 +77,8 @@
 - duplicate_candidate_ids: 0
 - source_failure_counts: {}
 - terminal_reason_counts: {'MEASURED': 2086, 'INSUFFICIENT_HORIZON': 120, 'NO_LEGAL_ENTRY_BAR': 9}
-- horizon_status_counts: {'1': {'MEASURED': 2206}, '3': {'MEASURED': 2196, 'SESSION_ENDED_BEFORE_HORIZON': 10}, '5': {'MEASURED': 2193, 'SESSION_ENDED_BEFORE_HORIZON': 13}, '15': {'MEASURED': 2155, 'SESSION_ENDED_BEFORE_HORIZON': 51}, '30': {'MEASURED': 2086, 'SESSION_ENDED_BEFORE_HORIZON': 120}}
+- horizon_status_counts: {'1': {'MEASURED': 2206, 'NO_LEGAL_ENTRY_BAR': 9}, '3': {'MEASURED': 2196, 'SESSION_ENDED_BEFORE_HORIZON': 10, 'NO_LEGAL_ENTRY_BAR': 9}, '5': {'MEASURED': 2193, 'SESSION_ENDED_BEFORE_HORIZON': 13, 'NO_LEGAL_ENTRY_BAR': 9}, '15': {'MEASURED': 2155, 'SESSION_ENDED_BEFORE_HORIZON': 51, 'NO_LEGAL_ENTRY_BAR': 9}, '30': {'MEASURED': 2086, 'SESSION_ENDED_BEFORE_HORIZON': 120, 'NO_LEGAL_ENTRY_BAR': 9}}
+- horizon_conservation: {'1': 2215, '3': 2215, '5': 2215, '15': 2215, '30': 2215}
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
 
 ## Runtime Proof Required After Merge
@@ -85,6 +89,7 @@
 ## What This PR Does Not Prove
 
 - Does not prove structural edge, profitability, option PnL, fill quality, slippage, latency, capital allocation, paper readiness, live readiness, broker correctness, or production promotion.
+- This PR supersedes the implementation direction and stale evidence in PR #674. PR #674 itself was not modified.
 
 ## Human Approval
 
