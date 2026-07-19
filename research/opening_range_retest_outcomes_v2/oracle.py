@@ -201,8 +201,8 @@ def _run_git(repo_root: Path, args: list[str]) -> str:
 
 
 def _implementation_tree_hash(repo_root: Path, rev: str) -> str:
-    stdout = _run_git(repo_root, ["ls-tree", "-r", rev, "--", *IMPLEMENTATION_TREE_PATHS])
-    return shab(stdout.encode("utf-8"))
+    proc = subprocess.run(["git", "ls-tree", "-r", rev, "--", *IMPLEMENTATION_TREE_PATHS], cwd=repo_root, check=True, capture_output=True, text=True)
+    return shab(proc.stdout.encode("utf-8"))
 
 
 def verify_contract_and_lineage(contract: dict[str, Any], repo_root: Path) -> list[str]:
