@@ -71,7 +71,7 @@ def verify_inputs(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], d
         "candidate_count": ledger.get("candidate_count") == INPUT_CANDIDATE_COUNT,
         "candidate_core": ledger.get("candidate_core_semantic_hash") == INPUT_CANDIDATE_CORE_HASH,
         "candidate_provenance": ledger.get("candidate_provenance_semantic_hash") == INPUT_CANDIDATE_PROVENANCE_HASH,
-        "reconciliation": reconciliation.get("decision") in {"ORB_PHASE1_V2_RECONCILED", "ORB_PHASE1_V2_RECERTIFIED", None},
+        "reconciliation": reconciliation.get("decision") == "UNAFFECTED_SUBSET_RECONCILED",
     }
     if not all(expected.values()):
         raise ValueError(f"ORB_PHASE1_V2_INPUT_CERTIFICATION_MISMATCH:{expected}")
