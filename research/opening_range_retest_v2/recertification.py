@@ -465,6 +465,7 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             f"- decision: {summary['decision']}",
             f"- reason: {summary['reason']}",
             f"- timestamp: {summary['timestamp']}",
+            f"- source: {summary['source']}",
             "- is_order_action: false",
             "- broker_api_called: false",
             "- allowed_for_live_execution: false",

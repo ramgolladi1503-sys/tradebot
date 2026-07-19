@@ -5,7 +5,8 @@
 - candidate_id: opening_range_retest_causal_replay_summary_v2
 - decision: ORB_PHASE1_V2_NOT_CERTIFIED
 - reason: Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.
-- timestamp: 2026-07-19T08:15:58.799276+00:00
+- timestamp: 2026-07-19T08:17:45.622317+00:00
+- source: research.opening_range_retest_v2.recertification
 - is_order_action: false
 - broker_api_called: false
 - allowed_for_live_execution: false
@@ -88,8 +89,8 @@
 ## Artifact Digests
 - source_manifest: `bc6b00315c0cbe6a5d8a2d4da8116cb675813309ae3db116b93c1cc3dd763be9`
 - candidate_ledger: `9949058d008a6790d4b4a3d7d6c5ab7af3465a19449ecd947da0716aaad2085d`
-- summary: `43a3ac7e7078ec7436be68b66a02a7f5c66cf053daf5a7d3d0127e0bec0098a8`
-- reconciliation: `88fb4300fd030557b93811128614f637d16df2ec2739ff6a83c19ab6332d402e`
+- summary: `8e05b4638f927a8135ef3607e7ca6a492d88d8d58b8823a52e08876092f635a0`
+- reconciliation: `90c2637b73e7a1e93d26cdde52c95fc428d74ad3be0fab33398ab7556f43aeaf`
 
 ## Claims Not Proven
 - No profitability, structural edge, option P&L, paper readiness, live readiness, or PR #674 outcome validity is claimed.
