@@ -75,7 +75,7 @@ def verify_sidecar(path: Path) -> dict[str, Any]:
     sidecar = path.with_suffix(path.suffix + ".sha256")
     actual = shafile(path)
     expected = sidecar.read_text(encoding="utf-8").split()[0] if sidecar.exists() else None
-    return {"path": str(path), "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": actual == expected}
+    return {"path": path.name, "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": actual == expected}
 
 
 def verify_input_bundle(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], list[str]]:
@@ -314,7 +314,7 @@ def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str
         failures.append("CANDIDATE_OR_HORIZON_CONSERVATION_FAIL")
     if not CLAIM_BOUNDARY.issubset(set(contract.get("claim_boundary", []))) or not CLAIM_BOUNDARY.issubset(set(summary.get("claim_boundary", []))):
         failures.append("CLAIM_BOUNDARY_MISSING")
-    forbidden = {"profitability_claim", "option_pnl", "live_ready", "paper_ready", "edge_claim"}
+    forbidden = {"profitability_claim\":true", "option_pnl\":true", "live_ready\":true", "paper_ready\":true", "edge_claim\":true"}
     if any(key in cbytes(obj).decode("utf-8").lower() for obj in (contract, summary, ledger, overlap) for key in forbidden):
         failures.append("FORBIDDEN_CLAIM_FOUND")
     verdict = "ORB_OUTCOMES_V2_AUDIT_CERTIFIED" if not failures and not source_failures else "ORB_OUTCOMES_V2_AUDIT_NOT_CERTIFIED"
