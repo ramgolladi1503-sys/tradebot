@@ -14,6 +14,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from research.opening_range_retest_v2.recertification import (  # noqa: E402
     V2Artifacts,
     build_v2_artifacts,
+    canonical_json_bytes,
+    sha256_bytes,
     write_artifacts,
 )
 
@@ -24,14 +26,37 @@ def _git_head() -> str:
 
 
 def _determinism_projection(artifacts: V2Artifacts) -> dict[str, object]:
+    def stable(payload: object) -> object:
+        if isinstance(payload, dict):
+            return {
+                key: stable(value)
+                for key, value in payload.items()
+                if key not in {"timestamp", "diagnostic_absolute_path"}
+            }
+        if isinstance(payload, list):
+            return [stable(value) for value in payload]
+        return payload
+
     return {
+        "source_manifest_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.source_manifest))),
         "source_manifest_semantic_hash": artifacts.source_manifest["source_manifest_semantic_hash"],
         "source_record_count": artifacts.source_manifest["record_count"],
+        "source_record_ids": [record["source_record_id"] for record in artifacts.source_manifest["records"]],
+        "candidate_ledger_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.candidate_ledger))),
         "candidate_count": artifacts.candidate_ledger["candidate_count"],
+        "candidate_ids": [record["candidate_id"] for record in artifacts.candidate_ledger["records"]],
         "candidate_core_semantic_hash": artifacts.candidate_ledger["candidate_core_semantic_hash"],
         "candidate_provenance_semantic_hash": artifacts.candidate_ledger["candidate_provenance_semantic_hash"],
+        "source_oracle_verdict": artifacts.source_oracle["verdict"],
+        "candidate_oracle_verdict": artifacts.candidate_oracle["verdict"],
+        "summary_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.summary))),
         "summary_decision": artifacts.summary["decision"],
+        "reconciliation_payload_hash": sha256_bytes(canonical_json_bytes(stable(artifacts.reconciliation))),
         "reconciliation_decision": artifacts.reconciliation["decision"],
+        "reconciliation_projection_hashes": {
+            "v1": artifacts.reconciliation.get("v1_common_projection_hash"),
+            "v2": artifacts.reconciliation.get("v2_common_projection_hash"),
+        },
     }
 
 

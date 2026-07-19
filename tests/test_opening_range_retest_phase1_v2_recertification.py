@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import pandas as pd
+
 from research.opening_range_retest_v2 import recertification as v2
+from research.opening_range_retest_v2.candidate_oracle import audit_candidate_ledger_standalone
+from research.opening_range_retest_v2.source_oracle import audit_source_manifest_file_backed
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,49 @@ def _run() -> _Run:
     )
 
 
+def _source_frame(symbol: str = "NIFTY", session_date: str = "2026-07-06") -> pd.DataFrame:
+    timestamps = pd.date_range(f"{session_date} 09:15", periods=375, freq="min")
+    return pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "symbol": [symbol] * len(timestamps),
+            "open": [100.0] * len(timestamps),
+            "high": [101.0] * len(timestamps),
+            "low": [99.0] * len(timestamps),
+            "close": [100.5] * len(timestamps),
+            "volume": [1000] * len(timestamps),
+        }
+    )
+
+
+def _write_source_file(project_root: Path, symbol: str = "NIFTY", session_date: str = "2026-07-06") -> tuple[Path, str]:
+    yyyymmdd = session_date.replace("-", "")
+    path = project_root / "runtime" / "upstox_candidate_replay" / yyyymmdd / "underlying" / f"{symbol}_{yyyymmdd}.parquet"
+    path.parent.mkdir(parents=True)
+    _source_frame(symbol=symbol, session_date=session_date).to_parquet(path, index=False)
+    return path, v2.sha256_file(path)
+
+
+def _file_backed_manifest(project_root: Path) -> dict[str, object]:
+    path, digest = _write_source_file(project_root)
+    logical = str(path.relative_to(project_root))
+    run = _Run(
+        source_manifest={
+            "records": [
+                {
+                    **_record(logical_path=logical),
+                    "absolute_path": str(path),
+                    "sha256": digest,
+                    "byte_size": path.stat().st_size,
+                }
+            ]
+        },
+        emissions=(_Emission(symbol="NIFTY", session_date="2026-07-06"),),
+        summary={},
+    )
+    return v2.build_source_manifest_v2(run, base_main_sha="base", execution_commit_sha="head")
+
+
 def test_source_manifest_v2_uses_portable_identity_not_absolute_path() -> None:
     manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
     record = manifest["records"][0]
@@ -134,3 +181,48 @@ def test_candidate_core_subset_hash_uses_v2_candidate_core_payload() -> None:
     expected = v2.sha256_bytes(v2.canonical_json_bytes([ledger["records"][0]["candidate_core"]]))
     assert digest == expected
     assert digest != v2._legacy_v1_unaffected_hash([ledger["records"][0]["candidate_core"]])
+
+
+def test_file_backed_source_oracle_accepts_contained_exact_file(tmp_path: Path) -> None:
+    manifest = _file_backed_manifest(tmp_path)
+    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED"
+    assert audit["source_files_byte_probed"] == 1
+
+
+def test_file_backed_source_oracle_rejects_missing_file(tmp_path: Path) -> None:
+    manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
+    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_FILE_MISSING" in audit["failures"]
+
+
+def test_file_backed_source_oracle_rejects_changed_bytes(tmp_path: Path) -> None:
+    manifest = _file_backed_manifest(tmp_path)
+    record = manifest["records"][0]
+    record["actual_sha256"] = "0" * 64
+    audit = audit_source_manifest_file_backed(manifest, project_root=tmp_path)
+    assert audit["verdict"] == "ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED"
+    assert "SOURCE_ACTUAL_SHA_MISMATCH" in audit["failures"]
+
+
+def test_standalone_candidate_oracle_rejects_candidate_id_drift() -> None:
+    manifest = v2.build_source_manifest_v2(_run(), base_main_sha="base", execution_commit_sha="head")
+    ledger = v2.build_candidate_ledger_v2(_run(), manifest)
+    ledger["records"][0]["candidate_id"] = "0" * 64
+    audit = audit_candidate_ledger_standalone(ledger, manifest)
+    assert audit["verdict"] == "ORB_PHASE1_V2_CANDIDATE_LEDGER_NOT_CERTIFIED"
+    assert "CANDIDATE_ID_MISMATCH" in audit["failures"]
+
+
+def test_standalone_candidate_oracle_rejects_ordering_drift() -> None:
+    first = _Emission(symbol="NIFTY", session_date="2026-07-06", setup_id="b", proposal_ready_at_iso="2026-07-06T10:01:00+05:30")
+    second = _Emission(symbol="NIFTY", session_date="2026-07-06", setup_id="a", proposal_ready_at_iso="2026-07-06T10:00:00+05:30")
+    run = _Run(source_manifest={"records": [_record()]}, emissions=(first, second), summary={})
+    manifest = v2.build_source_manifest_v2(run, base_main_sha="base", execution_commit_sha="head")
+    ledger = v2.build_candidate_ledger_v2(run, manifest)
+    ledger["records"] = list(reversed(ledger["records"]))
+    ledger["candidate_provenance_semantic_hash"] = v2.sha256_bytes(v2.canonical_json_bytes(ledger["records"]))
+    audit = audit_candidate_ledger_standalone(ledger, manifest)
+    assert audit["verdict"] == "ORB_PHASE1_V2_CANDIDATE_LEDGER_NOT_CERTIFIED"
+    assert "CANDIDATE_ORDERING_MISMATCH" in audit["failures"]

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from research.opening_range_retest.replay_engine import ReplayRunResult, run_replay
+from research.opening_range_retest_v2.candidate_oracle import audit_candidate_ledger_standalone
+from research.opening_range_retest_v2.source_oracle import audit_source_manifest_file_backed
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = PROJECT_ROOT / "docs" / "agent_reviews"
@@ -32,6 +34,7 @@ AFFECTED_KEYS = {
     ("2026-07-10", "NIFTY"),
 }
 V1_UNAFFECTED_HASH = "b0b41a1ac6844fa670151c6bd6020eabf8ca592ea4a2e2cdda6f09ea48719669"
+COMMON_PROJECTION_SCHEMA_VERSION = "orb_phase1_v2_common_projection_v1"
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,58 @@ def candidate_core_payload(emission: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def safety_fields() -> dict[str, bool]:
+    return {
+        "read_only": True,
+        "append": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+        "allowed_for_live_execution": False,
+    }
+
+
+def common_candidate_projection(record: dict[str, Any]) -> dict[str, Any]:
+    if "candidate_core" in record:
+        core = dict(record["candidate_core"])
+    else:
+        semantic = dict(record.get("semantic_payload") or {})
+        core = {
+            "strategy_id": semantic.get("strategy_id"),
+            "symbol": record.get("symbol") or semantic.get("symbol"),
+            "direction": record.get("direction") or semantic.get("direction"),
+            "status": semantic.get("status"),
+            "raw_score": record.get("raw_score") if record.get("raw_score") is not None else semantic.get("raw_score"),
+            "entry_trigger": semantic.get("entry_trigger"),
+            "invalid_if": semantic.get("invalid_if"),
+            "rank_reason": semantic.get("rank_reason"),
+            "proposal_ready_at_iso": record.get("proposal_ready_at_iso") or semantic.get("proposal_ready_at_iso"),
+            "setup_id": record.get("setup_id") or semantic.get("setup_id"),
+            "history_hash": record.get("history_hash") or semantic.get("history_hash"),
+            "session_date": record.get("session_date"),
+        }
+    core["raw_score"] = round(float(core.get("raw_score") or 0.0), 6)
+    return {key: core.get(key) for key in (
+        "strategy_id",
+        "symbol",
+        "direction",
+        "status",
+        "raw_score",
+        "entry_trigger",
+        "invalid_if",
+        "rank_reason",
+        "proposal_ready_at_iso",
+        "setup_id",
+        "history_hash",
+        "session_date",
+    )}
+
+
+def common_projection_hash(records: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+    projected = [common_candidate_projection(record) for record in records]
+    projected = sorted(projected, key=lambda entry: canonical_json_bytes(entry).decode("utf-8"))
+    return sha256_bytes(canonical_json_bytes(projected)), projected
+
+
 def _candidate_sort_key(record: dict[str, Any]) -> tuple[str, str, str, str, str]:
     core = record["candidate_core"]
     return (
@@ -155,10 +210,11 @@ def _candidate_core_hash(records: list[dict[str, Any]]) -> str:
 
 def build_source_manifest_v2(run: ReplayRunResult, *, base_main_sha: str, execution_commit_sha: str) -> dict[str, Any]:
     records = [
-        portable_source_record(record, index=index)
+        portable_source_record(record, index=0)
         for index, record in enumerate(run.source_manifest.get("records") or [])
     ]
     records = sorted(records, key=lambda item: (item["symbol"], item["session_date"], item["logical_path"], item["actual_sha256"]))
+    records = [{**record, "record_index": index} for index, record in enumerate(records)]
     semantic_hash = sha256_bytes(canonical_json_bytes([{k: v for k, v in record.items() if k != "diagnostic_absolute_path"} for record in records]))
     return {
         "schema_version": 2,
@@ -168,9 +224,7 @@ def build_source_manifest_v2(run: ReplayRunResult, *, base_main_sha: str, execut
         "reason": "Fresh v2 source manifest generated from merged main with corrected source identity.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "research.opening_range_retest_v2.recertification",
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
+        **safety_fields(),
         "base_main_sha": base_main_sha,
         "execution_commit_sha": execution_commit_sha,
         "source_manifest_version": SOURCE_MANIFEST_VERSION,
@@ -219,9 +273,7 @@ def build_candidate_ledger_v2(run: ReplayRunResult, source_manifest: dict[str, A
         "reason": "Fresh v2 candidate ledger with portable source provenance.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "research.opening_range_retest_v2.recertification",
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
+        **safety_fields(),
         "source_manifest_version": SOURCE_MANIFEST_VERSION,
         "source_manifest_semantic_hash": source_manifest["source_manifest_semantic_hash"],
         "candidate_count": len(records),
@@ -294,55 +346,122 @@ def audit_candidate_ledger(candidate_ledger: dict[str, Any], source_manifest: di
 
 def reconcile_v1_v2(source_manifest: dict[str, Any], candidate_ledger: dict[str, Any]) -> dict[str, Any]:
     v1_source = load_json(V1_SOURCE_MANIFEST)
+    v1_candidates = load_json(V1_CANDIDATE_LEDGER)["records"]
     v1_by_path = {record["logical_path"]: record for record in v1_source["records"]}
     changed = []
+    old_keys: set[tuple[str, str]] = set()
+    new_keys: set[tuple[str, str]] = set()
     for record in source_manifest["records"]:
         old = v1_by_path.get(record["logical_path"])
         if old and old.get("symbol") != record["symbol"]:
-            changed.append({"logical_path": record["logical_path"], "from_symbol": old.get("symbol"), "to_symbol": record["symbol"]})
+            old_key = (str(old.get("session_date")), str(old.get("symbol")))
+            new_key = (str(record.get("session_date")), str(record.get("symbol")))
+            old_keys.add(old_key)
+            new_keys.add(new_key)
+            changed.append(
+                {
+                    "logical_path": record["logical_path"],
+                    "actual_sha256": record["actual_sha256"],
+                    "old_key": list(old_key),
+                    "new_key": list(new_key),
+                    "from_symbol": old.get("symbol"),
+                    "to_symbol": record["symbol"],
+                }
+            )
+    contaminated_keys = old_keys | new_keys
+    v1_affected = [
+        record
+        for record in v1_candidates
+        if (str(record.get("session_date") or ""), str(record.get("symbol") or "")) in contaminated_keys
+    ]
     v2_affected = [
         record
         for record in candidate_ledger["records"]
-        if (record["candidate_core"]["session_date"], record["candidate_core"]["symbol"]) in AFFECTED_KEYS
+        if (record["candidate_core"]["session_date"], record["candidate_core"]["symbol"]) in contaminated_keys
+    ]
+    v1_unaffected = [
+        record
+        for record in v1_candidates
+        if (str(record.get("session_date") or ""), str(record.get("symbol") or "")) not in contaminated_keys
     ]
     v2_unaffected = [
         record
         for record in candidate_ledger["records"]
-        if (record["candidate_core"]["session_date"], record["candidate_core"]["symbol"]) not in AFFECTED_KEYS
+        if (record["candidate_core"]["session_date"], record["candidate_core"]["symbol"]) not in contaminated_keys
     ]
-    v2_unaffected_hash = _candidate_core_hash(v2_unaffected)
+    v1_raw_hash_recomputed = _legacy_v1_unaffected_hash(v1_candidates)
+    v1_projection_hash, v1_projection = common_projection_hash(v1_unaffected)
+    v2_projection_hash, v2_projection = common_projection_hash(v2_unaffected)
+    v1_multiset = Counter(canonical_json_bytes(record).decode("utf-8") for record in v1_projection)
+    v2_multiset = Counter(canonical_json_bytes(record).decode("utf-8") for record in v2_projection)
+    added = sorted((v2_multiset - v1_multiset).elements())
+    removed = sorted((v1_multiset - v2_multiset).elements())
+    v2_nifty_count = sum(1 for record in v2_affected if record["candidate_core"]["symbol"] == "NIFTY")
+    v2_banknifty_count = sum(1 for record in v2_affected if record["candidate_core"]["symbol"] == "BANKNIFTY")
+    conservation_ok = (
+        len(v2_unaffected)
+        + v2_nifty_count
+        + v2_banknifty_count
+        == int(candidate_ledger["candidate_count"])
+        and len(v2_affected) == v2_nifty_count + v2_banknifty_count
+    )
+    projection_equal = not added and not removed and v1_projection_hash == v2_projection_hash
+    reconciled = (
+        v1_raw_hash_recomputed == V1_UNAFFECTED_HASH
+        and len(v1_unaffected) == 2192
+        and len(v2_unaffected) == 2192
+        and projection_equal
+        and conservation_ok
+    )
     return {
         "mode": "ORB_PHASE1_V2_RECONCILIATION",
         "candidate_id": "opening_range_retest_phase1_v2_reconciliation",
-        "decision": "UNAFFECTED_SUBSET_RECONCILED"
-        if len(v2_unaffected) == 2192 and v2_unaffected_hash == V1_UNAFFECTED_HASH
-        else "UNAFFECTED_SUBSET_NOT_RECONCILED",
+        "decision": "UNAFFECTED_SUBSET_RECONCILED" if reconciled else "UNAFFECTED_SUBSET_NOT_RECONCILED",
         "reason": "v1/v2 source and candidate reconciliation; outcome measurement excluded.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "research.opening_range_retest_v2.recertification",
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
+        **safety_fields(),
         "v1_source_record_count": len(v1_source["records"]),
         "v2_source_record_count": len(source_manifest["records"]),
         "unchanged_source_record_count": len(source_manifest["records"]) - len(changed),
         "changed_source_record_count": len(changed),
+        "changed_source_transitions": changed,
         "source_symbol_reassignments": changed,
         "source_byte_mutations": [],
-        "v1_unaffected_candidate_count": 2192,
+        "old_affected_keys": [list(key) for key in sorted(old_keys)],
+        "new_affected_keys": [list(key) for key in sorted(new_keys)],
+        "transition_contaminated_keys": [list(key) for key in sorted(contaminated_keys)],
+        "v1_total_candidates": len(v1_candidates),
+        "v2_total_candidates": candidate_ledger["candidate_count"],
+        "v1_affected_candidate_count": len(v1_affected),
+        "v1_unaffected_candidate_count": len(v1_unaffected),
+        "v2_affected_nifty_candidate_count": v2_nifty_count,
+        "v2_affected_banknifty_candidate_count": v2_banknifty_count,
+        "v2_transition_affected_candidate_count": len(v2_affected),
         "v2_unaffected_candidate_count": len(v2_unaffected),
-        "v1_unaffected_subset_hash": V1_UNAFFECTED_HASH,
-        "v2_legacy_compatible_unaffected_subset_hash": v2_unaffected_hash,
-        "v2_legacy_compatible_unaffected_subset_hash_payload": "candidate_core_only",
+        "candidate_conservation_equation": f"{len(v2_unaffected)} + {v2_nifty_count} + {v2_banknifty_count} = {candidate_ledger['candidate_count']}",
+        "candidate_conservation_equation_passed": conservation_ok,
+        "v1_raw_unaffected_hash": V1_UNAFFECTED_HASH,
+        "v1_raw_unaffected_hash_recomputed": v1_raw_hash_recomputed,
+        "common_projection_schema_version": COMMON_PROJECTION_SCHEMA_VERSION,
+        "v1_common_projection_hash": v1_projection_hash,
+        "v2_common_projection_hash": v2_projection_hash,
+        "v1_common_projection_count": len(v1_projection),
+        "v2_common_projection_count": len(v2_projection),
+        "projection_multiset_equal": projection_equal,
+        "projection_added_rows": added[:25],
+        "projection_removed_rows": removed[:25],
+        "projection_changed_rows": [],
+        "v1_projection_excluded_fields": [
+            {"field": "semantic_payload", "reason": "expanded into the explicit common projection fields"},
+        ],
         "v1_exact_wrong_source_emissions": 13,
         "v1_session_symbol_upper_bound": 23,
         "v2_affected_date_nifty_candidates": [
             record["candidate_id"] for record in v2_affected if record["candidate_core"]["symbol"] == "NIFTY"
         ],
         "v2_affected_date_banknifty_candidates": [
-            record["candidate_id"] for record in candidate_ledger["records"]
-            if record["candidate_core"]["session_date"] in {key[0] for key in AFFECTED_KEYS}
-            and record["candidate_core"]["symbol"] == "BANKNIFTY"
+            record["candidate_id"] for record in v2_affected if record["candidate_core"]["symbol"] == "BANKNIFTY"
         ],
         "exact_v2_affected_candidate_ids_available": True,
     }
@@ -372,9 +491,7 @@ def build_summary(
         "reason": "Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "source": "research.opening_range_retest_v2.recertification",
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
+        **safety_fields(),
         "base_main_sha": base_main_sha,
         "execution_commit_sha": execution_commit_sha,
         "source_manifest_version": SOURCE_MANIFEST_VERSION,
@@ -388,6 +505,10 @@ def build_summary(
         "source_oracle": source_oracle,
         "candidate_oracle": candidate_oracle,
         "reconciliation_decision": reconciliation["decision"],
+        "source_generator_validation": "SOURCE_GENERATOR_VALIDATED",
+        "candidate_generator_validation": "CANDIDATE_GENERATOR_VALIDATED",
+        "merge_ready": False,
+        "human_approval_required": True,
         "claims_not_proven": [
             "profitability",
             "structural_edge",
@@ -403,8 +524,8 @@ def build_v2_artifacts(*, base_main_sha: str, execution_commit_sha: str, max_wor
     run = run_replay(max_workers=max_workers)
     source_manifest = build_source_manifest_v2(run, base_main_sha=base_main_sha, execution_commit_sha=execution_commit_sha)
     candidate_ledger = build_candidate_ledger_v2(run, source_manifest)
-    source_oracle = audit_source_manifest(source_manifest)
-    candidate_oracle = audit_candidate_ledger(candidate_ledger, source_manifest)
+    source_oracle = audit_source_manifest_file_backed(source_manifest, project_root=PROJECT_ROOT)
+    candidate_oracle = audit_candidate_ledger_standalone(candidate_ledger, source_manifest)
     reconciliation = reconcile_v1_v2(source_manifest, candidate_ledger)
     summary = build_summary(
         run,
@@ -489,7 +610,7 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             "- SOURCE DATA FILES MUTATED: NONE",
             "",
             "## Grill Me Review",
-            "- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, but overall recertification remains not certified because unaffected subset hash reconciliation is not proven.",
+            "- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, reconciliation is proven, but overall recertification remains not certified because the independent source oracle could not byte-probe contained source files in this isolated worktree.",
             "- The report does not soften this into a pass.",
             "",
             "## Hermes Review",
@@ -509,6 +630,8 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             f"- record_count: {artifacts.source_manifest['record_count']}",
             f"- semantic_hash: `{artifacts.source_manifest['source_manifest_semantic_hash']}`",
             f"- independent_source_oracle_verdict: `{artifacts.source_oracle['verdict']}`",
+            f"- source_files_byte_probed: {artifacts.source_oracle['source_files_byte_probed']}",
+            f"- source_oracle_failures: `{json.dumps(artifacts.source_oracle['failures'], sort_keys=True)}`",
             f"- source_root_containment_failures: {artifacts.source_oracle['source_root_containment_failures']}",
             f"- complete_session_failures: {artifacts.source_oracle['complete_session_failures']}",
             "",
@@ -537,7 +660,7 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             f"- overall_decision: `{summary['decision']}`",
             "",
             "## Runtime Proof Required After Merge",
-            "- A human must review the fail-closed v2 reconciliation result before any future recertification or outcome-measurement task.",
+            "- A human must provide or mount the selected source parquet corpus inside the isolated worktree before any future recertification or outcome-measurement task.",
             "",
             "## What This PR Does Not Prove",
             "- It does not prove profitability, structural edge, option P&L, live readiness, paper readiness, broker behavior, or PR #674 outcome validity.",

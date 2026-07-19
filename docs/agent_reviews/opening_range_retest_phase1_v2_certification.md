@@ -5,7 +5,7 @@
 - candidate_id: opening_range_retest_causal_replay_summary_v2
 - decision: ORB_PHASE1_V2_NOT_CERTIFIED
 - reason: Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.
-- timestamp: 2026-07-19T08:17:45.622317+00:00
+- timestamp: 2026-07-19T10:24:29.150286+00:00
 - source: research.opening_range_retest_v2.recertification
 - is_order_action: false
 - broker_api_called: false
@@ -30,7 +30,7 @@
 - SOURCE DATA FILES MUTATED: NONE
 
 ## Grill Me Review
-- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, but overall recertification remains not certified because unaffected subset hash reconciliation is not proven.
+- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, reconciliation is proven, but overall recertification remains not certified because the independent source oracle could not byte-probe contained source files in this isolated worktree.
 - The report does not soften this into a pass.
 
 ## Hermes Review
@@ -49,7 +49,9 @@
 - version: v2
 - record_count: 1512
 - semantic_hash: `a2790d859e7c613c7da70da9ada5aaf2a33b29e23bfdbd41ab81395780db7466`
-- independent_source_oracle_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED`
+- independent_source_oracle_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED`
+- source_files_byte_probed: 0
+- source_oracle_failures: `["SOURCE_FILE_MISSING"]`
 - source_root_containment_failures: 0
 - complete_session_failures: 0
 
@@ -65,20 +67,20 @@
 - v2_source_record_count: 1512
 - unchanged_source_record_count: 1507
 - changed_source_record_count: 5
-- source_symbol_reassignments: `[{"from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet", "to_symbol": "BANKNIFTY"}, {"from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260707/underlying/NSE_INDEX|Nifty Bank_20260707.parquet", "to_symbol": "BANKNIFTY"}, {"from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260708/underlying/NSE_INDEX|Nifty Bank_20260708.parquet", "to_symbol": "BANKNIFTY"}, {"from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260709/underlying/NSE_INDEX|Nifty Bank_20260709.parquet", "to_symbol": "BANKNIFTY"}, {"from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260710/underlying/NSE_INDEX|Nifty Bank_20260710.parquet", "to_symbol": "BANKNIFTY"}]`
+- source_symbol_reassignments: `[{"actual_sha256": "ab0aeab2b747d9c175631f337601fddbf47dcf18c6bd1b1f93ca24a6dfa21b18", "from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260706/underlying/NSE_INDEX|Nifty Bank_20260706.parquet", "new_key": ["2026-07-06", "BANKNIFTY"], "old_key": ["2026-07-06", "NIFTY"], "to_symbol": "BANKNIFTY"}, {"actual_sha256": "9fe9283f4ee7cf3e2b722938e5bc509eef786285e5e4dff22721b27c1f2f7119", "from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260707/underlying/NSE_INDEX|Nifty Bank_20260707.parquet", "new_key": ["2026-07-07", "BANKNIFTY"], "old_key": ["2026-07-07", "NIFTY"], "to_symbol": "BANKNIFTY"}, {"actual_sha256": "bc13b32287eac200d36cb5be234a96d003abe6811704e90a4e3e291378cdaab9", "from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260708/underlying/NSE_INDEX|Nifty Bank_20260708.parquet", "new_key": ["2026-07-08", "BANKNIFTY"], "old_key": ["2026-07-08", "NIFTY"], "to_symbol": "BANKNIFTY"}, {"actual_sha256": "8dfdc7b8a2c06ce46379d8f7f1cb59d10cd075bd34ceff0643c2b053ccdeb718", "from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260709/underlying/NSE_INDEX|Nifty Bank_20260709.parquet", "new_key": ["2026-07-09", "BANKNIFTY"], "old_key": ["2026-07-09", "NIFTY"], "to_symbol": "BANKNIFTY"}, {"actual_sha256": "2e4ccae957b1b0121a583f23b772c1cf680d8ab1cd6dfcbaa38bcdcae7b272aa", "from_symbol": "NIFTY", "logical_path": "runtime/upstox_candidate_replay/20260710/underlying/NSE_INDEX|Nifty Bank_20260710.parquet", "new_key": ["2026-07-10", "BANKNIFTY"], "old_key": ["2026-07-10", "NIFTY"], "to_symbol": "BANKNIFTY"}]`
 - source_byte_mutations: NONE
 - v1_unaffected_candidate_count: 2192
-- v2_unaffected_candidate_count: 2205
-- unaffected_subset_reconciliation: `UNAFFECTED_SUBSET_NOT_RECONCILED`
+- v2_unaffected_candidate_count: 2192
+- unaffected_subset_reconciliation: `UNAFFECTED_SUBSET_RECONCILED`
 
 ## Acceptance Proof
-- source_manifest_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED`
+- source_manifest_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_NOT_CERTIFIED`
 - candidate_ledger_verdict: `ORB_PHASE1_V2_CANDIDATE_LEDGER_CERTIFIED`
 - two_directory_determinism: `TWO_DIRECTORY_DETERMINISM_PASS`
 - overall_decision: `ORB_PHASE1_V2_NOT_CERTIFIED`
 
 ## Runtime Proof Required After Merge
-- A human must review the fail-closed v2 reconciliation result before any future recertification or outcome-measurement task.
+- A human must provide or mount the selected source parquet corpus inside the isolated worktree before any future recertification or outcome-measurement task.
 
 ## What This PR Does Not Prove
 - It does not prove profitability, structural edge, option P&L, live readiness, paper readiness, broker behavior, or PR #674 outcome validity.
@@ -87,10 +89,10 @@
 - Required before interpreting any v2 artifact as certification evidence because the current overall verdict is fail-closed.
 
 ## Artifact Digests
-- source_manifest: `bc6b00315c0cbe6a5d8a2d4da8116cb675813309ae3db116b93c1cc3dd763be9`
-- candidate_ledger: `9949058d008a6790d4b4a3d7d6c5ab7af3465a19449ecd947da0716aaad2085d`
-- summary: `8e05b4638f927a8135ef3607e7ca6a492d88d8d58b8823a52e08876092f635a0`
-- reconciliation: `90c2637b73e7a1e93d26cdde52c95fc428d74ad3be0fab33398ab7556f43aeaf`
+- source_manifest: `75c3af56f89fdd4a95dc65c61243a3b26cd0e3a8faf0da9302b0840d81e7312d`
+- candidate_ledger: `67a77e7a03e91b778d716a2bb39beea1766dc6af6dac54a1c50e1e29626ba92c`
+- summary: `539fab92f6be2da01d032c1544f257e56370ef95a9c2599a733359329e237b33`
+- reconciliation: `d5db372bc3661c801469e9379ef9c977bfcd4a26c50728ad3dc7ea9d6f6721c7`
 
 ## Claims Not Proven
 - No profitability, structural edge, option P&L, paper readiness, live readiness, or PR #674 outcome validity is claimed.
