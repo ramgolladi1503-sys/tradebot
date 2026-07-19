@@ -488,7 +488,7 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             "- SOURCE DATA FILES MUTATED: NONE",
             "",
             "## Grill Me Review",
-            "- Verdict: FAIL-CLOSED. Source and candidate v2 artifacts were generated, but overall recertification remains blocked because unaffected subset hash reconciliation is not proven.",
+            "- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, but overall recertification remains not certified because unaffected subset hash reconciliation is not proven.",
             "- The report does not soften this into a pass.",
             "",
             "## Hermes Review",

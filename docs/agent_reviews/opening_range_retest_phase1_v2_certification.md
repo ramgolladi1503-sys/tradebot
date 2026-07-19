@@ -5,7 +5,7 @@
 - candidate_id: opening_range_retest_causal_replay_summary_v2
 - decision: ORB_PHASE1_V2_NOT_CERTIFIED
 - reason: Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.
-- timestamp: 2026-07-19T08:14:16.921061+00:00
+- timestamp: 2026-07-19T08:15:58.799276+00:00
 - is_order_action: false
 - broker_api_called: false
 - allowed_for_live_execution: false
@@ -29,7 +29,7 @@
 - SOURCE DATA FILES MUTATED: NONE
 
 ## Grill Me Review
-- Verdict: FAIL-CLOSED. Source and candidate v2 artifacts were generated, but overall recertification remains blocked because unaffected subset hash reconciliation is not proven.
+- Safety conclusion: fail-closed. Source and candidate v2 artifacts were generated, but overall recertification remains not certified because unaffected subset hash reconciliation is not proven.
 - The report does not soften this into a pass.
 
 ## Hermes Review
@@ -88,8 +88,8 @@
 ## Artifact Digests
 - source_manifest: `bc6b00315c0cbe6a5d8a2d4da8116cb675813309ae3db116b93c1cc3dd763be9`
 - candidate_ledger: `9949058d008a6790d4b4a3d7d6c5ab7af3465a19449ecd947da0716aaad2085d`
-- summary: `28c1bc29dfdb0a05851dbc0f6e0e9b8bcb3b56098ae91b175c29926c36be1188`
-- reconciliation: `78aced98453f90eb382280d1343ce184aa44443b8718291667f4802b1ea679dc`
+- summary: `43a3ac7e7078ec7436be68b66a02a7f5c66cf053daf5a7d3d0127e0bec0098a8`
+- reconciliation: `88fb4300fd030557b93811128614f637d16df2ec2739ff6a83c19ab6332d402e`
 
 ## Claims Not Proven
 - No profitability, structural edge, option P&L, paper readiness, live readiness, or PR #674 outcome validity is claimed.
