@@ -13,11 +13,11 @@
 - negative_control_count: 98
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `cceab199ac5d221ef63f0d3de9c51a34949a0d4e4d746031d1a69f667501b07b`
-- outcome_ledger_hash: `34eb46360c0bda4e348744a7a41c5634eee85269d8a37f72f3b3e679278e94c2`
-- summary_hash: `b891e3b04bf9e8a741b79ad26208102a841f399d86aaf26ba60c979521b9c119`
-- frozen_code_sha: `6c6eb3387cea0b22046e392dfe55cbf5daeb1f87`
-- implementation_tree_hash: `61c9bf6cdbb23277e83c27ed0d681de8c338700ebe11e940ee6ad0340c06cc46`
+- contract_hash: `8b114bffb6511df8428663910695bd5e123bc9f9bea759f8a17fe4ef1c6b1453`
+- outcome_ledger_hash: `427041d412d90748da289388bfd47b0e8c39bed10dc5956364413da983045207`
+- summary_hash: `d41047f02cfe0743a1b481343ed38f2cfbb4653569503d5e597dc8489dd7828e`
+- frozen_code_sha: `2e2a5311145bbe8c3cb1606926b0ba50f2d74e14`
+- implementation_tree_hash: `fed584f9b08f8a1bdfba59bace894081f1de318a550866788e157472c8f35adc`
 
 ## Agent Work Contract
 
