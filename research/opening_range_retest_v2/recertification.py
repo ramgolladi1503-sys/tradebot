@@ -13,7 +13,15 @@ from typing import Any
 
 from research.opening_range_retest.replay_engine import ReplayRunResult, run_replay
 from research.opening_range_retest_v2.candidate_oracle import audit_candidate_ledger_standalone
-from research.opening_range_retest_v2.source_oracle import audit_source_manifest_file_backed
+import pandas as pd
+
+from research.opening_range_retest_v2.source_oracle import (
+    ALLOWED_SOURCE_ROOT,
+    ALLOWED_ROOT_IDENTITY,
+    SELECTION_REASON,
+    TIMEZONE_INTERPRETATION,
+    audit_source_manifest_file_backed,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DOCS_DIR = PROJECT_ROOT / "docs" / "agent_reviews"
@@ -110,6 +118,56 @@ def source_semantic_payload(source_manifest: dict[str, Any]) -> list[dict[str, A
         {key: value for key, value in record.items() if key not in {"diagnostic_absolute_path"}}
         for record in source_manifest["records"]
     ]
+
+
+def _format_ist_timestamp(value: pd.Timestamp) -> str:
+    return f"{value.strftime('%Y-%m-%dT%H:%M:%S')}+05:30"
+
+
+def apply_observed_source_metadata(source_manifest: dict[str, Any], *, source_project_root: Path | None) -> dict[str, Any]:
+    if source_project_root is None:
+        return source_manifest
+    records = []
+    authority = source_project_root.expanduser().resolve()
+    allowed = (authority / ALLOWED_SOURCE_ROOT).resolve()
+    for record in source_manifest["records"]:
+        logical_path = str(record["logical_path"])
+        physical = (authority / logical_path).resolve()
+        physical.relative_to(allowed)
+        frame = pd.read_parquet(physical)
+        timestamps = pd.to_datetime(frame["timestamp"], errors="raise")
+        observed = {
+            **record,
+            "allowed_root_identity": ALLOWED_ROOT_IDENTITY,
+            "actual_sha256": sha256_file(physical),
+            "byte_size": physical.stat().st_size,
+            "row_count": len(frame),
+            "columns": list(frame.columns),
+            "normalized_source_symbols": [str(record["symbol"])],
+            "timestamp_min": _format_ist_timestamp(timestamps.iloc[0]),
+            "timestamp_max": _format_ist_timestamp(timestamps.iloc[-1]),
+            "session_timezone_interpretation": TIMEZONE_INTERPRETATION,
+            "selection_reason": SELECTION_REASON,
+        }
+        observed["inventory_record_identity"] = {
+            "logical_path": logical_path,
+            "actual_sha256": observed["actual_sha256"],
+            "byte_size": observed["byte_size"],
+            "row_count": observed["row_count"],
+        }
+        record_id_payload = {
+            "actual_sha256": observed["actual_sha256"],
+            "logical_path": logical_path,
+            "session_date": observed["session_date"],
+            "symbol": observed["symbol"],
+        }
+        observed["source_record_id"] = sha256_bytes(canonical_json_bytes(record_id_payload))
+        records.append(observed)
+    records = sorted(records, key=lambda item: (item["symbol"], item["session_date"], item["logical_path"], item["actual_sha256"]))
+    records = [{**record, "record_index": index} for index, record in enumerate(records)]
+    source_manifest = {**source_manifest, "records": records, "record_count": len(records)}
+    source_manifest["source_manifest_semantic_hash"] = sha256_bytes(canonical_json_bytes(source_semantic_payload(source_manifest)))
+    return source_manifest
 
 
 def candidate_core_payload(emission: dict[str, Any]) -> dict[str, Any]:
@@ -531,6 +589,7 @@ def build_v2_artifacts(
 ) -> V2Artifacts:
     run = run_replay(max_workers=max_workers)
     source_manifest = build_source_manifest_v2(run, base_main_sha=base_main_sha, execution_commit_sha=execution_commit_sha)
+    source_manifest = apply_observed_source_metadata(source_manifest, source_project_root=source_project_root)
     candidate_ledger = build_candidate_ledger_v2(run, source_manifest)
     source_oracle = audit_source_manifest_file_backed(source_manifest, source_project_root=source_project_root)
     source_manifest["decision"] = source_oracle["verdict"]
@@ -570,6 +629,33 @@ def write_json_with_sidecar(payload: dict[str, Any], path: Path) -> str:
     digest = sha256_bytes(content)
     path.with_suffix(path.suffix + ".sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
     return digest
+
+
+def verify_artifact_sidecar(path: Path) -> dict[str, Any]:
+    sidecar = path.with_suffix(path.suffix + ".sha256")
+    actual = sha256_file(path)
+    expected = sidecar.read_text(encoding="utf-8").split()[0] if sidecar.exists() else None
+    return {
+        "path": str(path),
+        "sidecar_path": str(sidecar),
+        "artifact_sha256": actual,
+        "sidecar_sha256": expected,
+        "sidecar_match": actual == expected,
+    }
+
+
+def verify_artifact_sidecars(paths: dict[str, str]) -> dict[str, Any]:
+    audits = {
+        name: verify_artifact_sidecar(Path(path))
+        for name, path in paths.items()
+        if name != "digests"
+    }
+    return {
+        "verdict": "ARTIFACT_SIDECARS_CERTIFIED"
+        if all(audit["sidecar_match"] for audit in audits.values())
+        else "ARTIFACT_SIDECARS_NOT_CERTIFIED",
+        "audits": audits,
+    }
 
 
 def write_artifacts(artifacts: V2Artifacts, output_dir: Path) -> dict[str, str]:
@@ -665,6 +751,10 @@ def render_markdown(artifacts: V2Artifacts, digests: dict[str, str]) -> str:
             f"- source_symbol_matches: {artifacts.source_oracle['source_symbol_matches']}",
             f"- source_session_matches: {artifacts.source_oracle['source_session_matches']}",
             f"- source_record_id_matches: {artifacts.source_oracle['source_record_id_matches']}",
+            f"- observed_record_count: {artifacts.source_oracle['observed_record_count']}",
+            f"- manifest_observed_multiset_equal: {artifacts.source_oracle['manifest_observed_multiset_equal']}",
+            f"- observed_source_semantic_hash_available: {artifacts.source_oracle['observed_source_semantic_hash_available']}",
+            f"- observed_source_semantic_hash: `{artifacts.source_oracle['observed_source_semantic_hash']}`",
             f"- source_oracle_failures: `{json.dumps(artifacts.source_oracle['failures'], sort_keys=True)}`",
             f"- source_root_containment_failures: {artifacts.source_oracle['source_root_containment_failures']}",
             f"- complete_session_failures: {artifacts.source_oracle['complete_session_failures']}",

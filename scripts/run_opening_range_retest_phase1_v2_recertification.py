@@ -17,6 +17,7 @@ from research.opening_range_retest_v2.recertification import (  # noqa: E402
     build_v2_artifacts,
     canonical_json_bytes,
     sha256_bytes,
+    verify_artifact_sidecars,
     write_artifacts,
 )
 
@@ -96,6 +97,7 @@ def main() -> int:
         print(json.dumps({"verdict": "TWO_DIRECTORY_DETERMINISM_FAIL", "run_a": projection_a, "run_b": projection_b}, sort_keys=True))
         return 2
     paths = write_artifacts(artifacts_a, args.output_dir)
+    sidecars = verify_artifact_sidecars(paths)
     print(
         json.dumps(
             {
@@ -104,13 +106,15 @@ def main() -> int:
                 "source_authority_root": artifacts_a.source_oracle.get("source_authority_root"),
                 "candidate_verdict": artifacts_a.candidate_oracle["verdict"],
                 "two_directory_verdict": "TWO_DIRECTORY_DETERMINISM_PASS",
+                "sidecar_verdict": sidecars["verdict"],
+                "sidecars": sidecars,
                 "projection": projection_a,
                 "paths": paths,
             },
             sort_keys=True,
         )
     )
-    return 0 if artifacts_a.summary["decision"] == "ORB_PHASE1_V2_RECERTIFIED" else 2
+    return 0 if artifacts_a.summary["decision"] == "ORB_PHASE1_V2_RECERTIFIED" and sidecars["verdict"] == "ARTIFACT_SIDECARS_CERTIFIED" else 2
 
 
 if __name__ == "__main__":

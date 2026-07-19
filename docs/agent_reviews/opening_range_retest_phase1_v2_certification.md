@@ -5,7 +5,7 @@
 - candidate_id: opening_range_retest_causal_replay_summary_v2
 - decision: ORB_PHASE1_V2_RECERTIFIED
 - reason: Fresh Phase 1 v2 replay recertifies source provenance only; outcome measurement excluded.
-- timestamp: 2026-07-19T12:17:27.418476+00:00
+- timestamp: 2026-07-19T13:25:57.908237+00:00
 - source: research.opening_range_retest_v2.recertification
 - is_order_action: false
 - broker_api_called: false
@@ -52,7 +52,7 @@
 - version: v2
 - record_count: 1512
 - selected_source_count: 1512
-- semantic_hash: `a2790d859e7c613c7da70da9ada5aaf2a33b29e23bfdbd41ab81395780db7466`
+- semantic_hash: `243efbbda2dfbe90817408e50a54c5377f45dbb86db460918edb334fc57d3039`
 - source_authority_root: `/Users/madhuram/tradebot/runtime/upstox_candidate_replay`
 - independent_source_oracle_verdict: `ORB_PHASE1_V2_SOURCE_MANIFEST_CERTIFIED`
 - source_files_resolved: 1512
@@ -65,6 +65,10 @@
 - source_symbol_matches: 1512
 - source_session_matches: 1512
 - source_record_id_matches: 1512
+- observed_record_count: 1512
+- manifest_observed_multiset_equal: True
+- observed_source_semantic_hash_available: True
+- observed_source_semantic_hash: `243efbbda2dfbe90817408e50a54c5377f45dbb86db460918edb334fc57d3039`
 - source_oracle_failures: `[]`
 - source_root_containment_failures: 0
 - complete_session_failures: 0
@@ -76,7 +80,7 @@
 ## Candidate Ledger
 - candidate_count: 2215
 - candidate_core_semantic_hash: `8f28637e86095884b76ff931bf4f8b1606301895a226f7839949152c630e189a`
-- candidate_provenance_semantic_hash: `6a07f0181e2fbf78bc210860e9688faff61533ff83e3ce79b6db44224d6b7ba9`
+- candidate_provenance_semantic_hash: `b198ebab71cdc4b097360fb2280f2da6ac2ad1595c0da917dbd5a0b7a2dbba48`
 - independent_candidate_oracle_verdict: `ORB_PHASE1_V2_CANDIDATE_LEDGER_CERTIFIED`
 - candidates_with_complete_source_provenance: 2215
 
@@ -111,10 +115,10 @@
 - Required before merging this PR or using these research artifacts for downstream outcome work.
 
 ## Artifact Digests
-- source_manifest: `fce9d2b2f13cd24f190bde31e2f0885f91356b848fb8b1e2a94dacfe8fe2a411`
-- candidate_ledger: `0fbbbaa3e381c5a3d38e16a86559e23ce6d50408e3e918036e050a5be1c5cd5c`
-- summary: `14fa684a25b1cd54bbe93206cbe02bbf31e2e912293b0351f136dad009539453`
-- reconciliation: `9f6b834e87be596caf87a379898b20c7b031cebebfd80a731a22ce10e05064a0`
+- source_manifest: `3390fad00ae40f0ab77eb05386fb8e04af3127081843dba63b8a3af050b40926`
+- candidate_ledger: `1845bb3a66d2de3de46916b018cf3fdb55d254217b3079c4421a9252c2f4ac86`
+- summary: `b0df46946df273fa428ae3b3b67de826a4872b033736123a5fe9b751d0e5e830`
+- reconciliation: `b8d6ecabdc47cc50d582b4be05137ee3072fa84c44a6dfc32eaa822680135333`
 
 ## Claims Not Proven
 - No profitability, structural edge, option P&L, paper readiness, live readiness, or PR #674 outcome validity is claimed.
