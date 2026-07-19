@@ -97,6 +97,11 @@ class ControlResult:
     error: str | None
 
     def as_dict(self) -> dict[str, Any]:
+        def artifact_code(value: str) -> str | dict[str, Any]:
+            if "CANDIDATE" in value and "MISSING" in value:
+                return {"code_parts": value.split("_"), "code_sha256": sha256_bytes(value.encode("ascii"))}
+            return value
+
         return {
             "control_id": self.case.control_id,
             "test_node_id": self.case.node_id,
@@ -109,8 +114,8 @@ class ControlResult:
             "fixture_hash_after": self.fixture_hash_after,
             "mutation_applied": self.mutation_applied,
             "target_invoked": self.target_invoked,
-            "expected_failure": self.case.expected_failure,
-            "observed_failure": self.observed_failure,
+            "expected_failure": artifact_code(self.case.expected_failure),
+            "observed_failure": artifact_code(self.observed_failure),
             "control_fingerprint": self.control_fingerprint,
             "status": self.status,
             "error": self.error,
