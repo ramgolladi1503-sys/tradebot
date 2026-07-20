@@ -56,6 +56,43 @@ def _base_context(**overrides):
     return StrategyContext(**payload)
 
 
+def _orb_expected_components(
+    *,
+    direction: str,
+    boundary: float,
+    breakout_close: float,
+    retest_close: float,
+    volatility_expansion: float,
+) -> dict[str, float]:
+    max_retest_distance_pct = 0.0018
+    min_breakout_distance_pct = 0.0008
+    full_breakout_distance_pct = 0.004
+
+    def ratio(value: float, *, start: float, full: float) -> float:
+        return max(0.0, min(1.0, (value - start) / (full - start)))
+
+    retest_distance = abs(retest_close - boundary) / abs(boundary)
+    if direction == "BUY_CALL":
+        breakout_distance = max(0.0, (breakout_close - boundary) / abs(boundary))
+    else:
+        breakout_distance = max(0.0, (boundary - breakout_close) / abs(boundary))
+    raw_score = (
+        0.45 * (1.0 - ratio(retest_distance, start=0.0, full=max_retest_distance_pct))
+        + 0.35
+        * ratio(
+            breakout_distance,
+            start=min_breakout_distance_pct,
+            full=full_breakout_distance_pct,
+        )
+        + 0.20 * max(0.0, min(1.0, volatility_expansion))
+    )
+    return {
+        "retest_distance_pct": retest_distance,
+        "breakout_distance_pct": breakout_distance,
+        "raw_score": max(0.0, min(1.0, raw_score)),
+    }
+
+
 def test_opening_drive_generates_valid_call_candidate():
     ctx = _base_context()
     result = generate_opening_drive_candidates(ctx, _regime(TREND_UP=0.8, VOLATILITY_EXPANSION=0.4))
@@ -136,7 +173,24 @@ def test_orb_retest_generates_valid_call_candidate_near_retest_level():
     assert candidate.evidence["setup_identity"]["history_hash"]
     assert candidate.evidence["setup_identity"]["proposal_ready_at_iso"] == "2026-07-14T09:34:00+05:30"
     assert candidate.lineage["promotion_state"] == "READY_FOR_PUBLICATION"
-    assert candidate.raw_score == pytest.approx(0.42150442477876104, abs=1e-6)
+
+    evidence = candidate.evidence
+    expected = _orb_expected_components(
+        direction="BUY_CALL",
+        boundary=22600.0,
+        breakout_close=22608.0,
+        retest_close=22600.0,
+        volatility_expansion=0.3,
+    )
+    assert evidence["retest_distance_source"] == "retest_bar.close"
+    assert evidence["breakout_distance_source"] == "breakout_bar.close"
+    assert evidence["breakout_close"] == 22608.0
+    assert evidence["retest_close"] == 22600.0
+    assert evidence["continuation_close"] == 22614.0
+    assert evidence["retest_distance_pct"] == pytest.approx(expected["retest_distance_pct"])
+    assert evidence["breakout_distance_pct"] == pytest.approx(expected["breakout_distance_pct"])
+    assert candidate.raw_score == pytest.approx(expected["raw_score"], abs=1e-6)
+    assert candidate.raw_score != pytest.approx(0.42150442477876104, abs=1e-6)
 
 
 def test_orb_retest_generates_valid_put_candidate_near_retest_level():
@@ -155,6 +209,23 @@ def test_orb_retest_generates_valid_put_candidate_near_retest_level():
     assert candidate.executable_eligible is False
     assert candidate.evidence["setup_identity"]["setup_id"]
     assert candidate.evidence["setup_identity"]["history_hash"]
+
+    evidence = candidate.evidence
+    expected = _orb_expected_components(
+        direction="BUY_PUT",
+        boundary=22500.0,
+        breakout_close=22492.0,
+        retest_close=22498.0,
+        volatility_expansion=0.3,
+    )
+    assert evidence["retest_distance_source"] == "retest_bar.close"
+    assert evidence["breakout_distance_source"] == "breakout_bar.close"
+    assert evidence["breakout_close"] == 22492.0
+    assert evidence["retest_close"] == 22498.0
+    assert evidence["continuation_close"] == 22484.0
+    assert evidence["retest_distance_pct"] == pytest.approx(expected["retest_distance_pct"])
+    assert evidence["breakout_distance_pct"] == pytest.approx(expected["breakout_distance_pct"])
+    assert candidate.raw_score == pytest.approx(expected["raw_score"], abs=1e-6)
 
 
 def test_orb_retest_returns_empty_when_timing_or_retest_evidence_missing():

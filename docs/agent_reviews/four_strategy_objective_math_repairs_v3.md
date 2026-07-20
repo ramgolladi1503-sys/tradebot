@@ -276,6 +276,7 @@ Recorded validation:
 
 - Focused suite: `86 passed`.
 - ORB lane: `46 passed`.
+- Legacy opening-movement file after stale ORB score-oracle repair: `8 passed`.
 - VWAP lane: `11 passed`.
 - Compile: passed.
 - Ruff: passed.
@@ -289,11 +290,28 @@ Recorded validation:
 
 Full GitHub CI success is not claimed until all checks complete successfully.
 
+GitHub CI exposed one stale legacy ORB raw-score expectation in
+`tests/test_opening_movement_strategies.py::test_orb_retest_generates_valid_call_candidate_near_retest_level`.
+The focused 86-test suite did not include that legacy opening-movement test.
+The assertion was repaired only after independent fixture calculation matched
+the implementation output. Production code, thresholds, profiles, temporal
+predicates, bundles, and sidecars remained unchanged. PR 682 remains draft and
+unmerged. Edge validation remains a separate pre-merge task.
+
 ## Acceptance Proof
 
 Focused tests:
 
 ```bash
+pytest -q tests/test_opening_movement_strategies.py::test_orb_retest_generates_valid_call_candidate_near_retest_level -vv
+# Result: 1 passed
+
+pytest -q tests/test_opening_movement_strategies.py
+# Result: 8 passed
+
+PYTHONPATH=. /opt/anaconda3/bin/python3.12 -m pytest -q -o addopts='' -m "not integration and not feed_smoke and not feed_soak and not certification" --durations=25
+# Result: 6329 passed, 1 skipped, 24 deselected
+
 pytest -q tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/test_four_strategy_contract_freeze.py tests/test_four_strategy_contract_v2.py tests/test_strategy_parameter_profiles.py tests/test_movement_regime.py
 # Result: 86 passed in 1.16s
 ```
@@ -342,6 +360,13 @@ PUT raw_score=0.8413888888888889 retest_distance_pct=0.0 expected_retest_distanc
 ORB_INDEPENDENT_FORMULA_ORACLE=PASS
 ```
 
+Legacy opening-movement fixture oracle:
+
+```text
+CALL boundary=22600.0 breakout_close=22608.0 retest_close=22600.0 continuation_close=22614.0 expected_retest_distance=0.0 actual_retest_distance=0.0 expected_breakout_distance=0.00035398230088495576 actual_breakout_distance=0.00035398230088495576 independently_expected_raw_score=0.51 actual_raw_score=0.51 result=PASS
+PUT boundary=22500.0 breakout_close=22492.0 retest_close=22498.0 continuation_close=22484.0 expected_retest_distance=8.888888888888889e-05 actual_retest_distance=8.888888888888889e-05 expected_breakout_distance=0.00035555555555555557 actual_breakout_distance=0.00035555555555555557 independently_expected_raw_score=0.4877777777777778 actual_raw_score=0.4877777777777778 result=PASS
+```
+
 VWAP stale-label search:
 
 ```bash
@@ -377,6 +402,9 @@ Post-merge proof still required before live use:
 - No broker order is permitted as part of this proof.
 
 This proof has not occurred in this PR.
+
+Edge validation remains a separate pre-merge task against the unmerged PR 682
+head.
 
 ## What This PR Does Not Prove
 
