@@ -1,0 +1,42 @@
+{
+  "base_origin_main_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "entries": [
+    {
+      "name": "OPENING_RANGE_BREAKOUT / ORB",
+      "reason": "Prior candle validation reports weak or negative edge and missing bid/ask/depth for option certification.",
+      "retesting_prohibited": true,
+      "source_artifact": "docs/research/strategy_backtesting/opening_range_breakout_validation.md",
+      "verdict": "ORB_SIGNAL_EDGE_NOT_SUPPORTED / not structurally positive in available candle lane"
+    },
+    {
+      "name": "MEAN_REVERSION_EXTENSION",
+      "reason": "Can only be revisited with materially different structural mechanism and adequate data.",
+      "retesting_prohibited": false,
+      "source_artifact": "docs/research/strategy_backtesting_engine_audit.md and prior local validation memory",
+      "verdict": "WEAK_EDGE_CONSUMED_BY_COSTS in frozen diagnostics"
+    },
+    {
+      "name": "VOL_EXPANSION_NAIVE",
+      "reason": "Rejected strategy family; do not rename as a new edge.",
+      "retesting_prohibited": true,
+      "source_artifact": "docs/research/strategy_research_index.md",
+      "verdict": "REJECTED_TOXIC_REGIME"
+    },
+    {
+      "name": "HTF_OPENING_DRIVE_CONT / HTF_15M_TREND_CONT / HTF_15M_VWAP_PULLBACK",
+      "reason": "Previously rejected unless a materially different causal mechanism is specified.",
+      "retesting_prohibited": true,
+      "source_artifact": "docs/research/strategy_research_index.md",
+      "verdict": "Dead signal"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

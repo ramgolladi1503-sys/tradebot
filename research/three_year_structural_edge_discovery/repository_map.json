@@ -1,0 +1,74 @@
+{
+  "base_origin_main_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "candidate_contracts": [
+    "core/candidate_intent.py",
+    "core/candidate_state_contract.py",
+    "core/candidate_outcome_contract.py",
+    "core/replay_contract.py"
+  ],
+  "candidate_replay_adapters": [
+    "core/replay_candidate_handoff_entrypoint.py",
+    "core/outcome_evidence/replay_runner.py",
+    "core/option_backtest/adapter.py"
+  ],
+  "cost_models": [
+    "core/cost_slippage_model.py",
+    "core/option_fill_model.py",
+    "core/option_backtest/engine.py"
+  ],
+  "execution_eligibility_authority": [
+    "core/executable_truth.py",
+    "core/strategy_eligibility.py",
+    "core/runtime_safety_boot_guard.py"
+  ],
+  "market_regime_owners": [
+    "core/regime.py",
+    "core/regime_state.py",
+    "core/regime_router.py",
+    "core/strategy_regime_policy.py"
+  ],
+  "option_contract_selectors": [
+    "core/option_token_resolver.py",
+    "core/strike_selector.py",
+    "core/expiry_calendar.py"
+  ],
+  "outcome_owners": [
+    "core/outcome_truth_pipeline.py",
+    "core/outcome_evidence/",
+    "core/candidate_outcome_truth.py"
+  ],
+  "parameter_profile_owners": [
+    "core/strategy_parameter_profiles.py",
+    "core/strategy_truth/parameter_auditor.py"
+  ],
+  "proxy_or_deprecated_paths": [
+    "core/backtest_engine.py",
+    "core/backtest_elite.py",
+    "core/backtesting/wfa.py",
+    "scripts/run_candidate_strategy_backtest.py"
+  ],
+  "runtime_enablement_defaults": [
+    "config/",
+    "configs/",
+    "core/strategy_registry/"
+  ],
+  "schema_version": 1,
+  "session_history_owners": [
+    "core/replay_session_path.py",
+    "core/replay_harness.py",
+    "core/backtest_replay_clock.py"
+  ],
+  "strategy_interfaces": [
+    "core/strategy_spec.py",
+    "core/strategy_hypothesis_contracts.py",
+    "core/strategy_candidate_generator.py",
+    "core/strategy_candidate_pool.py",
+    "core/strategy_registry/"
+  ],
+  "trusted_option_replay_engines": [
+    "core/option_backtest/engine.py",
+    "core/option_backtest/wfa.py"
+  ],
+  "worktree_head_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "worktree_status_short": ""
+}
