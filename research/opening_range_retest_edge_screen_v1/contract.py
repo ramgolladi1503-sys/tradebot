@@ -15,6 +15,8 @@ FROZEN_IMPLEMENTATION_TREE_HASH = "dfdeefa882879267ccdffff7e10454d4298d3767e8b3f
 SOURCE_LEDGER_PATH = "docs/agent_reviews/opening_range_retest_outcome_ledger_v2.json"
 SOURCE_LEDGER_SHA256 = "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a"
 SOURCE_LEDGER_SEMANTIC_HASH = "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd"
+SOURCE_OVERLAP_PATH = "docs/agent_reviews/opening_range_retest_outcome_overlap_v2.json"
+SOURCE_OVERLAP_SHA256 = "2e5889719a47e6ddf04e357b5fe01bedd51cfaf71221bea22d2287eddc9fb354"
 OUTCOME_CONTRACT_SHA256 = "f3778e2b3b025b88ae9101e1a4263c4ea4917b06541fc70454287901f5def4d5"
 CERTIFIED_PROJECTION_HASH = "23ada7617040d2824e8e5e49742bfbb2d91e676994a3ba4f371d3e573014c581"
 
@@ -69,6 +71,12 @@ CONCENTRATION_REMOVALS = (
     "top_1pct_candidates_removed",
     "worst_1_session_removed",
     "worst_5_sessions_removed",
+    "most_positive_session_removed",
+    "five_most_positive_sessions_removed",
+    "most_positive_year_removed",
+    "most_positive_symbol_removed",
+    "most_positive_symbol_direction_removed",
+    "session_mean_winsorized_1_99",
 )
 
 ARTIFACT_NAMES = {
@@ -113,6 +121,61 @@ def safety_fields() -> dict[str, Any]:
 
 
 def contract_payload() -> dict[str, Any]:
+    structural_matrix = [
+        {
+            "rule_id": "primary_15m_session_equal_mean_must_be_positive_before_any_edge_classification",
+            "condition": "primary_15m.session_equal_mean <= 0",
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "primary_15m_session_equal_mean_must_clear_practical_hurdle",
+            "condition": "primary_15m.session_equal_mean_bps < structural_min_session_equal_mean_bps",
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "primary_15m_lower_ci_must_exclude_zero",
+            "condition": "primary_15m.session_cluster_bootstrap.lower <= 0",
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "primary_15m_controls_must_pass",
+            "condition": "any primary control gate fails",
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "primary_15m_replication_concentration_overlap_must_pass",
+            "condition": "any replication, concentration, or overlap gate fails",
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+    ]
+    conditional_matrix = [
+        {
+            "rule_id": "no_rescue_after_failed_primary_mean",
+            "condition": "primary_15m.session_equal_mean <= 0",
+            "allowed_conditional_edges": [],
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "diagnostic_horizons_cannot_rescue_primary",
+            "condition": "any diagnostic horizon passes while primary 15m fails",
+            "allowed_conditional_edges": [],
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+        {
+            "rule_id": "subgroups_cannot_rescue_primary",
+            "condition": "any symbol, direction, or symbol-direction subgroup passes while primary 15m fails",
+            "allowed_conditional_edges": [],
+            "verdict": "ORB_NO_STRUCTURAL_EDGE",
+            "terminal": True,
+        },
+    ]
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "mode": "ORB_EDGE_SCREEN_CONTRACT_V1",
@@ -128,6 +191,8 @@ def contract_payload() -> dict[str, Any]:
         "source_ledger_path": SOURCE_LEDGER_PATH,
         "source_ledger_sha256": SOURCE_LEDGER_SHA256,
         "source_ledger_semantic_hash": SOURCE_LEDGER_SEMANTIC_HASH,
+        "source_overlap_path": SOURCE_OVERLAP_PATH,
+        "source_overlap_sha256": SOURCE_OVERLAP_SHA256,
         "outcome_contract_sha256": OUTCOME_CONTRACT_SHA256,
         "certified_projection_hash": CERTIFIED_PROJECTION_HASH,
         "certified_candidates": CERTIFIED_CANDIDATES,
@@ -139,6 +204,15 @@ def contract_payload() -> dict[str, Any]:
         "all_horizon_minutes": list(HORIZONS),
         "expected_measured_counts": {str(k): v for k, v in EXPECTED_MEASURED_COUNTS.items()},
         "primary_estimand": "session_equal_mean",
+        "verdict_contract": {
+            "primary_owner": "15-minute session-equal result",
+            "terminal_no_edge_rule": "IF primary 15-minute session-equal mean <= 0 THEN ORB_NO_STRUCTURAL_EDGE",
+            "diagnostic_horizons_can_rescue_failed_primary": False,
+            "thirty_minute_can_rescue_failed_primary": False,
+            "symbol_direction_cells_can_rescue_failed_primary": False,
+            "structural_matrix": structural_matrix,
+            "conditional_matrix": conditional_matrix,
+        },
         "bootstrap": {
             "cluster": "session_date",
             "replications": BOOTSTRAP_REPLICATIONS,
@@ -152,7 +226,10 @@ def contract_payload() -> dict[str, Any]:
             "preserve": ["session", "symbol", "entry_time", "horizon", "unsigned_move"],
             "direction_counts_preserved_within": ["symbol", "calendar_year"],
         },
-        "opposite_direction_control": {"required_identity": "signal_return + opposite_return == 0"},
+        "opposite_direction_control": {
+            "required_recompute": "derive both signal and opposite returns from primitive entry open, terminal close, direction, and horizon",
+            "required_fields": ["records_checked", "exact_matches", "tolerance_matches", "mismatches", "max_abs_error", "first_mismatch"],
+        },
         "matched_time_control": {
             "draws_per_candidate": MATCHED_TIME_DRAWS_PER_CANDIDATE,
             "seed": MATCHED_TIME_SEED,
@@ -164,7 +241,9 @@ def contract_payload() -> dict[str, Any]:
         "within_stratum_direction_permutation": {
             "permutations": WITHIN_STRATUM_PERMUTATIONS,
             "seed": WITHIN_STRATUM_SEED,
-            "strata": ["symbol", "calendar_year", "entry_time_bucket"],
+            "strata": ["calendar_year", "symbol", "30_minute_candidate_time_bucket"],
+            "eligible_only_if": "at least two candidates and both directions",
+            "underpowered_if_eligible_coverage_below": 0.50,
         },
         "symbols": list(SYMBOLS),
         "directions": list(DIRECTIONS),
@@ -177,8 +256,11 @@ def contract_payload() -> dict[str, Any]:
         "holm_alpha": HOLM_ALPHA,
         "concentration_removals": list(CONCENTRATION_REMOVALS),
         "overlap_sensitivities": {
-            "A": "earliest candidate per session x symbol x direction",
-            "B": "earliest proposal_ready_at then lexicographically smallest candidate_id per overlap-connected component",
+            "all_candidates": "all measured 15-minute candidates",
+            "one_per_accepted_overlap_component": "earliest proposal_ready_at then lexicographically smallest candidate_id per accepted overlap component",
+            "earliest_per_symbol_session": "earliest proposal_ready_at then stable candidate_id per symbol-session",
+            "authority": SOURCE_OVERLAP_PATH,
+            "authority_sha256": SOURCE_OVERLAP_SHA256,
         },
         "verdicts": ["ORB_NO_STRUCTURAL_EDGE", "ORB_CONDITIONAL_EDGE_CANDIDATE", "ORB_STRUCTURAL_EDGE_CANDIDATE"],
         "forbidden": {

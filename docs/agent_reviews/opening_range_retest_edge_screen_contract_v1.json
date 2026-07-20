@@ -29,11 +29,17 @@
     "best_10_sessions_removed",
     "top_1pct_candidates_removed",
     "worst_1_session_removed",
-    "worst_5_sessions_removed"
+    "worst_5_sessions_removed",
+    "most_positive_session_removed",
+    "five_most_positive_sessions_removed",
+    "most_positive_year_removed",
+    "most_positive_symbol_removed",
+    "most_positive_symbol_direction_removed",
+    "session_mean_winsorized_1_99"
   ],
   "conditional_min_candidates": 300,
   "conditional_min_sessions": 150,
-  "contract_hash": "233a7094938c71f41f67be838133ad4843e5053373cfa0ebc52b111e7c55c712",
+  "contract_hash": "3f05a00a252ea92fecc9663f8f343e6a46f7a4d08a9ed4cd62c4e5017bddad39",
   "decision": "ORB_EDGE_SCREEN_CONTRACT_FROZEN",
   "diagnostic_horizon_minutes": [
     1,
@@ -113,12 +119,23 @@
   "not_option_pnl": true,
   "not_profitability_proof": true,
   "opposite_direction_control": {
-    "required_identity": "signal_return + opposite_return == 0"
+    "required_fields": [
+      "records_checked",
+      "exact_matches",
+      "tolerance_matches",
+      "mismatches",
+      "max_abs_error",
+      "first_mismatch"
+    ],
+    "required_recompute": "derive both signal and opposite returns from primitive entry open, terminal close, direction, and horizon"
   },
   "outcome_contract_sha256": "f3778e2b3b025b88ae9101e1a4263c4ea4917b06541fc70454287901f5def4d5",
   "overlap_sensitivities": {
-    "A": "earliest candidate per session x symbol x direction",
-    "B": "earliest proposal_ready_at then lexicographically smallest candidate_id per overlap-connected component"
+    "all_candidates": "all measured 15-minute candidates",
+    "authority": "docs/agent_reviews/opening_range_retest_outcome_overlap_v2.json",
+    "authority_sha256": "2e5889719a47e6ddf04e357b5fe01bedd51cfaf71221bea22d2287eddc9fb354",
+    "earliest_per_symbol_session": "earliest proposal_ready_at then stable candidate_id per symbol-session",
+    "one_per_accepted_overlap_component": "earliest proposal_ready_at then lexicographically smallest candidate_id per accepted overlap component"
   },
   "practical_hurdles_bps": [
     0,
@@ -152,6 +169,8 @@
   "source_ledger_path": "docs/agent_reviews/opening_range_retest_outcome_ledger_v2.json",
   "source_ledger_semantic_hash": "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd",
   "source_ledger_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a",
+  "source_overlap_path": "docs/agent_reviews/opening_range_retest_outcome_overlap_v2.json",
+  "source_overlap_sha256": "2e5889719a47e6ddf04e357b5fe01bedd51cfaf71221bea22d2287eddc9fb354",
   "structural_min_session_equal_mean_bps": 1.0,
   "symbol_direction_cells": [
     {
@@ -185,19 +204,83 @@
     "SENSEX"
   ],
   "timestamp": "2026-07-20T00:00:00Z",
+  "verdict_contract": {
+    "conditional_matrix": [
+      {
+        "allowed_conditional_edges": [],
+        "condition": "primary_15m.session_equal_mean <= 0",
+        "rule_id": "no_rescue_after_failed_primary_mean",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "allowed_conditional_edges": [],
+        "condition": "any diagnostic horizon passes while primary 15m fails",
+        "rule_id": "diagnostic_horizons_cannot_rescue_primary",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "allowed_conditional_edges": [],
+        "condition": "any symbol, direction, or symbol-direction subgroup passes while primary 15m fails",
+        "rule_id": "subgroups_cannot_rescue_primary",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      }
+    ],
+    "diagnostic_horizons_can_rescue_failed_primary": false,
+    "primary_owner": "15-minute session-equal result",
+    "structural_matrix": [
+      {
+        "condition": "primary_15m.session_equal_mean <= 0",
+        "rule_id": "primary_15m_session_equal_mean_must_be_positive_before_any_edge_classification",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "primary_15m.session_equal_mean_bps < structural_min_session_equal_mean_bps",
+        "rule_id": "primary_15m_session_equal_mean_must_clear_practical_hurdle",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "primary_15m.session_cluster_bootstrap.lower <= 0",
+        "rule_id": "primary_15m_lower_ci_must_exclude_zero",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "any primary control gate fails",
+        "rule_id": "primary_15m_controls_must_pass",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "any replication, concentration, or overlap gate fails",
+        "rule_id": "primary_15m_replication_concentration_overlap_must_pass",
+        "terminal": true,
+        "verdict": "ORB_NO_STRUCTURAL_EDGE"
+      }
+    ],
+    "symbol_direction_cells_can_rescue_failed_primary": false,
+    "terminal_no_edge_rule": "IF primary 15-minute session-equal mean <= 0 THEN ORB_NO_STRUCTURAL_EDGE",
+    "thirty_minute_can_rescue_failed_primary": false
+  },
   "verdicts": [
     "ORB_NO_STRUCTURAL_EDGE",
     "ORB_CONDITIONAL_EDGE_CANDIDATE",
     "ORB_STRUCTURAL_EDGE_CANDIDATE"
   ],
   "within_stratum_direction_permutation": {
+    "eligible_only_if": "at least two candidates and both directions",
     "permutations": 1000,
     "seed": 20260723,
     "strata": [
-      "symbol",
       "calendar_year",
-      "entry_time_bucket"
-    ]
+      "symbol",
+      "30_minute_candidate_time_bucket"
+    ],
+    "underpowered_if_eligible_coverage_below": 0.5
   },
   "years": [
     2024,
