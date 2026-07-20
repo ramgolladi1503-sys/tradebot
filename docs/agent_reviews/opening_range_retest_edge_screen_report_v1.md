@@ -14,25 +14,29 @@
 - primary_session_equal_mean_bps: -0.064401
 - primary_ci_bps: [-0.927855, 0.796142]
 - matched_time_coverage: 1.000000
-- random_direction_p: 0.591000
-- within_stratum_p: 0.615000
+- random_direction_p: 0.591409
+- within_stratum_p: 0.534466
 
 This is pre-cost underlying-only research evidence. It is not option PnL, not profitability proof, and not paper/live readiness.
 
 ## Failed Structural Gates
+- primary_15m_session_equal_mean_gt_0
 - mean_ge_1bp
 - lower_ci_gt_0
-- positive_session_rate_gt_50pct
+- sign_test_one_sided_lte_0_05
 - random_advantage_lower_ci_gt_0
 - random_permutation_p_lte_0_05
 - matched_time_advantage_lower_ci_gt_0
 - within_stratum_p_lte_0_05
 - at_least_2_of_3_years_positive
 - at_least_2_of_3_symbols_positive
-- positive_after_best_5_removed
-- positive_after_top_1pct_removed
-- overlap_sensitivity_a_positive
-- overlap_sensitivity_b_positive
+- positive_after_five_most_positive_sessions_removed
+- positive_after_most_positive_year_removed
+- positive_after_most_positive_symbol_removed
+- positive_after_most_positive_symbol_direction_removed
+- positive_after_winsorized_session_means
+- overlap_one_per_component_positive
+- overlap_earliest_symbol_session_positive
 
 STOP ORB RESEARCH
 FREEZE ACCEPTED IMPLEMENTATION

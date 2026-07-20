@@ -12,7 +12,7 @@
   "mode": "ORB_EDGE_SCREEN_CONCENTRATION_V1",
   "not_option_pnl": true,
   "not_profitability_proof": true,
-  "projection_hash": "60b2c282d73a03d6a6a9f8e0c7046353bb9365d6a71215a62def7ab610ae4efd",
+  "projection_hash": "f7e493dc22a4c398e4f598a4e4ac8a14afdef3f8e7f120bbeddf556994e9a133",
   "read_only": true,
   "reason": "recomputed pre-registered concentration controls without return-based rescue selection",
   "removal_means": {
@@ -20,11 +20,32 @@
     "best_1_session_removed": -1.5416559903726155e-05,
     "best_3_sessions_removed": -3.1609912579480274e-05,
     "best_5_sessions_removed": -4.5453544133842476e-05,
+    "five_most_positive_sessions_removed": -4.5453544133842476e-05,
+    "most_positive_session_removed": -1.5416559903726155e-05,
+    "most_positive_symbol_direction_removed": -3.224997748161129e-05,
+    "most_positive_symbol_removed": -1.2965561000650523e-05,
+    "most_positive_year_removed": -3.8638289336513914e-05,
+    "session_mean_winsorized_1_99": -3.5068619702592198e-06,
     "top_1pct_candidates_removed": -7.215779202956567e-05,
     "worst_1_session_removed": 5.827286608878886e-06,
     "worst_5_sessions_removed": 3.609929053988634e-05
   },
   "schema_version": 1,
+  "selected_identities": {
+    "five_most_positive_sessions": [
+      "2024-10-14",
+      "2025-06-06",
+      "2025-06-20",
+      "2024-09-20",
+      "2025-02-19"
+    ],
+    "most_positive_session": "2024-10-14",
+    "most_positive_symbol": "SENSEX",
+    "most_positive_symbol_direction": "SENSEX:BUY_CALL",
+    "most_positive_year": "2025",
+    "winsorize_session_mean_p01": -0.00304089479444,
+    "winsorize_session_mean_p99": 0.002974995712912001
+  },
   "source": "opening_range_retest_outcome_ledger_v2.json",
   "timestamp": "2026-07-20T00:00:00Z",
   "top_1pct_candidate_count": 22

@@ -2,14 +2,15 @@
   "allowed_for_live_execution": false,
   "append": false,
   "artifact_hashes": {
-    "concentration": "6c5d8d79581e90a5b8f290a8960478cce6adddc81ab8305f8bb711b075997bfa",
-    "contract": "8a2d6cd3cc25925ef07028f8ba829b774da1257d72bb7bd6e10f7a87910a7249",
-    "controls": "4c57175b3fc7bd2ec3466f459852b5d0c5004bb97feda7cbd6c4fcad37dc3799",
-    "metrics": "746b4617b5adc420e41314b0a7c4bf408a2ea08a28baceca124f17eb4e97ac79",
-    "overlap": "c77af6842b695b3bf94665cca6859728f68dec4797671a0846dbe563ae6fa943",
-    "replication": "fc41ab5c04c8a8828e427c8b0190648a3a13aa77f0153a90207eb42e46877ffd",
-    "report": "79bc9fce25da67e15fffb69870b636a2a4b93c9f21d416db46e2784397faf32f",
-    "verdict": "ca9f8d0a1e04d30439ea92b43c730cd51e47e008b50c2b1ddfd91d474fc91be7"
+    "audit": "542fae02c461980985386b5ee7835aad9345c22d6926192eee7659f19f9fb0a4",
+    "concentration": "d28b5f78c4aa0551bfc25eb92556cf3a67aa5bb44bb994f3125204b50464163e",
+    "contract": "cda2b6513bd3156512fb48f1100c343d11f5a4390582d15498711944199a80d7",
+    "controls": "6e3515b3c4fe8c22fcac39fae36e50b99ed8aa06761dd79825e264d6675a78a1",
+    "metrics": "64523b57a6e9623e92a263c75ac1613f36ac732f7f017acab9cd6e1e37cb2ea4",
+    "overlap": "50b19553c476b82549786371cc2dac42bde3e650ea25cf1d638361c73f3216ee",
+    "replication": "598a676c180d0275bac8cc708211113d1a40afafca54daaeeefaa20dbca9f7a5",
+    "report": "8c1abbf65daa9d20e7b320dc6b8dff1a8b94b767d902072c5456c9d5e8b32d6b",
+    "verdict": "157372d22cf44d84702573b3cba94df5134ecd64b8d4575287f3279d1eb958aa"
   },
   "broker_api_called": false,
   "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
@@ -44,6 +45,12 @@
         "path": "opening_range_retest_outcome_ledger_v2.json",
         "sidecar_match": true,
         "sidecar_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a"
+      },
+      "outcome_overlap": {
+        "artifact_sha256": "2e5889719a47e6ddf04e357b5fe01bedd51cfaf71221bea22d2287eddc9fb354",
+        "path": "opening_range_retest_outcome_overlap_v2.json",
+        "sidecar_match": true,
+        "sidecar_sha256": "2e5889719a47e6ddf04e357b5fe01bedd51cfaf71221bea22d2287eddc9fb354"
       }
     },
     "source_ledger_semantic_hash": "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd",
