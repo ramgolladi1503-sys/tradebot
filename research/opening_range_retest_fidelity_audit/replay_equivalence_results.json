@@ -1,0 +1,12 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "direct_whole_history_behavior": "LATEST_BAR_ONLY_EMISSION",
+  "incremental_prefix_behavior": "LIVE_EQUIVALENT_EMISSION",
+  "is_order_action": false,
+  "known_difference": "A completed session containing later bars after the first continuation does not re-emit the original candidate on direct whole-history invocation.",
+  "read_only": true,
+  "replay_requirement": "Historical replay must call the generator on causal prefixes, not only once on final session history.",
+  "status": "REQUIRES_PREFIX_REPLAY"
+}

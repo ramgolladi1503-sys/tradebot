@@ -1,0 +1,16 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "impact": "Audit found no per-instrument or per-regime ownership for ORB thresholds.",
+  "is_order_action": false,
+  "profile_dimensions": {
+    "expiry_context": "ANY",
+    "instrument": "ANY",
+    "regime_bucket": "ANY",
+    "session_bucket": "ANY",
+    "volatility_bucket": "ANY"
+  },
+  "read_only": true,
+  "status": "BROAD_PROFILE_WITH_NO_SEGMENT_SPECIALIZATION"
+}

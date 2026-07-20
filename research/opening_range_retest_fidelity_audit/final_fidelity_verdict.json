@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "edge_applicability": "VALID_ONLY_FOR_CURRENT_MISWIRED_VARIANT",
+  "historical_verdict_remains_frozen": "UNDERLYING_SIGNAL_WEAK_OR_UNSTABLE",
+  "is_order_action": false,
+  "optimization_performed": false,
+  "primary_verdict": "PARAMETER_CONTRACT_BROKEN",
+  "production_changes_made": false,
+  "read_only": true,
+  "requires_wfa_rerun": false,
+  "why": "The measured historical result remains a valid result for the current implemented ORB variant, but the implementation is not a faithful parameterized strategy contract because required profile parameters are inert or score-only."
+}

@@ -1,0 +1,29 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "authority_status": "AMBIGUOUS_AND_INCOMPLETE",
+  "broker_api_called": false,
+  "is_order_action": false,
+  "movement_type": "OPENING_RANGE_RETEST",
+  "profile": {
+    "blocked_reason": null,
+    "parameter_hash": "80e9589866186bbc73f2a5e4530a96ae2b62d86ec5062e60f7eecbfe11a7a064",
+    "parameters": {
+      "MAX_RETEST_DISTANCE_PCT": 0.0018,
+      "MAX_RETEST_MINUTES": 90,
+      "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+      "MIN_RETEST_MINUTES": 15
+    },
+    "profile_version": "v1",
+    "requested_profile_id": "opening_range_retest_v1",
+    "resolution_source": "COMPATIBILITY_ALIAS",
+    "resolved_profile_id": "opening_range_breakout_v1",
+    "warnings": [
+      "compatibility_alias:opening_range_retest_v1->opening_range_breakout_v1"
+    ]
+  },
+  "read_only": true,
+  "reason": "Profile requires four ORB parameters, but only two are wired and both wired parameters are score-only.",
+  "runtime_strategy_id": "opening_range_retest_v1",
+  "temporal_contract_version": "opening_range_retest_temporal_v1"
+}

@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "formula": "0.45*(1-ratio_score(retest_distance, full=MAX_RETEST_DISTANCE_PCT)) + 0.35*ratio_score(breakout_distance, start=MIN_BREAKOUT_DISTANCE_PCT, full=0.004) + 0.20*VOLATILITY_EXPANSION",
+  "is_order_action": false,
+  "read_only": true,
+  "score_status": "DETERMINISTIC_BUT_PARTLY_UNOWNED",
+  "unowned_constants": {
+    "breakout_full_saturation": 0.004
+  },
+  "weights_sum": 1.0
+}

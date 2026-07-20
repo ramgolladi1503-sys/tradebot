@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "confluence_tags": [
+    "orb_retest",
+    "vwap_alignment"
+  ],
+  "is_order_action": false,
+  "read_only": true,
+  "reason": "Candidate evidence includes ctx.vwap and tag vwap_alignment, but emission does not require VWAP relation.",
+  "status": "LABEL_OVERSTATED",
+  "vwap_predicate_in_main_temporal_path": false
+}

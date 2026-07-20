@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "audit_head": "78da75f7a663ab6772c2a453f7bed7ce25abdbc8",
+  "audit_id": "ORB_SPECIFICATION_FIDELITY_AND_PARAMETER_WIRING_AUDIT",
+  "broker_api_called": false,
+  "historical_research_commit": "78da75f7a663ab6772c2a453f7bed7ce25abdbc8",
+  "is_order_action": false,
+  "pr_682_modified": false,
+  "production_source_path": "strategies/movement/opening_range_breakout.py",
+  "production_source_sha256": "4f7dad9c0ba5749129b8645b9c76ba4543cc39087f18ebfbfb5063c09adfda0e",
+  "read_only": true,
+  "validated_production_source": "cf1b63908c779db844ef3534804142a8af26cbac"
+}

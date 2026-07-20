@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "breakout_to_retest_max_age_bars": 5,
+  "broker_api_called": false,
+  "continuation_must_be_latest_completed_bar": true,
+  "is_order_action": false,
+  "opening_range_bars": 15,
+  "previous_continuation_suppresses_late_reemission": true,
+  "read_only": true,
+  "retest_to_continuation_max_age_bars": 3,
+  "same_bar_breakout_retest_allowed": false
+}

@@ -1,0 +1,27 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "artifact_count": 16,
+  "artifacts": {
+    "candidate_vs_score_semantics.json": "c45d879fa74b29ab7c08d70c45de6f451f3179cb261ff8a21c4496575c60f8ff",
+    "final_fidelity_report.md": "7d42c114ef4ca2de3d88443329b7ea5b24388168286655e25417ef55b68ede0c",
+    "final_fidelity_verdict.json": "90a2a3e8f2b40acee1e14fb68da6c77daf68a190f54c8156aad9f8b8f8748a31",
+    "implementation_spec_matrix.json": "0bb7f60a1f1ff917b6272b053aa03c53d77716fe61fcc00e5055b63e2aa32cf1",
+    "intended_strategy_spec.json": "c6618d39558ef4025bccf675d90e65e365cd82c5434053286aea0a72346710f8",
+    "intended_strategy_spec.md": "e6052ab7047e0a9977706af591f7e1d754dab337ce92c2f2e76942c48f898b30",
+    "label_truth_audit.json": "7491978b0835ae8d2e6166b4cbcb2903abcfb2a88327e3d819cd1dc8e8f21c81",
+    "parameter_ownership_matrix.json": "f1fa5476336d93db711e8a9be19a37d849528669cb77a5309ac069fdb00a26b4",
+    "parameter_ownership_matrix.md": "0b6e180e4e551962f4f4669751ddc0a29d16e78440e4cf0f9e42172940c35155",
+    "parameter_wiring_results.json": "f1fa5476336d93db711e8a9be19a37d849528669cb77a5309ac069fdb00a26b4",
+    "profile_generality_audit.json": "b6b5aa937074a1398217e2ace3fc19449e95c0c86ea3b6723ca06ed6809c0c8f",
+    "replay_equivalence_results.json": "ae6d869a4d78ae07592f1763e30887893ceed4d590bb6eba1e00dfdbc9e86429",
+    "score_formula_audit.json": "fff46f25cbc4c2d5929f53c4d33b73b5793fb86f0c49f2c8d271bde0602079d6",
+    "source_identity.json": "eac3fc8d5d51822271461f865e37af0f5fcd6ce06037cd8903e88776e2b7f79c",
+    "specification_authority.json": "6eb9904d375bbdadd925de50528e9cb32a97e6e27029aecb4d228f8bb9642846",
+    "temporal_semantics_results.json": "feee3986407b34eded19f412adfa70420ea534563d9ea9c59068fd1d0a24fe6b"
+  },
+  "broker_api_called": false,
+  "is_order_action": false,
+  "read_only": true,
+  "status": "READY"
+}

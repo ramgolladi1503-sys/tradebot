@@ -1,0 +1,58 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "is_order_action": false,
+  "read_only": true,
+  "rows": {
+    "BREAKOUT_SCORE_FULL_SATURATION": {
+      "configured_value": 0.004,
+      "evidence": "Inline literal in ratio_score(breakout_distance, ..., full=0.004).",
+      "impact": "Affects ranking score without profile ownership.",
+      "runtime_role": "UNOWNED_SCORE_CONSTANT"
+    },
+    "MAX_BREAKOUT_TO_RETEST_AGE": {
+      "configured_value": 5,
+      "evidence": "Used in _scan_directional_setup expiry check.",
+      "impact": "Controls breakout-to-retest max age independently of profile.",
+      "runtime_role": "HARD_CODED_TEMPORAL_GATE"
+    },
+    "MAX_RETEST_DISTANCE_PCT": {
+      "configured_value": 0.0018,
+      "evidence": "Read in _build_temporal_candidate as ratio_score full value; no eligibility predicate rejects larger distances.",
+      "impact": "Changes raw score but not candidate inclusion.",
+      "runtime_role": "SCORE_ONLY"
+    },
+    "MAX_RETEST_MINUTES": {
+      "configured_value": 90,
+      "evidence": "Required by profile resolution but not read by temporal scan or candidate build.",
+      "impact": "Profile claims a retest-minute bound that cannot affect emitted candidates.",
+      "runtime_role": "REQUIRED_BUT_INERT"
+    },
+    "MAX_RETEST_TO_CONTINUATION_AGE": {
+      "configured_value": 3,
+      "evidence": "Used in _scan_directional_setup expiry check.",
+      "impact": "Controls retest-to-continuation max age independently of profile.",
+      "runtime_role": "HARD_CODED_TEMPORAL_GATE"
+    },
+    "MIN_BREAKOUT_DISTANCE_PCT": {
+      "configured_value": 0.0008,
+      "evidence": "Read in _build_temporal_candidate as ratio_score start value; _is_breakout only requires close beyond OR boundary.",
+      "impact": "Changes raw score but not candidate inclusion.",
+      "runtime_role": "SCORE_ONLY"
+    },
+    "MIN_RETEST_MINUTES": {
+      "configured_value": 15,
+      "evidence": "Required by profile resolution but not read by temporal scan or candidate build.",
+      "impact": "Profile claims a retest-minute bound that cannot affect emitted candidates.",
+      "runtime_role": "REQUIRED_BUT_INERT"
+    },
+    "OPENING_RANGE_BARS": {
+      "configured_value": 15,
+      "evidence": "Used to slice completed history before scanning breakouts.",
+      "impact": "Controls opening-range completion independently of profile.",
+      "runtime_role": "HARD_CODED_TEMPORAL_GATE"
+    }
+  },
+  "summary": "Timing contract is hardcoded; two required timing parameters are inert; two distance parameters are score-only."
+}

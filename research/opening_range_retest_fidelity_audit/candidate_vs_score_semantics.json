@@ -1,0 +1,20 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "candidate_eligibility_predicates": [
+    "valid completed 1m history",
+    "recomputed ORB fields match supplied ORB fields if supplied",
+    "breakout close beyond OR boundary",
+    "retest touches boundary and closes on breakout side",
+    "continuation closes beyond retest bar extreme",
+    "hardcoded temporal ages not expired"
+  ],
+  "is_order_action": false,
+  "read_only": true,
+  "score_only_inputs": [
+    "MAX_RETEST_DISTANCE_PCT",
+    "MIN_BREAKOUT_DISTANCE_PCT",
+    "VOLATILITY_EXPANSION"
+  ]
+}
