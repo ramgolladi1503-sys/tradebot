@@ -28,6 +28,7 @@ _CLAIM_HOLDING_STATES = frozenset(
 _VERIFICATION_CLAIM_STATES = frozenset({"ACTIVE", "VERIFIED", "REVIEW_NEEDS_HUMAN"})
 _ALLOWED_REVIEW_DECISIONS = frozenset({"APPROVE", "REWRITE", "REJECT", "NEEDS_HUMAN"})
 _ALLOWED_EXECUTABLES = frozenset({"python", "python3", "pytest", "ruff", "mypy", "git"})
+_ALLOWED_PYTHON_MODULES = frozenset({"pytest", "py_compile", "compileall", "json.tool", "unittest"})
 _READ_ONLY_GIT_COMMANDS = frozenset({"status", "diff", "rev-parse", "show", "log"})
 _BLOCKED_SCRIPT_BASENAMES = frozenset(
     {
@@ -165,6 +166,8 @@ def _safety() -> dict[str, bool]:
         "allowed_for_runtime_wiring": False,
         "allowed_for_live_execution": False,
         "auto_merge_enabled": False,
+        "acceptance_commands_credential_isolated": True,
+        "acceptance_commands_network_sandboxed": False,
     }
 
 
