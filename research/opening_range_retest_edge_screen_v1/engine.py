@@ -81,17 +81,21 @@ def verify_sidecar(path: Path) -> dict[str, Any]:
 def verify_source_authority(artifact_dir: Path) -> dict[str, Any]:
     ledger_path = artifact_dir / "opening_range_retest_outcome_ledger_v2.json"
     contract_path = artifact_dir / "opening_range_retest_outcome_contract_v2.json"
+    overlap_path = artifact_dir / "opening_range_retest_outcome_overlap_v2.json"
     ledger = load_json(ledger_path)
     failures: list[str] = []
     sidecars = {
         "outcome_ledger": verify_sidecar(ledger_path),
         "outcome_contract": verify_sidecar(contract_path),
+        "outcome_overlap": verify_sidecar(overlap_path),
     }
     for key, item in sidecars.items():
         if not item["sidecar_match"]:
             failures.append(f"SIDECAR_MISMATCH:{key}")
     if sidecars["outcome_ledger"]["artifact_sha256"] != C.SOURCE_LEDGER_SHA256:
         failures.append("SOURCE_LEDGER_SHA_MISMATCH")
+    if sidecars["outcome_overlap"]["artifact_sha256"] != C.SOURCE_OVERLAP_SHA256:
+        failures.append("SOURCE_OVERLAP_SHA_MISMATCH")
     if ledger.get("outcome_ledger_hash") != C.SOURCE_LEDGER_SEMANTIC_HASH:
         failures.append("SOURCE_LEDGER_SEMANTIC_HASH_MISMATCH")
     if sidecars["outcome_contract"]["artifact_sha256"] != C.OUTCOME_CONTRACT_SHA256:
@@ -142,6 +146,17 @@ def entry_bucket(ts: pd.Timestamp) -> str:
     return "OUT_OF_BUCKET"
 
 
+def entry_bucket_30(ts: pd.Timestamp) -> str:
+    start = pd.Timestamp(ts.date()) + pd.Timedelta(hours=9, minutes=15)
+    end = pd.Timestamp(ts.date()) + pd.Timedelta(hours=15, minutes=30)
+    if ts < start or ts >= end:
+        return "OUT_OF_BUCKET"
+    offset = int((ts - start).total_seconds() // 60)
+    bucket_start = start + pd.Timedelta(minutes=(offset // 30) * 30)
+    bucket_end = min(bucket_start + pd.Timedelta(minutes=30), end)
+    return f"{bucket_start.strftime('%H:%M')}-{bucket_end.strftime('%H:%M')}"
+
+
 def measured_rows(ledger: dict[str, Any], horizon: int) -> list[dict[str, Any]]:
     rows = []
     for record in ledger["records"]:
@@ -154,6 +169,8 @@ def measured_rows(ledger: dict[str, Any], horizon: int) -> list[dict[str, Any]]:
         symbol = str(core["symbol"])
         direction = str(core["direction"])
         ret = float(h[RETURN_FIELD])
+        entry_open = float(record["legal_entry"]["open"])
+        terminal_close = float(h["terminal_close"])
         mfe = float(h.get("mfe", 0.0))
         mae = float(h.get("mae", 0.0))
         rows.append(
@@ -166,7 +183,11 @@ def measured_rows(ledger: dict[str, Any], horizon: int) -> list[dict[str, Any]]:
                 "entry_start": entry_start,
                 "entry_time": entry_start.strftime("%H:%M"),
                 "entry_bucket": entry_bucket(entry_start),
+                "entry_bucket_30": entry_bucket_30(entry_start),
                 "proposal_ready_at": parse_ts(core["proposal_ready_at_iso"]),
+                "entry_open": entry_open,
+                "terminal_close": terminal_close,
+                "terminal_start": parse_ts(h["terminal_start"]),
                 "return": ret,
                 "return_bps": ret * 10000.0,
                 "unsigned_return": float(h.get("unsigned_underlying_return", abs(ret))),
@@ -216,12 +237,30 @@ def symbol_session_means(rows: list[dict[str, Any]]) -> dict[str, float]:
 def bootstrap(values: list[float], seed: int = C.BOOTSTRAP_SEED, reps: int = C.BOOTSTRAP_REPLICATIONS) -> dict[str, Any]:
     arr = np.array(values, dtype=float)
     if len(arr) == 0:
-        return {"replications": reps, "seed": seed, "lower": 0.0, "upper": 0.0, "p_le_zero": 1.0}
+        empty_hash = shab(cbytes([]))
+        return {
+            "replications": reps,
+            "seed": seed,
+            "lower": 0.0,
+            "upper": 0.0,
+            "lower_bps": 0.0,
+            "upper_bps": 0.0,
+            "bootstrap_mean": 0.0,
+            "bootstrap_mean_bps": 0.0,
+            "distribution_hash": empty_hash,
+            "p_le_zero": 1.0,
+            "p_gt_zero": 0.0,
+            "p_ge_1bp": 0.0,
+            "mcse_p_gt_zero": 0.0,
+            "mcse_p_ge_1bp": 0.0,
+        }
     rng = np.random.default_rng(seed)
     stats = np.empty(reps, dtype=float)
     n = len(arr)
     for i in range(reps):
         stats[i] = float(np.mean(arr[rng.integers(0, n, n)]))
+    p_gt_zero = float(np.mean(stats > 0.0))
+    p_ge_1bp = float(np.mean(stats >= 0.0001))
     return {
         "replications": reps,
         "seed": seed,
@@ -229,7 +268,14 @@ def bootstrap(values: list[float], seed: int = C.BOOTSTRAP_SEED, reps: int = C.B
         "upper": float(np.percentile(stats, 97.5)),
         "lower_bps": float(np.percentile(stats, 2.5) * 10000.0),
         "upper_bps": float(np.percentile(stats, 97.5) * 10000.0),
+        "bootstrap_mean": float(np.mean(stats)),
+        "bootstrap_mean_bps": float(np.mean(stats) * 10000.0),
+        "distribution_hash": shab(cbytes([round(float(value), 15) for value in stats])),
         "p_le_zero": float(np.mean(stats <= 0.0)),
+        "p_gt_zero": p_gt_zero,
+        "p_ge_1bp": p_ge_1bp,
+        "mcse_p_gt_zero": math.sqrt(p_gt_zero * (1.0 - p_gt_zero) / reps),
+        "mcse_p_ge_1bp": math.sqrt(p_ge_1bp * (1.0 - p_ge_1bp) / reps),
     }
 
 
@@ -238,11 +284,45 @@ def sign_test_positive(values: list[float]) -> dict[str, Any]:
     neg = sum(1 for v in values if v < 0)
     n = pos + neg
     if n == 0:
-        p = 1.0
+        one_sided = 1.0
+        two_sided = 1.0
     else:
+        one_sided = sum(math.comb(n, i) for i in range(pos, n + 1)) / (2**n)
         k = min(pos, neg)
-        p = min(1.0, 2.0 * sum(math.comb(n, i) for i in range(k + 1)) / (2**n))
-    return {"positive": pos, "negative": neg, "zero": len(values) - n, "two_sided_p": p}
+        two_sided = min(1.0, 2.0 * sum(math.comb(n, i) for i in range(k + 1)) / (2**n))
+    return {
+        "positive": pos,
+        "negative": neg,
+        "zero": len(values) - n,
+        "binomial_n_excluding_zero": n,
+        "one_sided_p_positive_tendency": one_sided,
+        "two_sided_p": two_sided,
+    }
+
+
+def distribution_summary(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {"count": 0, "mean": 0.0, "median": 0.0, "std": 0.0, "se": 0.0, "min": 0.0, "p25": 0.0, "p75": 0.0, "max": 0.0}
+    arr = np.array(values, dtype=float)
+    return {
+        "count": len(values),
+        "mean": float(np.mean(arr)),
+        "mean_bps": float(np.mean(arr) * 10000.0),
+        "median": float(np.median(arr)),
+        "median_bps": float(np.median(arr) * 10000.0),
+        "std": float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0,
+        "std_bps": float(np.std(arr, ddof=1) * 10000.0) if len(arr) > 1 else 0.0,
+        "se": float(np.std(arr, ddof=1) / math.sqrt(len(arr))) if len(arr) > 1 else 0.0,
+        "se_bps": float(np.std(arr, ddof=1) * 10000.0 / math.sqrt(len(arr))) if len(arr) > 1 else 0.0,
+        "min": float(np.min(arr)),
+        "min_bps": float(np.min(arr) * 10000.0),
+        "p25": float(np.percentile(arr, 25)),
+        "p25_bps": float(np.percentile(arr, 25) * 10000.0),
+        "p75": float(np.percentile(arr, 75)),
+        "p75_bps": float(np.percentile(arr, 75) * 10000.0),
+        "max": float(np.max(arr)),
+        "max_bps": float(np.max(arr) * 10000.0),
+    }
 
 
 def descriptive_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -282,6 +362,9 @@ def descriptive_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "mean_mae": mean(mae_values),
         "median_mae": median(mae_values),
         "mfe_abs_mae_ratio": mean(mfe_values) / mae_abs if mae_abs else None,
+        "session_distribution": distribution_summary(session_values),
+        "candidates_per_session_distribution": distribution_summary([float(v) for v in pd.Series([row["session_date"] for row in rows]).value_counts().to_list()]) if rows else distribution_summary([]),
+        "sign_test": sign_test_positive(session_values),
     }
 
 
@@ -304,9 +387,10 @@ def metrics_payload(ledger: dict[str, Any]) -> dict[str, Any]:
         stats = descriptive_stats(subset)
         boot = bootstrap(list(session_means(subset).values()), seed=C.BOOTSTRAP_SEED + len(raw_p) + 1)
         stats["session_cluster_bootstrap"] = boot
-        stats["one_sided_p"] = boot["p_le_zero"]
+        stats["sign_test"] = sign_test_positive(list(session_means(subset).values()))
+        stats["one_sided_p"] = stats["sign_test"]["one_sided_p_positive_tendency"]
         key = f"{symbol}:{direction}"
-        raw_p.append((key, boot["p_le_zero"]))
+        raw_p.append((key, stats["one_sided_p"]))
         symbol_direction[key] = stats
     sorted_p = sorted(raw_p, key=lambda item: item[1])
     holm: dict[str, Any] = {}
@@ -339,6 +423,7 @@ def random_direction_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
         groups[(row["symbol"], row["year"])].append(row)
     rng = random.Random(C.RANDOM_DIRECTION_SEED)
     diffs = []
+    control_stats = []
     for _ in range(C.RANDOM_DIRECTION_PERMUTATIONS):
         permuted = []
         for group_rows in groups.values():
@@ -349,25 +434,69 @@ def random_direction_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 item = dict(row)
                 item["return"] = sign * row["unsigned_return"]
                 permuted.append(item)
-        diffs.append(observed - mean(session_means(permuted).values()))
+        control_stat = mean(session_means(permuted).values())
+        control_stats.append(control_stat)
+        diffs.append(observed - control_stat)
     arr = np.array(diffs)
+    count_control_ge_observed = sum(1 for value in control_stats if value >= observed)
     return {
         "observed_signal_session_equal_mean": observed,
+        "observed_statistic": observed,
+        "control_distribution_summary": distribution_summary(control_stats),
         "mean_advantage": float(np.mean(arr)),
         "mean_advantage_bps": float(np.mean(arr) * 10000.0),
         "lower": float(np.percentile(arr, 2.5)),
         "upper": float(np.percentile(arr, 97.5)),
         "lower_bps": float(np.percentile(arr, 2.5) * 10000.0),
         "upper_bps": float(np.percentile(arr, 97.5) * 10000.0),
-        "permutation_p": float(np.mean(arr <= 0.0)),
+        "count_control_ge_observed": count_control_ge_observed,
+        "permutation_p": (1 + count_control_ge_observed) / (1 + C.RANDOM_DIRECTION_PERMUTATIONS),
+        "p_value_formula": "(1 + count(control >= observed)) / (1 + permutations)",
         "permutations": C.RANDOM_DIRECTION_PERMUTATIONS,
         "seed": C.RANDOM_DIRECTION_SEED,
     }
 
 
 def opposite_direction_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    failures = [row["candidate_id"] for row in rows if abs(row["return"] + (-row["return"])) > 1e-12]
-    return {"failures": failures, "max_abs_identity_error": 0.0 if not failures else None, "verdict": "PASS" if not failures else "FAIL"}
+    tolerance = 1e-10
+    exact_matches = 0
+    tolerance_matches = 0
+    mismatches = 0
+    max_abs_error = 0.0
+    first_mismatch = None
+    for row in rows:
+        raw = (row["terminal_close"] - row["entry_open"]) / row["entry_open"]
+        signal = raw if row["direction"] == "BUY_CALL" else -raw
+        opposite = -raw if row["direction"] == "BUY_CALL" else raw
+        error = abs(signal - row["return"])
+        identity_error = abs(signal + opposite)
+        total_error = max(error, identity_error)
+        max_abs_error = max(max_abs_error, total_error)
+        if total_error == 0.0:
+            exact_matches += 1
+        elif total_error <= tolerance:
+            tolerance_matches += 1
+        else:
+            mismatches += 1
+            if first_mismatch is None:
+                first_mismatch = {
+                    "candidate_id": row["candidate_id"],
+                    "expected_signal": row["return"],
+                    "recomputed_signal": signal,
+                    "recomputed_opposite": opposite,
+                    "signal_error": error,
+                    "identity_error": identity_error,
+                }
+    return {
+        "records_checked": len(rows),
+        "exact_matches": exact_matches,
+        "tolerance_matches": tolerance_matches,
+        "mismatches": mismatches,
+        "max_abs_error": max_abs_error,
+        "first_mismatch": first_mismatch,
+        "tolerance": tolerance,
+        "verdict": "PASS" if mismatches == 0 else "FAIL",
+    }
 
 
 def source_path(logical: str, source_project_root: Path) -> Path:
@@ -393,6 +522,11 @@ def matched_time_control(rows: list[dict[str, Any]], source_project_root: Path, 
     rng = random.Random(C.MATCHED_TIME_SEED)
     cache: dict[str, pd.DataFrame] = {}
     matched_rows = []
+    candidate_diffs = []
+    eligible_counts = []
+    uncovered_ids = []
+    shortage_count = 0
+    replacement_sampling_count = 0
     covered = 0
     total_draws = 0
     for row in rows:
@@ -414,8 +548,14 @@ def matched_time_control(rows: list[dict[str, Any]], source_project_root: Path, 
                 continue
             candidates.append((float(bar["open"]), float(terminal.iloc[0]["close"])))
         if not candidates:
+            uncovered_ids.append(row["candidate_id"])
             continue
+        eligible_counts.append(len(candidates))
+        if len(candidates) < C.MATCHED_TIME_DRAWS_PER_CANDIDATE:
+            shortage_count += 1
+            replacement_sampling_count += 1
         covered += 1
+        candidate_returns = []
         for _ in range(C.MATCHED_TIME_DRAWS_PER_CANDIDATE):
             entry_open, terminal_close = candidates[rng.randrange(len(candidates))]
             raw = (terminal_close - entry_open) / entry_open
@@ -423,7 +563,9 @@ def matched_time_control(rows: list[dict[str, Any]], source_project_root: Path, 
             item = dict(row)
             item["return"] = ret
             matched_rows.append(item)
+            candidate_returns.append(ret)
             total_draws += 1
+        candidate_diffs.append(row["return"] - mean(candidate_returns))
     observed = mean(session_means(rows).values())
     matched = mean(session_means(matched_rows).values())
     # Bootstrap paired by session date over observed-minus-control session means.
@@ -432,14 +574,27 @@ def matched_time_control(rows: list[dict[str, Any]], source_project_root: Path, 
     common = sorted(set(obs_sessions) & set(ctl_sessions))
     diffs = [obs_sessions[key] - ctl_sessions[key] for key in common]
     boot = bootstrap(diffs, seed=C.MATCHED_TIME_SEED)
+    control_distribution = list(ctl_sessions.values())
+    count_control_ge_observed = sum(1 for value in control_distribution if value >= observed)
     return {
         "coverage": covered / len(rows) if rows else 0.0,
         "covered_candidates": covered,
+        "uncovered_candidates": len(rows) - covered,
+        "uncovered_sample": sorted(uncovered_ids)[:10],
         "candidate_count": len(rows),
+        "eligible_timestamp_count_distribution": distribution_summary([float(v) for v in eligible_counts]),
+        "shortage_count": shortage_count,
+        "replacement_sampling_count": replacement_sampling_count,
         "draws": total_draws,
         "draws_per_candidate": C.MATCHED_TIME_DRAWS_PER_CANDIDATE,
+        "candidate_level_observed_minus_matched_mean": mean(candidate_diffs),
+        "candidate_level_observed_minus_matched_mean_bps": mean(candidate_diffs) * 10000.0,
         "signal_session_equal_mean": observed,
         "matched_time_session_equal_mean": matched,
+        "matched_control_distribution": distribution_summary(control_distribution),
+        "count_control_ge_observed": count_control_ge_observed,
+        "empirical_one_sided_add_one_p": (1 + count_control_ge_observed) / (1 + len(control_distribution)) if control_distribution else 1.0,
+        "paired_session_bootstrap_ci": boot,
         "advantage": observed - matched,
         "advantage_bps": (observed - matched) * 10000.0,
         "advantage_ci": boot,
@@ -451,12 +606,22 @@ def within_stratum_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
     observed = mean(session_means(rows).values())
     groups: dict[tuple[str, int, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        groups[(row["symbol"], row["year"], row["entry_bucket"])].append(row)
+        groups[(row["symbol"], row["year"], row["entry_bucket_30"])].append(row)
+    eligible_groups = {
+        key: group_rows
+        for key, group_rows in groups.items()
+        if len(group_rows) >= 2 and {row["direction"] for row in group_rows} == set(C.DIRECTIONS)
+    }
+    eligible_ids = {row["candidate_id"] for group_rows in eligible_groups.values() for row in group_rows}
+    eligible_rows = [row for row in rows if row["candidate_id"] in eligible_ids]
+    eligible_coverage = len(eligible_rows) / len(rows) if rows else 0.0
+    observed_eligible = mean(session_means(eligible_rows).values()) if eligible_rows else 0.0
     rng = random.Random(C.WITHIN_STRATUM_SEED)
     diffs = []
+    control_stats = []
     for _ in range(C.WITHIN_STRATUM_PERMUTATIONS):
         permuted = []
-        for group_rows in groups.values():
+        for group_rows in eligible_groups.values():
             directions = [row["direction"] for row in group_rows]
             rng.shuffle(directions)
             for row, direction in zip(group_rows, directions):
@@ -464,16 +629,31 @@ def within_stratum_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 item = dict(row)
                 item["return"] = sign * row["unsigned_return"]
                 permuted.append(item)
-        diffs.append(observed - mean(session_means(permuted).values()))
+        control_stat = mean(session_means(permuted).values()) if permuted else 0.0
+        control_stats.append(control_stat)
+        diffs.append(observed_eligible - control_stat)
     arr = np.array(diffs)
+    count_control_ge_observed = sum(1 for value in control_stats if value >= observed_eligible)
     return {
+        "observed_signal_session_equal_mean": observed,
+        "observed_eligible_session_equal_mean": observed_eligible,
+        "observed_statistic": observed_eligible,
+        "eligible_candidate_count": len(eligible_rows),
+        "ineligible_candidate_count": len(rows) - len(eligible_rows),
+        "eligible_stratum_count": len(eligible_groups),
+        "ineligible_stratum_count": len(groups) - len(eligible_groups),
+        "eligible_coverage": eligible_coverage,
+        "coverage_verdict": "UNDERPOWERED" if eligible_coverage < 0.50 else "ADEQUATE",
+        "control_distribution_summary": distribution_summary(control_stats),
         "mean_advantage": float(np.mean(arr)),
         "mean_advantage_bps": float(np.mean(arr) * 10000.0),
         "lower": float(np.percentile(arr, 2.5)),
         "upper": float(np.percentile(arr, 97.5)),
         "lower_bps": float(np.percentile(arr, 2.5) * 10000.0),
         "upper_bps": float(np.percentile(arr, 97.5) * 10000.0),
-        "permutation_p": float(np.mean(arr <= 0.0)),
+        "count_control_ge_observed": count_control_ge_observed,
+        "permutation_p": (1 + count_control_ge_observed) / (1 + C.WITHIN_STRATUM_PERMUTATIONS),
+        "p_value_formula": "(1 + count(control >= observed)) / (1 + permutations)",
         "permutations": C.WITHIN_STRATUM_PERMUTATIONS,
         "seed": C.WITHIN_STRATUM_SEED,
     }
@@ -505,6 +685,19 @@ def concentration_payload(ledger: dict[str, Any]) -> dict[str, Any]:
     top_count = max(1, math.ceil(len(rows) * 0.01))
     top_ids = {row["candidate_id"] for row in sorted(rows, key=lambda item: item["return"], reverse=True)[:top_count]}
     without_top = [row for row in rows if row["candidate_id"] not in top_ids]
+    by_year = {str(year): mean(session_means([row for row in rows if row["year"] == year]).values()) for year in C.YEARS}
+    by_symbol = {symbol: mean(session_means([row for row in rows if row["symbol"] == symbol]).values()) for symbol in C.SYMBOLS}
+    by_cell = {
+        f"{symbol}:{direction}": mean(session_means([row for row in rows if row["symbol"] == symbol and row["direction"] == direction]).values())
+        for symbol, direction in C.SYMBOL_DIRECTION_CELLS
+    }
+    most_positive_year = sorted(by_year.items(), key=lambda item: (-item[1], item[0]))[0][0]
+    most_positive_symbol = sorted(by_symbol.items(), key=lambda item: (-item[1], item[0]))[0][0]
+    most_positive_cell = sorted(by_cell.items(), key=lambda item: (-item[1], item[0]))[0][0]
+    session_values = list(sessions.values())
+    lo = float(np.percentile(session_values, 1)) if session_values else 0.0
+    hi = float(np.percentile(session_values, 99)) if session_values else 0.0
+    winsorized = [min(max(value, lo), hi) for value in session_values]
     payload = {
         **evidence_header("ORB_EDGE_SCREEN_CONCENTRATION_V1", "ORB_EDGE_SCREEN_CONCENTRATION_RECOMPUTED", "recomputed pre-registered concentration controls without return-based rescue selection"),
         "best_session_contribution": best[0][1] / total_positive if total_positive > 0 else None,
@@ -519,6 +712,23 @@ def concentration_payload(ledger: dict[str, Any]) -> dict[str, Any]:
             "top_1pct_candidates_removed": mean(session_means(without_top).values()),
             "worst_1_session_removed": remove_sessions({k for k, _ in worst[:1]}),
             "worst_5_sessions_removed": remove_sessions({k for k, _ in worst[:5]}),
+            "most_positive_session_removed": remove_sessions({k for k, _ in best[:1]}),
+            "five_most_positive_sessions_removed": remove_sessions({k for k, _ in best[:5]}),
+            "most_positive_year_removed": mean(session_means([row for row in rows if row["year"] != int(most_positive_year)]).values()),
+            "most_positive_symbol_removed": mean(session_means([row for row in rows if row["symbol"] != most_positive_symbol]).values()),
+            "most_positive_symbol_direction_removed": mean(
+                session_means([row for row in rows if f"{row['symbol']}:{row['direction']}" != most_positive_cell]).values()
+            ),
+            "session_mean_winsorized_1_99": mean(winsorized),
+        },
+        "selected_identities": {
+            "most_positive_session": best[0][0],
+            "five_most_positive_sessions": [key for key, _ in best[:5]],
+            "most_positive_year": most_positive_year,
+            "most_positive_symbol": most_positive_symbol,
+            "most_positive_symbol_direction": most_positive_cell,
+            "winsorize_session_mean_p01": lo,
+            "winsorize_session_mean_p99": hi,
         },
         "top_1pct_candidate_count": top_count,
     }
@@ -528,41 +738,117 @@ def concentration_payload(ledger: dict[str, Any]) -> dict[str, Any]:
 
 def replication_payload(ledger: dict[str, Any]) -> dict[str, Any]:
     rows = measured_rows(ledger, C.PRIMARY_HORIZON)
-    by_year = {str(year): descriptive_stats([row for row in rows if row["year"] == year]) for year in C.YEARS}
-    by_symbol = {symbol: descriptive_stats([row for row in rows if row["symbol"] == symbol]) for symbol in C.SYMBOLS}
-    by_direction = {direction: descriptive_stats([row for row in rows if row["direction"] == direction]) for direction in C.DIRECTIONS}
     sessions = session_means(rows)
-    total_positive = sum(v for v in sessions.values() if v > 0)
-    symbol_positive_contribution = {}
-    for symbol in C.SYMBOLS:
-        sym_sessions = session_means([row for row in rows if row["symbol"] == symbol])
-        symbol_positive_contribution[symbol] = sum(v for v in sym_sessions.values() if v > 0) / total_positive if total_positive > 0 else None
+    total_signed_abs = sum(abs(v) for v in sessions.values())
+
+    def subgroup_stats(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        stats = descriptive_stats(subset)
+        subgroup_sessions = list(session_means(subset).values())
+        stats["session_cluster_bootstrap"] = bootstrap(subgroup_sessions)
+        stats["sign_test"] = sign_test_positive(subgroup_sessions)
+        stats["share_of_candidates"] = len(subset) / len(rows) if rows else 0.0
+        signed = sum(session_means(subset).values())
+        stats["share_of_aggregate_signed_contribution"] = signed / total_signed_abs if total_signed_abs else 0.0
+        return stats
+
+    by_year = {str(year): subgroup_stats([row for row in rows if row["year"] == year]) for year in C.YEARS}
+    by_symbol = {symbol: subgroup_stats([row for row in rows if row["symbol"] == symbol]) for symbol in C.SYMBOLS}
+    by_direction = {direction: subgroup_stats([row for row in rows if row["direction"] == direction]) for direction in C.DIRECTIONS}
+    by_cell = {f"{symbol}:{direction}": subgroup_stats([row for row in rows if row["symbol"] == symbol and row["direction"] == direction]) for symbol, direction in C.SYMBOL_DIRECTION_CELLS}
+    raw_p = sorted((key, item["sign_test"]["one_sided_p_positive_tendency"]) for key, item in by_cell.items())
+    sorted_p = sorted(raw_p, key=lambda item: item[1])
+    running = 0.0
+    holm: dict[str, Any] = {}
+    m = len(sorted_p)
+    for rank, (key, pvalue) in enumerate(sorted_p, start=1):
+        adjusted = min(1.0, max(running, (m - rank + 1) * pvalue))
+        running = adjusted
+        holm[key] = {"raw_p": pvalue, "holm_adjusted_p": adjusted, "reject_0_05": adjusted <= C.HOLM_ALPHA}
+    for key, item in by_cell.items():
+        item["holm"] = holm[key]
     payload = {
         **evidence_header("ORB_EDGE_SCREEN_REPLICATION_V1", "ORB_EDGE_SCREEN_REPLICATION_RECOMPUTED", "recomputed year, symbol, and direction replication tables from certified outcomes"),
         "years": by_year,
         "symbols": by_symbol,
         "directions": by_direction,
-        "symbol_positive_contribution": symbol_positive_contribution,
+        "symbol_direction_cells": by_cell,
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
 
 
-def overlap_payload(ledger: dict[str, Any]) -> dict[str, Any]:
+def overlap_components(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        groups[(row["session_date"], row["symbol"])].append(row)
+    membership: dict[str, str] = {}
+    components: dict[str, list[dict[str, Any]]] = {}
+    for (session, symbol), group_rows in sorted(groups.items()):
+        current: list[dict[str, Any]] = []
+        current_end: pd.Timestamp | None = None
+        index = 0
+        for row in sorted(group_rows, key=lambda item: (item["entry_start"], item["terminal_start"], item["candidate_id"])):
+            if not current or (current_end is not None and row["entry_start"] < current_end):
+                current.append(row)
+                current_end = row["terminal_start"] if current_end is None else max(current_end, row["terminal_start"])
+                continue
+            component_id = f"{session}:{symbol}:{index:04d}"
+            components[component_id] = current
+            for item in current:
+                membership[item["candidate_id"]] = component_id
+            index += 1
+            current = [row]
+            current_end = row["terminal_start"]
+        if current:
+            component_id = f"{session}:{symbol}:{index:04d}"
+            components[component_id] = current
+            for item in current:
+                membership[item["candidate_id"]] = component_id
+    return {"membership": membership, "components": components}
+
+
+def overlap_payload(ledger: dict[str, Any], artifact_dir: Path) -> dict[str, Any]:
     rows = measured_rows(ledger, C.PRIMARY_HORIZON)
-    grouped_a: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    overlap_path = artifact_dir / "opening_range_retest_outcome_overlap_v2.json"
+    overlap_authority = load_json(overlap_path)
+    validation_failures = []
+    authority_sha = shafile(overlap_path)
+    if authority_sha != C.SOURCE_OVERLAP_SHA256:
+        validation_failures.append("OVERLAP_AUTHORITY_SHA_MISMATCH")
+    horizon_authority = overlap_authority.get("horizons", {}).get(str(C.PRIMARY_HORIZON), {})
+    if horizon_authority.get("complete_interval_count") != len(rows):
+        validation_failures.append("OVERLAP_AUTHORITY_INTERVAL_COUNT_MISMATCH")
+    component_result = overlap_components(rows)
+    membership = component_result["membership"]
+    components = component_result["components"]
+    if len(membership) != len(rows):
+        validation_failures.append("OVERLAP_COMPONENT_ORPHAN_OR_DUPLICATE_MEMBERSHIP")
+    grouped_symbol_session: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        grouped_a[(row["session_date"], row["symbol"], row["direction"])].append(row)
-    sens_a = [sorted(items, key=lambda row: (row["proposal_ready_at"], row["candidate_id"]))[0] for items in grouped_a.values()]
-    # Component approximation is pre-registered and non-return-based: same session/symbol/direction/bucket.
-    grouped_b: dict[tuple[str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
-    for row in rows:
-        grouped_b[(row["session_date"], row["symbol"], row["direction"], row["entry_bucket"])].append(row)
-    sens_b = [sorted(items, key=lambda row: (row["proposal_ready_at"], row["candidate_id"]))[0] for items in grouped_b.values()]
+        grouped_symbol_session[(row["session_date"], row["symbol"])].append(row)
+    one_per_component = [sorted(items, key=lambda row: (row["proposal_ready_at"], row["candidate_id"]))[0] for _, items in sorted(components.items())]
+    earliest_symbol_session = [sorted(items, key=lambda row: (row["proposal_ready_at"], row["candidate_id"]))[0] for _, items in sorted(grouped_symbol_session.items())]
     payload = {
         **evidence_header("ORB_EDGE_SCREEN_OVERLAP_V1", "ORB_EDGE_SCREEN_OVERLAP_RECOMPUTED", "recomputed pre-registered non-return overlap sensitivities"),
-        "sensitivity_a": {"rule": "earliest per session x symbol x direction", **descriptive_stats(sens_a)},
-        "sensitivity_b": {"rule": "earliest per non-return overlap proxy component", **descriptive_stats(sens_b)},
+        "authority": {
+            "path": C.SOURCE_OVERLAP_PATH,
+            "sha256": authority_sha,
+            "expected_sha256": C.SOURCE_OVERLAP_SHA256,
+            "complete_interval_count": horizon_authority.get("complete_interval_count"),
+            "validation_failures": validation_failures,
+        },
+        "all_candidates": {"rule": "all measured 15-minute candidates", **descriptive_stats(rows)},
+        "one_per_accepted_overlap_component": {
+            "rule": "earliest proposal_ready_at then candidate_id per deterministic accepted interval component",
+            "component_count": len(components),
+            "membership_count": len(membership),
+            **descriptive_stats(one_per_component),
+        },
+        "earliest_per_symbol_session": {
+            "rule": "earliest proposal_ready_at then candidate_id per symbol-session",
+            "symbol_session_count": len(grouped_symbol_session),
+            **descriptive_stats(earliest_symbol_session),
+        },
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -576,56 +862,49 @@ def structural_and_conditional(metrics: dict[str, Any], controls: dict[str, Any]
     years = replication["years"]
     symbols = replication["symbols"]
     structural_gates = {
+        "primary_15m_session_equal_mean_gt_0": primary["session_equal_mean"] > 0,
         "mean_ge_1bp": primary["session_equal_mean_bps"] >= C.STRUCTURAL_MIN_MEAN_BPS,
         "lower_ci_gt_0": primary["session_cluster_bootstrap"]["lower_bps"] > 0,
-        "positive_session_rate_gt_50pct": sum(1 for v in session_means(measured_rows(load_json(Path(C.SOURCE_LEDGER_PATH)), C.PRIMARY_HORIZON)).values() if v > 0) / primary["session_count"] > 0.50 if primary["session_count"] else False,
+        "sign_test_one_sided_lte_0_05": primary["sign_test"]["one_sided_p_positive_tendency"] <= C.HOLM_ALPHA,
         "random_advantage_lower_ci_gt_0": rand["lower_bps"] > 0,
         "random_permutation_p_lte_0_05": rand["permutation_p"] <= 0.05,
         "matched_time_advantage_lower_ci_gt_0": matched["advantage_ci"]["lower_bps"] > 0,
         "matched_time_coverage_gte_95pct": matched["coverage"] >= C.MATCHED_TIME_MIN_COVERAGE,
-        "within_stratum_p_lte_0_05": within["permutation_p"] <= 0.05,
+        "within_stratum_coverage_not_underpowered": within["coverage_verdict"] != "UNDERPOWERED",
+        "within_stratum_p_lte_0_05": within["permutation_p"] <= 0.05 and within["coverage_verdict"] != "UNDERPOWERED",
         "at_least_2_of_3_years_positive": sum(1 for item in years.values() if item["session_equal_mean"] > 0) >= 2,
         "no_year_below_minus_1bp": all(item["session_equal_mean_bps"] >= -1.0 for item in years.values()),
         "at_least_2_of_3_symbols_positive": sum(1 for item in symbols.values() if item["session_equal_mean"] > 0) >= 2,
         "best_5_concentration_lte_50pct": (concentration["best_5_session_contribution"] is not None and concentration["best_5_session_contribution"] <= 0.50),
-        "positive_after_best_5_removed": concentration["removal_means"]["best_5_sessions_removed"] > 0,
-        "positive_after_top_1pct_removed": concentration["removal_means"]["top_1pct_candidates_removed"] > 0,
-        "overlap_sensitivity_a_positive": overlap["sensitivity_a"]["session_equal_mean"] > 0,
-        "overlap_sensitivity_b_positive": overlap["sensitivity_b"]["session_equal_mean"] > 0,
+        "positive_after_five_most_positive_sessions_removed": concentration["removal_means"]["five_most_positive_sessions_removed"] > 0,
+        "positive_after_most_positive_year_removed": concentration["removal_means"]["most_positive_year_removed"] > 0,
+        "positive_after_most_positive_symbol_removed": concentration["removal_means"]["most_positive_symbol_removed"] > 0,
+        "positive_after_most_positive_symbol_direction_removed": concentration["removal_means"]["most_positive_symbol_direction_removed"] > 0,
+        "positive_after_winsorized_session_means": concentration["removal_means"]["session_mean_winsorized_1_99"] > 0,
+        "overlap_authority_valid": overlap["authority"]["validation_failures"] == [],
+        "overlap_one_per_component_positive": overlap["one_per_accepted_overlap_component"]["session_equal_mean"] > 0,
+        "overlap_earliest_symbol_session_positive": overlap["earliest_per_symbol_session"]["session_equal_mean"] > 0,
         "no_control_failure": controls["opposite_direction"]["verdict"] == "PASS",
     }
     structural = all(structural_gates.values())
     conditional_passed: list[str] = []
-    tested = ["30_minute_universe"] + list(metrics["symbol_direction"])
-    secondary = metrics["secondary"]
-    if (
-        secondary["session_equal_mean_bps"] >= C.STRUCTURAL_MIN_MEAN_BPS
-        and secondary["session_cluster_bootstrap"]["lower_bps"] > 0
-        and matched["coverage"] >= C.MATCHED_TIME_MIN_COVERAGE
-        and concentration["removal_means"]["best_5_sessions_removed"] > 0
-        and overlap["sensitivity_a"]["session_equal_mean"] > 0
-        and overlap["sensitivity_b"]["session_equal_mean"] > 0
-    ):
-        conditional_passed.append("30_minute_universe")
-    for key, item in metrics["symbol_direction"].items():
-        symbol = key.split(":")[0]
-        year_positive = sum(1 for year in C.YEARS if descriptive_stats([row for row in measured_rows(load_json(Path(C.SOURCE_LEDGER_PATH)), C.PRIMARY_HORIZON) if row["symbol"] == symbol and row["year"] == year])["session_equal_mean"] > 0) >= 2
-        if (
-            item["candidate_count"] >= C.CONDITIONAL_MIN_CANDIDATES
-            and item["session_count"] >= C.CONDITIONAL_MIN_SESSIONS
-            and item["holm"]["holm_adjusted_p"] <= C.HOLM_ALPHA
-            and item["session_equal_mean_bps"] >= C.STRUCTURAL_MIN_MEAN_BPS
-            and item["session_cluster_bootstrap"]["lower_bps"] > 0
-            and year_positive
-            and matched["coverage"] >= C.MATCHED_TIME_MIN_COVERAGE
-            and concentration["removal_means"]["best_5_sessions_removed"] > 0
-            and overlap["sensitivity_a"]["session_equal_mean"] > 0
-            and overlap["sensitivity_b"]["session_equal_mean"] > 0
-        ):
-            conditional_passed.append(key)
+    tested = ["diagnostic_30_minute_universe_no_rescue"] + [f"{key}_no_rescue" for key in metrics["symbol_direction"]]
+    primary_failed = primary["session_equal_mean"] <= 0
+    if not primary_failed:
+        for key, item in metrics["symbol_direction"].items():
+            if (
+                item["candidate_count"] >= C.CONDITIONAL_MIN_CANDIDATES
+                and item["session_count"] >= C.CONDITIONAL_MIN_SESSIONS
+                and item["holm"]["holm_adjusted_p"] <= C.HOLM_ALPHA
+                and item["session_equal_mean_bps"] >= C.STRUCTURAL_MIN_MEAN_BPS
+                and item["session_cluster_bootstrap"]["lower_bps"] > 0
+            ):
+                conditional_passed.append(key)
     verdict = "ORB_STRUCTURAL_EDGE_CANDIDATE" if structural else ("ORB_CONDITIONAL_EDGE_CANDIDATE" if conditional_passed else "ORB_NO_STRUCTURAL_EDGE")
     return {
         "verdict": verdict,
+        "terminal_primary_rule_applied": primary_failed,
+        "terminal_primary_rule": "IF primary 15-minute session-equal mean <= 0 THEN ORB_NO_STRUCTURAL_EDGE",
         "structural_gates": structural_gates,
         "structural_gates_passed": [key for key, value in structural_gates.items() if value],
         "structural_gates_failed": [key for key, value in structural_gates.items() if not value],
@@ -733,7 +1012,7 @@ def generate(output_dir: Path, source_project_root: Path, artifact_dir: Path) ->
     controls = controls_payload(ledger, source_project_root)
     concentration = concentration_payload(ledger)
     replication = replication_payload(ledger)
-    overlap = overlap_payload(ledger)
+    overlap = overlap_payload(ledger, artifact_dir)
     verdict = verdict_payload(metrics, controls, concentration, replication, overlap)
 
     output_dir.mkdir(parents=True, exist_ok=True)
