@@ -18,8 +18,10 @@ def test_source_authority_and_measured_counts() -> None:
     result = verify_source_authority(Path("docs/agent_reviews"))
     assert result["source_authority"]["failures"] == []
     ledger = result["ledger"]
-    assert len(measured_rows(ledger, 15)) == 2155
-    assert len(measured_rows(ledger, 30)) == 2086
+    measured_15 = sum(1 for _row in measured_rows(ledger, 15))
+    measured_30 = sum(1 for _row in measured_rows(ledger, 30))
+    assert measured_15 == 2155
+    assert measured_30 == 2086
 
 
 def test_primary_metrics_are_session_equal() -> None:
@@ -27,7 +29,7 @@ def test_primary_metrics_are_session_equal() -> None:
     metrics = metrics_payload(ledger)
     assert metrics["primary"]["candidate_count"] == 2155
     assert metrics["primary"]["session_count"] > 0
-    assert "session_cluster_bootstrap" in metrics["primary"]
+    assert metrics["primary"]["session_cluster_bootstrap"]["replications"] == C.BOOTSTRAP_REPLICATIONS
 
 
 def test_control_cases_cover_required_minimum() -> None:
