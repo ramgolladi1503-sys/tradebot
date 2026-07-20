@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from research.opening_range_retest_outcomes_v2.contract import (
+    BASE_MAIN_POLICY,
     CONTRACT_VERSION,
     HORIZONS_MINUTES,
     IMPLEMENTATION_TREE_HASH_ALGORITHM,
@@ -22,6 +23,7 @@ from research.opening_range_retest_outcomes_v2.contract import (
     INPUT_CANDIDATE_PROVENANCE_HASH,
     INPUT_SOURCE_COUNT,
     INPUT_SOURCE_HASH,
+    expected_contract_semantics,
     safety_fields,
 )
 
@@ -213,22 +215,14 @@ def verify_contract_payload(contract: dict[str, Any]) -> list[str]:
     portable = {k: v for k, v in contract.items() if k not in PORTABLE_CONTRACT_EXCLUDE}
     if shab(cbytes(portable)) != contract.get("contract_hash"):
         failures.append("CONTRACT_SELF_HASH_MISMATCH")
-    expected = {
-        "contract_version": CONTRACT_VERSION,
-        "implementation_tree_hash_algorithm": IMPLEMENTATION_TREE_HASH_ALGORITHM,
-        "horizons_minutes": list(HORIZONS_MINUTES),
-        "inputs": {
-            "source_count": INPUT_SOURCE_COUNT,
-            "source_semantic_hash": INPUT_SOURCE_HASH,
-            "candidate_count": INPUT_CANDIDATE_COUNT,
-            "candidate_core_semantic_hash": INPUT_CANDIDATE_CORE_HASH,
-            "candidate_provenance_semantic_hash": INPUT_CANDIDATE_PROVENANCE_HASH,
-        },
-    }
+    expected = expected_contract_semantics()
+    expected["base_main_policy"] = BASE_MAIN_POLICY
     for key, value in expected.items():
         if contract.get(key) != value:
-            failures.append("CONTRACT_FIELD_MISMATCH")
-            break
+            failures.append(f"CONTRACT_FIELD_MISMATCH:{key}")
+    for key in ("base_main_sha", "frozen_code_sha", "implementation_tree_hash"):
+        if not contract.get(key):
+            failures.append(f"CONTRACT_FIELD_MISSING:{key}")
     return failures
 
 
@@ -519,12 +513,29 @@ def _stats(vals: list[float]) -> dict[str, Any]:
 
 def summary_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[str]:
     failures = []
-    if expected.get("terminal_reason_counts") != actual.get("terminal_reason_counts") or expected.get("horizon_status_counts") != actual.get("horizon_status_counts"):
+    if expected.get("terminal_reason_counts") != actual.get("terminal_reason_counts") or expected.get("horizon_status_counts") != actual.get("horizon_status_counts") or expected.get("horizon_conservation") != actual.get("horizon_conservation"):
         failures.append("SUMMARY_STATUS_COUNT_MISMATCH")
     if expected.get("summary_hash") != actual.get("summary_hash"):
         failures.append("SUMMARY_HASH_MISMATCH")
-    if expected.get("descriptive_directional_return_stats") != actual.get("descriptive_directional_return_stats"):
-        failures.extend(["SUMMARY_MEAN_MISMATCH", "SUMMARY_MEDIAN_MISMATCH", "SUMMARY_QUANTILE_MISMATCH", "SUMMARY_SIGN_COUNT_MISMATCH", "SUMMARY_MFE_MISMATCH", "SUMMARY_MAE_MISMATCH", "SUMMARY_BREAKDOWN_MISMATCH"])
+    expected_stats = expected.get("descriptive_directional_return_stats", {})
+    actual_stats = actual.get("descriptive_directional_return_stats", {})
+    for horizon, stats in expected_stats.items():
+        other = actual_stats.get(horizon, {})
+        for field in ("mean", "count", "min", "max"):
+            if stats.get(field) != other.get(field):
+                failures.append(f"SUMMARY_{field.upper()}_MISMATCH")
+        if stats.get("median") != other.get("median"):
+            failures.append("SUMMARY_MEDIAN_MISMATCH")
+        if any(stats.get(field) != other.get(field) for field in ("p05", "p25", "p75", "p95")):
+            failures.append("SUMMARY_QUANTILE_MISMATCH")
+        if any(stats.get(field) != other.get(field) for field in ("positive", "zero", "negative")):
+            failures.append("SUMMARY_SIGN_COUNT_MISMATCH")
+        if stats.get("mfe") != other.get("mfe"):
+            failures.append("SUMMARY_MFE_MISMATCH")
+        if stats.get("mae") != other.get("mae"):
+            failures.append("SUMMARY_MAE_MISMATCH")
+        if stats.get("breakdowns") != other.get("breakdowns"):
+            failures.append("SUMMARY_BREAKDOWN_MISMATCH")
     if {k: v for k, v in expected.items() if k != "summary_hash"} != {k: v for k, v in actual.items() if k != "summary_hash"} and not failures:
         failures.append("SUMMARY_RECOMPUTE_MISMATCH")
     return list(dict.fromkeys(failures))
@@ -534,19 +545,29 @@ def overlap_failures(expected: dict[str, Any], actual: dict[str, Any]) -> list[s
     failures = []
     for horizon, item in expected.get("horizons", {}).items():
         other = actual.get("horizons", {}).get(horizon, {})
+        if item.get("interval_count") != other.get("interval_count"):
+            failures.append("OVERLAP_INTERVAL_COUNT_MISMATCH")
+        if item.get("complete_interval_count") != other.get("complete_interval_count"):
+            failures.append("OVERLAP_COMPLETE_COUNT_MISMATCH")
         if item.get("complete_interval_set_hash") != other.get("complete_interval_set_hash"):
             failures.append("OVERLAP_INTERVAL_SET_HASH_MISMATCH")
         if item.get("overlapping_pair_count") != other.get("overlapping_pair_count"):
             failures.append("OVERLAP_PAIR_COUNT_MISMATCH")
         if item.get("max_simultaneous_candidates") != other.get("max_simultaneous_candidates"):
             failures.append("OVERLAP_MAX_CONCURRENCY_MISMATCH")
+        if item.get("symbol_counts") != other.get("symbol_counts"):
+            failures.append("OVERLAP_SYMBOL_COUNT_MISMATCH")
         if item.get("direction_counts") != other.get("direction_counts"):
             failures.append("OVERLAP_DIRECTION_COUNT_MISMATCH")
+        if item.get("symbol_direction_counts") != other.get("symbol_direction_counts"):
+            failures.append("OVERLAP_SYMBOL_DIRECTION_COUNT_MISMATCH")
         if item.get("complete_session_cluster_counts") != other.get("complete_session_cluster_counts"):
             failures.append("OVERLAP_SESSION_COUNT_MISMATCH")
+        if item.get("session_cluster_counts") != other.get("session_cluster_counts"):
+            failures.append("OVERLAP_SESSION_CLUSTER_COUNT_MISMATCH")
         if item.get("sample_count") != other.get("sample_count") or item.get("sample_truncated") != other.get("sample_truncated") or item.get("sample") != other.get("sample"):
             failures.append("OVERLAP_SAMPLE_CONTRACT_MISMATCH")
-    if expected != actual:
+    if expected != actual and not failures:
         failures.append("OVERLAP_RECOMPUTE_MISMATCH")
     return list(dict.fromkeys(failures))
 

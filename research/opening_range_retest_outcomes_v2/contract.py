@@ -21,6 +21,7 @@ IMPLEMENTATION_TREE_PATHS = (
     "tests/test_opening_range_retest_outcome_controls_v2.py",
 )
 IMPLEMENTATION_TREE_HASH_ALGORITHM = "sha256(git-ls-tree-r HEAD -- implementation-tree-paths)"
+BASE_MAIN_POLICY = "PR_676_MERGED_MAIN_REQUIRED"
 
 
 def canonical_json_bytes(payload: Any) -> bytes:
@@ -49,53 +50,16 @@ def safety_fields() -> dict[str, bool]:
     }
 
 
-def evidence_fields(*, mode: str, decision: str, reason: str, source: str) -> dict[str, Any]:
+def expected_contract_semantics() -> dict[str, Any]:
     return {
-        "mode": mode,
-        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
-        "decision": decision,
-        "reason": reason,
-        "timestamp": EVIDENCE_TIMESTAMP,
-        "source": source,
-    }
-
-
-def portable_contract_payload(contract: dict[str, Any]) -> dict[str, Any]:
-    return {
-        k: v
-        for k, v in contract.items()
-        if k
-        not in {
-            "contract_hash",
-            "diagnostic_source_authority_root",
-            "diagnostic_generation_commit_sha",
-        }
-    }
-
-
-def build_contract(
-    *,
-    source_authority_root: str,
-    base_main_sha: str,
-    execution_commit_sha: str,
-    frozen_code_sha: str,
-    implementation_tree_hash: str,
-) -> dict[str, Any]:
-    contract = {
         "schema_version": 2,
         "contract_version": CONTRACT_VERSION,
-        **evidence_fields(
-            mode="ORB_OUTCOME_CONTRACT_V2",
-            decision="ORB_OUTCOME_CONTRACT_V2_FROZEN",
-            reason="strict offline underlying-outcome contract frozen after PR 676 merge",
-            source="opening_range_retest_causal_replay_summary_v2.json",
-        ),
-        "base_main_sha": base_main_sha,
-        "frozen_code_sha": frozen_code_sha,
-        "implementation_tree_hash": implementation_tree_hash,
+        "mode": "ORB_OUTCOME_CONTRACT_V2",
+        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
+        "decision": "ORB_OUTCOME_CONTRACT_V2_FROZEN",
+        "reason": "strict offline underlying-outcome contract frozen after PR 676 merge",
         "implementation_tree_hash_algorithm": IMPLEMENTATION_TREE_HASH_ALGORITHM,
         "implementation_tree_paths": list(IMPLEMENTATION_TREE_PATHS),
-        "diagnostic_generation_commit_sha": execution_commit_sha,
         "inputs": {
             "source_count": INPUT_SOURCE_COUNT,
             "source_semantic_hash": INPUT_SOURCE_HASH,
@@ -109,7 +73,6 @@ def build_contract(
             "copy": False,
             "symlink": False,
         },
-        "diagnostic_source_authority_root": source_authority_root,
         "bars": {
             "label": "start-labelled 1-minute bars",
             "session_timezone": "Asia/Kolkata",
@@ -154,6 +117,55 @@ def build_contract(
             "NOT_PAPER_OR_LIVE_READY",
         ],
         **safety_fields(),
+    }
+
+
+def evidence_fields(*, mode: str, decision: str, reason: str, source: str) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
+        "decision": decision,
+        "reason": reason,
+        "timestamp": EVIDENCE_TIMESTAMP,
+        "source": source,
+    }
+
+
+def portable_contract_payload(contract: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: v
+        for k, v in contract.items()
+        if k
+        not in {
+            "contract_hash",
+            "diagnostic_source_authority_root",
+            "diagnostic_generation_commit_sha",
+        }
+    }
+
+
+def build_contract(
+    *,
+    source_authority_root: str,
+    base_main_sha: str,
+    execution_commit_sha: str,
+    frozen_code_sha: str,
+    implementation_tree_hash: str,
+) -> dict[str, Any]:
+    contract = {
+        **expected_contract_semantics(),
+        **evidence_fields(
+            mode="ORB_OUTCOME_CONTRACT_V2",
+            decision="ORB_OUTCOME_CONTRACT_V2_FROZEN",
+            reason="strict offline underlying-outcome contract frozen after PR 676 merge",
+            source="opening_range_retest_causal_replay_summary_v2.json",
+        ),
+        "base_main_sha": base_main_sha,
+        "base_main_policy": BASE_MAIN_POLICY,
+        "frozen_code_sha": frozen_code_sha,
+        "implementation_tree_hash": implementation_tree_hash,
+        "diagnostic_generation_commit_sha": execution_commit_sha,
+        "diagnostic_source_authority_root": source_authority_root,
     }
     contract["contract_hash"] = sha256_bytes(canonical_json_bytes(portable_contract_payload(contract)))
     return contract
