@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 import subprocess
@@ -83,9 +84,14 @@ def _payload(repo: Path, **supervisor_overrides):
 
 def _commit_test(repo: Path, *, passing: bool = True, credentials_must_be_absent: bool = False) -> str:
     assertion = "assert 1 + 1 == 2" if passing else "assert 1 + 1 == 3"
-    lines = ["from pathlib import Path", "", "def test_feature():", f"    {assertion}"]
+    lines = ["import os", "from pathlib import Path", "", "def test_feature():", f"    {assertion}"]
     if credentials_must_be_absent:
-        lines.append('    assert Path(".env").exists() is False')
+        lines.extend(
+            [
+                '    assert Path(".env").exists() is False',
+                '    assert os.environ["PYTHONPATH"] == str(Path.cwd())',
+            ]
+        )
     (repo / "tests" / "test_feature.py").write_text("\n".join(lines) + "\n", encoding="utf-8")
     _git(repo, "add", "tests/test_feature.py")
     _git(repo, "commit", "-m", "test: add feature proof")
@@ -125,7 +131,7 @@ def test_shape_blocks_live_script_acceptance_command(tmp_path):
     assert "ACCEPTANCE_COMMAND_DIRECT_PYTHON_BLOCKED" in blockers
 
 
-def test_shape_blocks_arbitrary_python_module_and_executable_path(tmp_path):
+def test_shape_blocks_arbitrary_python_module_and_path_escape(tmp_path):
     repo = _repo(tmp_path)
     arbitrary = normalize_supervisor_contract(
         _payload(
@@ -138,7 +144,7 @@ def test_shape_blocks_arbitrary_python_module_and_executable_path(tmp_path):
     arbitrary_blockers, _ = validate_contract_shape(arbitrary)
     assert "ACCEPTANCE_COMMAND_PYTHON_MODULE_NOT_ALLOWED" in arbitrary_blockers
 
-    absolute = normalize_supervisor_contract(
+    absolute_executable = normalize_supervisor_contract(
         _payload(
             repo,
             acceptance_commands=[
@@ -146,8 +152,19 @@ def test_shape_blocks_arbitrary_python_module_and_executable_path(tmp_path):
             ],
         )
     )
-    absolute_blockers, _ = validate_contract_shape(absolute)
-    assert "ACCEPTANCE_COMMAND_EXECUTABLE_PATH_BLOCKED" in absolute_blockers
+    executable_blockers, _ = validate_contract_shape(absolute_executable)
+    assert "ACCEPTANCE_COMMAND_EXECUTABLE_PATH_BLOCKED" in executable_blockers
+
+    escaped_argument = normalize_supervisor_contract(
+        _payload(
+            repo,
+            acceptance_commands=[
+                {"name": "bad", "argv": ["pytest", "/tmp/test_external.py"], "timeout_seconds": 10}
+            ],
+        )
+    )
+    argument_blockers, _ = validate_contract_shape(escaped_argument)
+    assert "ACCEPTANCE_COMMAND_PATH_ESCAPE_BLOCKED" in argument_blockers
 
 
 def test_preflight_requires_clean_matching_isolated_branch(tmp_path):
@@ -210,7 +227,7 @@ def test_verify_records_hashes_and_passes_safe_commands(tmp_path):
     assert Path(result.details["manifest_path"]).exists()
 
 
-def test_verify_does_not_copy_ignored_env_into_acceptance_checkout(tmp_path):
+def test_verify_does_not_copy_ignored_env_or_inherit_pythonpath(tmp_path):
     repo = _repo(tmp_path)
     contract = normalize_supervisor_contract(_payload(repo))
     assert claim_contract(contract, enforce_tradebot_guard=False).accepted is True
@@ -222,6 +239,7 @@ def test_verify_does_not_copy_ignored_env_into_acceptance_checkout(tmp_path):
     assert result.accepted is True
     command = result.details["manifest"]["acceptance_commands"][0]
     assert command["ignored_source_credentials_copied"] is False
+    assert command["inherited_pythonpath_used"] is False
 
 
 def test_verify_fails_when_acceptance_command_fails(tmp_path):
