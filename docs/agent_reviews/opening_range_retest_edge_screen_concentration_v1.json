@@ -1,0 +1,31 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "best_10_session_contribution": 0.2115537647368321,
+  "best_1pct_candidate_contribution": 0.11034828513934651,
+  "best_5_session_contribution": 0.1253579870822558,
+  "best_session_contribution": 0.029094615010126966,
+  "broker_api_called": false,
+  "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+  "decision": "ORB_EDGE_SCREEN_CONCENTRATION_RECOMPUTED",
+  "is_order_action": false,
+  "mode": "ORB_EDGE_SCREEN_CONCENTRATION_V1",
+  "not_option_pnl": true,
+  "not_profitability_proof": true,
+  "projection_hash": "60b2c282d73a03d6a6a9f8e0c7046353bb9365d6a71215a62def7ab610ae4efd",
+  "read_only": true,
+  "reason": "recomputed pre-registered concentration controls without return-based rescue selection",
+  "removal_means": {
+    "best_10_sessions_removed": -7.300552333912985e-05,
+    "best_1_session_removed": -1.5416559903726155e-05,
+    "best_3_sessions_removed": -3.1609912579480274e-05,
+    "best_5_sessions_removed": -4.5453544133842476e-05,
+    "top_1pct_candidates_removed": -7.215779202956567e-05,
+    "worst_1_session_removed": 5.827286608878886e-06,
+    "worst_5_sessions_removed": 3.609929053988634e-05
+  },
+  "schema_version": 1,
+  "source": "opening_range_retest_outcome_ledger_v2.json",
+  "timestamp": "2026-07-20T00:00:00Z",
+  "top_1pct_candidate_count": 22
+}

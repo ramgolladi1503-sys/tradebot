@@ -1,0 +1,54 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "artifact_hashes": {
+    "concentration": "6c5d8d79581e90a5b8f290a8960478cce6adddc81ab8305f8bb711b075997bfa",
+    "contract": "8a2d6cd3cc25925ef07028f8ba829b774da1257d72bb7bd6e10f7a87910a7249",
+    "controls": "4c57175b3fc7bd2ec3466f459852b5d0c5004bb97feda7cbd6c4fcad37dc3799",
+    "metrics": "746b4617b5adc420e41314b0a7c4bf408a2ea08a28baceca124f17eb4e97ac79",
+    "overlap": "c77af6842b695b3bf94665cca6859728f68dec4797671a0846dbe563ae6fa943",
+    "replication": "fc41ab5c04c8a8828e427c8b0190648a3a13aa77f0153a90207eb42e46877ffd",
+    "report": "79bc9fce25da67e15fffb69870b636a2a4b93c9f21d416db46e2784397faf32f",
+    "verdict": "ca9f8d0a1e04d30439ea92b43c730cd51e47e008b50c2b1ddfd91d474fc91be7"
+  },
+  "broker_api_called": false,
+  "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+  "decision": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED",
+  "failures": [],
+  "is_order_action": false,
+  "mode": "ORB_EDGE_SCREEN_AUDIT_V1",
+  "not_option_pnl": true,
+  "not_profitability_proof": true,
+  "read_only": true,
+  "reason": "independent audit recomputed artifact sidecars, authority checks, counts, controls, and verdict consistency",
+  "schema_version": 1,
+  "source": "opening_range_retest_outcome_ledger_v2.json",
+  "source_authority": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "failures": [],
+    "is_order_action": false,
+    "not_option_pnl": true,
+    "not_profitability_proof": true,
+    "read_only": true,
+    "sidecars": {
+      "outcome_contract": {
+        "artifact_sha256": "f3778e2b3b025b88ae9101e1a4263c4ea4917b06541fc70454287901f5def4d5",
+        "path": "opening_range_retest_outcome_contract_v2.json",
+        "sidecar_match": true,
+        "sidecar_sha256": "f3778e2b3b025b88ae9101e1a4263c4ea4917b06541fc70454287901f5def4d5"
+      },
+      "outcome_ledger": {
+        "artifact_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a",
+        "path": "opening_range_retest_outcome_ledger_v2.json",
+        "sidecar_match": true,
+        "sidecar_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a"
+      }
+    },
+    "source_ledger_semantic_hash": "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd",
+    "source_ledger_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a"
+  },
+  "timestamp": "2026-07-20T00:00:00Z",
+  "verdict": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED"
+}

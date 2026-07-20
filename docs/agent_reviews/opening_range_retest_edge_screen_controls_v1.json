@@ -1,0 +1,66 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+  "decision": "ORB_EDGE_SCREEN_CONTROLS_RECOMPUTED",
+  "is_order_action": false,
+  "matched_time": {
+    "advantage": -0.00032636300527812226,
+    "advantage_bps": -3.2636300527812225,
+    "advantage_ci": {
+      "lower": -0.0003988201857421253,
+      "lower_bps": -3.9882018574212528,
+      "p_le_zero": 1.0,
+      "replications": 10000,
+      "seed": 20260722,
+      "upper": -0.0002571683068926836,
+      "upper_bps": -2.571683068926836
+    },
+    "candidate_count": 2155,
+    "coverage": 1.0,
+    "covered_candidates": 2155,
+    "draws": 215500,
+    "draws_per_candidate": 100,
+    "matched_time_session_equal_mean": 0.0003199229005733557,
+    "seed": 20260722,
+    "signal_session_equal_mean": -6.440104704766559e-06
+  },
+  "mode": "ORB_EDGE_SCREEN_CONTROLS_V1",
+  "not_option_pnl": true,
+  "not_profitability_proof": true,
+  "opposite_direction": {
+    "failures": [],
+    "max_abs_identity_error": 0.0,
+    "verdict": "PASS"
+  },
+  "projection_hash": "acb0fd8e5190bf52065b001a6865bdb251bd2a99d10ef2812309d51d1eae6dfd",
+  "random_direction": {
+    "lower": -8.95311981028507e-05,
+    "lower_bps": -0.895311981028507,
+    "mean_advantage": -1.00082730800242e-05,
+    "mean_advantage_bps": -0.10008273080024199,
+    "observed_signal_session_equal_mean": -6.440104704766559e-06,
+    "permutation_p": 0.591,
+    "permutations": 1000,
+    "seed": 20260721,
+    "upper": 6.826410242736925e-05,
+    "upper_bps": 0.6826410242736924
+  },
+  "read_only": true,
+  "reason": "recomputed random-direction, opposite-direction, matched-time, and within-stratum controls",
+  "schema_version": 1,
+  "source": "opening_range_retest_outcome_ledger_v2.json",
+  "timestamp": "2026-07-20T00:00:00Z",
+  "within_stratum_direction_permutation": {
+    "lower": -9.375381341549924e-05,
+    "lower_bps": -0.9375381341549924,
+    "mean_advantage": -1.224457878965542e-05,
+    "mean_advantage_bps": -0.12244578789655419,
+    "permutation_p": 0.615,
+    "permutations": 1000,
+    "seed": 20260723,
+    "upper": 6.821095617239762e-05,
+    "upper_bps": 0.6821095617239762
+  }
+}
