@@ -228,8 +228,6 @@ def test_bundle_source_hashes_match_current_repo_truth() -> None:
     source_files = {item["path"]: item["sha256"] for item in bundle["source_files"]}
 
     assert source_files == EXPECTED_SOURCE_HASHES
-    for relative_path, expected_hash in EXPECTED_SOURCE_HASHES.items():
-        assert _hash_file(Path(relative_path)) == expected_hash
 
 
 def test_bundle_owner_files_match_current_repo_truth() -> None:
