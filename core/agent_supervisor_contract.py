@@ -10,6 +10,7 @@ from core.agent_supervisor_git import _run_git
 from core.agent_supervisor_types import (
     AGENT_SUPERVISOR_SCHEMA_VERSION,
     _ALLOWED_EXECUTABLES,
+    _ALLOWED_PYTHON_MODULES,
     _BLOCKED_ARGUMENTS,
     _BLOCKED_SCRIPT_BASENAMES,
     _READ_ONLY_GIT_COMMANDS,
@@ -28,6 +29,7 @@ from core.agent_supervisor_types import (
     _tuple_text,
     _unsafe_rel_path,
 )
+
 
 def load_contract_file(path: str | Path) -> dict[str, Any]:
     contract_path = Path(path).expanduser()
@@ -111,7 +113,10 @@ def _command_policy_blockers(command: AcceptanceCommand) -> list[str]:
     if command.timeout_seconds < 1 or command.timeout_seconds > 7200:
         blockers.append("ACCEPTANCE_COMMAND_TIMEOUT_INVALID")
 
-    executable = Path(command.argv[0]).name.lower()
+    executable_token = command.argv[0]
+    executable = Path(executable_token).name.lower()
+    if executable_token != executable:
+        blockers.append("ACCEPTANCE_COMMAND_EXECUTABLE_PATH_BLOCKED")
     if executable not in _ALLOWED_EXECUTABLES:
         blockers.append("ACCEPTANCE_COMMAND_EXECUTABLE_NOT_ALLOWED")
 
@@ -120,8 +125,11 @@ def _command_policy_blockers(command: AcceptanceCommand) -> list[str]:
         blockers.append("ACCEPTANCE_COMMAND_TRADING_ACTION_BLOCKED")
     if any(Path(arg).name.lower() in _BLOCKED_SCRIPT_BASENAMES for arg in command.argv[1:]):
         blockers.append("ACCEPTANCE_COMMAND_LIVE_SCRIPT_BLOCKED")
-    if executable in {"python", "python3"} and "-c" in command.argv[1:]:
-        blockers.append("ACCEPTANCE_COMMAND_INLINE_PYTHON_BLOCKED")
+    if executable in {"python", "python3"}:
+        if len(lowered) < 3 or lowered[1] != "-m":
+            blockers.append("ACCEPTANCE_COMMAND_DIRECT_PYTHON_BLOCKED")
+        elif lowered[2] not in _ALLOWED_PYTHON_MODULES:
+            blockers.append("ACCEPTANCE_COMMAND_PYTHON_MODULE_NOT_ALLOWED")
     if executable == "git":
         if len(lowered) < 2 or lowered[1] not in _READ_ONLY_GIT_COMMANDS:
             blockers.append("ACCEPTANCE_COMMAND_GIT_MUTATION_BLOCKED")
