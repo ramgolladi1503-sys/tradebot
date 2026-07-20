@@ -1,0 +1,201 @@
+{
+  "all_horizon_minutes": [
+    1,
+    3,
+    5,
+    15,
+    30
+  ],
+  "allowed_for_live_execution": false,
+  "append": false,
+  "base_main_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "bootstrap": {
+    "authority": "session_cluster_bootstrap",
+    "ci": 0.95,
+    "cluster": "session_date",
+    "replications": 10000,
+    "seed": 20260720
+  },
+  "broker_api_called": false,
+  "certified_candidates": 2215,
+  "certified_negative_controls": 154,
+  "certified_projection_hash": "23ada7617040d2824e8e5e49742bfbb2d91e676994a3ba4f371d3e573014c581",
+  "certified_source_joins": 2215,
+  "concentration_removals": [
+    "best_1_session_removed",
+    "best_3_sessions_removed",
+    "best_5_sessions_removed",
+    "best_10_sessions_removed",
+    "top_1pct_candidates_removed",
+    "worst_1_session_removed",
+    "worst_5_sessions_removed"
+  ],
+  "conditional_min_candidates": 300,
+  "conditional_min_sessions": 150,
+  "contract_hash": "8ca61837f1e81f4522640b5d665b62eea630d6823c0dfc45ca4167c8c10fe1e7",
+  "diagnostic_horizon_minutes": [
+    1,
+    3,
+    5
+  ],
+  "directions": [
+    "BUY_CALL",
+    "BUY_PUT"
+  ],
+  "expected_measured_counts": {
+    "15": 2155,
+    "30": 2086
+  },
+  "forbidden": {
+    "option_pnl": true,
+    "option_replay": true,
+    "paper_live_promotion": true,
+    "parameter_search": true,
+    "production_integration": true,
+    "rescue_tuning": true,
+    "transaction_cost_certification": true,
+    "wfa": true
+  },
+  "frozen_implementation_tree_hash": "dfdeefa882879267ccdffff7e10454d4298d3767e8b3f687cfdbe6a0cd86bf14",
+  "frozen_outcome_code_sha": "9e4798d48a39f414c88095a1d1a70d055dda98a8",
+  "holm_alpha": 0.05,
+  "is_order_action": false,
+  "matched_time_control": {
+    "draws_per_candidate": 100,
+    "entry_time_buckets": [
+      [
+        "09:15",
+        "10:00"
+      ],
+      [
+        "10:00",
+        "11:00"
+      ],
+      [
+        "11:00",
+        "12:00"
+      ],
+      [
+        "12:00",
+        "13:00"
+      ],
+      [
+        "13:00",
+        "14:00"
+      ],
+      [
+        "14:00",
+        "15:00"
+      ],
+      [
+        "15:00",
+        "15:29"
+      ]
+    ],
+    "exclude": [
+      "actual_entry_bar",
+      "bars_without_exact_terminal_horizon",
+      "bars_outside_certified_session"
+    ],
+    "minimum_coverage": 0.95,
+    "preserve": [
+      "session",
+      "symbol",
+      "direction",
+      "horizon",
+      "entry_time_bucket"
+    ],
+    "seed": 20260722
+  },
+  "not_option_pnl": true,
+  "not_profitability_proof": true,
+  "opposite_direction_control": {
+    "required_identity": "signal_return + opposite_return == 0"
+  },
+  "outcome_contract_sha256": "f3778e2b3b025b88ae9101e1a4263c4ea4917b06541fc70454287901f5def4d5",
+  "overlap_sensitivities": {
+    "A": "earliest candidate per session x symbol x direction",
+    "B": "earliest proposal_ready_at then lexicographically smallest candidate_id per overlap-connected component"
+  },
+  "practical_hurdles_bps": [
+    0,
+    1,
+    2,
+    5
+  ],
+  "primary_estimand": "session_equal_mean",
+  "primary_horizon_minutes": 15,
+  "random_direction_control": {
+    "direction_counts_preserved_within": [
+      "symbol",
+      "calendar_year"
+    ],
+    "permutations": 1000,
+    "preserve": [
+      "session",
+      "symbol",
+      "entry_time",
+      "horizon",
+      "unsigned_move"
+    ],
+    "seed": 20260721
+  },
+  "read_only": true,
+  "schema_version": 1,
+  "screen_id": "opening_range_retest_edge_screen_v1",
+  "secondary_horizon_minutes": 30,
+  "source_ledger_path": "docs/agent_reviews/opening_range_retest_outcome_ledger_v2.json",
+  "source_ledger_semantic_hash": "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd",
+  "source_ledger_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a",
+  "structural_min_session_equal_mean_bps": 1.0,
+  "symbol_direction_cells": [
+    {
+      "direction": "BUY_CALL",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "direction": "BUY_PUT",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "direction": "BUY_CALL",
+      "symbol": "NIFTY"
+    },
+    {
+      "direction": "BUY_PUT",
+      "symbol": "NIFTY"
+    },
+    {
+      "direction": "BUY_CALL",
+      "symbol": "SENSEX"
+    },
+    {
+      "direction": "BUY_PUT",
+      "symbol": "SENSEX"
+    }
+  ],
+  "symbols": [
+    "BANKNIFTY",
+    "NIFTY",
+    "SENSEX"
+  ],
+  "verdicts": [
+    "ORB_NO_STRUCTURAL_EDGE",
+    "ORB_CONDITIONAL_EDGE_CANDIDATE",
+    "ORB_STRUCTURAL_EDGE_CANDIDATE"
+  ],
+  "within_stratum_direction_permutation": {
+    "permutations": 1000,
+    "seed": 20260723,
+    "strata": [
+      "symbol",
+      "calendar_year",
+      "entry_time_bucket"
+    ]
+  },
+  "years": [
+    2024,
+    2025,
+    2026
+  ]
+}
