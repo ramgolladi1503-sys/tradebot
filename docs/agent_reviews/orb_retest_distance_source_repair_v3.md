@@ -1,5 +1,14 @@
 # ORB Retest Distance Source Repair v3
 
+mode: PAPER
+candidate_id: orb_retest_distance_source_repair_v3_pr682
+decision: documentation_evidence_gate_repair
+reason: Added required agent-review and CE evidence fields for the approved ORB source-ownership repair without changing ORB production semantics.
+timestamp: 2026-07-20T18:35:00Z
+is_order_action: false
+broker_api_called: false
+source: docs.agent_reviews.orb_retest_distance_source_repair_v3
+
 Verified baseline: `a48176fc245375f15e316493364915ec37439e29`
 
 ## Agent Work Contract
