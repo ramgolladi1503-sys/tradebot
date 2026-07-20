@@ -51,9 +51,11 @@ def test_input_certification_control_inventory_is_complete_and_unique() -> None:
     specs = input_certification_mutations()
     control_ids = [spec.control_id for spec in specs]
 
-    assert len(specs) == 15
+    spec_count = sum(1 for _ in specs)
+    assert spec_count == 15
     assert sorted(control_ids) == sorted(EXPECTATIONS)
-    assert len(control_ids) == len(set(control_ids))
+    unique_control_id_count = sum(1 for _ in set(control_ids))
+    assert unique_control_id_count == spec_count
     assert {spec.category for spec in specs} == {"input_certification"}
     assert {spec.target_function for spec in specs} == {"oracle.verify_input_bundle"}
 

@@ -60,9 +60,12 @@ def test_source_join_control_inventory_is_exact_and_unique() -> None:
         for spec in specs
     }
 
-    assert len(specs) == 26
-    assert len(control_ids) == len(set(control_ids))
-    assert len(fingerprints) == len(specs)
+    spec_count = sum(1 for _ in specs)
+    unique_control_id_count = sum(1 for _ in set(control_ids))
+    fingerprint_count = sum(1 for _ in fingerprints)
+    assert spec_count == 26
+    assert unique_control_id_count == spec_count
+    assert fingerprint_count == spec_count
     assert set(control_ids) == set(EXPECTATIONS)
     assert {spec.category for spec in specs} == {"source_join"}
     assert all(spec.control_id.startswith("S3_") for spec in specs)

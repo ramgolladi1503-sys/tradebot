@@ -22,7 +22,9 @@ def test_summary_overlap_control(control):
 def test_summary_overlap_control_fingerprints_are_unique():
     fingerprints = [control_fingerprint(control, execute_control(control)) for control in CONTROL_CASES]
 
-    assert len(fingerprints) == len(set(fingerprints))
+    fingerprint_count = sum(1 for _ in fingerprints)
+    unique_fingerprint_count = sum(1 for _ in set(fingerprints))
+    assert fingerprint_count == unique_fingerprint_count
 
 
 def test_summary_overlap_controls_are_bound_to_shared_protocol_types():

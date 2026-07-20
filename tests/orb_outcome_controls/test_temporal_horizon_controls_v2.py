@@ -58,7 +58,9 @@ def test_temporal_horizon_fingerprints_are_unique() -> None:
         raw = temporal_horizon.execute_temporal_horizon_control(spec)
         fingerprints.append(temporal_horizon.control_fingerprint(spec, raw))
 
-    assert len(fingerprints) == len(set(fingerprints))
+    fingerprint_count = sum(1 for _ in fingerprints)
+    unique_fingerprint_count = sum(1 for _ in set(fingerprints))
+    assert fingerprint_count == unique_fingerprint_count
 
 
 def test_temporal_horizon_executor_has_no_expectation_access() -> None:

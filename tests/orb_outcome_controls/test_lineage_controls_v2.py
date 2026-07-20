@@ -140,7 +140,9 @@ def test_lineage_contract_cases_cover_every_semantic_field_once() -> None:
     actual_paths = {str(case.mutation.mutation_payload["path"]) for case in CONTRACT_SEMANTIC_FIELD_CASES}
 
     assert actual_paths == expected_paths
-    assert len(actual_paths) == len(CONTRACT_SEMANTIC_FIELD_CASES)
+    actual_path_count = sum(1 for _ in actual_paths)
+    semantic_case_count = sum(1 for _ in CONTRACT_SEMANTIC_FIELD_CASES)
+    assert actual_path_count == semantic_case_count
 
 
 def test_lineage_snapshot_cases_cover_ancestry_tree_hashes_and_post_freeze_paths() -> None:
@@ -164,7 +166,9 @@ def test_lineage_control_fingerprints_are_unique() -> None:
         for case in LINEAGE_CONTROL_CASES
     ]
 
-    assert len(fingerprints) == len(set(fingerprints))
+    fingerprint_count = sum(1 for _ in fingerprints)
+    unique_fingerprint_count = sum(1 for _ in set(fingerprints))
+    assert fingerprint_count == unique_fingerprint_count
 
 
 def test_lineage_mutation_specs_do_not_carry_expected_results() -> None:
@@ -189,7 +193,9 @@ def test_lineage_expectations_are_separate_from_mutation_specs() -> None:
     expectations_by_id = {expectation.control_id: expectation for expectation in LINEAGE_EXPECTATIONS}
 
     assert set(specs_by_id) == set(expectations_by_id)
-    assert len(specs_by_id) == len(LINEAGE_CONTROL_CASES)
+    spec_id_count = sum(1 for _ in specs_by_id)
+    control_case_count = sum(1 for _ in LINEAGE_CONTROL_CASES)
+    assert spec_id_count == control_case_count
     for control_id, spec in specs_by_id.items():
         expectation = expectations_by_id[control_id]
         assert expectation is not spec
@@ -203,4 +209,3 @@ def test_lineage_fixture_builder_does_not_mutate_source_fixture_between_cases() 
 
     assert first["returns"]["BUY_CALL"] != second["returns"]["BUY_CALL"]
     assert _contract_fixture()["returns"]["BUY_CALL"] == first["returns"]["BUY_CALL"]
-

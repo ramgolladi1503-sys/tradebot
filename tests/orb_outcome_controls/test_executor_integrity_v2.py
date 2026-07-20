@@ -56,4 +56,6 @@ def test_s6_all_targets_invoked_and_mutations_proven():
 def test_s6_duplicate_fingerprints_absent():
     fingerprints = [control_fingerprint(control, execute_control(control)) for control in CONTROL_CASES]
 
-    assert len(fingerprints) == len(set(fingerprints))
+    fingerprint_count = sum(1 for _ in fingerprints)
+    unique_fingerprint_count = sum(1 for _ in set(fingerprints))
+    assert fingerprint_count == unique_fingerprint_count
