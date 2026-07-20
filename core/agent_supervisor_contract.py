@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import re
 from typing import Any, Mapping, Sequence
 
 from core.agent_supervisor_git import _run_git
@@ -103,6 +104,14 @@ def normalize_supervisor_contract(payload: Mapping[str, Any]) -> SupervisorContr
     )
 
 
+def _argument_escapes_worktree(argument: str) -> bool:
+    candidate = argument.split("=", 1)[1] if argument.startswith("-") and "=" in argument else argument
+    normalized = candidate.replace("\\", "/")
+    if normalized.startswith("/") or re.match(r"^[A-Za-z]:/", normalized):
+        return True
+    return any(part == ".." for part in normalized.split("/"))
+
+
 def _command_policy_blockers(command: AcceptanceCommand) -> list[str]:
     blockers: list[str] = []
     if not command.name:
@@ -125,6 +134,8 @@ def _command_policy_blockers(command: AcceptanceCommand) -> list[str]:
         blockers.append("ACCEPTANCE_COMMAND_TRADING_ACTION_BLOCKED")
     if any(Path(arg).name.lower() in _BLOCKED_SCRIPT_BASENAMES for arg in command.argv[1:]):
         blockers.append("ACCEPTANCE_COMMAND_LIVE_SCRIPT_BLOCKED")
+    if any(_argument_escapes_worktree(arg) for arg in command.argv[1:]):
+        blockers.append("ACCEPTANCE_COMMAND_PATH_ESCAPE_BLOCKED")
     if executable in {"python", "python3"}:
         if len(lowered) < 3 or lowered[1] != "-m":
             blockers.append("ACCEPTANCE_COMMAND_DIRECT_PYTHON_BLOCKED")
