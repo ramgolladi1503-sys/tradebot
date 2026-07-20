@@ -1,8 +1,8 @@
-"""VWAP Reclaim/Rejection movement strategy.
+"""VWAP Reclaim/Rejection compatibility strategy.
 
-This strategy requires a causal completed-bar reclaim/rejection sequence. It
-emits read-only StrategyCandidate objects only and does not touch execution
-paths.
+This strategy keeps its historical compatibility identity but implements a
+causal VWAP reclaim-and-hold pattern. It emits read-only StrategyCandidate
+objects only and does not touch execution paths.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ IST = ZoneInfo("Asia/Kolkata")
 STRATEGY_ID = "vwap_reclaim_rejection_v1"
 MOVEMENT_TYPE = "VWAP_RECLAIM_REJECTION"
 TEMPORAL_CONTRACT_VERSION = "vwap_reclaim_causal_v1"
+IMPLEMENTED_PATTERN = "VWAP_RECLAIM_HOLD"
 MIN_TEMPORAL_BAR_COUNT = 3
 EMBEDDED_PROFILE_DEFAULTS = {
     "MIN_VWAP_DISTANCE_PCT": 0.00035,
@@ -89,7 +90,7 @@ def generate_vwap_reclaim_rejection_candidates(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
 ) -> tuple[StrategyCandidate, ...]:
-    """Generate CALL/PUT candidates for causal VWAP reclaim/rejection events."""
+    """Generate CALL/PUT candidates for causal VWAP reclaim-and-hold events."""
 
     profile = resolve_required_profile_parameters(STRATEGY_ID, REQUIRED_PROFILE_KEYS)
     if not profile.is_valid:
@@ -147,7 +148,7 @@ def generate_vwap_reclaim_rejection_candidates(
                     profile,
                     "BUY_CALL",
                     vwap_move,
-                    "upside_vwap_reclaim_or_rejection",
+                    "upside_vwap_reclaim_hold",
                     sequence,
                 )
             )
@@ -161,7 +162,7 @@ def generate_vwap_reclaim_rejection_candidates(
                     profile,
                     "BUY_PUT",
                     abs(vwap_move),
-                    "downside_vwap_reclaim_or_rejection",
+                    "downside_vwap_reclaim_hold",
                     sequence,
                 )
             )
@@ -213,6 +214,8 @@ def _build_candidate(
         "vwap_slope": ctx.vwap_slope,
         "vwap_distance_abs_pct": vwap_distance_abs,
         "confirmation_type": confirmation_type,
+        "implemented_pattern": IMPLEMENTED_PATTERN,
+        "compatibility_strategy_id": STRATEGY_ID,
         "previous_spot_ltp": _metadata_float(ctx, "previous_spot_ltp"),
         "temporal_contract_version": TEMPORAL_CONTRACT_VERSION,
         "temporal_evidence": temporal_evidence,
@@ -230,12 +233,12 @@ def _build_candidate(
         direction=direction,
         price_structure_score=price_structure_score,
         side=side,
-        entry_trigger="confirmed_vwap_reclaim_or_rejection",
+        entry_trigger="confirmed_vwap_reclaim_hold",
         invalid_if="price_crosses_back_through_vwap",
-        rank_reason="confirmed VWAP reclaim/rejection in a non-chop regime",
+        rank_reason="confirmed VWAP reclaim and hold in a non-chop regime",
         evidence=evidence,
         warnings=warnings,
-        confluence_tags=("vwap", "reclaim_rejection"),
+        confluence_tags=("vwap", "reclaim_hold"),
         strategy_version="v1",
         params_used=params,
         params_hash=profile.parameter_hash,

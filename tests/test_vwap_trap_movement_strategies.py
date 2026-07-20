@@ -3,7 +3,7 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement.failed_breakout_trap import generate_failed_breakout_trap_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
-from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, bearish_history, bullish_history
+from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, _bar, bearish_history, bullish_history
 
 
 def _regime(primary="TREND_UP", **scores):
@@ -72,7 +72,15 @@ def test_vwap_reclaim_generates_call_candidate_after_confirmed_reclaim():
     assert candidate.direction == "BUY_CALL"
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
-    assert "reclaim_rejection" in candidate.confluence_tags
+    assert candidate.entry_trigger == "confirmed_vwap_reclaim_hold"
+    assert candidate.rank_reason == "confirmed VWAP reclaim and hold in a non-chop regime"
+    assert candidate.confluence_tags == ("vwap", "reclaim_hold")
+    assert candidate.evidence["confirmation_type"] == "upside_vwap_reclaim_hold"
+    assert candidate.evidence["implemented_pattern"] == "VWAP_RECLAIM_HOLD"
+    assert candidate.evidence["compatibility_strategy_id"] == "vwap_reclaim_rejection_v1"
+    assert "rejection" not in candidate.entry_trigger
+    assert "rejection" not in candidate.rank_reason
+    assert "rejection" not in candidate.evidence["confirmation_type"]
     assert candidate.evidence["previous_spot_ltp"] == 22495.0
     assert candidate.evidence["temporal_evidence"]["vwap_provenance"] == "VWAP_AUTHORITATIVE"
     assert candidate.evidence["temporal_evidence"]["sequence_bar_timestamps"] == (
@@ -100,8 +108,79 @@ def test_vwap_reclaim_generates_put_candidate_after_confirmed_downside_reclaim()
     assert candidate.direction == "BUY_PUT"
     assert candidate.status == "RAW_CANDIDATE"
     assert candidate.executable_eligible is False
+    assert candidate.entry_trigger == "confirmed_vwap_reclaim_hold"
+    assert candidate.rank_reason == "confirmed VWAP reclaim and hold in a non-chop regime"
+    assert candidate.confluence_tags == ("vwap", "reclaim_hold")
+    assert candidate.evidence["confirmation_type"] == "downside_vwap_reclaim_hold"
+    assert candidate.evidence["implemented_pattern"] == "VWAP_RECLAIM_HOLD"
+    assert candidate.evidence["compatibility_strategy_id"] == "vwap_reclaim_rejection_v1"
     assert candidate.evidence["premium_change"] == 11.0
     assert candidate.evidence["temporal_evidence"]["vwap_provenance"] == "VWAP_AUTHORITATIVE"
+
+
+def test_vwap_reclaim_hold_preserves_compatibility_identity_and_profile_values():
+    ctx = _base_context(spot_ltp=22610.0, vwap=22540.0, vwap_slope=0.04)
+    candidate = generate_vwap_reclaim_rejection_candidates(ctx, _regime(TREND_UP=0.6, CHOP=0.1))[0]
+
+    assert candidate.strategy_id == "vwap_reclaim_rejection_v1"
+    assert candidate.movement_type == "VWAP_RECLAIM_REJECTION"
+    assert candidate.lineage["params_used"] == {
+        "MIN_VWAP_DISTANCE_PCT": 0.00035,
+        "MAX_VWAP_ENTRY_DISTANCE_PCT": 0.0035,
+        "MAX_CHOP_SCORE": 0.55,
+    }
+    assert candidate.evidence["temporal_contract_version"] == "vwap_reclaim_causal_v1"
+
+
+def test_vwap_reclaim_hold_does_not_emit_for_incomplete_or_same_side_sequences():
+    below_below_above = [
+        _bar(0, 22500.0, 22520.0, 22490.0, 22490.0),
+        _bar(1, 22500.0, 22520.0, 22490.0, 22500.0),
+        _bar(2, 22590.0, 22610.0, 22550.0, 22580.0),
+    ]
+    above_above_below = [
+        _bar(0, 22580.0, 22590.0, 22565.0, 22585.0),
+        _bar(1, 22575.0, 22590.0, 22560.0, 22580.0),
+        _bar(2, 22500.0, 22510.0, 22490.0, 22500.0),
+    ]
+    same_side = [
+        _bar(0, 22580.0, 22590.0, 22565.0, 22585.0),
+        _bar(1, 22590.0, 22605.0, 22570.0, 22595.0),
+        _bar(2, 22600.0, 22620.0, 22590.0, 22610.0),
+    ]
+
+    assert generate_vwap_reclaim_rejection_candidates(
+        _base_context(completed_bar_history=below_below_above),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    ) == ()
+    assert generate_vwap_reclaim_rejection_candidates(
+        _base_context(spot_ltp=22520.0, completed_bar_history=above_above_below),
+        _regime(primary="TREND_DOWN", TREND_DOWN=0.6, CHOP=0.1),
+    ) == ()
+    assert generate_vwap_reclaim_rejection_candidates(
+        _base_context(completed_bar_history=same_side),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    ) == ()
+
+
+def test_vwap_reclaim_hold_future_cutoff_and_vwap_mismatch_remain_fail_closed():
+    baseline = generate_vwap_reclaim_rejection_candidates(
+        _base_context(spot_ltp=22610.0, completed_bar_history=bullish_history()),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    )[0]
+    with_future = generate_vwap_reclaim_rejection_candidates(
+        _base_context(spot_ltp=22610.0, completed_bar_history=bullish_history(include_future=True)),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    )[0]
+    mismatch = generate_vwap_reclaim_rejection_candidates(
+        _base_context(vwap=22541.0),
+        _regime(TREND_UP=0.6, CHOP=0.1),
+    )
+
+    assert baseline.raw_score == with_future.raw_score
+    assert baseline.evidence["temporal_evidence"]["history_hash"] == with_future.evidence["temporal_evidence"]["history_hash"]
+    assert baseline.evidence["temporal_evidence"]["sequence_closes"] == with_future.evidence["temporal_evidence"]["sequence_closes"]
+    assert mismatch == ()
 
 
 def test_vwap_reclaim_returns_empty_in_chop_or_without_confirmation():
