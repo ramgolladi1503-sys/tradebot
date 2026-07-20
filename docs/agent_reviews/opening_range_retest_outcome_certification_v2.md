@@ -13,11 +13,14 @@
 - negative_control_count: 154
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
-- contract_hash: `138c16480c313e896b4f5bd929fe0d62294f3705718ae38a06744bc9722eb8d6`
-- outcome_ledger_hash: `f8842d649ba9cbf0bb3793186ecab9aa19bb27cc722ffe824ca0ddaa54e0dad9`
-- summary_hash: `dbded91c1f9f039fd4546a95bf046e06f54bb4964ae3d8e8f20649285d28f1e5`
-- frozen_code_sha: `21895142892a71d95aea6f7d904d4ea7cd58fcfc`
-- implementation_tree_hash: `9427ef022e5b2494e7abc5cbd11c944949a04c62aba1b000dfcda0a11dbafcd1`
+- portable_sidecar_identity: PORTABLE_LOGICAL_FILENAME
+- generic_absolute_path_gate: GENERIC_ABSOLUTE_FILESYSTEM_PATH_REJECTION_PASS
+- cross_worktree_determinism: CROSS_WORKTREE_OUTCOME_DETERMINISM_PASS
+- contract_hash: `1a560b97b3089f750fa5b5a166756d3b8d8c39a98915e13239865d488fc1f204`
+- outcome_ledger_hash: `2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd`
+- summary_hash: `3deb762c2b5c2caa96f9c896d9299c89c34364572d33da8b20f41d4db07ea2a7`
+- frozen_code_sha: `9e4798d48a39f414c88095a1d1a70d055dda98a8`
+- implementation_tree_hash: `dfdeefa882879267ccdffff7e10454d4298d3767e8b3f687cfdbe6a0cd86bf14`
 
 ## Agent Work Contract
 
@@ -59,6 +62,8 @@
 - implementation: Added generator and audit CLIs plus focused negative-control tests.
 - implementation: Generated contract, ledger, summary, overlap, audit, certification, and sidecar artifacts.
 - implementation: Generated negative-control matrix and sidecar artifact.
+- implementation: Input sidecar paths are portable logical identities using filename-only `path` values; artifact SHA-256, declared sidecar SHA-256, and match truth remain bound in the ledger.
+- implementation: Semantic projection rejects generic POSIX, Windows drive, and UNC absolute filesystem paths using host-independent pure path parsing.
 
 ## QA / Safety Review
 
@@ -84,6 +89,12 @@
 - horizon_status_counts: {'1': {'MEASURED': 2206, 'NO_LEGAL_ENTRY_BAR': 9}, '3': {'MEASURED': 2196, 'SESSION_ENDED_BEFORE_HORIZON': 10, 'NO_LEGAL_ENTRY_BAR': 9}, '5': {'MEASURED': 2193, 'SESSION_ENDED_BEFORE_HORIZON': 13, 'NO_LEGAL_ENTRY_BAR': 9}, '15': {'MEASURED': 2155, 'SESSION_ENDED_BEFORE_HORIZON': 51, 'NO_LEGAL_ENTRY_BAR': 9}, '30': {'MEASURED': 2086, 'SESSION_ENDED_BEFORE_HORIZON': 120, 'NO_LEGAL_ENTRY_BAR': 9}}
 - horizon_conservation: {'1': 2215, '3': 2215, '5': 2215, '15': 2215, '30': 2215}
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
+- input_sidecar_paths: PORTABLE_LOGICAL_IDENTITIES
+- generic_posix_path_negative_controls: PASS
+- windows_unc_path_negative_controls: PASS
+- non_path_false_positive_controls: PASS
+- semantic_absolute_path_leaks: 0
+- cross_worktree_determinism: CROSS_WORKTREE_OUTCOME_DETERMINISM_PASS
 
 ## Runtime Proof Required After Merge
 

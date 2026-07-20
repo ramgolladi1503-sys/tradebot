@@ -7,7 +7,7 @@ import math
 import subprocess
 from collections import Counter
 from datetime import timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import pandas as pd
@@ -85,6 +85,55 @@ def verify_sidecar(path: Path) -> dict[str, Any]:
     actual = shafile(path)
     expected = sidecar.read_text(encoding="utf-8").split()[0] if sidecar.exists() else None
     return {"path": path.name, "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": actual == expected}
+
+
+def _is_absolute_filesystem_path(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+
+def _portable_sidecar_path(value: object) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if _is_absolute_filesystem_path(value):
+        return None
+    if "/" in value or "\\" in value:
+        return None
+    if value != PurePosixPath(value).name:
+        return None
+    if value != PureWindowsPath(value).name:
+        return None
+    return value
+
+
+def input_sidecar_failures(expected_sidecars: dict[str, dict[str, object]], actual_sidecars: object) -> list[str]:
+    if not isinstance(actual_sidecars, dict):
+        return ["INPUT_SIDECAR_METADATA_MISSING"]
+    failures: list[str] = []
+    expected_keys = set(expected_sidecars)
+    actual_keys = set(actual_sidecars)
+    if expected_keys != actual_keys:
+        failures.append("INPUT_SIDECAR_KEY_SET_MISMATCH")
+    for key in sorted(expected_keys & actual_keys):
+        expected = expected_sidecars[key]
+        actual = actual_sidecars[key]
+        if not isinstance(actual, dict):
+            failures.append(f"INPUT_SIDECAR_METADATA_MISSING:{key}")
+            continue
+        expected_path = _portable_sidecar_path(expected.get("path"))
+        actual_path = _portable_sidecar_path(actual.get("path"))
+        if actual_path is None:
+            failures.append(f"INPUT_SIDECAR_PATH_NOT_PORTABLE:{key}")
+        elif expected_path != actual_path:
+            failures.append(f"INPUT_SIDECAR_PATH_MISMATCH:{key}")
+        if actual.get("artifact_sha256") != expected.get("artifact_sha256"):
+            failures.append(f"INPUT_SIDECAR_ARTIFACT_HASH_MISMATCH:{key}")
+        if actual.get("sidecar_sha256") != expected.get("sidecar_sha256"):
+            failures.append(f"INPUT_SIDECAR_DECLARED_HASH_MISMATCH:{key}")
+        if actual.get("sidecar_match") != expected.get("sidecar_match"):
+            failures.append(f"INPUT_SIDECAR_MATCH_FLAG_MISMATCH:{key}")
+    return failures
 
 
 def verify_input_bundle(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], list[str]]:
@@ -712,7 +761,10 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
 def audit_artifacts(*, artifact_dir: Path, source_root: Path, contract: dict[str, Any], ledger: dict[str, Any], summary: dict[str, Any], overlap: dict[str, Any], controls: dict[str, Any] | None, paths: dict[str, Path]) -> dict[str, Any]:
     failures = []
     failures.extend(verify_contract_and_lineage(contract, Path.cwd()))
+    _source_manifest, _candidate_ledger, _phase1_summary, expected_input_sidecars, bundle_failures = verify_input_bundle(artifact_dir)
+    failures.extend(input_sidecar_failures(expected_input_sidecars, ledger.get("input_sidecars")))
     records, joins, source_failures, input_failures = recompute_records(artifact_dir, source_root, contract)
+    input_failures = list(dict.fromkeys([*bundle_failures, *input_failures]))
     failures.extend(input_failures)
     if records != ledger.get("records"):
         failures.append("LEDGER_RECORD_FIELD_MISMATCH")

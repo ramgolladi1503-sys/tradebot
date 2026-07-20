@@ -6,7 +6,7 @@ import argparse
 import json
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -43,10 +43,45 @@ def implementation_tree_hash(rev: str = "HEAD") -> str:
 
 def _stable(payload: object) -> object:
     if isinstance(payload, dict):
-        return {k: _stable(v) for k, v in payload.items() if k not in {"generated_at", "diagnostic_source_authority_root"}}
+        return {
+            k: _stable(v)
+            for k, v in payload.items()
+            if k not in {"generated_at", "diagnostic_source_authority_root", "diagnostic_absolute_path"}
+        }
     if isinstance(payload, list):
         return [_stable(v) for v in payload]
     return payload
+
+
+def _is_absolute_filesystem_path(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+
+def _absolute_path_projection_leaks(payload: object, path: tuple[str, ...] = ()) -> list[str]:
+    leaks: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            leaks.extend(_absolute_path_projection_leaks(value, (*path, str(key))))
+        return leaks
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            leaks.extend(_absolute_path_projection_leaks(value, (*path, str(index))))
+        return leaks
+    if not isinstance(payload, str):
+        return leaks
+    if _is_absolute_filesystem_path(payload):
+        leaks.append(".".join(path))
+    return leaks
+
+
+def _projection_hash(payload: object) -> str:
+    stable = _stable(payload)
+    leaks = _absolute_path_projection_leaks(stable)
+    if leaks:
+        raise RuntimeError(f"SEMANTIC_PROJECTION_ABSOLUTE_PATH_LEAK:{','.join(leaks)}")
+    return sha256_bytes(canonical_json_bytes(stable))
 
 
 def _control_test_hashes() -> dict[str, str]:
@@ -211,7 +246,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
     digest = sha256_file(certification)
     certification.with_suffix(certification.suffix + ".sha256").write_text(f"{digest}  {certification.name}\n", encoding="utf-8")
     digests["certification"] = digest
-    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "controls": controls, "projection_hash": sha256_bytes(canonical_json_bytes(_stable({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "controls": controls, "audit": audit})))}
+    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "controls": controls, "projection_hash": _projection_hash({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "controls": controls, "audit": audit})}
 
 
 def main() -> int:
