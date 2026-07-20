@@ -1,5 +1,16 @@
 # Tradebot Agent Worktree Supervisor Review
 
+## Evidence Contract Record
+
+- mode: ENGINEERING_REVIEW
+- candidate_id: PR_679_AGENT_WORKTREE_SUPERVISOR
+- decision: DRAFT_APPROVED
+- reason: Local supervisor implementation has focused behavior proof and remains disconnected from trading runtime.
+- timestamp: 2026-07-20T09:12:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: PR_679_LOCAL_VALIDATION_AND_GITHUB_CI
+
 ## Agent Work Contract
 
 **Objective:** Extend the existing local agent work controls with deterministic worktree identity, exclusive file ownership, frozen-contract integrity, acceptance-command evidence, independent review, and release gates.
