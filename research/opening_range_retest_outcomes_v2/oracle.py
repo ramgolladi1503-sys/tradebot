@@ -305,7 +305,7 @@ def measure(candidate: dict[str, Any], source: dict[str, Any], frame: pd.DataFra
         return fail_record(candidate, source, contract, "CANDIDATE_TIMESTAMP_MALFORMED")
     if ready.date().isoformat() != source["session_date"]:
         return fail_record(candidate, source, contract, "CANDIDATE_TIMESTAMP_OUTSIDE_SESSION")
-    indexed = {row["timestamp"]: row for row in frame.to_dict("records")}
+    indexed = {row["timestamp"]: row for _, row in frame.iterrows()}
     if ready.second or ready.microsecond or ready.nanosecond:
         return fail_record(candidate, source, contract, "CANDIDATE_READY_OFF_GRID")
     if ready - pd.Timedelta(minutes=1) not in indexed:
