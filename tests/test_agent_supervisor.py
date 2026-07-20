@@ -33,6 +33,7 @@ def _repo(tmp_path: Path, name: str = "repo") -> Path:
     (repo / "core").mkdir()
     (repo / "tests").mkdir()
     (repo / "docs").mkdir()
+    (repo / ".gitignore").write_text(".env\n.runtime/\n", encoding="utf-8")
     (repo / "core" / "frozen.py").write_text("VALUE = 1\n", encoding="utf-8")
     (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
     _git(repo, "add", ".")
@@ -80,14 +81,26 @@ def _payload(repo: Path, **supervisor_overrides):
     }
 
 
-def _commit_test(repo: Path, *, passing: bool = True) -> str:
+def _commit_test(repo: Path, *, passing: bool = True, credentials_must_be_absent: bool = False) -> str:
     assertion = "assert 1 + 1 == 2" if passing else "assert 1 + 1 == 3"
-    (repo / "tests" / "test_feature.py").write_text(
-        f"def test_feature():\n    {assertion}\n", encoding="utf-8"
-    )
+    lines = ["from pathlib import Path", "", "def test_feature():", f"    {assertion}"]
+    if credentials_must_be_absent:
+        lines.append('    assert Path(".env").exists() is False')
+    (repo / "tests" / "test_feature.py").write_text("\n".join(lines) + "\n", encoding="utf-8")
     _git(repo, "add", "tests/test_feature.py")
     _git(repo, "commit", "-m", "test: add feature proof")
     return _git(repo, "rev-parse", "HEAD")
+
+
+def _reproduction_from_manifest(manifest: dict) -> list[dict]:
+    return [
+        {
+            "name": item["name"],
+            "argv": item["argv"],
+            "exit_code": 0,
+        }
+        for item in manifest["acceptance_commands"]
+    ]
 
 
 def test_shape_rejects_same_implementer_and_reviewer(tmp_path):
@@ -109,6 +122,32 @@ def test_shape_blocks_live_script_acceptance_command(tmp_path):
     )
     blockers, _ = validate_contract_shape(contract)
     assert "ACCEPTANCE_COMMAND_LIVE_SCRIPT_BLOCKED" in blockers
+    assert "ACCEPTANCE_COMMAND_DIRECT_PYTHON_BLOCKED" in blockers
+
+
+def test_shape_blocks_arbitrary_python_module_and_executable_path(tmp_path):
+    repo = _repo(tmp_path)
+    arbitrary = normalize_supervisor_contract(
+        _payload(
+            repo,
+            acceptance_commands=[
+                {"name": "bad", "argv": ["python", "-m", "unsafe_module"], "timeout_seconds": 10}
+            ],
+        )
+    )
+    arbitrary_blockers, _ = validate_contract_shape(arbitrary)
+    assert "ACCEPTANCE_COMMAND_PYTHON_MODULE_NOT_ALLOWED" in arbitrary_blockers
+
+    absolute = normalize_supervisor_contract(
+        _payload(
+            repo,
+            acceptance_commands=[
+                {"name": "bad", "argv": ["/tmp/python", "-m", "pytest"], "timeout_seconds": 10}
+            ],
+        )
+    )
+    absolute_blockers, _ = validate_contract_shape(absolute)
+    assert "ACCEPTANCE_COMMAND_EXECUTABLE_PATH_BLOCKED" in absolute_blockers
 
 
 def test_preflight_requires_clean_matching_isolated_branch(tmp_path):
@@ -165,8 +204,24 @@ def test_verify_records_hashes_and_passes_safe_commands(tmp_path):
     assert manifest["head_commit"] == head
     assert manifest["changed_paths"] == ["tests/test_feature.py"]
     assert manifest["acceptance_commands"][0]["exit_code"] == 0
+    assert manifest["acceptance_commands"][0]["execution_root"] == "credential_isolated_git_worktree"
+    assert manifest["acceptance_execution"]["network_sandboxed"] is False
     assert re.fullmatch(r"[0-9a-f]{64}", manifest["manifest_sha256"])
     assert Path(result.details["manifest_path"]).exists()
+
+
+def test_verify_does_not_copy_ignored_env_into_acceptance_checkout(tmp_path):
+    repo = _repo(tmp_path)
+    contract = normalize_supervisor_contract(_payload(repo))
+    assert claim_contract(contract, enforce_tradebot_guard=False).accepted is True
+    (repo / ".env").write_text("KITE_ACCESS_TOKEN=secret\n", encoding="utf-8")
+    _commit_test(repo, credentials_must_be_absent=True)
+
+    result = verify_contract(contract)
+
+    assert result.accepted is True
+    command = result.details["manifest"]["acceptance_commands"][0]
+    assert command["ignored_source_credentials_copied"] is False
 
 
 def test_verify_fails_when_acceptance_command_fails(tmp_path):
@@ -237,12 +292,41 @@ def test_review_requires_matching_manifest_and_reproduction_evidence(tmp_path):
             "base_commit": manifest["base_commit"],
             "head_commit": head,
             "implementation_manifest_sha256": manifest["manifest_sha256"],
-            "reproduction_results": [{"name": "focused-tests", "exit_code": 0}],
+            "reproduction_results": _reproduction_from_manifest(manifest),
             "findings": [],
         },
     )
     assert approved.state == SupervisorState.REVIEW_APPROVED.value
     assert approved.accepted is True
+
+
+def test_review_rejects_mismatched_reproduction_command(tmp_path):
+    repo = _repo(tmp_path)
+    contract = normalize_supervisor_contract(_payload(repo))
+    assert claim_contract(contract, enforce_tradebot_guard=False).accepted is True
+    head = _commit_test(repo)
+    verified = verify_contract(contract)
+    manifest = verified.details["manifest"]
+    reproduction = _reproduction_from_manifest(manifest)
+    reproduction[0]["argv"] = ["python", "-m", "pytest", "tests/other.py"]
+
+    reviewed = record_independent_review(
+        contract,
+        {
+            "schema_version": 1,
+            "task_id": "test-task",
+            "reviewer": "antigravity",
+            "decision": "APPROVE",
+            "summary": "Wrong command was reproduced.",
+            "base_commit": manifest["base_commit"],
+            "head_commit": head,
+            "implementation_manifest_sha256": manifest["manifest_sha256"],
+            "reproduction_results": reproduction,
+        },
+    )
+
+    assert reviewed.accepted is False
+    assert "REVIEW_REPRODUCTION_COMMAND_MISMATCH" in reviewed.blockers
 
 
 def test_release_requires_approved_independent_review(tmp_path):
@@ -290,7 +374,7 @@ def test_review_rejects_tampered_implementation_manifest(tmp_path):
             "base_commit": manifest["base_commit"],
             "head_commit": head,
             "implementation_manifest_sha256": manifest["manifest_sha256"],
-            "reproduction_results": [{"name": "focused-tests", "exit_code": 0}],
+            "reproduction_results": _reproduction_from_manifest(manifest),
         },
     )
     assert reviewed.accepted is False
