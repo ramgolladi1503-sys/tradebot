@@ -2,7 +2,7 @@
 
 Audited baseline: `a48176fc245375f15e316493364915ec37439e29`
 
-Integration source commit before bundle/evidence maintenance: `02ed107c9f6253736ea8ac564961e5121d77be42`
+Integration source commit before bundle/evidence maintenance: `02ed107c14617f6f31c39e832553895ce07dce24`
 
 ## Audit Artifact Hashes
 
@@ -88,11 +88,16 @@ V1 bundle byte-preservation hash:
 V2 bundle hash:
 
 ```text
-3e6d2e653b606138688937197c9a9b682ec7d7611907a5be03c17e75e4d31844  docs/agent_reviews/four_strategy_contract_bundle_v2.json
-bed09d869eb3d319c232efe4d3605de0c0314b0ee2ac1e689878be0b5439fc35  docs/agent_reviews/four_strategy_contract_bundle_v2.json.sha256
+14f80680534e4216255569eadb8fb55b86be2c04298eb22810820498efd182e0  docs/agent_reviews/four_strategy_contract_bundle_v2.json
+3fdd138de5c4dfc0e7cfafa2503e68002525b7a8534b30d59e7b678fe17c5c8d  docs/agent_reviews/four_strategy_contract_bundle_v2.json.sha256
 ```
 
-V2 bundle source commit uses the pre-bundle integration content identity `02ed107c9f6253736ea8ac564961e5121d77be42`, because the final integration commit includes evidence and contract files rather than additional production source edits.
+V2 bundle source commit uses the pre-bundle integration content identity `02ed107c14617f6f31c39e832553895ce07dce24`, because the final integration commit includes evidence and contract files rather than additional production source edits. The earlier invalid full SHA `02ed107c9f6253736ea8ac564961e5121d77be42` was rejected because it was not a Git commit object; Git-blob provenance was independently verified against the corrected commit.
+
+
+## Historical Freeze Policy
+
+The v1 bundle remained byte-identical. The v1 freeze test validates historical bundle bytes, source commit, stored hashes, strategy records, and fingerprints, but no longer compares historical v1 hashes to current repaired source files. Historical v1 source hashes were independently verified against Git blobs from the recorded v1 source commit `94b48666d166c45e4b65679b4811aa1ddc237b46`. Current ORB/VWAP source identity is verified by the corrected v2 bundle at source commit `02ed107c14617f6f31c39e832553895ce07dce24`.
 
 ## Validation
 
@@ -119,9 +124,9 @@ Result: PASS, 11 passed
 Integration:
 
 ```text
-pytest -q tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/test_four_strategy_contract_freeze.py tests/test_four_strategy_contract_freeze_v2.py tests/test_strategy_parameter_profiles.py tests/test_movement_regime.py
-python3 -m py_compile strategies/movement/opening_range_breakout.py strategies/movement/vwap_reclaim.py tests/test_four_strategy_contract_freeze_v2.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/vwap_reclaim_test_support.py
-ruff check strategies/movement/opening_range_breakout.py strategies/movement/vwap_reclaim.py tests/test_four_strategy_contract_freeze_v2.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/vwap_reclaim_test_support.py
+pytest -q tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/test_four_strategy_contract_freeze.py tests/test_four_strategy_contract_v2.py tests/test_strategy_parameter_profiles.py tests/test_movement_regime.py
+python3 -m py_compile strategies/movement/opening_range_breakout.py strategies/movement/vwap_reclaim.py tests/test_four_strategy_contract_v2.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/vwap_reclaim_test_support.py
+ruff check strategies/movement/opening_range_breakout.py strategies/movement/vwap_reclaim.py tests/test_four_strategy_contract_v2.py tests/test_opening_range_retest_temporal_fixture_contract.py tests/test_vwap_trap_movement_strategies.py tests/vwap_reclaim_test_support.py
 git diff --check
 Result: PASS, 86 passed
 ```

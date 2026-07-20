@@ -223,11 +223,15 @@ def test_bundle_bytes_are_canonical_and_sidecar_matches() -> None:
     assert digest == _hash_file(BUNDLE_PATH)
 
 
-def test_bundle_source_hashes_match_current_repo_truth() -> None:
+def test_bundle_source_hashes_match_historical_contract_truth() -> None:
     bundle = _load_bundle()
     source_files = {item["path"]: item["sha256"] for item in bundle["source_files"]}
 
     assert source_files == EXPECTED_SOURCE_HASHES
+    # v1 is a historical snapshot. Current implementation identity is verified
+    # by the versioned v2 contract. Historical v1 source identity is
+    # independently checked against its recorded Git source commit in the
+    # publication gate.
 
 
 def test_bundle_owner_files_match_current_repo_truth() -> None:

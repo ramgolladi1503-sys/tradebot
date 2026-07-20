@@ -9,6 +9,9 @@ import pytest
 
 BUNDLE_PATH = Path(__file__).resolve().parents[1] / "docs" / "agent_reviews" / "four_strategy_contract_bundle_v2.json"
 SIDECAR_PATH = Path(__file__).resolve().parents[1] / "docs" / "agent_reviews" / "four_strategy_contract_bundle_v2.json.sha256"
+V1_BUNDLE_PATH = Path(__file__).resolve().parents[1] / "docs" / "agent_reviews" / "four_strategy_contract_bundle_v1.json"
+EXPECTED_BUNDLE_SHA256 = "14f80680534e4216255569eadb8fb55b86be2c04298eb22810820498efd182e0"
+EXPECTED_SOURCE_COMMIT = "02ed107c14617f6f31c39e832553895ce07dce24"
 
 EXPECTED_SOURCE_HASHES = {
     "config/strategy_inventory.yml": "d14d28fea0950fe1a13eb2d975c12f9a1b0c789f21ae239fc7edea824b81c717",
@@ -38,15 +41,15 @@ def test_v2_bundle_is_canonical_and_supersedes_v1_without_overwriting_it() -> No
     raw = BUNDLE_PATH.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
 
+    assert digest == EXPECTED_BUNDLE_SHA256
     assert bundle["bundle_version"] == 2
     assert bundle["bundle_id"] == "four_strategy_contract_bundle_v2"
+    assert bundle["source_commit"] == EXPECTED_SOURCE_COMMIT
     assert bundle["supersedes"] == "four_strategy_contract_bundle_v1"
     assert bundle["bundle_sha256_sidecar"] == "docs/agent_reviews/four_strategy_contract_bundle_v2.json.sha256"
     assert raw == _canonical_bytes(bundle)
-    assert SIDECAR_PATH.read_text(encoding="utf-8").strip() == f"{digest}  {BUNDLE_PATH.name}"
-    assert _hash_file(Path("docs/agent_reviews/four_strategy_contract_bundle_v1.json")) == (
-        "8b7df7e030306b9699347f9b3ed1c421fd8dfc302c7902a178e8111cb177d8c2"
-    )
+    assert SIDECAR_PATH.read_text(encoding="utf-8").strip() == f"{EXPECTED_BUNDLE_SHA256}  docs/agent_reviews/{BUNDLE_PATH.name}"
+    assert _hash_file(V1_BUNDLE_PATH) == "8b7df7e030306b9699347f9b3ed1c421fd8dfc302c7902a178e8111cb177d8c2"
 
 
 def test_v2_bundle_source_hashes_match_current_repaired_repo_truth() -> None:
@@ -60,7 +63,9 @@ def test_v2_bundle_source_hashes_match_current_repaired_repo_truth() -> None:
 
 def test_v2_bundle_records_only_approved_orb_and_vwap_fingerprint_changes() -> None:
     bundle = _load_bundle()
+    v1_bundle = json.loads(V1_BUNDLE_PATH.read_text(encoding="utf-8"))
     strategies = {item["runtime_strategy_id"]: item for item in bundle["strategies"]}
+    v1_strategies = {item["runtime_strategy_id"]: item for item in v1_bundle["strategies"]}
 
     opening = strategies["opening_range_retest_v1"]
     assert opening["frozen_output_vector"] == {
@@ -81,6 +86,9 @@ def test_v2_bundle_records_only_approved_orb_and_vwap_fingerprint_changes() -> N
     }
 
     vwap = strategies["vwap_reclaim_rejection_v1"]
+    assert vwap["runtime_strategy_id"] == "vwap_reclaim_rejection_v1"
+    assert vwap["movement_type"] == "VWAP_RECLAIM_REJECTION"
+    assert vwap["contract_version"] == "vwap_reclaim_causal_v1"
     assert vwap["frozen_output_vector"] == {
         "strategy_id": "vwap_reclaim_rejection_v1",
         "direction": "BUY_CALL",
@@ -100,5 +108,5 @@ def test_v2_bundle_records_only_approved_orb_and_vwap_fingerprint_changes() -> N
         "thresholds_changed": False,
     }
 
-    assert strategies["trend_pullback_v1"]["frozen_output_vector"]["raw_score"] == pytest.approx(0.648584)
-    assert strategies["compression_breakout_v1"]["frozen_output_vector"]["raw_score"] == pytest.approx(0.470676)
+    assert strategies["trend_pullback_v1"] == v1_strategies["trend_pullback_v1"]
+    assert strategies["compression_breakout_v1"] == v1_strategies["compression_breakout_v1"]
