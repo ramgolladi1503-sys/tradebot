@@ -43,7 +43,11 @@ def implementation_tree_hash(rev: str = "HEAD") -> str:
 
 def _stable(payload: object) -> object:
     if isinstance(payload, dict):
-        return {k: _stable(v) for k, v in payload.items() if k not in {"generated_at", "diagnostic_source_authority_root"}}
+        return {
+            k: _stable(v)
+            for k, v in payload.items()
+            if k not in {"generated_at", "diagnostic_source_authority_root", "diagnostic_absolute_path"}
+        }
     if isinstance(payload, list):
         return [_stable(v) for v in payload]
     return payload
