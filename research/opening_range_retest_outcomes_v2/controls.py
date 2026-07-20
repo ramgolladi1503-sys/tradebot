@@ -144,7 +144,7 @@ class ControlResult:
             "mutation_fingerprint": self.control_fingerprint,
             "status": self.status,
             "error": self.error,
-            "duration_seconds": round(self.duration_seconds, 6),
+            "duration_seconds": 0.0,
         }
 
 
