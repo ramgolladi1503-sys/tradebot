@@ -49,6 +49,36 @@ def _stable(payload: object) -> object:
     return payload
 
 
+def _absolute_path_projection_leaks(payload: object, path: tuple[str, ...] = ()) -> list[str]:
+    leaks: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            leaks.extend(_absolute_path_projection_leaks(value, (*path, str(key))))
+        return leaks
+    if isinstance(payload, list):
+        for index, value in enumerate(payload):
+            leaks.extend(_absolute_path_projection_leaks(value, (*path, str(index))))
+        return leaks
+    if not isinstance(payload, str):
+        return leaks
+    lowered = payload.lower()
+    if (
+        payload.startswith(("/Users/", "/tmp/", "/private/tmp/", "\\\\"))
+        or lowered.startswith(("/users/", "/tmp/", "/private/tmp/"))
+        or (len(payload) >= 3 and payload[1:3] in {":\\", ":/"} and payload[0].isalpha())
+    ):
+        leaks.append(".".join(path))
+    return leaks
+
+
+def _projection_hash(payload: object) -> str:
+    stable = _stable(payload)
+    leaks = _absolute_path_projection_leaks(stable)
+    if leaks:
+        raise RuntimeError(f"SEMANTIC_PROJECTION_ABSOLUTE_PATH_LEAK:{','.join(leaks)}")
+    return sha256_bytes(canonical_json_bytes(stable))
+
+
 def _control_test_hashes() -> dict[str, str]:
     paths = [PROJECT_ROOT / "tests" / "test_opening_range_retest_outcome_controls_v2.py"]
     control_dir = PROJECT_ROOT / "tests" / "orb_outcome_controls"
@@ -211,7 +241,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
     digest = sha256_file(certification)
     certification.with_suffix(certification.suffix + ".sha256").write_text(f"{digest}  {certification.name}\n", encoding="utf-8")
     digests["certification"] = digest
-    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "controls": controls, "projection_hash": sha256_bytes(canonical_json_bytes(_stable({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "controls": controls, "audit": audit})))}
+    return {"paths": {k: str(v) for k, v in paths.items()} | {"certification": str(certification)}, "digests": digests, "summary": summary, "ledger": ledger, "audit": audit, "controls": controls, "projection_hash": _projection_hash({"contract": contract, "ledger": ledger, "summary": summary, "overlap": overlap, "controls": controls, "audit": audit})}
 
 
 def main() -> int:

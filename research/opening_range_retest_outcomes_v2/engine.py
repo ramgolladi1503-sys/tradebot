@@ -75,7 +75,7 @@ def verify_sidecar_file(path: Path) -> dict[str, Any]:
     expected = sidecar.read_text(encoding="utf-8").split()[0] if sidecar.exists() else None
     if actual != expected:
         raise ValueError(f"INPUT_SIDECAR_MISMATCH:{path.name}")
-    return {"path": str(path), "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": True}
+    return {"path": path.name, "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": True}
 
 
 def verify_inputs(artifact_dir: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
