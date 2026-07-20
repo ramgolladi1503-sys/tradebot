@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import shutil
 import statistics
 import subprocess
 from collections import Counter, defaultdict
@@ -21,6 +22,21 @@ OUTCOME_LEDGER = PROJECT_ROOT / "docs" / "agent_reviews" / "opening_range_retest
 OUTCOME_SUMMARY = PROJECT_ROOT / "docs" / "agent_reviews" / "opening_range_retest_outcome_summary_v2.json"
 OUTCOME_CONTRACT = PROJECT_ROOT / "docs" / "agent_reviews" / "opening_range_retest_outcome_contract_v2.json"
 TIMESTAMP = "2026-07-21T00:00:00Z"
+AUTHORIZED_RESEARCH_PATH_PREFIXES = (
+    "research/opening_range_retest_corrected_score_edge/",
+    "scripts/run_opening_range_retest_corrected_score_edge.py",
+    "scripts/audit_opening_range_retest_corrected_score_edge.py",
+    "tests/test_opening_range_retest_corrected_score_edge.py",
+)
+PRODUCTION_PATH_PREFIXES = (
+    "strategies/",
+    "core/",
+    "config/",
+    "execution/",
+    "risk/",
+    "feeds/",
+)
+VOLATILE_DETERMINISM_KEYS = {"absolute_output_dir", "execution_timestamp", "physical_temporary_path"}
 
 
 def canonical_json_bytes(payload: Any) -> bytes:
@@ -64,6 +80,10 @@ def git_output(args: list[str]) -> str:
     return subprocess.run(args, cwd=PROJECT_ROOT, check=True, capture_output=True, text=True).stdout.strip()
 
 
+def git_success(args: list[str]) -> bool:
+    return subprocess.run(args, cwd=PROJECT_ROOT, capture_output=True, text=True).returncode == 0
+
+
 def safety_fields() -> dict[str, bool]:
     return {
         "read_only": True,
@@ -72,6 +92,48 @@ def safety_fields() -> dict[str, bool]:
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
+
+
+def is_authorized_research_path(path: str) -> bool:
+    return any(path == prefix or path.startswith(prefix) for prefix in AUTHORIZED_RESEARCH_PATH_PREFIXES)
+
+
+def is_production_path(path: str) -> bool:
+    return any(path == prefix or path.startswith(prefix) for prefix in PRODUCTION_PATH_PREFIXES)
+
+
+def verify_source_identity() -> dict[str, Any]:
+    research_head = git_output(["git", "rev-parse", "HEAD"])
+    branch = git_output(["git", "branch", "--show-current"])
+    ancestor_ok = git_success(["git", "merge-base", "--is-ancestor", CORRECTED_SHA, research_head])
+    changed_paths = [
+        line.strip()
+        for line in git_output(["git", "diff", "--name-only", f"{CORRECTED_SHA}..HEAD"]).splitlines()
+        if line.strip()
+    ]
+    unauthorized_paths = [path for path in changed_paths if not is_authorized_research_path(path)]
+    production_changed_paths = [path for path in changed_paths if is_production_path(path)]
+    working_production_diffs = [
+        line.strip()
+        for line in git_output(["git", "diff", "--name-only", CORRECTED_SHA, "--", *PRODUCTION_PATH_PREFIXES]).splitlines()
+        if line.strip()
+    ]
+    status = {
+        "schema_version": 1,
+        "validated_production_source_sha": CORRECTED_SHA,
+        "research_execution_head": research_head,
+        "research_branch": branch,
+        "source_ancestor_check": "PASS" if ancestor_ok else "FAIL",
+        "changed_paths_since_validated_source": changed_paths,
+        "unauthorized_changed_paths_since_validated_source": unauthorized_paths,
+        "production_changed_paths_since_validated_source": production_changed_paths,
+        "working_tree_production_diffs_vs_validated_source": working_production_diffs,
+        **safety_fields(),
+    }
+    status["decision"] = "PASS" if ancestor_ok and not unauthorized_paths and not production_changed_paths and not working_production_diffs else "FAIL"
+    if status["decision"] != "PASS":
+        raise RuntimeError(f"SOURCE_IDENTITY_GATE_FAILED {json.dumps(status, sort_keys=True)}")
+    return status
 
 
 def stable_hash(records: list[dict[str, Any]], fields: list[str]) -> str:
@@ -143,11 +205,7 @@ def build_contract() -> dict[str, Any]:
         "source": "corrected PR 682 head",
         "historical_implementation": BASELINE_SHA,
         "corrected_implementation": CORRECTED_SHA,
-        "primary_hypotheses": [
-            "H1_CANDIDATE_EDGE",
-            "H2_SCORE_DISCRIMINATION",
-            "H3_TOP_BUCKET_EDGE",
-        ],
+        "primary_hypotheses": ["H1_CANDIDATE_EDGE", "H2_SCORE_DISCRIMINATION", "H3_TOP_BUCKET_EDGE"],
         "primary_metrics": [
             "all-candidate net expectancy",
             "top-20%-score net expectancy",
@@ -216,23 +274,26 @@ def build_dataset_manifest(contract_hash: str) -> dict[str, Any]:
         "option_data_search_result": "No artifact tied to the 2215-candidate ORB Phase 1 universe contains trusted executable entry ask and exit bid with costs.",
         **safety_fields(),
     }
-    manifest["dataset_manifest_hash"] = sha256_bytes(
-        canonical_json_bytes({k: v for k, v in manifest.items() if k != "dataset_manifest_hash"})
-    )
+    manifest["dataset_manifest_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in manifest.items() if k != "dataset_manifest_hash"}))
     return manifest
 
 
 def build_candidate_conservation() -> dict[str, Any]:
     records = candidate_records()
     fields = [
+        "candidate_id",
+        "setup_id",
         "strategy_id",
         "symbol",
         "session_date",
         "direction",
+        "boundary_type",
+        "normalized_boundary",
+        "breakout_timestamp",
+        "retest_timestamp",
+        "continuation_timestamp",
         "proposal_ready_at_iso",
         "history_hash",
-        "setup_id",
-        "candidate_id",
         "entry_trigger",
         "invalid_if",
         "status",
@@ -240,13 +301,21 @@ def build_candidate_conservation() -> dict[str, Any]:
     return {
         "schema_version": 1,
         "mode": "CANDIDATE_CONSERVATION_ORACLE",
-        "decision": "PASS_BY_EXISTING_REPAIR_SCOPE_AND_CURRENT_LEDGER_IDENTITY",
-        "reason": "PR 682 repair is score/evidence ownership only; current candidate ledger identity is frozen for downstream analysis.",
-        "base_candidate_count": len(records),
+        "decision": "NOT_EVALUATED_DUAL_REPLAY_UNAVAILABLE",
+        "reason": "No authoritative dual-version replay entry point was available in this compact repair; the baseline ledger was not regenerated from a48176f and must not be inferred from the corrected ledger.",
+        "baseline_implementation": BASELINE_SHA,
+        "corrected_implementation": CORRECTED_SHA,
+        "base_candidate_count": None,
         "corrected_candidate_count": len(records),
+        "current_certified_candidate_count": len(records),
         "candidate_id_count": len({record["candidate_id"] for record in records}),
-        "non_score_candidate_differences": 0,
+        "non_score_candidate_differences": None,
         "candidate_semantic_hash": stable_hash(records, fields),
+        "exact_comparison_count": None,
+        "field_level_diff_report": None,
+        "distinct_generated_ledger_paths": [],
+        "source_shas_compared": [],
+        "ledger_sha256_values": [],
         "exact_conservation_fields": fields,
         "permitted_differences": [
             "raw_score",
@@ -346,75 +415,104 @@ def build_empty_gate_artifact(mode: str, decision: str, reason: str) -> dict[str
     }
 
 
-def build_external_artifact_manifest(output_dir: Path = OUTPUT_DIR) -> dict[str, Any]:
-    artifacts = []
-    for logical_name, relative in (
-        ("old_vs_corrected_score_ledger", "old_vs_corrected_score_ledger.parquet"),
-        ("option_trade_ledger", "option_trade_ledger.parquet"),
-    ):
-        path = output_dir / relative
-        try:
-            repository_relative_path = str(path.relative_to(PROJECT_ROOT))
-        except ValueError:
-            repository_relative_path = None
-        artifacts.append(
-            {
-                "logical_artifact_name": logical_name,
-                "absolute_current_path": str(path),
-                "repository_relative_path": repository_relative_path,
-                "ignored_status": "IGNORED_BY_GITIGNORE_PARQUET_RULE",
-                "size_bytes": path.stat().st_size if path.exists() else None,
-                "sha256": sha256_file(path) if path.exists() else None,
-                "format": "parquet",
-                "schema": "EMPTY_PLACEHOLDER_NO_ROWS",
-                "row_count": 0,
-                "candidate_count": 0,
-                "session_count": 0,
-                "date_range": None,
-                "source_input_hashes": {
-                    "contract_hash": sha256_file(output_dir / "edge_validation_contract.json")
-                    if (output_dir / "edge_validation_contract.json").exists()
-                    else None,
-                    "dataset_manifest_hash": sha256_file(output_dir / "dataset_manifest.json")
-                    if (output_dir / "dataset_manifest.json").exists()
-                    else None,
-                    "candidate_ledger_hash": sha256_file(CANDIDATE_LEDGER),
-                    "outcome_ledger_hash": sha256_file(OUTCOME_LEDGER),
-                },
-                "generation_command": "python3 scripts/run_opening_range_retest_corrected_score_edge.py",
-                "reproducible": True,
-                "required_for_audit": True,
-                "git_storage_decision": "EXTERNAL_HASH_PINNED_REPO_POLICY_IGNORED",
-            }
-        )
+def build_external_artifact_manifest() -> dict[str, Any]:
     return {
         "schema_version": 1,
         "mode": "ORB_CORRECTED_SCORE_EXTERNAL_ARTIFACT_MANIFEST",
-        "decision": "EXTERNAL_HASH_PINNED_REPO_POLICY_IGNORED",
-        "reason": "Repository policy ignores Parquet files; identities are preserved by path, size, schema, row count, and SHA-256.",
-        "artifact_count": len(artifacts),
-        "artifacts": artifacts,
+        "decision": "ARTIFACT_AVAILABILITY_RECORDED",
+        "reason": "No Parquet ledger is generated unless authoritative inputs exist. Missing ledgers are represented as unavailable metadata, not empty placeholder files.",
+        "artifact_count": 0,
+        "available_artifacts": [],
+        "unavailable_artifacts": [
+            {
+                "logical_artifact_name": "old_vs_corrected_score_ledger",
+                "expected_format": "parquet",
+                "status": "NOT_GENERATED_DUAL_REPLAY_MISSING",
+                "path": None,
+                "size_bytes": None,
+                "sha256": None,
+                "row_count": None,
+                "reason": "A genuine baseline-versus-corrected dual replay was not executed; no baseline ledger is inferred from the corrected ledger.",
+            },
+            {
+                "logical_artifact_name": "option_trade_ledger",
+                "expected_format": "parquet",
+                "status": "NOT_GENERATED_NO_TRUSTED_OPTION_BID_ASK",
+                "path": None,
+                "size_bytes": None,
+                "sha256": None,
+                "row_count": None,
+                "reason": "No trusted executable option bid/ask ledger exists for entry ask, exit bid, and cost economics on the frozen ORB candidate universe.",
+            },
+        ],
         **safety_fields(),
     }
 
 
-def stable_external_artifact_manifest(payload: dict[str, Any]) -> dict[str, Any]:
-    stable = dict(payload)
-    stable["artifacts"] = [
-        {
-            key: value
-            for key, value in artifact.items()
-            if key not in {"absolute_current_path", "repository_relative_path"}
-        }
-        for artifact in payload.get("artifacts", [])
-    ]
-    return stable
+def stable_projection(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        return {key: stable_projection(value) for key, value in sorted(payload.items()) if key not in VOLATILE_DETERMINISM_KEYS}
+    if isinstance(payload, list):
+        return [stable_projection(item) for item in payload]
+    return payload
 
 
-def build_final_verdict(contract_hash: str, manifest_hash: str, determinism_hash: str) -> dict[str, Any]:
+def compact_artifact_hashes(output_dir: Path) -> dict[str, str]:
+    hashes = {}
+    for path in sorted(output_dir.glob("*.json")):
+        if path.name in {"determinism_report.json", "artifact_audit.json"}:
+            continue
+        hashes[path.name] = sha256_bytes(canonical_json_bytes(stable_projection(read_json(path))))
+    return hashes
+
+
+def compare_outputs(run_a: Path, run_b: Path) -> dict[str, Any]:
+    hash_a = compact_artifact_hashes(run_a)
+    hash_b = compact_artifact_hashes(run_b)
+    differing = sorted(set(hash_a) ^ set(hash_b))
+    differing.extend(name for name in sorted(set(hash_a) & set(hash_b)) if hash_a[name] != hash_b[name])
+    external_a = read_json(run_a / "external_artifact_manifest.json")
+    external_b = read_json(run_b / "external_artifact_manifest.json")
+    final_a = read_json(run_a / "final_verdict.json")
+    final_b = read_json(run_b / "final_verdict.json")
+    result = {
+        "schema_version": 1,
+        "mode": "DETERMINISM_REPORT",
+        "decision": "PASS" if not differing else "FAIL",
+        "run_a": str(run_a),
+        "run_b": str(run_b),
+        "run_a_hash": sha256_bytes(canonical_json_bytes(hash_a)),
+        "run_b_hash": sha256_bytes(canonical_json_bytes(hash_b)),
+        "comparison_result": "PASS" if not differing else "FAIL",
+        "differing_artifacts": differing,
+        "differing_json_paths": [],
+        "contract_semantic_hash_run_a": hash_a.get("edge_validation_contract.json"),
+        "contract_semantic_hash_run_b": hash_b.get("edge_validation_contract.json"),
+        "dataset_manifest_semantic_hash_run_a": hash_a.get("dataset_manifest.json"),
+        "dataset_manifest_semantic_hash_run_b": hash_b.get("dataset_manifest.json"),
+        "candidate_artifact_semantic_hash_run_a": hash_a.get("candidate_conservation.json"),
+        "candidate_artifact_semantic_hash_run_b": hash_b.get("candidate_conservation.json"),
+        "unavailable_artifact_classifications_run_a": [item["status"] for item in external_a.get("unavailable_artifacts", [])],
+        "unavailable_artifact_classifications_run_b": [item["status"] for item in external_b.get("unavailable_artifacts", [])],
+        "final_verdict_semantic_hash_run_a": hash_a.get("final_verdict.json"),
+        "final_verdict_semantic_hash_run_b": hash_b.get("final_verdict.json"),
+        "compact_artifact_hashes_run_a": hash_a,
+        "compact_artifact_hashes_run_b": hash_b,
+        "old_vs_corrected_score_ledger": "NOT_APPLICABLE_ARTIFACT_UNAVAILABLE",
+        "option_trade_ledger": "NOT_APPLICABLE_ARTIFACT_UNAVAILABLE",
+        "final_verdict_run_a": final_a.get("final_verdict"),
+        "final_verdict_run_b": final_b.get("final_verdict"),
+        **safety_fields(),
+    }
+    result["determinism_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in result.items() if k != "determinism_hash"}))
+    return result
+
+
+def build_final_verdict(contract_hash: str, manifest_hash: str, determinism_hash: str, source_identity: dict[str, Any]) -> dict[str, Any]:
     candidates = candidate_records()
     sessions = sorted({record["session_date"] for record in candidates})
     directions = Counter(record["direction"] for record in candidates)
+    conservation = build_candidate_conservation()
     return {
         "schema_version": 1,
         "mode": "ORB_CORRECTED_SCORE_STRUCTURAL_EDGE_REVALIDATION_FINAL",
@@ -424,17 +522,17 @@ def build_final_verdict(contract_hash: str, manifest_hash: str, determinism_hash
         "pr_682_state": "OPEN",
         "pr_682_draft": "YES",
         "pr_682_merged": "NO",
-        "validated_source_sha": CORRECTED_SHA,
-        "research_worktree": str(PROJECT_ROOT),
-        "research_branch": git_output(["git", "branch", "--show-current"]),
-        "research_head": git_output(["git", "rev-parse", "HEAD"]),
+        "validated_production_source_sha": CORRECTED_SHA,
+        "research_execution_head": source_identity["research_execution_head"],
+        "research_branch": source_identity["research_branch"],
         "contract_hash": contract_hash,
         "dataset_manifest_hash": manifest_hash,
         "trusted_option_bid_ask_available": "NO",
-        "candidate_conservation": "PASS",
-        "base_candidate_count": len(candidates),
+        "candidate_conservation": conservation["decision"],
+        "base_candidate_count": None,
         "corrected_candidate_count": len(candidates),
-        "non_score_candidate_differences": 0,
+        "current_certified_candidate_count": len(candidates),
+        "non_score_candidate_differences": None,
         "underlying_outcome_invariance": "NOT_EVALUATED",
         "option_economic_outcome_invariance": "NOT_EVALUABLE_NO_TRUSTED_OPTION_DATA",
         "all_candidate_net_expectancy": None,
@@ -451,7 +549,7 @@ def build_final_verdict(contract_hash: str, manifest_hash: str, determinism_hash
         "put_results": {"candidate_count": directions.get("BUY_PUT", 0)},
         "session_concentration": {"session_count": len(sessions), "cannot_calculate_net_pnl_concentration": True},
         "negative_controls": "not run for option economics; missing executable option outcomes",
-        "determinism": "PASS",
+        "determinism": "PENDING_TWO_RUN_COMPARISON" if determinism_hash == "PENDING" else "PASS",
         "determinism_hash": determinism_hash,
         "underlying_signal": "UNDERLYING_SIGNAL_EVALUATION_INCOMPLETE",
         "option_economic_edge": "INSUFFICIENT_TRUSTED_OPTION_DATA",
@@ -471,13 +569,14 @@ def build_report(final_verdict: dict[str, Any], contract_hash: str, manifest_has
 
 FINAL VERDICT: {final_verdict["final_verdict"]}
 
-The corrected PR #682 ORB score repair was evaluated as an offline research question against frozen head `{CORRECTED_SHA}`. The existing ORB candidate and outcome artifacts are sufficient for candidate identity inventory and underlying descriptive outcomes, but not for executable option economics.
+The corrected PR #682 ORB score repair was evaluated as an offline research question against validated production source `{CORRECTED_SHA}` from research execution head `{final_verdict["research_execution_head"]}`. The existing ORB candidate and outcome artifacts are sufficient for candidate identity inventory and underlying descriptive outcomes, but not for executable option economics.
 
 ## Evidence Boundary
 
 - Contract hash: `{contract_hash}`
 - Dataset manifest hash: `{manifest_hash}`
-- Candidate count: {final_verdict["corrected_candidate_count"]}
+- Current certified candidate count: {final_verdict["current_certified_candidate_count"]}
+- Candidate conservation: {final_verdict["candidate_conservation"]}
 - Trusted option bid/ask available: NO
 - Production files changed: NO
 - Thresholds changed: NO
@@ -487,9 +586,9 @@ The corrected PR #682 ORB score repair was evaluated as an offline research ques
 
 ## Decision
 
-No structural option edge is claimed. Existing certified ORB outcome artifacts are explicitly descriptive, pre-cost, underlying-only evidence. The required entry ask, exit bid, cost, and option trade ledger authority is absent for the frozen candidate universe. Underlying signal evaluation is also incomplete because this task did not compute and audit chronological folds, holdout results, session-cluster uncertainty, negative controls, and concentration analysis.
+No structural option edge is claimed. Existing certified ORB outcome artifacts are explicitly descriptive, pre-cost, underlying-only evidence. Candidate conservation is not claimed because a genuine baseline-versus-corrected dual replay was not executed. The required entry ask, exit bid, cost, and option trade ledger authority is absent for the frozen candidate universe. Underlying signal evaluation is also incomplete because this task did not compute and audit chronological folds, holdout results, session-cluster uncertainty, negative controls, and concentration analysis.
 
-Large Parquet ledgers were not committed because repository policy ignores them. Their identities are preserved through the external artifact manifest, including exact path, size, schema, row count and SHA-256.
+Parquet ledgers are not generated when authoritative inputs are unavailable. Missing ledgers are recorded as unavailable metadata in `external_artifact_manifest.json`; zero-byte placeholder Parquet files are invalid evidence.
 
 ## Next Action
 
@@ -497,17 +596,14 @@ Large Parquet ledgers were not committed because repository policy ignores them.
 """
 
 
-def generate(output_dir: Path = OUTPUT_DIR) -> dict[str, Any]:
-    head = git_output(["git", "rev-parse", "HEAD"])
-    if head != CORRECTED_SHA:
-        raise RuntimeError(f"FROZEN_HEAD_MISMATCH head={head} expected={CORRECTED_SHA}")
-
+def generate_compact(output_dir: Path = OUTPUT_DIR, determinism_hash: str = "PENDING") -> dict[str, Any]:
+    source_identity = verify_source_identity()
     contract = build_contract()
     contract_hash = write_json(output_dir / "edge_validation_contract.json", contract)
     manifest = build_dataset_manifest(contract_hash)
     manifest_hash = write_json(output_dir / "dataset_manifest.json", manifest)
-
     artifacts: dict[str, dict[str, Any]] = {
+        "source_identity.json": source_identity,
         "candidate_conservation.json": build_candidate_conservation(),
         "candidate_semantic_hashes.json": {
             "schema_version": 1,
@@ -517,87 +613,53 @@ def generate(output_dir: Path = OUTPUT_DIR) -> dict[str, Any]:
         },
         "outcome_invariance.json": build_outcome_invariance(),
         "underlying_outcome_summary.json": build_underlying_summary(),
-        "option_economic_summary.json": build_empty_gate_artifact(
-            "OPTION_ECONOMIC_SUMMARY",
-            "INSUFFICIENT_TRUSTED_OPTION_DATA",
-            "No trusted option bid/ask ledger is available.",
-        ),
+        "option_economic_summary.json": build_empty_gate_artifact("OPTION_ECONOMIC_SUMMARY", "INSUFFICIENT_TRUSTED_OPTION_DATA", "No trusted option bid/ask ledger is available."),
         "score_discrimination_summary.json": build_score_summary(),
-        "wfa_fold_results.json": build_empty_gate_artifact(
-            "WFA_FOLD_RESULTS",
-            "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA",
-            "Walk-forward option economics require executable option outcomes.",
-        ),
-        "holdout_results.json": build_empty_gate_artifact(
-            "HOLDOUT_RESULTS",
-            "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA",
-            "Holdout option economics require executable option outcomes.",
-        ),
-        "statistical_uncertainty.json": build_empty_gate_artifact(
-            "STATISTICAL_UNCERTAINTY",
-            "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA",
-            "Session-clustered option PnL intervals require executable option outcomes.",
-        ),
-        "negative_controls.json": build_empty_gate_artifact(
-            "NEGATIVE_CONTROLS",
-            "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA",
-            "Economic score controls require executable option outcomes.",
-        ),
-        "concentration_analysis.json": build_empty_gate_artifact(
-            "CONCENTRATION_ANALYSIS",
-            "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA",
-            "Net PnL concentration requires executable option outcomes.",
-        ),
+        "wfa_fold_results.json": build_empty_gate_artifact("WFA_FOLD_RESULTS", "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA", "Walk-forward option economics require executable option outcomes."),
+        "holdout_results.json": build_empty_gate_artifact("HOLDOUT_RESULTS", "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA", "Holdout option economics require executable option outcomes."),
+        "statistical_uncertainty.json": build_empty_gate_artifact("STATISTICAL_UNCERTAINTY", "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA", "Session-clustered option PnL intervals require executable option outcomes."),
+        "negative_controls.json": build_empty_gate_artifact("NEGATIVE_CONTROLS", "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA", "Economic score controls require executable option outcomes."),
+        "concentration_analysis.json": build_empty_gate_artifact("CONCENTRATION_ANALYSIS", "BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA", "Net PnL concentration requires executable option outcomes."),
+        "external_artifact_manifest.json": build_external_artifact_manifest(),
     }
     for name, payload in artifacts.items():
         write_json(output_dir / name, payload)
-
-    write_text(
-        output_dir / "candidate_conservation.md",
-        "# Candidate Conservation\n\nPASS for frozen current-ledger identity. No option-edge claim is made because trusted option bid/ask data is unavailable.",
-    )
-    write_text(
-        output_dir / "outcome_invariance.md",
-        "# Outcome Invariance\n\nExecutable option outcome invariance is blocked: the available ORB v2 outcome ledger is underlying-only and pre-cost.",
-    )
-    (output_dir / "old_vs_corrected_score_ledger.parquet").write_bytes(b"")
-    (output_dir / "option_trade_ledger.parquet").write_bytes(b"")
-    external_manifest = build_external_artifact_manifest(output_dir)
-    write_json(output_dir / "external_artifact_manifest.json", external_manifest)
-
-    deterministic_payload = {
-        "contract": contract,
-        "manifest": manifest,
-        "external_manifest": stable_external_artifact_manifest(external_manifest),
-        "candidate_conservation": artifacts["candidate_conservation.json"],
-        "underlying_summary": artifacts["underlying_outcome_summary.json"],
-        "score_summary": artifacts["score_discrimination_summary.json"],
-    }
-    determinism_hash = sha256_bytes(canonical_json_bytes(deterministic_payload))
-    determinism = {
-        "schema_version": 1,
-        "mode": "DETERMINISM_REPORT",
-        "decision": "PASS",
-        "determinism_hash": determinism_hash,
-        "identical_candidate_semantic_hashes": True,
-        "identical_trade_ledger_semantic_hashes": "not_applicable_no_option_trade_ledger",
-        "identical_fold_results": True,
-        "identical_final_summary_hash": True,
-        **safety_fields(),
-    }
-    write_json(output_dir / "determinism_report.json", determinism)
-    final_verdict = build_final_verdict(contract_hash, manifest_hash, determinism_hash)
+    for stale in ("old_vs_corrected_score_ledger.parquet", "option_trade_ledger.parquet"):
+        stale_path = output_dir / stale
+        if stale_path.exists():
+            stale_path.unlink()
+    write_text(output_dir / "candidate_conservation.md", "# Candidate Conservation\n\nNOT_EVALUATED_DUAL_REPLAY_UNAVAILABLE. No baseline candidate count is inferred from the corrected ledger.")
+    write_text(output_dir / "outcome_invariance.md", "# Outcome Invariance\n\nExecutable option outcome invariance is blocked: the available ORB v2 outcome ledger is underlying-only and pre-cost.")
+    final_verdict = build_final_verdict(contract_hash, manifest_hash, determinism_hash, source_identity)
     write_json(output_dir / "final_verdict.json", final_verdict)
-    write_text(output_dir / "determinism_report.md", "# Determinism\n\nPASS for compact offline artifacts; option trade-ledger determinism is not applicable because trusted option data is unavailable.")
     write_text(output_dir / "final_report.md", build_report(final_verdict, contract_hash, manifest_hash))
     return {"contract_hash": contract_hash, "dataset_manifest_hash": manifest_hash, "final_verdict": final_verdict}
+
+
+def generate(output_dir: Path = OUTPUT_DIR, *, skip_determinism: bool = False) -> dict[str, Any]:
+    if skip_determinism:
+        return generate_compact(output_dir, determinism_hash="PENDING")
+    run_a = Path("/tmp/orb-corrected-score-run-a")
+    run_b = Path("/tmp/orb-corrected-score-run-b")
+    for path in (run_a, run_b):
+        if path.exists():
+            shutil.rmtree(path)
+        generate_compact(path, determinism_hash="PENDING")
+    determinism = compare_outputs(run_a, run_b)
+    if determinism["decision"] != "PASS":
+        raise RuntimeError(f"DETERMINISM_FAILED {json.dumps(determinism, sort_keys=True)}")
+    result = generate_compact(output_dir, determinism_hash=determinism["determinism_hash"])
+    write_json(output_dir / "determinism_report.json", determinism)
+    write_text(output_dir / "determinism_report.md", "# Determinism\n\nPASS after independent two-directory compact artifact comparison. Unavailable ledgers are recorded as NOT_APPLICABLE_ARTIFACT_UNAVAILABLE.")
+    return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
+    parser.add_argument("--skip-determinism", action="store_true")
     args = parser.parse_args()
-    result = generate(args.output_dir)
+    result = generate(args.output_dir, skip_determinism=args.skip_determinism)
     print(result["final_verdict"]["final_verdict"])
     print(f"contract_hash={result['contract_hash']}")
     print(f"dataset_manifest_hash={result['dataset_manifest_hash']}")

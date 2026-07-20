@@ -1,3 +1,3 @@
 # Determinism
 
-PASS for compact offline artifacts; option trade-ledger determinism is not applicable because trusted option data is unavailable.
+PASS after independent two-directory compact artifact comparison. Unavailable ledgers are recorded as NOT_APPLICABLE_ARTIFACT_UNAVAILABLE.

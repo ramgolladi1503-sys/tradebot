@@ -1,3 +1,3 @@
 # Candidate Conservation
 
-PASS for frozen current-ledger identity. No option-edge claim is made because trusted option bid/ask data is unavailable.
+NOT_EVALUATED_DUAL_REPLAY_UNAVAILABLE. No baseline candidate count is inferred from the corrected ledger.
