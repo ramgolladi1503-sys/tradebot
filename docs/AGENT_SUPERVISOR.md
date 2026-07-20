@@ -49,12 +49,21 @@ even when the path was changed in a committed patch.
 
 Commands are arrays of arguments, never shell strings. The supervisor allows a
 small verification-oriented executable set and blocks known live/order scripts,
-inline Python, mutating Git commands, and explicit trading actions. Broker,
-Telegram, SMTP, and access-token environment variables are removed before each
-command. Safe offline values are injected.
+direct Python files, unapproved Python modules, mutating Git commands, executable
+paths, and explicit trading actions.
 
-This is a guardrail, not a sandbox. The task author must still keep acceptance
-commands narrow and reviewable.
+Python is limited to approved modules such as `pytest`, `py_compile`,
+`compileall`, `json.tool`, and `unittest`. Broker, Telegram, SMTP, and
+access-token environment variables are removed before each command.
+
+Acceptance commands run against a temporary detached Git worktree at the exact
+committed head. Ignored files such as `.env`, local runtime data, and other
+untracked credentials are not copied. The command receives an isolated HOME and
+closed proxy settings. Results record that the checkout was credential-isolated.
+
+This is still a guardrail, not a full operating-system or network sandbox. Raw
+socket access is not proven impossible, so task authors must keep commands narrow,
+offline, and reviewable.
 
 ### Evidence manifests
 
@@ -65,8 +74,8 @@ Verification writes:
 ```
 
 The manifest records base/head commits, changed paths, command argv, exit codes,
-timeouts, output hashes/tails, frozen-path hashes, artifact hashes, blockers, and
-a deterministic manifest SHA-256.
+timeouts, output hashes/tails, frozen-path hashes, artifact hashes, execution
+isolation facts, blockers, and a deterministic manifest SHA-256.
 
 Independent review writes:
 
@@ -75,8 +84,9 @@ Independent review writes:
 ```
 
 Review approval is blocked unless the reviewer identity differs from the
-implementer, commit identities match, the implementation manifest hash is
-valid, and reproduction evidence reports successful exit codes.
+implementer, commit identities match, the implementation manifest hash is valid,
+and reproduction evidence matches every expected command name and argv with a
+successful exit code.
 
 ## Task contract
 
@@ -200,13 +210,18 @@ PYTHONPATH=. python scripts/agent_supervisor.py verify \
   --contract docs/samples/codex-supervisor-task.json
 ```
 
-Do not ask the reviewer to approve a failed implementation manifest.
+The verification command executes acceptance checks in a temporary detached
+worktree at the exact head commit. It does not run them inside the credentialed
+source worktree. Do not ask the reviewer to approve a failed implementation
+manifest.
 
 ### 6. Run a fresh-context independent review
 
 The reviewer must inspect the exact `base_commit`, `head_commit`, and
-`manifest_sha256` from `implementation_manifest.json`, rerun the required checks,
-and write a review payload shaped like `docs/samples/antigravity-supervisor-review.json`.
+`manifest_sha256` from `implementation_manifest.json`, rerun every required
+command, and write a review payload shaped like
+`docs/samples/antigravity-supervisor-review.json`. Each reproduction row must
+copy the exact command name and argv from the implementation manifest.
 
 ```bash
 PYTHONPATH=. python scripts/agent_supervisor.py review \
@@ -242,6 +257,13 @@ abandoned or broken tasks and is explicitly recorded as a forced release.
   "reproduction_results": [
     {
       "name": "focused-tests",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_feed_reconnect_resource_verifier.py",
+        "-q"
+      ],
       "exit_code": 0
     }
   ],
@@ -250,9 +272,9 @@ abandoned or broken tasks and is explicitly recorded as a forced release.
 }
 ```
 
-The current implementation records reproduction evidence but cannot prove which
-external model executed the commands. Treat reviewer identity as an auditable
-assertion, not cryptographic authentication.
+The current implementation validates reproduction structure but cannot prove
+which external model executed the commands. Treat reviewer identity and the
+reported exit code as auditable assertions, not cryptographic authentication.
 
 ## States
 
@@ -275,6 +297,7 @@ This version does not provide:
 3. Git commit, push, PR creation, or merge automation.
 4. A dashboard, phone approval, webhook, or remote terminal.
 5. Runtime access, broker credentials, paper orders, or live orders.
+6. Cryptographic reviewer authentication or a full network sandbox.
 
 Those features should not be added until this local supervisor survives real
 Tradebot use without scope bypasses, stale claims, or unverifiable evidence.
