@@ -1,4 +1,3 @@
 # Ignore mock hash leaks from docs
 501e4ca0714a5432f001f11a2da51ba7155b0242:docs/agent_handoffs/feed-websocket-reconnect-antigravity.md:generic-api-key:78
 4b6917e5b5ae618c6cc52f0a31168f4f70ef99e9:docs/agent_reviews/feed_async_descriptor_control_audit.md:generic-api-key:146
-f2fab47707bf55ce140c1a9d0a6be57382368a72:research/opening_range_retest_outcomes_v2/controls.py:generic-api-key:325

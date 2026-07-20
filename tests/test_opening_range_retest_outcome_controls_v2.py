@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from research.opening_range_retest_outcomes_v2.controls import CONTROL_CASES, build_negative_control_report, execute_control_case, executor_expectation_imports, executor_expected_result_leaks
+from research.opening_range_retest_outcomes_v2.oracle import control_report_failures
 
 
 @pytest.mark.parametrize("case", CONTROL_CASES, ids=lambda case: case.control_id)
@@ -49,6 +50,27 @@ def test_executable_control_report_is_bound_to_real_nodes() -> None:
     assert all(row["target_invoked"] is True for row in report["controls"])
     assert all(row["mutation_applied"] is True for row in report["controls"])
     assert all(row["fixture_hash_before"] != row["fixture_hash_after"] for row in report["controls"])
-    assert all(row["executor_function"].startswith("_exec_") for row in report["controls"])
+    assert all(".control_cases." in row["executor_function"] for row in report["controls"])
     assert all(row["missing_expected_failures"] == [] for row in report["controls"])
     assert all(row["unrelated_failures"] == [] for row in report["controls"])
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_failure"),
+    [
+        (lambda report: report.__setitem__("unexpected_failure_count", 1), "NEGATIVE_CONTROL_METRIC_NONZERO:unexpected_failure_count"),
+        (lambda report: report.__setitem__("non_isolated_mutation_count", 1), "NEGATIVE_CONTROL_METRIC_NONZERO:non_isolated_mutation_count"),
+        (lambda report: report.__setitem__("captured_pytest_node_ids", []), "NEGATIVE_CONTROL_PYTEST_NODE_BINDING_MISMATCH"),
+        (lambda report: report.__setitem__("category_source_hashes", {}), "NEGATIVE_CONTROL_CATEGORY_HASH_MISSING"),
+        (lambda report: report.__setitem__("frozen_code_sha", "stale"), "NEGATIVE_CONTROL_FROZEN_SHA_MISMATCH"),
+        (lambda report: report.__setitem__("implementation_tree_hash", "stale"), "NEGATIVE_CONTROL_IMPLEMENTATION_TREE_MISMATCH"),
+        (lambda report: report.__setitem__("control_report_self_hash", "stale"), "NEGATIVE_CONTROL_REPORT_SELF_HASH_MISMATCH"),
+    ],
+)
+def test_oracle_rejects_forged_negative_control_report(mutation, expected_failure) -> None:
+    report = build_negative_control_report(frozen_code_sha="frozen", implementation_tree_hash="tree")
+
+    mutation(report)
+
+    failures = control_report_failures(report, frozen_code_sha="frozen", implementation_tree_hash="tree")
+    assert expected_failure in failures

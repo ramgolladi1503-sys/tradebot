@@ -105,6 +105,8 @@ def execute_temporal_horizon_control(spec: MutationSpec) -> RawExecution:
     )
 
 
+
+
 def control_fingerprint(spec: MutationSpec, raw: RawExecution) -> str:
     return _payload_hash(
         {
@@ -276,3 +278,8 @@ def _fixture_hash(candidate: dict[str, object], source: dict[str, object], frame
 
 def _payload_hash(payload: object) -> str:
     return sha256_bytes(canonical_json_bytes(payload))
+
+
+MUTATION_SPECS = temporal_horizon_specs()
+EXPECTATIONS = temporal_horizon_expectations()
+EXECUTORS = {"*": execute_temporal_horizon_control}

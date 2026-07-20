@@ -199,7 +199,18 @@ def test_lineage_expectations_are_separate_from_mutation_specs() -> None:
     for control_id, spec in specs_by_id.items():
         expectation = expectations_by_id[control_id]
         assert expectation is not spec
-        assert all(failure.startswith(("CONTRACT_FIELD_MISMATCH:", "FROZEN_CODE_SHA_NOT_ANCESTOR", "IMPLEMENTATION_TREE_HASH_MISMATCH", "POST_FREEZE_UNEXPECTED_PATH")) for failure in expectation.expected_failures)
+        assert all(
+            failure.startswith(
+                (
+                    "CONTRACT_FIELD_MISMATCH:",
+                    "CONTRACT_FIELD_MISSING:",
+                    "FROZEN_CODE_SHA_NOT_ANCESTOR",
+                    "IMPLEMENTATION_TREE_HASH_MISMATCH",
+                    "POST_FREEZE_UNEXPECTED_PATH",
+                )
+            )
+            for failure in expectation.expected_failures
+        )
 
 
 def test_lineage_fixture_builder_does_not_mutate_source_fixture_between_cases() -> None:

@@ -312,3 +312,10 @@ MATH_IDENTITY_CONTROLS: tuple[MathIdentityControl, ...] = (
         target_function="oracle.ledger_conservation_failures",
     ),
 )
+
+MUTATION_SPECS = tuple(control.spec for control in MATH_IDENTITY_CONTROLS)
+EXPECTATIONS = tuple(control.expectation for control in MATH_IDENTITY_CONTROLS)
+EXECUTORS = {
+    "math_identity.verify_math_record_failures": execute_math_identity,
+    "oracle.ledger_conservation_failures": execute_duplicate_identity,
+}

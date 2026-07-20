@@ -415,6 +415,8 @@ STATIC_CONTROLS: tuple[SummaryOverlapControl, ...] = (
 )
 
 CONTROL_CASES: tuple[SummaryOverlapControl, ...] = SUMMARY_CONTROLS + OVERLAP_CONTROLS + STATIC_CONTROLS
+MUTATION_SPECS = tuple(control.spec for control in CONTROL_CASES)
+EXPECTATIONS = tuple(control.expectation for control in CONTROL_CASES)
 
 
 def execute_control(control: SummaryOverlapControl) -> RawExecution:

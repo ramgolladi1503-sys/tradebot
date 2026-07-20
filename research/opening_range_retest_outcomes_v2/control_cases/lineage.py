@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from research.opening_range_retest_outcomes_v2.contract import BASE_MAIN_POLICY, expected_contract_semantics
 from research.opening_range_retest_outcomes_v2.control_protocol import (
     ControlExpectation,
     MutationSpec,
+    RawExecution,
 )
+from research.opening_range_retest_outcomes_v2.oracle import cbytes, shab, verify_contract_payload, verify_lineage_snapshot
 
 
 LINEAGE_CATEGORY = "lineage_hash"
@@ -51,9 +54,9 @@ CONTRACT_SEMANTIC_FIELD_CASES: tuple[LineageControlCase, ...] = (
     _contract("LINEAGE_CONTRACT_DECISION", "decision", "WRONG_DECISION", "CONTRACT_FIELD_MISMATCH:decision"),
     _contract("LINEAGE_CONTRACT_REASON", "reason", "wrong reason", "CONTRACT_FIELD_MISMATCH:reason"),
     _contract("LINEAGE_CONTRACT_SOURCE", "source", "wrong.json", "CONTRACT_FIELD_MISMATCH:source"),
-    _contract("LINEAGE_CONTRACT_BASE_MAIN_SHA", "base_main_sha", "0" * 40, "CONTRACT_FIELD_MISMATCH:base_main_sha"),
-    _contract("LINEAGE_CONTRACT_FROZEN_CODE_SHA", "frozen_code_sha", "1" * 40, "CONTRACT_FIELD_MISMATCH:frozen_code_sha"),
-    _contract("LINEAGE_CONTRACT_TREE_HASH", "implementation_tree_hash", "2" * 64, "CONTRACT_FIELD_MISMATCH:implementation_tree_hash"),
+    _contract("LINEAGE_CONTRACT_BASE_MAIN_SHA", "base_main_sha", "", "CONTRACT_FIELD_MISSING:base_main_sha"),
+    _contract("LINEAGE_CONTRACT_FROZEN_CODE_SHA", "frozen_code_sha", "", "CONTRACT_FIELD_MISSING:frozen_code_sha"),
+    _contract("LINEAGE_CONTRACT_TREE_HASH", "implementation_tree_hash", "", "CONTRACT_FIELD_MISSING:implementation_tree_hash"),
     _contract(
         "LINEAGE_CONTRACT_TREE_ALGORITHM",
         "implementation_tree_hash_algorithm",
@@ -146,4 +149,98 @@ LINEAGE_SNAPSHOT_CASES: tuple[LineageControlCase, ...] = (
 LINEAGE_CONTROL_CASES: tuple[LineageControlCase, ...] = CONTRACT_SEMANTIC_FIELD_CASES + LINEAGE_SNAPSHOT_CASES
 LINEAGE_MUTATION_SPECS: tuple[MutationSpec, ...] = tuple(case.mutation for case in LINEAGE_CONTROL_CASES)
 LINEAGE_EXPECTATIONS: tuple[ControlExpectation, ...] = tuple(case.expectation for case in LINEAGE_CONTROL_CASES)
+MUTATION_SPECS = LINEAGE_MUTATION_SPECS
+EXPECTATIONS = LINEAGE_EXPECTATIONS
 
+
+def execute_lineage_control(spec: MutationSpec) -> RawExecution:
+    if spec.target_function == "verify_contract_payload":
+        return _execute_contract_semantic_control(spec)
+    if spec.target_function == "verify_lineage_snapshot":
+        return _execute_lineage_snapshot_control(spec)
+    raise ValueError(f"unsupported lineage target: {spec.target_function}")
+
+
+EXECUTORS = {"*": execute_lineage_control}
+
+
+def _execute_contract_semantic_control(spec: MutationSpec) -> RawExecution:
+    before = _contract_fixture()
+    after = _contract_fixture()
+    _set_dotted_path(after, str(spec.mutation_payload["path"]), spec.mutation_payload["replacement"])
+    _refresh_contract_hash(after)
+    failures = tuple(verify_contract_payload(after))
+    return _raw(failures, before, after)
+
+
+def _execute_lineage_snapshot_control(spec: MutationSpec) -> RawExecution:
+    before = {
+        "frozen_sha": "frozen",
+        "head_sha": "head",
+        "is_ancestor": True,
+        "expected_tree_hash": "tree",
+        "frozen_tree_hash": "tree",
+        "head_tree_hash": "tree",
+        "changed_paths": [],
+    }
+    after = dict(before)
+    key = str(spec.mutation_payload["snapshot_key"])
+    after[key] = spec.mutation_payload["replacement"]
+    failures = tuple(
+        verify_lineage_snapshot(
+            frozen_sha=str(after["frozen_sha"]),
+            head_sha=str(after["head_sha"]),
+            is_ancestor=bool(after["is_ancestor"]),
+            expected_tree_hash=str(after["expected_tree_hash"]),
+            frozen_tree_hash=str(after["frozen_tree_hash"]),
+            head_tree_hash=str(after["head_tree_hash"]),
+            changed_paths=list(after["changed_paths"]),
+        )
+    )
+    return _raw(failures, before, after)
+
+
+def _contract_fixture() -> dict[str, Any]:
+    payload = expected_contract_semantics()
+    payload.update(
+        {
+            "base_main_sha": "base",
+            "base_main_policy": BASE_MAIN_POLICY,
+            "frozen_code_sha": "frozen",
+            "implementation_tree_hash": "tree",
+            "diagnostic_generation_commit_sha": "frozen",
+            "diagnostic_source_authority_root": "/tmp/source",
+        }
+    )
+    _refresh_contract_hash(payload)
+    return payload
+
+
+def _refresh_contract_hash(payload: dict[str, Any]) -> None:
+    portable = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"contract_hash", "diagnostic_source_authority_root", "diagnostic_generation_commit_sha"}
+    }
+    payload["contract_hash"] = shab(cbytes(portable))
+
+
+def _set_dotted_path(payload: dict[str, Any], dotted_path: str, value: Any) -> None:
+    cursor: Any = payload
+    parts = dotted_path.split(".")
+    for part in parts[:-1]:
+        cursor = cursor[part]
+    cursor[parts[-1]] = value
+
+
+def _raw(observed: tuple[str, ...], before: dict[str, Any], after: dict[str, Any]) -> RawExecution:
+    before_hash = shab(cbytes(before))
+    after_hash = shab(cbytes(after))
+    return RawExecution(
+        observed_failures=observed,
+        target_invoked=True,
+        mutation_applied=before_hash != after_hash,
+        fixture_hash_before=before_hash,
+        fixture_hash_after=after_hash,
+        target_output_hash=shab(cbytes(observed)),
+    )

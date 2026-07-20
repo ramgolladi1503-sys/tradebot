@@ -142,6 +142,24 @@ def input_certification_mutations() -> tuple[MutationSpec, ...]:
     return sidecar_specs + content_specs
 
 
+MUTATION_SPECS = input_certification_mutations()
+EXPECTATIONS = {
+    "INPUT_SIDECAR_SOURCE_MANIFEST": ("INPUT_SIDECAR_MISMATCH:source_manifest",),
+    "INPUT_SIDECAR_CANDIDATE_LEDGER": ("INPUT_SIDECAR_MISMATCH:candidate_ledger",),
+    "INPUT_SIDECAR_PHASE1_SUMMARY": ("INPUT_SIDECAR_MISMATCH:phase1_summary",),
+    "INPUT_SIDECAR_RECONCILIATION": ("INPUT_SIDECAR_MISMATCH:reconciliation",),
+    "INPUT_SIDECAR_PHASE1_CERTIFICATION": ("INPUT_SIDECAR_MISMATCH:phase1_certification",),
+    "INPUT_SOURCE_MANIFEST_HASH": ("INPUT_SOURCE_MANIFEST_MISMATCH",),
+    "INPUT_SOURCE_MANIFEST_COUNT": ("INPUT_SOURCE_MANIFEST_MISMATCH",),
+    "INPUT_CANDIDATE_LEDGER_CORE_HASH": ("INPUT_CANDIDATE_LEDGER_MISMATCH",),
+    "INPUT_CANDIDATE_LEDGER_PROVENANCE_HASH": ("INPUT_CANDIDATE_LEDGER_MISMATCH",),
+    "INPUT_CANDIDATE_LEDGER_COUNT": ("INPUT_CANDIDATE_LEDGER_MISMATCH",),
+    "INPUT_SUMMARY_VERDICT": ("INPUT_SUMMARY_VERDICT_MISMATCH",),
+    "INPUT_RECONCILIATION_VERDICT": ("INPUT_RECONCILIATION_MISMATCH",),
+    "INPUT_RECONCILIATION_V1_COUNT": ("INPUT_RECONCILIATION_MISMATCH",),
+    "INPUT_RECONCILIATION_V2_COUNT": ("INPUT_RECONCILIATION_MISMATCH",),
+    "INPUT_DECEPTIVE_CERTIFICATION": ("INPUT_CERTIFICATION_MISMATCH",),
+}
 def execute_input_certification_control(spec: MutationSpec) -> RawExecution:
     result = inspect_input_certification_mutation(spec)
     return RawExecution(
@@ -152,6 +170,9 @@ def execute_input_certification_control(spec: MutationSpec) -> RawExecution:
         fixture_hash_after=str(result["after_hash"]),
         target_output_hash=_hash_payload(result["failures"]),
     )
+
+
+EXECUTORS = {"*": execute_input_certification_control}
 
 
 def inspect_input_certification_mutation(spec: MutationSpec) -> dict[str, Any]:

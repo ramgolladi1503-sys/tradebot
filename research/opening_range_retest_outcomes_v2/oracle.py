@@ -215,13 +215,26 @@ def verify_contract_payload(contract: dict[str, Any]) -> list[str]:
         failures.append("CONTRACT_SELF_HASH_MISMATCH")
     expected = expected_contract_semantics()
     expected["base_main_policy"] = BASE_MAIN_POLICY
-    for key, value in expected.items():
-        if contract.get(key) != value:
-            failures.append(f"CONTRACT_FIELD_MISMATCH:{key}")
+    failures.extend(_semantic_mismatches(contract, expected))
     for key in ("base_main_sha", "frozen_code_sha", "implementation_tree_hash"):
         if not contract.get(key):
             failures.append(f"CONTRACT_FIELD_MISSING:{key}")
     return failures
+
+
+def _semantic_mismatches(actual: Any, expected: Any, prefix: str = "") -> list[str]:
+    if isinstance(expected, dict):
+        failures: list[str] = []
+        for key, value in expected.items():
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            if not isinstance(actual, dict) or key not in actual:
+                failures.append(f"CONTRACT_FIELD_MISMATCH:{child_prefix}")
+                continue
+            failures.extend(_semantic_mismatches(actual[key], value, child_prefix))
+        return failures
+    if actual != expected:
+        return [f"CONTRACT_FIELD_MISMATCH:{prefix}"]
+    return []
 
 
 def verify_lineage_snapshot(
@@ -642,7 +655,7 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
     nodes = [row.get("pytest_node_id") for row in rows]
     if controls.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED":
         failures.append("NEGATIVE_CONTROL_VERDICT_MISMATCH")
-    if controls.get("collected", 0) < 75 or controls.get("executed") != controls.get("collected") or controls.get("passed") != controls.get("executed"):
+    if controls.get("collected", 0) < 90 or controls.get("executed") != controls.get("collected") or controls.get("passed") != controls.get("executed"):
         failures.append("NEGATIVE_CONTROL_EXECUTION_COUNTS_MISMATCH")
     if controls.get("failed") or controls.get("skipped") or controls.get("xfailed") or controls.get("xpassed"):
         failures.append("NEGATIVE_CONTROL_NON_PASSING_RESULT")
@@ -650,10 +663,31 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
         failures.append("NEGATIVE_CONTROL_DUPLICATE_ID")
     if any(not str(node).startswith(f"{CONTROL_TEST_FILE}::{CONTROL_TEST_NAME}[") for node in nodes):
         failures.append("NEGATIVE_CONTROL_NODE_ID_MISMATCH")
+    if controls.get("reported_pytest_node_ids") != nodes or controls.get("captured_pytest_node_ids") != nodes:
+        failures.append("NEGATIVE_CONTROL_PYTEST_NODE_BINDING_MISMATCH")
     if controls.get("frozen_code_sha") != frozen_code_sha:
         failures.append("NEGATIVE_CONTROL_FROZEN_SHA_MISMATCH")
     if controls.get("implementation_tree_hash") != implementation_tree_hash:
         failures.append("NEGATIVE_CONTROL_IMPLEMENTATION_TREE_MISMATCH")
+    if not controls.get("category_source_hashes") or not controls.get("category_test_hashes"):
+        failures.append("NEGATIVE_CONTROL_CATEGORY_HASH_MISSING")
+    required_zero = (
+        "unexpected_failure_count",
+        "missing_expected_failure_count",
+        "direct_expected_result_leak_count",
+        "indirect_expected_result_leak_count",
+        "executor_expectation_import_count",
+        "non_isolated_mutation_count",
+        "clean_fixture_failure_count",
+        "non_invoked_target_count",
+        "non_mutating_control_count",
+        "duplicate_control_fingerprint_count",
+    )
+    for key in required_zero:
+        if controls.get(key) != 0:
+            failures.append(f"NEGATIVE_CONTROL_METRIC_NONZERO:{key}")
+    if controls.get("exact_failure_set_match_count") != controls.get("control_count"):
+        failures.append("NEGATIVE_CONTROL_EXACT_FAILURE_SET_MISMATCH")
     for row in rows:
         mutation = str(row.get("mutation", "")).lower()
         if "negative mutation" in mutation or not row.get("target_invoked") or not row.get("mutation_applied") or row.get("status") != "PASS":
@@ -669,6 +703,9 @@ def control_report_failures(controls: dict[str, Any] | None, *, frozen_code_sha:
         failures.append("NEGATIVE_CONTROL_DUPLICATE_FINGERPRINT")
     if controls.get("unique_control_fingerprint_count") != len(rows):
         failures.append("NEGATIVE_CONTROL_FINGERPRINT_COUNT_MISMATCH")
+    expected_self_hash = shab(cbytes({key: value for key, value in controls.items() if key not in {"control_report_self_hash", "timestamp"}}))
+    if controls.get("control_report_self_hash") != expected_self_hash:
+        failures.append("NEGATIVE_CONTROL_REPORT_SELF_HASH_MISMATCH")
     return list(dict.fromkeys(failures))
 
 

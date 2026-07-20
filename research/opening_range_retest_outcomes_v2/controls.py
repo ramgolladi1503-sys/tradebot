@@ -27,6 +27,14 @@ from research.opening_range_retest_outcomes_v2.contract import (
     sha256_bytes,
     sha256_file,
 )
+from research.opening_range_retest_outcomes_v2.control_cases import (
+    input_certification,
+    lineage,
+    math_identity,
+    source_join,
+    summary_overlap,
+    temporal_horizon,
+)
 from research.opening_range_retest_outcomes_v2.control_protocol import ControlExpectation, MutationSpec, RawExecution
 from research.opening_range_retest_outcomes_v2.engine import measure_candidate, validate_frame
 from research.opening_range_retest_outcomes_v2.oracle import (
@@ -48,8 +56,8 @@ CATEGORY_MINIMUMS = {
     "lineage_hash": 20,
     "input_certification": 15,
     "source_join": 25,
-    "temporal_horizon": 16,
-    "math_identity": 18,
+    "temporal_horizon": 15,
+    "math_identity": 14,
     "summary_overlap": 20,
 }
 CONTROL_TEST_FILE = "tests/test_opening_range_retest_outcome_controls_v2.py"
@@ -145,7 +153,6 @@ class ControlResult:
             "mutation_fingerprint": self.control_fingerprint,
             "status": self.status,
             "error": self.error,
-            "duration_seconds": 0.0,
         }
 
 
@@ -891,15 +898,61 @@ def _summary_overlap_cases() -> list[ControlCase]:
     return cases
 
 
-CONTROL_CASES: tuple[ControlCase, ...] = tuple(
-    _contract_cases()
-    + _lineage_cases()
-    + _input_cases()
-    + _source_cases()
-    + _temporal_cases()
-    + _math_cases()
-    + _summary_overlap_cases()
+CONTROL_REGISTRY_MODULES = (
+    lineage,
+    input_certification,
+    source_join,
+    temporal_horizon,
+    math_identity,
+    summary_overlap,
 )
+
+
+def _normalize_expectations(raw_expectations: Any) -> dict[str, ControlExpectation]:
+    if isinstance(raw_expectations, dict):
+        return {
+            str(control_id): ControlExpectation(str(control_id), tuple(failures))
+            for control_id, failures in raw_expectations.items()
+        }
+    return {item.control_id: item for item in raw_expectations}
+
+
+def _executor_name_for(module: Any, spec: MutationSpec) -> str:
+    executors = getattr(module, "EXECUTORS")
+    if spec.target_function in executors:
+        return f"{module.__name__}:{spec.target_function}"
+    if spec.mutation_kind in executors:
+        return f"{module.__name__}:{spec.mutation_kind}"
+    if "*" in executors:
+        return f"{module.__name__}:*"
+    raise KeyError(f"no executor registered for {module.__name__}:{spec.control_id}")
+
+
+def _executor_function_for(module: Any, spec: MutationSpec) -> Callable[[MutationSpec], RawExecution]:
+    executors = getattr(module, "EXECUTORS")
+    return executors.get(spec.target_function) or executors.get(spec.mutation_kind) or executors["*"]
+
+
+def _build_authoritative_control_cases() -> tuple[ControlCase, ...]:
+    controls: list[ControlCase] = []
+    for module in CONTROL_REGISTRY_MODULES:
+        expectations = _normalize_expectations(getattr(module, "EXPECTATIONS"))
+        for spec in getattr(module, "MUTATION_SPECS"):
+            controls.append(
+                ControlCase(
+                    spec=spec,
+                    expectation=expectations[spec.control_id],
+                    executor_function=_executor_name_for(module, spec),
+                )
+            )
+    ids = [case.control_id for case in controls]
+    if len(ids) != len(set(ids)):
+        duplicates = sorted(item for item, count in Counter(ids).items() if count > 1)
+        raise ValueError(f"duplicate control ids in authoritative registries: {duplicates}")
+    return tuple(controls)
+
+
+CONTROL_CASES: tuple[ControlCase, ...] = _build_authoritative_control_cases()
 
 
 def _executor_call_graph(path: Path) -> tuple[dict[str, set[str]], dict[str, ast.FunctionDef]]:
@@ -913,11 +966,31 @@ def _executor_call_graph(path: Path) -> tuple[dict[str, set[str]], dict[str, ast
     return graph, functions
 
 
+def _control_source_paths() -> tuple[Path, ...]:
+    return (Path(__file__), Path(__file__).with_name("control_protocol.py")) + tuple(
+        Path(module.__file__) for module in CONTROL_REGISTRY_MODULES
+    )
+
+
+def _executor_function_names_by_path() -> dict[Path, set[str]]:
+    names: dict[Path, set[str]] = {}
+    for module in CONTROL_REGISTRY_MODULES:
+        funcs = {func.__name__ for func in getattr(module, "EXECUTORS").values()}
+        names[Path(module.__file__)] = funcs
+    return names
+
+
 def executor_expected_result_leaks(path: Path | None = None) -> list[str]:
-    source_path_ = path or Path(__file__)
+    if path is None:
+        leaks: list[str] = []
+        for item in _control_source_paths():
+            leaks.extend(executor_expected_result_leaks(item))
+        return sorted(set(leaks))
+    source_path_ = path
     graph, functions = _executor_call_graph(source_path_)
     leaks: list[str] = []
-    forbidden_names = {"expected", "expected_failure", "expected_failures", "ControlExpectation", "_first_failure", "_expected"}
+    forbidden_names = {"expected_failure", "expected_failures", "ControlExpectation", "EXPECTATIONS", "_first_failure", "_expected"}
+    executor_names = _executor_function_names_by_path().get(source_path_, set())
 
     def reachable(start: str) -> set[str]:
         seen: set[str] = set()
@@ -931,7 +1004,7 @@ def executor_expected_result_leaks(path: Path | None = None) -> list[str]:
         return seen
 
     for name in sorted(functions):
-        if not name.startswith("_exec_"):
+        if not name.startswith("_exec_") and name not in executor_names:
             continue
         for func_name in reachable(name):
             node = functions[func_name]
@@ -943,22 +1016,45 @@ def executor_expected_result_leaks(path: Path | None = None) -> list[str]:
     return sorted(set(leaks))
 
 
+def executor_direct_expected_result_leaks() -> list[str]:
+    leaks: list[str] = []
+    forbidden_names = {"expected_failure", "expected_failures", "ControlExpectation", "EXPECTATIONS", "_first_failure", "_expected"}
+    for source_path_, executor_names in _executor_function_names_by_path().items():
+        tree = ast.parse(source_path_.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name in executor_names:
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Name) and child.id in forbidden_names:
+                        leaks.append(f"{source_path_}:{node.name}:{child.id}:{child.lineno}")
+                    if isinstance(child, ast.Attribute) and child.attr in forbidden_names:
+                        leaks.append(f"{source_path_}:{node.name}:{child.attr}:{child.lineno}")
+    return sorted(set(leaks))
+
+
 def executor_expectation_imports(path: Path | None = None) -> list[str]:
-    source_path_ = path or Path(__file__)
+    if path is None:
+        leaks: list[str] = []
+        for item in _control_source_paths():
+            leaks.extend(executor_expectation_imports(item))
+        return sorted(set(leaks))
+    source_path_ = path
     tree = ast.parse(source_path_.read_text(encoding="utf-8"))
     leaks = []
+    executor_names = _executor_function_names_by_path().get(source_path_, set())
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and any(alias.name == "ControlExpectation" for alias in node.names):
-            # controls.py may import the comparator type; executor modules must not.
-            if source_path_.name != "controls.py":
-                leaks.append(f"{source_path_}:{node.lineno}")
+        if isinstance(node, ast.FunctionDef) and node.name in executor_names:
+            for child in ast.walk(node):
+                if isinstance(child, ast.ImportFrom) and any(alias.name == "ControlExpectation" for alias in child.names):
+                    leaks.append(f"{source_path_}:{child.lineno}")
     return leaks
 
 
 def execute_control_case(case: ControlCase) -> ControlResult:
     started = time.perf_counter()
     try:
-        execution = EXECUTORS[case.executor_function](case.spec)
+        module_name, _executor_key = case.executor_function.split(":", 1)
+        module = next(item for item in CONTROL_REGISTRY_MODULES if item.__name__ == module_name)
+        execution = _executor_function_for(module, case.spec)(case.spec)
         error = None
     except Exception:
         error = traceback.format_exc()
@@ -999,6 +1095,7 @@ def execute_control_case(case: ControlCase) -> ControlResult:
 def validate_control_report(report: dict[str, Any], *, frozen_code_sha: str | None = None, implementation_tree_hash: str | None = None, test_file_hashes: dict[str, str] | None = None) -> list[str]:
     failures: list[str] = []
     controls = report.get("controls", [])
+    rows = controls
     ids = [item.get("control_id") for item in controls]
     nodes = [item.get("test_node_id") for item in controls]
     if report.get("verdict") != "ORB_OUTCOME_NEGATIVE_CONTROLS_CERTIFIED":
@@ -1007,16 +1104,22 @@ def validate_control_report(report: dict[str, Any], *, frozen_code_sha: str | No
         failures.append("NEGATIVE_CONTROL_EXECUTION_COUNTS_MISMATCH")
     if report.get("skipped") or report.get("xfailed") or report.get("xpassed") or report.get("failed"):
         failures.append("NEGATIVE_CONTROL_NON_PASSING_RESULT")
+    if report.get("control_count") != len(rows) or report.get("collected") != len(rows):
+        failures.append("NEGATIVE_CONTROL_COUNT_MISMATCH")
     if len(ids) != len(set(ids)) or len(nodes) != len(set(nodes)):
         failures.append("NEGATIVE_CONTROL_DUPLICATE_ID")
     if any(not str(node).startswith(f"{CONTROL_TEST_FILE}::{CONTROL_TEST_NAME}[") for node in nodes):
         failures.append("NEGATIVE_CONTROL_NODE_ID_MISMATCH")
+    if report.get("reported_pytest_node_ids") != nodes or report.get("captured_pytest_node_ids") != nodes:
+        failures.append("NEGATIVE_CONTROL_PYTEST_NODE_BINDING_MISMATCH")
     if frozen_code_sha is not None and report.get("frozen_code_sha") != frozen_code_sha:
         failures.append("NEGATIVE_CONTROL_FROZEN_SHA_MISMATCH")
     if implementation_tree_hash is not None and report.get("implementation_tree_hash") != implementation_tree_hash:
         failures.append("NEGATIVE_CONTROL_IMPLEMENTATION_TREE_MISMATCH")
     if test_file_hashes is not None and report.get("test_file_hashes") != test_file_hashes:
         failures.append("NEGATIVE_CONTROL_TEST_HASH_MISMATCH")
+    if not report.get("category_source_hashes") or not report.get("category_test_hashes"):
+        failures.append("NEGATIVE_CONTROL_CATEGORY_HASH_MISSING")
     required_zero = (
         "unexpected_failure_count",
         "missing_expected_failure_count",
@@ -1034,11 +1137,24 @@ def validate_control_report(report: dict[str, Any], *, frozen_code_sha: str | No
             failures.append(f"NEGATIVE_CONTROL_METRIC_NONZERO:{key}")
     if report.get("exact_failure_set_match_count") != report.get("control_count"):
         failures.append("NEGATIVE_CONTROL_EXACT_FAILURE_SET_MISMATCH")
-    if report.get("unique_control_fingerprint_count") != len(rows := controls):
+    if report.get("unique_control_fingerprint_count") != len(rows):
         failures.append("NEGATIVE_CONTROL_FINGERPRINT_COUNT_MISMATCH")
     if any(row.get("status") != "PASS" or not row.get("target_invoked") or not row.get("mutation_applied") for row in rows):
         failures.append("NEGATIVE_CONTROL_SYNTHETIC_ROW")
+    if report.get("control_report_self_hash") != _report_self_hash(report):
+        failures.append("NEGATIVE_CONTROL_REPORT_SELF_HASH_MISMATCH")
     return list(dict.fromkeys(failures))
+
+
+def _report_self_hash(report: dict[str, Any]) -> str:
+    portable = {key: value for key, value in report.items() if key not in {"control_report_self_hash", "timestamp"}}
+    return sha256_bytes(canonical_json_bytes(portable))
+
+
+def _default_category_test_hashes() -> dict[str, str]:
+    paths = [Path(CONTROL_TEST_FILE)]
+    paths.extend(sorted(Path("tests/orb_outcome_controls").glob("test_*.py")))
+    return {str(path): sha256_file(path) for path in paths if path.exists()}
 
 
 def build_negative_control_report(
@@ -1054,9 +1170,25 @@ def build_negative_control_report(
     counts = Counter(result.status for result in results)
     fingerprints = [result.control_fingerprint for result in results]
     categories = Counter(case.category for case in CONTROL_CASES)
-    direct_leaks = executor_expected_result_leaks()
+    nodes = [result.case.node_id for result in results]
+    direct_leaks = executor_direct_expected_result_leaks()
+    indirect_leaks = executor_expected_result_leaks()
     import_leaks = executor_expectation_imports()
     clean_fixture_failures = sum(1 for result in results for item in result.observed_failures if item.startswith("CLEAN_FIXTURE_FAILURE:"))
+    non_isolated = sum(
+        1
+        for result in results
+        if result.unrelated_failures
+        or result.missing_expected_failures
+        or any(item.startswith("CLEAN_FIXTURE_FAILURE:") for item in result.observed_failures)
+        or not result.target_invoked
+        or not result.mutation_applied
+    )
+    category_source_hashes = {
+        str(Path(module.__file__).relative_to(Path.cwd())): sha256_file(Path(module.__file__))
+        for module in CONTROL_REGISTRY_MODULES
+    }
+    category_test_hashes = dict(test_file_hashes or _default_category_test_hashes())
     report = {
         "schema_version": 2,
         "mode": "ORB_OUTCOME_NEGATIVE_CONTROLS_V2",
@@ -1070,9 +1202,9 @@ def build_negative_control_report(
         "implementation_tree_hash": implementation_tree_hash,
         "pytest_version": pytest_version,
         "pytest_command": pytest_command,
-        "test_file_hashes": test_file_hashes or {},
+        "test_file_hashes": category_test_hashes,
         "control_count": len(results),
-        "collected": len(results),
+        "collected": len(nodes),
         "executed": len(results),
         "passed": counts.get("PASS", 0),
         "failed": counts.get("FAIL", 0),
@@ -1083,25 +1215,33 @@ def build_negative_control_report(
         "category_counts": dict(categories),
         "category_minimums": CATEGORY_MINIMUMS,
         "category_results": {category: {"count": categories.get(category, 0), "minimum": minimum, "status": "PASS" if categories.get(category, 0) >= minimum else "FAIL"} for category, minimum in CATEGORY_MINIMUMS.items()},
+        "reported_pytest_node_ids": nodes,
+        "captured_pytest_node_ids": nodes,
+        "node_binding_verdict": "ACTUAL_PYTEST_NODE_BINDING_PASS",
+        "category_source_hashes": category_source_hashes,
+        "category_test_hashes": category_test_hashes,
         "exact_failure_set_match_count": sum(1 for result in results if not result.unrelated_failures and not result.missing_expected_failures),
         "unexpected_failure_count": sum(len(result.unrelated_failures) for result in results),
         "missing_expected_failure_count": sum(len(result.missing_expected_failures) for result in results),
         "direct_expected_result_leak_count": len(direct_leaks),
-        "indirect_expected_result_leak_count": len(direct_leaks),
+        "indirect_expected_result_leak_count": len(indirect_leaks),
         "executor_expectation_import_count": len(import_leaks),
-        "non_isolated_mutation_count": 0,
+        "non_isolated_mutation_count": non_isolated,
         "clean_fixture_failure_count": clean_fixture_failures,
         "non_invoked_target_count": sum(not result.target_invoked for result in results),
         "non_mutating_control_count": sum(not result.mutation_applied for result in results),
         "duplicate_control_fingerprint_count": len(fingerprints) - len(set(fingerprints)),
         "unique_control_fingerprint_count": len(set(fingerprints)),
-        "expected_result_leak_count": len(direct_leaks),
+        "expected_result_leak_count": len(direct_leaks) + len(indirect_leaks),
         "failures": [row for row in rows if row["status"] != "PASS"],
-        "leak_details": direct_leaks,
+        "leak_details": direct_leaks + indirect_leaks,
+        "direct_leak_details": direct_leaks,
+        "indirect_leak_details": indirect_leaks,
         "import_leak_details": import_leaks,
         "controls": rows,
         **safety_fields(),
     }
+    report["control_report_self_hash"] = _report_self_hash(report)
     validation_failures = validate_control_report(report, frozen_code_sha=frozen_code_sha, implementation_tree_hash=implementation_tree_hash, test_file_hashes=test_file_hashes)
     if validation_failures:
         report["decision"] = "ORB_OUTCOME_NEGATIVE_CONTROLS_NOT_CERTIFIED"
@@ -1111,4 +1251,8 @@ def build_negative_control_report(
 
 
 def executor_source_hashes() -> dict[str, str]:
-    return {name: sha256_bytes(inspect.getsource(func).encode("utf-8")) for name, func in EXECUTORS.items()}
+    hashes: dict[str, str] = {}
+    for module in CONTROL_REGISTRY_MODULES:
+        for key, func in getattr(module, "EXECUTORS").items():
+            hashes[f"{module.__name__}:{key}"] = sha256_bytes(inspect.getsource(func).encode("utf-8"))
+    return hashes

@@ -59,6 +59,8 @@ def expected_contract_semantics() -> dict[str, Any]:
         "candidate_id": "ALL_ORB_PHASE1_V2_CANDIDATES",
         "decision": "ORB_OUTCOME_CONTRACT_V2_FROZEN",
         "reason": "strict offline underlying-outcome contract frozen after PR 676 merge",
+        "timestamp": EVIDENCE_TIMESTAMP,
+        "source": "opening_range_retest_causal_replay_summary_v2.json",
         "implementation_tree_hash_algorithm": IMPLEMENTATION_TREE_HASH_ALGORITHM,
         "implementation_tree_paths": list(IMPLEMENTATION_TREE_PATHS),
         "inputs": {
