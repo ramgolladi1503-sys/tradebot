@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import subprocess
 
@@ -164,7 +165,7 @@ def test_verify_records_hashes_and_passes_safe_commands(tmp_path):
     assert manifest["head_commit"] == head
     assert manifest["changed_paths"] == ["tests/test_feature.py"]
     assert manifest["acceptance_commands"][0]["exit_code"] == 0
-    assert len(manifest["manifest_sha256"]) == 64
+    assert re.fullmatch(r"[0-9a-f]{64}", manifest["manifest_sha256"])
     assert Path(result.details["manifest_path"]).exists()
 
 
