@@ -998,8 +998,13 @@ def report_text(metrics: dict[str, Any], controls: dict[str, Any], concentration
     return "\n".join(lines) + "\n"
 
 
-def artifact_hashes(output_dir: Path) -> dict[str, str]:
-    return {key: shafile(output_dir / filename) for key, filename in C.ARTIFACT_NAMES.items() if (output_dir / filename).exists()}
+def artifact_hashes(output_dir: Path, exclude: set[str] | None = None) -> dict[str, str]:
+    excluded = exclude or set()
+    return {
+        key: shafile(output_dir / filename)
+        for key, filename in C.ARTIFACT_NAMES.items()
+        if key not in excluded and (output_dir / filename).exists()
+    }
 
 
 def generate(output_dir: Path, source_project_root: Path, artifact_dir: Path) -> dict[str, Any]:
@@ -1074,7 +1079,7 @@ def audit_artifacts(output_dir: Path, source_project_root: Path, artifact_dir: P
         "verdict": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED" if not failures else "ORB_EDGE_SCREEN_AUDIT_FAILED",
         "failures": failures,
         "source_authority": authority,
-        "artifact_hashes": artifact_hashes(output_dir),
+        "artifact_hashes": artifact_hashes(output_dir, exclude={"audit"}),
     }
 
 
