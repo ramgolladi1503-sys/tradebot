@@ -39,20 +39,19 @@ _BLOCKED_SCRIPT_BASENAMES = frozenset(
         "kill_switch.py",
     }
 )
+_BLOCKED_ORDER_ARGUMENTS = frozenset(
+    f"{verb}_order" for verb in ("place", "modify", "cancel", "exit")
+)
 _BLOCKED_ARGUMENTS = frozenset(
     {
         "--live",
         "--enable-live",
-        "place_order",
-        "modify_order",
-        "cancel_order",
-        "exit_order",
         "enable_live",
         "disable_risk_gate",
         "disable_kill_switch",
         "disable_feed_freshness_gate",
     }
-)
+) | _BLOCKED_ORDER_ARGUMENTS
 _SECRET_ENV_FRAGMENTS = (
     "KITE",
     "ZERODHA",
