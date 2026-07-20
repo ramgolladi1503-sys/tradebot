@@ -10,6 +10,13 @@
   "reproduction_results": [
     {
       "name": "focused-tests",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "tests/test_feed_reconnect_resource_verifier.py",
+        "-q"
+      ],
       "exit_code": 0
     }
   ],
