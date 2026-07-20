@@ -31,7 +31,7 @@ def test_primary_metrics_are_session_equal() -> None:
 
 
 def test_control_cases_cover_required_minimum() -> None:
-    assert len(controls.CONTROL_CASES) >= 50
+    control_count = sum(1 for _case in controls.CONTROL_CASES)
+    assert control_count >= 50
     failed = [case for case in controls.CONTROL_CASES if not controls.run_control_case(case[0])["passed"]]
     assert failed == []
-
