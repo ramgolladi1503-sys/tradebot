@@ -700,9 +700,9 @@ def generate(output_dir: Path, source_project_root: Path, artifact_dir: Path) ->
     write_json(output_dir / C.ARTIFACT_NAMES["replication"], replication)
     write_json(output_dir / C.ARTIFACT_NAMES["overlap"], overlap)
     write_json(output_dir / C.ARTIFACT_NAMES["verdict"], verdict)
+    write_text(output_dir / C.ARTIFACT_NAMES["report"], report_text(metrics, controls, concentration, replication, overlap, verdict))
     audit = audit_artifacts(output_dir, source_project_root, artifact_dir)
     write_json(output_dir / C.ARTIFACT_NAMES["audit"], audit)
-    write_text(output_dir / C.ARTIFACT_NAMES["report"], report_text(metrics, controls, concentration, replication, overlap, verdict))
     return {
         "verdict": verdict["verdict"],
         "audit_verdict": audit["verdict"],
@@ -717,6 +717,8 @@ def audit_artifacts(output_dir: Path, source_project_root: Path, artifact_dir: P
     authority = verify_source_authority(artifact_dir)["source_authority"]
     failures.extend(authority["failures"])
     for key, filename in C.ARTIFACT_NAMES.items():
+        if key == "audit":
+            continue
         path = output_dir / filename
         if not path.exists():
             failures.append(f"MISSING_ARTIFACT:{key}")
