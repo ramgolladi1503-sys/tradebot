@@ -23,6 +23,7 @@ from research.opening_range_retest_outcomes_v2.contract import (
     INPUT_SOURCE_COUNT,
     INPUT_SOURCE_HASH,
     canonical_json_bytes,
+    safety_fields,
     sha256_bytes,
     sha256_file,
 )
@@ -1099,6 +1100,7 @@ def build_negative_control_report(
         "leak_details": direct_leaks,
         "import_leak_details": import_leaks,
         "controls": rows,
+        **safety_fields(),
     }
     validation_failures = validate_control_report(report, frozen_code_sha=frozen_code_sha, implementation_tree_hash=implementation_tree_hash, test_file_hashes=test_file_hashes)
     if validation_failures:
