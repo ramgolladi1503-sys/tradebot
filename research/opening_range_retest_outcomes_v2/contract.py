@@ -19,6 +19,7 @@ IMPLEMENTATION_TREE_PATHS = (
     "scripts/audit_opening_range_retest_outcomes_v2.py",
     "tests/test_opening_range_retest_outcomes_v2.py",
     "tests/test_opening_range_retest_outcome_controls_v2.py",
+    "tests/orb_outcome_controls",
 )
 IMPLEMENTATION_TREE_HASH_ALGORITHM = "sha256(git-ls-tree-r HEAD -- implementation-tree-paths)"
 BASE_MAIN_POLICY = "PR_676_MERGED_MAIN_REQUIRED"

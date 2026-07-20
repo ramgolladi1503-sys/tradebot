@@ -49,6 +49,14 @@ def _stable(payload: object) -> object:
     return payload
 
 
+def _control_test_hashes() -> dict[str, str]:
+    paths = [PROJECT_ROOT / "tests" / "test_opening_range_retest_outcome_controls_v2.py"]
+    control_dir = PROJECT_ROOT / "tests" / "orb_outcome_controls"
+    if control_dir.exists():
+        paths.extend(sorted(control_dir.glob("test_*.py")))
+    return {str(path.relative_to(PROJECT_ROOT)): sha256_file(path) for path in paths}
+
+
 def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str, frozen_code_sha: str, require_clean: bool = True) -> dict[str, object]:
     head = _git_head()
     if head != frozen_code_sha:
@@ -72,7 +80,7 @@ def generate(output_dir: Path, *, source_project_root: Path, base_main_sha: str,
         implementation_tree_hash=impl_hash,
         pytest_version=pytest.__version__,
         pytest_command="python -m pytest -q tests/test_opening_range_retest_outcome_controls_v2.py",
-        test_file_hashes={"tests/test_opening_range_retest_outcome_controls_v2.py": sha256_file(PROJECT_ROOT / "tests" / "test_opening_range_retest_outcome_controls_v2.py")},
+        test_file_hashes=_control_test_hashes(),
     )
     paths = {
         "contract": output_dir / "opening_range_retest_outcome_contract_v2.json",

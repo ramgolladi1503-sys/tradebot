@@ -277,6 +277,7 @@ def _contract() -> dict[str, Any]:
             "scripts/audit_opening_range_retest_outcomes_v2.py",
             "tests/test_opening_range_retest_outcomes_v2.py",
             "tests/test_opening_range_retest_outcome_controls_v2.py",
+            "tests/orb_outcome_controls",
         ],
         "diagnostic_generation_commit_sha": "frozen",
         "inputs": {
@@ -1041,8 +1042,8 @@ def validate_control_report(report: dict[str, Any], *, frozen_code_sha: str | No
 
 def build_negative_control_report(
     *,
-    frozen_code_sha: str,
-    implementation_tree_hash: str,
+    frozen_code_sha: str = "frozen",
+    implementation_tree_hash: str = "tree",
     pytest_version: str | None = None,
     pytest_command: str | None = None,
     test_file_hashes: dict[str, str] | None = None,
