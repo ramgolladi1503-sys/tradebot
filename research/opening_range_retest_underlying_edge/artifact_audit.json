@@ -1,0 +1,1 @@
+{"allowed_for_live_execution":false,"append":false,"broker_api_called":false,"candidate_outcome_join_verified":true,"failures":{"artifacts":[],"missing":[],"sidecars":[],"source_join":[]},"is_order_action":false,"mode":"ORB_UNDERLYING_EDGE_ARTIFACT_AUDIT","no_option_profitability_claim":true,"read_only":true,"schema_version":1,"verdict":"PASS"}
