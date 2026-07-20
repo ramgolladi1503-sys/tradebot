@@ -54,14 +54,23 @@ _BLOCKED_ARGUMENTS = frozenset(
     }
 ) | _BLOCKED_ORDER_ARGUMENTS
 _SECRET_ENV_FRAGMENTS = (
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "API_KEY",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
     "KITE",
     "ZERODHA",
     "UPSTOX",
     "BROKER",
     "TELEGRAM",
     "SMTP",
-    "API_SECRET",
-    "ACCESS_TOKEN",
+    "AWS_",
+    "AZURE_",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "SSH_AUTH_SOCK",
 )
 _TASK_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,79}$")
 _MAX_CAPTURE_CHARS = 8_000
