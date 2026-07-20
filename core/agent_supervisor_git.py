@@ -141,18 +141,30 @@ def _credential_isolated_checkout(worktree: Path, head_commit: str) -> Iterator[
         shutil.rmtree(parent, ignore_errors=True)
 
 
-def _safe_environment(isolated_home: Path) -> dict[str, str]:
+def _safe_environment(isolated_home: Path, execution_root: Path) -> dict[str, str]:
     env = dict(os.environ)
     for key in list(env):
         upper = key.upper()
         if any(fragment in upper for fragment in _SECRET_ENV_FRAGMENTS):
             env.pop(key, None)
+    for key in (
+        "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "PYTHONINSPECT",
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "BASH_ENV",
+        "ENV",
+    ):
+        env.pop(key, None)
     env.update(
         {
             "HOME": str(isolated_home),
             "USERPROFILE": str(isolated_home),
             "XDG_CONFIG_HOME": str(isolated_home / ".config"),
             "XDG_CACHE_HOME": str(isolated_home / ".cache"),
+            "PYTHONPATH": str(execution_root),
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_TERMINAL_PROMPT": "0",
             "TRADEBOT_AGENT_SUPERVISOR": "1",
@@ -180,7 +192,7 @@ def _run_acceptance_command(
     command: AcceptanceCommand,
 ) -> dict[str, Any]:
     started = time.monotonic()
-    env = _safe_environment(isolated_home)
+    env = _safe_environment(isolated_home, execution_root)
     resolved_executable = shutil.which(command.argv[0], path=env.get("PATH"))
     if not resolved_executable:
         return {
@@ -196,6 +208,7 @@ def _run_acceptance_command(
             "stderr_sha256": hashlib.sha256(f"executable_not_found:{command.argv[0]}".encode("utf-8")).hexdigest(),
             "execution_root": "credential_isolated_git_worktree",
             "ignored_source_credentials_copied": False,
+            "inherited_pythonpath_used": False,
             "network_sandboxed": False,
         }
     argv = [resolved_executable, *command.argv[1:]]
@@ -225,6 +238,7 @@ def _run_acceptance_command(
             "stderr_sha256": hashlib.sha256(stderr.encode("utf-8")).hexdigest(),
             "execution_root": "credential_isolated_git_worktree",
             "ignored_source_credentials_copied": False,
+            "inherited_pythonpath_used": False,
             "network_sandboxed": False,
         }
     except subprocess.TimeoutExpired as exc:
@@ -244,6 +258,7 @@ def _run_acceptance_command(
             "stderr_sha256": hashlib.sha256(stderr.encode("utf-8")).hexdigest(),
             "execution_root": "credential_isolated_git_worktree",
             "ignored_source_credentials_copied": False,
+            "inherited_pythonpath_used": False,
             "network_sandboxed": False,
         }
 
