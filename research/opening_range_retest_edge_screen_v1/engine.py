@@ -58,6 +58,19 @@ def safety() -> dict[str, Any]:
     return C.safety_fields()
 
 
+def evidence_header(mode: str, decision: str, reason: str) -> dict[str, Any]:
+    return {
+        "schema_version": C.SCHEMA_VERSION,
+        "mode": mode,
+        "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+        "decision": decision,
+        "reason": reason,
+        "source": "opening_range_retest_outcome_ledger_v2.json",
+        "timestamp": TIMESTAMP,
+        **safety(),
+    }
+
+
 def verify_sidecar(path: Path) -> dict[str, Any]:
     actual = shafile(path)
     sidecar = path.with_suffix(path.suffix + ".sha256")
@@ -307,10 +320,7 @@ def metrics_payload(ledger: dict[str, Any]) -> dict[str, Any]:
         item["holm"] = holm[key]
 
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_METRICS_V1",
-        "source": "opening_range_retest_outcome_ledger_v2.json",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_METRICS_V1", "ORB_EDGE_SCREEN_METRICS_RECOMPUTED", "recomputed fixed horizon metrics from certified outcome ledger records"),
         "horizons": horizons,
         "primary_horizon": C.PRIMARY_HORIZON,
         "secondary_horizon": C.SECONDARY_HORIZON,
@@ -318,7 +328,6 @@ def metrics_payload(ledger: dict[str, Any]) -> dict[str, Any]:
         "secondary": horizons[str(C.SECONDARY_HORIZON)],
         "symbol_direction": symbol_direction,
         "projection_hash": shab(cbytes({"horizons": horizons, "symbol_direction": symbol_direction})),
-        **safety(),
     }
     return payload
 
@@ -473,14 +482,11 @@ def within_stratum_control(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def controls_payload(ledger: dict[str, Any], source_project_root: Path) -> dict[str, Any]:
     rows = measured_rows(ledger, C.PRIMARY_HORIZON)
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_CONTROLS_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_CONTROLS_V1", "ORB_EDGE_SCREEN_CONTROLS_RECOMPUTED", "recomputed random-direction, opposite-direction, matched-time, and within-stratum controls"),
         "random_direction": random_direction_control(rows),
         "opposite_direction": opposite_direction_control(rows),
         "matched_time": matched_time_control(rows, source_project_root),
         "within_stratum_direction_permutation": within_stratum_control(rows),
-        **safety(),
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -500,9 +506,7 @@ def concentration_payload(ledger: dict[str, Any]) -> dict[str, Any]:
     top_ids = {row["candidate_id"] for row in sorted(rows, key=lambda item: item["return"], reverse=True)[:top_count]}
     without_top = [row for row in rows if row["candidate_id"] not in top_ids]
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_CONCENTRATION_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_CONCENTRATION_V1", "ORB_EDGE_SCREEN_CONCENTRATION_RECOMPUTED", "recomputed pre-registered concentration controls without return-based rescue selection"),
         "best_session_contribution": best[0][1] / total_positive if total_positive > 0 else None,
         "best_5_session_contribution": sum(v for _, v in best[:5] if v > 0) / total_positive if total_positive > 0 else None,
         "best_10_session_contribution": sum(v for _, v in best[:10] if v > 0) / total_positive if total_positive > 0 else None,
@@ -517,7 +521,6 @@ def concentration_payload(ledger: dict[str, Any]) -> dict[str, Any]:
             "worst_5_sessions_removed": remove_sessions({k for k, _ in worst[:5]}),
         },
         "top_1pct_candidate_count": top_count,
-        **safety(),
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -535,14 +538,11 @@ def replication_payload(ledger: dict[str, Any]) -> dict[str, Any]:
         sym_sessions = session_means([row for row in rows if row["symbol"] == symbol])
         symbol_positive_contribution[symbol] = sum(v for v in sym_sessions.values() if v > 0) / total_positive if total_positive > 0 else None
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_REPLICATION_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_REPLICATION_V1", "ORB_EDGE_SCREEN_REPLICATION_RECOMPUTED", "recomputed year, symbol, and direction replication tables from certified outcomes"),
         "years": by_year,
         "symbols": by_symbol,
         "directions": by_direction,
         "symbol_positive_contribution": symbol_positive_contribution,
-        **safety(),
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -560,12 +560,9 @@ def overlap_payload(ledger: dict[str, Any]) -> dict[str, Any]:
         grouped_b[(row["session_date"], row["symbol"], row["direction"], row["entry_bucket"])].append(row)
     sens_b = [sorted(items, key=lambda row: (row["proposal_ready_at"], row["candidate_id"]))[0] for items in grouped_b.values()]
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_OVERLAP_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_OVERLAP_V1", "ORB_EDGE_SCREEN_OVERLAP_RECOMPUTED", "recomputed pre-registered non-return overlap sensitivities"),
         "sensitivity_a": {"rule": "earliest per session x symbol x direction", **descriptive_stats(sens_a)},
         "sensitivity_b": {"rule": "earliest per non-return overlap proxy component", **descriptive_stats(sens_b)},
-        **safety(),
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -640,12 +637,9 @@ def structural_and_conditional(metrics: dict[str, Any], controls: dict[str, Any]
 def verdict_payload(metrics: dict[str, Any], controls: dict[str, Any], concentration: dict[str, Any], replication: dict[str, Any], overlap: dict[str, Any]) -> dict[str, Any]:
     result = structural_and_conditional(metrics, controls, concentration, replication, overlap)
     payload = {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_VERDICT_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_VERDICT_V1", result["verdict"], "applied frozen structural and conditional verdict gates to recomputed evidence"),
         **result,
         "next_action": "freeze ORB and select the next strategy" if result["verdict"] == "ORB_NO_STRUCTURAL_EDGE" else "human review, then WFA only",
-        **safety(),
     }
     payload["projection_hash"] = shab(cbytes({k: v for k, v in payload.items() if k != "projection_hash"}))
     return payload
@@ -656,6 +650,14 @@ def report_text(metrics: dict[str, Any], controls: dict[str, Any], concentration
     lines = [
         "# ORB Structural-Edge Screen v1",
         "",
+        "- mode: ORB_EDGE_SCREEN_REPORT_V1",
+        "- candidate_id: ALL_ORB_OUTCOME_V2_CANDIDATES",
+        f"- decision: {verdict['verdict']}",
+        "- reason: applied frozen structural and conditional verdict gates to recomputed evidence",
+        f"- timestamp: {TIMESTAMP}",
+        "- source: opening_range_retest_outcome_ledger_v2.json",
+        "- is_order_action: false",
+        "- broker_api_called: false",
         f"- verdict: {verdict['verdict']}",
         f"- primary_horizon_minutes: {C.PRIMARY_HORIZON}",
         f"- primary_candidate_count: {primary['candidate_count']}",
@@ -747,14 +749,11 @@ def audit_artifacts(output_dir: Path, source_project_root: Path, artifact_dir: P
     if controls["matched_time"]["coverage"] < 0 or controls["matched_time"]["coverage"] > 1:
         failures.append("MATCHED_TIME_COVERAGE_INVALID")
     return {
-        "schema_version": C.SCHEMA_VERSION,
-        "mode": "ORB_EDGE_SCREEN_AUDIT_V1",
-        "timestamp": TIMESTAMP,
+        **evidence_header("ORB_EDGE_SCREEN_AUDIT_V1", "ORB_EDGE_SCREEN_AUDIT_CERTIFIED" if not failures else "ORB_EDGE_SCREEN_AUDIT_FAILED", "independent audit recomputed artifact sidecars, authority checks, counts, controls, and verdict consistency"),
         "verdict": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED" if not failures else "ORB_EDGE_SCREEN_AUDIT_FAILED",
         "failures": failures,
         "source_authority": authority,
         "artifact_hashes": artifact_hashes(output_dir),
-        **safety(),
     }
 
 

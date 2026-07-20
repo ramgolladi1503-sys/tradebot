@@ -27,7 +27,7 @@ def audit(output_dir: Path) -> dict[str, Any]:
             failures.append(f"SIDECAR_MISMATCH:{key}")
         artifacts[key] = {"path": filename, "sha256": actual, "sidecar_sha256": expected}
     if failures:
-        return {"schema_version": C.SCHEMA_VERSION, "mode": "ORB_EDGE_SCREEN_ORACLE_AUDIT_V1", "verdict": "ORB_EDGE_SCREEN_AUDIT_FAILED", "failures": failures, **C.safety_fields()}
+        return {"schema_version": C.SCHEMA_VERSION, "mode": "ORB_EDGE_SCREEN_ORACLE_AUDIT_V1", "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES", "decision": "ORB_EDGE_SCREEN_AUDIT_FAILED", "reason": "oracle artifact presence or sidecar validation failed", "timestamp": C.TIMESTAMP, "source": "opening_range_retest_outcome_ledger_v2.json", "verdict": "ORB_EDGE_SCREEN_AUDIT_FAILED", "failures": failures, **C.safety_fields()}
     contract = load_json(output_dir / C.ARTIFACT_NAMES["contract"])
     metrics = load_json(output_dir / C.ARTIFACT_NAMES["metrics"])
     controls = load_json(output_dir / C.ARTIFACT_NAMES["controls"])
@@ -59,6 +59,11 @@ def audit(output_dir: Path) -> dict[str, Any]:
     return {
         "schema_version": C.SCHEMA_VERSION,
         "mode": "ORB_EDGE_SCREEN_ORACLE_AUDIT_V1",
+        "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+        "decision": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED" if not failures else "ORB_EDGE_SCREEN_AUDIT_FAILED",
+        "reason": "oracle independently checked artifact sidecars, contract identity, horizon counts, controls, replication, overlap, and verdict boundaries",
+        "timestamp": C.TIMESTAMP,
+        "source": "opening_range_retest_outcome_ledger_v2.json",
         "verdict": "ORB_EDGE_SCREEN_AUDIT_CERTIFIED" if not failures else "ORB_EDGE_SCREEN_AUDIT_FAILED",
         "failures": failures,
         "artifact_hashes": artifacts,
@@ -76,4 +81,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

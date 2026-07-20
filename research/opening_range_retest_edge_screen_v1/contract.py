@@ -6,6 +6,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 SCREEN_ID = "opening_range_retest_edge_screen_v1"
+TIMESTAMP = "2026-07-20T00:00:00Z"
 
 BASE_MAIN_SHA = "a48176fc245375f15e316493364915ec37439e29"
 FROZEN_OUTCOME_CODE_SHA = "9e4798d48a39f414c88095a1d1a70d055dda98a8"
@@ -114,7 +115,13 @@ def safety_fields() -> dict[str, Any]:
 def contract_payload() -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
+        "mode": "ORB_EDGE_SCREEN_CONTRACT_V1",
         "screen_id": SCREEN_ID,
+        "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
+        "decision": "ORB_EDGE_SCREEN_CONTRACT_FROZEN",
+        "reason": "pre-registered structural-edge screen contract freezes horizons, seeds, hurdles, controls, subgroups, and verdict rules before evidence generation",
+        "timestamp": TIMESTAMP,
+        "source": SOURCE_LEDGER_PATH,
         "base_main_sha": BASE_MAIN_SHA,
         "frozen_outcome_code_sha": FROZEN_OUTCOME_CODE_SHA,
         "frozen_implementation_tree_hash": FROZEN_IMPLEMENTATION_TREE_HASH,
@@ -188,4 +195,3 @@ def contract_payload() -> dict[str, Any]:
     }
     payload["contract_hash"] = sha256_bytes(canonical_json_bytes({k: v for k, v in payload.items() if k != "contract_hash"}))
     return payload
-

@@ -17,6 +17,7 @@
     "seed": 20260720
   },
   "broker_api_called": false,
+  "candidate_id": "ALL_ORB_OUTCOME_V2_CANDIDATES",
   "certified_candidates": 2215,
   "certified_negative_controls": 154,
   "certified_projection_hash": "23ada7617040d2824e8e5e49742bfbb2d91e676994a3ba4f371d3e573014c581",
@@ -32,7 +33,8 @@
   ],
   "conditional_min_candidates": 300,
   "conditional_min_sessions": 150,
-  "contract_hash": "8ca61837f1e81f4522640b5d665b62eea630d6823c0dfc45ca4167c8c10fe1e7",
+  "contract_hash": "233a7094938c71f41f67be838133ad4843e5053373cfa0ebc52b111e7c55c712",
+  "decision": "ORB_EDGE_SCREEN_CONTRACT_FROZEN",
   "diagnostic_horizon_minutes": [
     1,
     3,
@@ -107,6 +109,7 @@
     ],
     "seed": 20260722
   },
+  "mode": "ORB_EDGE_SCREEN_CONTRACT_V1",
   "not_option_pnl": true,
   "not_profitability_proof": true,
   "opposite_direction_control": {
@@ -141,9 +144,11 @@
     "seed": 20260721
   },
   "read_only": true,
+  "reason": "pre-registered structural-edge screen contract freezes horizons, seeds, hurdles, controls, subgroups, and verdict rules before evidence generation",
   "schema_version": 1,
   "screen_id": "opening_range_retest_edge_screen_v1",
   "secondary_horizon_minutes": 30,
+  "source": "docs/agent_reviews/opening_range_retest_outcome_ledger_v2.json",
   "source_ledger_path": "docs/agent_reviews/opening_range_retest_outcome_ledger_v2.json",
   "source_ledger_semantic_hash": "2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd",
   "source_ledger_sha256": "2136cf84f19aa93d4b81d3b30c3e69cc91aaaa5e849ad286b7f213ae3ec21a3a",
@@ -179,6 +184,7 @@
     "NIFTY",
     "SENSEX"
   ],
+  "timestamp": "2026-07-20T00:00:00Z",
   "verdicts": [
     "ORB_NO_STRUCTURAL_EDGE",
     "ORB_CONDITIONAL_EDGE_CANDIDATE",
