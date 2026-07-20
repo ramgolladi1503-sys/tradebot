@@ -1,0 +1,1 @@
+{"allowed_for_live_execution":false,"append":false,"broker_api_called":false,"decision":"BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA","fold_count":0,"is_order_action":false,"mode":"WFA_FOLD_RESULTS","read_only":true,"reason":"Walk-forward option economics require executable option outcomes.","result_count":0,"schema_version":1}

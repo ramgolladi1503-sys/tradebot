@@ -1,0 +1,1 @@
+{"allowed_for_live_execution":false,"append":false,"broker_api_called":false,"decision":"BLOCKED_BY_MISSING_TRUSTED_OPTION_DATA","fold_count":null,"is_order_action":false,"mode":"NEGATIVE_CONTROLS","read_only":true,"reason":"Economic score controls require executable option outcomes.","result_count":0,"schema_version":1}

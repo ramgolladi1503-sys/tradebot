@@ -1,0 +1,1 @@
+{"allowed_for_live_execution":false,"append":false,"broker_api_called":false,"decision":"INSUFFICIENT_TRUSTED_OPTION_DATA","fold_count":null,"is_order_action":false,"mode":"OPTION_ECONOMIC_SUMMARY","read_only":true,"reason":"No trusted option bid/ask ledger is available.","result_count":0,"schema_version":1}
