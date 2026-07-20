@@ -14,12 +14,13 @@
 - candidate_conservation: CANDIDATE_CONSERVATION_PASS
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
 - portable_sidecar_identity: PORTABLE_LOGICAL_FILENAME
+- generic_absolute_path_gate: GENERIC_ABSOLUTE_FILESYSTEM_PATH_REJECTION_PASS
 - cross_worktree_determinism: CROSS_WORKTREE_OUTCOME_DETERMINISM_PASS
-- contract_hash: `6f18d094b21ee640aa1d88a163cb04313b64e9ffc3dfb18fd8ac82faa2c306b4`
-- outcome_ledger_hash: `aa2faccdfc2ddddcb052cf548575c98ab62d22be3da6cb8201156f636d82d644`
-- summary_hash: `be18714b259328947dd34164c381bb3e323b0c54550be8a0a4f9804ac2e76525`
-- frozen_code_sha: `035702df97dccea07f54d2d3d2d7d22747b42324`
-- implementation_tree_hash: `8da594d0b7a3806eb3c2b912f9fc87ab2e9a6da0fe2bf042cd8d769a1518918e`
+- contract_hash: `1a560b97b3089f750fa5b5a166756d3b8d8c39a98915e13239865d488fc1f204`
+- outcome_ledger_hash: `2e798aa937c8d88ea164ef6c47bc295de929ee2944f03a34b1397d0ad40a10bd`
+- summary_hash: `3deb762c2b5c2caa96f9c896d9299c89c34364572d33da8b20f41d4db07ea2a7`
+- frozen_code_sha: `9e4798d48a39f414c88095a1d1a70d055dda98a8`
+- implementation_tree_hash: `dfdeefa882879267ccdffff7e10454d4298d3767e8b3f687cfdbe6a0cd86bf14`
 
 ## Agent Work Contract
 
@@ -62,6 +63,7 @@
 - implementation: Generated contract, ledger, summary, overlap, audit, certification, and sidecar artifacts.
 - implementation: Generated negative-control matrix and sidecar artifact.
 - implementation: Input sidecar paths are portable logical identities using filename-only `path` values; artifact SHA-256, declared sidecar SHA-256, and match truth remain bound in the ledger.
+- implementation: Semantic projection rejects generic POSIX, Windows drive, and UNC absolute filesystem paths using host-independent pure path parsing.
 
 ## QA / Safety Review
 
@@ -88,6 +90,10 @@
 - horizon_conservation: {'1': 2215, '3': 2215, '5': 2215, '15': 2215, '30': 2215}
 - sidecar_verdict: ARTIFACT_SIDECARS_CERTIFIED
 - input_sidecar_paths: PORTABLE_LOGICAL_IDENTITIES
+- generic_posix_path_negative_controls: PASS
+- windows_unc_path_negative_controls: PASS
+- non_path_false_positive_controls: PASS
+- semantic_absolute_path_leaks: 0
 - cross_worktree_determinism: CROSS_WORKTREE_OUTCOME_DETERMINISM_PASS
 
 ## Runtime Proof Required After Merge
