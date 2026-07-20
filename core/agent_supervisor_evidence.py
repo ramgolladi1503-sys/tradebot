@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 from core.agent_supervisor_claims import _read_claim, _update_claim_state
 from core.agent_supervisor_git import (
     _changed_paths,
+    _credential_isolated_checkout,
     _evidence_dir,
     _hash_path,
     _manifest_hash_is_valid,
@@ -32,6 +33,7 @@ from core.agent_supervisor_types import (
     _tuple_text,
     _utc_now,
 )
+
 
 def verify_contract(contract: SupervisorContract) -> SupervisorResult:
     blockers: list[str] = []
@@ -94,15 +96,38 @@ def verify_contract(contract: SupervisorContract) -> SupervisorResult:
 
     command_results: list[dict[str, Any]] = []
     if not blockers:
-        for command in contract.acceptance_commands:
-            result = _run_acceptance_command(worktree, command)
-            command_results.append(result)
-            if result["timed_out"]:
-                blockers.append("ACCEPTANCE_COMMAND_TIMED_OUT")
-                break
-            if result["exit_code"] != 0:
-                blockers.append("ACCEPTANCE_COMMAND_FAILED")
-                break
+        try:
+            with _credential_isolated_checkout(worktree, head_commit) as (
+                verification_root,
+                isolated_home,
+            ):
+                for command in contract.acceptance_commands:
+                    result = _run_acceptance_command(
+                        verification_root,
+                        isolated_home,
+                        command,
+                    )
+                    command_results.append(result)
+                    if result["timed_out"]:
+                        blockers.append("ACCEPTANCE_COMMAND_TIMED_OUT")
+                        break
+                    if result["exit_code"] != 0:
+                        blockers.append("ACCEPTANCE_COMMAND_FAILED")
+                        break
+        except Exception as exc:
+            blockers.append("ACCEPTANCE_SANDBOX_FAILED")
+            command_results.append(
+                {
+                    "name": "sandbox-setup",
+                    "argv": [],
+                    "timed_out": False,
+                    "exit_code": None,
+                    "error": f"{type(exc).__name__}:{exc}",
+                    "execution_root": "credential_isolated_git_worktree",
+                    "ignored_source_credentials_copied": False,
+                    "network_sandboxed": False,
+                }
+            )
 
     artifact_hashes = {path: _hash_path(worktree, path) for path in contract.required_artifacts}
     missing_artifacts = [path for path, record in artifact_hashes.items() if record["kind"] == "missing"]
@@ -127,15 +152,26 @@ def verify_contract(contract: SupervisorContract) -> SupervisorResult:
             "allowed_paths": list(contract.allowed_paths),
             "prohibited_paths": list(contract.prohibited_paths),
             "ownership_paths": list(contract.ownership_paths),
-            "scope_violations": sorted(set(blockers).intersection({
-                "CHANGED_PATH_OUTSIDE_ALLOWED_PATHS",
-                "PROHIBITED_PATH_CHANGED",
-                "FROZEN_PATH_CHANGED",
-            })),
+            "scope_violations": sorted(
+                set(blockers).intersection(
+                    {
+                        "CHANGED_PATH_OUTSIDE_ALLOWED_PATHS",
+                        "PROHIBITED_PATH_CHANGED",
+                        "FROZEN_PATH_CHANGED",
+                    }
+                )
+            ),
         },
         "frozen_initial": frozen_initial,
         "frozen_current": frozen_current,
         "frozen_violations": frozen_violations,
+        "acceptance_execution": {
+            "credential_isolated_git_worktree": True,
+            "ignored_source_credentials_copied": False,
+            "user_home_isolated": True,
+            "proxy_environment_forced_closed": True,
+            "network_sandboxed": False,
+        },
         "acceptance_commands": command_results,
         "required_artifacts": artifact_hashes,
         "missing_artifacts": missing_artifacts,
@@ -178,6 +214,30 @@ def _load_json_object(path: str | Path, *, label: str) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise ValueError(f"{label}_must_be_json_object")
     return dict(payload)
+
+
+def _validate_reproduction_results(
+    expected_commands: Sequence[Mapping[str, Any]],
+    reproduction_list: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    blockers: list[str] = []
+    if len(reproduction_list) != len(expected_commands):
+        blockers.append("REVIEW_REPRODUCTION_COUNT_MISMATCH")
+        return blockers
+    for expected, reproduced in zip(expected_commands, reproduction_list):
+        if _text(reproduced.get("name")) != _text(expected.get("name")):
+            blockers.append("REVIEW_REPRODUCTION_COMMAND_MISMATCH")
+        expected_argv = list(expected.get("argv") or [])
+        reproduced_argv = list(reproduced.get("argv") or [])
+        if reproduced_argv != expected_argv:
+            blockers.append("REVIEW_REPRODUCTION_COMMAND_MISMATCH")
+        try:
+            exit_code = int(reproduced.get("exit_code", 1))
+        except Exception:
+            exit_code = 1
+        if exit_code != 0:
+            blockers.append("REVIEW_REPRODUCTION_FAILED")
+    return blockers
 
 
 def record_independent_review(
@@ -237,10 +297,16 @@ def record_independent_review(
         implementation_manifest.get("manifest_sha256")
     ):
         blockers.append("REVIEW_MANIFEST_HASH_MISMATCH")
-    if contract.acceptance_commands and not reproduction_list:
+
+    expected_commands = [
+        dict(item)
+        for item in implementation_manifest.get("acceptance_commands", [])
+        if isinstance(item, Mapping) and item.get("name") != "sandbox-setup"
+    ]
+    if expected_commands and not reproduction_list:
         blockers.append("REVIEW_REPRODUCTION_EVIDENCE_MISSING")
-    if any(int(item.get("exit_code", 1)) != 0 for item in reproduction_list):
-        blockers.append("REVIEW_REPRODUCTION_FAILED")
+    elif reproduction_list:
+        blockers.extend(_validate_reproduction_results(expected_commands, reproduction_list))
 
     review_manifest_payload = {
         "schema_version": AGENT_SUPERVISOR_SCHEMA_VERSION,
