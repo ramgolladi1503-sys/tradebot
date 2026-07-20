@@ -156,10 +156,11 @@ def _build_temporal_candidate(
     max_retest_distance_pct = float(params["MAX_RETEST_DISTANCE_PCT"])
     min_breakout_distance_pct = float(params["MIN_BREAKOUT_DISTANCE_PCT"])
     side = side_evidence(ctx, setup.direction)
-    scoring_spot = setup.breakout_bar.close
+    breakout_reference_close = setup.breakout_bar.close
+    retest_reference_close = setup.retest_bar.close
     retest_level = setup.normalized_boundary_value
-    retest_distance = pct_distance(scoring_spot, retest_level) or 0.0
-    breakout_distance = _breakout_distance(scoring_spot, setup.direction, retest_level)
+    retest_distance = pct_distance(retest_reference_close, retest_level) or 0.0
+    breakout_distance = _breakout_distance(breakout_reference_close, setup.direction, retest_level)
     price_structure_score = clamp_score(
         0.45
         * (1.0 - ratio_score(retest_distance, start=0.0, full=max_retest_distance_pct))
@@ -169,13 +170,18 @@ def _build_temporal_candidate(
     )
     completed_history_provenance = _completed_history_provenance(ctx, setup)
     evidence = {
-        "spot_ltp": scoring_spot,
+        "spot_ltp": breakout_reference_close,
         "vwap": ctx.vwap,
         "orb_high": setup.orb_high,
         "orb_low": setup.orb_low,
+        "breakout_close": setup.breakout_bar.close,
+        "retest_close": setup.retest_bar.close,
+        "continuation_close": setup.continuation_bar.close,
         "retest_level": retest_level,
         "retest_distance_pct": retest_distance,
         "breakout_distance_pct": breakout_distance,
+        "retest_distance_source": "retest_bar.close",
+        "breakout_distance_source": "breakout_bar.close",
         "setup_identity": {
             "contract_version": TEMPORAL_CONTRACT_VERSION,
             "strategy_id": STRATEGY_ID,

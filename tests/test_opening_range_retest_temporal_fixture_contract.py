@@ -678,11 +678,113 @@ def test_future_mutation_and_physical_truncation_preserve_candidate_payload_and_
         breakout_timestamp=extended_trace.first_emission_checkpoint or "",
     )
 
+
+@pytest.mark.parametrize(
+    (
+        "case_id",
+        "rows",
+        "regime_builder",
+        "direction",
+        "boundary_type",
+        "boundary_value",
+        "breakout_close",
+        "retest_close",
+    ),
+    [
+        (
+            "call_retest_distance_source",
+            OPENING_RANGE_ROWS
+            + (
+                (15, 22556.0, 22690.0, 22554.0, 22680.0),
+                (16, 22600.0, 22602.0, 22598.0, 22600.0),
+                (17, 22600.0, 22612.0, 22599.0, 22608.0),
+            ),
+            lambda _state: _regime(up=0.8, down=0.0),
+            "BUY_CALL",
+            "ORB_HIGH",
+            OPENING_RANGE_HIGH,
+            22680.0,
+            22600.0,
+        ),
+        (
+            "put_retest_distance_source",
+            OPENING_RANGE_ROWS
+            + (
+                (15, 22556.0, 22558.0, 22410.0, 22420.0),
+                (16, 22500.0, 22502.0, 22496.0, 22500.0),
+                (17, 22500.0, 22501.0, 22482.0, 22490.0),
+            ),
+            lambda _state: _regime(up=0.0, down=0.8),
+            "BUY_PUT",
+            "ORB_LOW",
+            OPENING_RANGE_LOW,
+            22420.0,
+            22500.0,
+        ),
+    ],
+)
+def test_retest_and_breakout_distance_sources_are_independent(
+    case_id: str,
+    rows: tuple[tuple[int, float, float, float, float], ...],
+    regime_builder,
+    direction: str,
+    boundary_type: str,
+    boundary_value: float,
+    breakout_close: float,
+    retest_close: float,
+) -> None:
+    trace, state, candidate = _first_emitting_candidate(
+        case_id=case_id,
+        rows=rows,
+        regime_builder=regime_builder,
+    )
+    evidence = candidate.evidence
+    identity = evidence["setup_identity"]
+
+    expected_retest_distance = abs(retest_close - boundary_value) / abs(boundary_value)
+    if direction == "BUY_CALL":
+        expected_breakout_distance = max(0.0, (breakout_close - boundary_value) / abs(boundary_value))
+    else:
+        expected_breakout_distance = max(0.0, (boundary_value - breakout_close) / abs(boundary_value))
+    expected_score = (
+        0.45 * (1.0 - min(1.0, expected_retest_distance / 0.0018))
+        + 0.35 * min(1.0, max(0.0, (expected_breakout_distance - 0.0008) / (0.004 - 0.0008)))
+        + 0.20 * 0.45
+    )
+
+    assert evidence["breakout_close"] == breakout_close
+    assert evidence["retest_close"] == retest_close
+    assert evidence["continuation_close"] == rows[-1][4]
+    assert evidence["retest_level"] == boundary_value
+    assert evidence["retest_distance_pct"] == pytest.approx(expected_retest_distance)
+    assert evidence["breakout_distance_pct"] == pytest.approx(expected_breakout_distance)
+    assert evidence["retest_distance_pct"] != pytest.approx(expected_breakout_distance)
+    assert evidence["retest_distance_source"] == "retest_bar.close"
+    assert evidence["breakout_distance_source"] == "breakout_bar.close"
+    assert candidate.raw_score == pytest.approx(expected_score)
+    assert candidate.direction == direction
+    assert candidate.entry_trigger == "opening_range_breakout_retest_hold"
+    assert candidate.invalid_if == "price_returns_inside_opening_range"
+    assert candidate.rank_reason == "opening range breakout retest held"
+    assert identity["boundary_type"] == boundary_type
+    assert identity["normalized_boundary_value"] == boundary_value
+    assert identity["breakout_timestamp"] == _bar(15, *rows[15][1:])["bar_end_timestamp"]
+    assert identity["retest_timestamp"] == _bar(16, *rows[16][1:])["bar_end_timestamp"]
+    assert identity["continuation_timestamp"] == _bar(17, *rows[17][1:])["bar_end_timestamp"]
+    assert identity["setup_id"] == _setup_id(
+        direction=direction,
+        boundary_type=boundary_type,
+        normalized_boundary_value=boundary_value,
+        breakout_timestamp=identity["breakout_timestamp"],
+    )
+    assert identity["history_hash"] == _history_hash(rows, cutoff_index=len(rows))
+    assert trace.emission_count == 1
+
 @pytest.mark.parametrize(
     ("case_id", "ctx_overrides", "expected_has_candidate", "expected_raw_score"),
     [
-        ("orb_match", {}, True, 0.451504),
-        ("orb_absent", {"orb_high": None, "orb_low": None}, True, 0.451504),
+        ("orb_match", {}, True, 0.54),
+        ("orb_absent", {"orb_high": None, "orb_low": None}, True, 0.54),
         ("orb_high_mismatch", {"orb_high": OPENING_RANGE_HIGH + 5.0}, False, None),
         ("orb_low_mismatch", {"orb_low": OPENING_RANGE_LOW - 5.0}, False, None),
         (
