@@ -8,6 +8,30 @@ from research.opening_range_retest_outcomes_v2.engine import verify_inputs, veri
 from research.opening_range_retest_outcomes_v2.oracle import input_sidecar_failures, verify_sidecar
 from scripts.generate_opening_range_retest_outcomes_v2 import _projection_hash
 
+NON_PORTABLE_SIDECAR_PATHS = (
+    "/home/runner/work/repo/file.json",
+    "/opt/build/file.json",
+    "/var/tmp/file.json",
+    "/root/project/file.json",
+    "/mnt/data/file.json",
+    "/Users/example/repo/file.json",
+    "/tmp/file.json",
+    "/private/tmp/file.json",
+    "C:\\repo\\file.json",
+    "D:/repo/file.json",
+    "\\\\server\\share\\file.json",
+    "folder/file.json",
+    "folder\\file.json",
+)
+
+PORTABLE_NON_PATH_VALUES = (
+    "https://github.com/example/repo",
+    "2026-07-20T09:12:01Z",
+    "BUY_CALL",
+    "(terminal_close - entry_open) / entry_open",
+    "artifact.json",
+)
+
 
 def _write_artifact(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -90,13 +114,7 @@ def test_input_sidecar_failures_reject_absolute_paths(tmp_path: Path) -> None:
     _write_artifact(artifact, {"a": 1})
     expected = {"artifact": verify_sidecar(artifact)}
 
-    for bad_path in (
-        "/Users/example/repo/file.json",
-        "/tmp/file.json",
-        "/private/tmp/file.json",
-        "C:\\repo\\file.json",
-        "\\\\server\\share\\file.json",
-    ):
+    for bad_path in NON_PORTABLE_SIDECAR_PATHS:
         actual = {"artifact": {**expected["artifact"], "path": bad_path}}
         assert input_sidecar_failures(expected, actual) == ["INPUT_SIDECAR_PATH_NOT_PORTABLE:artifact"]
 
@@ -139,3 +157,20 @@ def test_projection_hash_keeps_portable_sidecar_evidence_and_rejects_absolute_pa
         assert str(exc) == "SEMANTIC_PROJECTION_ABSOLUTE_PATH_LEAK:ledger.input_sidecars.artifact.path"
     else:
         raise AssertionError("expected projection absolute-path rejection")
+
+
+def test_projection_hash_rejects_generic_absolute_paths() -> None:
+    for bad_path in NON_PORTABLE_SIDECAR_PATHS[:11]:
+        payload = {"metadata": {"unexpected_location": bad_path}}
+        try:
+            _projection_hash(payload)
+        except RuntimeError as exc:
+            assert str(exc) == "SEMANTIC_PROJECTION_ABSOLUTE_PATH_LEAK:metadata.unexpected_location"
+        else:
+            raise AssertionError(f"expected projection absolute-path rejection for {bad_path!r}")
+
+
+def test_projection_hash_accepts_non_path_controls() -> None:
+    for value in PORTABLE_NON_PATH_VALUES:
+        payload = {"metadata": {"value": value}}
+        assert _projection_hash(payload) == sha256_bytes(canonical_json_bytes(payload))

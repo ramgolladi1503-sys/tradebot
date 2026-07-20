@@ -7,7 +7,7 @@ import math
 import subprocess
 from collections import Counter
 from datetime import timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import pandas as pd
@@ -87,17 +87,22 @@ def verify_sidecar(path: Path) -> dict[str, Any]:
     return {"path": path.name, "artifact_sha256": actual, "sidecar_sha256": expected, "sidecar_match": actual == expected}
 
 
+def _is_absolute_filesystem_path(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+
 def _portable_sidecar_path(value: object) -> str | None:
     if not isinstance(value, str) or not value:
         return None
-    if value != Path(value).name:
-        return None
-    lowered = value.lower()
-    if value.startswith(("/", "\\\\")) or lowered.startswith(("/users/", "/tmp/", "/private/tmp/")):
-        return None
-    if len(value) >= 3 and value[1:3] in {":\\", ":/"} and value[0].isalpha():
+    if _is_absolute_filesystem_path(value):
         return None
     if "/" in value or "\\" in value:
+        return None
+    if value != PurePosixPath(value).name:
+        return None
+    if value != PureWindowsPath(value).name:
         return None
     return value
 

@@ -6,7 +6,7 @@ import argparse
 import json
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -53,6 +53,12 @@ def _stable(payload: object) -> object:
     return payload
 
 
+def _is_absolute_filesystem_path(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+
 def _absolute_path_projection_leaks(payload: object, path: tuple[str, ...] = ()) -> list[str]:
     leaks: list[str] = []
     if isinstance(payload, dict):
@@ -65,12 +71,7 @@ def _absolute_path_projection_leaks(payload: object, path: tuple[str, ...] = ())
         return leaks
     if not isinstance(payload, str):
         return leaks
-    lowered = payload.lower()
-    if (
-        payload.startswith(("/Users/", "/tmp/", "/private/tmp/", "\\\\"))
-        or lowered.startswith(("/users/", "/tmp/", "/private/tmp/"))
-        or (len(payload) >= 3 and payload[1:3] in {":\\", ":/"} and payload[0].isalpha())
-    ):
+    if _is_absolute_filesystem_path(payload):
         leaks.append(".".join(path))
     return leaks
 
