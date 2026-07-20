@@ -14,9 +14,7 @@ import pandas as pd
 
 from research.opening_range_retest_outcomes_v2.contract import (
     BASE_MAIN_POLICY,
-    CONTRACT_VERSION,
     HORIZONS_MINUTES,
-    IMPLEMENTATION_TREE_HASH_ALGORITHM,
     IMPLEMENTATION_TREE_PATHS,
     INPUT_CANDIDATE_COUNT,
     INPUT_CANDIDATE_CORE_HASH,
