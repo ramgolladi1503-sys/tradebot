@@ -674,6 +674,48 @@ def report_text(metrics: dict[str, Any], controls: dict[str, Any], concentration
     lines.extend(f"- {item}" for item in verdict["structural_gates_failed"])
     if verdict["verdict"] == "ORB_NO_STRUCTURAL_EDGE":
         lines.extend(["", "STOP ORB RESEARCH", "FREEZE ACCEPTED IMPLEMENTATION", "DO NOT TUNE ORB", "SELECT NEXT STRATEGY HYPOTHESIS"])
+    lines.extend(
+        [
+            "",
+            "## Agent Work Contract",
+            "- source_agent: Codex",
+            "- action: GENERATE_PATCH",
+            "- scope: offline ORB structural-edge screen over certified outcome ledger only",
+            "- allowed_paths: research/opening_range_retest_edge_screen_v1, scripts/*edge_screen_v1.py, tests/*edge_screen*, docs/agent_reviews/opening_range_retest_edge_screen_*_v1*",
+            "- forbidden_paths: production strategy, core, config, broker, risk, feed, dashboard, runtime source data, Phase 1 v2 artifacts, Outcome v2 artifacts, PR #674",
+            "",
+            "## Scope Guard",
+            "- production files touched: none",
+            "- source data copied: none",
+            "- source symlinks created: none",
+            "- ORB tuning performed: none",
+            "",
+            "## Grill Me Review",
+            "- Verdict is constrained by failed structural gates; no profitability, option PnL, WFA, paper, or live readiness claim is made.",
+            "",
+            "## Hermes Review",
+            "- The workflow separates contract freeze, implementation freeze, deterministic evidence generation, and independent oracle audit.",
+            "",
+            "## GSD Review",
+            "- Implementation stays inside the approved research, script, test, and evidence paths.",
+            "",
+            "## QA / Safety Review",
+            "- Evidence is read-only, append=false, is_order_action=false, broker_api_called=false, and allowed_for_live_execution=false.",
+            "",
+            "## Acceptance Proof",
+            "- Contract, metrics, controls, concentration, replication, overlap, verdict, audit, and report artifacts have SHA-256 sidecars.",
+            "- Independent oracle verdict required: ORB_EDGE_SCREEN_AUDIT_CERTIFIED.",
+            "",
+            "## Runtime Proof Required After Merge",
+            "- None. This PR is offline research evidence only and is not production integration.",
+            "",
+            "## What This PR Does Not Prove",
+            "- It does not prove option profitability, transaction-cost survivability, WFA stability, paper readiness, live readiness, or production promotion.",
+            "",
+            "## Human Approval",
+            "- Required before any WFA follow-up or next strategy-hypothesis selection work.",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
