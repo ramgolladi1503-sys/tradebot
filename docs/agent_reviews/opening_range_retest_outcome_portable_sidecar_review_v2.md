@@ -1,5 +1,14 @@
 # ORB Outcome v2 Portable Sidecar Review
 
+- mode: ORB_OUTCOME_PORTABLE_SIDECAR_REVIEW_V2
+- candidate_id: ALL_ORB_PHASE1_V2_CANDIDATES
+- decision: ORB_OUTCOMES_V2_PORTABLE_SIDECAR_IDENTITY_CERTIFIED
+- reason: input sidecar identity is filename-only and cross-worktree outcome evidence is byte-stable without removing sidecar hashes from projection
+- timestamp: 2026-07-20T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: opening_range_retest_outcome_portable_sidecar_review_v2.md
+
 ## Agent Work Contract
 
 - source_agent: Codex
