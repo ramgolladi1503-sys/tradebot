@@ -2,7 +2,6 @@
   "allowed_for_live_execution": false,
   "append": false,
   "artifact_hashes": {
-    "audit": "542fae02c461980985386b5ee7835aad9345c22d6926192eee7659f19f9fb0a4",
     "concentration": "d28b5f78c4aa0551bfc25eb92556cf3a67aa5bb44bb994f3125204b50464163e",
     "contract": "cda2b6513bd3156512fb48f1100c343d11f5a4390582d15498711944199a80d7",
     "controls": "6e3515b3c4fe8c22fcac39fae36e50b99ed8aa06761dd79825e264d6675a78a1",
