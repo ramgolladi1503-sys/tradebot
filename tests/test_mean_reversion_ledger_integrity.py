@@ -52,6 +52,13 @@ def test_immediate_next_bar_contract():
     assert not is_immediate_next_bar(signal_bar_index=10, current_bar_index=10)
 
 
+def test_opening_range_boundary_is_exclusive_for_start_labelled_candles():
+    module = _load_script_module()
+    assert module._is_opening_range_bar(pd.Timestamp("2026-01-05 09:15"), 45)
+    assert module._is_opening_range_bar(pd.Timestamp("2026-01-05 09:59"), 45)
+    assert not module._is_opening_range_bar(pd.Timestamp("2026-01-05 10:00"), 45)
+
+
 def test_inferred_interval_uses_positive_median_and_rejects_single_row():
     module = _load_script_module()
     timestamps = pd.Series(
@@ -71,6 +78,52 @@ def test_inferred_interval_uses_positive_median_and_rejects_single_row():
         assert str(exc) == "cannot infer candle interval from fewer than two timestamps"
     else:
         raise AssertionError("single-row input must not invent a candle interval")
+
+
+def test_entry_bar_ambiguity_is_conservatively_stopped_at_bar_end():
+    module = _load_script_module()
+    active_trade = {
+        "entry_ts": pd.Timestamp("2026-01-05 10:00"),
+        "direction": "LONG",
+        "stop_loss": 95.0,
+        "target": 105.0,
+    }
+    row = pd.Series({"high": 106.0, "low": 94.0, "close": 100.0})
+
+    outcome = module._resolve_bar_exit(
+        active_trade=active_trade,
+        row=row,
+        bar_start=pd.Timestamp("2026-01-05 10:00"),
+        bar_interval=pd.Timedelta(minutes=1),
+        time_stop_minutes=30,
+    )
+
+    assert outcome == (
+        95.0,
+        "SAME_CANDLE_AMBIGUOUS_ASSUMED_STOP",
+        pd.Timestamp("2026-01-05 10:01"),
+    )
+
+
+def test_time_stop_uses_bar_close_time_not_start_time():
+    module = _load_script_module()
+    active_trade = {
+        "entry_ts": pd.Timestamp("2026-01-05 09:15"),
+        "direction": "LONG",
+        "stop_loss": 90.0,
+        "target": 110.0,
+    }
+    row = pd.Series({"high": 102.0, "low": 98.0, "close": 101.0})
+
+    outcome = module._resolve_bar_exit(
+        active_trade=active_trade,
+        row=row,
+        bar_start=pd.Timestamp("2026-01-05 09:44"),
+        bar_interval=pd.Timedelta(minutes=1),
+        time_stop_minutes=30,
+    )
+
+    assert outcome == (101.0, "TIME_STOP", pd.Timestamp("2026-01-05 09:45"))
 
 
 def test_ledger_uses_causal_state_dimensional_cost_and_bar_end_timestamp(
