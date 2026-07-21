@@ -35,6 +35,7 @@ class DiscoveryConfig:
     validation_fraction: float = 0.2
     holdout_fraction: float = 0.2
     random_seed: int = 42
+    label_side: str = "LONG"
 
     def __post_init__(self) -> None:
         if self.opening_range_bars < 2:
@@ -50,7 +51,9 @@ class DiscoveryConfig:
         if not 0 < self.holdout_fraction < 0.5:
             raise ValueError("holdout_fraction must be in (0, 0.5)")
         if self.validation_fraction + self.holdout_fraction >= 0.6:
-            raise ValueError("development partition must retain at least 40% of rows")
+            raise ValueError("development partition must retain at least 40% of sessions")
+        if self.label_side.upper() not in {"LONG", "SHORT"}:
+            raise ValueError("label_side must be LONG or SHORT")
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,8 @@ def feature_names_from_frame(columns: Iterable[str]) -> tuple[str, ...]:
         "mae_atr",
         "label_return_r",
         "future_close_return_atr",
+        "label_status",
+        "label_side",
         "split",
     }
     return tuple(column for column in columns if column not in excluded)
