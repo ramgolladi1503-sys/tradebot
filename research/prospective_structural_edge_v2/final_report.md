@@ -1,23 +1,13 @@
-# Prospective Structural Edge V2 Final Report
+# Prospective Structural Edge V2 Report
 
-FINAL VERDICT: `BLOCKED_SAFE_STORAGE`
+FINAL VERDICT: `CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_4`
 
-Prior epoch closed: `YES`
+Cycle 3 finalists: `0`
 
-Old lockbox status: `OPENED_ONCE_AND_EXHAUSTED`
+Cycle 4 started: `YES`
+
+Cycle 4 hypotheses: `AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION`, `AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE`, `AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION`
+
+Prospective outcomes inspected: `NO`
 
 Old lockbox reused: `NO`
-
-Prospective eligible sessions: `0`
-
-Lockbox sealed/opened: `NO` / `NO`
-
-Prospective outcomes inspected before seal: `NO`
-
-Additional cycles/hypotheses: `1` / `5`
-
-Cumulative hypotheses: `15`
-
-Blocker: filesystem headroom is below the 8 GiB safe floor for continuing repeated WFA/control cycles.
-
-Next action: free at least 2 GiB without deleting datasets/worktrees, then run Cycle 3 implementation-fidelity and development WFA from frozen AC11-AC15 specs.

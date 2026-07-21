@@ -1,0 +1,34 @@
+{
+  "cycle_number": 4,
+  "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+  "global_hypothesis_number": 16,
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "input_universe": "500 development sessions only; prospective sessions not evaluated",
+  "mechanism_family": "prior-day extreme acceptance with same-direction VWAP migration",
+  "parameter_hash": "ceddead181a8020f7cb0b360ec6f4f27702e9ff626ed4eaabbdb6058aef0aa2e",
+  "parameters": {
+    "acceptance_fraction": 0.26,
+    "confirmation_count": 2,
+    "late_start_minutes_from_open": 285,
+    "morning_range_end_minutes_from_open": 225,
+    "primary_horizon_minutes": 30,
+    "setup_expiry_minutes_from_open": 360
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "specification_hash": "25d538c6d9c9c7ed6089bb0dfafe1288fb4dff1fac21fab17c7b2a56b6230bc9",
+  "state_machine": [
+    "completed bars only",
+    "exact timestamp alignment",
+    "single emission",
+    "same-bar entry prohibited",
+    "future suffix invariant"
+  ],
+  "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+  "structural_premise": "After accepting prior-day high/low rather than sweeping/reclaiming it, same-direction VWAP migration may indicate accepted auction continuation."
+}

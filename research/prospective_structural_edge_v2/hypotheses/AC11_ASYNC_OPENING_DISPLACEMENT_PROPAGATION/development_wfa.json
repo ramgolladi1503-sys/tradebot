@@ -1,0 +1,76 @@
+{
+  "folds": [
+    {
+      "fold": 1,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_end": "20241028",
+      "train_start": "20240701",
+      "validation_end": "20250227",
+      "validation_start": "20241029"
+    },
+    {
+      "fold": 2,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_end": "20250227",
+      "train_start": "20240701",
+      "validation_end": "20250702",
+      "validation_start": "20250228"
+    },
+    {
+      "fold": 3,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_end": "20250702",
+      "train_start": "20240701",
+      "validation_end": "20251031",
+      "validation_start": "20250703"
+    },
+    {
+      "fold": 4,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_end": "20251031",
+      "train_start": "20240701",
+      "validation_end": "20260305",
+      "validation_start": "20251103"
+    },
+    {
+      "fold": 5,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_end": "20260305",
+      "train_start": "20240701",
+      "validation_end": "20260710",
+      "validation_start": "20260306"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

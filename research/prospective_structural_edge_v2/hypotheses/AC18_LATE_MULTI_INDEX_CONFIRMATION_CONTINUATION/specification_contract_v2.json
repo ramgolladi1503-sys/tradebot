@@ -1,0 +1,34 @@
+{
+  "cycle_number": 4,
+  "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+  "global_hypothesis_number": 18,
+  "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+  "input_universe": "500 development sessions only; prospective sessions not evaluated",
+  "mechanism_family": "late-session continuation after multi-index confirmation",
+  "parameter_hash": "ec75ace6812c66813fbf9e0a89fce3ca4628b00f48aea659b3f6303376c436cd",
+  "parameters": {
+    "acceptance_fraction": 0.28,
+    "confirmation_count": 2,
+    "late_start_minutes_from_open": 285,
+    "morning_range_end_minutes_from_open": 225,
+    "primary_horizon_minutes": 30,
+    "setup_expiry_minutes_from_open": 360
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "specification_hash": "5e5b7c3981c175bc97f5a6c6ed84b0b4f1453fc99c04461331a1284ea84f9e8c",
+  "state_machine": [
+    "completed bars only",
+    "exact timestamp alignment",
+    "single emission",
+    "same-bar entry prohibited",
+    "future suffix invariant"
+  ],
+  "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+  "structural_premise": "After 14:00, two-index confirmation outside the morning range may reflect closing hedge flow and index basket execution."
+}

@@ -1,0 +1,40 @@
+{
+  "direction_breakdown": [
+    {
+      "count": 19,
+      "direction": -1,
+      "mean": -0.4377278270127846
+    },
+    {
+      "count": 13,
+      "direction": 1,
+      "mean": -2.828505794852515
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "single_session_concentration": 0.03125,
+  "symbol_breakdown": [
+    {
+      "count": 27,
+      "mean": -2.7933053249620503,
+      "target_symbol": "BANKNIFTY"
+    },
+    {
+      "count": 4,
+      "mean": 0.9489513995328274,
+      "target_symbol": "NIFTY"
+    },
+    {
+      "count": 1,
+      "mean": 26.536034129518438,
+      "target_symbol": "SENSEX"
+    }
+  ],
+  "top_five_session_concentration": 0.15625
+}

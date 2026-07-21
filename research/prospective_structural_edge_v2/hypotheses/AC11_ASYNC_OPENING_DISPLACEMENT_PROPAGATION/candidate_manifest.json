@@ -1,0 +1,13 @@
+{
+  "candidate_count": 0,
+  "candidate_sessions": 0,
+  "row_level_ledger_committed": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "sample_candidate_ids": []
+}

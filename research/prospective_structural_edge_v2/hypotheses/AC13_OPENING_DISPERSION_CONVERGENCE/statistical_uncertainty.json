@@ -1,0 +1,15 @@
+{
+  "bootstrap_resamples": 10000,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "seed": 20260721,
+  "session_clustered_ci_95": [
+    -7.825148930394079,
+    4.9468112323635545
+  ]
+}

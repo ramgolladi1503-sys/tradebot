@@ -3978,6 +3978,13 @@
     },
     {
       "cycle_number": 3,
+      "development_summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "development_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_RESULT_CONCENTRATION|NOT_RUN_NO_CANDIDATES",
       "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
       "entry_event": "First completed confirmation event for the frozen structural premise.",
       "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
@@ -4078,7 +4085,7 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "V2_SPECIFICATION_FIDELITY_PASS",
+      "status": "CYCLE3_DEVELOPMENT_REJECTED",
       "structural_premise": "One index opens with accepted displacement while another remains inside opening balance; continuation is expected only after the laggard confirms, capturing propagation rather than simultaneous breakout.",
       "symbols": [
         "NIFTY",
@@ -4090,6 +4097,55 @@
     },
     {
       "cycle_number": 3,
+      "development_summary": {
+        "candidate_count": 58,
+        "candidate_sessions": 38,
+        "direction_breakdown": [
+          {
+            "count": 24,
+            "direction": -1,
+            "mean": 8.51677859403562
+          },
+          {
+            "count": 34,
+            "direction": 1,
+            "mean": 7.656170688157891
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -13.882594175776573,
+        "mean_bps": 8.012284304383158,
+        "median_bps": 9.249402711527521,
+        "mfe_mean_bps": 23.58401169486919,
+        "positive_candidate_fraction": 0.6206896551724138,
+        "positive_session_fraction": 0.6052631578947368,
+        "quarter_count": 8,
+        "session_clustered_ci_95": [
+          -1.3492346661921621,
+          14.06970760246494
+        ],
+        "single_session_concentration": 0.05172413793103448,
+        "symbol_breakdown": [
+          {
+            "count": 10,
+            "mean": 11.502299347335155,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 29,
+            "mean": 6.8927277724880875,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 19,
+            "mean": 7.884231093616688,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.22413793103448276
+      },
+      "development_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE",
       "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
       "entry_event": "First completed confirmation event for the frozen structural premise.",
       "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
@@ -4190,7 +4246,7 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "V2_SPECIFICATION_FIDELITY_PASS",
+      "status": "CYCLE3_DEVELOPMENT_REJECTED",
       "structural_premise": "When a neutral gap opens near the prior close but the prior session closed in the top/bottom quartile of its range, early continuation may reflect unfinished inventory from the prior close.",
       "symbols": [
         "NIFTY",
@@ -4202,6 +4258,55 @@
     },
     {
       "cycle_number": 3,
+      "development_summary": {
+        "candidate_count": 32,
+        "candidate_sessions": 32,
+        "direction_breakdown": [
+          {
+            "count": 19,
+            "direction": -1,
+            "mean": -0.4377278270127846
+          },
+          {
+            "count": 13,
+            "direction": 1,
+            "mean": -2.828505794852515
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -20.62559384150134,
+        "mean_bps": -1.4089813764476755,
+        "median_bps": -7.375872645657422,
+        "mfe_mean_bps": 18.87486167811068,
+        "positive_candidate_fraction": 0.4375,
+        "positive_session_fraction": 0.4375,
+        "quarter_count": 9,
+        "session_clustered_ci_95": [
+          -7.825148930394079,
+          4.9468112323635545
+        ],
+        "single_session_concentration": 0.03125,
+        "symbol_breakdown": [
+          {
+            "count": 27,
+            "mean": -2.7933053249620503,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 4,
+            "mean": 0.9489513995328274,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 1,
+            "mean": 26.536034129518438,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.15625
+      },
+      "development_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
       "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
       "entry_event": "First completed confirmation event for the frozen structural premise.",
       "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
@@ -4302,7 +4407,7 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "V2_SPECIFICATION_FIDELITY_PASS",
+      "status": "CYCLE3_DEVELOPMENT_REJECTED",
       "structural_premise": "Large dispersion among index opening returns that contracts after the first hour can create directional continuation in the lagging index toward the basket mean.",
       "symbols": [
         "NIFTY",
@@ -4314,6 +4419,55 @@
     },
     {
       "cycle_number": 3,
+      "development_summary": {
+        "candidate_count": 269,
+        "candidate_sessions": 153,
+        "direction_breakdown": [
+          {
+            "count": 135,
+            "direction": -1,
+            "mean": -4.07937522152104
+          },
+          {
+            "count": 134,
+            "direction": 1,
+            "mean": -2.499539378519463
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -18.96536974249457,
+        "mean_bps": -3.2923937978696975,
+        "median_bps": -4.8641258152648525,
+        "mfe_mean_bps": 14.75149961721001,
+        "positive_candidate_fraction": 0.40148698884758366,
+        "positive_session_fraction": 0.39215686274509803,
+        "quarter_count": 8,
+        "session_clustered_ci_95": [
+          -5.340079144140667,
+          0.8094672580167369
+        ],
+        "single_session_concentration": 0.011152416356877323,
+        "symbol_breakdown": [
+          {
+            "count": 84,
+            "mean": -3.9501847230814726,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 87,
+            "mean": -1.783976400063908,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 98,
+            "mean": -4.067678245740254,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.055762081784386616
+      },
+      "development_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
       "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
       "entry_event": "First completed confirmation event for the frozen structural premise.",
       "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
@@ -4414,7 +4568,7 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "V2_SPECIFICATION_FIDELITY_PASS",
+      "status": "CYCLE3_DEVELOPMENT_REJECTED",
       "structural_premise": "A high volatility-of-volatility first hour followed by compression and directional acceptance may mark transition from chaotic repricing to durable inventory direction.",
       "symbols": [
         "NIFTY",
@@ -4426,6 +4580,55 @@
     },
     {
       "cycle_number": 3,
+      "development_summary": {
+        "candidate_count": 150,
+        "candidate_sessions": 88,
+        "direction_breakdown": [
+          {
+            "count": 82,
+            "direction": -1,
+            "mean": -4.663196620211651
+          },
+          {
+            "count": 68,
+            "direction": 1,
+            "mean": 3.8714854900266413
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -15.433883566631648,
+        "mean_bps": -0.7941407302369587,
+        "median_bps": -0.6488154792416712,
+        "mfe_mean_bps": 15.266927861040692,
+        "positive_candidate_fraction": 0.4866666666666667,
+        "positive_session_fraction": 0.4772727272727273,
+        "quarter_count": 9,
+        "session_clustered_ci_95": [
+          -5.079651643976156,
+          2.9265669182583665
+        ],
+        "single_session_concentration": 0.02,
+        "symbol_breakdown": [
+          {
+            "count": 54,
+            "mean": -0.822981709076637,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 46,
+            "mean": -0.32483494754006914,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 50,
+            "mean": -1.1947537931712435,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.1
+      },
+      "development_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
       "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
       "entry_event": "First completed confirmation event for the frozen structural premise.",
       "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
@@ -4526,7 +4729,7 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "V2_SPECIFICATION_FIDELITY_PASS",
+      "status": "CYCLE3_DEVELOPMENT_REJECTED",
       "structural_premise": "A morning trend that pauses without reclaiming VWAP and then breaks its pause range may represent second-wave execution flow, distinct from generic trend pullback.",
       "symbols": [
         "NIFTY",
@@ -4535,6 +4738,108 @@
       ],
       "v2_parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
       "v2_specification_hash": "66b4ada2c5ab4a3d64e2efa5d8c115af650878abdfb5014c7d0893d41eeb6674"
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 16,
+      "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "prior-day extreme acceptance with same-direction VWAP migration",
+      "parameter_hash": "ceddead181a8020f7cb0b360ec6f4f27702e9ff626ed4eaabbdb6058aef0aa2e",
+      "parameters": {
+        "acceptance_fraction": 0.26,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "25d538c6d9c9c7ed6089bb0dfafe1288fb4dff1fac21fab17c7b2a56b6230bc9",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "After accepting prior-day high/low rather than sweeping/reclaiming it, same-direction VWAP migration may indicate accepted auction continuation."
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 17,
+      "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "intraday correlation breakdown and leader-following response",
+      "parameter_hash": "255c3f7636489e56139ee6c5e8f5dca71e15f52ffeccd8e476bcfab9822a715b",
+      "parameters": {
+        "acceptance_fraction": 0.27,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "4429539ea798d550ab1037a1b8f2c5129a339872562d633694f8186ea46baf4b",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "A temporary breakdown in cross-index one-minute return correlation followed by laggard realignment may capture basket re-hedging flow."
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 18,
+      "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "late-session continuation after multi-index confirmation",
+      "parameter_hash": "ec75ace6812c66813fbf9e0a89fce3ca4628b00f48aea659b3f6303376c436cd",
+      "parameters": {
+        "acceptance_fraction": 0.28,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "5e5b7c3981c175bc97f5a6c6ed84b0b4f1453fc99c04461331a1284ea84f9e8c",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "After 14:00, two-index confirmation outside the morning range may reflect closing hedge flow and index basket execution."
     }
   ],
   "multiple_testing": "Holm-Bonferroni across cumulative family; project alpha not reset",
@@ -5088,6 +5393,108 @@
         "BANKNIFTY",
         "SENSEX"
       ]
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 16,
+      "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "prior-day extreme acceptance with same-direction VWAP migration",
+      "parameter_hash": "ceddead181a8020f7cb0b360ec6f4f27702e9ff626ed4eaabbdb6058aef0aa2e",
+      "parameters": {
+        "acceptance_fraction": 0.26,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "25d538c6d9c9c7ed6089bb0dfafe1288fb4dff1fac21fab17c7b2a56b6230bc9",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "After accepting prior-day high/low rather than sweeping/reclaiming it, same-direction VWAP migration may indicate accepted auction continuation."
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 17,
+      "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "intraday correlation breakdown and leader-following response",
+      "parameter_hash": "255c3f7636489e56139ee6c5e8f5dca71e15f52ffeccd8e476bcfab9822a715b",
+      "parameters": {
+        "acceptance_fraction": 0.27,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "4429539ea798d550ab1037a1b8f2c5129a339872562d633694f8186ea46baf4b",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "A temporary breakdown in cross-index one-minute return correlation followed by laggard realignment may capture basket re-hedging flow."
+    },
+    {
+      "cycle_number": 4,
+      "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+      "global_hypothesis_number": 18,
+      "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+      "input_universe": "500 development sessions only; prospective sessions not evaluated",
+      "mechanism_family": "late-session continuation after multi-index confirmation",
+      "parameter_hash": "ec75ace6812c66813fbf9e0a89fce3ca4628b00f48aea659b3f6303376c436cd",
+      "parameters": {
+        "acceptance_fraction": 0.28,
+        "confirmation_count": 2,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "specification_hash": "5e5b7c3981c175bc97f5a6c6ed84b0b4f1453fc99c04461331a1284ea84f9e8c",
+      "state_machine": [
+        "completed bars only",
+        "exact timestamp alignment",
+        "single emission",
+        "same-bar entry prohibited",
+        "future suffix invariant"
+      ],
+      "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+      "structural_premise": "After 14:00, two-index confirmation outside the morning range may reflect closing hedge flow and index basket execution."
     }
   ],
   "prior_hypotheses_carried_forward": 10,
@@ -5099,5 +5506,5 @@
     "read_only": true
   },
   "schema_version": 1,
-  "total_cumulative_hypotheses": 15
+  "total_cumulative_hypotheses": 18
 }

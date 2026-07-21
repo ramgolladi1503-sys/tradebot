@@ -1,0 +1,1 @@
+from research.prospective_structural_edge_v2.cycle3_development_runner import ac12 as generate_candidates

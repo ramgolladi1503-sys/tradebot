@@ -1,0 +1,58 @@
+{
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "summary": {
+    "candidate_count": 58,
+    "candidate_sessions": 38,
+    "direction_breakdown": [
+      {
+        "count": 24,
+        "direction": -1,
+        "mean": 8.51677859403562
+      },
+      {
+        "count": 34,
+        "direction": 1,
+        "mean": 7.656170688157891
+      }
+    ],
+    "direction_count": 2,
+    "mae_mean_bps": -13.882594175776573,
+    "mean_bps": 8.012284304383158,
+    "median_bps": 9.249402711527521,
+    "mfe_mean_bps": 23.58401169486919,
+    "positive_candidate_fraction": 0.6206896551724138,
+    "positive_session_fraction": 0.6052631578947368,
+    "quarter_count": 8,
+    "session_clustered_ci_95": [
+      -1.3492346661921621,
+      14.06970760246494
+    ],
+    "single_session_concentration": 0.05172413793103448,
+    "symbol_breakdown": [
+      {
+        "count": 10,
+        "mean": 11.502299347335155,
+        "target_symbol": "BANKNIFTY"
+      },
+      {
+        "count": 29,
+        "mean": 6.8927277724880875,
+        "target_symbol": "NIFTY"
+      },
+      {
+        "count": 19,
+        "mean": 7.884231093616688,
+        "target_symbol": "SENSEX"
+      }
+    ],
+    "symbol_count": 3,
+    "top_five_session_concentration": 0.22413793103448276
+  },
+  "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE"
+}

@@ -1,0 +1,17 @@
+{
+  "cycle": 4,
+  "mechanism_families": [
+    "prior-day extreme acceptance with same-direction VWAP migration",
+    "intraday correlation breakdown leader-following response",
+    "late-session continuation after multi-index confirmation"
+  ],
+  "prospective_outcomes_inspected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "status": "STARTED_PLAN_ONLY"
+}

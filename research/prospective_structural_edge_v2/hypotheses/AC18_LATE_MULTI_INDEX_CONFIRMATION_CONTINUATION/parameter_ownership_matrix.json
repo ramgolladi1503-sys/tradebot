@@ -1,0 +1,20 @@
+{
+  "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+  "parameter_hash": "ec75ace6812c66813fbf9e0a89fce3ca4628b00f48aea659b3f6303376c436cd",
+  "parameters": {
+    "acceptance_fraction": 0.28,
+    "confirmation_count": 2,
+    "late_start_minutes_from_open": 285,
+    "morning_range_end_minutes_from_open": 225,
+    "primary_horizon_minutes": 30,
+    "setup_expiry_minutes_from_open": 360
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

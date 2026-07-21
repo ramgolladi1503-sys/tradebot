@@ -1,0 +1,286 @@
+{
+  "folds": [
+    {
+      "fold": 1,
+      "summary": {
+        "candidate_count": 60,
+        "candidate_sessions": 31,
+        "direction_breakdown": [
+          {
+            "count": 30,
+            "direction": -1,
+            "mean": -6.216024018477207
+          },
+          {
+            "count": 30,
+            "direction": 1,
+            "mean": -4.6069156080191425
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -17.979202060910083,
+        "mean_bps": -5.411469813248173,
+        "median_bps": -7.2293949907142885,
+        "mfe_mean_bps": 12.106394714858544,
+        "positive_candidate_fraction": 0.3333333333333333,
+        "positive_session_fraction": 0.3225806451612903,
+        "quarter_count": 2,
+        "session_clustered_ci_95": [
+          -12.054183010624772,
+          -1.426046714912081
+        ],
+        "single_session_concentration": 0.05,
+        "symbol_breakdown": [
+          {
+            "count": 15,
+            "mean": -5.157034124818309,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 20,
+            "mean": -3.306048482324575,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 25,
+            "mean": -7.248468291044974,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.25
+      },
+      "train_end": "20241028",
+      "train_start": "20240701",
+      "validation_end": "20250227",
+      "validation_start": "20241029"
+    },
+    {
+      "fold": 2,
+      "summary": {
+        "candidate_count": 88,
+        "candidate_sessions": 44,
+        "direction_breakdown": [
+          {
+            "count": 44,
+            "direction": -1,
+            "mean": -0.11012196927436092
+          },
+          {
+            "count": 44,
+            "direction": 1,
+            "mean": -6.342726490208789
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -19.584456627391372,
+        "mean_bps": -3.2264242297415744,
+        "median_bps": -6.587859240717031,
+        "mfe_mean_bps": 13.5248276093958,
+        "positive_candidate_fraction": 0.375,
+        "positive_session_fraction": 0.38636363636363635,
+        "quarter_count": 2,
+        "session_clustered_ci_95": [
+          -7.400653181806335,
+          3.0278804777945125
+        ],
+        "single_session_concentration": 0.03409090909090909,
+        "symbol_breakdown": [
+          {
+            "count": 27,
+            "mean": -5.00658346356811,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 29,
+            "mean": -0.3502858883620597,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 32,
+            "mean": -4.33091524807562,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.17045454545454544
+      },
+      "train_end": "20250227",
+      "train_start": "20240701",
+      "validation_end": "20250702",
+      "validation_start": "20250228"
+    },
+    {
+      "fold": 3,
+      "summary": {
+        "candidate_count": 20,
+        "candidate_sessions": 13,
+        "direction_breakdown": [
+          {
+            "count": 11,
+            "direction": -1,
+            "mean": -2.7420118107304967
+          },
+          {
+            "count": 9,
+            "direction": 1,
+            "mean": 13.724160438100727
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -12.696021438043658,
+        "mean_bps": 4.667765701243554,
+        "median_bps": 1.9594674310730031,
+        "mfe_mean_bps": 17.33811115115064,
+        "positive_candidate_fraction": 0.6,
+        "positive_session_fraction": 0.5384615384615384,
+        "quarter_count": 2,
+        "session_clustered_ci_95": [
+          -7.411777081031861,
+          17.804481956476934
+        ],
+        "single_session_concentration": 0.1,
+        "symbol_breakdown": [
+          {
+            "count": 3,
+            "mean": 22.529929539285565,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 8,
+            "mean": 3.8139364100953084,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 9,
+            "mean": -0.5273295415275661,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.5
+      },
+      "train_end": "20250702",
+      "train_start": "20240701",
+      "validation_end": "20251031",
+      "validation_start": "20250703"
+    },
+    {
+      "fold": 4,
+      "summary": {
+        "candidate_count": 23,
+        "candidate_sessions": 17,
+        "direction_breakdown": [
+          {
+            "count": 10,
+            "direction": -1,
+            "mean": 7.003045627265723
+          },
+          {
+            "count": 13,
+            "direction": 1,
+            "mean": 0.9566949031196527
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -14.428308258620271,
+        "mean_bps": 3.5855430440527276,
+        "median_bps": 4.770715916422308,
+        "mfe_mean_bps": 19.091654804367803,
+        "positive_candidate_fraction": 0.5217391304347826,
+        "positive_session_fraction": 0.47058823529411764,
+        "quarter_count": 2,
+        "session_clustered_ci_95": [
+          -6.7861035869636455,
+          11.06044476439933
+        ],
+        "single_session_concentration": 0.13043478260869565,
+        "symbol_breakdown": [
+          {
+            "count": 7,
+            "mean": 0.7766969545416492,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 8,
+            "mean": 7.574435850217636,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 8,
+            "mean": 2.0543905662100124,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.4782608695652174
+      },
+      "train_end": "20251031",
+      "train_start": "20240701",
+      "validation_end": "20260305",
+      "validation_start": "20251103"
+    },
+    {
+      "fold": 5,
+      "summary": {
+        "candidate_count": 93,
+        "candidate_sessions": 48,
+        "direction_breakdown": [
+          {
+            "count": 50,
+            "direction": -1,
+            "mean": -9.515882439962443
+          },
+          {
+            "count": 43,
+            "direction": 1,
+            "mean": -1.4619684399080253
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -22.51115117354393,
+        "mean_bps": -5.792029730259862,
+        "median_bps": -4.185830775899069,
+        "mfe_mean_bps": 15.191207972946513,
+        "positive_candidate_fraction": 0.3763440860215054,
+        "positive_session_fraction": 0.3541666666666667,
+        "quarter_count": 3,
+        "session_clustered_ci_95": [
+          -8.658196849606727,
+          2.9767540379799926
+        ],
+        "single_session_concentration": 0.03225806451612903,
+        "symbol_breakdown": [
+          {
+            "count": 31,
+            "mean": -4.813010459381245,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 27,
+            "mean": -7.522722388362762,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 35,
+            "mean": -5.3240553196444,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.16129032258064516
+      },
+      "train_end": "20260305",
+      "train_start": "20240701",
+      "validation_end": "20260710",
+      "validation_start": "20260306"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

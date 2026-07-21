@@ -1,0 +1,19 @@
+{
+  "candidate_count": 269,
+  "candidate_sessions": 153,
+  "row_level_ledger_committed": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "sample_candidate_ids": [
+    "2bc834ce6e02cdf4f8f0703bc6465f97f48c0083de38aac479f4af7809b72827",
+    "0a95ae0477b37386edeb5a2e1256e4a13b75306a31bd9d08dfcfaf32b2697980",
+    "44e68b080c68e2a3a8e7e2636524133cbb066827c8a374f5099c2cc997fa261c",
+    "e9e7f6dc3838c2f6d28180382d2fa3543c16188d2607de1cbb38a5b3ff0eb657",
+    "d347e5432b80269af838206992b77f05cb7a1947370441f854199078cd26d56f"
+  ]
+}

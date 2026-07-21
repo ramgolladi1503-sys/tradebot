@@ -1,0 +1,11 @@
+{
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "semantic_hash": "3a874d86f0eee3f606623961fbd2f396229f67be1b0c42266c83af919ba4f356",
+  "verdict": "PASS"
+}

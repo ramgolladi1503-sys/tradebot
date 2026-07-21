@@ -1,0 +1,20 @@
+{
+  "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+  "parameter_hash": "255c3f7636489e56139ee6c5e8f5dca71e15f52ffeccd8e476bcfab9822a715b",
+  "parameters": {
+    "acceptance_fraction": 0.27,
+    "confirmation_count": 2,
+    "late_start_minutes_from_open": 285,
+    "morning_range_end_minutes_from_open": 225,
+    "primary_horizon_minutes": 30,
+    "setup_expiry_minutes_from_open": 360
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

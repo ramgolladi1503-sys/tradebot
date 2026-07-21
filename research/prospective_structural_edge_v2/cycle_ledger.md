@@ -1,5 +1,5 @@
 # Cycle Ledger
 
-Cycle 3: `HYPOTHESES_FROZEN_NOT_EVALUATED`
+Cycle 3: `COMPLETE_ZERO_FINALISTS`
 
-Prospective outcomes inspected: `NO`
+Cycle 4: `HYPOTHESES_FROZEN_NOT_EVALUATED`

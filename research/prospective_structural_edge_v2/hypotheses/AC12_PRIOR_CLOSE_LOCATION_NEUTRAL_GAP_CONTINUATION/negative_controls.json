@@ -1,0 +1,16 @@
+{
+  "candidate_id_corruption": "PASS_FAIL_CLOSED_BY_HASH",
+  "direction_inversion_mean_bps": -8.012284304383158,
+  "future_suffix_mutation": "PASS_STATIC_PREFIX_HASH",
+  "lookahead_trap": "PASS_PREFIX_ONLY",
+  "real_mean_bps": 8.012284304383158,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS",
+  "within_session_permutation_mean_bps": 5.096856935772388
+}

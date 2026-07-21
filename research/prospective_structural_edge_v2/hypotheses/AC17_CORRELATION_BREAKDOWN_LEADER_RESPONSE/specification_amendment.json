@@ -1,0 +1,15 @@
+{
+  "candidate_counts_calculated_before_amendment": "NO",
+  "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+  "outcome_data_read_before_amendment": "NO",
+  "parameter_optimization": "NO",
+  "reason": "NEW_CYCLE4_HYPOTHESIS_PRE_OUTCOME_FREEZE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

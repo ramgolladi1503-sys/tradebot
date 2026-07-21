@@ -1,0 +1,34 @@
+{
+  "cycle_number": 4,
+  "direction_rule": "specified by causal completed-bar state machine in Cycle 4 before outcomes",
+  "global_hypothesis_number": 17,
+  "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+  "input_universe": "500 development sessions only; prospective sessions not evaluated",
+  "mechanism_family": "intraday correlation breakdown and leader-following response",
+  "parameter_hash": "255c3f7636489e56139ee6c5e8f5dca71e15f52ffeccd8e476bcfab9822a715b",
+  "parameters": {
+    "acceptance_fraction": 0.27,
+    "confirmation_count": 2,
+    "late_start_minutes_from_open": 285,
+    "morning_range_end_minutes_from_open": 225,
+    "primary_horizon_minutes": 30,
+    "setup_expiry_minutes_from_open": 360
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "specification_hash": "4429539ea798d550ab1037a1b8f2c5129a339872562d633694f8186ea46baf4b",
+  "state_machine": [
+    "completed bars only",
+    "exact timestamp alignment",
+    "single emission",
+    "same-bar entry prohibited",
+    "future suffix invariant"
+  ],
+  "status": "CYCLE4_FROZEN_NOT_EVALUATED",
+  "structural_premise": "A temporary breakdown in cross-index one-minute return correlation followed by laggard realignment may capture basket re-hedging flow."
+}
