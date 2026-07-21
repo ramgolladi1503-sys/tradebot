@@ -51,11 +51,11 @@ When these are unavailable, the dataset records `option_data_availability=UNAVAI
 
 The first implementation provides:
 
-- chronological development/validation/locked-holdout partitions
+- chronological whole-session development/validation/locked-holdout partitions
 - development-only fitting
 - validation-only default evaluation
 - an explicit holdout acknowledgement gate
-- contiguous validation folds for a frozen rule
+- contiguous whole-session validation folds for a frozen rule
 - label permutation
 - timestamp-shift control
 - condition ablations
@@ -63,6 +63,8 @@ The first implementation provides:
 - transaction-cost stress in R units
 - independent rule-mask oracle
 - future-mutation causality oracle
+- same-session label horizon enforcement
+- separate LONG and SHORT discovery directions
 - semantic dataset hashes
 
 It does not claim strict option-replay certification. That remains blocked until a frozen candidate is adapted to real option replay data and passes the existing strict engine and WFA contracts.
