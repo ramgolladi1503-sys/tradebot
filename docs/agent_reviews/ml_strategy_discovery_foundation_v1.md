@@ -1,7 +1,11 @@
 # ML Strategy Discovery Foundation v1 Agent Review
 
 - mode: ML_STRATEGY_DISCOVERY_FOUNDATION_V1
+- candidate_id: ALL_ML_STRATEGY_DISCOVERY_FOUNDATION_V1
 - decision: FOUNDATION_IMPLEMENTED_DATA_INTEGRATION_PENDING
+- reason: Data-independent discovery contracts are implemented, while authoritative dataset binding and every edge or profitability claim remain blocked.
+- timestamp: 2026-07-21T10:38:49Z
+- source: docs/agent_reviews/ml_strategy_discovery_foundation_v1.md
 - claim_boundary: NO_EDGE_OR_PROFITABILITY_CLAIM
 - read_only: true
 - is_order_action: false
