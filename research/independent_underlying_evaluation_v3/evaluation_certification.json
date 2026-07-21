@@ -1,0 +1,34 @@
+{
+  "artifact": "evaluation_certification",
+  "broker_api_called": false,
+  "determinism": "PASS",
+  "external_hash_audit": "PASS",
+  "independent_audit": "PASS",
+  "option_data_used": false,
+  "option_economics": "OUT_OF_SCOPE",
+  "order_action": false,
+  "pre_open_audit": "PASS_READY_TO_OPEN_ONCE",
+  "pre_open_integrity": "PASS",
+  "production_runtime_changed": false,
+  "rules_changed_after_open": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "task_verdict": "INDEPENDENT_CONFIRMATION_CANDIDATES_REJECTED",
+  "tests": {
+    "artifact_audit": "PASS",
+    "git_diff_check": "PASS",
+    "py_compile": "PASS",
+    "pytest_minimum_suite": "19 passed in 40.16s",
+    "ruff": "PASS"
+  },
+  "unused_alpha_reassigned": false,
+  "verdict": "PASS",
+  "worktree_open_count": 1
+}
