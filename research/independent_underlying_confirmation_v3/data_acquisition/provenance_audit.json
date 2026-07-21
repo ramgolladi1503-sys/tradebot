@@ -1,6 +1,6 @@
 {
   "append_only": true,
-  "eligible_independent_sessions": 0,
+  "eligible_independent_sessions": 366,
   "identity_drift": "NONE",
   "records": [],
   "safety_flags": {
@@ -10,5 +10,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "verdict": "PASS_WAITING_NO_FETCH"
+  "verdict": "PASS"
 }

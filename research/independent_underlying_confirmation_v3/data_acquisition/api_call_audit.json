@@ -1,8 +1,9 @@
 {
   "access_token_logged_or_persisted": false,
-  "api_version_used": "NONE",
+  "api_version_used": "V3",
   "broker_trading_api_called": false,
-  "historical_market_data_api_called": false,
+  "credential_available": true,
+  "historical_market_data_api_called": true,
   "official_api_capability_verified": "PASS",
   "option_api_called": false,
   "order_action": false,
@@ -13,5 +14,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "verdict": "BLOCKED_HISTORICAL_DATA_CREDENTIAL_UNAVAILABLE"
+  "verdict": "PASS"
 }

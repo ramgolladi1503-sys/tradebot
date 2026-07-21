@@ -1,3 +1,5 @@
 # External Data Manifest
 
-Verdict: `NO_DATA_FETCHED`
+Parquet files: `1098`
+
+Parquet data committed to git: `NO`

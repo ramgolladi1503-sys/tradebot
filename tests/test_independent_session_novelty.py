@@ -24,9 +24,9 @@ def test_inventory_is_strategy_outcome_blind():
     assert inventory["eligible_independent_sessions"] == 0
 
 
-def test_independent_manifest_is_append_only_and_empty_before_seal():
+def test_independent_manifest_is_append_only_and_unopened_after_seal():
     manifest = json.loads((BASE / "independent_session_manifest.json").read_text())
 
     assert manifest["append_only"] is True
     assert manifest["opened"] is False
-    assert manifest["sessions"] == []
+    assert len(manifest["sessions"]) >= 250

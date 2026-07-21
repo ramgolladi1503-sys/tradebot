@@ -1,5 +1,5 @@
 # Independent Underlying Data Acquisition V3 Final Report
 
-Final verdict: `BLOCKED_HISTORICAL_DATA_CREDENTIAL_UNAVAILABLE`
+Final verdict: `INDEPENDENT_UNSEEN_EPOCH_SEALED_READY_FOR_EVALUATION`
 
-No historical API call was made, no parquet data was committed, and the independent epoch remains unsealed and unopened.
+The epoch is sealed and not opened. AC24/AC16 have not been evaluated.

@@ -1,8 +1,7 @@
 {
-  "append_only": true,
-  "eligible_independent_sessions": 0,
-  "identity_drift": "NONE",
-  "records": [],
+  "external_data_root": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3",
+  "parquet_data_committed_to_git": false,
+  "parquet_file_count": 1098,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -10,5 +9,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "verdict": "NO_DATA_FETCHED"
+  "verdict": "PASS"
 }

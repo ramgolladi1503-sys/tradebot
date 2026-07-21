@@ -1,5 +1,6 @@
 # Chunk State Manifest
 
-Fetched monthly chunks: `0`
+Fetched monthly chunks: `54`
 
-No historical API call was made because credentials were unavailable.
+Failed retryable chunks: `0`
+Failed permanent chunks: `0`

@@ -1,8 +1,1488 @@
 {
-  "append_only": true,
-  "eligible_independent_sessions": 0,
-  "identity_drift": "NONE",
-  "records": [],
+  "dominant_bar_count": 375,
+  "eligible_independent_sessions": 366,
+  "exhausted_corpus_overlap": 0,
+  "incomplete_sessions_excluded": 0,
+  "nonstandard_sessions_excluded": 2,
+  "old_lockbox_overlap": 0,
+  "records": [
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230102"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230103"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230104"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230105"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230106"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230109"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230110"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230111"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230112"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230113"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230116"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230117"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230118"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230119"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230120"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230123"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230124"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230125"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230127"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230130"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230131"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230201"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230202"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230203"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230206"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230207"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230208"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230209"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230210"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230213"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230214"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230215"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230216"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230217"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230220"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230221"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230222"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230223"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230224"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230227"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230228"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230301"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230302"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230303"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230306"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230308"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230309"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230310"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230313"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230314"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230315"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230316"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230317"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230320"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230321"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230322"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230323"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230324"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230327"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230328"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230329"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230331"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230403"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230405"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230406"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230410"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230411"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230412"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230413"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230417"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230418"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230419"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230420"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230421"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230424"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230425"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230426"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230427"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230428"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230502"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230503"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230504"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230505"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230508"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230509"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230510"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230511"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230512"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230515"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230516"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230517"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230518"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230519"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230522"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230523"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230524"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230525"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230526"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230529"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230530"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230531"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230601"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230602"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230605"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230606"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230607"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230608"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230609"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230612"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230613"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230614"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230615"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230616"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230619"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230620"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230621"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230622"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230623"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230626"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230627"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230628"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230630"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230703"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230704"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230705"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230706"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230707"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230710"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230711"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230712"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230713"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230714"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230717"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230718"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230719"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230720"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230721"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230724"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230725"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230726"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230727"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230728"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230731"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230801"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230802"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230803"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230804"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230807"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230808"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230809"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230810"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230811"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230814"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230816"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230817"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230818"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230821"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230822"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230823"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230824"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230825"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230828"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230829"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230830"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230831"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230901"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230904"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230905"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230906"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230907"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230908"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230911"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230912"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230913"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230914"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230915"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230918"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230920"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230921"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230922"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230925"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230926"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230927"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230928"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20230929"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231003"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231004"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231005"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231006"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231009"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231010"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231011"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231012"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231013"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231016"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231017"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231018"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231019"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231020"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231023"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231025"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231026"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231027"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231030"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231031"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231101"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231102"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231103"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231106"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231107"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231108"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231109"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231110"
+    },
+    {
+      "classification": "NONSTANDARD_SPECIAL_SESSION",
+      "session_date": "20231112"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231113"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231115"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231116"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231117"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231120"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231121"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231122"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231123"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231124"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231128"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231129"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231130"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231201"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231204"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231205"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231206"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231207"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231208"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231211"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231212"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231213"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231214"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231215"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231218"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231219"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231220"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231221"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231222"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231226"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231227"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231228"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20231229"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240101"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240102"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240103"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240104"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240105"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240108"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240109"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240110"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240111"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240112"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240115"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240116"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240117"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240118"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240119"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240120"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240123"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240124"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240125"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240129"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240130"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240131"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240201"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240202"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240205"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240206"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240207"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240208"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240209"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240212"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240213"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240214"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240215"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240216"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240219"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240220"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240221"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240222"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240223"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240226"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240227"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240228"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240229"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240301"
+    },
+    {
+      "classification": "CROSS_INDEX_GRID_MISMATCH",
+      "session_date": "20240302"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240304"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240305"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240306"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240307"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240311"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240312"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240313"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240314"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240315"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240318"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240319"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240320"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240321"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240322"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240326"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240327"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240328"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240401"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240402"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240403"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240404"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240405"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240408"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240409"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240410"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240412"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240415"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240416"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240418"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240419"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240422"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240423"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240424"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240425"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240426"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240429"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240430"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240502"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240503"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240506"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240507"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240508"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240509"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240510"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240513"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240514"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240515"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240516"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240517"
+    },
+    {
+      "classification": "NONSTANDARD_SPECIAL_SESSION",
+      "session_date": "20240518"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240521"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240522"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240523"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240524"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240527"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240528"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240529"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240530"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240531"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240603"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240604"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240605"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240606"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240607"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240610"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240611"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240612"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240613"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240614"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240618"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240619"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240620"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240621"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240624"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240625"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240626"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240627"
+    },
+    {
+      "classification": "ELIGIBLE_INDEPENDENT_SESSION",
+      "session_date": "20240628"
+    }
+  ],
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -10,5 +1490,6 @@
     "is_order_action": false,
     "read_only": true
   },
-  "verdict": "PASS_WAITING_NO_FETCH"
+  "strategy_candidate_counts_calculated": false,
+  "strategy_outcomes_calculated": false
 }

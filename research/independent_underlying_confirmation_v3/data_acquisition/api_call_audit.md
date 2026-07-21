@@ -1,5 +1,7 @@
 # API Call Audit
 
-Historical market-data API called: `NO`
+Historical market-data API called: `YES`
 
-Reason: `UPSTOX_ACCESS_TOKEN` unavailable.
+Broker trading API called: `NO`
+Option API called: `NO`
+Access token logged or persisted: `NO`

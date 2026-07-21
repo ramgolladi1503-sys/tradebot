@@ -1,9 +1,11 @@
 {
+  "alpha_frozen": true,
   "candidate_registry_frozen": true,
   "epoch_opened": false,
-  "epoch_sealed": false,
+  "epoch_sealed": true,
   "generator_equivalence_passed": true,
   "outcome_blindness_passed": true,
+  "provenance_audit_passed": true,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -11,5 +13,6 @@
     "is_order_action": false,
     "read_only": true
   },
-  "verdict": "PASS_WAITING_CREDENTIAL_BLOCKED"
+  "session_manifest_frozen": true,
+  "verdict": "PASS"
 }

@@ -1,5 +1,5 @@
 # Independent Session Manifest
 
-Eligible sessions: `0`
+Eligible sessions: `366`
 
-Append-only: `YES`
+Opened: `NO`

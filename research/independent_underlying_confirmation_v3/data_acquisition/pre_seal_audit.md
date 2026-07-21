@@ -1,3 +1,6 @@
 # Pre-Seal Audit
 
-Verdict: `PASS_WAITING_CREDENTIAL_BLOCKED`
+Verdict: `PASS`
+
+Epoch sealed: `YES`
+Epoch opened: `NO`

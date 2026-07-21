@@ -1,12 +1,11 @@
 {
-  "calendar_gate_pass": true,
   "calendar_span_days": 543,
   "eligible_sessions": 366,
-  "epoch_opened": false,
-  "epoch_sealed": true,
-  "first_eligible_session": "2023-01-02",
-  "last_eligible_session": "2024-06-28",
+  "epoch_type": "INDEPENDENT_HISTORICAL_CONFIRMATION_EPOCH_V3",
+  "first_session": "2023-01-02",
+  "last_session": "2024-06-28",
   "manifest_hash": "d2fdd5bc974e095c0c2cb18155fa3cf644c6a53e4f59a492ef57d7cbe1806208",
+  "opened": false,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -14,6 +13,7 @@
     "is_order_action": false,
     "read_only": true
   },
-  "session_gate_pass": true,
-  "verdict": "INDEPENDENT_UNSEEN_EPOCH_SEALED_READY_FOR_EVALUATION"
+  "sealed": true,
+  "strategy_candidate_counts_calculated": false,
+  "strategy_outcomes_calculated": false
 }

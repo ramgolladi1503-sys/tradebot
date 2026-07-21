@@ -1,10 +1,7 @@
 {
-  "expected_shared_sessions": 0,
-  "primary_window": [
-    "2023-01-02",
-    "2024-06-28"
-  ],
-  "provider_daily_candles_used": false,
+  "eligible_shared_sessions": 366,
+  "expected_shared_sessions": 368,
+  "nonstandard_special_sessions": 2,
   "provider_missing_dates_not_treated_as_holidays": true,
   "safety_flags": {
     "allowed_for_live_execution": false,
@@ -13,5 +10,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "status": "NOT_BUILT_CREDENTIAL_UNAVAILABLE"
+  "status": "BUILT_FROM_VALIDATED_SHARED_UNDERLYING_CANDLES"
 }

@@ -1,5 +1,5 @@
 # Expected Shared Session Calendar
 
-Status: `NOT_BUILT_CREDENTIAL_UNAVAILABLE`
+Expected shared sessions observed: `368`
 
-No provider daily candle calls were made.
+Eligible standard sessions: `366`
