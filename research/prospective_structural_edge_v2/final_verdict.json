@@ -1,18 +1,98 @@
 {
-  "FINAL_VERDICT": "CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_6",
+  "AC22_lesson": {
+    "aggregate_mean_bps": -2.8202,
+    "clustered_ci": [
+      -7.688702606586144,
+      2.135837180225828
+    ],
+    "fold_means": [
+      0.2323,
+      -1.9536,
+      -3.1796,
+      -4.1613,
+      -10.7809
+    ],
+    "matched_counterfactual": "FAIL",
+    "negative_controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+    "positive_session_fraction": 0.4545,
+    "sample": [
+      88,
+      88
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE"
+  },
+  "AC23_lesson": {
+    "aggregate_mean_bps": 1.0507,
+    "clustered_ci": [
+      -2.2055932451773628,
+      4.464451058047442
+    ],
+    "fold_means": [
+      1.1268,
+      6.1877,
+      1.8316,
+      -2.0816,
+      -3.1958
+    ],
+    "matched_counterfactual": "PASS",
+    "negative_controls": "PASS",
+    "positive_session_fraction": 0.5103,
+    "sample": [
+      145,
+      145
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION"
+  },
+  "AC24_lesson": {
+    "aggregate_mean_bps": 2.36,
+    "clustered_ci": [
+      -2.6116770306024364,
+      7.42745196569638
+    ],
+    "fold_means": [
+      5.3585,
+      0.7202,
+      2.0245,
+      7.6147,
+      5.8157
+    ],
+    "matched_counterfactual": "PASS",
+    "negative_controls": "PASS",
+    "positive_session_fraction": 0.513,
+    "sample": [
+      115,
+      115
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION"
+  },
+  "AC25_outcome_dependency_verdict": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT",
+  "AC26_outcome_dependency_verdict": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT",
+  "AC27_outcome_dependency_verdict": "REJECTED_EXHAUSTED_MECHANISM_FAMILY",
+  "FINAL_VERDICT": "SEARCH_UNIVERSE_EXHAUSTED_WITH_EVIDENCE",
   "bid_ask_required": false,
   "cumulative_hypotheses": 27,
-  "cycle5_finalists": [],
-  "cycle6_hypotheses": [
-    "AC25_OPENING_AUCTION_FAILURE_BASKET_MEDIAN_RETURN",
-    "AC26_PRIOR_RANGE_MIDPOINT_ACCEPTANCE_ROTATION",
-    "AC27_THREE_INDEX_VOLATILITY_CONTRACTION_ASYMMETRY"
+  "cycle5_evidence_ingested": true,
+  "cycle6_finalists": [],
+  "cycle7_hypotheses": [],
+  "cycle7_started": false,
+  "evaluated_hypotheses": [],
+  "mechanism_families_exhausted": [
+    "opening_repair_state",
+    "compression_breakout",
+    "cross_index_contraction",
+    "prior_extreme_acceptance",
+    "generic_late_continuation",
+    "same_corpus_midpoint_variants",
+    "same_corpus_nonconfirmation_reversal_repairs"
   ],
-  "cycle6_started": true,
+  "mechanism_families_still_scientifically_open": [],
   "old_lockbox_reused": false,
   "option_data_used": false,
   "option_economic_certification": "OUT_OF_SCOPE",
+  "outcomes_read_before_contract_freeze": false,
+  "parameters_optimized": false,
   "prospective_lockbox_opened": false,
+  "replacement_hypotheses": [],
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,

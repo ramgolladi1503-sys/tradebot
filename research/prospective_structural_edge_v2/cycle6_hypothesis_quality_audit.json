@@ -1,0 +1,16 @@
+{
+  "AC25": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT",
+  "AC26": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT",
+  "AC27": "REJECTED_EXHAUSTED_MECHANISM_FAMILY",
+  "evaluated_hypotheses": [],
+  "outcomes_read_before_contract_freeze": false,
+  "parameters_optimized": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "SEARCH_UNIVERSE_EXHAUSTED_WITH_EVIDENCE"
+}

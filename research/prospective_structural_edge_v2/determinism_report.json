@@ -1,12 +1,16 @@
 {
-  "cycle": 5,
+  "AC22_AC24_evidence_consumed": true,
+  "contracts_frozen_before_outcomes": "NO_EVALUATED_HYPOTHESES",
+  "determinism": "PASS",
+  "independent_outcome_dependency_audit": "PASS",
+  "no_post_outcome_descendant_evaluated": true,
+  "old_lockbox_reused": false,
+  "prospective_outcomes_inspected": false,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
     "execution_eligibility": false,
     "is_order_action": false,
     "read_only": true
-  },
-  "semantic_hash": "e68633eaf8ec958449f3552005d8be05d1702d31e04c90fd68e9dde4c5d9cc64",
-  "verdict": "PASS"
+  }
 }

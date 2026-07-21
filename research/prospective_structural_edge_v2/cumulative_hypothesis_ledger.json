@@ -1,30 +1,15 @@
 {
   "cumulative_hypotheses": 27,
-  "cycle5_finalists": [],
-  "cycle5_replacements": [
-    "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
-    "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL",
-    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION"
+  "cycle6_evaluated_hypotheses": [],
+  "cycle6_finalists": [],
+  "cycle6_plan_only_hypotheses": [
+    "AC25",
+    "AC26",
+    "AC27"
   ],
-  "cycle5_results": {
-    "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
-    "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION",
-    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION"
-  },
-  "cycle5_started_rejected_as_cosmetic": [
-    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
-    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
-    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
-  ],
-  "cycle6_hypotheses_frozen_as_plan_only": [
-    "AC25_OPENING_AUCTION_FAILURE_BASKET_MEDIAN_RETURN",
-    "AC26_PRIOR_RANGE_MIDPOINT_ACCEPTANCE_ROTATION",
-    "AC27_THREE_INDEX_VOLATILITY_CONTRACTION_ASYMMETRY"
-  ],
+  "cycle7_started": false,
   "old_lockbox_reused": false,
-  "prior_hypotheses": "AC01-AC21 preserved",
   "prospective_outcomes_inspected": false,
-  "remaining_project_level_prospective_alpha": 0.01,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -32,5 +17,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "schema_version": 3
+  "schema_version": 4
 }

@@ -1,6 +1,5 @@
-# Cycle 5 Final Report
+# Cycle 6 Final Report
 
-Final verdict: `CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_6`
+Final verdict: `SEARCH_UNIVERSE_EXHAUSTED_WITH_EVIDENCE`
 
-Underlying structural edge confirmed: `NO`
-Option data used: `NO`
+No Cycle 6 hypothesis was evaluated because AC25-AC27 failed pre-outcome outcome-dependency or family-exhaustion review. Cycle 7 is not started.

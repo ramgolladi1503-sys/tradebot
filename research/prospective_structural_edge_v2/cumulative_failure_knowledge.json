@@ -1,6 +1,12 @@
 {
   "cycle5_completed": true,
   "cycle5_finalists": [],
+  "cycle6_completed": true,
+  "cycle6_lessons": {
+    "AC25": "Rejected as AC22 outcome-dependent descendant.",
+    "AC26": "Rejected as AC24 outcome-dependent descendant.",
+    "AC27": "Rejected as exhausted compression/contraction family."
+  },
   "cycle6_started": true,
   "prior_hypotheses_analyzed": 18,
   "records": [

@@ -1,4 +1,13 @@
 {
+  "cycle6_exhausted_families": [
+    "opening_repair_state",
+    "compression_breakout",
+    "cross_index_contraction",
+    "prior_extreme_acceptance",
+    "generic_late_continuation",
+    "same_corpus_midpoint_variants",
+    "same_corpus_nonconfirmation_reversal_repairs"
+  ],
   "family_status": {
     "compression_breakout": "WEAK_OR_UNSTABLE",
     "cross_index_convergence_or_realignment": "UNDERPOWERED_NOT_CONFIRMED",
@@ -15,5 +24,6 @@
     "execution_eligibility": false,
     "is_order_action": false,
     "read_only": true
-  }
+  },
+  "same_corpus_open_families": []
 }
