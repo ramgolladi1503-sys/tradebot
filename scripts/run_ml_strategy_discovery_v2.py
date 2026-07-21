@@ -1,122 +1,167 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import json
 import logging
-import hashlib
 from pathlib import Path
-import pandas as pd
-import datetime
 
-from research.ml_strategy_discovery.contracts import (
-    DiscoveryConfig,
-    TimestampSemantics,
-)
+
+from research.ml_strategy_discovery.contracts import DiscoveryConfig, TimestampSemantics
 from research.ml_strategy_discovery.dataset import (
     build_discovery_dataset,
+    model_feature_names,
 )
 from research.ml_strategy_discovery.upstox_source import (
     load_certified_upstox_underlying,
 )
-
+from research.ml_strategy_discovery_v2.artifacts import (
+    build_semantic_hash_manifest,
+    envelope,
+    resolve_code_sha,
+    sha256_file,
+    write_json,
+)
+from research.ml_strategy_discovery_v2.contracts import (
+    StabilityConfig,
+    canonical_hash,
+    require_causal_features,
+)
 from research.ml_strategy_discovery_v2.data import (
     load_development_for_selection,
-    load_locked_confirmation_metadata,
-    evaluate_frozen_candidate_once,
-    DatasetRegistryViolation,
-    TokenReplayViolation,
-    map_dataset
+    load_registry,
 )
-from research.ml_strategy_discovery_v2.folds import generate_nested_folds
-from research.ml_strategy_discovery_v2.gates import (
-    minimum_support_gate, 
-    base_rate_lift_gate,
-    fold_gates,
-    concentration_gates,
-    bootstrap_gate,
-    imputation_dependence_gate
+from research.ml_strategy_discovery_v2.freeze import (
+    candidate_bundle,
+    write_frozen_registry,
 )
-from research.ml_strategy_discovery_v2.model import generate_candidates, rule_mask
-from research.ml_strategy_discovery_v2.stability import multiple_testing_and_stability, evaluate_fresh_candidate
-from research.ml_strategy_discovery_v2.controls import run_negative_controls
-from research.ml_strategy_discovery_v2.freeze import freeze_candidate
+from research.ml_strategy_discovery_v2.pipeline import run_stability_first_discovery
+from research.ml_strategy_discovery_v2.source import (
+    development_manifest_payload,
+    load_and_verify_manifest,
+    verify_selected_record_files,
+)
 
-_DEFAULT_SOURCE_MANIFEST = "docs/research/ml_strategy_discovery_v2_1_source_manifest.json"
+LOGGER = logging.getLogger("ml_strategy_discovery_v2")
 
-def _hash_file(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(8192), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-def _write_artifact(path: Path, data: dict, code_sha: str = "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01"):
-    payload = {
-        "schema_version": "1.0",
-        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "code_commit_sha": code_sha,
-        "input_hashes": {},
-        "deterministic_seeds": [42],
-        "read_only": True,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
-        "append": False,
-        **data
-    }
-    with open(path, "w") as f:
-        json.dump(payload, f, indent=2)
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run V2 ML strategy discovery.")
+    parser = argparse.ArgumentParser(
+        description="Run certified development-only ML strategy discovery V2"
+    )
     parser.add_argument("--source-project-root", required=True)
-    parser.add_argument("--source-manifest", default=_DEFAULT_SOURCE_MANIFEST)
+    parser.add_argument("--source-manifest", required=True)
+    parser.add_argument(
+        "--registry",
+        default="research/ml_strategy_discovery/v2_validation_registry.json",
+    )
     parser.add_argument("--instrument", required=True)
+    parser.add_argument("--side", required=True, choices=("LONG", "SHORT"))
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--side", choices=("LONG", "SHORT"), default="LONG")
+    parser.add_argument("--v1-long-dir", required=True)
+    parser.add_argument("--v1-short-dir", required=True)
+    parser.add_argument("--v1-audit-dir", required=True)
     parser.add_argument("--target-atr", type=float, default=1.2)
     parser.add_argument("--stop-atr", type=float, default=0.6)
     parser.add_argument("--horizon-bars", type=int, default=30)
-    parser.add_argument("--development-only", action="store_true")
-    # V1 args for compatibility with test
-    parser.add_argument("--v1-long-dir")
-    parser.add_argument("--v1-short-dir")
-    parser.add_argument("--v1-audit-dir")
+    parser.add_argument("--outer-folds", type=int, default=5)
+    parser.add_argument("--inner-folds", type=int, default=4)
+    parser.add_argument("--bootstrap-iterations", type=int, default=1000)
+    parser.add_argument("--permutation-iterations", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--development-only", action="store_true", required=True)
     return parser.parse_args()
 
-def main():
-    logging.basicConfig(level=logging.INFO)
-    args = parse_args()
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    code_sha = "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01" # Hardcoded for this exercise
-    
-    # 0. Generate manifest-related artifacts
-    # (Since this is a CLI run, we write the minimal required structure to pass)
-    _write_artifact(out_dir / "input_inventory.json", {"files": []}, code_sha)
-    _write_artifact(out_dir / "source_delta_inventory.json", {"delta": "V2_FRESH_NIFTY_APPEND"}, code_sha)
-    _write_artifact(out_dir / "source_certification.json", {"certified": True}, code_sha)
-    _write_artifact(out_dir / "partition_registry.json", {"status": "V2_LOCKED"}, code_sha)
-    
-    try:
-        manifest_hash = _hash_file(args.source_manifest)
-    except FileNotFoundError:
-        manifest_hash = "unknown"
-        
-    try:
-        sidecar_hash = open(f"{args.source_manifest}.sha256").read().split()[0]
-        if manifest_hash != sidecar_hash:
-            raise ValueError("Manifest sidecar mismatch.")
-    except FileNotFoundError:
-        pass # Handle in tests
 
-    # 1. Load source and build features
-    bundle = load_certified_upstox_underlying(
-        source_project_root=args.source_project_root,
-        source_manifest_path=args.source_manifest,
+def _resolve(root: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def _required_evidence_hashes(args: argparse.Namespace) -> dict[str, str]:
+    requirements = {
+        "v1_long_evidence_manifest": Path(args.v1_long_dir) / "evidence_manifest.json",
+        "v1_short_evidence_manifest": Path(args.v1_short_dir)
+        / "evidence_manifest.json",
+        "v1_audit_final_report": Path(args.v1_audit_dir) / "final_report.md",
+    }
+    hashes: dict[str, str] = {}
+    for name, path in requirements.items():
+        if not path.is_file():
+            raise ValueError(f"required V1 evidence file is missing: {path}")
+        hashes[name] = sha256_file(path)
+    return hashes
+
+
+def _write_report(path: Path, result: dict, confirmation_status: str) -> None:
+    candidate = result.get("candidate")
+    lines = [
+        "# ML Strategy Discovery V2 — Certified Development Screen",
+        "",
+        f"- Side: `{result['side']}`",
+        f"- Development verdict: `{result['verdict']}`",
+        f"- Confirmation status: `{confirmation_status}`",
+        f"- Outer folds: `{result['candidate_funnel']['outer_folds']}`",
+        f"- Inner hypotheses: `{result['candidate_funnel'].get('total_inner_hypotheses', 0)}`",
+        f"- Unique hypotheses: `{result['candidate_funnel'].get('unique_hypotheses', 0)}`",
+    ]
+    if candidate is not None:
+        lines.extend(
+            [
+                f"- Candidate rule hash: `{candidate['rule_hash']}`",
+                f"- Candidate conditions: `{json.dumps(candidate['conditions'], sort_keys=True)}`",
+            ]
+        )
+    if result.get("rejection_reasons"):
+        lines.append(f"- Rejection reasons: `{', '.join(result['rejection_reasons'])}`")
+    lines.extend(
+        [
+            "",
+            "The screen uses underlying research-label outcomes only. It is not option P&L, execution, profitability, paper, or live certification.",
+            "",
+            "`NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN`",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
+    args = parse_args()
+    project_root = Path(args.source_project_root).expanduser().resolve()
+    output_dir = Path(args.output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    code_sha = resolve_code_sha(project_root)
+    manifest_path = _resolve(project_root, args.source_manifest)
+    registry_path = _resolve(project_root, args.registry)
+    registry = load_registry(registry_path)
+    source_payload, source_identity = load_and_verify_manifest(manifest_path)
+    v1_hashes = _required_evidence_hashes(args)
+
+    # The parent manifest is read as metadata only. Only DEVELOPMENT records are
+    # materialized into a child selection manifest before any parquet is opened.
+    selected_manifest = development_manifest_payload(
+        source_payload,
+        instrument=args.instrument,
+        registry=registry,
+    )
+    selected_manifest_path = output_dir / "development_source_selection_manifest.json"
+    selected_manifest_path.write_text(
+        json.dumps(selected_manifest, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    selected_manifest_hash = sha256_file(selected_manifest_path)
+    selected_file_verification = verify_selected_record_files(
+        project_root, selected_manifest["records"]
+    )
+
+    source_bundle = load_certified_upstox_underlying(
+        source_project_root=project_root,
+        source_manifest_path=selected_manifest_path,
         instrument=args.instrument,
     )
-    
     config = DiscoveryConfig(
         instrument=args.instrument,
         timestamp_column="timestamp",
@@ -124,133 +169,196 @@ def main():
         source_timezone="Asia/Kolkata",
         bar_interval_minutes=1,
         strict_bar_cadence=True,
-        source_kind="CERTIFIED_UPSTOX_CANDIDATE_REPLAY_V2_1",
+        source_kind="CERTIFIED_UPSTOX_V2_DEVELOPMENT_ONLY",
         target_atr=args.target_atr,
         stop_atr=args.stop_atr,
         barrier_horizon_bars=args.horizon_bars,
         label_side=args.side,
+        random_seed=args.seed,
     )
-    
-    # Filter the bars first to avoid loading outcomes and filtering later!
-    # bundle.bars has a 'timestamp' column. We can extract session_date.
-    
-    # We create a temporary DataFrame to use our mapping logic
-    bundle.bars["session_date"] = bundle.bars["timestamp"].dt.strftime("%Y-%m-%d")
-    dev_bars = bundle.bars[bundle.bars["session_date"].apply(lambda x: map_dataset(x)) == "DEVELOPMENT_V1"].copy()
-    
-    dataset = build_discovery_dataset(dev_bars, config=config, option_quotes=None)
-    
-    # Extract dev dataset (this also ensures we strictly return the right type and structure)
-    dev_df = load_development_for_selection(dataset)
-    
-    # Generate candidates on DEVELOPMENT_V1
-    features = [c for c in dev_df.columns if pd.api.types.is_numeric_dtype(dev_df[c]) and c not in [
-        "label_return_r", "split", "session_date", "v2_dataset"
-    ]]
-    
-    candidates = generate_candidates(dev_df, features=features)
-    
-    _write_artifact(out_dir / "search_space_manifest.json", {"features": features, "num_candidates": len(candidates)}, code_sha)
-    
-    # Score candidates
-    stage_counts = {"initial": len(candidates)}
-    
-    # Filter 1: Min Support
-    cands_f1 = []
-    masks_f1 = []
-    for cand in candidates:
-        mask = rule_mask(dev_df, cand)
-        if minimum_support_gate(dev_df, mask):
-            cands_f1.append(cand)
-            masks_f1.append(mask)
-    stage_counts["minimum_support"] = len(cands_f1)
-    
-    # Filter 2: Base Rate Lift
-    cands_f2 = []
-    masks_f2 = []
-    base_returns = dev_df["label_return_r"].dropna()
-    base_metrics = {"label_expectancy_r": base_returns.mean()}
-    for cand, mask in zip(cands_f1, masks_f1):
-        cand_returns = dev_df.loc[mask, "label_return_r"].dropna()
-        cand_metrics = {"label_expectancy_r": cand_returns.mean()}
-        if base_rate_lift_gate(cand_metrics, base_metrics):
-            cands_f2.append(cand)
-            masks_f2.append(mask)
-    stage_counts["base_rate_lift"] = len(cands_f2)
-    
-    # Filter 3: Folds & Concentration
-    cands_f3 = []
-    masks_f3 = []
-    folds = generate_nested_folds(dev_df)
-    _write_artifact(out_dir / "fold_manifest.json", {"folds": folds}, code_sha)
-    
-    for cand, mask in zip(cands_f2, masks_f2):
-        fold_results = []
-        for f in folds:
-            f_val = dev_df[dev_df["session_date"].isin(f["val_sessions"])]
-            f_mask = rule_mask(f_val, cand)
-            f_cand_returns = f_val.loc[f_mask, "label_return_r"].dropna()
-            f["expectancy_r"] = f_cand_returns.mean() if len(f_cand_returns) else 0
-            f["trades"] = len(f_cand_returns)
-            fold_results.append(f)
-            
-        if fold_gates(fold_results) and concentration_gates(dev_df, mask) and bootstrap_gate(dev_df, mask):
-            cands_f3.append(cand)
-            masks_f3.append(mask)
-    stage_counts["stability_and_concentration"] = len(cands_f3)
-    
-    _write_artifact(out_dir / "candidate_funnel.json", stage_counts, code_sha)
-    
-    # Multiple Testing and Stability Selection
-    adjusted_candidates = multiple_testing_and_stability(dev_df, cands_f3, masks_f3)
-    
-    _write_artifact(out_dir / "multiple_testing.json", {"candidates": adjusted_candidates}, code_sha)
-    _write_artifact(out_dir / "stability_selection.json", {"candidates": adjusted_candidates}, code_sha)
-    
-    final_candidates = []
-    for cand in adjusted_candidates:
-        controls = run_negative_controls(dev_df, cand)
-        cand["controls"] = controls
-        final_candidates.append(cand)
-        
-    _write_artifact(out_dir / "negative_controls.json", {"candidates": final_candidates}, code_sha)
+    dataset = build_discovery_dataset(
+        source_bundle.bars, config=config, option_quotes=None
+    )
+    development = load_development_for_selection(dataset, registry=registry)
+    features = require_causal_features(model_feature_names(development))
+    stability_config = StabilityConfig(
+        outer_folds=args.outer_folds,
+        inner_folds=args.inner_folds,
+        bootstrap_iterations=args.bootstrap_iterations,
+        permutation_iterations=args.permutations,
+        seed=args.seed,
+    )
+    LOGGER.info(
+        "running side=%s rows=%s sessions=%s features=%s",
+        args.side,
+        len(development),
+        development["session_date"].nunique(),
+        len(features),
+    )
+    result = run_stability_first_discovery(
+        development,
+        side=args.side,
+        features=features,
+        config=stability_config,
+    )
 
-    # Freeze at most one candidate per side
-    if final_candidates:
-        best_cand = sorted(final_candidates, key=lambda c: c["dev_expectancy_r"], reverse=True)[0]
-        
-        # We explicitly DO NOT evaluate confirmation here in the same run.
-        # We freeze the candidate and issue a REQUIRES_ACKNOWLEDGEMENT lock.
-        
-        freeze_candidate(
-            candidate=best_cand, 
-            side=args.side, 
-            output_dir=out_dir, 
-            search_space_hash="ss_hash", 
-            fold_hash="f_hash", 
-            code_sha=code_sha
+    input_hashes = {
+        "parent_source_manifest": source_identity["manifest_sha256"],
+        "development_source_selection_manifest": selected_manifest_hash,
+        "registry": registry.source_hash,
+        **v1_hashes,
+    }
+    seeds = [args.seed]
+    common = dict(
+        code_sha=code_sha, input_hashes=input_hashes, deterministic_seeds=seeds
+    )
+    write_json(
+        output_dir / "input_inventory.json",
+        envelope(
+            {
+                "instrument": args.instrument,
+                "side": args.side,
+                "parent_source_identity": source_identity,
+                "development_source_record_count": len(selected_manifest["records"]),
+                "development_source_record_set_hash": canonical_hash(
+                    selected_manifest["records"]
+                ),
+                "development_source_file_verification": selected_file_verification,
+                "development_rows": len(development),
+                "development_sessions": int(development["session_date"].nunique()),
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "partition_registry.json",
+        envelope(
+            {
+                "registry_hash": registry.source_hash,
+                "loaded_partition": "DEVELOPMENT_V1",
+                "validation_v1_consumed_loaded": False,
+                "holdout_v1_locked_loaded": False,
+                "fresh_confirmation_loaded": False,
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "feature_schema.json",
+        envelope(
+            {
+                "features": list(features),
+                "feature_schema_hash": result.get(
+                    "feature_schema_hash", canonical_hash(features)
+                ),
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "fold_manifest.json",
+        envelope(
+            {
+                "folds": result["folds"],
+                "fold_manifest_hash": result["fold_manifest_hash"],
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "candidate_funnel.json",
+        envelope(result["candidate_funnel"], **common),
+    )
+    write_json(
+        output_dir / "outer_fold_results.json",
+        envelope(
+            {
+                "results": result["outer_fold_results"],
+                "summary": result.get("fold_summary", {}),
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "multiple_testing.json",
+        envelope(result["multiple_testing"], **common),
+    )
+    write_json(
+        output_dir / "stability_selection.json",
+        envelope(
+            {
+                "recurrence": result.get("recurrence"),
+                "gate_results": result.get("gate_results", {}),
+            },
+            **common,
+        ),
+    )
+    write_json(
+        output_dir / "negative_controls.json",
+        envelope(
+            result.get(
+                "negative_controls",
+                {"passes": False, "rejection_reasons": ["NO_CANDIDATE_TO_CONTROL"]},
+            ),
+            **common,
+        ),
+    )
+
+    bundles: list[dict] = []
+    if result.get("candidate") is not None:
+        bundles.append(
+            candidate_bundle(
+                candidate=result["candidate"],
+                side=args.side,
+                source_manifest_hash=source_identity["manifest_sha256"],
+                development_dataset_hash=result["development_dataset_hash"],
+                feature_schema_hash=result["feature_schema_hash"],
+                fold_manifest_hash=result["fold_manifest_hash"],
+                search_space_hash=result["search_space_hash"],
+                multiple_testing=result["candidate_significance"],
+                recurrence=result["recurrence"],
+                concentration=result["concentration"],
+                bootstrap=result["bootstrap"],
+                imputation_dependence=result["imputation_dependence"],
+                controls=result["negative_controls"],
+                code_sha=code_sha,
+            )
         )
-        
-        logging.info(f"FROZEN {args.side} CANDIDATE")
-        
-        _write_artifact(out_dir / "confirmation_lock.json", {"status": "LOCKED", "token_required": True}, code_sha)
-        
-        with open(out_dir / "final_report.md", "w") as f:
-            f.write(f"# V2 Discovery Report\n\n")
-            f.write(f"- Side: {args.side}\n")
-            f.write(f"- Verdict: ONE_{args.side}_V2_CANDIDATE_FROZEN\n")
-            f.write(f"Candidate details written to frozen JSON.\n")
-            f.write("- NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN\n")
-    else:
-        logging.info("NO STABLE CANDIDATE")
-        
-        # If no candidate survives, generate no token and read no fresh outcomes
-        _write_artifact(out_dir / "confirmation_lock.json", {"status": "NO_CANDIDATE"}, code_sha)
-        
-        with open(out_dir / "final_report.md", "w") as f:
-            f.write(f"# V2 Discovery Report\n\n")
-            f.write(f"- Verdict: NO_STABLE_CANDIDATE\n")
-            f.write("- NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN\n")
+    frozen = write_frozen_registry(
+        output_dir / "frozen_candidates.json",
+        bundles=bundles,
+        code_sha=code_sha,
+        input_hashes=input_hashes,
+        seeds=seeds,
+    )
+    confirmation_status = "NEED_NEW_FRESH_CONFIRMATION_DATA"
+    write_json(
+        output_dir / "confirmation_lock.json",
+        envelope(
+            {
+                "status": confirmation_status,
+                "candidate_bundle_hashes": [
+                    item["candidate_bundle_hash"] for item in bundles
+                ],
+                "token_issued": False,
+                "consumed_fresh_dates": {"start": "2026-07-11", "end": "2026-07-21"},
+            },
+            **common,
+        ),
+    )
+    _write_report(output_dir / "final_report.md", result, confirmation_status)
+    semantic_manifest = build_semantic_hash_manifest(output_dir)
+    write_json(
+        output_dir / "semantic_hash_manifest.json",
+        envelope(semantic_manifest, **common),
+    )
+    LOGGER.info(
+        "development verdict=%s frozen_registry_verdict=%s",
+        result["verdict"],
+        frozen["verdict"],
+    )
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

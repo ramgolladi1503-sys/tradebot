@@ -1,59 +1,85 @@
-import json
-from pathlib import Path
-from typing import Dict, Any
-import datetime
-import hashlib
-import uuid
+from __future__ import annotations
 
-def freeze_candidate(candidate: Dict[str, Any], side: str, output_dir: Path, search_space_hash: str, fold_hash: str, code_sha: str) -> None:
-    """
-    Freeze a stable candidate into the evidence directory as a final read-only JSON.
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out_file = output_dir / f"frozen_candidates.json"
-    
-    # Calculate candidate bundle hash
-    # To do this deterministically, sort keys
-    raw = json.dumps(candidate, sort_keys=True)
-    cand_bundle_hash = hashlib.sha256(raw.encode('utf-8')).hexdigest()
-    
-    candidate_id = str(uuid.uuid4())
-    
-    payload = {
-        "schema_version": "1.0",
-        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "code_commit_sha": code_sha,
-        "input_hashes": {
-            "search_space_hash": search_space_hash,
-            "fold_hash": fold_hash
-        },
-        "deterministic_seeds": [42],
-        "read_only": True,
-        "is_order_action": False,
-        "broker_api_called": False,
-        "allowed_for_live_execution": False,
-        "append": False,
-        
-        "candidate_id": candidate_id,
+from pathlib import Path
+from typing import Any
+
+from .artifacts import envelope, write_json
+from .contracts import canonical_hash
+
+
+def candidate_bundle(
+    *,
+    candidate: dict[str, Any],
+    side: str,
+    source_manifest_hash: str,
+    development_dataset_hash: str,
+    feature_schema_hash: str,
+    fold_manifest_hash: str,
+    search_space_hash: str,
+    multiple_testing: dict[str, Any],
+    recurrence: dict[str, Any],
+    concentration: dict[str, Any],
+    bootstrap: dict[str, Any],
+    imputation_dependence: dict[str, Any],
+    controls: dict[str, Any],
+    code_sha: str,
+) -> dict[str, Any]:
+    if side not in {"LONG", "SHORT"}:
+        raise ValueError("side must be LONG or SHORT")
+    economic = {
         "side": side,
-        "frozen_candidate": candidate,
-        "candidate_bundle_hash": cand_bundle_hash,
-        
-        "status": "FRESH_CONFIRMATION_REQUIRES_EXPLICIT_ACKNOWLEDGEMENT"
+        "candidate": candidate,
+        "source_manifest_hash": source_manifest_hash,
+        "development_dataset_hash": development_dataset_hash,
+        "feature_schema_hash": feature_schema_hash,
+        "fold_manifest_hash": fold_manifest_hash,
+        "search_space_hash": search_space_hash,
+        "multiple_testing": multiple_testing,
+        "recurrence": recurrence,
+        "concentration": concentration,
+        "bootstrap": bootstrap,
+        "imputation_dependence": imputation_dependence,
+        "controls": controls,
+        "code_commit_sha": code_sha,
     }
-    
-    # If the file exists, we append if it's a list, but the prompt says 
-    # "At most one freeze per side", so we just overwrite it with the list of frozen candidates
-    # Wait, if both long and short have a candidate, we might need a dict
-    frozen_dict = {}
-    if out_file.exists():
-        with open(out_file, "r") as f:
-            try:
-                frozen_dict = json.load(f)
-            except:
-                pass
-                
-    frozen_dict[side] = payload
-    
-    with open(out_file, "w") as f:
-        json.dump(frozen_dict, f, indent=2, separators=(',', ':'))
+    bundle_hash = canonical_hash(economic)
+    return {
+        **economic,
+        "candidate_id": f"v2_{side.lower()}_{bundle_hash[:16]}",
+        "candidate_bundle_hash": bundle_hash,
+        "status": "FRESH_CONFIRMATION_REQUIRES_EXPLICIT_ACKNOWLEDGEMENT",
+    }
+
+
+def write_frozen_registry(
+    output_path: str | Path,
+    *,
+    bundles: list[dict[str, Any]],
+    code_sha: str,
+    input_hashes: dict[str, str],
+    seeds: list[int],
+) -> dict[str, Any]:
+    seen_sides: set[str] = set()
+    for bundle in bundles:
+        side = str(bundle["side"])
+        if side in seen_sides:
+            raise ValueError(f"at most one frozen candidate per side: {side}")
+        seen_sides.add(side)
+    payload = envelope(
+        {
+            "verdict": (
+                "NO_STABLE_CANDIDATE"
+                if not bundles
+                else "ONE_CANDIDATE_PER_SIDE_FROZEN"
+                if len(bundles) == 2
+                else f"ONE_{bundles[0]['side']}_V2_CANDIDATE_FROZEN"
+            ),
+            "candidates": bundles,
+            "confirmation_token_issued": False,
+        },
+        code_sha=code_sha,
+        input_hashes=input_hashes,
+        deterministic_seeds=seeds,
+    )
+    write_json(output_path, payload)
+    return payload
