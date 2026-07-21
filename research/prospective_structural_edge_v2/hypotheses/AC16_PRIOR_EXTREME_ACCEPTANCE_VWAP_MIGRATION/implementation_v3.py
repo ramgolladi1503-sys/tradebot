@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-from research.prospective_structural_edge_v2.cycle4_underlying_runner import ac16_generate, make_candidate
+from research.prospective_structural_edge_v2.cycle4_underlying_runner import ac16_generate
 
 
 PARAMETERS = {

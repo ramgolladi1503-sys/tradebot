@@ -1,0 +1,12 @@
+{
+  "first_legal_next_bar": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_entry_prohibited": true,
+  "verdict": "PASS"
+}

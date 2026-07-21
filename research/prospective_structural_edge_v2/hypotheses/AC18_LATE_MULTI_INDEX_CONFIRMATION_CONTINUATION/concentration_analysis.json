@@ -1,0 +1,36 @@
+{
+  "direction_breakdown": [
+    {
+      "count": 138,
+      "direction": -1,
+      "mean": -1.9502533867346614
+    },
+    {
+      "count": 140,
+      "direction": 1,
+      "mean": 0.010406037692875307
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "single_session_concentration": 0.026910147523714508,
+  "symbol_breakdown": [
+    {
+      "count": 24,
+      "mean": -2.342736162696951,
+      "target_symbol": "BANKNIFTY"
+    },
+    {
+      "count": 254,
+      "mean": -0.8324899771167477,
+      "target_symbol": "NIFTY"
+    }
+  ],
+  "top_five_session_concentration": 0.10343461001768604,
+  "verdict": "PASS"
+}

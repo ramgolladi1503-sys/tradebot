@@ -1,0 +1,17 @@
+{
+  "cycle": 5,
+  "hypotheses": [
+    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
+    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
+    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
+  ],
+  "outcomes_read": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "status": "STARTED_SPECIFICATION_ONLY"
+}

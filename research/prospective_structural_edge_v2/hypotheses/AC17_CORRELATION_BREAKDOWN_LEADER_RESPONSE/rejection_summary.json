@@ -1,0 +1,31 @@
+{
+  "observed_rejection_codes": [
+    "INSUFFICIENT_HISTORY",
+    "STRUCTURAL_PRECONDITION_NOT_MET",
+    "TIMESTAMP_ALIGNMENT_FAILURE"
+  ],
+  "required_rejection_codes": [
+    "MISSING_REQUIRED_SYMBOL",
+    "MISSING_PRIOR_SESSION",
+    "INCOMPLETE_SESSION",
+    "TIMESTAMP_ALIGNMENT_FAILURE",
+    "INSUFFICIENT_HISTORY",
+    "NONFINITE_INPUT",
+    "ZERO_NORMALIZATION_RANGE",
+    "ZERO_VARIANCE_CORRELATION_WINDOW",
+    "STRUCTURAL_PRECONDITION_NOT_MET",
+    "CONFIRMATION_NOT_MET",
+    "INVALIDATED_BEFORE_ENTRY",
+    "SETUP_EXPIRED",
+    "DUPLICATE_SETUP",
+    "FUTURE_DATA_REQUIRED"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "silent_drops": false
+}

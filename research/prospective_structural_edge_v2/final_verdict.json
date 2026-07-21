@@ -1,30 +1,19 @@
 {
-  "FINAL_VERDICT": "CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_4",
-  "available_space_last_measured": "7.6Gi",
-  "broker_api_called": false,
-  "candidate_counts_calculated_before_v2_freeze": false,
-  "cumulative_hypotheses": 18,
-  "cycle3_finalists": [],
-  "cycle4_hypotheses": [
-    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
-    "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
-    "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION"
+  "FINAL_VERDICT": "CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_5",
+  "bid_ask_required_for_current_task": false,
+  "cumulative_hypotheses": 21,
+  "cycle4_finalists": [],
+  "cycle5_hypotheses": [
+    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
+    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
+    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
   ],
-  "cycle4_started": true,
-  "execution_eligibility": false,
-  "next_action": "Run Cycle 4 specification fidelity oracle, implementation fidelity, and development WFA for AC16-AC18.",
+  "cycle5_started": true,
+  "missing_option_data_blocked_research": false,
   "old_lockbox_reused": false,
-  "option_economic_edge": "NOT_EVALUATED_NO_TRUSTED_BID_ASK",
-  "order_action": false,
-  "outcomes_read_before_v2_freeze": false,
-  "parameters_optimized": false,
-  "production_strategy_created": false,
-  "prospective_calendar_span": 0,
-  "prospective_eligible_sessions": 0,
-  "prospective_lockbox_opened": false,
-  "prospective_lockbox_sealed": false,
+  "option_data_used": false,
+  "option_economic_certification": "OUT_OF_SCOPE",
   "prospective_outcomes_inspected": false,
-  "safe_storage_override_by_user": true,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -32,7 +21,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "schema_version": 2,
-  "shadow_test_only": "NO",
-  "v1_contracts_preserved": true
+  "underlying_structural_edge_confirmed": false
 }

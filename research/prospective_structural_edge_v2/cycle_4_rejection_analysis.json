@@ -1,0 +1,766 @@
+{
+  "cycle": 4,
+  "finalists": [],
+  "results": {
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": {
+      "controls": {
+        "candidate_id_corruption": "PASS_FAIL_CLOSED",
+        "direction_inversion_mean_bps": -2.546988117649075,
+        "future_suffix_mutation": "PASS",
+        "matched_random_time_entry": "RUN_DETERMINISTIC_COMPACT",
+        "timestamp_lookahead_trap": "PASS_FAIL_CLOSED",
+        "verdict": "PASS",
+        "within_session_signal_permutation": "RUN_DETERMINISTIC_COMPACT"
+      },
+      "summary": {
+        "candidate_count": 371,
+        "candidate_sessions": 183,
+        "direction_breakdown": [
+          {
+            "count": 185,
+            "direction": -1,
+            "mean": 2.5492388077639085
+          },
+          {
+            "count": 186,
+            "direction": 1,
+            "mean": 2.54474952801873
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -15.453010387880367,
+        "mean_bps": 2.546988117649075,
+        "median_bps": 1.188579666469014,
+        "mfe_mean_bps": 16.59804742809126,
+        "positive_candidate_fraction": 0.5256064690026954,
+        "positive_session_fraction": 0.4972677595628415,
+        "quarter_count": 9,
+        "session_clustered_ci_95": [
+          -2.522725204820559,
+          4.217508674649048
+        ],
+        "single_session_concentration": 0.055315966300681196,
+        "symbol_breakdown": [
+          {
+            "count": 119,
+            "mean": 1.9404049119813622,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 124,
+            "mean": 2.909711980949742,
+            "target_symbol": "NIFTY"
+          },
+          {
+            "count": 128,
+            "mean": 2.759532199095756,
+            "target_symbol": "SENSEX"
+          }
+        ],
+        "symbol_count": 3,
+        "top_five_session_concentration": 0.1340142700394855
+      },
+      "verdict": "REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION",
+      "wfa": [
+        {
+          "fold": 1,
+          "summary": {
+            "candidate_count": 73,
+            "candidate_sessions": 39,
+            "direction_breakdown": [
+              {
+                "count": 46,
+                "direction": -1,
+                "mean": -0.09529295790574048
+              },
+              {
+                "count": 27,
+                "direction": 1,
+                "mean": -4.804759024556152
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -20.938885147207014,
+            "mean_bps": -1.8371502702284952,
+            "median_bps": -3.7928916263663126,
+            "mfe_mean_bps": 19.44921041055633,
+            "positive_candidate_fraction": 0.4246575342465753,
+            "positive_session_fraction": 0.41025641025641024,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -11.491618096632074,
+              5.2349615885387815
+            ],
+            "single_session_concentration": 0.08518806992107414,
+            "symbol_breakdown": [
+              {
+                "count": 26,
+                "mean": -4.865571593320504,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 23,
+                "mean": 0.4680091352691012,
+                "target_symbol": "NIFTY"
+              },
+              {
+                "count": 24,
+                "mean": -0.7654716004806824,
+                "target_symbol": "SENSEX"
+              }
+            ],
+            "symbol_count": 3,
+            "top_five_session_concentration": 0.32946024905157506
+          },
+          "train_blocks": [
+            1
+          ],
+          "validation_block": 2
+        },
+        {
+          "fold": 2,
+          "summary": {
+            "candidate_count": 51,
+            "candidate_sessions": 23,
+            "direction_breakdown": [
+              {
+                "count": 12,
+                "direction": -1,
+                "mean": -5.134400788340913
+              },
+              {
+                "count": 39,
+                "direction": 1,
+                "mean": 10.365678738742005
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -16.80127729024459,
+            "mean_bps": 6.718601202957791,
+            "median_bps": 4.564394815944617,
+            "mfe_mean_bps": 18.530551606047133,
+            "positive_candidate_fraction": 0.6470588235294118,
+            "positive_session_fraction": 0.6086956521739131,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -4.458229465530202,
+              13.141149817325582
+            ],
+            "single_session_concentration": 0.15803714575862693,
+            "symbol_breakdown": [
+              {
+                "count": 16,
+                "mean": 9.719824803820082,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 18,
+                "mean": 2.8023007942414484,
+                "target_symbol": "NIFTY"
+              },
+              {
+                "count": 17,
+                "mean": 8.040591187845875,
+                "target_symbol": "SENSEX"
+              }
+            ],
+            "symbol_count": 3,
+            "top_five_session_concentration": 0.508498840920503
+          },
+          "train_blocks": [
+            1,
+            2
+          ],
+          "validation_block": 3
+        },
+        {
+          "fold": 3,
+          "summary": {
+            "candidate_count": 62,
+            "candidate_sessions": 28,
+            "direction_breakdown": [
+              {
+                "count": 27,
+                "direction": -1,
+                "mean": 1.2953823768610024
+              },
+              {
+                "count": 35,
+                "direction": 1,
+                "mean": 1.7840487665270466
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -9.144426236169227,
+            "mean_bps": 1.571242435543447,
+            "median_bps": 2.429309279534664,
+            "mfe_mean_bps": 11.305389287917768,
+            "positive_candidate_fraction": 0.6129032258064516,
+            "positive_session_fraction": 0.6428571428571429,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -2.3691876759658945,
+              7.228248719878294
+            ],
+            "single_session_concentration": 0.15423434874167488,
+            "symbol_breakdown": [
+              {
+                "count": 19,
+                "mean": 2.4584573454891183,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 22,
+                "mean": 0.3281530227225693,
+                "target_symbol": "NIFTY"
+              },
+              {
+                "count": 21,
+                "mean": 2.070808330452568,
+                "target_symbol": "SENSEX"
+              }
+            ],
+            "symbol_count": 3,
+            "top_five_session_concentration": 0.4736530004778078
+          },
+          "train_blocks": [
+            1,
+            2,
+            3
+          ],
+          "validation_block": 4
+        },
+        {
+          "fold": 4,
+          "summary": {
+            "candidate_count": 58,
+            "candidate_sessions": 32,
+            "direction_breakdown": [
+              {
+                "count": 32,
+                "direction": -1,
+                "mean": 3.8778488557958055
+              },
+              {
+                "count": 26,
+                "direction": 1,
+                "mean": -2.9306115873698553
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -11.666221144886277,
+            "mean_bps": 0.8257803812732677,
+            "median_bps": -1.6232925842907253,
+            "mfe_mean_bps": 11.67423365940901,
+            "positive_candidate_fraction": 0.41379310344827586,
+            "positive_session_fraction": 0.375,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -3.9623763342248988,
+              7.620586977726448
+            ],
+            "single_session_concentration": 0.1798243692807709,
+            "symbol_breakdown": [
+              {
+                "count": 17,
+                "mean": 4.767079972769288,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 20,
+                "mean": 0.7876195902816185,
+                "target_symbol": "NIFTY"
+              },
+              {
+                "count": 21,
+                "mean": -2.328451868040987,
+                "target_symbol": "SENSEX"
+              }
+            ],
+            "symbol_count": 3,
+            "top_five_session_concentration": 0.4950032763786947
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "validation_block": 5
+        },
+        {
+          "fold": 5,
+          "summary": {
+            "candidate_count": 78,
+            "candidate_sessions": 38,
+            "direction_breakdown": [
+              {
+                "count": 43,
+                "direction": -1,
+                "mean": 0.6777331984416631
+              },
+              {
+                "count": 35,
+                "direction": 1,
+                "mean": 2.5874786505761804
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -17.308492675011795,
+            "mean_bps": 1.5346702602968947,
+            "median_bps": 3.9885931412497744,
+            "mfe_mean_bps": 16.776514334955852,
+            "positive_candidate_fraction": 0.5641025641025641,
+            "positive_session_fraction": 0.5263157894736842,
+            "quarter_count": 3,
+            "session_clustered_ci_95": [
+              -10.859129254470693,
+              5.447526954744867
+            ],
+            "single_session_concentration": 0.07255745024557184,
+            "symbol_breakdown": [
+              {
+                "count": 27,
+                "mean": -0.3294911775251784,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 24,
+                "mean": 3.1791538547600493,
+                "target_symbol": "NIFTY"
+              },
+              {
+                "count": 27,
+                "mean": 1.9370685030406096,
+                "target_symbol": "SENSEX"
+              }
+            ],
+            "symbol_count": 3,
+            "top_five_session_concentration": 0.303167729475232
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "validation_block": 6
+        }
+      ]
+    },
+    "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE": {
+      "controls": {
+        "verdict": "NOT_RUN_NO_CANDIDATES"
+      },
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_RESULT_CONCENTRATION|NOT_RUN_NO_CANDIDATES",
+      "wfa": [
+        {
+          "fold": 1,
+          "summary": {
+            "candidate_count": 0,
+            "candidate_sessions": 0,
+            "mean_bps": null,
+            "median_bps": null
+          },
+          "train_blocks": [
+            1
+          ],
+          "validation_block": 2
+        },
+        {
+          "fold": 2,
+          "summary": {
+            "candidate_count": 0,
+            "candidate_sessions": 0,
+            "mean_bps": null,
+            "median_bps": null
+          },
+          "train_blocks": [
+            1,
+            2
+          ],
+          "validation_block": 3
+        },
+        {
+          "fold": 3,
+          "summary": {
+            "candidate_count": 0,
+            "candidate_sessions": 0,
+            "mean_bps": null,
+            "median_bps": null
+          },
+          "train_blocks": [
+            1,
+            2,
+            3
+          ],
+          "validation_block": 4
+        },
+        {
+          "fold": 4,
+          "summary": {
+            "candidate_count": 0,
+            "candidate_sessions": 0,
+            "mean_bps": null,
+            "median_bps": null
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "validation_block": 5
+        },
+        {
+          "fold": 5,
+          "summary": {
+            "candidate_count": 0,
+            "candidate_sessions": 0,
+            "mean_bps": null,
+            "median_bps": null
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "validation_block": 6
+        }
+      ]
+    },
+    "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION": {
+      "controls": {
+        "candidate_id_corruption": "PASS_FAIL_CLOSED",
+        "direction_inversion_mean_bps": 0.9628709427783478,
+        "future_suffix_mutation": "PASS",
+        "matched_random_time_entry": "RUN_DETERMINISTIC_COMPACT",
+        "timestamp_lookahead_trap": "PASS_FAIL_CLOSED",
+        "verdict": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+        "within_session_signal_permutation": "RUN_DETERMINISTIC_COMPACT"
+      },
+      "summary": {
+        "candidate_count": 278,
+        "candidate_sessions": 278,
+        "direction_breakdown": [
+          {
+            "count": 138,
+            "direction": -1,
+            "mean": -1.9502533867346614
+          },
+          {
+            "count": 140,
+            "direction": 1,
+            "mean": 0.010406037692875307
+          }
+        ],
+        "direction_count": 2,
+        "mae_mean_bps": -12.578602136205065,
+        "mean_bps": -0.9628709427783478,
+        "median_bps": -0.9986889351232264,
+        "mfe_mean_bps": 12.429679534902078,
+        "positive_candidate_fraction": 0.4460431654676259,
+        "positive_session_fraction": 0.4460431654676259,
+        "quarter_count": 9,
+        "session_clustered_ci_95": [
+          -2.8777569749597838,
+          0.9838831072834994
+        ],
+        "single_session_concentration": 0.026910147523714508,
+        "symbol_breakdown": [
+          {
+            "count": 24,
+            "mean": -2.342736162696951,
+            "target_symbol": "BANKNIFTY"
+          },
+          {
+            "count": 254,
+            "mean": -0.8324899771167477,
+            "target_symbol": "NIFTY"
+          }
+        ],
+        "symbol_count": 2,
+        "top_five_session_concentration": 0.10343461001768604
+      },
+      "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "wfa": [
+        {
+          "fold": 1,
+          "summary": {
+            "candidate_count": 42,
+            "candidate_sessions": 42,
+            "direction_breakdown": [
+              {
+                "count": 23,
+                "direction": -1,
+                "mean": -0.32622530844234815
+              },
+              {
+                "count": 19,
+                "direction": 1,
+                "mean": 5.837040070756127
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -13.552289650885536,
+            "mean_bps": 2.46191855357601,
+            "median_bps": -0.692679562142029,
+            "mfe_mean_bps": 16.492474824419872,
+            "positive_candidate_fraction": 0.4523809523809524,
+            "positive_session_fraction": 0.4523809523809524,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -3.9692406133959963,
+              9.586341919843443
+            ],
+            "single_session_concentration": 0.13796475556482501,
+            "symbol_breakdown": [
+              {
+                "count": 5,
+                "mean": 16.863105094698792,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 37,
+                "mean": 0.5158122642350934,
+                "target_symbol": "NIFTY"
+              }
+            ],
+            "symbol_count": 2,
+            "top_five_session_concentration": 0.437857140976992
+          },
+          "train_blocks": [
+            1
+          ],
+          "validation_block": 2
+        },
+        {
+          "fold": 2,
+          "summary": {
+            "candidate_count": 36,
+            "candidate_sessions": 36,
+            "direction_breakdown": [
+              {
+                "count": 13,
+                "direction": -1,
+                "mean": -4.695697945477084
+              },
+              {
+                "count": 23,
+                "direction": 1,
+                "mean": -4.753985914961842
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -13.199474840299215,
+            "mean_bps": -4.732937481536791,
+            "median_bps": -2.0967339167993204,
+            "mfe_mean_bps": 8.525453534041185,
+            "positive_candidate_fraction": 0.3055555555555556,
+            "positive_session_fraction": 0.3055555555555556,
+            "quarter_count": 3,
+            "session_clustered_ci_95": [
+              -8.360705456836254,
+              -1.3246589365134256
+            ],
+            "single_session_concentration": 0.1223467821024666,
+            "symbol_breakdown": [
+              {
+                "count": 3,
+                "mean": -12.292184743382117,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 33,
+                "mean": -4.045733185005398,
+                "target_symbol": "NIFTY"
+              }
+            ],
+            "symbol_count": 2,
+            "top_five_session_concentration": 0.4500647589389043
+          },
+          "train_blocks": [
+            1,
+            2
+          ],
+          "validation_block": 3
+        },
+        {
+          "fold": 3,
+          "summary": {
+            "candidate_count": 57,
+            "candidate_sessions": 57,
+            "direction_breakdown": [
+              {
+                "count": 30,
+                "direction": -1,
+                "mean": -4.186157783526009
+              },
+              {
+                "count": 27,
+                "direction": 1,
+                "mean": -2.409565854963592
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -11.791887114948558,
+            "mean_bps": -3.3446142384174955,
+            "median_bps": -2.2497826223544237,
+            "mfe_mean_bps": 8.130796023409054,
+            "positive_candidate_fraction": 0.42105263157894735,
+            "positive_session_fraction": 0.42105263157894735,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -6.455263348794006,
+              -0.4153855914840286
+            ],
+            "single_session_concentration": 0.07947481087707266,
+            "symbol_breakdown": [
+              {
+                "count": 3,
+                "mean": -0.4889038708862555,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 54,
+                "mean": -3.5032648143914535,
+                "target_symbol": "NIFTY"
+              }
+            ],
+            "symbol_count": 2,
+            "top_five_session_concentration": 0.26387195368069266
+          },
+          "train_blocks": [
+            1,
+            2,
+            3
+          ],
+          "validation_block": 4
+        },
+        {
+          "fold": 4,
+          "summary": {
+            "candidate_count": 48,
+            "candidate_sessions": 48,
+            "direction_breakdown": [
+              {
+                "count": 24,
+                "direction": -1,
+                "mean": 0.04170736759188479
+              },
+              {
+                "count": 24,
+                "direction": 1,
+                "mean": 0.8287847702036686
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -10.329337202032672,
+            "mean_bps": 0.4352460688977766,
+            "median_bps": 0.5747133838979179,
+            "mfe_mean_bps": 11.753060837925178,
+            "positive_candidate_fraction": 0.5208333333333334,
+            "positive_session_fraction": 0.5208333333333334,
+            "quarter_count": 2,
+            "session_clustered_ci_95": [
+              -2.6982072774642956,
+              3.52803392646088
+            ],
+            "single_session_concentration": 0.06958822800443187,
+            "symbol_breakdown": [
+              {
+                "count": 3,
+                "mean": -1.5218661592949114,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 45,
+                "mean": 0.5657202174439558,
+                "target_symbol": "NIFTY"
+              }
+            ],
+            "symbol_count": 2,
+            "top_five_session_concentration": 0.2790853770908699
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "validation_block": 5
+        },
+        {
+          "fold": 5,
+          "summary": {
+            "candidate_count": 51,
+            "candidate_sessions": 51,
+            "direction_breakdown": [
+              {
+                "count": 26,
+                "direction": -1,
+                "mean": -4.065870096853218
+              },
+              {
+                "count": 25,
+                "direction": 1,
+                "mean": -0.8853693413728879
+              }
+            ],
+            "direction_count": 2,
+            "mae_mean_bps": -16.68890772650999,
+            "mean_bps": -2.506801099068742,
+            "median_bps": -2.4000634451559755,
+            "mfe_mean_bps": 15.67494928568271,
+            "positive_candidate_fraction": 0.47058823529411764,
+            "positive_session_fraction": 0.47058823529411764,
+            "quarter_count": 3,
+            "session_clustered_ci_95": [
+              -8.497465428401409,
+              3.4378607185703514
+            ],
+            "single_session_concentration": 0.08045313180953761,
+            "symbol_breakdown": [
+              {
+                "count": 5,
+                "mean": -14.939292207016397,
+                "target_symbol": "BANKNIFTY"
+              },
+              {
+                "count": 46,
+                "mean": -1.1554433699439977,
+                "target_symbol": "NIFTY"
+              }
+            ],
+            "symbol_count": 2,
+            "top_five_session_concentration": 0.31891553747338913
+          },
+          "train_blocks": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "validation_block": 6
+        }
+      ]
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

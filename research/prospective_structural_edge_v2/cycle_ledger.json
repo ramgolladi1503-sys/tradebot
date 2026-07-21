@@ -1,52 +1,26 @@
 {
   "cycles": [
     {
-      "cycle_number": 3,
+      "cycle": 4,
       "finalists": [],
-      "hypotheses": [
-        "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
-        "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
-        "AC13_OPENING_DISPERSION_CONVERGENCE",
-        "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
-        "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE"
-      ],
-      "prospective_outcomes_inspected": false,
-      "rejection_summary": {
-        "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_RESULT_CONCENTRATION|NOT_RUN_NO_CANDIDATES",
-        "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE",
-        "AC13_OPENING_DISPERSION_CONVERGENCE": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
-        "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
-        "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE"
-      },
-      "safety_flags": {
-        "allowed_for_live_execution": false,
-        "broker_api_called": false,
-        "execution_eligibility": false,
-        "is_order_action": false,
-        "read_only": true
-      },
-      "status": "COMPLETE_ZERO_FINALISTS"
-    },
-    {
-      "cycle_number": 4,
       "hypotheses": [
         "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
         "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
         "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION"
       ],
-      "prospective_outcomes_inspected": false,
-      "safety_flags": {
-        "allowed_for_live_execution": false,
-        "broker_api_called": false,
-        "execution_eligibility": false,
-        "is_order_action": false,
-        "read_only": true
-      },
-      "status": "HYPOTHESES_FROZEN_NOT_EVALUATED"
+      "status": "COMPLETED_NO_FINALISTS"
+    },
+    {
+      "cycle": 5,
+      "hypotheses": [
+        "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
+        "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
+        "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
+      ],
+      "outcomes_read": false,
+      "status": "STARTED_SPECIFICATION_ONLY"
     }
   ],
-  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
-  "next_cycle": 4,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -54,5 +28,5 @@
     "is_order_action": false,
     "read_only": true
   },
-  "schema_version": 1
+  "schema_version": 2
 }

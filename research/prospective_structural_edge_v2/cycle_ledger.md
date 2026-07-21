@@ -1,5 +1,7 @@
 # Cycle Ledger
 
-Cycle 3: `COMPLETE_ZERO_FINALISTS`
+Cycle 4: `COMPLETED_NO_FINALISTS`
 
-Cycle 4: `HYPOTHESES_FROZEN_NOT_EVALUATED`
+Cycle 5: `STARTED_SPECIFICATION_ONLY`
+
+No prospective outcomes inspected.

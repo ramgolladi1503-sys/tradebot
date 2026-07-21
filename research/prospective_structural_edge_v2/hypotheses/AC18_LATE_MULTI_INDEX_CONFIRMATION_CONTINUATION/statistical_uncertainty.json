@@ -1,0 +1,15 @@
+{
+  "bootstrap_resamples": 10000,
+  "cluster": "session",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "session_clustered_ci_95": [
+    -2.8777569749597838,
+    0.9838831072834994
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "folds": [
+    {
+      "fold": 1,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_blocks": [
+        1
+      ],
+      "validation_block": 2
+    },
+    {
+      "fold": 2,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_blocks": [
+        1,
+        2
+      ],
+      "validation_block": 3
+    },
+    {
+      "fold": 3,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_blocks": [
+        1,
+        2,
+        3
+      ],
+      "validation_block": 4
+    },
+    {
+      "fold": 4,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_blocks": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation_block": 5
+    },
+    {
+      "fold": 5,
+      "summary": {
+        "candidate_count": 0,
+        "candidate_sessions": 0,
+        "mean_bps": null,
+        "median_bps": null
+      },
+      "train_blocks": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "validation_block": 6
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "training_only_fitted_statistics": true
+}

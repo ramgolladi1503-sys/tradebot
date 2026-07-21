@@ -1,0 +1,14 @@
+{
+  "direction_breakdown": null,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "single_session_concentration": null,
+  "symbol_breakdown": null,
+  "top_five_session_concentration": null,
+  "verdict": "REJECTED_RESULT_CONCENTRATION"
+}

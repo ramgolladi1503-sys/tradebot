@@ -67,7 +67,9 @@ def test_ac17_correlation_estimator_and_leader_laggard_tie_breaking():
     candidates, _ = ac17_generate("20260102", data, None)
 
     if candidates:
-        assert candidates[0].symbol in {"BANKNIFTY", "SENSEX"}
+        assert candidates[0].symbol in {"NIFTY", "BANKNIFTY", "SENSEX"}
+        assert candidates[0].evidence["leader"] in {"NIFTY", "BANKNIFTY"}
+        assert candidates[0].evidence["laggard"] == candidates[0].symbol
 
 
 def test_ac18_morning_range_and_confirming_index_count():

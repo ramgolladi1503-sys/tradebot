@@ -4,7 +4,6 @@ import hashlib
 import json
 import math
 import random
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -212,9 +211,16 @@ def ac17_generate(session: str, data: dict[str, pd.DataFrame], prior: dict[str, 
     if any(len(data[s]) <= 181 for s in SYMBOLS):
         return [], ["INSUFFICIENT_HISTORY"]
     order = {s: i for i, s in enumerate(SYMBOLS)}
+    closes = {s: [float(v) for v in data[s]["close"].tolist()] for s in SYMBOLS}
+    one_minute_returns: dict[str, list[float | None]] = {s: [None] for s in SYMBOLS}
+    for s in SYMBOLS:
+        for i in range(1, len(closes[s])):
+            old = closes[s][i - 1]
+            new = closes[s][i]
+            one_minute_returns[s].append(math.log(new / old) if old > 0 and new > 0 and math.isfinite(old) and math.isfinite(new) else None)
     rejections: list[str] = []
     for i in range(45, 175):
-        returns = {s: [log_return(data[s], j) for j in range(i - 44, i + 1)] for s in SYMBOLS}
+        returns = {s: one_minute_returns[s][i - 44 : i + 1] for s in SYMBOLS}
         if any(any(v is None for v in vals) for vals in returns.values()):
             return [], ["NONFINITE_INPUT"]
         pair_corrs = [corr(returns[a], returns[b]) for n, a in enumerate(SYMBOLS) for b in SYMBOLS[n + 1 :]]
@@ -225,8 +231,8 @@ def ac17_generate(session: str, data: dict[str, pd.DataFrame], prior: dict[str, 
             continue
         disps = {}
         for s in SYMBOLS:
-            base = float(data[s].loc[i - 15, "close"])
-            now = float(data[s].loc[i, "close"])
+            base = closes[s][i - 15]
+            now = closes[s][i]
             disps[s] = (now / base - 1.0) * 10_000.0 if base > 0 else 0.0
         leader = sorted(SYMBOLS, key=lambda s: (-abs(disps[s]), order[s]))[0]
         direction = 1 if disps[leader] > 0 else -1
@@ -237,8 +243,8 @@ def ac17_generate(session: str, data: dict[str, pd.DataFrame], prior: dict[str, 
             continue
         confirmed = 0
         for j in range(i + 1, min(i + 25, len(data[laggard]) - 1)):
-            base = float(data[laggard].loc[i, "close"])
-            now = float(data[laggard].loc[j, "close"])
+            base = closes[laggard][i]
+            now = closes[laggard][j]
             move = direction * (now / base - 1.0) * 10_000.0 if base > 0 else 0
             confirmed = confirmed + 1 if move >= 8 else 0
             if confirmed >= 2:
@@ -555,6 +561,16 @@ def wfa(hid: str, sessions: list[str], data_by_session: dict[str, dict[str, pd.D
     return folds
 
 
+def wfa_from_rows(rows: list[dict[str, Any]], sessions: list[str]) -> list[dict[str, Any]]:
+    parts = blocks(sessions)
+    by_validation_block = {fold: set(parts[fold]) for fold in range(1, 6)}
+    folds = []
+    for fold in range(1, 6):
+        validation_rows = [r for r in rows if r["session_date"] in by_validation_block[fold]]
+        folds.append({"fold": fold, "train_blocks": list(range(1, fold + 1)), "validation_block": fold + 1, "summary": summarize(validation_rows)})
+    return folds
+
+
 def controls(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return {"verdict": "NOT_RUN_NO_CANDIDATES"}
@@ -597,7 +613,7 @@ def run_development() -> dict[str, Any]:
     for hid in HYPOTHESES:
         rows, rejections = run_hypothesis(hid, sessions, data_by_session)
         summary = summarize(rows)
-        folds = wfa(hid, sessions, data_by_session)
+        folds = wfa_from_rows(rows, sessions)
         ctrl = controls(rows)
         dev_verdict = verdict(summary, folds, ctrl)
         hdir = BASE / "hypotheses" / hid
