@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -60,7 +61,7 @@ def test_structural_audit_accepts_passed_candidate_without_reject_reason():
     assert result["blockers"] == []
 
 
-def test_parameter_discovery_does_not_pass_undefined_pf_or_failed_audits():
+def test_parameter_discovery_uses_declared_gated_lane_and_rejects_failed_audits():
     module = _load(
         "parameter_discovery", "scripts/run_mean_reversion_parameter_discovery.py"
     )
@@ -69,11 +70,48 @@ def test_parameter_discovery_does_not_pass_undefined_pf_or_failed_audits():
         1.15,
     )
     assert not module._positive(
-        {"audits_passed": False, "proxy_option_net_expectancy": 10.0}
+        {"audits_passed": False, "gated_expectancy": 10.0}
     )
     assert module._positive(
-        {"audits_passed": True, "proxy_option_net_expectancy": 0.1}
+        {"audits_passed": True, "gated_expectancy": 0.1}
     )
+    # A positive proxy lane cannot rescue a negative declared gate lane.
+    assert not module._positive(
+        {
+            "audits_passed": True,
+            "gated_expectancy": -0.1,
+            "proxy_option_net_expectancy": 100.0,
+        }
+    )
+
+
+def test_gated_profit_factor_uses_model_specific_ledger_field(tmp_path):
+    module = _load(
+        "parameter_discovery_pf", "scripts/run_mean_reversion_parameter_discovery.py"
+    )
+    ledger = tmp_path / "phase_4_trade_ledger.jsonl"
+    rows = [
+        {
+            "underlying_net_pnl_after_index_cost": 8.0,
+            "proxy_option_net_pnl": -100.0,
+        },
+        {
+            "underlying_net_pnl_after_index_cost": -4.0,
+            "proxy_option_net_pnl": 200.0,
+        },
+    ]
+    ledger.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+
+    underlying_pf, underlying_state = module._ledger_profit_factor(
+        tmp_path, "UNDERLYING_INDEX_PROXY_FIXED_HURDLE"
+    )
+    proxy_pf, proxy_state = module._ledger_profit_factor(
+        tmp_path, "DELTA_PROXY_OPTION"
+    )
+    assert underlying_state == "FINITE"
+    assert underlying_pf == 2.0
+    assert proxy_state == "FINITE"
+    assert proxy_pf == 2.0
 
 
 def test_region_stability_requires_an_evaluated_positive_neighbor():
@@ -88,7 +126,7 @@ def test_region_stability_requires_an_evaluated_positive_neighbor():
         (1,): {
             "train_metrics": {
                 "audits_passed": True,
-                "proxy_option_net_expectancy": 1.0,
+                "gated_expectancy": 1.0,
             }
         }
     }
