@@ -1,0 +1,5 @@
+# Readiness Report V2
+
+- created_at_utc: 2026-07-21T12:06:20+00:00
+- verdict: PARTIAL_FRESH_DATA_ACQUIRED_NEED_EARLIER_HISTORY
+- full_session_floor: FAIL
