@@ -1,10 +1,10 @@
 # Cumulative Hypothesis Ledger
 
-Cumulative hypotheses: `21`
+Cumulative hypotheses: `27`
 
-Cycle 4 finalists: `NONE`
+Cycle 5 finalists: `NONE`
 
-Cycle 5 plan-only hypotheses: AC19, AC20, AC21.
+Cycle 6 plan-only hypotheses: AC25, AC26, AC27.
 
 Old lockbox reused: `NO`
 Prospective outcomes inspected: `NO`

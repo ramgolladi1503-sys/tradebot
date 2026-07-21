@@ -1,0 +1,13 @@
+{
+  "failure_knowledge_consumed": true,
+  "old_lockbox_reused": false,
+  "prospective_outcomes_inspected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

@@ -1,0 +1,15 @@
+{
+  "duplicates_not_evaluated": true,
+  "no_failed_rule_tuned_or_reversed": true,
+  "old_lockbox_reused": false,
+  "prior_evidence_consumed": true,
+  "prospective_outcomes_inspected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

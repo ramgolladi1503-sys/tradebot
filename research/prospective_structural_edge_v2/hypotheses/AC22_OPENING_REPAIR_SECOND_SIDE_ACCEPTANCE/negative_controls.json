@@ -1,0 +1,20 @@
+{
+  "candidate_id_corruption": "PASS_FAIL_CLOSED",
+  "cumulative_holm_family_size": 21,
+  "direction_inversion_mean_bps": 2.8202057716147415,
+  "familywise_alpha": 0.05,
+  "future_suffix_mutation": "PASS",
+  "lookahead_trap": "PASS_FAIL_CLOSED",
+  "matched_counterfactual_separation": "FAIL",
+  "matched_random_time": "RUN_COMPACT",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "session_shift": "RUN_COMPACT",
+  "verdict": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+  "within_session_permutation": "RUN_COMPACT"
+}

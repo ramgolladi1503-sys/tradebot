@@ -1,0 +1,16 @@
+{
+  "observed_rejection_codes": [
+    "CONFIRMATION_NOT_MET",
+    "MISSING_PRIOR_SESSION",
+    "STRUCTURAL_PRECONDITION_NOT_MET",
+    "TIMESTAMP_ALIGNMENT_FAILURE"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "silent_drops": false
+}

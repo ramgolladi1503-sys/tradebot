@@ -1,0 +1,29 @@
+{
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "summary": {
+    "candidate_count": 88,
+    "candidate_sessions": 88,
+    "direction_count": 2,
+    "mae_mean_bps": -21.025095758877566,
+    "mean_bps": -2.8202057716147415,
+    "median_bps": -1.9192897110942297,
+    "mfe_mean_bps": 17.04379247595961,
+    "positive_candidate_fraction": 0.45454545454545453,
+    "positive_session_fraction": 0.45454545454545453,
+    "quarter_count": 9,
+    "session_clustered_ci_95": [
+      -7.688702606586144,
+      2.135837180225828
+    ],
+    "single_session_concentration": 0.011363636363636364,
+    "symbol_count": 3,
+    "top_five_session_concentration": 0.056818181818181816
+  },
+  "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE"
+}

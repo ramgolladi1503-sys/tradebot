@@ -1,0 +1,12 @@
+{
+  "future_suffix_invariance": true,
+  "repeated_prefix_determinism": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

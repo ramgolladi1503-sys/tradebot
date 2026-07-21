@@ -1,0 +1,19 @@
+{
+  "candidate_count": 145,
+  "candidate_sessions": 145,
+  "compact_manifest_only": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "sample_candidate_ids": [
+    "b6bf5fa9a6dc64b3459402754098fc8341b30d6814525e6055a244151b3fc6dc",
+    "a6ce00934c02f4d613a5b4c2f3bf263911a7607fe5ce3f4fa04318bc292eefec",
+    "a23f729d50bd142c627ce057f84b8640853daa0a00c291f8a6e6f214b08f9dd2",
+    "4fd81fd2b425d53e4a3f52e54edbd2b7eeea3b7c3b5ee40da33eca852d04f4e6",
+    "52da102c1954da4bd0409b441ef4f8466a758beccf48ecf6183155e24c677dfe"
+  ]
+}

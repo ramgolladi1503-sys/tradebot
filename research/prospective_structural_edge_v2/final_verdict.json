@@ -1,19 +1,18 @@
 {
-  "FINAL_VERDICT": "CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_5",
-  "bid_ask_required_for_current_task": false,
-  "cumulative_hypotheses": 21,
-  "cycle4_finalists": [],
-  "cycle5_hypotheses": [
-    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
-    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
-    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
+  "FINAL_VERDICT": "CONTINUE_PROSPECTIVE_DISCOVERY_CYCLE_6",
+  "bid_ask_required": false,
+  "cumulative_hypotheses": 27,
+  "cycle5_finalists": [],
+  "cycle6_hypotheses": [
+    "AC25_OPENING_AUCTION_FAILURE_BASKET_MEDIAN_RETURN",
+    "AC26_PRIOR_RANGE_MIDPOINT_ACCEPTANCE_ROTATION",
+    "AC27_THREE_INDEX_VOLATILITY_CONTRACTION_ASYMMETRY"
   ],
-  "cycle5_started": true,
-  "missing_option_data_blocked_research": false,
+  "cycle6_started": true,
   "old_lockbox_reused": false,
   "option_data_used": false,
   "option_economic_certification": "OUT_OF_SCOPE",
-  "prospective_outcomes_inspected": false,
+  "prospective_lockbox_opened": false,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
