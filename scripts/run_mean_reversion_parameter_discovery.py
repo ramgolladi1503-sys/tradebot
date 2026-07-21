@@ -63,21 +63,37 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def _ledger_profit_factor(base_dir: Path) -> tuple[float | None, str]:
+def _ledger_profit_factor(
+    base_dir: Path,
+    pnl_model: str | None,
+) -> tuple[float | None, str]:
+    if pnl_model == "UNDERLYING_INDEX_PROXY_FIXED_HURDLE":
+        pnl_field = "underlying_net_pnl_after_index_cost"
+    elif pnl_model == "DELTA_PROXY_OPTION":
+        pnl_field = "proxy_option_net_pnl"
+    else:
+        return None, "PNL_MODEL_UNRESOLVED"
+
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
     if not ledger_path.exists():
         return None, "NO_TRADES"
     wins = 0.0
     losses = 0.0
+    trade_count = 0
     for line in ledger_path.read_text().splitlines():
         if not line.strip():
             continue
         trade = json.loads(line)
-        pnl = float(trade.get("proxy_option_net_pnl", 0.0))
+        if pnl_field not in trade:
+            return None, "GATED_PNL_FIELD_MISSING"
+        trade_count += 1
+        pnl = float(trade[pnl_field])
         if pnl > 0:
             wins += pnl
-        else:
+        elif pnl < 0:
             losses += abs(pnl)
+    if trade_count == 0:
+        return None, "NO_TRADES"
     if losses > 0:
         return wins / losses, "FINITE"
     if wins > 0:
@@ -109,17 +125,44 @@ def get_metrics(
         for blocker in report.get("blockers", []):
             if blocker not in blockers:
                 blockers.append(str(blocker))
+        for blocker in report.get("failed_blockers", []):
+            if blocker not in blockers:
+                blockers.append(str(blocker))
+        for blocker in report.get("suspicious_blockers", []):
+            if blocker not in blockers:
+                blockers.append(str(blocker))
 
-    profit_factor, profit_factor_state = _ledger_profit_factor(base_dir)
+    accounting_metrics = accounting.get("metrics", {})
+    pnl_model = accounting_metrics.get("pnl_model_used_for_gate")
+    gated_expectancy_raw = accounting_metrics.get("gated_expectancy")
+    if gated_expectancy_raw is None:
+        blockers.append("GATED_EXPECTANCY_MISSING")
+        gated_expectancy = 0.0
+    else:
+        gated_expectancy = float(gated_expectancy_raw)
+
+    profit_factor, profit_factor_state = _ledger_profit_factor(
+        base_dir, str(pnl_model) if pnl_model is not None else None
+    )
+    if profit_factor_state in {
+        "PNL_MODEL_UNRESOLVED",
+        "GATED_PNL_FIELD_MISSING",
+        "NO_TRADES",
+    }:
+        blockers.append(f"GATED_PROFIT_FACTOR_UNAVAILABLE:{profit_factor_state}")
+
     metrics = {
-        "selected_trades": int(
-            accounting.get("metrics", {}).get("total_trades", 0) or 0
-        ),
-        "proxy_option_net_expectancy": float(
-            accounting.get("metrics", {}).get(
-                "proxy_option_net_expectancy", 0.0
+        "selected_trades": int(accounting_metrics.get("total_trades", 0) or 0),
+        "pnl_model_used_for_gate": pnl_model,
+        "gated_expectancy": gated_expectancy,
+        "underlying_net_expectancy_after_index_cost": float(
+            accounting_metrics.get(
+                "underlying_net_expectancy_after_index_cost", 0.0
             )
             or 0.0
+        ),
+        "proxy_option_net_expectancy": float(
+            accounting_metrics.get("proxy_option_net_expectancy", 0.0) or 0.0
         ),
         "cap_saturation_ratio": quality.get("metrics", {}).get(
             "cap_saturation_ratio"
@@ -160,7 +203,7 @@ def run_pass(
 
 def _positive(metrics: dict[str, Any]) -> bool:
     return bool(metrics.get("audits_passed")) and float(
-        metrics.get("proxy_option_net_expectancy", 0.0) or 0.0
+        metrics.get("gated_expectancy", 0.0) or 0.0
     ) > 0
 
 
@@ -321,9 +364,7 @@ def main() -> None:
             )
             if not holdout_metrics.get("audits_passed"):
                 record["pass_fail_reason"].append("HOLDOUT_AUDIT_FAILED")
-            if float(
-                holdout_metrics.get("proxy_option_net_expectancy", 0.0) or 0.0
-            ) <= 0:
+            if float(holdout_metrics.get("gated_expectancy", 0.0) or 0.0) <= 0:
                 record["pass_fail_reason"].append("HOLDOUT_EXPECTANCY_NEGATIVE")
             if not _passes_pf(holdout_metrics, 1.15):
                 record["pass_fail_reason"].append("HOLDOUT_PROFIT_FACTOR_LOW")
@@ -357,13 +398,16 @@ def main() -> None:
             values.append(
                 {
                     "params": record["overrides"],
-                    "expectancy": metrics["proxy_option_net_expectancy"],
+                    "pnl_model_used_for_gate": metrics[
+                        "pnl_model_used_for_gate"
+                    ],
+                    "gated_expectancy": metrics["gated_expectancy"],
                     "profit_factor": metrics["profit_factor"],
                     "profit_factor_state": metrics["profit_factor_state"],
                     "audits_passed": metrics["audits_passed"],
                 }
             )
-        values.sort(key=lambda item: item["expectancy"], reverse=True)
+        values.sort(key=lambda item: item["gated_expectancy"], reverse=True)
         return values[:10]
 
     report = {
