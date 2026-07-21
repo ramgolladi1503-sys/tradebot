@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from scripts.fetch_independent_underlying_confirmation_v3 import month_chunks, sanitize_error
+from scripts.fetch_independent_underlying_confirmation_v3 import write_monthly_staging_payload
 from scripts.update_independent_confirmation_manifest_v3 import append_records
 from scripts.validate_independent_underlying_session_v3 import validate_frame
 
@@ -80,3 +81,19 @@ def test_acquisition_outcome_blindness_audit():
     assert audit["strategy_outcomes_calculated"] == "NO"
     assert audit["strategy_specific_imports"] == []
     assert audit["AC24_AC16_files_opened_by_acquisition_runtime"] == "NO"
+
+
+def test_monthly_payload_write_is_append_only(monkeypatch, tmp_path):
+    import scripts.fetch_independent_underlying_confirmation_v3 as fetcher
+
+    monkeypatch.setattr(fetcher, "DATA_ROOT", tmp_path)
+    path, state = write_monthly_staging_payload("NIFTY", "2023-01-02", "2023-01-31", b'{"ok": true}')
+    same_path, same_state = write_monthly_staging_payload("NIFTY", "2023-01-02", "2023-01-31", b'{"ok": true}')
+
+    assert Path(path).exists()
+    assert same_path == path
+    assert state == "WRITTEN_APPEND_ONLY_PAYLOAD"
+    assert same_state == "REUSED_EXISTING_IDENTICAL_PAYLOAD"
+
+    with pytest.raises(RuntimeError, match="identity drift"):
+        write_monthly_staging_payload("NIFTY", "2023-01-02", "2023-01-31", b'{"ok": false}')

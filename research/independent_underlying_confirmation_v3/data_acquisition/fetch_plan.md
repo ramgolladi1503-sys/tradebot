@@ -1,5 +1,5 @@
 # Fetch Plan
 
-Primary monthly chunks per symbol: `18`
+Window: `2023-01-02` through `2024-06-28`
 
-Total primary planned requests: `54`
+Monthly chunks: `18`

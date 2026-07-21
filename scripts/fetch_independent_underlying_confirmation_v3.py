@@ -91,6 +91,7 @@ class FetchResult:
     status_code: int | None
     payload_hash: str | None
     error_class: str | None
+    payload: bytes | None = None
 
 
 class HistoricalFetcher:
@@ -108,7 +109,7 @@ class HistoricalFetcher:
             try:
                 response = requests.get(url, headers=headers, timeout=self.timeout)
                 if response.status_code == 200:
-                    return FetchResult("FETCHED_PENDING_VALIDATION", response.status_code, sha256_bytes(response.content), None)
+                    return FetchResult("FETCHED_PENDING_VALIDATION", response.status_code, sha256_bytes(response.content), None, response.content)
                 if response.status_code not in retryable:
                     return FetchResult("FETCH_FAILED_PERMANENT", response.status_code, None, sanitize_error(response.text[:200]))
                 delay = float(response.headers.get("Retry-After") or (2**attempt + self.rng.random()))
@@ -155,6 +156,24 @@ def parse_candles(payload: dict[str, Any], symbol: str, provenance: dict[str, An
     return pd.DataFrame.from_records(records)
 
 
+def write_monthly_staging_payload(symbol: str, start: str, end: str, payload: bytes) -> tuple[str, str]:
+    digest = sha256_bytes(payload)
+    out_dir = DATA_ROOT / "monthly_staging" / symbol
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{symbol}_{start}_{end}.json"
+    if path.exists():
+        existing = sha256_file(path)
+        if existing == digest:
+            return str(path), "REUSED_EXISTING_IDENTICAL_PAYLOAD"
+        quarantine = DATA_ROOT / "quarantine" / "identity_drift"
+        quarantine.mkdir(parents=True, exist_ok=True)
+        drift_path = quarantine / f"{symbol}_{start}_{end}_{digest}.json"
+        drift_path.write_bytes(payload)
+        raise RuntimeError(f"identity drift for {path}; quarantined {drift_path}")
+    path.write_bytes(payload)
+    return str(path), "WRITTEN_APPEND_ONLY_PAYLOAD"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", default=PRIMARY_WINDOW[0])
@@ -178,7 +197,20 @@ def main() -> int:
         for start, end in chunks:
             states.append({"symbol": symbol, "chunk_start": start, "chunk_end": end, "state": "PLANNED"})
             result = fetcher.fetch_chunk(resolution[symbol], start, end)
-            states.append({"symbol": symbol, "chunk_start": start, "chunk_end": end, **result.__dict__})
+            result_record = {
+                "symbol": symbol,
+                "chunk_start": start,
+                "chunk_end": end,
+                "status": result.status,
+                "status_code": result.status_code,
+                "payload_hash": result.payload_hash,
+                "error_class": result.error_class,
+            }
+            if result.payload is not None:
+                payload_path, payload_state = write_monthly_staging_payload(symbol, start, end, result.payload)
+                result_record["monthly_staging_path"] = payload_path
+                result_record["payload_state"] = payload_state
+            states.append(result_record)
     write_json(RESEARCH_ROOT / "chunk_state_manifest.json", {"states": states, "token_logged": False, "safety_flags": SAFETY_FLAGS})
     return 0
 

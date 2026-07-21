@@ -1,8 +1,4 @@
 {
-  "credential_available": false,
-  "failed_permanent_chunks": 0,
-  "failed_retryable_chunks": 0,
-  "fetched_monthly_chunks": 0,
   "safety_flags": {
     "allowed_for_live_execution": false,
     "broker_api_called": false,
@@ -18,9 +14,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "error_class": null,
+      "payload_hash": "b01fe38c0b9093fa3a4ee3883e38b470c94e36a23e20d9e35be5ed0e3382a992",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-02-28",
       "chunk_start": "2023-02-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "error_class": null,
+      "payload_hash": "0c8ebd7fea41772f30fb294cf049a4a42f1d1b6cf1d22013c920d34d671472f1",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -30,9 +44,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "error_class": null,
+      "payload_hash": "b1bd43ea2ef90b133a421d778cbecc7ed7969825b8a393708e205166db7eb663",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-04-30",
       "chunk_start": "2023-04-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "error_class": null,
+      "payload_hash": "eb9f76c151bc8f91ec73c7a19610a7ec9f7842a3098bc470246eb62d49990612",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -42,9 +74,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "error_class": null,
+      "payload_hash": "2d11ddb9cbc342431d82999d6c6d215e88ebdee1bd1a7e285fa55103a309fa12",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-06-30",
       "chunk_start": "2023-06-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "error_class": null,
+      "payload_hash": "8dbe48f3a615a8c839d3d30fc28f467d19b90fae66278f25901266d10dccd5c7",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -54,9 +104,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "error_class": null,
+      "payload_hash": "7f42a5a9abc8126b2d5359f8b1b2c647825f167dd1aa1e1eba0cc3e23bc37337",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-08-31",
       "chunk_start": "2023-08-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "error_class": null,
+      "payload_hash": "b0c7e91e69c947d19e6395d7a5ff4915eb3bfa3df608afe373c1c3023f7d5468",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -66,9 +134,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "error_class": null,
+      "payload_hash": "a5569dccedae5100696edb359665ef5eb729b3acd345485634ae1a29a3bc288c",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-10-31",
       "chunk_start": "2023-10-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "error_class": null,
+      "payload_hash": "beaf628f484bd97a1b847f8a0e7e8b51f7d106e1858fb57d24f113abc34cc0e5",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -78,9 +164,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "error_class": null,
+      "payload_hash": "b2cd39c11059647b67239eddbed2d6ebdfbbe8d72d5094dd3d326785f0476426",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2023-12-31",
       "chunk_start": "2023-12-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "error_class": null,
+      "payload_hash": "88d7efb4244b10da011820b8821f6af52d16d7a3e520cabb89d889a2f1f90bb4",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -90,9 +194,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "error_class": null,
+      "payload_hash": "0aa8bfdeb3c5f843b10af89aeb108c325603fa295f453d75d46145575afc09cf",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2024-02-29",
       "chunk_start": "2024-02-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "error_class": null,
+      "payload_hash": "f412d3524550d514148e3f4a5589518602d047c9820114726f385044b863ea36",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -102,9 +224,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "error_class": null,
+      "payload_hash": "15f45557035c21b313a490cd56c0631a7fb9de45980d7105f59a03c8cc23bf15",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2024-04-30",
       "chunk_start": "2024-04-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "error_class": null,
+      "payload_hash": "88c30dd47529bf1101bf683e5ceb6f243200b4f91c07d8cd2c09e32e1dc53380",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -114,9 +254,27 @@
       "symbol": "NIFTY"
     },
     {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "error_class": null,
+      "payload_hash": "e327cf8cfd1c1b2aec45a63c384afb4786f35a51fed3f1f94c8eb6a3905e0b93",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "NIFTY"
+    },
+    {
       "chunk_end": "2024-06-28",
       "chunk_start": "2024-06-01",
       "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "error_class": null,
+      "payload_hash": "f3b36551ea6a0924dbec86ed193fc8ecda9eda8ff0a8f74361e05c27a5eaa3ae",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "NIFTY"
     },
     {
@@ -126,9 +284,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "error_class": null,
+      "payload_hash": "abfe3e240a09e758cba06844be958a527d9195c84a6851f794444447045d3c89",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-02-28",
       "chunk_start": "2023-02-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "error_class": null,
+      "payload_hash": "8296195c01600d50aa4e4aed42de2731974df479f5efbc888dc75e5a1f619595",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -138,9 +314,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "error_class": null,
+      "payload_hash": "0469b7b5b6d043b38de684b753807849bb009d37ab673679a748bea52632d1fb",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-04-30",
       "chunk_start": "2023-04-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "error_class": null,
+      "payload_hash": "f1ef982281bc9f78666b2fea4a8fd08a8c5b561e864af4eba826b3c24f683130",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -150,9 +344,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "error_class": null,
+      "payload_hash": "485ced6e61792a5b796587837ed52f009ae4842382ac700887675d08841601c3",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-06-30",
       "chunk_start": "2023-06-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "error_class": null,
+      "payload_hash": "ff1277dddaa210e5e09d4f1630a1d7b41fb2777f521184ae2ebbef9288bea5e9",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -162,9 +374,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "error_class": null,
+      "payload_hash": "cb3609f8a65745d03bf7a121afc7515e64b61424074103dc1e77245e36754898",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-08-31",
       "chunk_start": "2023-08-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "error_class": null,
+      "payload_hash": "28e2487e223b007531446f212aaa816cd4866e87e2d3b1fee639cf47ed9f740c",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -174,9 +404,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "error_class": null,
+      "payload_hash": "f15973ad71e42759537ac8a6e17c3aa691924a8a8933731c5d3b5ee1044667a3",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-10-31",
       "chunk_start": "2023-10-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "error_class": null,
+      "payload_hash": "fac41bff40f3684ef379a708ff0f606a74fcf9c9beb977ce71d32060584b78dc",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -186,9 +434,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "error_class": null,
+      "payload_hash": "90c3606da6dcfb9e0b64453b7c1a24138237e16b50154fef44b40e2e0c11a061",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2023-12-31",
       "chunk_start": "2023-12-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "error_class": null,
+      "payload_hash": "51519d59a76e5c299c28ced1d9d7641286ca98c328ba542f6da4b029d201a7d5",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -198,9 +464,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "error_class": null,
+      "payload_hash": "49358c1ece231cfc89474d1f8d98ac18ffcb925ddcf2419a8ad2f1c75bc16b2c",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2024-02-29",
       "chunk_start": "2024-02-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "error_class": null,
+      "payload_hash": "9e5e4ccfb3dda28dfbbc39b258ed01937e36f0b3ec3f320afb2656b0b836de0a",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -210,9 +494,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "error_class": null,
+      "payload_hash": "d5ca885b1b879358307ba51fefdd50b9cee99e8eaeb7b109867134ea790e7568",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2024-04-30",
       "chunk_start": "2024-04-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "error_class": null,
+      "payload_hash": "62c7fc628b1feb265e1c12c9b5e575341861297623a6c5329422940254f1265d",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -222,9 +524,27 @@
       "symbol": "BANKNIFTY"
     },
     {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "error_class": null,
+      "payload_hash": "0af5dd7bd2aa7875515f9237ca67d26525c7e4954783838ca1a6a961939bb5bf",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "BANKNIFTY"
+    },
+    {
       "chunk_end": "2024-06-28",
       "chunk_start": "2024-06-01",
       "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "error_class": null,
+      "payload_hash": "5359da1fcabb183e9721ae674210d41d551d15c70e18e05cb085f6aa0c4f6d79",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "BANKNIFTY"
     },
     {
@@ -234,9 +554,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "error_class": null,
+      "payload_hash": "fcd80f47797c695123ecc1b608cec1139c97a2ca8452e3e7f6fea0b7377fee63",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-02-28",
       "chunk_start": "2023-02-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "error_class": null,
+      "payload_hash": "e6866dac5131bde47e88da8af43a1f5bf3b666969b963707c1d22b7e48760fd1",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -246,9 +584,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "error_class": null,
+      "payload_hash": "184df2efff719e1b6b88ea47516288c69d75f4894a17d5cac183a35262db20c9",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-04-30",
       "chunk_start": "2023-04-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "error_class": null,
+      "payload_hash": "f3786b126cb936e5268cd8114bb322c74bebc6032a1715040541bf9ebe92a123",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -258,9 +614,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "error_class": null,
+      "payload_hash": "b0307cbd75a131cee3d1022cc142b507166f41e5a6fddf4bb94847eca50d6d2c",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-06-30",
       "chunk_start": "2023-06-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "error_class": null,
+      "payload_hash": "6fc136bd016cc076b674aa3f0fd57ec6c498aef5b6c1aef2337419c2cd382676",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -270,9 +644,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "error_class": null,
+      "payload_hash": "42ff11da92f8f6722e5ffbcf704df47b94d687d4c253b6a34bcf5d439d9c4e98",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-08-31",
       "chunk_start": "2023-08-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "error_class": null,
+      "payload_hash": "b94acd629500e3f037889ffbdd96b6a057fb66666e4971853344c512adfabd13",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -282,9 +674,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "error_class": null,
+      "payload_hash": "183a79877fd83d5832105892d4532c7401e21343d7feeb8898dbf1698bfbb3e7",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-10-31",
       "chunk_start": "2023-10-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "error_class": null,
+      "payload_hash": "1f51a5e6da4c71d18a43b66af5d2a4a530ad66bc5b1eccbbe3e9b9af15932abd",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -294,9 +704,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "error_class": null,
+      "payload_hash": "2ee0999c5f3a97c6b08d40d3276934627cb980f546a9b9925f78e77eb792bbef",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2023-12-31",
       "chunk_start": "2023-12-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "error_class": null,
+      "payload_hash": "4e1fcaf77986af5e302fd555e2269d719641c036a1ebc7f7cecb802e99641f59",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -306,9 +734,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "error_class": null,
+      "payload_hash": "8e8b204a7e4c70452812ebac5be76e5ed0946268a38aa66d1d4e0645e51a132c",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2024-02-29",
       "chunk_start": "2024-02-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "error_class": null,
+      "payload_hash": "13664536f41691536d8cf27585ff9632bcef6d6ef9545e19f9202363f139628e",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -318,9 +764,27 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "error_class": null,
+      "payload_hash": "cb2ad25b580507eed8db8c7d246c692b80d55a08e95d13761da6736a3773cc3e",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2024-04-30",
       "chunk_start": "2024-04-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "error_class": null,
+      "payload_hash": "2a051fcdf4da1d3e4961b2ac196471f80f64fc2a75381a9f9c77bad687407cd9",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     },
     {
@@ -330,10 +794,29 @@
       "symbol": "SENSEX"
     },
     {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "error_class": null,
+      "payload_hash": "b40e3d9bb1b4a20bb9207d0a96d0b5b71fc201f554102287ee45cd0aee83c5d1",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
+      "symbol": "SENSEX"
+    },
+    {
       "chunk_end": "2024-06-28",
       "chunk_start": "2024-06-01",
       "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "error_class": null,
+      "payload_hash": "d610684d195cbf959b21afb351c083ea9331df47e745800e6ceda3dfb2680e67",
+      "status": "FETCHED_PENDING_VALIDATION",
+      "status_code": 200,
       "symbol": "SENSEX"
     }
-  ]
+  ],
+  "token_logged": false
 }
