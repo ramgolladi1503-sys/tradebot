@@ -6,25 +6,32 @@ import pandas as pd
 
 def _profit_factor(pnl: pd.Series) -> float:
     winners = pnl[pnl > 0]
-    losers = pnl[pnl <= 0]
+    losers = pnl[pnl < 0]
+    win_sum = float(winners.sum())
     loss_sum = float(losers.sum())
     if loss_sum == 0.0:
-        return float("inf")
-    return abs(float(winners.sum()) / loss_sum)
+        return float("inf") if win_sum > 0.0 else 0.0
+    return abs(win_sum / loss_sum)
 
 
 def _drawdown_metrics(pnl: pd.Series, initial_capital: float) -> tuple[float, float]:
-    cumulative = pnl.cumsum()
-    equity = initial_capital + cumulative
-    running_max = np.maximum.accumulate(equity.to_numpy(dtype=float))
-    drawdowns_abs = equity.to_numpy(dtype=float) - running_max
+    cumulative = pnl.cumsum().to_numpy(dtype=float)
+    equity_path = np.concatenate(
+        ([float(initial_capital)], float(initial_capital) + cumulative)
+    )
+    running_max = np.maximum.accumulate(equity_path)
+    drawdowns_abs = equity_path - running_max
     drawdowns_pct = np.divide(
         drawdowns_abs,
         running_max,
         out=np.zeros_like(drawdowns_abs, dtype=float),
         where=running_max != 0,
     )
-    return float(drawdowns_pct.min() * 100.0), float(drawdowns_abs.min())
+    # Drop the initial-capital anchor after it establishes the legal peak.
+    return (
+        float(drawdowns_pct[1:].min() * 100.0),
+        float(drawdowns_abs[1:].min()),
+    )
 
 
 def _subset_metrics(
@@ -178,7 +185,11 @@ def print_tearsheet(metrics: dict) -> None:
     print(f"Total Trades:       {metrics['total_trades']}")
     print(f"Expectancy (Net):   ${metrics['after_cost_expectancy']:,.2f}")
 
-    suffix = "" if metrics["after_cost_expectancy"] > 0 else " (IRRELEVANT - NEGATIVE EXPECTANCY)"
+    suffix = (
+        ""
+        if metrics["after_cost_expectancy"] > 0
+        else " (IRRELEVANT - NEGATIVE EXPECTANCY)"
+    )
     print(f"Win Rate:           {metrics['win_rate_pct']:.2f}%{suffix}")
     print(f"Profit Factor:      {metrics['profit_factor']:.2f}")
     if metrics.get("profit_factor_oos") is not None:
