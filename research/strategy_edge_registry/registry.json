@@ -1,0 +1,5 @@
+{
+  "schema_version": "v1",
+  "registry_name": "strategy_edge_registry",
+  "description": "Registry for authoritative strategy hypothesis resolutions (supported or rejected)."
+}
