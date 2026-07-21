@@ -1,0 +1,72 @@
+{
+  "recalculated": {
+    "base_expectancy": 0.001052985524288867,
+    "five_best_arithmetic_contribution_pct": 133.8271739188512,
+    "matched_random_all_counts_exact": true,
+    "matched_random_empirical_p_value": 0.8271728271728271,
+    "matched_random_no_overlap": true,
+    "neighborhood_positive_expectancy_pct": 100.0
+  },
+  "status": "PASS",
+  "verdicts": {
+    "allowed_verdicts": [
+      "INSUFFICIENT_DATA",
+      "INSUFFICIENT_TRADABLE_DATA",
+      "INVALID_BACKTEST",
+      "NO_STRUCTURAL_EDGE",
+      "PARAMETER_FRAGILE",
+      "PROMISING_BUT_UNPROVEN",
+      "STRUCTURAL_EDGE_SUPPORTED"
+    ],
+    "decision_inputs": {
+      "base": {
+        "completed_trades": 127,
+        "compounded_return": 0.06646093450455637,
+        "expectancy": 0.001052985524288867,
+        "max_drawdown": -0.2575081174330085,
+        "profit_factor": 1.1201818946794393
+      },
+      "five_best_concentration_pct": 133.8271739188512,
+      "matched_random_empirical_p_value": 0.8271728271728271,
+      "neighborhood_surviving_2x_costs_pct": 96.29629629629629,
+      "tradable_data_available": false,
+      "trend_filter_incremental": false,
+      "without_five_best_compounded_return": -0.10541185222333072
+    },
+    "decision_rules": [
+      {
+        "condition": "base completed trades < 30",
+        "index_verdict": "INSUFFICIENT_DATA"
+      },
+      {
+        "condition": "base expectancy <= 0 or profit factor <= 1",
+        "index_verdict": "NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "five-best concentration > 100% or without-five-best return < 0",
+        "index_verdict": "PARAMETER_FRAGILE"
+      },
+      {
+        "condition": "trend filter not incremental",
+        "index_verdict": "PARAMETER_FRAGILE"
+      },
+      {
+        "condition": "matched-random empirical p-value > 0.05",
+        "index_verdict": "PROMISING_BUT_UNPROVEN"
+      },
+      {
+        "condition": "otherwise",
+        "index_verdict": "PROMISING_BUT_UNPROVEN"
+      }
+    ],
+    "index_signal_verdict": "PARAMETER_FRAGILE",
+    "overall_research_verdict": "NO_STRUCTURAL_EDGE",
+    "reason_codes": [
+      "CONCENTRATED_PNL",
+      "NEGATIVE_WITHOUT_FIVE_BEST",
+      "TREND_FILTER_NOT_INCREMENTAL",
+      "INSUFFICIENT_TRADABLE_DATA"
+    ],
+    "tradable_instrument_verdict": "INSUFFICIENT_TRADABLE_DATA"
+  }
+}

@@ -14,6 +14,14 @@ from research.rsi2_mean_reversion.engine import (
     wilder_rsi,
 )
 from research.rsi2_mean_reversion.evidence_closure import semantic_hash
+from research.rsi2_mean_reversion.publication_gate import (
+    ALLOWED_VERDICTS,
+    REQUIRED_CONTROLS,
+    control_completeness,
+    matched_random_replicates,
+    parameter_neighborhood,
+    verdict_decision_table,
+)
 
 
 def test_simple_rsi_two_period_hand_calculated_values():
@@ -182,3 +190,46 @@ def test_parameter_combination_ids_cover_full_grid_deterministically():
         for rsi_type in ["WILDER_RSI_2", "SIMPLE_RSI_2"]
         for lane in ["NEXT_OPEN_EXECUTABLE", "SAME_CLOSE_THEORETICAL_PROXY"]
     }
+
+
+def test_matched_random_replicates_exact_count_and_deterministic():
+    _, first, first_summary = matched_random_replicates(replicates=5, seed=20260721)
+    _, second, second_summary = matched_random_replicates(replicates=5, seed=20260721)
+
+    assert first["completed_trades"].eq(127).all()
+    assert first["overlap_count"].eq(0).all()
+    assert (~first["duplicate_entries"]).all()
+    pd.testing.assert_frame_equal(first, second)
+    assert first_summary["empirical_p_value"] == second_summary["empirical_p_value"]
+
+
+def test_verdict_fields_are_distinct_allowed_enums_and_deterministic():
+    _, matched, summary = matched_random_replicates(replicates=5, seed=20260721)
+    neighborhood, neighborhood_summary = parameter_neighborhood()
+    base = pd.read_csv("runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv")
+    base = base[base["rsi_variant"] == "WILDER_RSI_2"].copy()
+
+    verdict = verdict_decision_table(summary, neighborhood_summary, base)
+    repeat = verdict_decision_table(summary, neighborhood_summary, base)
+
+    assert verdict == repeat
+    assert verdict["index_signal_verdict"] in ALLOWED_VERDICTS
+    assert verdict["tradable_instrument_verdict"] in ALLOWED_VERDICTS
+    assert verdict["overall_research_verdict"] in ALLOWED_VERDICTS
+    assert verdict["index_signal_verdict"] != "INSUFFICIENT_TRADABLE_DATA"
+
+
+def test_control_completeness_matrix_has_every_required_control():
+    _, _, summary = matched_random_replicates(replicates=5, seed=20260721)
+    rows = control_completeness(summary)
+
+    assert {row["control_id"] for row in rows} == set(REQUIRED_CONTROLS)
+    assert all(row["pass"] for row in rows)
+
+
+def test_parameter_neighborhood_aggregation_recalculates_from_matrix():
+    matrix, summary = parameter_neighborhood()
+
+    assert len(matrix) == 27
+    assert summary["positive_net_expectancy_pct"] == (matrix["expectancy"] > 0.0).mean() * 100.0
+    assert summary["surviving_2x_costs_pct"] == (matrix["cost_2x_expectancy"] > 0.0).mean() * 100.0

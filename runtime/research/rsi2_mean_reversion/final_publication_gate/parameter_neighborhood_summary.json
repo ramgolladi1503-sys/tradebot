@@ -1,0 +1,284 @@
+{
+  "baseline_neighborhood_rule": "SMA 150/200/250; entry 10/15/20; exit 80/85/90; WILDER_RSI_2; NEXT_OPEN_EXECUTABLE",
+  "contiguous_profitable_neighborhoods": [
+    {
+      "entries": [
+        10.0,
+        15.0,
+        20.0
+      ],
+      "exits": [
+        80.0,
+        85.0,
+        90.0
+      ],
+      "positive_cells": 9,
+      "sma": 150
+    },
+    {
+      "entries": [
+        10.0,
+        15.0,
+        20.0
+      ],
+      "exits": [
+        80.0,
+        85.0,
+        90.0
+      ],
+      "positive_cells": 9,
+      "sma": 200
+    },
+    {
+      "entries": [
+        10.0,
+        15.0,
+        20.0
+      ],
+      "exits": [
+        80.0,
+        85.0,
+        90.0
+      ],
+      "positive_cells": 9,
+      "sma": 250
+    }
+  ],
+  "full_grid_summary": {
+    "all_192_cells": {
+      "cells": 192,
+      "positive_fold_majority_pct": 59.375,
+      "positive_net_expectancy_pct": 84.89583333333334,
+      "profit_factor_above_1_pct": 84.89583333333334,
+      "surviving_2x_costs_pct": 52.083333333333336,
+      "surviving_base_costs_pct": 84.89583333333334
+    },
+    "by_entry_threshold": {
+      "10.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 62.5,
+        "positive_net_expectancy_pct": 85.41666666666666,
+        "profit_factor_above_1_pct": 85.41666666666666,
+        "surviving_2x_costs_pct": 62.5,
+        "surviving_base_costs_pct": 85.41666666666666
+      },
+      "15.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 72.91666666666666,
+        "positive_net_expectancy_pct": 89.58333333333334,
+        "profit_factor_above_1_pct": 89.58333333333334,
+        "surviving_2x_costs_pct": 54.166666666666664,
+        "surviving_base_costs_pct": 89.58333333333334
+      },
+      "20.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 56.25,
+        "positive_net_expectancy_pct": 77.08333333333334,
+        "profit_factor_above_1_pct": 77.08333333333334,
+        "surviving_2x_costs_pct": 37.5,
+        "surviving_base_costs_pct": 77.08333333333334
+      },
+      "5.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 45.83333333333333,
+        "positive_net_expectancy_pct": 87.5,
+        "profit_factor_above_1_pct": 87.5,
+        "surviving_2x_costs_pct": 54.166666666666664,
+        "surviving_base_costs_pct": 87.5
+      }
+    },
+    "by_execution_lane": {
+      "NEXT_OPEN_EXECUTABLE": {
+        "cells": 96,
+        "positive_fold_majority_pct": 71.875,
+        "positive_net_expectancy_pct": 98.95833333333334,
+        "profit_factor_above_1_pct": 98.95833333333334,
+        "surviving_2x_costs_pct": 61.458333333333336,
+        "surviving_base_costs_pct": 98.95833333333334
+      },
+      "SAME_CLOSE_THEORETICAL_PROXY": {
+        "cells": 96,
+        "positive_fold_majority_pct": 46.875,
+        "positive_net_expectancy_pct": 70.83333333333334,
+        "profit_factor_above_1_pct": 70.83333333333334,
+        "surviving_2x_costs_pct": 42.70833333333333,
+        "surviving_base_costs_pct": 70.83333333333334
+      }
+    },
+    "by_exit_threshold": {
+      "70.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 75.0,
+        "positive_net_expectancy_pct": 100.0,
+        "profit_factor_above_1_pct": 100.0,
+        "surviving_2x_costs_pct": 87.5,
+        "surviving_base_costs_pct": 100.0
+      },
+      "80.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 52.083333333333336,
+        "positive_net_expectancy_pct": 81.25,
+        "profit_factor_above_1_pct": 81.25,
+        "surviving_2x_costs_pct": 39.58333333333333,
+        "surviving_base_costs_pct": 81.25
+      },
+      "85.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 56.25,
+        "positive_net_expectancy_pct": 81.25,
+        "profit_factor_above_1_pct": 81.25,
+        "surviving_2x_costs_pct": 35.41666666666667,
+        "surviving_base_costs_pct": 81.25
+      },
+      "90.0": {
+        "cells": 48,
+        "positive_fold_majority_pct": 54.166666666666664,
+        "positive_net_expectancy_pct": 77.08333333333334,
+        "profit_factor_above_1_pct": 77.08333333333334,
+        "surviving_2x_costs_pct": 45.83333333333333,
+        "surviving_base_costs_pct": 77.08333333333334
+      }
+    },
+    "by_rsi_implementation": {
+      "SIMPLE_RSI_2": {
+        "cells": 96,
+        "positive_fold_majority_pct": 47.91666666666667,
+        "positive_net_expectancy_pct": 76.04166666666666,
+        "profit_factor_above_1_pct": 76.04166666666666,
+        "surviving_2x_costs_pct": 21.875,
+        "surviving_base_costs_pct": 76.04166666666666
+      },
+      "WILDER_RSI_2": {
+        "cells": 96,
+        "positive_fold_majority_pct": 70.83333333333334,
+        "positive_net_expectancy_pct": 93.75,
+        "profit_factor_above_1_pct": 93.75,
+        "surviving_2x_costs_pct": 82.29166666666666,
+        "surviving_base_costs_pct": 93.75
+      }
+    },
+    "by_sma_period": {
+      "150": {
+        "cells": 64,
+        "positive_fold_majority_pct": 67.1875,
+        "positive_net_expectancy_pct": 93.75,
+        "profit_factor_above_1_pct": 93.75,
+        "surviving_2x_costs_pct": 57.8125,
+        "surviving_base_costs_pct": 93.75
+      },
+      "200": {
+        "cells": 64,
+        "positive_fold_majority_pct": 57.8125,
+        "positive_net_expectancy_pct": 78.125,
+        "profit_factor_above_1_pct": 78.125,
+        "surviving_2x_costs_pct": 50.0,
+        "surviving_base_costs_pct": 78.125
+      },
+      "250": {
+        "cells": 64,
+        "positive_fold_majority_pct": 53.125,
+        "positive_net_expectancy_pct": 82.8125,
+        "profit_factor_above_1_pct": 82.8125,
+        "surviving_2x_costs_pct": 48.4375,
+        "surviving_base_costs_pct": 82.8125
+      }
+    }
+  },
+  "isolated_best_cells": [
+    {
+      "CAGR": 0.0362765687952915,
+      "base_cost_expectancy": 0.0068556406957573,
+      "best_five_trade_concentration": 25.088730495672777,
+      "combination_id": "0a5db17ccfe5d9f54a8b3417577db9d0737418e7865e5c762cf864c31d10d4b4",
+      "completed_trades": 92,
+      "cost_1_5x_expectancy": 0.0065556406957573,
+      "cost_2x_expectancy": 0.0062556406957573,
+      "entry_rsi": 10.0,
+      "execution_lane": "NEXT_OPEN_EXECUTABLE",
+      "exit_rsi": 90.0,
+      "expectancy": 0.0068556406957573,
+      "maximum_drawdown": -0.2379235671621046,
+      "positive_fold_majority": true,
+      "positive_fold_percentage": 1.0,
+      "positive_profit_factor": true,
+      "profit_factor": 1.873879015624267,
+      "rsi_type": "WILDER_RSI_2",
+      "sma": 150,
+      "survives_2x_costs": true,
+      "survives_base_costs": true
+    },
+    {
+      "CAGR": 0.0327622633233612,
+      "base_cost_expectancy": 0.0053153658779056,
+      "best_five_trade_concentration": 29.569682170672912,
+      "combination_id": "93a5eee57292cc4edde17d6ca61690b8a0f3c340c9bb12250e06c67023692f66",
+      "completed_trades": 110,
+      "cost_1_5x_expectancy": 0.0050153658779056,
+      "cost_2x_expectancy": 0.0047153658779056,
+      "entry_rsi": 15.0,
+      "execution_lane": "NEXT_OPEN_EXECUTABLE",
+      "exit_rsi": 90.0,
+      "expectancy": 0.0053153658779056,
+      "maximum_drawdown": -0.2418236498312265,
+      "positive_fold_majority": true,
+      "positive_fold_percentage": 0.8333333333333334,
+      "positive_profit_factor": true,
+      "profit_factor": 1.6017204892818704,
+      "rsi_type": "WILDER_RSI_2",
+      "sma": 150,
+      "survives_2x_costs": true,
+      "survives_base_costs": true
+    },
+    {
+      "CAGR": 0.0223380820324237,
+      "base_cost_expectancy": 0.0042234735494574,
+      "best_five_trade_concentration": 47.54948731040035,
+      "combination_id": "4248b971ea9632aafc04259b4bbae44f9cced688a7896af2be9388ea012596ce",
+      "completed_trades": 99,
+      "cost_1_5x_expectancy": 0.0039234735494574,
+      "cost_2x_expectancy": 0.0036234735494574,
+      "entry_rsi": 10.0,
+      "execution_lane": "NEXT_OPEN_EXECUTABLE",
+      "exit_rsi": 90.0,
+      "expectancy": 0.0042234735494574,
+      "maximum_drawdown": -0.2344894482030091,
+      "positive_fold_majority": true,
+      "positive_fold_percentage": 0.8333333333333334,
+      "positive_profit_factor": true,
+      "profit_factor": 1.4595075290200734,
+      "rsi_type": "WILDER_RSI_2",
+      "sma": 250,
+      "survives_2x_costs": true,
+      "survives_base_costs": true
+    }
+  ],
+  "matrix_artifact": "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_matrix.csv",
+  "neighborhood_cells": 27,
+  "positive_fold_majority_pct": 96.29629629629629,
+  "positive_net_expectancy_pct": 100.0,
+  "profit_factor_above_1_pct": 100.0,
+  "surviving_2x_costs_pct": 96.29629629629629,
+  "surviving_base_costs_pct": 100.0,
+  "worst_neighborhood_cell": {
+    "CAGR": -0.0027968584667852,
+    "base_cost_expectancy": 0.0002304679209716,
+    "best_five_trade_concentration": 0.0,
+    "combination_id": "bfcc1a6433e2c1226a4f0172d5ec7c282d46566f3e85c7cad8c670151224d444",
+    "completed_trades": 145,
+    "cost_1_5x_expectancy": -6.953207902837947e-05,
+    "cost_2x_expectancy": -0.0003695320790283,
+    "entry_rsi": 20.0,
+    "execution_lane": "NEXT_OPEN_EXECUTABLE",
+    "exit_rsi": 85.0,
+    "expectancy": 0.0002304679209716,
+    "maximum_drawdown": -0.2974621874310996,
+    "positive_fold_majority": false,
+    "positive_fold_percentage": 0.5,
+    "positive_profit_factor": true,
+    "profit_factor": 1.024592408713525,
+    "rsi_type": "WILDER_RSI_2",
+    "sma": 200,
+    "survives_2x_costs": false,
+    "survives_base_costs": true
+  }
+}

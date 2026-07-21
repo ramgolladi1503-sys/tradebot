@@ -1,0 +1,16 @@
+{
+  "files": {
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/baseline_immutability_report.json": "d7df7d5b4baeca2414f5de96828ea7f6dad7a144028ffaec56afce4be3736878",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/control_completeness_matrix.json": "251abd36f3e82ee8dcac8205d0fbc66bc51f4068af5e1200917e7be811c66bf3",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/final_publication_report.json": "f52122948f59cd914de2699c5762d632c2066e33a87081c4f67801cd762732bd",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/final_publication_summary.md": "8131ce7f701f9f50de5305cfdb487ddd01d2295619b49334ac4137993526f758",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/independent_publication_oracle.json": "e93b3209054390829778a5e2063524acc99e78be65eabe6571944c0358af18ac",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_manifest.json": "0f77963194f6669f81cd3cd7a679b8b899fabc8396b508a1a0b375321f8962f4",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_replicates.csv": "241058b1bb95a380207bf77cd059783fdcd1ab8f6b8d451add12edb8b27be2cf",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_summary.json": "2d3d87098417db824c77ea8a5b310cfaf1b6b7911312a7cb3b7c94781034002e",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_matrix.csv": "9a6bf0d52183b7a3336219ed6e3d699b4a5bc8c45b6f063cbe8d3fb60d2c0b13",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_summary.json": "95679eb58142737b2f9a7ffbed6f0820078bc2f6b0c2f9a80567df9f91c69b4e",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/pre_repair_manifest.json": "7714d83abb26ab3fca3e8e7e5f4eaea812861e3a075f3c0595a5018f8441c219",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/verdict_decision_table.json": "2aeeee862bd2a6f89a0b48da121951d28c1fc478fc786221167850a8d4241f6c"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "assertions": {
+    "deterministic_seed_schedule": "20260721..20261720",
+    "each_successful_replicate_exactly_127_trades": true,
+    "no_duplicate_entry_within_replicate": true,
+    "no_overlapping_positions": true
+  },
+  "base_completed_trades": 127,
+  "case": "CASE_A_REPAIRED_EXACT_REPLICATE_MATCH",
+  "replicate_artifact": "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_replicates.csv",
+  "replicate_count": 1000,
+  "summary_artifact": "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_summary.json"
+}

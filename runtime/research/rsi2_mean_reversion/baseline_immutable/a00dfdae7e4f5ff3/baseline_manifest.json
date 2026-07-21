@@ -1,0 +1,56 @@
+{
+  "artifact_sha256": {
+    "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+    "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json": "7082e55ba53100542f9bcc2f89f9e429d304ad9c60be382d8bf908ca8656fec4",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b"
+  },
+  "branch": "research/rsi2-mean-reversion-edge",
+  "captured_at_utc": "2026-07-21T13:29:29.805182+00:00",
+  "git_diff_stat": "",
+  "git_status_short": [
+    "?? research/rsi2_mean_reversion/",
+    "?? runtime/research/",
+    "?? scripts/reproduce_rsi2_evidence_closure.sh",
+    "?? scripts/run_rsi2_evidence_closure.py",
+    "?? scripts/run_rsi2_mean_reversion_research.py",
+    "?? tests/test_rsi2_mean_reversion_research.py"
+  ],
+  "head_commit": "d74307a226c984b62592e33368a889edc9f833d0",
+  "immediate_pre_edit_capture_from_task_start": {
+    "artifact_sha256": {
+      "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+      "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json": "e7de678082eea69fc674329db336e40349d6f4722ad34ac7895e25bdd9c34d7c",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b"
+    },
+    "branch": "research/rsi2-mean-reversion-edge",
+    "git_diff_stat": "",
+    "head_commit": "d74307a226c984b62592e33368a889edc9f833d0",
+    "note": "Captured before evidence-closure code edits in terminal output; repeated clean rebuilds later regenerated baseline_manifest and baseline report copy. Treat this as the authoritative pre-edit hash record.",
+    "versions": {
+      "numpy": "1.26.4",
+      "pandas": "2.2.2",
+      "pytest": "9.0.2",
+      "python": "3.12.2 | packaged by conda-forge | (main, Feb 16 2024, 20:54:21) [Clang 16.0.6 ]",
+      "yfinance": "1.1.0"
+    }
+  },
+  "pre_existing_dirty_changes": "prior RSI research artifacts were already untracked before this evidence-closure task",
+  "research_files": [
+    "research/rsi2_mean_reversion/__init__.py",
+    "research/rsi2_mean_reversion/engine.py",
+    "research/rsi2_mean_reversion/evidence_closure.py",
+    "research/rsi2_mean_reversion/oracle.py",
+    "scripts/run_rsi2_evidence_closure.py",
+    "scripts/run_rsi2_mean_reversion_research.py",
+    "tests/test_rsi2_mean_reversion_research.py"
+  ],
+  "versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.2.2",
+    "pytest": "9.0.2",
+    "python": "3.12.2 | packaged by conda-forge | (main, Feb 16 2024, 20:54:21) [Clang 16.0.6 ]",
+    "yfinance": "1.1.0"
+  }
+}

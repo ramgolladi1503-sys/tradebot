@@ -1,0 +1,41 @@
+{
+  "artifact_hashes": {
+    "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/artifact_hash_manifest.json": "69119213576a399a1d51b35e017dc4334dbf24608d23eb49a8b5e607c4c842c7",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/rsi2_mean_reversion_report.json": "7082e55ba53100542f9bcc2f89f9e429d304ad9c60be382d8bf908ca8656fec4",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/baseline_manifest.json": "9f117281e53af0a43d330be7d8a7aa1488aaa9cb5f0d9c26bc98cb5bc1f00957",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/concentration_reconciliation.json": "6502265e4f5f2c49db4d61999ce674b93d1314968578e411e5fe08eaa8bcbb11",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/contract_compliance_matrix.json": "9af30a86a0b66c02111d6b6517ab08100e2e14f7bde697cdb90855dbd11a27ca",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/data_quality_report.json": "48345cbb0efe95a01bd59bfc6ce4f81d5d8692fa4ef3dfb3cf88bf950e10d74c",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/final_evidence_report.json": "0ff1801d4a55a3c617ca5efd69a176afc25b369ae6cc86b4ec37749ea92c9403",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/final_summary.md": "1deb2be29d03281b41ca315e0892dabfed7804c9ba0535fdfcf3595bfbd7aad4",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/fold_manifest.json": "73474e012bfc1fd88e3a10283baeca8dbcdb129e0af343899a26dc6eb751cc14",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/fold_results.csv": "934f36a3446764d8cd172b453416a72cefb6897f517fa41bd6cb55887bcfe0e5",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/independent_oracle_report.json": "f85880cbf267ee240aacfdf1ca32cd0dc50c2c70787a223baceb2aa703176cd4",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/negative_controls.json": "fb9a619836bafc41685275394d9dca708ff7cbe24b2763f67c5c6161dae9c978",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/parameter_grid_manifest.json": "da3b3cc275745f45b0ad6eac43b50f2bcae69c445efc4dc04a8d44a6e882a227",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/parameter_results.csv": "01e77953ebf96ab5f1fb71ea8b3870df5719d2274fb7af35acc2c97f27949351",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/tail_risk_report.json": "92c3da8c13d0f68098b55a7437869e88dab85c2ab6c6ca70ad633f3b8f8f1644",
+    "runtime/research/rsi2_mean_reversion/evidence_closure/test_coverage_matrix.json": "61f060bbe03e0c82123a4fad4e063cc15097e0e15407c2ac44f61e59f23f6074",
+    "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json": "818d495c3dbdeb7997e43903b0a03b4025c83df60b06982e5a5eef371167b2f5",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b",
+    "runtime/research/rsi2_mean_reversion/worktree_start_record.json": "2af06f0361f602fec6773cf4ae9447b776bb2fab8725cdf43f2219d94ba0ea7e"
+  },
+  "branch": "research/rsi2-mean-reversion-edge",
+  "captured_at_note": "pre_repair_manifest_created_before_publication_gate_code_edits",
+  "expected_head": "98c8f13fe7e23ef8c5ec6159ea93af4beebaf47c",
+  "git_status_short": [],
+  "head": "98c8f13fe7e23ef8c5ec6159ea93af4beebaf47c",
+  "head_verified": true,
+  "reproducibility_script_generated_files": [
+    "runtime/research/rsi2_mean_reversion/evidence_closure/*",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json",
+    "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md",
+    "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv"
+  ],
+  "worktree_clean": true
+}

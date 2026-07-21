@@ -1,0 +1,639 @@
+{
+  "allowed_for_live_execution": false,
+  "baseline": {
+    "artifact_hashes": {
+      "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/artifact_hash_manifest.json": "69119213576a399a1d51b35e017dc4334dbf24608d23eb49a8b5e607c4c842c7",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/rsi2_mean_reversion_report.json": "7082e55ba53100542f9bcc2f89f9e429d304ad9c60be382d8bf908ca8656fec4",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/baseline/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/baseline_manifest.json": "9f117281e53af0a43d330be7d8a7aa1488aaa9cb5f0d9c26bc98cb5bc1f00957",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/concentration_reconciliation.json": "6502265e4f5f2c49db4d61999ce674b93d1314968578e411e5fe08eaa8bcbb11",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/contract_compliance_matrix.json": "9af30a86a0b66c02111d6b6517ab08100e2e14f7bde697cdb90855dbd11a27ca",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/data_quality_report.json": "48345cbb0efe95a01bd59bfc6ce4f81d5d8692fa4ef3dfb3cf88bf950e10d74c",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/final_evidence_report.json": "0ff1801d4a55a3c617ca5efd69a176afc25b369ae6cc86b4ec37749ea92c9403",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/final_summary.md": "1deb2be29d03281b41ca315e0892dabfed7804c9ba0535fdfcf3595bfbd7aad4",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/fold_manifest.json": "73474e012bfc1fd88e3a10283baeca8dbcdb129e0af343899a26dc6eb751cc14",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/fold_results.csv": "934f36a3446764d8cd172b453416a72cefb6897f517fa41bd6cb55887bcfe0e5",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/independent_oracle_report.json": "f85880cbf267ee240aacfdf1ca32cd0dc50c2c70787a223baceb2aa703176cd4",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/negative_controls.json": "fb9a619836bafc41685275394d9dca708ff7cbe24b2763f67c5c6161dae9c978",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/parameter_grid_manifest.json": "da3b3cc275745f45b0ad6eac43b50f2bcae69c445efc4dc04a8d44a6e882a227",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/parameter_results.csv": "01e77953ebf96ab5f1fb71ea8b3870df5719d2274fb7af35acc2c97f27949351",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/tail_risk_report.json": "92c3da8c13d0f68098b55a7437869e88dab85c2ab6c6ca70ad633f3b8f8f1644",
+      "runtime/research/rsi2_mean_reversion/evidence_closure/test_coverage_matrix.json": "61f060bbe03e0c82123a4fad4e063cc15097e0e15407c2ac44f61e59f23f6074",
+      "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json": "818d495c3dbdeb7997e43903b0a03b4025c83df60b06982e5a5eef371167b2f5",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b",
+      "runtime/research/rsi2_mean_reversion/worktree_start_record.json": "2af06f0361f602fec6773cf4ae9447b776bb2fab8725cdf43f2219d94ba0ea7e"
+    },
+    "branch": "research/rsi2-mean-reversion-edge",
+    "captured_at_note": "pre_repair_manifest_created_before_publication_gate_code_edits",
+    "expected_head": "98c8f13fe7e23ef8c5ec6159ea93af4beebaf47c",
+    "git_status_short": [],
+    "head": "98c8f13fe7e23ef8c5ec6159ea93af4beebaf47c",
+    "head_verified": true,
+    "reproducibility_script_generated_files": [
+      "runtime/research/rsi2_mean_reversion/evidence_closure/*",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_report.json",
+      "runtime/research/rsi2_mean_reversion/rsi2_mean_reversion_summary.md",
+      "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv"
+    ],
+    "worktree_clean": true
+  },
+  "baseline_immutability": {
+    "baseline_identity": "a00dfdae7e4f5ff3",
+    "mismatches": [],
+    "status": "PASS"
+  },
+  "broker_api_called": false,
+  "control_completeness": [
+    {
+      "artifact_field": "matched_random_replicates",
+      "completed_trades": 127,
+      "compounded_return": null,
+      "control_id": "matched_random",
+      "expectancy": 0.0027412840378825657,
+      "implementation_function": "matched_random_replicates",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": null,
+      "reason": "present",
+      "seed": 20260721
+    },
+    {
+      "artifact_field": "negative_controls.results.one_session_signal_shift_backward",
+      "completed_trades": 208,
+      "compounded_return": null,
+      "control_id": "one_session_signal_shift_backward",
+      "expectancy": -0.013854611224215541,
+      "implementation_function": "negative_controls.results.one_session_signal_shift_backward",
+      "max_drawdown": -0.9460183049527114,
+      "pass": true,
+      "profit_factor": 0.017781613557100357,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.one_session_signal_shift_forward",
+      "completed_trades": 207,
+      "compounded_return": null,
+      "control_id": "one_session_signal_shift_forward",
+      "expectancy": 0.0006601032556382432,
+      "implementation_function": "negative_controls.results.one_session_signal_shift_forward",
+      "max_drawdown": -0.12029821789714046,
+      "pass": true,
+      "profit_factor": 1.1554468456122224,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.inverted_rsi_condition",
+      "completed_trades": 302,
+      "compounded_return": null,
+      "control_id": "inverted_rsi_condition",
+      "expectancy": 0.001023193479544558,
+      "implementation_function": "negative_controls.results.inverted_rsi_condition",
+      "max_drawdown": -0.1094024832453816,
+      "pass": true,
+      "profit_factor": 1.2512810536459378,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.trend_filter_removed",
+      "completed_trades": 314,
+      "compounded_return": null,
+      "control_id": "trend_filter_removed",
+      "expectancy": 0.0001740599233047417,
+      "implementation_function": "negative_controls.results.trend_filter_removed",
+      "max_drawdown": -0.2780482765109422,
+      "pass": true,
+      "profit_factor": 1.029851130956394,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.randomized_rsi_distribution",
+      "completed_trades": 407,
+      "compounded_return": null,
+      "control_id": "randomized_rsi_distribution",
+      "expectancy": 4.333449530970999e-05,
+      "implementation_function": "negative_controls.results.randomized_rsi_distribution",
+      "max_drawdown": -0.15225620516812532,
+      "pass": true,
+      "profit_factor": 1.0112522163984825,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.block_bootstrap_confidence_interval",
+      "completed_trades": null,
+      "compounded_return": null,
+      "control_id": "block_bootstrap_confidence_interval",
+      "expectancy": null,
+      "implementation_function": "negative_controls.results.block_bootstrap_confidence_interval",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": null,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.best_calendar_year_removed",
+      "completed_trades": 116,
+      "compounded_return": -0.05428475213995343,
+      "control_id": "best_calendar_year_removed",
+      "expectancy": 9.182627018403076e-05,
+      "implementation_function": "negative_controls.results.best_calendar_year_removed",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": 1.0100134744537652,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.five_best_trades_removed",
+      "completed_trades": null,
+      "compounded_return": null,
+      "control_id": "five_best_trades_removed",
+      "expectancy": null,
+      "implementation_function": "negative_controls.results.five_best_trades_removed",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": null,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.crash_period_only",
+      "completed_trades": 1,
+      "compounded_return": -0.24371930702201072,
+      "control_id": "crash_period_only",
+      "expectancy": -0.24371930702201067,
+      "implementation_function": "negative_controls.results.crash_period_only",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": 0.0,
+      "reason": "present",
+      "seed": null
+    },
+    {
+      "artifact_field": "negative_controls.results.crash_period_excluded",
+      "completed_trades": 126,
+      "compounded_return": 0.4101390454715743,
+      "control_id": "crash_period_excluded",
+      "expectancy": 0.0029956227667198316,
+      "implementation_function": "negative_controls.results.crash_period_excluded",
+      "max_drawdown": null,
+      "pass": true,
+      "profit_factor": 1.43434620603238,
+      "reason": "present",
+      "seed": null
+    }
+  ],
+  "independent_oracle": {
+    "recalculated": {
+      "base_expectancy": 0.001052985524288867,
+      "five_best_arithmetic_contribution_pct": 133.8271739188512,
+      "matched_random_all_counts_exact": true,
+      "matched_random_empirical_p_value": 0.8271728271728271,
+      "matched_random_no_overlap": true,
+      "neighborhood_positive_expectancy_pct": 100.0
+    },
+    "status": "PASS",
+    "verdicts": {
+      "allowed_verdicts": [
+        "INSUFFICIENT_DATA",
+        "INSUFFICIENT_TRADABLE_DATA",
+        "INVALID_BACKTEST",
+        "NO_STRUCTURAL_EDGE",
+        "PARAMETER_FRAGILE",
+        "PROMISING_BUT_UNPROVEN",
+        "STRUCTURAL_EDGE_SUPPORTED"
+      ],
+      "decision_inputs": {
+        "base": {
+          "completed_trades": 127,
+          "compounded_return": 0.06646093450455637,
+          "expectancy": 0.001052985524288867,
+          "max_drawdown": -0.2575081174330085,
+          "profit_factor": 1.1201818946794393
+        },
+        "five_best_concentration_pct": 133.8271739188512,
+        "matched_random_empirical_p_value": 0.8271728271728271,
+        "neighborhood_surviving_2x_costs_pct": 96.29629629629629,
+        "tradable_data_available": false,
+        "trend_filter_incremental": false,
+        "without_five_best_compounded_return": -0.10541185222333072
+      },
+      "decision_rules": [
+        {
+          "condition": "base completed trades < 30",
+          "index_verdict": "INSUFFICIENT_DATA"
+        },
+        {
+          "condition": "base expectancy <= 0 or profit factor <= 1",
+          "index_verdict": "NO_STRUCTURAL_EDGE"
+        },
+        {
+          "condition": "five-best concentration > 100% or without-five-best return < 0",
+          "index_verdict": "PARAMETER_FRAGILE"
+        },
+        {
+          "condition": "trend filter not incremental",
+          "index_verdict": "PARAMETER_FRAGILE"
+        },
+        {
+          "condition": "matched-random empirical p-value > 0.05",
+          "index_verdict": "PROMISING_BUT_UNPROVEN"
+        },
+        {
+          "condition": "otherwise",
+          "index_verdict": "PROMISING_BUT_UNPROVEN"
+        }
+      ],
+      "index_signal_verdict": "PARAMETER_FRAGILE",
+      "overall_research_verdict": "NO_STRUCTURAL_EDGE",
+      "reason_codes": [
+        "CONCENTRATED_PNL",
+        "NEGATIVE_WITHOUT_FIVE_BEST",
+        "TREND_FILTER_NOT_INCREMENTAL",
+        "INSUFFICIENT_TRADABLE_DATA"
+      ],
+      "tradable_instrument_verdict": "INSUFFICIENT_TRADABLE_DATA"
+    }
+  },
+  "is_order_action": false,
+  "matched_random_summary": {
+    "base_completed_trades": 127,
+    "empirical_p_value": 0.8271728271728271,
+    "fraction_replicates_beating_real_strategy": 0.827,
+    "matching_tolerances": {
+      "completed_trades": "exact",
+      "eligibility": "trend_ok eligible entry dates",
+      "holding_duration": "base holding duration multiset assigned per replicate",
+      "non_overlap": "exact, overlap_count must be zero"
+    },
+    "mean_replicate_expectancy": 0.0027412840378825657,
+    "median_replicate_expectancy": 0.0027738635853503963,
+    "p05_expectancy": -0.00033150586565380445,
+    "p95_expectancy": 0.005679415585824379,
+    "real_strategy_expectancy": 0.001052985524288867,
+    "replicates": 1000,
+    "seed_end": 20261720,
+    "seed_start": 20260721,
+    "status": "PASS",
+    "total_aggregated_trades": 127000,
+    "trades_per_replicate": [
+      127
+    ]
+  },
+  "parameter_neighborhood": {
+    "baseline_neighborhood_rule": "SMA 150/200/250; entry 10/15/20; exit 80/85/90; WILDER_RSI_2; NEXT_OPEN_EXECUTABLE",
+    "contiguous_profitable_neighborhoods": [
+      {
+        "entries": [
+          10.0,
+          15.0,
+          20.0
+        ],
+        "exits": [
+          80.0,
+          85.0,
+          90.0
+        ],
+        "positive_cells": 9,
+        "sma": 150
+      },
+      {
+        "entries": [
+          10.0,
+          15.0,
+          20.0
+        ],
+        "exits": [
+          80.0,
+          85.0,
+          90.0
+        ],
+        "positive_cells": 9,
+        "sma": 200
+      },
+      {
+        "entries": [
+          10.0,
+          15.0,
+          20.0
+        ],
+        "exits": [
+          80.0,
+          85.0,
+          90.0
+        ],
+        "positive_cells": 9,
+        "sma": 250
+      }
+    ],
+    "full_grid_summary": {
+      "all_192_cells": {
+        "cells": 192,
+        "positive_fold_majority_pct": 59.375,
+        "positive_net_expectancy_pct": 84.89583333333334,
+        "profit_factor_above_1_pct": 84.89583333333334,
+        "surviving_2x_costs_pct": 52.083333333333336,
+        "surviving_base_costs_pct": 84.89583333333334
+      },
+      "by_entry_threshold": {
+        "10.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 62.5,
+          "positive_net_expectancy_pct": 85.41666666666666,
+          "profit_factor_above_1_pct": 85.41666666666666,
+          "surviving_2x_costs_pct": 62.5,
+          "surviving_base_costs_pct": 85.41666666666666
+        },
+        "15.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 72.91666666666666,
+          "positive_net_expectancy_pct": 89.58333333333334,
+          "profit_factor_above_1_pct": 89.58333333333334,
+          "surviving_2x_costs_pct": 54.166666666666664,
+          "surviving_base_costs_pct": 89.58333333333334
+        },
+        "20.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 56.25,
+          "positive_net_expectancy_pct": 77.08333333333334,
+          "profit_factor_above_1_pct": 77.08333333333334,
+          "surviving_2x_costs_pct": 37.5,
+          "surviving_base_costs_pct": 77.08333333333334
+        },
+        "5.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 45.83333333333333,
+          "positive_net_expectancy_pct": 87.5,
+          "profit_factor_above_1_pct": 87.5,
+          "surviving_2x_costs_pct": 54.166666666666664,
+          "surviving_base_costs_pct": 87.5
+        }
+      },
+      "by_execution_lane": {
+        "NEXT_OPEN_EXECUTABLE": {
+          "cells": 96,
+          "positive_fold_majority_pct": 71.875,
+          "positive_net_expectancy_pct": 98.95833333333334,
+          "profit_factor_above_1_pct": 98.95833333333334,
+          "surviving_2x_costs_pct": 61.458333333333336,
+          "surviving_base_costs_pct": 98.95833333333334
+        },
+        "SAME_CLOSE_THEORETICAL_PROXY": {
+          "cells": 96,
+          "positive_fold_majority_pct": 46.875,
+          "positive_net_expectancy_pct": 70.83333333333334,
+          "profit_factor_above_1_pct": 70.83333333333334,
+          "surviving_2x_costs_pct": 42.70833333333333,
+          "surviving_base_costs_pct": 70.83333333333334
+        }
+      },
+      "by_exit_threshold": {
+        "70.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 75.0,
+          "positive_net_expectancy_pct": 100.0,
+          "profit_factor_above_1_pct": 100.0,
+          "surviving_2x_costs_pct": 87.5,
+          "surviving_base_costs_pct": 100.0
+        },
+        "80.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 52.083333333333336,
+          "positive_net_expectancy_pct": 81.25,
+          "profit_factor_above_1_pct": 81.25,
+          "surviving_2x_costs_pct": 39.58333333333333,
+          "surviving_base_costs_pct": 81.25
+        },
+        "85.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 56.25,
+          "positive_net_expectancy_pct": 81.25,
+          "profit_factor_above_1_pct": 81.25,
+          "surviving_2x_costs_pct": 35.41666666666667,
+          "surviving_base_costs_pct": 81.25
+        },
+        "90.0": {
+          "cells": 48,
+          "positive_fold_majority_pct": 54.166666666666664,
+          "positive_net_expectancy_pct": 77.08333333333334,
+          "profit_factor_above_1_pct": 77.08333333333334,
+          "surviving_2x_costs_pct": 45.83333333333333,
+          "surviving_base_costs_pct": 77.08333333333334
+        }
+      },
+      "by_rsi_implementation": {
+        "SIMPLE_RSI_2": {
+          "cells": 96,
+          "positive_fold_majority_pct": 47.91666666666667,
+          "positive_net_expectancy_pct": 76.04166666666666,
+          "profit_factor_above_1_pct": 76.04166666666666,
+          "surviving_2x_costs_pct": 21.875,
+          "surviving_base_costs_pct": 76.04166666666666
+        },
+        "WILDER_RSI_2": {
+          "cells": 96,
+          "positive_fold_majority_pct": 70.83333333333334,
+          "positive_net_expectancy_pct": 93.75,
+          "profit_factor_above_1_pct": 93.75,
+          "surviving_2x_costs_pct": 82.29166666666666,
+          "surviving_base_costs_pct": 93.75
+        }
+      },
+      "by_sma_period": {
+        "150": {
+          "cells": 64,
+          "positive_fold_majority_pct": 67.1875,
+          "positive_net_expectancy_pct": 93.75,
+          "profit_factor_above_1_pct": 93.75,
+          "surviving_2x_costs_pct": 57.8125,
+          "surviving_base_costs_pct": 93.75
+        },
+        "200": {
+          "cells": 64,
+          "positive_fold_majority_pct": 57.8125,
+          "positive_net_expectancy_pct": 78.125,
+          "profit_factor_above_1_pct": 78.125,
+          "surviving_2x_costs_pct": 50.0,
+          "surviving_base_costs_pct": 78.125
+        },
+        "250": {
+          "cells": 64,
+          "positive_fold_majority_pct": 53.125,
+          "positive_net_expectancy_pct": 82.8125,
+          "profit_factor_above_1_pct": 82.8125,
+          "surviving_2x_costs_pct": 48.4375,
+          "surviving_base_costs_pct": 82.8125
+        }
+      }
+    },
+    "isolated_best_cells": [
+      {
+        "CAGR": 0.0362765687952915,
+        "base_cost_expectancy": 0.0068556406957573,
+        "best_five_trade_concentration": 25.088730495672777,
+        "combination_id": "0a5db17ccfe5d9f54a8b3417577db9d0737418e7865e5c762cf864c31d10d4b4",
+        "completed_trades": 92,
+        "cost_1_5x_expectancy": 0.0065556406957573,
+        "cost_2x_expectancy": 0.0062556406957573,
+        "entry_rsi": 10.0,
+        "execution_lane": "NEXT_OPEN_EXECUTABLE",
+        "exit_rsi": 90.0,
+        "expectancy": 0.0068556406957573,
+        "maximum_drawdown": -0.2379235671621046,
+        "positive_fold_majority": true,
+        "positive_fold_percentage": 1.0,
+        "positive_profit_factor": true,
+        "profit_factor": 1.873879015624267,
+        "rsi_type": "WILDER_RSI_2",
+        "sma": 150,
+        "survives_2x_costs": true,
+        "survives_base_costs": true
+      },
+      {
+        "CAGR": 0.0327622633233612,
+        "base_cost_expectancy": 0.0053153658779056,
+        "best_five_trade_concentration": 29.569682170672912,
+        "combination_id": "93a5eee57292cc4edde17d6ca61690b8a0f3c340c9bb12250e06c67023692f66",
+        "completed_trades": 110,
+        "cost_1_5x_expectancy": 0.0050153658779056,
+        "cost_2x_expectancy": 0.0047153658779056,
+        "entry_rsi": 15.0,
+        "execution_lane": "NEXT_OPEN_EXECUTABLE",
+        "exit_rsi": 90.0,
+        "expectancy": 0.0053153658779056,
+        "maximum_drawdown": -0.2418236498312265,
+        "positive_fold_majority": true,
+        "positive_fold_percentage": 0.8333333333333334,
+        "positive_profit_factor": true,
+        "profit_factor": 1.6017204892818704,
+        "rsi_type": "WILDER_RSI_2",
+        "sma": 150,
+        "survives_2x_costs": true,
+        "survives_base_costs": true
+      },
+      {
+        "CAGR": 0.0223380820324237,
+        "base_cost_expectancy": 0.0042234735494574,
+        "best_five_trade_concentration": 47.54948731040035,
+        "combination_id": "4248b971ea9632aafc04259b4bbae44f9cced688a7896af2be9388ea012596ce",
+        "completed_trades": 99,
+        "cost_1_5x_expectancy": 0.0039234735494574,
+        "cost_2x_expectancy": 0.0036234735494574,
+        "entry_rsi": 10.0,
+        "execution_lane": "NEXT_OPEN_EXECUTABLE",
+        "exit_rsi": 90.0,
+        "expectancy": 0.0042234735494574,
+        "maximum_drawdown": -0.2344894482030091,
+        "positive_fold_majority": true,
+        "positive_fold_percentage": 0.8333333333333334,
+        "positive_profit_factor": true,
+        "profit_factor": 1.4595075290200734,
+        "rsi_type": "WILDER_RSI_2",
+        "sma": 250,
+        "survives_2x_costs": true,
+        "survives_base_costs": true
+      }
+    ],
+    "matrix_artifact": "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_matrix.csv",
+    "neighborhood_cells": 27,
+    "positive_fold_majority_pct": 96.29629629629629,
+    "positive_net_expectancy_pct": 100.0,
+    "profit_factor_above_1_pct": 100.0,
+    "surviving_2x_costs_pct": 96.29629629629629,
+    "surviving_base_costs_pct": 100.0,
+    "worst_neighborhood_cell": {
+      "CAGR": -0.0027968584667852,
+      "base_cost_expectancy": 0.0002304679209716,
+      "best_five_trade_concentration": 0.0,
+      "combination_id": "bfcc1a6433e2c1226a4f0172d5ec7c282d46566f3e85c7cad8c670151224d444",
+      "completed_trades": 145,
+      "cost_1_5x_expectancy": -6.953207902837947e-05,
+      "cost_2x_expectancy": -0.0003695320790283,
+      "entry_rsi": 20.0,
+      "execution_lane": "NEXT_OPEN_EXECUTABLE",
+      "exit_rsi": 85.0,
+      "expectancy": 0.0002304679209716,
+      "maximum_drawdown": -0.2974621874310996,
+      "positive_fold_majority": false,
+      "positive_fold_percentage": 0.5,
+      "positive_profit_factor": true,
+      "profit_factor": 1.024592408713525,
+      "rsi_type": "WILDER_RSI_2",
+      "sma": 200,
+      "survives_2x_costs": false,
+      "survives_base_costs": true
+    }
+  },
+  "production_files_changed": false,
+  "publication_gate": "PASS_PUBLICATION_GATE",
+  "verdicts": {
+    "allowed_verdicts": [
+      "INSUFFICIENT_DATA",
+      "INSUFFICIENT_TRADABLE_DATA",
+      "INVALID_BACKTEST",
+      "NO_STRUCTURAL_EDGE",
+      "PARAMETER_FRAGILE",
+      "PROMISING_BUT_UNPROVEN",
+      "STRUCTURAL_EDGE_SUPPORTED"
+    ],
+    "decision_inputs": {
+      "base": {
+        "completed_trades": 127,
+        "compounded_return": 0.06646093450455637,
+        "expectancy": 0.001052985524288867,
+        "max_drawdown": -0.2575081174330085,
+        "profit_factor": 1.1201818946794393
+      },
+      "five_best_concentration_pct": 133.8271739188512,
+      "matched_random_empirical_p_value": 0.8271728271728271,
+      "neighborhood_surviving_2x_costs_pct": 96.29629629629629,
+      "tradable_data_available": false,
+      "trend_filter_incremental": false,
+      "without_five_best_compounded_return": -0.10541185222333072
+    },
+    "decision_rules": [
+      {
+        "condition": "base completed trades < 30",
+        "index_verdict": "INSUFFICIENT_DATA"
+      },
+      {
+        "condition": "base expectancy <= 0 or profit factor <= 1",
+        "index_verdict": "NO_STRUCTURAL_EDGE"
+      },
+      {
+        "condition": "five-best concentration > 100% or without-five-best return < 0",
+        "index_verdict": "PARAMETER_FRAGILE"
+      },
+      {
+        "condition": "trend filter not incremental",
+        "index_verdict": "PARAMETER_FRAGILE"
+      },
+      {
+        "condition": "matched-random empirical p-value > 0.05",
+        "index_verdict": "PROMISING_BUT_UNPROVEN"
+      },
+      {
+        "condition": "otherwise",
+        "index_verdict": "PROMISING_BUT_UNPROVEN"
+      }
+    ],
+    "index_signal_verdict": "PARAMETER_FRAGILE",
+    "overall_research_verdict": "NO_STRUCTURAL_EDGE",
+    "reason_codes": [
+      "CONCENTRATED_PNL",
+      "NEGATIVE_WITHOUT_FIVE_BEST",
+      "TREND_FILTER_NOT_INCREMENTAL",
+      "INSUFFICIENT_TRADABLE_DATA"
+    ],
+    "tradable_instrument_verdict": "INSUFFICIENT_TRADABLE_DATA"
+  }
+}

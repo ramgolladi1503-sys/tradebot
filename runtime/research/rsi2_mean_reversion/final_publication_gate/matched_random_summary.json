@@ -1,0 +1,24 @@
+{
+  "base_completed_trades": 127,
+  "empirical_p_value": 0.8271728271728271,
+  "fraction_replicates_beating_real_strategy": 0.827,
+  "matching_tolerances": {
+    "completed_trades": "exact",
+    "eligibility": "trend_ok eligible entry dates",
+    "holding_duration": "base holding duration multiset assigned per replicate",
+    "non_overlap": "exact, overlap_count must be zero"
+  },
+  "mean_replicate_expectancy": 0.0027412840378825657,
+  "median_replicate_expectancy": 0.0027738635853503963,
+  "p05_expectancy": -0.00033150586565380445,
+  "p95_expectancy": 0.005679415585824379,
+  "real_strategy_expectancy": 0.001052985524288867,
+  "replicates": 1000,
+  "seed_end": 20261720,
+  "seed_start": 20260721,
+  "status": "PASS",
+  "total_aggregated_trades": 127000,
+  "trades_per_replicate": [
+    127
+  ]
+}
