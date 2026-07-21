@@ -1,0 +1,14 @@
+{
+  "definitions_changed": false,
+  "directions_changed": false,
+  "horizons_changed": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "thresholds_changed": false,
+  "verdict": "PASS"
+}

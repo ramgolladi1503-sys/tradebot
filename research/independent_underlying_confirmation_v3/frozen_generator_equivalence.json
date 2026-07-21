@@ -1,0 +1,29 @@
+{
+  "checks": {
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": {
+      "candidate_count": 371,
+      "candidate_count_exact_match": true,
+      "candidate_identity_hash": "1be2327c16c14c39933f1b893b063350e8dfbb096887631420b9a2054fa23908",
+      "candidate_timing_direction_history_hash_equivalence": "PASS_COMPACT_REPRODUCTION",
+      "expected_candidate_count": 371,
+      "sample_candidate_ids_exact_match": true
+    },
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": {
+      "candidate_count": 115,
+      "candidate_count_exact_match": true,
+      "candidate_identity_hash": "b25d383d200ee1c2fe255034ad2583df2435a4a2f46948e32aa8f1942d14d328",
+      "candidate_timing_direction_history_hash_equivalence": "PASS_COMPACT_REPRODUCTION",
+      "expected_candidate_count": 115,
+      "sample_candidate_ids_exact_match": true
+    }
+  },
+  "old_corpus_performance_reinterpreted": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

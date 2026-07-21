@@ -1,0 +1,52 @@
+{
+  "alpha_allocation": {
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": 0.004,
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": 0.006,
+    "total": 0.01
+  },
+  "confirmation_candidates": [
+    {
+      "alpha": 0.006,
+      "candidate_generator_semantic_hash": "4be001a9b7acf482235e90db389e9fd0fd4c0199ed68f8645e8f182b493b2d5f",
+      "candidate_generator_source_path": "research/prospective_structural_edge_v2/cycle5_failure_runner.py",
+      "candidate_identity_contract": "sha256 of hypothesis/spec/parameter/session/symbol/direction/cutoff/evidence",
+      "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+      "old_corpus_candidate_count": 115,
+      "old_corpus_candidate_sessions": 115,
+      "old_corpus_compact_manifest_hash": "da6c331bce5fe8b6e94cb490cbdc002b8d156e38286c668bb1f0b2f504039965",
+      "order": 1,
+      "parameter_hash": "532cacdebe2ed4909c9a32632d8cc04ede079a1e6fe02ba8b2876e1393172935",
+      "parameter_path": "research/prospective_structural_edge_v2/hypotheses/AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION/parameter_ownership_matrix.json",
+      "primary_outcome_definition": "direction-normalized underlying close-to-close bps over frozen horizon",
+      "rejection_contract": "fail closed with explicit rejection lineage; no silent drops",
+      "specification_hash": "81137922979a0497e16616ca0c596197c72b4ce1e28dfb153e81829f55f2934b",
+      "specification_path": "research/prospective_structural_edge_v2/hypotheses/AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION/specification_contract.json"
+    },
+    {
+      "alpha": 0.004,
+      "candidate_generator_semantic_hash": "6b9419ca1b631492f78d3e0965046e78f0574c601aab432af1cc7068bea4d596",
+      "candidate_generator_source_path": "research/prospective_structural_edge_v2/cycle4_underlying_runner.py",
+      "candidate_identity_contract": "canonical sha256 of hypothesis, specification_hash, parameter_hash, session, target symbol, direction, cutoff timestamp and evidence",
+      "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "old_corpus_candidate_count": 371,
+      "old_corpus_candidate_sessions": 183,
+      "old_corpus_compact_manifest_hash": "955cd5c420f4a978fdc9191326a8faf373f56fb1e1cfccf3cd646c803eec531e",
+      "order": 2,
+      "parameter_hash": "96962f33f660a0f6927b860b475ac2c595bc62cd7e156e9ad6bfc1816052bc98",
+      "parameter_path": "research/prospective_structural_edge_v2/hypotheses/AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/parameter_ownership_matrix_v3.json",
+      "primary_outcome_definition": "direction-normalized underlying close-to-close bps over frozen horizon",
+      "rejection_contract": "fail closed with explicit rejection lineage; no silent drops",
+      "specification_hash": "2064343bc20abe841ba23591683afa041e8f67dda864721746a1f49af475062f",
+      "specification_path": "research/prospective_structural_edge_v2/hypotheses/AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json"
+    }
+  ],
+  "outcomes_read_before_freeze": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "unused_alpha_reassignment_allowed": false
+}

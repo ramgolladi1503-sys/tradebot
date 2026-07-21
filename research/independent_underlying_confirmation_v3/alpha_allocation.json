@@ -1,0 +1,13 @@
+{
+  "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": 0.004,
+  "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": 0.006,
+  "immutable_after_outcomes": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "total": 0.01
+}
