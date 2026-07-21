@@ -44,6 +44,12 @@ def _opening_range_end(ts: pd.Timestamp, opening_range_minutes: int) -> pd.Times
     return session_start + pd.Timedelta(minutes=int(opening_range_minutes))
 
 
+def _is_opening_range_bar(ts: pd.Timestamp, opening_range_minutes: int) -> bool:
+    """Upstox timestamps are candle starts; the end boundary is exclusive."""
+    session_start = ts.normalize() + pd.Timedelta(hours=9, minutes=15)
+    return session_start <= ts < _opening_range_end(ts, opening_range_minutes)
+
+
 def _infer_bar_interval(timestamps: pd.Series) -> pd.Timedelta:
     """Infer the positive candle interval for start-labelled Upstox candles."""
     ordered = pd.to_datetime(timestamps, errors="raise").sort_values()
@@ -55,6 +61,44 @@ def _infer_bar_interval(timestamps: pd.Series) -> pd.Timedelta:
     if interval <= pd.Timedelta(0):
         raise ValueError("inferred candle interval must be positive")
     return interval
+
+
+def _resolve_bar_exit(
+    *,
+    active_trade: dict[str, Any],
+    row: pd.Series,
+    bar_start: pd.Timestamp,
+    bar_interval: pd.Timedelta,
+    time_stop_minutes: int,
+) -> tuple[float, str, pd.Timestamp] | None:
+    """Resolve post-entry OHLC outcomes using a conservative bar contract."""
+    direction = str(active_trade["direction"])
+    stop = float(active_trade["stop_loss"])
+    target = float(active_trade["target"])
+    high = float(row["high"])
+    low = float(row["low"])
+
+    if direction == "SHORT":
+        stop_hit = high >= stop
+        target_hit = low <= target
+    else:
+        stop_hit = low <= stop
+        target_hit = high >= target
+
+    bar_end = pd.Timestamp(bar_start) + bar_interval
+    if stop_hit and target_hit:
+        return stop, "SAME_CANDLE_AMBIGUOUS_ASSUMED_STOP", bar_end
+    if stop_hit:
+        return stop, "STOP_LOSS", bar_end
+    if target_hit:
+        return target, "TARGET", bar_end
+
+    minutes_held_at_close = (
+        bar_end - pd.Timestamp(active_trade["entry_ts"])
+    ).total_seconds() / 60.0
+    if minutes_held_at_close >= time_stop_minutes:
+        return float(row["close"]), "TIME_STOP", bar_end
+    return None
 
 
 def _ledger_row(
@@ -84,7 +128,6 @@ def _ledger_row(
     )
     gross_proxy_option = gross_underlying * float(proxy_delta)
     risk = abs(entry_price - float(active_trade["stop_loss"]))
-
     underlying_net = gross_underlying - float(underlying_cost)
     proxy_option_net = gross_proxy_option - float(proxy_exec_cost)
 
@@ -168,7 +211,6 @@ def main() -> None:
         "configs/strategy_risk_contracts/MEAN_REVERSION_EXTENSION.json"
     )
     risk_contract = json.loads(risk_contract_path.read_text())
-
     v2_version = risk_contract.get("v2_signal_version", "1.0")
     or_minutes = int(
         _get_cfg(risk_contract, overrides, "entry.opening_range_minutes", 45)
@@ -237,6 +279,38 @@ def main() -> None:
     contract_resolution_failures = 0
     quote_truth_propagated = 0
 
+    def record_exit(
+        *,
+        symbol: str,
+        active_trade: dict[str, Any],
+        exit_price: float,
+        exit_reason: str,
+        exit_ts: pd.Timestamp,
+        parquet_file: Path,
+    ) -> None:
+        nonlocal trade_count
+        ledger_rows.append(
+            _ledger_row(
+                symbol=symbol,
+                active_trade=active_trade,
+                exit_ts=exit_ts,
+                exit_price=exit_price,
+                exit_reason=exit_reason,
+                time_stop_minutes=time_stop_minutes,
+                proxy_delta=proxy_delta,
+                proxy_exec_cost=proxy_exec_cost,
+                underlying_cost=underlying_cost,
+                source_data_path=parquet_file,
+                v2_version=v2_version,
+            )
+        )
+        trade_count += 1
+        setup_types[active_trade["setup_type"]] += 1
+        regime = active_trade["htf_regime"]
+        htf_regimes[regime] = htf_regimes.get(regime, 0) + 1
+        cost_margins.append(active_trade["cost_hurdle_margin"])
+        rejection_qualities.append(active_trade["rejection_quality"])
+
     if replay_dir.exists():
         dates = sorted(
             d.name for d in replay_dir.iterdir() if d.is_dir() and d.name.isdigit()
@@ -296,53 +370,23 @@ def main() -> None:
                         pending_signal_bar_index = None
 
                     if active_trade is not None:
-                        minutes_held = (
-                            ts - pd.Timestamp(active_trade["entry_ts"])
-                        ).total_seconds() / 60.0
-                        stop = float(active_trade["stop_loss"])
-                        target = float(active_trade["target"])
-                        direction = active_trade["direction"]
-                        exit_price: float | None = None
-                        exit_reason: str | None = None
-                        if direction == "SHORT":
-                            if float(row["high"]) >= stop:
-                                exit_price = stop
-                                exit_reason = "STOP_LOSS"
-                            elif float(row["low"]) <= target:
-                                exit_price = target
-                                exit_reason = "TARGET"
-                        else:
-                            if float(row["low"]) <= stop:
-                                exit_price = stop
-                                exit_reason = "STOP_LOSS"
-                            elif float(row["high"]) >= target:
-                                exit_price = target
-                                exit_reason = "TARGET"
-                        if exit_price is None and minutes_held >= time_stop_minutes:
-                            exit_price = float(row["close"])
-                            exit_reason = "TIME_STOP"
-                        if exit_price is not None and exit_reason is not None:
-                            ledger_rows.append(
-                                _ledger_row(
-                                    symbol=symbol,
-                                    active_trade=active_trade,
-                                    exit_ts=ts + bar_interval,
-                                    exit_price=exit_price,
-                                    exit_reason=exit_reason,
-                                    time_stop_minutes=time_stop_minutes,
-                                    proxy_delta=proxy_delta,
-                                    proxy_exec_cost=proxy_exec_cost,
-                                    underlying_cost=underlying_cost,
-                                    source_data_path=parquet_file,
-                                    v2_version=v2_version,
-                                )
+                        outcome = _resolve_bar_exit(
+                            active_trade=active_trade,
+                            row=row,
+                            bar_start=ts,
+                            bar_interval=bar_interval,
+                            time_stop_minutes=time_stop_minutes,
+                        )
+                        if outcome is not None:
+                            exit_price, exit_reason, exit_ts = outcome
+                            record_exit(
+                                symbol=symbol,
+                                active_trade=active_trade,
+                                exit_price=exit_price,
+                                exit_reason=exit_reason,
+                                exit_ts=exit_ts,
+                                parquet_file=parquet_file,
                             )
-                            trade_count += 1
-                            setup_types[active_trade["setup_type"]] += 1
-                            regime = active_trade["htf_regime"]
-                            htf_regimes[regime] = htf_regimes.get(regime, 0) + 1
-                            cost_margins.append(active_trade["cost_hurdle_margin"])
-                            rejection_qualities.append(active_trade["rejection_quality"])
                             active_trade = None
                         continue
 
@@ -457,12 +501,31 @@ def main() -> None:
                             pending_signal_bar_index = None
                             trades_today += 1
                             day_trades_calendar += 1
+
+                            entry_outcome = _resolve_bar_exit(
+                                active_trade=active_trade,
+                                row=row,
+                                bar_start=ts,
+                                bar_interval=bar_interval,
+                                time_stop_minutes=time_stop_minutes,
+                            )
+                            if entry_outcome is not None:
+                                exit_price, exit_reason, exit_ts = entry_outcome
+                                record_exit(
+                                    symbol=symbol,
+                                    active_trade=active_trade,
+                                    exit_price=exit_price,
+                                    exit_reason=exit_reason,
+                                    exit_ts=exit_ts,
+                                    parquet_file=parquet_file,
+                                )
+                                active_trade = None
                             continue
 
                     feed_snapshot_id = hashlib.sha256(
                         f"{symbol}{source_ts}{row['close']}".encode()
                     ).hexdigest()
-                    if ts <= _opening_range_end(ts, or_minutes):
+                    if _is_opening_range_bar(ts, or_minutes):
                         or_high = (
                             float(row["high"])
                             if or_high is None
@@ -609,27 +672,14 @@ def main() -> None:
                 if active_trade is not None and not df.empty:
                     final_row = df.iloc[-1]
                     final_ts = pd.Timestamp(final_row["timestamp"])
-                    ledger_rows.append(
-                        _ledger_row(
-                            symbol=symbol,
-                            active_trade=active_trade,
-                            exit_ts=final_ts + bar_interval,
-                            exit_price=float(final_row["close"]),
-                            exit_reason="SESSION_END",
-                            time_stop_minutes=time_stop_minutes,
-                            proxy_delta=proxy_delta,
-                            proxy_exec_cost=proxy_exec_cost,
-                            underlying_cost=underlying_cost,
-                            source_data_path=parquet_file,
-                            v2_version=v2_version,
-                        )
+                    record_exit(
+                        symbol=symbol,
+                        active_trade=active_trade,
+                        exit_price=float(final_row["close"]),
+                        exit_reason="SESSION_END",
+                        exit_ts=final_ts + bar_interval,
+                        parquet_file=parquet_file,
                     )
-                    trade_count += 1
-                    setup_types[active_trade["setup_type"]] += 1
-                    regime = active_trade["htf_regime"]
-                    htf_regimes[regime] = htf_regimes.get(regime, 0) + 1
-                    cost_margins.append(active_trade["cost_hurdle_margin"])
-                    rejection_qualities.append(active_trade["rejection_quality"])
                     active_trade = None
 
                 if trades_today == max_trades:
@@ -667,7 +717,6 @@ def main() -> None:
     percent_symbol_days_at_cap = (
         symbol_days_at_cap / parquet_symbol_days if parquet_symbol_days > 0 else 0
     )
-
     catalog_path = base_dir / "historical_data_catalog.json"
     catalog_days = 0
     if catalog_path.exists():
