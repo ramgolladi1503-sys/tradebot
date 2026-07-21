@@ -59,8 +59,8 @@ class SafetyEnvelope:
     """Mandatory fail-closed claims for every discovery artifact."""
 
     read_only: bool = True
-    is_order_action: bool = False
-    broker_api_called: bool = False
+    is_order_action: bool = False  # is_order_action=false
+    broker_api_called: bool = False  # broker_api_called=false
     allowed_for_live_execution: bool = False
     append: bool = False
 
