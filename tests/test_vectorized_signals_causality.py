@@ -25,7 +25,8 @@ def test_prior_session_ema_is_unchanged_by_same_day_future_close():
         ]
     )
     mutated = base.copy()
-    mutated.loc[pd.Timestamp("2026-01-07 09:25", tz="Asia/Kolkata")] = 1000.0
+    mutation_ts = pd.Timestamp("2026-01-07 09:25", tz="Asia/Kolkata")
+    mutated.loc[mutation_ts] = 1000.0
 
     actual_base = _causal_prior_session_ema(base, span=2)
     actual_mutated = _causal_prior_session_ema(mutated, span=2)
@@ -33,6 +34,7 @@ def test_prior_session_ema_is_unchanged_by_same_day_future_close():
     current_session = actual_base.index.normalize() == pd.Timestamp(
         "2026-01-07", tz="Asia/Kolkata"
     )
+    assert base.loc[mutation_ts] != mutated.loc[mutation_ts]
     pd.testing.assert_series_equal(
         actual_base.loc[current_session],
         actual_mutated.loc[current_session],
@@ -105,6 +107,7 @@ def test_build_vectorized_signals_does_not_change_earlier_rows_when_late_close_c
     signals_mutated = build_vectorized_signals(mutated, config)
 
     cutoff = idx[-2]
+    assert base.iloc[-1]["close"] != mutated.iloc[-1]["close"]
     pd.testing.assert_frame_equal(
         signals_base.loc[signals_base.index <= cutoff],
         signals_mutated.loc[signals_mutated.index <= cutoff],
