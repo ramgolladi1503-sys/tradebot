@@ -44,6 +44,19 @@ def _opening_range_end(ts: pd.Timestamp, opening_range_minutes: int) -> pd.Times
     return session_start + pd.Timedelta(minutes=int(opening_range_minutes))
 
 
+def _infer_bar_interval(timestamps: pd.Series) -> pd.Timedelta:
+    """Infer the positive candle interval for start-labelled Upstox candles."""
+    ordered = pd.to_datetime(timestamps, errors="raise").sort_values()
+    positive = ordered.diff().dropna()
+    positive = positive[positive > pd.Timedelta(0)]
+    if positive.empty:
+        raise ValueError("cannot infer candle interval from fewer than two timestamps")
+    interval = positive.median()
+    if interval <= pd.Timedelta(0):
+        raise ValueError("inferred candle interval must be positive")
+    return interval
+
+
 def _ledger_row(
     *,
     symbol: str,
@@ -58,6 +71,10 @@ def _ledger_row(
     source_data_path: Path,
     v2_version: str,
 ) -> dict[str, Any]:
+    entry_ts = pd.Timestamp(active_trade["entry_ts"])
+    if pd.Timestamp(exit_ts) <= entry_ts:
+        raise ValueError("exit timestamp must be after entry timestamp")
+
     direction = active_trade["direction"]
     entry_price = float(active_trade["entry_price"])
     gross_underlying = (
@@ -76,7 +93,7 @@ def _ledger_row(
         "symbol": symbol,
         "signal_time": active_trade["signal_time"],
         "entry_time": active_trade["entry_time"],
-        "exit_time": exit_ts.isoformat(),
+        "exit_time": pd.Timestamp(exit_ts).isoformat(),
         "signal_close": active_trade["signal_close"],
         "entry_open": entry_price,
         "entry_delay_bars": int(active_trade["entry_delay_bars"]),
@@ -87,11 +104,9 @@ def _ledger_row(
         "target": float(active_trade["target"]),
         "time_stop_minutes": int(time_stop_minutes),
         "exit_reason": exit_reason,
-        # Legacy fields remain in one consistent underlying-point lane.
         "gross_pnl": gross_underlying,
         "costs": float(underlying_cost),
         "net_pnl": underlying_net,
-        # Explicit dimensional accounting fields.
         "pnl_model": PNL_MODEL,
         "underlying_gross_pnl": gross_underlying,
         "underlying_execution_cost": float(underlying_cost),
@@ -139,15 +154,11 @@ def main() -> None:
     args = parser.parse_args()
 
     overrides = json.loads(args.config_override)
-
     base_dir = Path(f"runtime/strategy_validation/{STRATEGY_ID}")
     base_dir.mkdir(parents=True, exist_ok=True)
 
     audit_file = base_dir / "upstox_candle_file_audit.json"
-    audit_data: dict[str, Any] = {}
-    if audit_file.exists():
-        audit_data = json.loads(audit_file.read_text())
-
+    audit_data = json.loads(audit_file.read_text()) if audit_file.exists() else {}
     if audit_data.get("classification") != "UPSTOX_CANDLE_FILES_VALID":
         print("Audit is invalid.")
         (base_dir / "phase_4_trade_ledger.jsonl").write_text("")
@@ -180,7 +191,6 @@ def main() -> None:
     max_trades = int(
         _get_cfg(risk_contract, overrides, "entry.max_trades_per_symbol_day", 4)
     )
-
     proxy_delta = float(
         _get_cfg(risk_contract, overrides, "cost_model.proxy_option_delta", 0.50)
     )
@@ -197,7 +207,6 @@ def main() -> None:
     )
 
     replay_dir = Path("runtime/upstox_candidate_replay")
-
     ledger_rows: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
     trade_count = 0
@@ -206,23 +215,19 @@ def main() -> None:
     cost_hurdle_rejected_count = 0
     next_open_cost_hurdle_rejected_count = 0
     fallback_executable_count = 0
-
     parquet_trading_days = 0
     parquet_symbol_days = 0
     raw_failed_breakout_setups = 0
-
     symbol_days_at_cap = 0
     zero_trade_symbol_days = 0
     one_trade_symbol_days = 0
     zero_trade_calendar_days = 0
     total_calendar_days = 0
     max_trades_observed = 0
-
     cost_margins: list[float] = []
     rejection_qualities: list[float] = []
     setup_types = {"FAILED_BREAKOUT_SHORT": 0, "FAILED_BREAKDOWN_LONG": 0}
     htf_regimes: dict[str, int] = {}
-
     feed_snapshots_seen = 0
     fresh_spot_snapshots = 0
     option_chain_snapshots_attempted = 0
@@ -239,7 +244,6 @@ def main() -> None:
         for date_key in dates:
             if not (args.start_date <= date_key <= args.end_date):
                 continue
-
             underlying_dir = replay_dir / date_key / "underlying"
             if not underlying_dir.exists():
                 continue
@@ -254,12 +258,12 @@ def main() -> None:
                 df = pd.read_parquet(parquet_file)
                 df = df.sort_values("timestamp").reset_index(drop=True)
                 df["timestamp"] = pd.to_datetime(df["timestamp"])
+                bar_interval = _infer_bar_interval(df["timestamp"])
                 df.set_index("timestamp", inplace=True)
                 df["htf_sma"] = causal_completed_htf_sma(
                     df["close"], period_minutes=htf_period, window=15
                 )
                 df.reset_index(inplace=True)
-
                 df["tr"] = np.maximum(
                     df["high"] - df["low"],
                     np.maximum(
@@ -282,9 +286,6 @@ def main() -> None:
                     ts = pd.Timestamp(row["timestamp"])
                     source_ts = ts.isoformat()
 
-                    # A pending signal may never coexist with an active trade.
-                    # This guard makes any future control-flow regression fail
-                    # closed instead of executing a stale signal later.
                     if active_trade is not None and pending_signal is not None:
                         pending_signal["reject_reason"] = (
                             "PENDING_SIGNAL_INVALIDATED_BY_ACTIVE_TRADE"
@@ -301,7 +302,6 @@ def main() -> None:
                         stop = float(active_trade["stop_loss"])
                         target = float(active_trade["target"])
                         direction = active_trade["direction"]
-
                         exit_price: float | None = None
                         exit_reason: str | None = None
                         if direction == "SHORT":
@@ -318,17 +318,15 @@ def main() -> None:
                             elif float(row["high"]) >= target:
                                 exit_price = target
                                 exit_reason = "TARGET"
-
                         if exit_price is None and minutes_held >= time_stop_minutes:
                             exit_price = float(row["close"])
                             exit_reason = "TIME_STOP"
-
                         if exit_price is not None and exit_reason is not None:
                             ledger_rows.append(
                                 _ledger_row(
                                     symbol=symbol,
                                     active_trade=active_trade,
-                                    exit_ts=ts,
+                                    exit_ts=ts + bar_interval,
                                     exit_price=exit_price,
                                     exit_reason=exit_reason,
                                     time_stop_minutes=time_stop_minutes,
@@ -344,9 +342,7 @@ def main() -> None:
                             regime = active_trade["htf_regime"]
                             htf_regimes[regime] = htf_regimes.get(regime, 0) + 1
                             cost_margins.append(active_trade["cost_hurdle_margin"])
-                            rejection_qualities.append(
-                                active_trade["rejection_quality"]
-                            )
+                            rejection_qualities.append(active_trade["rejection_quality"])
                             active_trade = None
                         continue
 
@@ -363,11 +359,9 @@ def main() -> None:
                         else:
                             if bool(row.get("fallback", False)):
                                 fallback_executable_count += 1
-
                             entry_price = float(row["open"])
                             stop_loss = float(pending_signal["stop_loss"])
                             direction = pending_signal["direction"]
-
                             if direction == "SHORT":
                                 if entry_price >= stop_loss:
                                     pending_signal["reject_reason"] = (
@@ -398,7 +392,6 @@ def main() -> None:
                             expected_move = abs(planned_target - entry_price)
                             proxy_expected_move = expected_move * proxy_delta
                             margin = proxy_expected_move - proxy_exec_cost
-
                             pending_signal["entry_eval_time"] = source_ts
                             pending_signal["entry_open"] = entry_price
                             pending_signal["target"] = planned_target
@@ -407,7 +400,6 @@ def main() -> None:
                                 proxy_expected_move
                             )
                             pending_signal["cost_hurdle_margin"] = margin
-
                             if margin <= 0:
                                 next_open_cost_hurdle_rejected_count += 1
                                 pending_signal["reject_reason"] = (
@@ -429,7 +421,6 @@ def main() -> None:
                             ).hexdigest()
                             candidates.append(pending_signal)
                             quote_truth_propagated += 1
-
                             signal_index = int(pending_signal_bar_index)
                             active_trade = {
                                 "entry_ts": ts,
@@ -466,13 +457,11 @@ def main() -> None:
                             pending_signal_bar_index = None
                             trades_today += 1
                             day_trades_calendar += 1
-                            # Do not discover another signal on the entry bar.
                             continue
 
                     feed_snapshot_id = hashlib.sha256(
                         f"{symbol}{source_ts}{row['close']}".encode()
                     ).hexdigest()
-
                     if ts <= _opening_range_end(ts, or_minutes):
                         or_high = (
                             float(row["high"])
@@ -485,7 +474,6 @@ def main() -> None:
                             else min(or_low, float(row["low"]))
                         )
                         continue
-
                     if or_high is None or or_low is None:
                         continue
                     if pd.isna(row["htf_sma"]) or pd.isna(row["atr"]):
@@ -501,7 +489,6 @@ def main() -> None:
                         min(row["open"], row["close"]) - row["low"]
                     )
 
-                    candidate: dict[str, Any] | None = None
                     if float(row["high"]) > or_high and float(row["close"]) < or_high:
                         raw_failed_breakout_setups += 1
                         htf_regime = (
@@ -539,7 +526,6 @@ def main() -> None:
                     option_chain_snapshots_ready += 1
                     contract_resolution_attempts += 1
                     contract_resolution_successes += 1
-
                     contract_key = f"{symbol}_OPT_MOCK"
                     option_chain_snapshot_id = hashlib.sha256(
                         f"{symbol}{source_ts}2026-07-06{failed_level}".encode()
@@ -552,7 +538,6 @@ def main() -> None:
                     risk = abs(stop_loss - entry)
                     reward = risk * 2.5
                     target = entry - reward if direction == "SHORT" else entry + reward
-
                     candidate = {
                         "trace_id": hashlib.sha256(
                             f"trace_{candidate_id}".encode()
@@ -593,7 +578,6 @@ def main() -> None:
                         "blockers": [],
                         "signal_bar_index": int(bar_index),
                     }
-
                     if wick_ratio < min_wick_ratio:
                         candidate["reject_reason"] = "WICK_TOO_WEAK"
                         candidate["status"] = "REJECTED"
@@ -612,7 +596,6 @@ def main() -> None:
                         candidate["status"] = "REJECTED"
                         candidates.append(candidate)
                         continue
-
                     pending_signal = candidate
                     pending_signal_bar_index = int(bar_index)
 
@@ -630,7 +613,7 @@ def main() -> None:
                         _ledger_row(
                             symbol=symbol,
                             active_trade=active_trade,
-                            exit_ts=final_ts,
+                            exit_ts=final_ts + bar_interval,
                             exit_price=float(final_row["close"]),
                             exit_reason="SESSION_END",
                             time_stop_minutes=time_stop_minutes,
