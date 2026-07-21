@@ -94,7 +94,9 @@ def test_start_and_end_labels_resolve_same_completed_interval() -> None:
         "volume": [10.0],
     }
     start = normalize_bars(
-        pd.DataFrame({"timestamp": [pd.Timestamp("2026-01-05 09:15:00")], **common}),
+        pd.DataFrame(
+            {"timestamp": [pd.Timestamp("2026-01-05 09:15:00")], **common}
+        ),
         DiscoveryConfig(
             instrument="NIFTY",
             timestamp_semantics="START",
@@ -102,7 +104,9 @@ def test_start_and_end_labels_resolve_same_completed_interval() -> None:
         ),
     )
     end = normalize_bars(
-        pd.DataFrame({"timestamp": [pd.Timestamp("2026-01-05 09:16:00")], **common}),
+        pd.DataFrame(
+            {"timestamp": [pd.Timestamp("2026-01-05 09:16:00")], **common}
+        ),
         DiscoveryConfig(
             instrument="NIFTY",
             timestamp_semantics="END",
@@ -165,7 +169,9 @@ def test_chronological_split_is_session_disjoint_and_ordered() -> None:
     validation = split.loc[split["split"] == "VALIDATION"]
     holdout = split.loc[split["split"] == "HOLDOUT_LOCKED"]
     assert dev["decision_timestamp"].max() < validation["decision_timestamp"].min()
-    assert validation["decision_timestamp"].max() < holdout["decision_timestamp"].min()
+    assert validation["decision_timestamp"].max() < holdout[
+        "decision_timestamp"
+    ].min()
     assert set(dev["session_date"]).isdisjoint(validation["session_date"])
     assert set(dev["session_date"]).isdisjoint(holdout["session_date"])
     assert set(validation["session_date"]).isdisjoint(holdout["session_date"])
@@ -241,7 +247,8 @@ def test_candidate_evaluation_preserves_frozen_imputation_and_claim_boundary() -
         "timestamp_shift",
         "condition_ablations",
     }
-    assert len(parameter_stability(dataset, candidate)) == 4
+    stability_cases = parameter_stability(dataset, candidate)
+    assert sum(1 for _ in stability_cases) == 4
     with pytest.raises(PermissionError):
         evaluate_locked_holdout_once(dataset, candidate, acknowledgement="NO")
 
