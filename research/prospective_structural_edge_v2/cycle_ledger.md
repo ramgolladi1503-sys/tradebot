@@ -1,3 +1,5 @@
 # Cycle Ledger
 
-Next cycle: `3`
+Cycle 3: `HYPOTHESES_FROZEN_NOT_EVALUATED`
+
+Prospective outcomes inspected: `NO`

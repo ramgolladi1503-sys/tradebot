@@ -3975,10 +3975,1111 @@
       "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
       "specification_hash": "6ae0ae75928c444a45e8153d19f6312348092f36c732f47df359b0becf26a114",
       "structural_premise": "A close outside the morning range after 14:00 can reflect closing hedging/index-flow pressure rather than ordinary midday noise."
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 11,
+      "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+      "hypothesis_name": "Ac11 Async Opening Displacement Propagation",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "cross-index leadership propagation after asynchronous opening displacement",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "0586d059782afb9d7bf72850d6cd6c20e0cf3a7b487e28d985913d65d6e54975",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "One index opens with accepted displacement while another remains inside opening balance; continuation is expected only after the laggard confirms, capturing propagation rather than simultaneous breakout.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 12,
+      "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+      "hypothesis_name": "Ac12 Prior Close Location Neutral Gap Continuation",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "prior-day closing-location continuation after neutral gap",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "c2e7fe3610df4ae53b3b35dafecc18296e60fc7c9ecc510f2ad4b2048f81d946",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "When a neutral gap opens near the prior close but the prior session closed in the top/bottom quartile of its range, early continuation may reflect unfinished inventory from the prior close.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 13,
+      "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+      "hypothesis_name": "Ac13 Opening Dispersion Convergence",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "opening dispersion convergence/divergence across three indices",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "b181a7df47572d934566c3452c91afaf3e31eb106bd921d1ec0848219d077517",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "Large dispersion among index opening returns that contracts after the first hour can create directional continuation in the lagging index toward the basket mean.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 14,
+      "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+      "hypothesis_name": "Ac14 First Hour Vol Of Vol Transition",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "first-hour volatility-of-volatility transition",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "11c437af82d2700b3212cda05b6e39bf146a233fc16ca2663c751dca299ec08d",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "A high volatility-of-volatility first hour followed by compression and directional acceptance may mark transition from chaotic repricing to durable inventory direction.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 15,
+      "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+      "hypothesis_name": "Ac15 Morning Trend Interruption Second Impulse",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "morning trend interruption followed by second impulse",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "b1eceaa1504c9805a113d67126ba17a59d7f8ad0c203527439f6b8ee8268ecea",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "A morning trend that pauses without reclaiming VWAP and then breaks its pause range may represent second-wave execution flow, distinct from generic trend pullback.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
     }
   ],
   "multiple_testing": "Holm-Bonferroni across cumulative family; project alpha not reset",
-  "new_hypotheses": [],
+  "new_hypotheses": [
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 11,
+      "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+      "hypothesis_name": "Ac11 Async Opening Displacement Propagation",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "cross-index leadership propagation after asynchronous opening displacement",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "0586d059782afb9d7bf72850d6cd6c20e0cf3a7b487e28d985913d65d6e54975",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "One index opens with accepted displacement while another remains inside opening balance; continuation is expected only after the laggard confirms, capturing propagation rather than simultaneous breakout.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 12,
+      "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+      "hypothesis_name": "Ac12 Prior Close Location Neutral Gap Continuation",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "prior-day closing-location continuation after neutral gap",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "c2e7fe3610df4ae53b3b35dafecc18296e60fc7c9ecc510f2ad4b2048f81d946",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "When a neutral gap opens near the prior close but the prior session closed in the top/bottom quartile of its range, early continuation may reflect unfinished inventory from the prior close.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 13,
+      "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+      "hypothesis_name": "Ac13 Opening Dispersion Convergence",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "opening dispersion convergence/divergence across three indices",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "b181a7df47572d934566c3452c91afaf3e31eb106bd921d1ec0848219d077517",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "Large dispersion among index opening returns that contracts after the first hour can create directional continuation in the lagging index toward the basket mean.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 14,
+      "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+      "hypothesis_name": "Ac14 First Hour Vol Of Vol Transition",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "first-hour volatility-of-volatility transition",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "11c437af82d2700b3212cda05b6e39bf146a233fc16ca2663c751dca299ec08d",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "A high volatility-of-volatility first hour followed by compression and directional acceptance may mark transition from chaotic repricing to durable inventory direction.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "cycle_number": 3,
+      "direction_rule": "Frozen by mechanism-specific completed-bar state machine before outcomes.",
+      "entry_event": "First completed confirmation event for the frozen structural premise.",
+      "falsifier": "Fails specification/fidelity/sample/WFA/clustered-CI/control/sensitivity/concentration gates on development corpus.",
+      "field_classification": {
+        "cycle_number": "SPECIFIED",
+        "direction_rule": "SPECIFIED",
+        "entry_event": "SPECIFIED",
+        "falsifier": "SPECIFIED",
+        "first_legal_timestamp": "SPECIFIED",
+        "global_hypothesis_number": "SPECIFIED",
+        "hypothesis_id": "SPECIFIED",
+        "hypothesis_name": "SPECIFIED",
+        "invalidation": "SPECIFIED",
+        "material_distinction": "SPECIFIED",
+        "mechanism_family": "SPECIFIED",
+        "numeric_parameters": "SPECIFIED",
+        "parameter_units_owners": "SPECIFIED",
+        "persistence_rationale": "SPECIFIED",
+        "primary_horizon_exit": "SPECIFIED",
+        "prior_related_research": "SPECIFIED",
+        "required_data": "SPECIFIED",
+        "restart_future_suffix_behavior": "SPECIFIED",
+        "safety_flags": "SPECIFIED",
+        "same_bar_rules": "SPECIFIED",
+        "secondary_descriptive_horizons": "SPECIFIED",
+        "sensitivity_neighborhood": "SPECIFIED",
+        "session_window": "SPECIFIED",
+        "setup_expiry": "SPECIFIED",
+        "single_emission_rule": "SPECIFIED",
+        "state_machine": "SPECIFIED",
+        "status": "SPECIFIED",
+        "structural_premise": "SPECIFIED",
+        "symbols": "SPECIFIED"
+      },
+      "first_legal_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "global_hypothesis_number": 15,
+      "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+      "hypothesis_name": "Ac15 Morning Trend Interruption Second Impulse",
+      "invalidation": "Opposite structural reclaim before entry or setup expiry.",
+      "material_distinction": "Not a threshold/horizon variant of AC01-AC10; each candidate identity depends on a new causal market-structure family.",
+      "mechanism_family": "morning trend interruption followed by second impulse",
+      "numeric_parameters": {
+        "confirmation_window_minutes": 15,
+        "opening_window_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 240
+      },
+      "parameter_hash": "9a9012b895c4e2032856f37d6c62e9211ad25312bebfaa20b0ef76dda6595008",
+      "parameter_units_owners": {
+        "confirmation_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "opening_window_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "primary_horizon_minutes": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        },
+        "setup_expiry_minutes_from_open": {
+          "owner": "session_clock_structure",
+          "rationale": "round completed-bar/session boundary value",
+          "unit": "completed minutes"
+        }
+      },
+      "persistence_rationale": "Mechanism is based on session structure, cross-index inventory, prior-session location, or completed-bar volatility transition rather than optimized indicators.",
+      "primary_horizon_exit": "Direction-normalized underlying bps at primary_horizon_minutes.",
+      "prior_related_research": "Prior AC01-AC10 carried forward; AC07/AC08 may not be retested on old lockbox.",
+      "required_data": "Complete underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX across the 500 development sessions only.",
+      "restart_future_suffix_behavior": "Candidate identity depends only on prefix through legal entry; future suffix must not alter candidate timing, direction, or ID.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "same_bar_rules": "No same-bar entry; confirmation bar cannot also be entry bar.",
+      "secondary_descriptive_horizons": [
+        15,
+        30,
+        60
+      ],
+      "sensitivity_neighborhood": "integer minutes nominal-1, nominal, nominal+1; continuous values 0.8x/1.0x/1.2x where applicable",
+      "session_window": "09:15-13:15 IST, completed bars only",
+      "setup_expiry": "Frozen setup_expiry_minutes_from_open.",
+      "single_emission_rule": "At most one candidate per symbol-session or market-session as specified by the mechanism.",
+      "specification_hash": "b1eceaa1504c9805a113d67126ba17a59d7f8ad0c203527439f6b8ee8268ecea",
+      "state_machine": [
+        "Load complete session bars only",
+        "Compute prior/opening/cross-index structural state",
+        "Wait for confirmation on completed bar",
+        "Emit first legal next-bar candidate once",
+        "Reject all later duplicate setups"
+      ],
+      "status": "FROZEN_NOT_YET_EVALUATED",
+      "structural_premise": "A morning trend that pauses without reclaiming VWAP and then breaks its pause range may represent second-wave execution flow, distinct from generic trend pullback.",
+      "symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ]
+    }
+  ],
   "prior_hypotheses_carried_forward": 10,
   "safety_flags": {
     "allowed_for_live_execution": false,
@@ -3988,5 +5089,5 @@
     "read_only": true
   },
   "schema_version": 1,
-  "total_cumulative_hypotheses": 10
+  "total_cumulative_hypotheses": 15
 }

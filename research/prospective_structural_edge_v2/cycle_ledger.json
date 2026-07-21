@@ -1,5 +1,25 @@
 {
-  "cycles": [],
+  "cycles": [
+    {
+      "cycle_number": 3,
+      "hypotheses": [
+        "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+        "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+        "AC13_OPENING_DISPERSION_CONVERGENCE",
+        "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+        "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE"
+      ],
+      "prospective_outcomes_inspected": false,
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "status": "HYPOTHESES_FROZEN_NOT_EVALUATED"
+    }
+  ],
   "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
   "next_cycle": 3,
   "safety_flags": {
