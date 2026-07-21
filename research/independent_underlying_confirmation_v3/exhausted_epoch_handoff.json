@@ -1,0 +1,15 @@
+{
+  "new_same_corpus_hypotheses_allowed": false,
+  "old_final_lockbox_reusable": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_corpus_parameter_variants_allowed": false,
+  "same_corpus_search_status": "CLOSED",
+  "scientifically_valid_continuation": "INDEPENDENT_UNSEEN_DATA_ONLY",
+  "source_commit": "693d6495ec045a3bc80d65c788afcc0438007ef3"
+}
