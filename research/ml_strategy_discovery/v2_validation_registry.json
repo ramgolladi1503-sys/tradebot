@@ -1,26 +1,15 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "ml_strategy_discovery_v2_partition_registry_v2",
   "read_only": true,
   "is_order_action": false,
   "broker_api_called": false,
   "allowed_for_live_execution": false,
   "append": false,
-  "datasets": {
-    "DEVELOPMENT_V1": {
-      "status": "AVAILABLE",
-      "description": "Allowed for V2 candidate generation and testing."
-    },
-    "VALIDATION_V1_CONSUMED": {
-      "status": "LOCKED",
-      "description": "Consumed in V1. Forbidden for V2 selection."
-    },
-    "HOLDOUT_V1_LOCKED": {
-      "status": "LOCKED",
-      "description": "Remains untouched and locked."
-    },
-    "FRESH_CONFIRMATION_V2_LOCKED": {
-      "status": "LOCKED",
-      "description": "Fresh OOS data. Must remain locked until a V2 rule is frozen."
-    }
-  }
+  "ranges": [
+    {"name": "DEVELOPMENT_V1", "start": null, "end": "2025-09-05", "status": "AVAILABLE_FOR_DEVELOPMENT_ONLY"},
+    {"name": "VALIDATION_V1_CONSUMED", "start": "2025-09-08", "end": "2026-02-05", "status": "PERMANENTLY_FORBIDDEN_FOR_V2_SELECTION"},
+    {"name": "HOLDOUT_V1_LOCKED", "start": "2026-02-06", "end": "2026-07-10", "status": "LOCKED_AND_UNTOUCHED"},
+    {"name": "FRESH_CONFIRMATION_V2_CONSUMED_INVALID", "start": "2026-07-11", "end": "2026-07-21", "status": "CONSUMED_AND_INVALID_FOR_CONFIRMATION"},
+    {"name": "FRESH_CONFIRMATION_V2_LOCKED", "start": "2026-07-22", "end": null, "status": "METADATA_ONLY_UNTIL_SEPARATE_AUTHORIZATION"}
+  ]
 }
