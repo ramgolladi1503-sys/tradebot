@@ -1,0 +1,132 @@
+{
+  "candidate_affecting_ambiguous_fields": [],
+  "field_classification": {
+    "WFA_results": "SPECIFIED",
+    "allowed_symbols": "SPECIFIED",
+    "cycle_number": "SPECIFIED",
+    "direction": "SPECIFIED",
+    "discovery_candidate_count": "SPECIFIED",
+    "discovery_session_count": "SPECIFIED",
+    "entry_event": "SPECIFIED",
+    "final_lockbox_status": "SPECIFIED",
+    "final_verdict": "SPECIFIED",
+    "finalist_status": "SPECIFIED",
+    "global_hypothesis_number": "SPECIFIED",
+    "hypothesis_id": "SPECIFIED",
+    "hypothesis_name": "SPECIFIED",
+    "invalidation": "SPECIFIED",
+    "known_prior_research": "SPECIFIED",
+    "legal_entry_timestamp": "SPECIFIED",
+    "material_distinction_from_prior_work": "SPECIFIED",
+    "mechanism_family": "SPECIFIED",
+    "negative_control_result": "SPECIFIED",
+    "negative_expectation_falsifier": "SPECIFIED",
+    "parameter_hash": "SPECIFIED",
+    "parameter_ownership": "SPECIFIED",
+    "parameter_sensitivity_neighborhood": "SPECIFIED",
+    "parameter_units": "SPECIFIED",
+    "parameter_values": "SPECIFIED",
+    "participants_or_behavior": "SPECIFIED",
+    "persistence_rationale": "SPECIFIED",
+    "primary_outcome": "SPECIFIED",
+    "required_data": "SPECIFIED",
+    "safety_flags": "SPECIFIED",
+    "screening_result": "SPECIFIED",
+    "sensitivity_result": "SPECIFIED",
+    "session_window": "SPECIFIED",
+    "setup_expiry": "SPECIFIED",
+    "setup_state_machine": "SPECIFIED",
+    "single_emission_rule": "SPECIFIED",
+    "specification_hash": "SPECIFIED",
+    "structural_premise": "SPECIFIED"
+  },
+  "hypothesis": {
+    "WFA_results": null,
+    "allowed_symbols": [
+      "NIFTY",
+      "BANKNIFTY",
+      "SENSEX"
+    ],
+    "cycle_number": 1,
+    "direction": "Long upside escape; short downside escape.",
+    "discovery_candidate_count": null,
+    "discovery_session_count": null,
+    "entry_event": "First completed accepted close outside narrow opening balance.",
+    "final_lockbox_status": "NOT_OPENED",
+    "final_verdict": "FROZEN_NOT_YET_TESTED",
+    "finalist_status": "NOT_EVALUATED",
+    "global_hypothesis_number": 4,
+    "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+    "hypothesis_name": "Narrow first-30-minute balance escape",
+    "invalidation": "Close back inside opening range before entry.",
+    "known_prior_research": "Related to compression breakout but distinct because compression is first-30-minute market balance width, not indicator compression score.",
+    "legal_entry_timestamp": "Next completed one-minute timestamp after escape close.",
+    "material_distinction_from_prior_work": "Uses explicit opening-balance geometry and acceptance rather than generic volatility/compression score.",
+    "mechanism_family": "narrow-opening-range expansion",
+    "negative_control_result": null,
+    "negative_expectation_falsifier": "No WFA-positive expansion after narrow balances or controls indistinguishable.",
+    "parameter_hash": "3b7795ca5cadf6328e9379471fd19542683bcb11024971516fd4f064293a7fda",
+    "parameter_ownership": "opening auction/balance structure",
+    "parameter_sensitivity_neighborhood": {
+      "escape_fraction_of_range": [
+        0.16,
+        0.2,
+        0.24
+      ],
+      "max_opening_range_width_bps": [
+        28,
+        35,
+        42
+      ],
+      "opening_range_minutes": [
+        29,
+        30,
+        31
+      ],
+      "primary_horizon_minutes": [
+        59,
+        60,
+        61
+      ]
+    },
+    "parameter_units": {
+      "escape_fraction_of_range": "fraction",
+      "max_opening_range_width_bps": "basis points of session open",
+      "opening_range_minutes": "completed one-minute bars",
+      "primary_horizon_minutes": "completed minutes",
+      "setup_expiry_minutes_from_open": "minutes from 09:15"
+    },
+    "parameter_values": {
+      "escape_fraction_of_range": 0.2,
+      "max_opening_range_width_bps": 35,
+      "opening_range_minutes": 30,
+      "primary_horizon_minutes": 60,
+      "setup_expiry_minutes_from_open": 165
+    },
+    "participants_or_behavior": "Liquidity builds inside early balance; breakout participants and hedgers transact after accepted escape.",
+    "persistence_rationale": "Compression followed by acceptance is a market-structure transition, not an indicator combination.",
+    "primary_outcome": "Direction-normalized underlying return to +60 completed minutes.",
+    "required_data": "Underlying one-minute OHLC; first 30-minute range; same-session bars after 09:45.",
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "execution_eligibility": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "screening_result": null,
+    "sensitivity_result": null,
+    "session_window": "09:45-12:00 IST",
+    "setup_expiry": "12:00 IST",
+    "setup_state_machine": [
+      "WAIT first 30 completed bars",
+      "CLASSIFY narrow if opening range width <= 35 bps of open",
+      "WAIT close outside opening range by 20% of range",
+      "EMIT in escape direction next bar"
+    ],
+    "single_emission_rule": "At most one candidate per symbol-session.",
+    "specification_hash": "4e7b94dd62d6072c5b2f77132854a76eaca5c230f513ae04e76b05007d7fa4d9",
+    "structural_premise": "Unusually narrow first-30-minute range stores intraday energy; a later accepted escape can continue as balance resolves."
+  },
+  "schema_version": 1
+}

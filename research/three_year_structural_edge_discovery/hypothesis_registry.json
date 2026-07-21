@@ -1,0 +1,453 @@
+{
+  "hypotheses": [
+    {
+      "WFA_results": null,
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long gap-up accepted sessions; short gap-down accepted sessions.",
+      "discovery_candidate_count": null,
+      "discovery_session_count": null,
+      "entry_event": "First completed bar after 09:30 acceptance confirmation.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "FROZEN_NOT_YET_TESTED",
+      "finalist_status": "NOT_EVALUATED",
+      "global_hypothesis_number": 1,
+      "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+      "hypothesis_name": "Gap acceptance continuation after completed first-15-minute confirmation",
+      "invalidation": "Price closes back through prior close before entry or opening range midpoint fails acceptance.",
+      "known_prior_research": "Related to opening drive and ORB, but distinct because trigger is prior-close gap acceptance after first-15-minute confirmation, not opening-range breakout/retest.",
+      "legal_entry_timestamp": "09:31 IST or first next completed one-minute timestamp after acceptance.",
+      "material_distinction_from_prior_work": "Uses overnight inventory acceptance relative to prior close, not generic ORB breakout or raw opening impulse.",
+      "mechanism_family": "overnight gap acceptance continuation",
+      "negative_control_result": null,
+      "negative_expectation_falsifier": "No positive WFA mean, fewer than 4 positive folds, or controls match/exceed signal.",
+      "parameter_hash": "1f1ce49384ab7719c7c3ccad849080fbbb37adebd142889916ea06f201f390e2",
+      "parameter_ownership": "session mechanics and round completed-bar structure",
+      "parameter_sensitivity_neighborhood": {
+        "acceptance_fraction_of_gap": [
+          0.4,
+          0.5,
+          0.6
+        ],
+        "minimum_abs_gap_bps": [
+          16,
+          20,
+          24
+        ],
+        "opening_confirmation_minutes": [
+          14,
+          15,
+          16
+        ],
+        "primary_horizon_minutes": [
+          29,
+          30,
+          31
+        ]
+      },
+      "parameter_units": {
+        "acceptance_fraction_of_gap": "fraction",
+        "minimum_abs_gap_bps": "basis points from prior close to open",
+        "opening_confirmation_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes after entry",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "acceptance_fraction_of_gap": 0.5,
+        "minimum_abs_gap_bps": 20,
+        "opening_confirmation_minutes": 15,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 45
+      },
+      "participants_or_behavior": "Overnight inventory adjustment, index futures hedging, and intraday trend followers adding after the first accepted opening range.",
+      "persistence_rationale": "Opening auction displacement often forces benchmark and intraday participants to transact in the gap direction when price stays outside the prior close area.",
+      "primary_outcome": "Direction-normalized underlying return from legal entry close to +30 completed minutes, clipped at session end.",
+      "required_data": "Underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX; prior-session close; completed first 15 one-minute bars.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": null,
+      "sensitivity_result": null,
+      "session_window": "09:15-10:00 IST setup only",
+      "setup_expiry": "10:00 IST",
+      "setup_state_machine": [
+        "LOAD prior complete session close",
+        "WAIT for first 15 completed bars",
+        "MEASURE gap from prior close to session open",
+        "ACCEPT if 09:30 close remains beyond 50% of gap in gap direction and above/below opening range midpoint",
+        "EMIT once at first legal bar after acceptance"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "24094e03d49fc7068b624dd1be3e5145f1d691c3bae244a92b5d0ad77b039c8e",
+      "structural_premise": "A directional overnight gap that is accepted after the opening range reflects inventory repricing rather than immediate mean reversion."
+    },
+    {
+      "WFA_results": null,
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Short failed gap-up; long failed gap-down.",
+      "discovery_candidate_count": null,
+      "discovery_session_count": null,
+      "entry_event": "First completed close showing rejection after 09:30 and before 10:15.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "FROZEN_NOT_YET_TESTED",
+      "finalist_status": "NOT_EVALUATED",
+      "global_hypothesis_number": 2,
+      "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+      "hypothesis_name": "Gap rejection reversal after failed first-30-minute acceptance",
+      "invalidation": "Gap resumes beyond opening extreme before entry.",
+      "known_prior_research": "Related to mean reversion but not generic VWAP extension; premise is failed overnight gap inventory.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after rejection close.",
+      "material_distinction_from_prior_work": "Candidate identity depends on prior-close gap failure, not stretch-from-VWAP or ORB retest.",
+      "mechanism_family": "overnight gap rejection",
+      "negative_control_result": null,
+      "negative_expectation_falsifier": "Reversal returns fail WFA/control separation or are concentrated in few sessions.",
+      "parameter_hash": "77888e9be020db74d0f6003b3e9bee6c533e4ba65957be8b56475d00ca83f172",
+      "parameter_ownership": "gap mechanics and completed-bar causality",
+      "parameter_sensitivity_neighborhood": {
+        "minimum_abs_gap_bps": [
+          16,
+          20,
+          24
+        ],
+        "minimum_wait_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          44,
+          45,
+          46
+        ],
+        "rejection_fraction_remaining": [
+          0.2,
+          0.25,
+          0.3
+        ]
+      },
+      "parameter_units": {
+        "minimum_abs_gap_bps": "basis points",
+        "minimum_wait_minutes": "completed minutes from open",
+        "primary_horizon_minutes": "completed minutes",
+        "rejection_fraction_remaining": "fraction of initial gap remaining",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "minimum_abs_gap_bps": 20,
+        "minimum_wait_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "rejection_fraction_remaining": 0.25,
+        "setup_expiry_minutes_from_open": 60
+      },
+      "participants_or_behavior": "Opening gap chasers unwind; liquidity providers fade failed displacement; hedgers reduce directional exposure.",
+      "persistence_rationale": "Failed gap acceptance creates predictable inventory pain when price crosses back through prior close/opening midpoint.",
+      "primary_outcome": "Direction-normalized underlying return from legal entry close to +45 completed minutes.",
+      "required_data": "Underlying one-minute OHLC candles; prior-session close; completed first 30 bars.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": null,
+      "sensitivity_result": null,
+      "session_window": "09:15-10:15 IST setup only",
+      "setup_expiry": "10:15 IST",
+      "setup_state_machine": [
+        "LOAD prior close",
+        "WAIT for gap open and first 30 completed bars",
+        "REJECT if price closes back inside 25% of prior-close gap or crosses prior close",
+        "EMIT reversal at first completed rejection close"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "1175deb06b1f14358f1ab3615bc5283a1f9033cfb4a88f481fd7b714227cbe6e",
+      "structural_premise": "A gap that cannot hold through the first 30 minutes indicates trapped directional open inventory and mean reversion pressure."
+    },
+    {
+      "WFA_results": null,
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long after sweep below prior low and reclaim; short after sweep above prior high and reclaim.",
+      "discovery_candidate_count": null,
+      "discovery_session_count": null,
+      "entry_event": "First completed reclaim close after sweep.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "FROZEN_NOT_YET_TESTED",
+      "finalist_status": "NOT_EVALUATED",
+      "global_hypothesis_number": 3,
+      "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+      "hypothesis_name": "Prior-day liquidity sweep reclaim continuation",
+      "invalidation": "Second close beyond swept extreme before entry.",
+      "known_prior_research": "Distinct from ORB and VWAP; uses previous session extrema as liquidity pools.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after reclaim.",
+      "material_distinction_from_prior_work": "Candidate is anchored on prior-day high/low stop-run failure rather than opening range or VWAP state.",
+      "mechanism_family": "prior-day high/low sweep and reclaim",
+      "negative_control_result": null,
+      "negative_expectation_falsifier": "Reclaim does not outperform matched random entries around prior-day levels.",
+      "parameter_hash": "f62ddbcc52fd21fb3480fb538ca31d6c444efeff9cb6c2b8b2ee0af425a738c6",
+      "parameter_ownership": "prior-session liquidity level mechanics",
+      "parameter_sensitivity_neighborhood": {
+        "earliest_setup_minutes_from_open": [
+          14,
+          15,
+          16
+        ],
+        "minimum_sweep_bps": [
+          4,
+          5,
+          6
+        ],
+        "primary_horizon_minutes": [
+          29,
+          30,
+          31
+        ]
+      },
+      "parameter_units": {
+        "earliest_setup_minutes_from_open": "minutes from 09:15",
+        "minimum_sweep_bps": "basis points beyond prior extreme",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "earliest_setup_minutes_from_open": 15,
+        "minimum_sweep_bps": 5,
+        "primary_horizon_minutes": 30,
+        "reclaim_close_inside_prior_range": true,
+        "setup_expiry_minutes_from_open": 315
+      },
+      "participants_or_behavior": "Stop orders and breakout liquidity are absorbed; trapped breakout traders unwind; stronger hands reclaim value.",
+      "persistence_rationale": "Prior-day extremes are visible liquidity pools; failed auction beyond them can create short-horizon directional flow.",
+      "primary_outcome": "Direction-normalized underlying return from entry to +30 completed minutes.",
+      "required_data": "Underlying one-minute OHLC candles for current and prior complete session.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": null,
+      "sensitivity_result": null,
+      "session_window": "09:30-14:30 IST",
+      "setup_expiry": "14:30 IST",
+      "setup_state_machine": [
+        "LOAD prior-day high and low",
+        "WAIT for current session sweep beyond level by minimum bps",
+        "REQUIRE completed close back inside prior range",
+        "EMIT away from swept level on next bar"
+      ],
+      "single_emission_rule": "At most one high sweep and one low sweep per symbol-session; first side only if both occur.",
+      "specification_hash": "1663b112dd7cd827676b4ae26e133fa54b1a8095499a29083c500947b986f077",
+      "structural_premise": "A sweep beyond prior-day high/low followed by reclaim marks failed stop-run liquidity and continuation away from the swept level."
+    },
+    {
+      "WFA_results": null,
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long upside escape; short downside escape.",
+      "discovery_candidate_count": null,
+      "discovery_session_count": null,
+      "entry_event": "First completed accepted close outside narrow opening balance.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "FROZEN_NOT_YET_TESTED",
+      "finalist_status": "NOT_EVALUATED",
+      "global_hypothesis_number": 4,
+      "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+      "hypothesis_name": "Narrow first-30-minute balance escape",
+      "invalidation": "Close back inside opening range before entry.",
+      "known_prior_research": "Related to compression breakout but distinct because compression is first-30-minute market balance width, not indicator compression score.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after escape close.",
+      "material_distinction_from_prior_work": "Uses explicit opening-balance geometry and acceptance rather than generic volatility/compression score.",
+      "mechanism_family": "narrow-opening-range expansion",
+      "negative_control_result": null,
+      "negative_expectation_falsifier": "No WFA-positive expansion after narrow balances or controls indistinguishable.",
+      "parameter_hash": "3b7795ca5cadf6328e9379471fd19542683bcb11024971516fd4f064293a7fda",
+      "parameter_ownership": "opening auction/balance structure",
+      "parameter_sensitivity_neighborhood": {
+        "escape_fraction_of_range": [
+          0.16,
+          0.2,
+          0.24
+        ],
+        "max_opening_range_width_bps": [
+          28,
+          35,
+          42
+        ],
+        "opening_range_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          59,
+          60,
+          61
+        ]
+      },
+      "parameter_units": {
+        "escape_fraction_of_range": "fraction",
+        "max_opening_range_width_bps": "basis points of session open",
+        "opening_range_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "escape_fraction_of_range": 0.2,
+        "max_opening_range_width_bps": 35,
+        "opening_range_minutes": 30,
+        "primary_horizon_minutes": 60,
+        "setup_expiry_minutes_from_open": 165
+      },
+      "participants_or_behavior": "Liquidity builds inside early balance; breakout participants and hedgers transact after accepted escape.",
+      "persistence_rationale": "Compression followed by acceptance is a market-structure transition, not an indicator combination.",
+      "primary_outcome": "Direction-normalized underlying return to +60 completed minutes.",
+      "required_data": "Underlying one-minute OHLC; first 30-minute range; same-session bars after 09:45.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": null,
+      "sensitivity_result": null,
+      "session_window": "09:45-12:00 IST",
+      "setup_expiry": "12:00 IST",
+      "setup_state_machine": [
+        "WAIT first 30 completed bars",
+        "CLASSIFY narrow if opening range width <= 35 bps of open",
+        "WAIT close outside opening range by 20% of range",
+        "EMIT in escape direction next bar"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "4e7b94dd62d6072c5b2f77132854a76eaca5c230f513ae04e76b05007d7fa4d9",
+      "structural_premise": "Unusually narrow first-30-minute range stores intraday energy; a later accepted escape can continue as balance resolves."
+    },
+    {
+      "WFA_results": null,
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long if leader and laggard both close above first-30-minute range; short if both close below.",
+      "discovery_candidate_count": null,
+      "discovery_session_count": null,
+      "entry_event": "Second index completed confirmation close.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "FROZEN_NOT_YET_TESTED",
+      "finalist_status": "NOT_EVALUATED",
+      "global_hypothesis_number": 5,
+      "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+      "hypothesis_name": "Cross-index leader escape followed by laggard continuation",
+      "invalidation": "Leader closes back inside its opening range before confirmation.",
+      "known_prior_research": "Distinct from single-symbol ORB/retest because identity requires cross-index lead-lag sequencing.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after cross-index confirmation.",
+      "material_distinction_from_prior_work": "The causal object is market-wide transmission, not a standalone breakout.",
+      "mechanism_family": "cross-index leadership and lag",
+      "negative_control_result": null,
+      "negative_expectation_falsifier": "Lag confirmation fails WFA/control separation or leader-only control matches it.",
+      "parameter_hash": "6e41a90aa6f4b12c3014588e51ce98cd40e5aa2acc719c5f70c8334f48ee151c",
+      "parameter_ownership": "cross-index market-flow mechanics",
+      "parameter_sensitivity_neighborhood": {
+        "confirmation_window_minutes": [
+          14,
+          15,
+          16
+        ],
+        "escape_fraction_of_range": [
+          0.08,
+          0.1,
+          0.12
+        ],
+        "opening_range_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          44,
+          45,
+          46
+        ]
+      },
+      "parameter_units": {
+        "confirmation_window_minutes": "minutes after leader escape",
+        "escape_fraction_of_range": "fraction",
+        "opening_range_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "confirmation_window_minutes": 15,
+        "escape_fraction_of_range": 0.1,
+        "opening_range_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 195
+      },
+      "participants_or_behavior": "Index arbitrage, basket hedging, and sector/index rotation transmit directional pressure across NIFTY, BANKNIFTY, and SENSEX.",
+      "persistence_rationale": "Cross-index confirmation filters idiosyncratic noise and captures broad index-flow alignment.",
+      "primary_outcome": "Equal-weight direction-normalized underlying return across confirmed symbols to +45 completed minutes.",
+      "required_data": "Synchronized one-minute underlying OHLC for all three indices.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": null,
+      "sensitivity_result": null,
+      "session_window": "09:45-12:30 IST",
+      "setup_expiry": "12:30 IST",
+      "setup_state_machine": [
+        "WAIT first 30 completed bars for all symbols",
+        "IDENTIFY first index to close outside its opening range",
+        "WAIT up to 15 minutes for second index confirmation same direction",
+        "EMIT on confirming laggard and optionally evaluate all aligned symbols"
+      ],
+      "single_emission_rule": "At most one market-wide candidate per session.",
+      "specification_hash": "03c6214e70c14d2d08c4729531ee013ec5541362c450aeed34d9cb8ebb670048",
+      "structural_premise": "When one index escapes its opening balance and another confirms with lag, broad-market flow is more durable than single-index noise."
+    }
+  ],
+  "multiple_testing_control": "Holm-Bonferroni familywise alpha 0.05 across all frozen hypotheses in all cycles",
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "total_frozen_hypotheses": 5,
+  "total_hypotheses_entering_wfa": 0,
+  "total_hypotheses_reaching_holdout": 0,
+  "total_screened_hypotheses": 0
+}

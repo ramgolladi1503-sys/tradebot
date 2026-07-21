@@ -1,0 +1,126 @@
+{
+  "candidate_affecting_ambiguous_fields": [],
+  "field_classification": {
+    "WFA_results": "SPECIFIED",
+    "allowed_symbols": "SPECIFIED",
+    "cycle_number": "SPECIFIED",
+    "direction": "SPECIFIED",
+    "discovery_candidate_count": "SPECIFIED",
+    "discovery_session_count": "SPECIFIED",
+    "entry_event": "SPECIFIED",
+    "final_lockbox_status": "SPECIFIED",
+    "final_verdict": "SPECIFIED",
+    "finalist_status": "SPECIFIED",
+    "global_hypothesis_number": "SPECIFIED",
+    "hypothesis_id": "SPECIFIED",
+    "hypothesis_name": "SPECIFIED",
+    "invalidation": "SPECIFIED",
+    "known_prior_research": "SPECIFIED",
+    "legal_entry_timestamp": "SPECIFIED",
+    "material_distinction_from_prior_work": "SPECIFIED",
+    "mechanism_family": "SPECIFIED",
+    "negative_control_result": "SPECIFIED",
+    "negative_expectation_falsifier": "SPECIFIED",
+    "parameter_hash": "SPECIFIED",
+    "parameter_ownership": "SPECIFIED",
+    "parameter_sensitivity_neighborhood": "SPECIFIED",
+    "parameter_units": "SPECIFIED",
+    "parameter_values": "SPECIFIED",
+    "participants_or_behavior": "SPECIFIED",
+    "persistence_rationale": "SPECIFIED",
+    "primary_outcome": "SPECIFIED",
+    "required_data": "SPECIFIED",
+    "safety_flags": "SPECIFIED",
+    "screening_result": "SPECIFIED",
+    "sensitivity_result": "SPECIFIED",
+    "session_window": "SPECIFIED",
+    "setup_expiry": "SPECIFIED",
+    "setup_state_machine": "SPECIFIED",
+    "single_emission_rule": "SPECIFIED",
+    "specification_hash": "SPECIFIED",
+    "structural_premise": "SPECIFIED"
+  },
+  "hypothesis": {
+    "WFA_results": null,
+    "allowed_symbols": [
+      "NIFTY",
+      "BANKNIFTY",
+      "SENSEX"
+    ],
+    "cycle_number": 1,
+    "direction": "Long after sweep below prior low and reclaim; short after sweep above prior high and reclaim.",
+    "discovery_candidate_count": null,
+    "discovery_session_count": null,
+    "entry_event": "First completed reclaim close after sweep.",
+    "final_lockbox_status": "NOT_OPENED",
+    "final_verdict": "FROZEN_NOT_YET_TESTED",
+    "finalist_status": "NOT_EVALUATED",
+    "global_hypothesis_number": 3,
+    "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+    "hypothesis_name": "Prior-day liquidity sweep reclaim continuation",
+    "invalidation": "Second close beyond swept extreme before entry.",
+    "known_prior_research": "Distinct from ORB and VWAP; uses previous session extrema as liquidity pools.",
+    "legal_entry_timestamp": "Next completed one-minute timestamp after reclaim.",
+    "material_distinction_from_prior_work": "Candidate is anchored on prior-day high/low stop-run failure rather than opening range or VWAP state.",
+    "mechanism_family": "prior-day high/low sweep and reclaim",
+    "negative_control_result": null,
+    "negative_expectation_falsifier": "Reclaim does not outperform matched random entries around prior-day levels.",
+    "parameter_hash": "f62ddbcc52fd21fb3480fb538ca31d6c444efeff9cb6c2b8b2ee0af425a738c6",
+    "parameter_ownership": "prior-session liquidity level mechanics",
+    "parameter_sensitivity_neighborhood": {
+      "earliest_setup_minutes_from_open": [
+        14,
+        15,
+        16
+      ],
+      "minimum_sweep_bps": [
+        4,
+        5,
+        6
+      ],
+      "primary_horizon_minutes": [
+        29,
+        30,
+        31
+      ]
+    },
+    "parameter_units": {
+      "earliest_setup_minutes_from_open": "minutes from 09:15",
+      "minimum_sweep_bps": "basis points beyond prior extreme",
+      "primary_horizon_minutes": "completed minutes",
+      "setup_expiry_minutes_from_open": "minutes from 09:15"
+    },
+    "parameter_values": {
+      "earliest_setup_minutes_from_open": 15,
+      "minimum_sweep_bps": 5,
+      "primary_horizon_minutes": 30,
+      "reclaim_close_inside_prior_range": true,
+      "setup_expiry_minutes_from_open": 315
+    },
+    "participants_or_behavior": "Stop orders and breakout liquidity are absorbed; trapped breakout traders unwind; stronger hands reclaim value.",
+    "persistence_rationale": "Prior-day extremes are visible liquidity pools; failed auction beyond them can create short-horizon directional flow.",
+    "primary_outcome": "Direction-normalized underlying return from entry to +30 completed minutes.",
+    "required_data": "Underlying one-minute OHLC candles for current and prior complete session.",
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "execution_eligibility": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "screening_result": null,
+    "sensitivity_result": null,
+    "session_window": "09:30-14:30 IST",
+    "setup_expiry": "14:30 IST",
+    "setup_state_machine": [
+      "LOAD prior-day high and low",
+      "WAIT for current session sweep beyond level by minimum bps",
+      "REQUIRE completed close back inside prior range",
+      "EMIT away from swept level on next bar"
+    ],
+    "single_emission_rule": "At most one high sweep and one low sweep per symbol-session; first side only if both occur.",
+    "specification_hash": "1663b112dd7cd827676b4ae26e133fa54b1a8095499a29083c500947b986f077",
+    "structural_premise": "A sweep beyond prior-day high/low followed by reclaim marks failed stop-run liquidity and continuation away from the swept level."
+  },
+  "schema_version": 1
+}

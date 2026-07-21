@@ -1,0 +1,132 @@
+{
+  "candidate_affecting_ambiguous_fields": [],
+  "field_classification": {
+    "WFA_results": "SPECIFIED",
+    "allowed_symbols": "SPECIFIED",
+    "cycle_number": "SPECIFIED",
+    "direction": "SPECIFIED",
+    "discovery_candidate_count": "SPECIFIED",
+    "discovery_session_count": "SPECIFIED",
+    "entry_event": "SPECIFIED",
+    "final_lockbox_status": "SPECIFIED",
+    "final_verdict": "SPECIFIED",
+    "finalist_status": "SPECIFIED",
+    "global_hypothesis_number": "SPECIFIED",
+    "hypothesis_id": "SPECIFIED",
+    "hypothesis_name": "SPECIFIED",
+    "invalidation": "SPECIFIED",
+    "known_prior_research": "SPECIFIED",
+    "legal_entry_timestamp": "SPECIFIED",
+    "material_distinction_from_prior_work": "SPECIFIED",
+    "mechanism_family": "SPECIFIED",
+    "negative_control_result": "SPECIFIED",
+    "negative_expectation_falsifier": "SPECIFIED",
+    "parameter_hash": "SPECIFIED",
+    "parameter_ownership": "SPECIFIED",
+    "parameter_sensitivity_neighborhood": "SPECIFIED",
+    "parameter_units": "SPECIFIED",
+    "parameter_values": "SPECIFIED",
+    "participants_or_behavior": "SPECIFIED",
+    "persistence_rationale": "SPECIFIED",
+    "primary_outcome": "SPECIFIED",
+    "required_data": "SPECIFIED",
+    "safety_flags": "SPECIFIED",
+    "screening_result": "SPECIFIED",
+    "sensitivity_result": "SPECIFIED",
+    "session_window": "SPECIFIED",
+    "setup_expiry": "SPECIFIED",
+    "setup_state_machine": "SPECIFIED",
+    "single_emission_rule": "SPECIFIED",
+    "specification_hash": "SPECIFIED",
+    "structural_premise": "SPECIFIED"
+  },
+  "hypothesis": {
+    "WFA_results": null,
+    "allowed_symbols": [
+      "NIFTY",
+      "BANKNIFTY",
+      "SENSEX"
+    ],
+    "cycle_number": 1,
+    "direction": "Long if leader and laggard both close above first-30-minute range; short if both close below.",
+    "discovery_candidate_count": null,
+    "discovery_session_count": null,
+    "entry_event": "Second index completed confirmation close.",
+    "final_lockbox_status": "NOT_OPENED",
+    "final_verdict": "FROZEN_NOT_YET_TESTED",
+    "finalist_status": "NOT_EVALUATED",
+    "global_hypothesis_number": 5,
+    "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+    "hypothesis_name": "Cross-index leader escape followed by laggard continuation",
+    "invalidation": "Leader closes back inside its opening range before confirmation.",
+    "known_prior_research": "Distinct from single-symbol ORB/retest because identity requires cross-index lead-lag sequencing.",
+    "legal_entry_timestamp": "Next completed one-minute timestamp after cross-index confirmation.",
+    "material_distinction_from_prior_work": "The causal object is market-wide transmission, not a standalone breakout.",
+    "mechanism_family": "cross-index leadership and lag",
+    "negative_control_result": null,
+    "negative_expectation_falsifier": "Lag confirmation fails WFA/control separation or leader-only control matches it.",
+    "parameter_hash": "6e41a90aa6f4b12c3014588e51ce98cd40e5aa2acc719c5f70c8334f48ee151c",
+    "parameter_ownership": "cross-index market-flow mechanics",
+    "parameter_sensitivity_neighborhood": {
+      "confirmation_window_minutes": [
+        14,
+        15,
+        16
+      ],
+      "escape_fraction_of_range": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "opening_range_minutes": [
+        29,
+        30,
+        31
+      ],
+      "primary_horizon_minutes": [
+        44,
+        45,
+        46
+      ]
+    },
+    "parameter_units": {
+      "confirmation_window_minutes": "minutes after leader escape",
+      "escape_fraction_of_range": "fraction",
+      "opening_range_minutes": "completed one-minute bars",
+      "primary_horizon_minutes": "completed minutes",
+      "setup_expiry_minutes_from_open": "minutes from 09:15"
+    },
+    "parameter_values": {
+      "confirmation_window_minutes": 15,
+      "escape_fraction_of_range": 0.1,
+      "opening_range_minutes": 30,
+      "primary_horizon_minutes": 45,
+      "setup_expiry_minutes_from_open": 195
+    },
+    "participants_or_behavior": "Index arbitrage, basket hedging, and sector/index rotation transmit directional pressure across NIFTY, BANKNIFTY, and SENSEX.",
+    "persistence_rationale": "Cross-index confirmation filters idiosyncratic noise and captures broad index-flow alignment.",
+    "primary_outcome": "Equal-weight direction-normalized underlying return across confirmed symbols to +45 completed minutes.",
+    "required_data": "Synchronized one-minute underlying OHLC for all three indices.",
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "execution_eligibility": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "screening_result": null,
+    "sensitivity_result": null,
+    "session_window": "09:45-12:30 IST",
+    "setup_expiry": "12:30 IST",
+    "setup_state_machine": [
+      "WAIT first 30 completed bars for all symbols",
+      "IDENTIFY first index to close outside its opening range",
+      "WAIT up to 15 minutes for second index confirmation same direction",
+      "EMIT on confirming laggard and optionally evaluate all aligned symbols"
+    ],
+    "single_emission_rule": "At most one market-wide candidate per session.",
+    "specification_hash": "03c6214e70c14d2d08c4729531ee013ec5541362c450aeed34d9cb8ebb670048",
+    "structural_premise": "When one index escapes its opening balance and another confirms with lag, broad-market flow is more durable than single-index noise."
+  },
+  "schema_version": 1
+}

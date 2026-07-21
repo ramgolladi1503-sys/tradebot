@@ -1,0 +1,133 @@
+{
+  "candidate_affecting_ambiguous_fields": [],
+  "field_classification": {
+    "WFA_results": "SPECIFIED",
+    "allowed_symbols": "SPECIFIED",
+    "cycle_number": "SPECIFIED",
+    "direction": "SPECIFIED",
+    "discovery_candidate_count": "SPECIFIED",
+    "discovery_session_count": "SPECIFIED",
+    "entry_event": "SPECIFIED",
+    "final_lockbox_status": "SPECIFIED",
+    "final_verdict": "SPECIFIED",
+    "finalist_status": "SPECIFIED",
+    "global_hypothesis_number": "SPECIFIED",
+    "hypothesis_id": "SPECIFIED",
+    "hypothesis_name": "SPECIFIED",
+    "invalidation": "SPECIFIED",
+    "known_prior_research": "SPECIFIED",
+    "legal_entry_timestamp": "SPECIFIED",
+    "material_distinction_from_prior_work": "SPECIFIED",
+    "mechanism_family": "SPECIFIED",
+    "negative_control_result": "SPECIFIED",
+    "negative_expectation_falsifier": "SPECIFIED",
+    "parameter_hash": "SPECIFIED",
+    "parameter_ownership": "SPECIFIED",
+    "parameter_sensitivity_neighborhood": "SPECIFIED",
+    "parameter_units": "SPECIFIED",
+    "parameter_values": "SPECIFIED",
+    "participants_or_behavior": "SPECIFIED",
+    "persistence_rationale": "SPECIFIED",
+    "primary_outcome": "SPECIFIED",
+    "required_data": "SPECIFIED",
+    "safety_flags": "SPECIFIED",
+    "screening_result": "SPECIFIED",
+    "sensitivity_result": "SPECIFIED",
+    "session_window": "SPECIFIED",
+    "setup_expiry": "SPECIFIED",
+    "setup_state_machine": "SPECIFIED",
+    "single_emission_rule": "SPECIFIED",
+    "specification_hash": "SPECIFIED",
+    "structural_premise": "SPECIFIED"
+  },
+  "hypothesis": {
+    "WFA_results": null,
+    "allowed_symbols": [
+      "NIFTY",
+      "BANKNIFTY",
+      "SENSEX"
+    ],
+    "cycle_number": 1,
+    "direction": "Long gap-up accepted sessions; short gap-down accepted sessions.",
+    "discovery_candidate_count": null,
+    "discovery_session_count": null,
+    "entry_event": "First completed bar after 09:30 acceptance confirmation.",
+    "final_lockbox_status": "NOT_OPENED",
+    "final_verdict": "FROZEN_NOT_YET_TESTED",
+    "finalist_status": "NOT_EVALUATED",
+    "global_hypothesis_number": 1,
+    "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+    "hypothesis_name": "Gap acceptance continuation after completed first-15-minute confirmation",
+    "invalidation": "Price closes back through prior close before entry or opening range midpoint fails acceptance.",
+    "known_prior_research": "Related to opening drive and ORB, but distinct because trigger is prior-close gap acceptance after first-15-minute confirmation, not opening-range breakout/retest.",
+    "legal_entry_timestamp": "09:31 IST or first next completed one-minute timestamp after acceptance.",
+    "material_distinction_from_prior_work": "Uses overnight inventory acceptance relative to prior close, not generic ORB breakout or raw opening impulse.",
+    "mechanism_family": "overnight gap acceptance continuation",
+    "negative_control_result": null,
+    "negative_expectation_falsifier": "No positive WFA mean, fewer than 4 positive folds, or controls match/exceed signal.",
+    "parameter_hash": "1f1ce49384ab7719c7c3ccad849080fbbb37adebd142889916ea06f201f390e2",
+    "parameter_ownership": "session mechanics and round completed-bar structure",
+    "parameter_sensitivity_neighborhood": {
+      "acceptance_fraction_of_gap": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "minimum_abs_gap_bps": [
+        16,
+        20,
+        24
+      ],
+      "opening_confirmation_minutes": [
+        14,
+        15,
+        16
+      ],
+      "primary_horizon_minutes": [
+        29,
+        30,
+        31
+      ]
+    },
+    "parameter_units": {
+      "acceptance_fraction_of_gap": "fraction",
+      "minimum_abs_gap_bps": "basis points from prior close to open",
+      "opening_confirmation_minutes": "completed one-minute bars",
+      "primary_horizon_minutes": "completed minutes after entry",
+      "setup_expiry_minutes_from_open": "minutes from 09:15"
+    },
+    "parameter_values": {
+      "acceptance_fraction_of_gap": 0.5,
+      "minimum_abs_gap_bps": 20,
+      "opening_confirmation_minutes": 15,
+      "primary_horizon_minutes": 30,
+      "setup_expiry_minutes_from_open": 45
+    },
+    "participants_or_behavior": "Overnight inventory adjustment, index futures hedging, and intraday trend followers adding after the first accepted opening range.",
+    "persistence_rationale": "Opening auction displacement often forces benchmark and intraday participants to transact in the gap direction when price stays outside the prior close area.",
+    "primary_outcome": "Direction-normalized underlying return from legal entry close to +30 completed minutes, clipped at session end.",
+    "required_data": "Underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX; prior-session close; completed first 15 one-minute bars.",
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "execution_eligibility": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "screening_result": null,
+    "sensitivity_result": null,
+    "session_window": "09:15-10:00 IST setup only",
+    "setup_expiry": "10:00 IST",
+    "setup_state_machine": [
+      "LOAD prior complete session close",
+      "WAIT for first 15 completed bars",
+      "MEASURE gap from prior close to session open",
+      "ACCEPT if 09:30 close remains beyond 50% of gap in gap direction and above/below opening range midpoint",
+      "EMIT once at first legal bar after acceptance"
+    ],
+    "single_emission_rule": "At most one candidate per symbol-session.",
+    "specification_hash": "24094e03d49fc7068b624dd1be3e5145f1d691c3bae244a92b5d0ad77b039c8e",
+    "structural_premise": "A directional overnight gap that is accepted after the opening range reflects inventory repricing rather than immediate mean reversion."
+  },
+  "schema_version": 1
+}

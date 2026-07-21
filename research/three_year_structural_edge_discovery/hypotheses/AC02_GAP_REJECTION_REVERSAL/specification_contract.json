@@ -1,0 +1,132 @@
+{
+  "candidate_affecting_ambiguous_fields": [],
+  "field_classification": {
+    "WFA_results": "SPECIFIED",
+    "allowed_symbols": "SPECIFIED",
+    "cycle_number": "SPECIFIED",
+    "direction": "SPECIFIED",
+    "discovery_candidate_count": "SPECIFIED",
+    "discovery_session_count": "SPECIFIED",
+    "entry_event": "SPECIFIED",
+    "final_lockbox_status": "SPECIFIED",
+    "final_verdict": "SPECIFIED",
+    "finalist_status": "SPECIFIED",
+    "global_hypothesis_number": "SPECIFIED",
+    "hypothesis_id": "SPECIFIED",
+    "hypothesis_name": "SPECIFIED",
+    "invalidation": "SPECIFIED",
+    "known_prior_research": "SPECIFIED",
+    "legal_entry_timestamp": "SPECIFIED",
+    "material_distinction_from_prior_work": "SPECIFIED",
+    "mechanism_family": "SPECIFIED",
+    "negative_control_result": "SPECIFIED",
+    "negative_expectation_falsifier": "SPECIFIED",
+    "parameter_hash": "SPECIFIED",
+    "parameter_ownership": "SPECIFIED",
+    "parameter_sensitivity_neighborhood": "SPECIFIED",
+    "parameter_units": "SPECIFIED",
+    "parameter_values": "SPECIFIED",
+    "participants_or_behavior": "SPECIFIED",
+    "persistence_rationale": "SPECIFIED",
+    "primary_outcome": "SPECIFIED",
+    "required_data": "SPECIFIED",
+    "safety_flags": "SPECIFIED",
+    "screening_result": "SPECIFIED",
+    "sensitivity_result": "SPECIFIED",
+    "session_window": "SPECIFIED",
+    "setup_expiry": "SPECIFIED",
+    "setup_state_machine": "SPECIFIED",
+    "single_emission_rule": "SPECIFIED",
+    "specification_hash": "SPECIFIED",
+    "structural_premise": "SPECIFIED"
+  },
+  "hypothesis": {
+    "WFA_results": null,
+    "allowed_symbols": [
+      "NIFTY",
+      "BANKNIFTY",
+      "SENSEX"
+    ],
+    "cycle_number": 1,
+    "direction": "Short failed gap-up; long failed gap-down.",
+    "discovery_candidate_count": null,
+    "discovery_session_count": null,
+    "entry_event": "First completed close showing rejection after 09:30 and before 10:15.",
+    "final_lockbox_status": "NOT_OPENED",
+    "final_verdict": "FROZEN_NOT_YET_TESTED",
+    "finalist_status": "NOT_EVALUATED",
+    "global_hypothesis_number": 2,
+    "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+    "hypothesis_name": "Gap rejection reversal after failed first-30-minute acceptance",
+    "invalidation": "Gap resumes beyond opening extreme before entry.",
+    "known_prior_research": "Related to mean reversion but not generic VWAP extension; premise is failed overnight gap inventory.",
+    "legal_entry_timestamp": "Next completed one-minute timestamp after rejection close.",
+    "material_distinction_from_prior_work": "Candidate identity depends on prior-close gap failure, not stretch-from-VWAP or ORB retest.",
+    "mechanism_family": "overnight gap rejection",
+    "negative_control_result": null,
+    "negative_expectation_falsifier": "Reversal returns fail WFA/control separation or are concentrated in few sessions.",
+    "parameter_hash": "77888e9be020db74d0f6003b3e9bee6c533e4ba65957be8b56475d00ca83f172",
+    "parameter_ownership": "gap mechanics and completed-bar causality",
+    "parameter_sensitivity_neighborhood": {
+      "minimum_abs_gap_bps": [
+        16,
+        20,
+        24
+      ],
+      "minimum_wait_minutes": [
+        29,
+        30,
+        31
+      ],
+      "primary_horizon_minutes": [
+        44,
+        45,
+        46
+      ],
+      "rejection_fraction_remaining": [
+        0.2,
+        0.25,
+        0.3
+      ]
+    },
+    "parameter_units": {
+      "minimum_abs_gap_bps": "basis points",
+      "minimum_wait_minutes": "completed minutes from open",
+      "primary_horizon_minutes": "completed minutes",
+      "rejection_fraction_remaining": "fraction of initial gap remaining",
+      "setup_expiry_minutes_from_open": "minutes from 09:15"
+    },
+    "parameter_values": {
+      "minimum_abs_gap_bps": 20,
+      "minimum_wait_minutes": 30,
+      "primary_horizon_minutes": 45,
+      "rejection_fraction_remaining": 0.25,
+      "setup_expiry_minutes_from_open": 60
+    },
+    "participants_or_behavior": "Opening gap chasers unwind; liquidity providers fade failed displacement; hedgers reduce directional exposure.",
+    "persistence_rationale": "Failed gap acceptance creates predictable inventory pain when price crosses back through prior close/opening midpoint.",
+    "primary_outcome": "Direction-normalized underlying return from legal entry close to +45 completed minutes.",
+    "required_data": "Underlying one-minute OHLC candles; prior-session close; completed first 30 bars.",
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "broker_api_called": false,
+      "execution_eligibility": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "screening_result": null,
+    "sensitivity_result": null,
+    "session_window": "09:15-10:15 IST setup only",
+    "setup_expiry": "10:15 IST",
+    "setup_state_machine": [
+      "LOAD prior close",
+      "WAIT for gap open and first 30 completed bars",
+      "REJECT if price closes back inside 25% of prior-close gap or crosses prior close",
+      "EMIT reversal at first completed rejection close"
+    ],
+    "single_emission_rule": "At most one candidate per symbol-session.",
+    "specification_hash": "1175deb06b1f14358f1ab3615bc5283a1f9033cfb4a88f481fd7b714227cbe6e",
+    "structural_premise": "A gap that cannot hold through the first 30 minutes indicates trapped directional open inventory and mean reversion pressure."
+  },
+  "schema_version": 1
+}
