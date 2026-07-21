@@ -1,139 +1,146 @@
-# ML Strategy Discovery Core — Implementation Report
+# ML Strategy Discovery Core — Agent Review Evidence
 
-Date: 2026-07-21
-Status: `RESEARCH_CORE_IMPLEMENTED`
-Production status: `NOT_CONNECTED`
-Edge verdict: `NOT_EVALUATED_WITH_USER_DATA`
+- mode: ML_STRATEGY_DISCOVERY_CORE_V2
+- candidate_id: ML_DISCOVERY_CORE_AND_CERTIFIED_SOURCE_ADAPTER
+- decision: IMPLEMENTED_PENDING_CURRENT_HEAD_CI_AND_REAL_CORPUS_RUN
+- reason: The causal discovery core is implemented and now binds certified source files with explicit start-labelled bar semantics; current-head CI and the actual local corpus run remain required before accepting generated candidates.
+- timestamp: 2026-07-21T16:50:00+05:30
+- source: ml_strategy_discovery_core_implementation.md
+- read_only: true
+- is_order_action: false
+- broker_api_called: false
+- live_order_action: false
+- broker_order_action: false
+- allowed_for_live_execution: false
+- append: false
 
-## Implemented
+## Agent Work Contract
 
-### Point-in-time dataset contract
+- source_agent: ChatGPT
+- action: GENERATE_PATCH
+- title: ML strategy discovery core and certified Upstox source adapter
+- scope: Implement causal completed-bar discovery, interpretable model and rule extraction, frozen-rule validation controls, explicit timestamp authority, and a manifest-bound underlying-data adapter.
+- requested_paths: `research/ml_strategy_discovery/`, `scripts/run_ml_strategy_discovery.py`, `tests/test_ml_strategy_discovery_*.py`, and ML-discovery evidence documentation.
+- allowed_paths: only the requested research, CLI, focused tests, and evidence paths.
+- forbidden_paths: production runtime, `main.py`, `run_live.sh`, `config/`, credentials, broker, execution, order, risk, feed, dashboard, production strategies, `.env`, secrets, live runtime, and source parquet mutation.
+- expected_tests: focused ML-discovery tests, source-adapter negative tests, compile check, full repository tests, health gate, CodeQL, Code Excellence, repo-forensics, evidence gate, registry verification, and gitleaks.
+- acceptance_proof: start-labelled bars are available only at bar end; certified files are contained, hashed, reopened, and session-verified; development-only model fitting is isolated from holdout; extracted rules reproduce their source tree leaves with frozen imputation; underlying label metrics are not called option P&L.
 
-- strict OHLCV and timestamp validation
-- duplicate timestamps fail closed
-- deterministic UTC normalization and stable sorting
-- explicit session dates and interval-gap flags
-- immutable schema versions
-- explicit decision, feature-cutoff, and source-max timestamps
-- enforced invariant: `source_data_max_timestamp <= decision_timestamp`
-- deterministic semantic hashing
+## Scope Guard
 
-### Causal market features
+- PRODUCTION FILES TOUCHED: NONE
+- STRATEGY FILES TOUCHED: NONE
+- RUNTIME WIRING: NONE
+- BROKER ADAPTERS TOUCHED: NONE
+- RISK OR FEED GATES TOUCHED: NONE
+- DASHBOARD FILES TOUCHED: NONE
+- CREDENTIAL OR ENVIRONMENT FILES TOUCHED: NONE
+- SOURCE PARQUET FILES MUTATED: NONE
+- ORDER ACTIONS: NONE
+- BROKER API CALLED: NO
+- LIVE EXECUTION ENABLED: NO
 
-The implementation computes completed-bar features across distinct structure families:
+## Grill Me Review
 
-- multi-horizon returns
-- true range and ATR
-- ATR percentile
-- normalized candle/range expansion
-- directional efficiency
-- ATR-normalized trend slope
-- compression ratio
-- relative volume and volume acceleration
-- volume percentile
-- wick ratios and close-location value
-- causal session VWAP distance
-- completed opening-range location and width
-- prior-day range position and distances
-- opening gap
-- session time and weekday
-- optional expiry context
-- causal breakout, retest, and failed-breakout states
+The dangerous assumption in the original core was that a source timestamp represented a completed decision timestamp. The certified Upstox corpus uses start-labelled one-minute bars. Using the row's close, high, low, or volume at the start timestamp would leak the entire candle. The v2 contract now represents bar start and bar end separately and uses bar end as the decision, feature cutoff, and source-data maximum timestamp.
 
-Opening-range values are masked until the opening range is complete.
+A second fake-confidence risk was rule extraction after median imputation. A tree can route a missing feature using its development-fitted median, while a later human-readable rule evaluator may treat the same missing value as false. The frozen candidate now carries the development imputation values for every path feature and is rejected if its deterministic mask does not exactly reproduce the source leaf on development rows.
 
-### Path-dependent labels
+The current label return remains an underlying ATR research label. It is not an executable entry, fill, option premium return, or transaction-cost result. Metrics are therefore explicitly named `label_profit_factor`, `label_expectancy_r`, and related label terms.
 
-- target-first, stop-first, neither, and same-bar ambiguity
-- separate LONG and SHORT directional labeling
-- full horizon must remain inside the same trading session
-- incomplete end-of-session labels are excluded from model-ready rows
-- configurable target, stop, and horizon in ATR units
-- bars to event
-- maximum favorable and adverse excursion
-- horizon close return in ATR units
-- conservative same-bar treatment as a stop in research return
+## Hermes Review
 
-### Deterministic regimes
+The architecture has separate owners:
 
-- trend direction/range regime
-- volatility regime
-- gap regime
-- session-time regime
+1. Source adapter: selects only certified manifest records and independently verifies contained files.
+2. Dataset contract: converts source timestamps into explicit completed-bar decision timestamps.
+3. Feature and label construction: uses completed bars and same-session future paths.
+4. Development-only discovery models: fit imputer, shallow tree, and XGBoost comparison without fitting or scoring on locked holdout.
+5. Candidate contract: freezes side, thresholds, leaf ID, source-development dataset hash, and imputation values.
+6. Independent evaluator and oracle: reproduce rule masks and evaluate only declared temporal scopes.
+7. Strict option replay: remains outside this package as a later independent validation authority.
 
-### Discovery models
+No production inference, ranking, risk, broker, dashboard, or execution owner imports the discovery package.
 
-- shallow decision tree for readable rule paths
-- XGBoost for nonlinear discovery comparison
-- development-only fitting
-- validation-only model metrics
-- locked holdout not passed into fitting or validation scoring
-- no trading session can appear in more than one partition
-- ranked tree and XGBoost feature importance
-- extraction of frozen `StrategyCandidate` rule contracts
+## GSD Review
 
-### Independent evaluation and controls
+Implemented components:
 
-- deterministic rule evaluator
-- profit factor, expectancy, win rate, total R, sessions, and drawdown
-- contiguous whole-session frozen-rule validation folds
-- label-permutation control
-- timestamp-shift control
-- individual-condition ablations
-- ±5% and ±10% threshold perturbations
-- configurable cost stress
-- explicit holdout acknowledgement guard
-- independent numpy rule oracle
-- future-data mutation causality oracle
+- START and END timestamp semantics
+- source timezone and bar interval contract
+- bar-start and bar-end metadata
+- strict one-minute cadence option
+- finite and ordered OHLCV validation
+- certified Upstox source-manifest adapter
+- path containment and symlink rejection
+- source SHA-256, byte-size, row-count, schema, symbol, session, and cadence checks
+- row and session conservation
+- causal market-structure and event features
+- same-session LONG and SHORT triple-barrier labels
+- chronological whole-session development, validation, and locked holdout partitions
+- shallow decision tree plus deterministic CPU XGBoost comparison
+- frozen candidate leaf ID, side, development dataset hash, and imputation values
+- exact candidate-mask versus source-tree-leaf reproduction gate
+- label permutation, timestamp shift, ablation, parameter, and abstract label-cost controls
+- independent future-mutation and rule-mask oracles
+- research CLI supporting certified corpus or explicit file input
+- evidence and source-adapter manifests with non-action safety fields
 
-### Evidence output
+## QA / Safety Review
 
-The CLI writes:
+The earlier branch head passed both full repository test workflows, health gates, CodeQL, registry verification, Portfolio CI, and repo-forensics, but failed the evidence and Code Excellence gates because the evidence files did not satisfy required repository contracts.
 
-- `discovery_dataset.parquet`
-- `feature_importance.json`
-- `candidates.json`
-- `evidence_manifest.json`
+The v2 repair adds the exact evidence fields and literal non-action flags required by those gates. Current-head validation is not yet claimed in this document. It must be established by GitHub CI after these changes and by a local actual-corpus run from the source-authority checkout.
 
-The manifest always states research-only status and preserves the option-data limitation.
+Focused tests now cover:
 
-## Deliberately not implemented
+- START timestamp to bar-end decision conversion
+- equivalent END-labelled interval conversion
+- strict cadence failure
+- deterministic dataset hashes
+- duplicate timestamp failure
+- future mutation changes labels but not features
+- whole-session split isolation
+- holdout mutation cannot change development or validation artifacts
+- frozen imputation behavior
+- exact tree-leaf reproduction
+- same-bar ambiguity
+- same-session horizon enforcement
+- SHORT direction correctness
+- certified source file reopen and row conservation
+- SHA mismatch rejection
+- path escape rejection before data use
+- incomplete-session rejection
 
-The following are not truthfully supportable without additional data or dependencies:
+## Acceptance Proof
 
-- real option net-outcome labels without historical bid/ask paths and strike-selection provenance
-- IV/OI/depth features when those fields are absent
-- SHAP interaction analysis because SHAP is not an existing repository dependency
-- symbolic regression and clustering in the first core release
-- strict option-replay certification directly inside the discovery package
-- live execution or production inference integration
-- a structural-edge or profitability claim
+- start-labelled bar high, low, close, and volume available at source timestamp: REJECTED
+- completed decision time for one-minute start-labelled bar: SOURCE TIMESTAMP PLUS ONE MINUTE
+- explicit file with missing timestamp semantics: FAIL CLOSED
+- irregular certified session cadence: FAIL CLOSED
+- source path outside certified root: FAIL CLOSED
+- source symlink component: FAIL CLOSED
+- source SHA mismatch: FAIL CLOSED
+- source incomplete session: FAIL CLOSED
+- source symbol or session mismatch: FAIL CLOSED
+- future mutation changes current features: FAIL CLOSED BY TEST
+- same-bar target and stop: AMBIGUOUS AND CONSERVATIVELY LABELLED AS STOP
+- next-session gap satisfies intraday label: PROHIBITED
+- model imputer fitted outside development: PROHIBITED
+- candidate missing development imputation values: CANNOT REPRODUCE SOURCE LEAF
+- extracted candidate differs from source tree leaf: FAIL CLOSED
+- holdout fitted or validation-scored by discovery model: PROHIBITED
+- option profitability inferred from underlying labels: PROHIBITED
+- live candidate status: ABSENT
 
-## Focused validation
+## Runtime Proof Required After Merge
 
-Executed locally against the isolated implementation:
+No live runtime proof is authorized. Before any merge decision, run the current branch through all repository CI gates. After human merge, use a fresh isolated checkout and invoke the certified-source CLI against the exact local source-authority root and committed source manifest. Run LONG and SHORT discovery separately. Preserve output hashes and do not evaluate the locked holdout until a single candidate is frozen and explicitly approved for one-time holdout consumption.
 
-- `python -m compileall -q research scripts tests`
-- `PYTHONPATH=/tmp/ml_impl pytest -q`
+## What This PR Does Not Prove
 
-Result:
+This work does not prove structural edge, option profitability, executable Profit Factor, realistic fills, slippage tolerance, strict option WFA success, locked-holdout success, paper readiness, live readiness, or production strategy correctness. A positive underlying label result cannot be promoted until the frozen rule is independently ported to the strict option replay engine with real strike-selection and bid/ask path provenance.
 
-`9 passed`
+## Human Approval
 
-Covered behaviors:
-
-1. deterministic dataset hashes and explicit missing-option status
-2. duplicate timestamps fail closed
-3. future mutation changes labels but not features
-4. chronological whole-session split and holdout ordering
-5. holdout mutations do not change trained models, candidates, or validation metrics
-6. rule evaluation, negative controls, stability tests, oracle agreement, and holdout guard
-7. same-bar target/stop ambiguity is explicit and conservatively valued
-8. barrier labels never cross a trading-session boundary
-9. short-side barrier labels are directionally correct
-
-## Truthful final verdict
-
-This branch implements a credible research discovery core, not a finished profitable strategy.
-
-The next evidence step is to run the CLI on the user's actual historical underlying data. Any extracted candidate that survives development and validation must then be frozen and ported to the existing strict option replay engine using real option quote paths before any executable-edge claim is allowed.
+Human approval is required for merge, actual-corpus execution that consumes substantial local data, candidate selection, any locked-holdout evaluation, strict option-replay integration, shadow integration, and every production or live decision. This PR must remain draft and must not be auto-merged.
