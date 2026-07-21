@@ -1,0 +1,4424 @@
+{
+  "buy_and_hold": {
+    "CAGR": 0.10581614014651053,
+    "Sharpe": 0.7081979932569158,
+    "annualized_volatility": 0.1650006690217362,
+    "maximum_drawdown": -0.38439852452742107,
+    "total_return": 3.9939984392769157
+  },
+  "cash_risk_free": "NOT_EVALUATED_NO_FROZEN_RISK_FREE_SERIES_FOUND",
+  "cost_formula": {
+    "base_total_round_trip_drag_bps": 6.0,
+    "formula": "(spread_bps_round_trip + slippage_bps_round_trip + fees_taxes_bps_round_trip + adverse_entry_slippage_bps) / 10000",
+    "unit": "decimal return drag per completed round trip",
+    "warning": "Index-proxy costs are diagnostic only and are not futures, ETF, or options executable cost evidence."
+  },
+  "cost_model_declared_before_result_review": [
+    {
+      "adverse_entry_slippage_bps": 0.0,
+      "fees_taxes_bps_round_trip": 0.0,
+      "name": "zero_cost_diagnostic",
+      "slippage_bps_round_trip": 0.0,
+      "spread_bps_round_trip": 0.0
+    },
+    {
+      "adverse_entry_slippage_bps": 0.0,
+      "fees_taxes_bps_round_trip": 3.0,
+      "name": "base_index_proxy_costs",
+      "slippage_bps_round_trip": 2.0,
+      "spread_bps_round_trip": 1.0
+    },
+    {
+      "adverse_entry_slippage_bps": 0.0,
+      "fees_taxes_bps_round_trip": 4.5,
+      "name": "cost_stress_1_5x",
+      "slippage_bps_round_trip": 3.0,
+      "spread_bps_round_trip": 1.5
+    },
+    {
+      "adverse_entry_slippage_bps": 0.0,
+      "fees_taxes_bps_round_trip": 6.0,
+      "name": "cost_stress_2x",
+      "slippage_bps_round_trip": 4.0,
+      "spread_bps_round_trip": 2.0
+    },
+    {
+      "adverse_entry_slippage_bps": 5.0,
+      "fees_taxes_bps_round_trip": 3.0,
+      "name": "adverse_next_open_slippage_stress",
+      "slippage_bps_round_trip": 2.0,
+      "spread_bps_round_trip": 1.0
+    }
+  ],
+  "cost_model_name_contract": "INDEX_PROXY_DIAGNOSTIC_COST_MODEL",
+  "data_contract": {
+    "auto_adjust": true,
+    "exclusive_end_date": "2026-01-01",
+    "frozen_input_path": "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv",
+    "frozen_input_sha256": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "independent_reconciliation": "NOT_AVAILABLE_IN_REPOSITORY",
+    "qc": {
+      "duplicate_dates": 0,
+      "end": "2025-12-31",
+      "large_calendar_gaps_gt_5d": 1,
+      "non_positive_ohlc_rows": 0,
+      "rows": 3929,
+      "start": "2010-01-04",
+      "status": "PASS"
+    },
+    "raw_sha256": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "source": "yfinance_secondary_smoke_test",
+    "source_status": "SECONDARY_SMOKE_SOURCE_ONLY",
+    "start_date": "2010-01-01",
+    "ticker": "^NSEI",
+    "timezone": "Yahoo Finance exchange daily calendar, normalized to naive session dates",
+    "use_through_date": "2025-12-31",
+    "yfinance_version": "1.1.0"
+  },
+  "generated_at_utc": "2026-07-21T13:30:09.981375+00:00",
+  "ledger_path": "runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv",
+  "metrics": {
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|adverse_next_open_slippage_stress|trend_filter": {
+      "CAGR": -0.008098051277713902,
+      "Calmar": -0.023603147921821967,
+      "Sharpe": -0.022250830460189653,
+      "Sortino": -0.004461114513471812,
+      "annualized_volatility": 0.102415216443521,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.01811602744548599,
+      "average_win": 0.009698319016491885,
+      "completed_trades": 286,
+      "expectancy_per_trade": -0.00012422990889190958,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0012910591641159335,
+          "net_return_sum": -0.03744071575936207,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -0.000567835906519313,
+          "net_return_sum": -0.03236664667160084,
+          "trades": 57,
+          "win_rate": 0.5964912280701754
+        },
+        "2016_2018": {
+          "expectancy": -0.00022834864959364647,
+          "net_return_sum": -0.013015873026837849,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2019_2021": {
+          "expectancy": 0.0006041817427600199,
+          "net_return_sum": 0.039271813279401296,
+          "trades": 65,
+          "win_rate": 0.7230769230769231
+        },
+        "2022_2024": {
+          "expectancy": -2.2533171016039027e-05,
+          "net_return_sum": -0.0014195897740104588,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0006294172006215929,
+          "net_return_sum": 0.009441258009323893,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.34309200215734614,
+      "median_holding_period": 3.0,
+      "median_trade": 0.00430629185731023,
+      "net_profit_factor": 0.9805818497974064,
+      "payoff_ratio": 0.5353446855650704,
+      "win_rate": 0.6468531468531469,
+      "worst_five_trade_sequence": -0.3001738695260397,
+      "worst_trade": -0.30450096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.025352483329055094,
+        "2011": -0.08750505489167795,
+        "2012": 0.07541682246137095,
+        "2013": -0.05573990474678856,
+        "2014": 0.07721201379834683,
+        "2015": -0.05383875572315912,
+        "2016": 0.0219577763857684,
+        "2017": 0.05661196007865128,
+        "2018": -0.09158560949125755,
+        "2019": 0.0440139376509673,
+        "2020": -0.23581338585949432,
+        "2021": 0.23107126148792834,
+        "2022": -0.04923341965201273,
+        "2023": 0.06100717478510304,
+        "2024": -0.013193344907100762,
+        "2025": 0.009441258009323893
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs|no_trend_filter": {
+      "CAGR": 0.03317904313258113,
+      "Calmar": 0.10914124171247554,
+      "Sharpe": 0.3388401550861501,
+      "Sortino": 0.08717441327321193,
+      "annualized_volatility": 0.12386889843299237,
+      "average_holding_period": 4.3725,
+      "average_loss": -0.01987379741447757,
+      "average_win": 0.012111005377627916,
+      "completed_trades": 400,
+      "expectancy_per_trade": 0.0016359824632133679,
+      "exposure_percentage": 44.51514380249427,
+      "five_best_trades_pnl_contribution_pct": 42.133355324663526,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": 0.0012747184120372877,
+          "net_return_sum": 0.09815331772687115,
+          "trades": 77,
+          "win_rate": 0.6753246753246753
+        },
+        "2013_2015": {
+          "expectancy": 0.0004392953390520646,
+          "net_return_sum": 0.03250785508985278,
+          "trades": 74,
+          "win_rate": 0.6351351351351351
+        },
+        "2016_2018": {
+          "expectancy": 0.0017561112956738598,
+          "net_return_sum": 0.12995223587986562,
+          "trades": 74,
+          "win_rate": 0.6621621621621622
+        },
+        "2019_2021": {
+          "expectancy": 0.003990085883654269,
+          "net_return_sum": 0.31122669892503296,
+          "trades": 78,
+          "win_rate": 0.7435897435897436
+        },
+        "2022_2024": {
+          "expectancy": 0.0006835355125611938,
+          "net_return_sum": 0.049898092416967146,
+          "trades": 73,
+          "win_rate": 0.6712328767123288
+        },
+        "2025_2027": {
+          "expectancy": 0.0013606160519482313,
+          "net_return_sum": 0.03265478524675755,
+          "trades": 24,
+          "win_rate": 0.5833333333333334
+        }
+      },
+      "gross_profit_factor": 1.3540459634078774,
+      "largest_year_pnl_contribution_pct": 36.05771358092998,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.30400096802992993,
+      "median_holding_period": 3.0,
+      "median_trade": 0.005554991759070749,
+      "net_profit_factor": 1.2513543937128568,
+      "payoff_ratio": 0.6093956341129526,
+      "win_rate": 0.6725,
+      "worst_five_trade_sequence": -0.28076594203635996,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": 0.06464595660804852,
+        "2011": -0.07206007840874892,
+        "2012": 0.10556743952757161,
+        "2013": 0.04431767839509037,
+        "2014": 0.08921201379834684,
+        "2015": -0.10102183710358437,
+        "2016": 0.09417704836566132,
+        "2017": 0.07639069316059605,
+        "2018": -0.04061550564639166,
+        "2019": 0.14078091055604214,
+        "2020": -0.07662547311893758,
+        "2021": 0.24707126148792835,
+        "2022": -0.025442910300357943,
+        "2023": 0.07853434762442595,
+        "2024": -0.0031933449071007564,
+        "2025": 0.03265478524675755
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 25,
+        "2011": 28,
+        "2012": 24,
+        "2013": 25,
+        "2014": 24,
+        "2015": 25,
+        "2016": 27,
+        "2017": 26,
+        "2018": 21,
+        "2019": 25,
+        "2020": 21,
+        "2021": 32,
+        "2022": 25,
+        "2023": 28,
+        "2024": 20,
+        "2025": 24
+      }
+    },
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs|trend_filter": {
+      "CAGR": 0.0008182335867876755,
+      "Calmar": 0.0026071480828215527,
+      "Sharpe": 0.06729735365607857,
+      "Sortino": 0.013308573016384022,
+      "annualized_volatility": 0.10242565937526527,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.018351274977684302,
+      "average_win": 0.009987004861863978,
+      "completed_trades": 286,
+      "expectancy_per_trade": 0.00037577009110809024,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 1159.4623841611146,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0007910591641159353,
+          "net_return_sum": -0.022940715759362126,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -6.783590651931369e-05,
+          "net_return_sum": -0.0038666466716008804,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": 0.0002716513504063533,
+          "net_return_sum": 0.015484126973162139,
+          "trades": 57,
+          "win_rate": 0.6491228070175439
+        },
+        "2019_2021": {
+          "expectancy": 0.0011041817427600207,
+          "net_return_sum": 0.07177181327940134,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": 0.0004774668289839611,
+          "net_return_sum": 0.03008041022598955,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0011294172006215933,
+          "net_return_sum": 0.0169412580093239,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 1876.9690110544545,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3138423905335491,
+      "median_holding_period": 3.0,
+      "median_trade": 0.0048062918573102305,
+      "net_profit_factor": 1.0603740438932123,
+      "payoff_ratio": 0.5442131336383152,
+      "win_rate": 0.6608391608391608,
+      "worst_five_trade_sequence": -0.2976738695260397,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.08541682246137094,
+        "2013": -0.045739904746788566,
+        "2014": 0.08921201379834684,
+        "2015": -0.047338755723159126,
+        "2016": 0.02995777638576841,
+        "2017": 0.0691119600786513,
+        "2018": -0.08358560949125755,
+        "2019": 0.054013937650967306,
+        "2020": -0.22931338585949432,
+        "2021": 0.24707126148792835,
+        "2022": -0.04073341965201273,
+        "2023": 0.07400717478510305,
+        "2024": -0.0031933449071007564,
+        "2025": 0.0169412580093239
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|cost_stress_1_5x|trend_filter": {
+      "CAGR": -0.004540574066341563,
+      "Calmar": -0.013711466030450882,
+      "Sharpe": 0.013571294663614907,
+      "Sortino": 0.0027116900718152613,
+      "annualized_volatility": 0.10241441165702293,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.018096712301494722,
+      "average_win": 0.0098459219150881,
+      "completed_trades": 286,
+      "expectancy_per_trade": 7.577009110809125e-05,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0010910591641159332,
+          "net_return_sum": -0.031640715759362066,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -0.000367835906519313,
+          "net_return_sum": -0.020966646671600843,
+          "trades": 57,
+          "win_rate": 0.6140350877192983
+        },
+        "2016_2018": {
+          "expectancy": -2.8348649593646127e-05,
+          "net_return_sum": -0.0016158730268378291,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2019_2021": {
+          "expectancy": 0.0008041817427600203,
+          "net_return_sum": 0.05227181327940132,
+          "trades": 65,
+          "win_rate": 0.7230769230769231
+        },
+        "2022_2024": {
+          "expectancy": 0.00017746682898396165,
+          "net_return_sum": 0.011180410225989583,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0008294172006215928,
+          "net_return_sum": 0.012441258009323893,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3311516110864954,
+      "median_holding_period": 3.0,
+      "median_trade": 0.0045062918573102306,
+      "net_profit_factor": 1.0119746867253476,
+      "payoff_ratio": 0.5440724122179288,
+      "win_rate": 0.6503496503496503,
+      "worst_five_trade_sequence": -0.2991738695260397,
+      "worst_trade": -0.3043009680299298,
+      "yearly_return_matrix": {
+        "2010": -0.02435248332905509,
+        "2011": -0.08670505489167796,
+        "2012": 0.07941682246137095,
+        "2013": -0.051739904746788565,
+        "2014": 0.08201201379834683,
+        "2015": -0.05123875572315912,
+        "2016": 0.02515777638576841,
+        "2017": 0.061611960078651294,
+        "2018": -0.08838560949125754,
+        "2019": 0.0480139376509673,
+        "2020": -0.23321338585949433,
+        "2021": 0.23747126148792835,
+        "2022": -0.04583341965201273,
+        "2023": 0.06620717478510305,
+        "2024": -0.009193344907100762,
+        "2025": 0.012441258009323896
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|cost_stress_2x|trend_filter": {
+      "CAGR": -0.009872285862442709,
+      "Calmar": -0.027882299607198152,
+      "Sharpe": -0.04016070507947189,
+      "Sortino": -0.008052129393270787,
+      "annualized_volatility": 0.10241810987882494,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.018216027445485998,
+      "average_win": 0.009598319016491885,
+      "completed_trades": 286,
+      "expectancy_per_trade": -0.0002242299088919089,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0013910591641159338,
+          "net_return_sum": -0.04034071575936208,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -0.0006678359065193128,
+          "net_return_sum": -0.03806664667160083,
+          "trades": 57,
+          "win_rate": 0.5964912280701754
+        },
+        "2016_2018": {
+          "expectancy": -0.0003283486495936458,
+          "net_return_sum": -0.01871587302683781,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2019_2021": {
+          "expectancy": 0.0005041817427600226,
+          "net_return_sum": 0.032771813279401464,
+          "trades": 65,
+          "win_rate": 0.7230769230769231
+        },
+        "2022_2024": {
+          "expectancy": -0.0001225331710160386,
+          "net_return_sum": -0.007719589774010431,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0005294172006215935,
+          "net_return_sum": 0.007941258009323902,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.35407000145332557,
+      "median_holding_period": 3.0,
+      "median_trade": 0.004206291857310231,
+      "net_profit_factor": 0.9651434397130431,
+      "payoff_ratio": 0.5269161481676613,
+      "win_rate": 0.6468531468531469,
+      "worst_five_trade_sequence": -0.3006738695260397,
+      "worst_trade": -0.30460096802992975,
+      "yearly_return_matrix": {
+        "2010": -0.02585248332905509,
+        "2011": -0.08790505489167796,
+        "2012": 0.07341682246137096,
+        "2013": -0.057739904746788556,
+        "2014": 0.07481201379834684,
+        "2015": -0.05513875572315912,
+        "2016": 0.02035777638576841,
+        "2017": 0.0541119600786513,
+        "2018": -0.09318560949125754,
+        "2019": 0.04201393765096731,
+        "2020": -0.2371133858594943,
+        "2021": 0.22787126148792836,
+        "2022": -0.05093341965201272,
+        "2023": 0.05840717478510306,
+        "2024": -0.015193344907100753,
+        "2025": 0.007941258009323902
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|NEXT_OPEN_EXECUTABLE|zero_cost_diagnostic|trend_filter": {
+      "CAGR": 0.011617655050580433,
+      "Calmar": 0.03829142380796353,
+      "Sharpe": 0.17463769249008962,
+      "Sortino": 0.03406356159635459,
+      "annualized_volatility": 0.10249296641114762,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.01852759522805066,
+      "average_win": 0.010373764778578369,
+      "completed_trades": 286,
+      "expectancy_per_trade": 0.0009757700911080908,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 76.72277480194477,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00019105916411593456,
+          "net_return_sum": -0.005540715759362103,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": 0.0005321640934806869,
+          "net_return_sum": 0.03033335332839915,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": 0.0008716513504063537,
+          "net_return_sum": 0.04968412697316216,
+          "trades": 57,
+          "win_rate": 0.6666666666666666
+        },
+        "2019_2021": {
+          "expectancy": 0.0017041817427600205,
+          "net_return_sum": 0.11077181327940133,
+          "trades": 65,
+          "win_rate": 0.7846153846153846
+        },
+        "2022_2024": {
+          "expectancy": 0.0010774668289839614,
+          "net_return_sum": 0.06788041022598956,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0017294172006215931,
+          "net_return_sum": 0.025941258009323898,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 131.27228383849385,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3034009680299298,
+      "median_holding_period": 3.0,
+      "median_trade": 0.00540629185731023,
+      "net_profit_factor": 1.1619614038956436,
+      "payoff_ratio": 0.5599088630170718,
+      "win_rate": 0.6748251748251748,
+      "worst_five_trade_sequence": -0.2946738695260397,
+      "worst_trade": -0.3034009680299298,
+      "yearly_return_matrix": {
+        "2010": -0.019852483329055093,
+        "2011": -0.08310505489167797,
+        "2012": 0.09741682246137096,
+        "2013": -0.03373990474678856,
+        "2014": 0.10361201379834684,
+        "2015": -0.039538755723159125,
+        "2016": 0.039557776385768406,
+        "2017": 0.0841119600786513,
+        "2018": -0.07398560949125754,
+        "2019": 0.0660139376509673,
+        "2020": -0.22151338585949432,
+        "2021": 0.26627126148792835,
+        "2022": -0.030533419652012728,
+        "2023": 0.08960717478510305,
+        "2024": 0.00880665509289924,
+        "2025": 0.025941258009323898
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|adverse_next_open_slippage_stress|trend_filter": {
+      "CAGR": -0.01564577327316352,
+      "Calmar": -0.040764694759412974,
+      "Sharpe": -0.09278638009378182,
+      "Sortino": -0.018343888005089327,
+      "annualized_volatility": 0.10505368715449905,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.019752750558313145,
+      "average_win": 0.00933354550698613,
+      "completed_trades": 286,
+      "expectancy_per_trade": -0.0005313870746013865,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.002180803803426375,
+          "net_return_sum": -0.06324331029936488,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2013_2015": {
+          "expectancy": -0.00023504697508060625,
+          "net_return_sum": -0.013397677579594557,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": -0.0002684428487179476,
+          "net_return_sum": -0.015301242376923013,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2019_2021": {
+          "expectancy": -0.0002747867170750612,
+          "net_return_sum": -0.017861136609878977,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": -0.0007101301056912564,
+          "net_return_sum": -0.044738196658549154,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.00017099067922093995,
+          "net_return_sum": 0.002564860188314099,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.089707098265539,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.3838069526952794,
+      "median_holding_period": 3.0,
+      "median_trade": 0.003813836574092389,
+      "net_profit_factor": 0.9206809131285715,
+      "payoff_ratio": 0.47251877552101285,
+      "win_rate": 0.6608391608391608,
+      "worst_five_trade_sequence": -0.3266215161288168,
+      "worst_trade": -0.31443769691860957,
+      "yearly_return_matrix": {
+        "2010": -0.03448469855306263,
+        "2011": -0.08860229332025552,
+        "2012": 0.05984368157395327,
+        "2013": -0.030794916425094,
+        "2014": 0.06622191127874918,
+        "2015": -0.04882467243324974,
+        "2016": 0.06433685406833839,
+        "2017": 0.011685539294011695,
+        "2018": -0.0913236357392731,
+        "2019": 0.013194783209514619,
+        "2020": -0.2477451886871921,
+        "2021": 0.2166892688677985,
+        "2022": -0.07118569115220691,
+        "2023": 0.06080489996547918,
+        "2024": -0.03435740547182141,
+        "2025": 0.002564860188314099
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 21,
+        "2020": 12,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|base_index_proxy_costs|trend_filter": {
+      "CAGR": -0.006793304676569467,
+      "Calmar": -0.01860254572921406,
+      "Sharpe": -0.005481737968901181,
+      "Sortino": -0.0010724617205789622,
+      "annualized_volatility": 0.10503090621516784,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.01987608798693012,
+      "average_win": 0.009684247747059557,
+      "completed_trades": 286,
+      "expectancy_per_trade": -3.1387074601386866e-05,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0016808038034263765,
+          "net_return_sum": -0.04874331029936492,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2013_2015": {
+          "expectancy": 0.0002649530249193931,
+          "net_return_sum": 0.015102322420405406,
+          "trades": 57,
+          "win_rate": 0.6491228070175439
+        },
+        "2016_2018": {
+          "expectancy": 0.00023155715128205247,
+          "net_return_sum": 0.013198757623076991,
+          "trades": 57,
+          "win_rate": 0.6666666666666666
+        },
+        "2019_2021": {
+          "expectancy": 0.0002252132829249384,
+          "net_return_sum": 0.014638863390120996,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": -0.00021013010569125647,
+          "net_return_sum": -0.013238196658549157,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0006709906792209403,
+          "net_return_sum": 0.010064860188314106,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.089707098265539,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.36518145287507797,
+      "median_holding_period": 3.0,
+      "median_trade": 0.00431383657409239,
+      "net_profit_factor": 0.99519539035736,
+      "payoff_ratio": 0.48723107652912423,
+      "win_rate": 0.6713286713286714,
+      "worst_five_trade_sequence": -0.3241215161288168,
+      "worst_trade": -0.31393769691860957,
+      "yearly_return_matrix": {
+        "2010": -0.03198469855306263,
+        "2011": -0.08660229332025554,
+        "2012": 0.06984368157395328,
+        "2013": -0.020794916425094005,
+        "2014": 0.0782219112787492,
+        "2015": -0.04232467243324975,
+        "2016": 0.0723368540683384,
+        "2017": 0.024185539294011692,
+        "2018": -0.08332363573927311,
+        "2019": 0.02369478320951463,
+        "2020": -0.2417451886871921,
+        "2021": 0.2326892688677985,
+        "2022": -0.06268569115220692,
+        "2023": 0.07380489996547918,
+        "2024": -0.024357405471821404,
+        "2025": 0.010064860188314106
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 21,
+        "2020": 12,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|cost_stress_1_5x|trend_filter": {
+      "CAGR": -0.012113761919909871,
+      "Calmar": -0.03218132373112061,
+      "Sharpe": -0.05787174316489865,
+      "Sortino": -0.011362487685324083,
+      "annualized_volatility": 0.10503971779842305,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.019966487859875853,
+      "average_win": 0.00943476253063984,
+      "completed_trades": 286,
+      "expectancy_per_trade": -0.0003313870746013859,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.001980803803426374,
+          "net_return_sum": -0.05744331029936485,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2013_2015": {
+          "expectancy": -3.5046975080606e-05,
+          "net_return_sum": -0.0019976775795945423,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": -6.844284871794763e-05,
+          "net_return_sum": -0.0039012423769230146,
+          "trades": 57,
+          "win_rate": 0.6666666666666666
+        },
+        "2019_2021": {
+          "expectancy": -7.47867170750613e-05,
+          "net_return_sum": -0.004861136609878984,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": -0.0005101301056912559,
+          "net_return_sum": -0.03213819665854912,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0003709906792209405,
+          "net_return_sum": 0.005564860188314107,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.089707098265539,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.37642211430213435,
+      "median_holding_period": 3.0,
+      "median_trade": 0.00401383657409239,
+      "net_profit_factor": 0.9500338008466269,
+      "payoff_ratio": 0.47252990094465736,
+      "win_rate": 0.6678321678321678,
+      "worst_five_trade_sequence": -0.3256215161288168,
+      "worst_trade": -0.3142376969186096,
+      "yearly_return_matrix": {
+        "2010": -0.033484698553062624,
+        "2011": -0.08780229332025552,
+        "2012": 0.06384368157395327,
+        "2013": -0.026794916425094004,
+        "2014": 0.0710219112787492,
+        "2015": -0.04622467243324976,
+        "2016": 0.0675368540683384,
+        "2017": 0.016685539294011696,
+        "2018": -0.0881236357392731,
+        "2019": 0.01739478320951462,
+        "2020": -0.2453451886871921,
+        "2021": 0.2230892688677985,
+        "2022": -0.06778569115220692,
+        "2023": 0.06600489996547919,
+        "2024": -0.0303574054718214,
+        "2025": 0.0055648601883141035
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 21,
+        "2020": 12,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|cost_stress_2x|trend_filter": {
+      "CAGR": -0.017407305163408382,
+      "Calmar": -0.0442383913702709,
+      "Sharpe": -0.11023766949021355,
+      "Sortino": -0.021869017617445884,
+      "annualized_volatility": 0.1050630994662924,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.01965069647617525,
+      "average_win": 0.009282933783665839,
+      "completed_trades": 286,
+      "expectancy_per_trade": -0.0006313870746013859,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.002280803803426375,
+          "net_return_sum": -0.06614331029936488,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2013_2015": {
+          "expectancy": -0.00033504697508060597,
+          "net_return_sum": -0.01909767757959454,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": -0.0003684428487179472,
+          "net_return_sum": -0.02100124237692299,
+          "trades": 57,
+          "win_rate": 0.6140350877192983
+        },
+        "2019_2021": {
+          "expectancy": -0.0003747867170750591,
+          "net_return_sum": -0.02436113660987884,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": -0.0008101301056912558,
+          "net_return_sum": -0.05103819665854912,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 7.099067922094054e-05,
+          "net_return_sum": 0.0010648601883141082,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.089707098265539,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.39348865598911553,
+      "median_holding_period": 3.0,
+      "median_trade": 0.00371383657409239,
+      "net_profit_factor": 0.9062313427908317,
+      "payoff_ratio": 0.47239718932713576,
+      "win_rate": 0.6573426573426573,
+      "worst_five_trade_sequence": -0.3271215161288168,
+      "worst_trade": -0.31453769691860956,
+      "yearly_return_matrix": {
+        "2010": -0.034984698553062625,
+        "2011": -0.08900229332025553,
+        "2012": 0.05784368157395328,
+        "2013": -0.032794916425093995,
+        "2014": 0.0638219112787492,
+        "2015": -0.050124672433249744,
+        "2016": 0.0627368540683384,
+        "2017": 0.009185539294011703,
+        "2018": -0.09292363573927309,
+        "2019": 0.011094783209514632,
+        "2020": -0.2489451886871921,
+        "2021": 0.2134892688677985,
+        "2022": -0.07288569115220692,
+        "2023": 0.05820489996547919,
+        "2024": -0.0363574054718214,
+        "2025": 0.0010648601883141082
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 21,
+        "2020": 12,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "SIMPLE_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|zero_cost_diagnostic|trend_filter": {
+      "CAGR": 0.003928867145650994,
+      "Calmar": 0.01148458062039771,
+      "Sharpe": 0.09928331508057502,
+      "Sortino": 0.01922270099649142,
+      "annualized_volatility": 0.10505700190510413,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.01992115706184234,
+      "average_win": 0.010130505586111059,
+      "completed_trades": 286,
+      "expectancy_per_trade": 0.0005686129253986138,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 245.80193806678423,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.001080803803426375,
+          "net_return_sum": -0.03134331029936488,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2013_2015": {
+          "expectancy": 0.0008649530249193937,
+          "net_return_sum": 0.04930232242040544,
+          "trades": 57,
+          "win_rate": 0.6491228070175439
+        },
+        "2016_2018": {
+          "expectancy": 0.0008315571512820526,
+          "net_return_sum": 0.04739875762307699,
+          "trades": 57,
+          "win_rate": 0.6842105263157895
+        },
+        "2019_2021": {
+          "expectancy": 0.0008252132829249389,
+          "net_return_sum": 0.05363886339012103,
+          "trades": 65,
+          "win_rate": 0.7538461538461538
+        },
+        "2022_2024": {
+          "expectancy": 0.0003898698943087438,
+          "net_return_sum": 0.02456180334145086,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0012709906792209402,
+          "net_return_sum": 0.019064860188314103,
+          "trades": 15,
+          "win_rate": 0.6
+        }
+      },
+      "gross_profit_factor": 1.089707098265539,
+      "largest_year_pnl_contribution_pct": 389.3015289428291,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.3420993134632144,
+      "median_holding_period": 3.0,
+      "median_trade": 0.0049138365740923895,
+      "net_profit_factor": 1.089707098265539,
+      "payoff_ratio": 0.508529979190585,
+      "win_rate": 0.6818181818181818,
+      "worst_five_trade_sequence": -0.3211215161288168,
+      "worst_trade": -0.3133376969186096,
+      "yearly_return_matrix": {
+        "2010": -0.028984698553062627,
+        "2011": -0.08420229332025553,
+        "2012": 0.08184368157395328,
+        "2013": -0.008794916425094002,
+        "2014": 0.09262191127874919,
+        "2015": -0.03452467243324975,
+        "2016": 0.0819368540683384,
+        "2017": 0.039185539294011695,
+        "2018": -0.0737236357392731,
+        "2019": 0.036294783209514625,
+        "2020": -0.2345451886871921,
+        "2021": 0.2518892688677985,
+        "2022": -0.052485691152206915,
+        "2023": 0.08940489996547918,
+        "2024": -0.012357405471821403,
+        "2025": 0.019064860188314103
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 21,
+        "2020": 12,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|adverse_next_open_slippage_stress|trend_filter": {
+      "CAGR": 5.1483969066401514e-05,
+      "Calmar": 0.00019589321843477392,
+      "Sharpe": 0.050236822772811274,
+      "Sortino": 0.007019417776384709,
+      "annualized_volatility": 0.08966311672524734,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.025787496916580464,
+      "average_win": 0.014516614770050939,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.000552985524288883,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 21428.842588482978,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.006112972204083273,
+          "net_return_sum": -0.07946863865308255,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.001612845976056411,
+          "net_return_sum": 0.045159687329579506,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.0017063209926015583,
+          "net_return_sum": 0.0409517038224374,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.001666216625407867,
+          "net_return_sum": -0.046654065511420276,
+          "trades": 28,
+          "win_rate": 0.6785714285714286
+        },
+        "2022_2024": {
+          "expectancy": 0.002189849441450836,
+          "net_return_sum": 0.059125934919172576,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.007302077096857364,
+          "net_return_sum": 0.051114539678001544,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 14277.800615997447,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.2628164950158497,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007178940755241493,
+      "net_profit_factor": 1.061895007255111,
+      "payoff_ratio": 0.5629322930027094,
+      "win_rate": 0.6535433070866141,
+      "worst_five_trade_sequence": -0.2089029750185412,
+      "worst_trade": -0.24421930702201067,
+      "yearly_return_matrix": {
+        "2010": 0.023088781333764987,
+        "2011": -0.1430250706622516,
+        "2012": 0.04046765067540406,
+        "2013": -0.018148961635112246,
+        "2014": 0.112982817313246,
+        "2015": -0.04967416834855427,
+        "2016": 0.019380792557651745,
+        "2017": 0.049904133437026384,
+        "2018": -0.02833322217224075,
+        "2019": 0.059009098948254464,
+        "2020": -0.13716702068915837,
+        "2021": 0.03150385622948361,
+        "2022": -0.06807318104431456,
+        "2023": 0.009621801720146622,
+        "2024": 0.1175773142433405,
+        "2025": 0.051114539678001544
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs|no_trend_filter": {
+      "CAGR": 0.012880095221660115,
+      "Calmar": 0.052848070918308045,
+      "Sharpe": 0.1836261927096427,
+      "Sortino": 0.03234869936853639,
+      "annualized_volatility": 0.10243937813048812,
+      "average_holding_period": 10.292397660818713,
+      "average_loss": -0.02554419003681486,
+      "average_win": 0.01644983612372925,
+      "completed_trades": 171,
+      "expectancy_per_trade": 0.0017150901024856966,
+      "exposure_percentage": 44.79511326037159,
+      "five_best_trades_pnl_contribution_pct": 106.67323916459064,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.004394934079455563,
+          "net_return_sum": -0.12745308830421134,
+          "trades": 29,
+          "win_rate": 0.5862068965517241
+        },
+        "2013_2015": {
+          "expectancy": 0.0035296108457080833,
+          "net_return_sum": 0.127065990445491,
+          "trades": 36,
+          "win_rate": 0.6111111111111112
+        },
+        "2016_2018": {
+          "expectancy": 0.0035670959376395716,
+          "net_return_sum": 0.11771416594210586,
+          "trades": 33,
+          "win_rate": 0.7272727272727273
+        },
+        "2019_2021": {
+          "expectancy": 0.0033636697972389555,
+          "net_return_sum": 0.11100110330888553,
+          "trades": 33,
+          "win_rate": 0.7272727272727273
+        },
+        "2022_2024": {
+          "expectancy": 0.0012707454715273777,
+          "net_return_sum": 0.03812236414582133,
+          "trades": 30,
+          "win_rate": 0.5666666666666667
+        },
+        "2025_2027": {
+          "expectancy": 0.002682987198696185,
+          "net_return_sum": 0.02682987198696185,
+          "trades": 10,
+          "win_rate": 0.7
+        }
+      },
+      "gross_profit_factor": 1.2643789124311635,
+      "largest_year_pnl_contribution_pct": 59.88463176991399,
+      "longest_losing_sequence": 7,
+      "maximum_drawdown": -0.24371930702201072,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007543021544697815,
+      "net_profit_factor": 1.1913549337457774,
+      "payoff_ratio": 0.6439756398625823,
+      "win_rate": 0.6491228070175439,
+      "worst_five_trade_sequence": -0.20640297501854118,
+      "worst_trade": -0.24371930702201067,
+      "yearly_return_matrix": {
+        "2010": -0.019283829572381436,
+        "2011": -0.19857752592597344,
+        "2012": 0.09040826719414352,
+        "2013": 0.06751520262305558,
+        "2014": 0.118482817313246,
+        "2015": -0.05893202949081058,
+        "2016": 0.0578192595510196,
+        "2017": 0.05490413343702639,
+        "2018": 0.00499077295405986,
+        "2019": 0.13597729069547274,
+        "2020": -0.061480043616070824,
+        "2021": 0.0365038562294836,
+        "2022": -0.09832394862107853,
+        "2023": 0.0133689985235594,
+        "2024": 0.1230773142433405,
+        "2025": 0.02682987198696185
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 9,
+        "2011": 10,
+        "2012": 10,
+        "2013": 13,
+        "2014": 11,
+        "2015": 12,
+        "2016": 12,
+        "2017": 10,
+        "2018": 11,
+        "2019": 13,
+        "2020": 10,
+        "2021": 10,
+        "2022": 10,
+        "2023": 9,
+        "2024": 11,
+        "2025": 10
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs|trend_filter": {
+      "CAGR": 0.004032464906842392,
+      "Calmar": 0.015659564238364093,
+      "Sharpe": 0.09562246018415801,
+      "Sortino": 0.013274385056664433,
+      "annualized_volatility": 0.08969840502654201,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.0258772796872998,
+      "average_win": 0.014838716525459286,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0010529855242888827,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 269.2799296131961,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.005612972204083275,
+          "net_return_sum": -0.07296863865308258,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.002112845976056411,
+          "net_return_sum": 0.059159687329579505,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.002206320992601558,
+          "net_return_sum": 0.0529517038224374,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0011662166254078666,
+          "net_return_sum": -0.03265406551142026,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2022_2024": {
+          "expectancy": 0.002689849441450835,
+          "net_return_sum": 0.07262593491917255,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.007802077096857362,
+          "net_return_sum": 0.054614539678001534,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 185.18745660263073,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.25750811743300794,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007678940755241493,
+      "net_profit_factor": 1.1201818946794408,
+      "payoff_ratio": 0.5734264460859043,
+      "win_rate": 0.6614173228346457,
+      "worst_five_trade_sequence": -0.20640297501854118,
+      "worst_trade": -0.24371930702201067,
+      "yearly_return_matrix": {
+        "2010": 0.02458878133376499,
+        "2011": -0.1420250706622516,
+        "2012": 0.04446765067540406,
+        "2013": -0.013148961635112255,
+        "2014": 0.118482817313246,
+        "2015": -0.046174168348554284,
+        "2016": 0.02188079255765174,
+        "2017": 0.05490413343702639,
+        "2018": -0.023833222172240747,
+        "2019": 0.06400909894825446,
+        "2020": -0.13316702068915837,
+        "2021": 0.0365038562294836,
+        "2022": -0.06407318104431457,
+        "2023": 0.013621801720146626,
+        "2024": 0.1230773142433405,
+        "2025": 0.05461453967800155
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|cost_stress_1_5x|trend_filter": {
+      "CAGR": 0.0016422178690034261,
+      "Calmar": 0.006299326209698159,
+      "Sharpe": 0.06839737392247792,
+      "Sortino": 0.009558152505622494,
+      "annualized_volatility": 0.08967459678724125,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.025587496916580455,
+      "average_win": 0.014716614770050946,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0007529855242888821,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 667.5879629766365,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00591297220408327,
+          "net_return_sum": -0.07686863865308251,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.0018128459760564082,
+          "net_return_sum": 0.05075968732957943,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.0019063209926015584,
+          "net_return_sum": 0.0457517038224374,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.001466216625407871,
+          "net_return_sum": -0.041054065511420386,
+          "trades": 28,
+          "win_rate": 0.6785714285714286
+        },
+        "2022_2024": {
+          "expectancy": 0.002389849441450836,
+          "net_return_sum": 0.06452593491917256,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.007502077096857364,
+          "net_return_sum": 0.05251453967800155,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 450.5759543041573,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.2606973848211165,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007378940755241493,
+      "net_profit_factor": 1.0849395328937905,
+      "payoff_ratio": 0.5751486680400817,
+      "win_rate": 0.6535433070866141,
+      "worst_five_trade_sequence": -0.20790297501854124,
+      "worst_trade": -0.2440193070220107,
+      "yearly_return_matrix": {
+        "2010": 0.023688781333764987,
+        "2011": -0.14262507066225158,
+        "2012": 0.042067650675404064,
+        "2013": -0.016148961635112254,
+        "2014": 0.11518281731324599,
+        "2015": -0.048274168348554275,
+        "2016": 0.02038079255765174,
+        "2017": 0.051904133437026385,
+        "2018": -0.026533222172240745,
+        "2019": 0.061009098948254466,
+        "2020": -0.13556702068915844,
+        "2021": 0.033503856229483604,
+        "2022": -0.06647318104431456,
+        "2023": 0.011221801720146625,
+        "2024": 0.1197773142433405,
+        "2025": 0.05251453967800154
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|cost_stress_2x|trend_filter": {
+      "CAGR": -0.0007430547285178779,
+      "Calmar": -0.00281594591296093,
+      "Sharpe": 0.04115419812647821,
+      "Sortino": 0.005750050411766697,
+      "annualized_volatility": 0.08965869486837569,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.025887496916580467,
+      "average_win": 0.014416614770050936,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0004529855242888826,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.006212972204083274,
+          "net_return_sum": -0.08076863865308256,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.0015128459760564092,
+          "net_return_sum": 0.042359687329579454,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.0016063209926015572,
+          "net_return_sum": 0.038551703822437375,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0017662166254078673,
+          "net_return_sum": -0.049454065511420287,
+          "trades": 28,
+          "win_rate": 0.6785714285714286
+        },
+        "2022_2024": {
+          "expectancy": 0.002089849441450836,
+          "net_return_sum": 0.05642593491917257,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.007202077096857364,
+          "net_return_sum": 0.050414539678001545,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.26387393489975297,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007078940755241493,
+      "net_profit_factor": 1.0505062713988818,
+      "payoff_ratio": 0.5568948908620578,
+      "win_rate": 0.6535433070866141,
+      "worst_five_trade_sequence": -0.20940297501854122,
+      "worst_trade": -0.24431930702201068,
+      "yearly_return_matrix": {
+        "2010": 0.02278878133376499,
+        "2011": -0.1432250706622516,
+        "2012": 0.039667650675404065,
+        "2013": -0.019148961635112247,
+        "2014": 0.11188281731324601,
+        "2015": -0.05037416834855428,
+        "2016": 0.018880792557651745,
+        "2017": 0.04890413343702639,
+        "2018": -0.029233222172240753,
+        "2019": 0.05800909894825447,
+        "2020": -0.1379670206891584,
+        "2021": 0.03050385622948361,
+        "2022": -0.06887318104431456,
+        "2023": 0.008821801720146627,
+        "2024": 0.11647731424334051,
+        "2025": 0.050414539678001545
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|NEXT_OPEN_EXECUTABLE|zero_cost_diagnostic|trend_filter": {
+      "CAGR": 0.008827917819038023,
+      "Calmar": 0.035158206724734284,
+      "Sharpe": 0.14998970311782936,
+      "Sortino": 0.020692772245869996,
+      "annualized_volatility": 0.08976971321499945,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.025888624977188808,
+      "average_win": 0.015261781301489624,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0016529855242888828,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 120.59964860873313,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.005012972204083272,
+          "net_return_sum": -0.06516863865308253,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.00271284597605641,
+          "net_return_sum": 0.07595968732957947,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.0028063209926015575,
+          "net_return_sum": 0.06735170382243738,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0005662166254078686,
+          "net_return_sum": -0.015854065511420323,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2022_2024": {
+          "expectancy": 0.0032898494414508356,
+          "net_return_sum": 0.08882593491917257,
+          "trades": 27,
+          "win_rate": 0.6296296296296297
+        },
+        "2025_2027": {
+          "expectancy": 0.008402077096857363,
+          "net_return_sum": 0.05881453967800154,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 85.9448587630568,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.25109124274041716,
+      "median_holding_period": 8.0,
+      "median_trade": 0.008278940755241493,
+      "net_profit_factor": 1.1930698666100712,
+      "payoff_ratio": 0.5895168752661528,
+      "win_rate": 0.6692913385826772,
+      "worst_five_trade_sequence": -0.2034029750185412,
+      "worst_trade": -0.24311930702201068,
+      "yearly_return_matrix": {
+        "2010": 0.026388781333764988,
+        "2011": -0.14082507066225158,
+        "2012": 0.04926765067540406,
+        "2013": -0.00714896163511225,
+        "2014": 0.125082817313246,
+        "2015": -0.041974168348554275,
+        "2016": 0.024880792557651743,
+        "2017": 0.060904133437026386,
+        "2018": -0.01843322217224075,
+        "2019": 0.07000909894825447,
+        "2020": -0.1283670206891584,
+        "2021": 0.042503856229483605,
+        "2022": -0.05927318104431456,
+        "2023": 0.018421801720146624,
+        "2024": 0.1296773142433405,
+        "2025": 0.05881453967800154
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|adverse_next_open_slippage_stress|trend_filter": {
+      "CAGR": -0.009723495707053886,
+      "Calmar": -0.031387102906460525,
+      "Sharpe": -0.060710121954570644,
+      "Sortino": -0.008788148519974014,
+      "annualized_volatility": 0.09039867688022854,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.024012588371737573,
+      "average_win": 0.014481334304046902,
+      "completed_trades": 127,
+      "expectancy_per_trade": -0.0006737533635847748,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.007884314603713085,
+          "net_return_sum": -0.10249608984827009,
+          "trades": 13,
+          "win_rate": 0.46153846153846156
+        },
+        "2013_2015": {
+          "expectancy": 0.0018467798690880984,
+          "net_return_sum": 0.051709836334466755,
+          "trades": 28,
+          "win_rate": 0.5714285714285714
+        },
+        "2016_2018": {
+          "expectancy": 0.0004059575661506896,
+          "net_return_sum": 0.00974298158761655,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0014699488679700797,
+          "net_return_sum": -0.04115856830316223,
+          "trades": 28,
+          "win_rate": 0.6428571428571429
+        },
+        "2022_2024": {
+          "expectancy": -0.0015008819407667348,
+          "net_return_sum": -0.04052381240070184,
+          "trades": 27,
+          "win_rate": 0.5555555555555556
+        },
+        "2025_2027": {
+          "expectancy": 0.005308425064969224,
+          "net_return_sum": 0.03715897545478457,
+          "trades": 7,
+          "win_rate": 0.7142857142857143
+        }
+      },
+      "gross_profit_factor": 1.047120994315887,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.309792711230206,
+      "median_holding_period": 8.0,
+      "median_trade": 0.006612060703818357,
+      "net_profit_factor": 0.928731816953163,
+      "payoff_ratio": 0.6030726084111449,
+      "win_rate": 0.6062992125984252,
+      "worst_five_trade_sequence": -0.21912019543102726,
+      "worst_trade": -0.24466202673406567,
+      "yearly_return_matrix": {
+        "2010": 0.017523844148535663,
+        "2011": -0.14291445005475126,
+        "2012": 0.022894516057945485,
+        "2013": -0.0015744959688277355,
+        "2014": 0.10036181326141402,
+        "2015": -0.04707748095811955,
+        "2016": 0.007204990057510914,
+        "2017": 0.051316976092799844,
+        "2018": -0.04877898456269423,
+        "2019": 0.022198093799001402,
+        "2020": -0.12044315063954253,
+        "2021": 0.05708648853737886,
+        "2022": -0.10183887902145282,
+        "2023": 0.004153646705900488,
+        "2024": 0.057161419914850464,
+        "2025": 0.03715897545478457
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|base_index_proxy_costs|trend_filter": {
+      "CAGR": -0.005776499578349248,
+      "Calmar": -0.019534808186674104,
+      "Sharpe": -0.015659653681346978,
+      "Sortino": -0.0022231278666419918,
+      "annualized_volatility": 0.09038020046175127,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.025022559903573983,
+      "average_win": 0.014424920478658884,
+      "completed_trades": 127,
+      "expectancy_per_trade": -0.00017375336358477472,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.007384314603713088,
+          "net_return_sum": -0.09599608984827014,
+          "trades": 13,
+          "win_rate": 0.46153846153846156
+        },
+        "2013_2015": {
+          "expectancy": 0.002346779869088099,
+          "net_return_sum": 0.06570983633446677,
+          "trades": 28,
+          "win_rate": 0.5714285714285714
+        },
+        "2016_2018": {
+          "expectancy": 0.0009059575661506895,
+          "net_return_sum": 0.021742981587616547,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0009699488679700795,
+          "net_return_sum": -0.027158568303162225,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2022_2024": {
+          "expectancy": -0.0010008819407667353,
+          "net_return_sum": -0.02702381240070185,
+          "trades": 27,
+          "win_rate": 0.5555555555555556
+        },
+        "2025_2027": {
+          "expectancy": 0.005808425064969224,
+          "net_return_sum": 0.04065897545478457,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.047120994315887,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.2957029075048586,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007112060703818358,
+      "net_profit_factor": 0.9812367810689321,
+      "payoff_ratio": 0.5764766088779976,
+      "win_rate": 0.6299212598425197,
+      "worst_five_trade_sequence": -0.21662019543102726,
+      "worst_trade": -0.24416202673406567,
+      "yearly_return_matrix": {
+        "2010": 0.019023844148535664,
+        "2011": -0.14191445005475126,
+        "2012": 0.02689451605794549,
+        "2013": 0.003425504031172255,
+        "2014": 0.10586181326141403,
+        "2015": -0.04357748095811956,
+        "2016": 0.00970499005751091,
+        "2017": 0.05631697609279985,
+        "2018": -0.04427898456269423,
+        "2019": 0.027198093799001406,
+        "2020": -0.11644315063954254,
+        "2021": 0.062086488537378866,
+        "2022": -0.09783887902145282,
+        "2023": 0.008153646705900491,
+        "2024": 0.06266141991485046,
+        "2025": 0.04065897545478457
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|cost_stress_1_5x|trend_filter": {
+      "CAGR": -0.008146343618553264,
+      "Calmar": -0.02678043821917126,
+      "Sharpe": -0.04269338010620146,
+      "Sortino": -0.006179434710154964,
+      "annualized_volatility": 0.09038867067238386,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.023812588371737567,
+      "average_win": 0.014681334304046917,
+      "completed_trades": 127,
+      "expectancy_per_trade": -0.00047375336358477545,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.007684314603713085,
+          "net_return_sum": -0.0998960898482701,
+          "trades": 13,
+          "win_rate": 0.46153846153846156
+        },
+        "2013_2015": {
+          "expectancy": 0.0020467798690880974,
+          "net_return_sum": 0.05730983633446672,
+          "trades": 28,
+          "win_rate": 0.5714285714285714
+        },
+        "2016_2018": {
+          "expectancy": 0.0006059575661506884,
+          "net_return_sum": 0.014542981587616521,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.001269948867970084,
+          "net_return_sum": -0.03555856830316235,
+          "trades": 28,
+          "win_rate": 0.6428571428571429
+        },
+        "2022_2024": {
+          "expectancy": -0.001300881940766735,
+          "net_return_sum": -0.035123812400701844,
+          "trades": 27,
+          "win_rate": 0.5555555555555556
+        },
+        "2025_2027": {
+          "expectancy": 0.005508425064969223,
+          "net_return_sum": 0.03855897545478456,
+          "trades": 7,
+          "win_rate": 0.7142857142857143
+        }
+      },
+      "gross_profit_factor": 1.047120994315887,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.3041900790376745,
+      "median_holding_period": 8.0,
+      "median_trade": 0.006812060703818358,
+      "net_profit_factor": 0.9494664954216604,
+      "payoff_ratio": 0.6165366853387406,
+      "win_rate": 0.6062992125984252,
+      "worst_five_trade_sequence": -0.2181201954310273,
+      "worst_trade": -0.2444620267340657,
+      "yearly_return_matrix": {
+        "2010": 0.018123844148535663,
+        "2011": -0.14251445005475125,
+        "2012": 0.02449451605794549,
+        "2013": 0.00042550403117225244,
+        "2014": 0.10256181326141402,
+        "2015": -0.04567748095811955,
+        "2016": 0.008204990057510908,
+        "2017": 0.053316976092799846,
+        "2018": -0.046978984562694226,
+        "2019": 0.024198093799001404,
+        "2020": -0.11884315063954258,
+        "2021": 0.05908648853737886,
+        "2022": -0.1002388790214528,
+        "2023": 0.005753646705900492,
+        "2024": 0.059361419914850465,
+        "2025": 0.038558975454784566
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|cost_stress_2x|trend_filter": {
+      "CAGR": -0.010511249549034485,
+      "Calmar": -0.03362765781319462,
+      "Sharpe": -0.06971598902280637,
+      "Sortino": -0.01009250542488268,
+      "annualized_volatility": 0.09040498740795641,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.024112588371737576,
+      "average_win": 0.014381334304046901,
+      "completed_trades": 127,
+      "expectancy_per_trade": -0.0007737533635847764,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.007984314603713088,
+          "net_return_sum": -0.10379608984827013,
+          "trades": 13,
+          "win_rate": 0.46153846153846156
+        },
+        "2013_2015": {
+          "expectancy": 0.001746779869088097,
+          "net_return_sum": 0.048909836334466716,
+          "trades": 28,
+          "win_rate": 0.5714285714285714
+        },
+        "2016_2018": {
+          "expectancy": 0.0003059575661506885,
+          "net_return_sum": 0.007342981587616523,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0015699488679700813,
+          "net_return_sum": -0.043958568303162276,
+          "trades": 28,
+          "win_rate": 0.6428571428571429
+        },
+        "2022_2024": {
+          "expectancy": -0.0016008819407667353,
+          "net_return_sum": -0.043223812400701854,
+          "trades": 27,
+          "win_rate": 0.5555555555555556
+        },
+        "2025_2027": {
+          "expectancy": 0.0052084250649692245,
+          "net_return_sum": 0.03645897545478457,
+          "trades": 7,
+          "win_rate": 0.7142857142857143
+        }
+      },
+      "gross_profit_factor": 1.047120994315887,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.3125775100789251,
+      "median_holding_period": 8.0,
+      "median_trade": 0.006512060703818358,
+      "net_profit_factor": 0.9184934643595161,
+      "payoff_ratio": 0.5964243275061792,
+      "win_rate": 0.6062992125984252,
+      "worst_five_trade_sequence": -0.2196201954310273,
+      "worst_trade": -0.2447620267340657,
+      "yearly_return_matrix": {
+        "2010": 0.017223844148535665,
+        "2011": -0.14311445005475126,
+        "2012": 0.02209451605794549,
+        "2013": -0.0025744959688277363,
+        "2014": 0.09926181326141403,
+        "2015": -0.04777748095811955,
+        "2016": 0.006704990057510914,
+        "2017": 0.05031697609279985,
+        "2018": -0.049678984562694234,
+        "2019": 0.021198093799001408,
+        "2020": -0.12124315063954257,
+        "2021": 0.05608648853737887,
+        "2022": -0.1026388790214528,
+        "2023": 0.0033536467059004926,
+        "2024": 0.05606141991485047,
+        "2025": 0.03645897545478457
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "WILDER_RSI_2|SAME_CLOSE_THEORETICAL_PROXY|zero_cost_diagnostic|trend_filter": {
+      "CAGR": -0.00102196186878023,
+      "Calmar": -0.00354621257426465,
+      "Sharpe": 0.03841299378124376,
+      "Sortino": 0.005346616246531719,
+      "annualized_volatility": 0.09038680639547297,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.026109440374360263,
+      "average_win": 0.014493357822850427,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0004262466364152252,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.006784314603713084,
+          "net_return_sum": -0.0881960898482701,
+          "trades": 13,
+          "win_rate": 0.46153846153846156
+        },
+        "2013_2015": {
+          "expectancy": 0.0029467798690880976,
+          "net_return_sum": 0.08250983633446674,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.0015059575661506887,
+          "net_return_sum": 0.03614298158761653,
+          "trades": 24,
+          "win_rate": 0.75
+        },
+        "2019_2021": {
+          "expectancy": -0.00036994886797008165,
+          "net_return_sum": -0.010358568303162285,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2022_2024": {
+          "expectancy": -0.00040088194076673514,
+          "net_return_sum": -0.010823812400701849,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.006408425064969224,
+          "net_return_sum": 0.044858975454784566,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.047120994315887,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.2881840406851939,
+      "median_holding_period": 8.0,
+      "median_trade": 0.0077120607038183575,
+      "net_profit_factor": 1.047120994315887,
+      "payoff_ratio": 0.5551002861433618,
+      "win_rate": 0.6535433070866141,
+      "worst_five_trade_sequence": -0.21362019543102728,
+      "worst_trade": -0.24356202673406568,
+      "yearly_return_matrix": {
+        "2010": 0.020823844148535664,
+        "2011": -0.14071445005475125,
+        "2012": 0.03169451605794549,
+        "2013": 0.00942550403117226,
+        "2014": 0.11246181326141402,
+        "2015": -0.03937748095811955,
+        "2016": 0.012704990057510912,
+        "2017": 0.06231697609279985,
+        "2018": -0.03887898456269423,
+        "2019": 0.033198093799001405,
+        "2020": -0.11164315063954255,
+        "2021": 0.06808648853737886,
+        "2022": -0.0930388790214528,
+        "2023": 0.01295364670590049,
+        "2024": 0.06926141991485046,
+        "2025": 0.044858975454784566
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "baseline|one_day_dip|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs": {
+      "CAGR": -0.015696640086585556,
+      "Calmar": -0.038622340441252775,
+      "Sharpe": -0.16422213183536963,
+      "Sortino": -0.06800789237487029,
+      "annualized_volatility": 0.07936528286585219,
+      "average_holding_period": 2.0644654088050314,
+      "average_loss": -0.011383272052688912,
+      "average_win": 0.006752170343164124,
+      "completed_trades": 636,
+      "expectancy_per_trade": -0.0003195115973571857,
+      "exposure_percentage": 33.41817256299313,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0028610317273292806,
+          "net_return_sum": -0.19741118918572037,
+          "trades": 69,
+          "win_rate": 0.5072463768115942
+        },
+        "2013_2015": {
+          "expectancy": -0.0004534373476540254,
+          "net_return_sum": -0.0553193564137911,
+          "trades": 122,
+          "win_rate": 0.5819672131147541
+        },
+        "2016_2018": {
+          "expectancy": -0.0005772513549610336,
+          "net_return_sum": -0.07850618427470057,
+          "trades": 136,
+          "win_rate": 0.625
+        },
+        "2019_2021": {
+          "expectancy": 0.00012850580930341191,
+          "net_return_sum": 0.016448743590836725,
+          "trades": 128,
+          "win_rate": 0.625
+        },
+        "2022_2024": {
+          "expectancy": 0.0003697335536457881,
+          "net_return_sum": 0.05250216461770191,
+          "trades": 142,
+          "win_rate": 0.6549295774647887
+        },
+        "2025_2027": {
+          "expectancy": 0.0015147806601667523,
+          "net_return_sum": 0.05907644574650334,
+          "trades": 39,
+          "win_rate": 0.6153846153846154
+        }
+      },
+      "gross_profit_factor": 1.0666045655671974,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 7,
+      "maximum_drawdown": -0.4064134878221899,
+      "median_holding_period": 2.0,
+      "median_trade": 0.0017899443740516004,
+      "net_profit_factor": 0.9280178281742981,
+      "payoff_ratio": 0.5931660345031596,
+      "win_rate": 0.610062893081761,
+      "worst_five_trade_sequence": -0.10673789560244651,
+      "worst_trade": -0.059466318686942146,
+      "yearly_return_matrix": {
+        "2010": -0.02989205400784808,
+        "2011": -0.14401616386781818,
+        "2012": -0.023502971310054178,
+        "2013": -0.035305481851166526,
+        "2014": 0.06305992038224331,
+        "2015": -0.08307379494486777,
+        "2016": -0.025976206484236528,
+        "2017": 0.04522102070219988,
+        "2018": -0.09775099849266392,
+        "2019": -0.006031731244685763,
+        "2020": -0.03628392023102239,
+        "2021": 0.05876439506654495,
+        "2022": -0.10044200463345951,
+        "2023": 0.04710208876055525,
+        "2024": 0.10584208049060627,
+        "2025": 0.05907644574650337
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 13,
+        "2011": 9,
+        "2012": 47,
+        "2013": 45,
+        "2014": 50,
+        "2015": 27,
+        "2016": 36,
+        "2017": 56,
+        "2018": 44,
+        "2019": 43,
+        "2020": 31,
+        "2021": 54,
+        "2022": 33,
+        "2023": 50,
+        "2024": 59,
+        "2025": 39
+      }
+    },
+    "baseline|random_equal_exposure|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs": {
+      "CAGR": -0.01158339169497602,
+      "Calmar": -0.06495909232682204,
+      "Sharpe": -0.3015482169900972,
+      "Sortino": -0.1016401873953645,
+      "annualized_volatility": 0.03730060455387113,
+      "average_holding_period": 1.140625,
+      "average_loss": -0.007109841709270239,
+      "average_win": 0.006596407902219768,
+      "completed_trades": 256,
+      "expectancy_per_trade": -0.0006850372038842974,
+      "exposure_percentage": 7.4319165181980145,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0010066518481639765,
+          "net_return_sum": -0.02617294805226339,
+          "trades": 26,
+          "win_rate": 0.5769230769230769
+        },
+        "2013_2015": {
+          "expectancy": -0.0012552651740555636,
+          "net_return_sum": -0.06150799352872262,
+          "trades": 49,
+          "win_rate": 0.46938775510204084
+        },
+        "2016_2018": {
+          "expectancy": -0.00011628884660141378,
+          "net_return_sum": -0.006977330796084827,
+          "trades": 60,
+          "win_rate": 0.48333333333333334
+        },
+        "2019_2021": {
+          "expectancy": 0.00018545453315271205,
+          "net_return_sum": 0.00908727212448289,
+          "trades": 49,
+          "win_rate": 0.4897959183673469
+        },
+        "2022_2024": {
+          "expectancy": -0.001381893739730914,
+          "net_return_sum": -0.08291362438385484,
+          "trades": 60,
+          "win_rate": 0.4
+        },
+        "2025_2027": {
+          "expectancy": -0.0005737416298281055,
+          "net_return_sum": -0.006884899557937266,
+          "trades": 12,
+          "win_rate": 0.4166666666666667
+        }
+      },
+      "gross_profit_factor": 0.975495339014148,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.17831825045672878,
+      "median_holding_period": 1.0,
+      "median_trade": -0.0003975705161452619,
+      "net_profit_factor": 0.8186342469670441,
+      "payoff_ratio": 0.9277854798959834,
+      "win_rate": 0.46875,
+      "worst_five_trade_sequence": -0.07412020334184144,
+      "worst_trade": -0.04561075477059991,
+      "yearly_return_matrix": {
+        "2010": 0.0074123705408827775,
+        "2011": -0.008667015166166546,
+        "2012": -0.024918303426979628,
+        "2013": -0.036022583636146153,
+        "2014": -0.014086465126647203,
+        "2015": -0.011398944765929259,
+        "2016": -0.035717694901919506,
+        "2017": 0.01103571827669609,
+        "2018": 0.017704645829138593,
+        "2019": 0.009643936261141385,
+        "2020": 0.007487396657896359,
+        "2021": -0.008044060794554851,
+        "2022": -0.03939214095056273,
+        "2023": 0.020464870753543456,
+        "2024": -0.06398635418683554,
+        "2025": -0.006884899557937266
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 6,
+        "2011": 2,
+        "2012": 18,
+        "2013": 18,
+        "2014": 23,
+        "2015": 8,
+        "2016": 11,
+        "2017": 26,
+        "2018": 23,
+        "2019": 18,
+        "2020": 13,
+        "2021": 18,
+        "2022": 13,
+        "2023": 23,
+        "2024": 24,
+        "2025": 12
+      }
+    },
+    "baseline|two_day_dip|NEXT_OPEN_EXECUTABLE|base_index_proxy_costs": {
+      "CAGR": -0.015364586431741656,
+      "Calmar": -0.05624425740594644,
+      "Sharpe": -0.2371485470047555,
+      "Sortino": -0.07021097498952861,
+      "annualized_volatility": 0.059412053162385334,
+      "average_holding_period": 2.0784313725490198,
+      "average_loss": -0.012963412251655577,
+      "average_win": 0.007182454586742,
+      "completed_trades": 306,
+      "expectancy_per_trade": -0.0007178853498845017,
+      "exposure_percentage": 16.187325019088828,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0015862034894446363,
+          "net_return_sum": -0.05551712213056227,
+          "trades": 35,
+          "win_rate": 0.5428571428571428
+        },
+        "2013_2015": {
+          "expectancy": -0.0012296207834530252,
+          "net_return_sum": -0.07746610935754059,
+          "trades": 63,
+          "win_rate": 0.5396825396825397
+        },
+        "2016_2018": {
+          "expectancy": -0.0006958800824702879,
+          "net_return_sum": -0.04175280494821727,
+          "trades": 60,
+          "win_rate": 0.6166666666666667
+        },
+        "2019_2021": {
+          "expectancy": 0.0006723509932115867,
+          "net_return_sum": 0.042358112572329965,
+          "trades": 63,
+          "win_rate": 0.6984126984126984
+        },
+        "2022_2024": {
+          "expectancy": -0.0018138033036301784,
+          "net_return_sum": -0.1178972147359616,
+          "trades": 65,
+          "win_rate": 0.5846153846153846
+        },
+        "2025_2027": {
+          "expectancy": 0.0015301110767647127,
+          "net_return_sum": 0.030602221535294252,
+          "trades": 20,
+          "win_rate": 0.7
+        }
+      },
+      "gross_profit_factor": 0.9757339414669938,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 11,
+      "maximum_drawdown": -0.2731760919314268,
+      "median_holding_period": 1.5,
+      "median_trade": 0.0026842631647211908,
+      "net_profit_factor": 0.8587865905466604,
+      "payoff_ratio": 0.5540558648688132,
+      "win_rate": 0.6078431372549019,
+      "worst_five_trade_sequence": -0.1301579614257543,
+      "worst_trade": -0.057465134006724775,
+      "yearly_return_matrix": {
+        "2010": 0.0063517461843035465,
+        "2011": -0.07720531881489401,
+        "2012": 0.015336450500028222,
+        "2013": -0.14073428182084063,
+        "2014": 0.07483921422120503,
+        "2015": -0.011571041757904944,
+        "2016": 0.012454680722857079,
+        "2017": 0.030683874156321893,
+        "2018": -0.08489135982739625,
+        "2019": -0.0009161466843056985,
+        "2020": -0.04168967978562681,
+        "2021": 0.08496393904226246,
+        "2022": -0.08212690056706705,
+        "2023": -0.004914356950420355,
+        "2024": -0.03085595721847415,
+        "2025": 0.030602221535294252
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 7,
+        "2011": 5,
+        "2012": 23,
+        "2013": 21,
+        "2014": 28,
+        "2015": 14,
+        "2016": 13,
+        "2017": 27,
+        "2018": 20,
+        "2019": 18,
+        "2020": 14,
+        "2021": 31,
+        "2022": 20,
+        "2023": 26,
+        "2024": 19,
+        "2025": 20
+      }
+    },
+    "forward_returns_SIMPLE_RSI_2": {
+      "1": {
+        "baseline_mean": 0.000549177571887721,
+        "signal_count": 734,
+        "signal_mean": 9.239198205425463e-05,
+        "signal_median": -0.00019851301852313874
+      },
+      "10": {
+        "baseline_mean": 0.004895989279131873,
+        "signal_count": 728,
+        "signal_mean": 0.0035754565791726238,
+        "signal_median": 0.00366020368339548
+      },
+      "2": {
+        "baseline_mean": 0.0010682096025520715,
+        "signal_count": 733,
+        "signal_mean": 0.0003001069506304023,
+        "signal_median": 0.0010937199596257052
+      },
+      "5": {
+        "baseline_mean": 0.002554909759578952,
+        "signal_count": 730,
+        "signal_mean": 0.0012691093739857849,
+        "signal_median": 0.002234918708017508
+      }
+    },
+    "forward_returns_WILDER_RSI_2": {
+      "1": {
+        "baseline_mean": 0.0005205387381071094,
+        "signal_count": 407,
+        "signal_mean": -2.6850165695155434e-05,
+        "signal_median": -0.0001499387472150282
+      },
+      "10": {
+        "baseline_mean": 0.004426462327743052,
+        "signal_count": 405,
+        "signal_mean": 0.006596161875699727,
+        "signal_median": 0.006481067629890758
+      },
+      "2": {
+        "baseline_mean": 0.0009329139040478713,
+        "signal_count": 406,
+        "signal_mean": 0.000854802978351839,
+        "signal_median": 0.0012697197996276444
+      },
+      "5": {
+        "baseline_mean": 0.002240224217320175,
+        "signal_count": 405,
+        "signal_mean": 0.0029715619613706187,
+        "signal_median": 0.0037291803532093493
+      }
+    },
+    "ledger_equity_reconciliation": {
+      "absolute_difference": 0.0,
+      "equity_curve_net": 0.06646093450456303,
+      "ledger_compounded_net": 0.06646093450456303,
+      "tolerance": 1e-12
+    },
+    "param_stability|SIMPLE_RSI_2|entry_10.0|exit_80.0": {
+      "CAGR": -0.0047924192382575725,
+      "Calmar": -0.01401256173683225,
+      "Sharpe": 0.010672309449325115,
+      "Sortino": 0.002105827603820688,
+      "annualized_volatility": 0.10202864456628549,
+      "average_holding_period": 4.035211267605634,
+      "average_loss": -0.018201084820539913,
+      "average_win": 0.009681093301503777,
+      "completed_trades": 284,
+      "expectancy_per_trade": 5.977831572813912e-05,
+      "exposure_percentage": 29.167727157037415,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0017666964044337232,
+          "net_return_sum": -0.05123419572857797,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -0.000839549356989415,
+          "net_return_sum": -0.04533566527742841,
+          "trades": 54,
+          "win_rate": 0.5925925925925926
+        },
+        "2016_2018": {
+          "expectancy": 0.00016686421130151558,
+          "net_return_sum": 0.010011852678090936,
+          "trades": 60,
+          "win_rate": 0.65
+        },
+        "2019_2021": {
+          "expectancy": 0.000761285361008774,
+          "net_return_sum": 0.047199692382543984,
+          "trades": 62,
+          "win_rate": 0.7258064516129032
+        },
+        "2022_2024": {
+          "expectancy": 0.0004499602881838138,
+          "net_return_sum": 0.02834749815558027,
+          "trades": 63,
+          "win_rate": 0.6825396825396826
+        },
+        "2025_2027": {
+          "expectancy": 0.00174924121603642,
+          "net_return_sum": 0.02798785945658272,
+          "trades": 16,
+          "win_rate": 0.5625
+        }
+      },
+      "gross_profit_factor": 1.1085552115633095,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.34200878670604673,
+      "median_holding_period": 3.0,
+      "median_trade": 0.004940637421171502,
+      "net_profit_factor": 1.0095178458183653,
+      "payoff_ratio": 0.5318964994096763,
+      "win_rate": 0.6549295774647887,
+      "worst_five_trade_sequence": -0.30580360905147885,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.057123342492155116,
+        "2013": -0.05593005503045542,
+        "2014": 0.058659795120333966,
+        "2015": -0.04806540536730694,
+        "2016": 0.02131628718164623,
+        "2017": 0.0696000541272447,
+        "2018": -0.08090448863079999,
+        "2019": 0.05295748901427434,
+        "2020": -0.25246626777097764,
+        "2021": 0.24670847113924727,
+        "2022": -0.039114577248716115,
+        "2023": 0.08708374672369473,
+        "2024": -0.019621671319398327,
+        "2025": 0.02798785945658272
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 18,
+        "2014": 23,
+        "2015": 13,
+        "2016": 17,
+        "2017": 25,
+        "2018": 18,
+        "2019": 20,
+        "2020": 11,
+        "2021": 31,
+        "2022": 18,
+        "2023": 26,
+        "2024": 19,
+        "2025": 16
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_10.0|exit_85.0": {
+      "CAGR": -0.002251638623958385,
+      "Calmar": -0.007359015058491754,
+      "Sharpe": 0.036073297565401626,
+      "Sortino": 0.0070284927742768595,
+      "annualized_volatility": 0.10171188734186842,
+      "average_holding_period": 4.310469314079422,
+      "average_loss": -0.018407241158892772,
+      "average_win": 0.009922492175787948,
+      "completed_trades": 277,
+      "expectancy_per_trade": 0.000206518649453406,
+      "exposure_percentage": 30.38941206413846,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0007910591641159353,
+          "net_return_sum": -0.022940715759362126,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -0.0008290644413545984,
+          "net_return_sum": -0.044769479833148315,
+          "trades": 54,
+          "win_rate": 0.6111111111111112
+        },
+        "2016_2018": {
+          "expectancy": 0.0004530861101682332,
+          "net_return_sum": 0.025825908279589294,
+          "trades": 57,
+          "win_rate": 0.6491228070175439
+        },
+        "2019_2021": {
+          "expectancy": 0.0010759617472431478,
+          "net_return_sum": 0.06670962832907516,
+          "trades": 62,
+          "win_rate": 0.7258064516129032
+        },
+        "2022_2024": {
+          "expectancy": 3.681309815819165e-05,
+          "net_return_sum": 0.002208785889491499,
+          "trades": 60,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0020114359328632005,
+          "net_return_sum": 0.03017153899294801,
+          "trades": 15,
+          "win_rate": 0.6
+        }
+      },
+      "gross_profit_factor": 1.1319677635626444,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3059701068773004,
+      "median_holding_period": 3.0,
+      "median_trade": 0.0048787803991878105,
+      "net_profit_factor": 1.0327134793855193,
+      "payoff_ratio": 0.539053739239694,
+      "win_rate": 0.6570397111913358,
+      "worst_five_trade_sequence": -0.2976738695260397,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.08541682246137094,
+        "2013": -0.05152359123816749,
+        "2014": 0.05409286712817833,
+        "2015": -0.047338755723159126,
+        "2016": 0.02995777638576841,
+        "2017": 0.07646009450386783,
+        "2018": -0.08059196261004693,
+        "2019": 0.05947462215717893,
+        "2020": -0.24433652824553848,
+        "2021": 0.2515715344174347,
+        "2022": -0.04834863211153863,
+        "2023": 0.06223150600920077,
+        "2024": -0.011674088008170637,
+        "2025": 0.03017153899294801
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 18,
+        "2014": 23,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 11,
+        "2021": 31,
+        "2022": 17,
+        "2023": 24,
+        "2024": 19,
+        "2025": 15
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_10.0|exit_90.0": {
+      "CAGR": -0.005313268693006079,
+      "Calmar": -0.015097722415010234,
+      "Sharpe": 0.0066448930499844,
+      "Sortino": 0.001281061206358415,
+      "annualized_volatility": 0.1033007308098377,
+      "average_holding_period": 4.763358778625954,
+      "average_loss": -0.019148380882832317,
+      "average_win": 0.010425607274429635,
+      "completed_trades": 262,
+      "expectancy_per_trade": 4.0848074169711855e-05,
+      "exposure_percentage": 31.76380758462713,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00037662135446577097,
+          "net_return_sum": -0.010168776570575817,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2013_2015": {
+          "expectancy": -0.0018104129641679607,
+          "net_return_sum": -0.09052064820839803,
+          "trades": 50,
+          "win_rate": 0.58
+        },
+        "2016_2018": {
+          "expectancy": 9.246782486861518e-05,
+          "net_return_sum": 0.004808326893167989,
+          "trades": 52,
+          "win_rate": 0.6730769230769231
+        },
+        "2019_2021": {
+          "expectancy": 0.001159437809881036,
+          "net_return_sum": 0.06956626859286216,
+          "trades": 60,
+          "win_rate": 0.7166666666666667
+        },
+        "2022_2024": {
+          "expectancy": 0.00011802561607690386,
+          "net_return_sum": 0.006845485732460424,
+          "trades": 58,
+          "win_rate": 0.6551724137931034
+        },
+        "2025_2027": {
+          "expectancy": 0.0020114359328632005,
+          "net_return_sum": 0.03017153899294801,
+          "trades": 15,
+          "win_rate": 0.6
+        }
+      },
+      "gross_profit_factor": 1.098323902705404,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3519251809613084,
+      "median_holding_period": 4.0,
+      "median_trade": 0.0047042171106163495,
+      "net_profit_factor": 1.0060750938648153,
+      "payoff_ratio": 0.5444641684444883,
+      "win_rate": 0.648854961832061,
+      "worst_five_trade_sequence": -0.2976738695260397,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.023520396030806738,
+        "2011": -0.08550505489167798,
+        "2012": 0.09885667435190888,
+        "2013": -0.05152359123816749,
+        "2014": 0.03471530662152583,
+        "2015": -0.07371236359175633,
+        "2016": 0.02059834778257153,
+        "2017": 0.07087058030534536,
+        "2018": -0.08666060119474887,
+        "2019": 0.043402312822539896,
+        "2020": -0.24220887004719466,
+        "2021": 0.26837282581751687,
+        "2022": -0.03782793235084682,
+        "2023": 0.046460834208454746,
+        "2024": -0.0017874161251475174,
+        "2025": 0.03017153899294801
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 4,
+        "2011": 4,
+        "2012": 19,
+        "2013": 18,
+        "2014": 21,
+        "2015": 11,
+        "2016": 15,
+        "2017": 23,
+        "2018": 14,
+        "2019": 19,
+        "2020": 11,
+        "2021": 30,
+        "2022": 17,
+        "2023": 23,
+        "2024": 18,
+        "2025": 15
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_15.0|exit_80.0": {
+      "CAGR": -0.0017303685074453456,
+      "Calmar": -0.0052415743081777955,
+      "Sharpe": 0.04201642941964222,
+      "Sortino": 0.008420041595132747,
+      "annualized_volatility": 0.10280440926870722,
+      "average_holding_period": 4.037542662116041,
+      "average_loss": -0.018188704361861693,
+      "average_win": 0.009773142611944823,
+      "completed_trades": 293,
+      "expectancy_per_trade": 0.00022985012941700254,
+      "exposure_percentage": 30.109442606261133,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0017666964044337232,
+          "net_return_sum": -0.05123419572857797,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -7.776898448914017e-05,
+          "net_return_sum": -0.00443283211588099,
+          "trades": 57,
+          "win_rate": 0.6140350877192983
+        },
+        "2016_2018": {
+          "expectancy": -4.977192498839024e-06,
+          "net_return_sum": -0.00029863154993034144,
+          "trades": 60,
+          "win_rate": 0.65
+        },
+        "2019_2021": {
+          "expectancy": 0.0008040288820441563,
+          "net_return_sum": 0.05226187733287016,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": 0.0008518048862436111,
+          "net_return_sum": 0.05621912249207833,
+          "trades": 66,
+          "win_rate": 0.6818181818181818
+        },
+        "2025_2027": {
+          "expectancy": 0.0009269217180389137,
+          "net_return_sum": 0.01483074748862262,
+          "trades": 16,
+          "win_rate": 0.5
+        }
+      },
+      "gross_profit_factor": 1.1381462319260658,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.3301238150426792,
+      "median_holding_period": 3.0,
+      "median_trade": 0.004750325119955812,
+      "net_profit_factor": 1.03702632500883,
+      "payoff_ratio": 0.5373193393828135,
+      "win_rate": 0.658703071672355,
+      "worst_five_trade_sequence": -0.30580360905147885,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.057123342492155116,
+        "2013": -0.050146368539076495,
+        "2014": 0.09377894179050247,
+        "2015": -0.04806540536730694,
+        "2016": 0.02131628718164623,
+        "2017": 0.06225191970202816,
+        "2018": -0.08386683843360473,
+        "2019": 0.04749680450806272,
+        "2020": -0.23744312538493348,
+        "2021": 0.24220819820974093,
+        "2022": -0.031499364789190215,
+        "2023": 0.09885941549959702,
+        "2024": -0.01114092821832845,
+        "2025": 0.01483074748862262
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 17,
+        "2017": 25,
+        "2018": 18,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 18,
+        "2023": 28,
+        "2024": 20,
+        "2025": 16
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_15.0|exit_85.0": {
+      "CAGR": 0.0008182335867876755,
+      "Calmar": 0.0026071480828215527,
+      "Sharpe": 0.06729735365607857,
+      "Sortino": 0.013308573016384022,
+      "annualized_volatility": 0.10242565937526527,
+      "average_holding_period": 4.304195804195804,
+      "average_loss": -0.018351274977684302,
+      "average_win": 0.009987004861863978,
+      "completed_trades": 286,
+      "expectancy_per_trade": 0.00037577009110809024,
+      "exposure_percentage": 31.331127513362176,
+      "five_best_trades_pnl_contribution_pct": 1159.4623841611146,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0007910591641159353,
+          "net_return_sum": -0.022940715759362126,
+          "trades": 29,
+          "win_rate": 0.6206896551724138
+        },
+        "2013_2015": {
+          "expectancy": -6.783590651931369e-05,
+          "net_return_sum": -0.0038666466716008804,
+          "trades": 57,
+          "win_rate": 0.631578947368421
+        },
+        "2016_2018": {
+          "expectancy": 0.0002716513504063533,
+          "net_return_sum": 0.015484126973162139,
+          "trades": 57,
+          "win_rate": 0.6491228070175439
+        },
+        "2019_2021": {
+          "expectancy": 0.0011041817427600207,
+          "net_return_sum": 0.07177181327940134,
+          "trades": 65,
+          "win_rate": 0.7384615384615385
+        },
+        "2022_2024": {
+          "expectancy": 0.0004774668289839611,
+          "net_return_sum": 0.03008041022598955,
+          "trades": 63,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0011294172006215933,
+          "net_return_sum": 0.0169412580093239,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1619614038956436,
+      "largest_year_pnl_contribution_pct": 1876.9690110544545,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3138423905335491,
+      "median_holding_period": 3.0,
+      "median_trade": 0.0048062918573102305,
+      "net_profit_factor": 1.0603740438932123,
+      "payoff_ratio": 0.5442131336383152,
+      "win_rate": 0.6608391608391608,
+      "worst_five_trade_sequence": -0.2976738695260397,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.08541682246137094,
+        "2013": -0.045739904746788566,
+        "2014": 0.08921201379834684,
+        "2015": -0.047338755723159126,
+        "2016": 0.02995777638576841,
+        "2017": 0.0691119600786513,
+        "2018": -0.08358560949125755,
+        "2019": 0.054013937650967306,
+        "2020": -0.22931338585949432,
+        "2021": 0.24707126148792835,
+        "2022": -0.04073341965201273,
+        "2023": 0.07400717478510305,
+        "2024": -0.0031933449071007564,
+        "2025": 0.0169412580093239
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 20,
+        "2013": 20,
+        "2014": 24,
+        "2015": 13,
+        "2016": 16,
+        "2017": 25,
+        "2018": 16,
+        "2019": 20,
+        "2020": 13,
+        "2021": 32,
+        "2022": 17,
+        "2023": 26,
+        "2024": 20,
+        "2025": 15
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_15.0|exit_90.0": {
+      "CAGR": -0.0022528159649364277,
+      "Calmar": -0.0065138694167103245,
+      "Sharpe": 0.037592523450166074,
+      "Sortino": 0.0073593588139966755,
+      "annualized_volatility": 0.10399802636008261,
+      "average_holding_period": 4.74169741697417,
+      "average_loss": -0.019086711197950443,
+      "average_win": 0.010480823018350892,
+      "completed_trades": 271,
+      "expectancy_per_trade": 0.00022492554110983717,
+      "exposure_percentage": 32.70552303385085,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00037662135446577097,
+          "net_return_sum": -0.010168776570575817,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2013_2015": {
+          "expectancy": -0.0009361851895632182,
+          "net_return_sum": -0.04961781504685056,
+          "trades": 53,
+          "win_rate": 0.6037735849056604
+        },
+        "2016_2018": {
+          "expectancy": -0.00010664246852458152,
+          "net_return_sum": -0.005545408363278239,
+          "trades": 52,
+          "win_rate": 0.6730769230769231
+        },
+        "2019_2021": {
+          "expectancy": 0.0011845786276696551,
+          "net_return_sum": 0.07462845354318827,
+          "trades": 63,
+          "win_rate": 0.7301587301587301
+        },
+        "2022_2024": {
+          "expectancy": 0.0005691329519501387,
+          "net_return_sum": 0.03471711006895846,
+          "trades": 61,
+          "win_rate": 0.6557377049180327
+        },
+        "2025_2027": {
+          "expectancy": 0.0011294172006215933,
+          "net_return_sum": 0.0169412580093239,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        }
+      },
+      "gross_profit_factor": 1.1285578381443493,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3458491137628852,
+      "median_holding_period": 4.0,
+      "median_trade": 0.0045120787648717416,
+      "net_profit_factor": 1.0339741898247765,
+      "payoff_ratio": 0.5491162364041186,
+      "win_rate": 0.6531365313653137,
+      "worst_five_trade_sequence": -0.2976738695260397,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.023520396030806738,
+        "2011": -0.08550505489167798,
+        "2012": 0.09885667435190888,
+        "2013": -0.045739904746788566,
+        "2014": 0.06983445329169435,
+        "2015": -0.07371236359175633,
+        "2016": 0.02059834778257153,
+        "2017": 0.06353570322634043,
+        "2018": -0.08967945937219017,
+        "2019": 0.037941628316328274,
+        "2020": -0.2271857276611505,
+        "2021": 0.26387255288801054,
+        "2022": -0.03021271989132092,
+        "2023": 0.05823650298435702,
+        "2024": 0.006693326975922363,
+        "2025": 0.0169412580093239
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 4,
+        "2011": 4,
+        "2012": 19,
+        "2013": 20,
+        "2014": 22,
+        "2015": 11,
+        "2016": 15,
+        "2017": 23,
+        "2018": 14,
+        "2019": 19,
+        "2020": 13,
+        "2021": 31,
+        "2022": 17,
+        "2023": 25,
+        "2024": 19,
+        "2025": 15
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_20.0|exit_80.0": {
+      "CAGR": -6.80990920659541e-05,
+      "Calmar": -0.00019029012387197281,
+      "Sharpe": 0.05886031142218831,
+      "Sortino": 0.01234270369964955,
+      "annualized_volatility": 0.10339735640135006,
+      "average_holding_period": 4.035483870967742,
+      "average_loss": -0.01701300468380798,
+      "average_win": 0.009831594963983215,
+      "completed_trades": 310,
+      "expectancy_per_trade": 0.00030609186315407906,
+      "exposure_percentage": 31.840162891320944,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0024227484494285956,
+          "net_return_sum": -0.07268245348285787,
+          "trades": 30,
+          "win_rate": 0.6333333333333333
+        },
+        "2013_2015": {
+          "expectancy": -0.0005315588586997443,
+          "net_return_sum": -0.03295664923938415,
+          "trades": 62,
+          "win_rate": 0.5806451612903226
+        },
+        "2016_2018": {
+          "expectancy": -2.9656311725452487e-05,
+          "net_return_sum": -0.0018090350152526018,
+          "trades": 61,
+          "win_rate": 0.6229508196721312
+        },
+        "2019_2021": {
+          "expectancy": 0.0010625512709419895,
+          "net_return_sum": 0.07437858896593927,
+          "trades": 70,
+          "win_rate": 0.7285714285714285
+        },
+        "2022_2024": {
+          "expectancy": 0.0009858519279586184,
+          "net_return_sum": 0.06802378302914466,
+          "trades": 69,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.003329680184454171,
+          "net_return_sum": 0.05993424332017508,
+          "trades": 18,
+          "win_rate": 0.5555555555555556
+        }
+      },
+      "gross_profit_factor": 1.1554382579290903,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.35786981836099474,
+      "median_holding_period": 3.0,
+      "median_trade": 0.004740729151543267,
+      "net_profit_factor": 1.0507037139803543,
+      "payoff_ratio": 0.5778870426891949,
+      "win_rate": 0.6451612903225806,
+      "worst_five_trade_sequence": -0.2938198285059066,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.03567508473787523,
+        "2013": -0.04665932514070483,
+        "2014": 0.07553783250706347,
+        "2015": -0.061835156605742764,
+        "2016": 0.02131628718164623,
+        "2017": 0.06960629365578425,
+        "2018": -0.09273161585268305,
+        "2019": 0.04369820032681026,
+        "2020": -0.23997011549376215,
+        "2021": 0.27065050413289127,
+        "2022": -0.03320519450669965,
+        "2023": 0.09814560876908637,
+        "2024": 0.003083368766757952,
+        "2025": 0.05993424332017508
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 21,
+        "2013": 22,
+        "2014": 27,
+        "2015": 13,
+        "2016": 17,
+        "2017": 26,
+        "2018": 18,
+        "2019": 22,
+        "2020": 14,
+        "2021": 34,
+        "2022": 18,
+        "2023": 29,
+        "2024": 22,
+        "2025": 18
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_20.0|exit_85.0": {
+      "CAGR": 0.0034015523723236463,
+      "Calmar": 0.010546966525001405,
+      "Sharpe": 0.09316202951113316,
+      "Sortino": 0.019176141464628014,
+      "annualized_volatility": 0.10308913782099219,
+      "average_holding_period": 4.29042904290429,
+      "average_loss": -0.017429188623239163,
+      "average_win": 0.009999006346128657,
+      "completed_trades": 303,
+      "expectancy_per_trade": 0.0004941863072388152,
+      "exposure_percentage": 33.08729956731993,
+      "five_best_trades_pnl_contribution_pct": 284.73500454101514,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0014796324504547347,
+          "net_return_sum": -0.044388973513642044,
+          "trades": 30,
+          "win_rate": 0.6333333333333333
+        },
+        "2013_2015": {
+          "expectancy": -0.0002851458366193487,
+          "net_return_sum": -0.01767904187039962,
+          "trades": 62,
+          "win_rate": 0.6129032258064516
+        },
+        "2016_2018": {
+          "expectancy": 0.00024092626737654975,
+          "net_return_sum": 0.013973723507839885,
+          "trades": 58,
+          "win_rate": 0.6206896551724138
+        },
+        "2019_2021": {
+          "expectancy": 0.0013412646416067204,
+          "net_return_sum": 0.09388852491247043,
+          "trades": 70,
+          "win_rate": 0.7285714285714285
+        },
+        "2022_2024": {
+          "expectancy": 0.0006348403669123637,
+          "net_return_sum": 0.041899464216216,
+          "trades": 66,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.0036496914024044917,
+          "net_return_sum": 0.06204475384087636,
+          "trades": 17,
+          "win_rate": 0.5882352941176471
+        }
+      },
+      "gross_profit_factor": 1.187446624742289,
+      "largest_year_pnl_contribution_pct": 493.7844180011939,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.32251475950552455,
+      "median_holding_period": 3.0,
+      "median_trade": 0.004748950317429324,
+      "net_profit_factor": 1.0818213926896163,
+      "payoff_ratio": 0.5736931627899481,
+      "win_rate": 0.6534653465346535,
+      "worst_five_trade_sequence": -0.2938198285059066,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.0228524833290551,
+        "2011": -0.08550505489167798,
+        "2012": 0.06396856470709106,
+        "2013": -0.027541439423712476,
+        "2014": 0.07097090451490784,
+        "2015": -0.06110850696159495,
+        "2016": 0.02995777638576841,
+        "2017": 0.07646633403240738,
+        "2018": -0.09245038691033587,
+        "2019": 0.050215333469714844,
+        "2020": -0.231840375968323,
+        "2021": 0.2755135674110787,
+        "2022": -0.04240682634141048,
+        "2023": 0.07329336805459241,
+        "2024": 0.011012922503034081,
+        "2025": 0.06204475384087636
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 5,
+        "2011": 4,
+        "2012": 21,
+        "2013": 22,
+        "2014": 27,
+        "2015": 13,
+        "2016": 16,
+        "2017": 26,
+        "2018": 16,
+        "2019": 22,
+        "2020": 14,
+        "2021": 34,
+        "2022": 17,
+        "2023": 27,
+        "2024": 22,
+        "2025": 17
+      }
+    },
+    "param_stability|SIMPLE_RSI_2|entry_20.0|exit_90.0": {
+      "CAGR": 2.7894604353040364e-05,
+      "Calmar": 7.838424475486252e-05,
+      "Sharpe": 0.06053869944970824,
+      "Sortino": 0.012350083103749385,
+      "annualized_volatility": 0.10501672043982636,
+      "average_holding_period": 4.7212543554006965,
+      "average_loss": -0.018161359577793253,
+      "average_win": 0.010549088404508996,
+      "completed_trades": 287,
+      "expectancy_per_trade": 0.00034537518431795216,
+      "exposure_percentage": 34.48714685670654,
+      "five_best_trades_pnl_contribution_pct": 35810.95042725269,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0013290396953003689,
+          "net_return_sum": -0.03721311146841033,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2013_2015": {
+          "expectancy": -0.0010850050814792207,
+          "net_return_sum": -0.0629302947257948,
+          "trades": 58,
+          "win_rate": 0.603448275862069
+        },
+        "2016_2018": {
+          "expectancy": -7.858613427353954e-05,
+          "net_return_sum": -0.004165065116497595,
+          "trades": 53,
+          "win_rate": 0.6415094339622641
+        },
+        "2019_2021": {
+          "expectancy": 0.001548741001072441,
+          "net_return_sum": 0.10531438807292598,
+          "trades": 68,
+          "win_rate": 0.7205882352941176
+        },
+        "2022_2024": {
+          "expectancy": 0.0007271275634247645,
+          "net_return_sum": 0.046536164059184926,
+          "trades": 64,
+          "win_rate": 0.65625
+        },
+        "2025_2027": {
+          "expectancy": 0.003223787317365261,
+          "net_return_sum": 0.051580597077844174,
+          "trades": 16,
+          "win_rate": 0.5
+        }
+      },
+      "gross_profit_factor": 1.151331534849978,
+      "largest_year_pnl_contribution_pct": 65526.544877365675,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.3558700404689418,
+      "median_holding_period": 4.0,
+      "median_trade": 0.004347387312391305,
+      "net_profit_factor": 1.053508712034139,
+      "payoff_ratio": 0.5808534520404443,
+      "win_rate": 0.6445993031358885,
+      "worst_five_trade_sequence": -0.29381982850590654,
+      "worst_trade": -0.30400096802992976,
+      "yearly_return_matrix": {
+        "2010": -0.023520396030806738,
+        "2011": -0.08550505489167798,
+        "2012": 0.0718123394540744,
+        "2013": -0.027541439423712476,
+        "2014": 0.051600562114024986,
+        "2015": -0.08698941741610729,
+        "2016": 0.02059834778257153,
+        "2017": 0.0737808238921994,
+        "2018": -0.09854423679126849,
+        "2019": 0.04271224703174431,
+        "2020": -0.22971271776997917,
+        "2021": 0.29231485881116087,
+        "2022": -0.03188612658071867,
+        "2023": 0.05752269625384638,
+        "2024": 0.020899594386057208,
+        "2025": 0.05158059707784418
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 4,
+        "2011": 4,
+        "2012": 20,
+        "2013": 22,
+        "2014": 25,
+        "2015": 11,
+        "2016": 15,
+        "2017": 24,
+        "2018": 14,
+        "2019": 21,
+        "2020": 14,
+        "2021": 33,
+        "2022": 17,
+        "2023": 26,
+        "2024": 21,
+        "2025": 16
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_10.0|exit_80.0": {
+      "CAGR": 0.013377730535877541,
+      "Calmar": 0.048455725347231984,
+      "Sharpe": 0.20486687125634487,
+      "Sortino": 0.02475218890939229,
+      "annualized_volatility": 0.0877602938961527,
+      "average_holding_period": 7.368852459016393,
+      "average_loss": -0.02568322769396392,
+      "average_win": 0.013554381227418588,
+      "completed_trades": 122,
+      "expectancy_per_trade": 0.0022976901434154065,
+      "exposure_percentage": 22.881140239246626,
+      "five_best_trades_pnl_contribution_pct": 78.07474106667497,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00160881176484982,
+          "net_return_sum": -0.022523364707897477,
+          "trades": 14,
+          "win_rate": 0.7857142857142857
+        },
+        "2013_2015": {
+          "expectancy": 0.004925564988183876,
+          "net_return_sum": 0.1280646896927808,
+          "trades": 26,
+          "win_rate": 0.6923076923076923
+        },
+        "2016_2018": {
+          "expectancy": -0.0019160520324036701,
+          "net_return_sum": -0.0383210406480734,
+          "trades": 20,
+          "win_rate": 0.7
+        },
+        "2019_2021": {
+          "expectancy": 0.0010552623407880232,
+          "net_return_sum": 0.028492083201276625,
+          "trades": 27,
+          "win_rate": 0.7037037037037037
+        },
+        "2022_2024": {
+          "expectancy": 0.003984417718166883,
+          "net_return_sum": 0.10359486067233896,
+          "trades": 26,
+          "win_rate": 0.6538461538461539
+        },
+        "2025_2027": {
+          "expectancy": 0.009001218809583792,
+          "net_return_sum": 0.08101096928625413,
+          "trades": 9,
+          "win_rate": 0.8888888888888888
+        }
+      },
+      "gross_profit_factor": 1.4025843406270289,
+      "largest_year_pnl_contribution_pct": 54.377761276162396,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.27608152473238623,
+      "median_holding_period": 6.0,
+      "median_trade": 0.007732367411277075,
+      "net_profit_factor": 1.3118413095301997,
+      "payoff_ratio": 0.5277522509604251,
+      "win_rate": 0.7131147540983607,
+      "worst_five_trade_sequence": -0.22139312655602583,
+      "worst_trade": -0.26042995893471604,
+      "yearly_return_matrix": {
+        "2010": 0.02458878133376499,
+        "2011": -0.12568827515045866,
+        "2012": 0.07857612910879622,
+        "2013": 0.016752044493790426,
+        "2014": 0.08998062971273935,
+        "2015": 0.021332015486251014,
+        "2016": -0.012472225659706293,
+        "2017": 0.054286186434768305,
+        "2018": -0.08013500142313541,
+        "2019": 0.059650532031942066,
+        "2020": -0.1554593001050106,
+        "2021": 0.12430085127434513,
+        "2022": -0.05704873392259067,
+        "2023": 0.031909546635617944,
+        "2024": 0.1287340479593117,
+        "2025": 0.08101096928625413
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 3,
+        "2012": 8,
+        "2013": 10,
+        "2014": 10,
+        "2015": 6,
+        "2016": 5,
+        "2017": 9,
+        "2018": 6,
+        "2019": 8,
+        "2020": 8,
+        "2021": 11,
+        "2022": 8,
+        "2023": 7,
+        "2024": 11,
+        "2025": 9
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_10.0|exit_85.0": {
+      "CAGR": 0.004921723213026752,
+      "Calmar": 0.01818382671334003,
+      "Sharpe": 0.10660188680860604,
+      "Sortino": 0.01268280282748644,
+      "annualized_volatility": 0.08641953551461576,
+      "average_holding_period": 9.99090909090909,
+      "average_loss": -0.02976114340043705,
+      "average_win": 0.014051165856710282,
+      "completed_trades": 110,
+      "expectancy_per_trade": 0.0013057668000856016,
+      "exposure_percentage": 27.97149401883431,
+      "five_best_trades_pnl_contribution_pct": 191.16590376975333,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.003646581676123828,
+          "net_return_sum": -0.04375898011348593,
+          "trades": 12,
+          "win_rate": 0.6666666666666666
+        },
+        "2013_2015": {
+          "expectancy": 0.002707094046066311,
+          "net_return_sum": 0.06767735115165778,
+          "trades": 25,
+          "win_rate": 0.64
+        },
+        "2016_2018": {
+          "expectancy": 0.0006507154157962788,
+          "net_return_sum": 0.012363592900129297,
+          "trades": 19,
+          "win_rate": 0.6842105263157895
+        },
+        "2019_2021": {
+          "expectancy": -0.0015859376412214968,
+          "net_return_sum": -0.038062503389315924,
+          "trades": 24,
+          "win_rate": 0.75
+        },
+        "2022_2024": {
+          "expectancy": 0.0035495916199836273,
+          "net_return_sum": 0.08164060725962342,
+          "trades": 23,
+          "win_rate": 0.7391304347826086
+        },
+        "2025_2027": {
+          "expectancy": 0.009110611457258234,
+          "net_return_sum": 0.06377428020080764,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.22464249937979,
+      "largest_year_pnl_contribution_pct": 146.6093021419387,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.2706648765749662,
+      "median_holding_period": 8.0,
+      "median_trade": 0.008028061136304766,
+      "net_profit_factor": 1.1508199236467624,
+      "payoff_ratio": 0.4721312507268769,
+      "win_rate": 0.7090909090909091,
+      "worst_five_trade_sequence": -0.20890061050145814,
+      "worst_trade": -0.24762243979253634,
+      "yearly_return_matrix": {
+        "2010": 0.02458878133376499,
+        "2011": -0.1325127383961067,
+        "2012": 0.0641649769488558,
+        "2013": 0.0015669477486408186,
+        "2014": 0.11972710663754105,
+        "2015": -0.053616703234524124,
+        "2016": 0.011491872469582234,
+        "2017": 0.06780065070831527,
+        "2018": -0.06692893027776821,
+        "2019": 0.0633054741034246,
+        "2020": -0.14157171878410246,
+        "2021": 0.04020374129136191,
+        "2022": -0.04864849820228099,
+        "2023": 0.02648027932525559,
+        "2024": 0.10380882613664884,
+        "2025": 0.06377428020080765
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 7,
+        "2013": 9,
+        "2014": 10,
+        "2015": 6,
+        "2016": 4,
+        "2017": 9,
+        "2018": 6,
+        "2019": 8,
+        "2020": 7,
+        "2021": 9,
+        "2022": 8,
+        "2023": 6,
+        "2024": 9,
+        "2025": 7
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_10.0|exit_90.0": {
+      "CAGR": 0.02172878604383488,
+      "Calmar": 0.09315196933813914,
+      "Sharpe": 0.30031739080074554,
+      "Sortino": 0.037241554371427836,
+      "annualized_volatility": 0.08724183345529177,
+      "average_holding_period": 13.595959595959595,
+      "average_loss": -0.03166511582021712,
+      "average_win": 0.01895404810412596,
+      "completed_trades": 99,
+      "expectancy_per_trade": 0.004126212207096166,
+      "exposure_percentage": 34.2580809366251,
+      "five_best_trades_pnl_contribution_pct": 46.96717099280164,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": 0.002199742496612466,
+          "net_return_sum": 0.026396909959349592,
+          "trades": 12,
+          "win_rate": 0.6666666666666666
+        },
+        "2013_2015": {
+          "expectancy": 0.0017608424978752231,
+          "net_return_sum": 0.036977692455379685,
+          "trades": 21,
+          "win_rate": 0.5238095238095238
+        },
+        "2016_2018": {
+          "expectancy": 0.002997798826310518,
+          "net_return_sum": 0.05396037887358933,
+          "trades": 18,
+          "win_rate": 0.8333333333333334
+        },
+        "2019_2021": {
+          "expectancy": 0.0037146336531860614,
+          "net_return_sum": 0.07429267306372123,
+          "trades": 20,
+          "win_rate": 0.8
+        },
+        "2022_2024": {
+          "expectancy": 0.006063874289216415,
+          "net_return_sum": 0.1273413600735447,
+          "trades": 21,
+          "win_rate": 0.6666666666666666
+        },
+        "2025_2027": {
+          "expectancy": 0.012789427725276558,
+          "net_return_sum": 0.08952599407693591,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.5193706899852526,
+      "largest_year_pnl_contribution_pct": 33.441558188499506,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.23326169267511643,
+      "median_holding_period": 10.0,
+      "median_trade": 0.013000525251928675,
+      "net_profit_factor": 1.444843936650171,
+      "payoff_ratio": 0.5985782023264994,
+      "win_rate": 0.7070707070707071,
+      "worst_five_trade_sequence": -0.22025614710065133,
+      "worst_trade": -0.2306148134363048,
+      "yearly_return_matrix": {
+        "2010": 0.045560974203621506,
+        "2011": -0.13253759411352486,
+        "2012": 0.11337352986925295,
+        "2013": -0.013113653325501934,
+        "2014": 0.09737834702460854,
+        "2015": -0.04728700124372694,
+        "2016": 0.016282620599141942,
+        "2017": 0.09939934292731452,
+        "2018": -0.061721584652867145,
+        "2019": 0.09286084748361326,
+        "2020": -0.09517390877772353,
+        "2021": 0.07660573435783151,
+        "2022": -0.026875124008673444,
+        "2023": 0.017053198024118536,
+        "2024": 0.13716328605809963,
+        "2025": 0.08952599407693593
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 7,
+        "2013": 8,
+        "2014": 7,
+        "2015": 6,
+        "2016": 4,
+        "2017": 9,
+        "2018": 5,
+        "2019": 8,
+        "2020": 6,
+        "2021": 6,
+        "2022": 7,
+        "2023": 5,
+        "2024": 9,
+        "2025": 7
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_15.0|exit_80.0": {
+      "CAGR": 0.012010959847425395,
+      "Calmar": 0.045735053116481225,
+      "Sharpe": 0.1890658187621027,
+      "Sortino": 0.026092895837307048,
+      "annualized_volatility": 0.08763012122672158,
+      "average_holding_period": 7.413793103448276,
+      "average_loss": -0.021735917516757963,
+      "average_win": 0.013060225600761874,
+      "completed_trades": 145,
+      "expectancy_per_trade": 0.001781475762669236,
+      "exposure_percentage": 27.36065156528379,
+      "five_best_trades_pnl_contribution_pct": 74.33256485397598,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0034960842140955473,
+          "net_return_sum": -0.052441263211433206,
+          "trades": 15,
+          "win_rate": 0.6666666666666666
+        },
+        "2013_2015": {
+          "expectancy": 0.002889552641961946,
+          "net_return_sum": 0.08379702661689643,
+          "trades": 29,
+          "win_rate": 0.6551724137931034
+        },
+        "2016_2018": {
+          "expectancy": 0.0006041145778464708,
+          "net_return_sum": 0.01570697902400824,
+          "trades": 26,
+          "win_rate": 0.7307692307692307
+        },
+        "2019_2021": {
+          "expectancy": 0.0005857390740158623,
+          "net_return_sum": 0.019329389442523454,
+          "trades": 33,
+          "win_rate": 0.696969696969697
+        },
+        "2022_2024": {
+          "expectancy": 0.0036837533536710687,
+          "net_return_sum": 0.1178801073174742,
+          "trades": 32,
+          "win_rate": 0.59375
+        },
+        "2025_2027": {
+          "expectancy": 0.007404174639757011,
+          "net_return_sum": 0.07404174639757011,
+          "trades": 10,
+          "win_rate": 0.8
+        }
+      },
+      "gross_profit_factor": 1.3475321408415701,
+      "largest_year_pnl_contribution_pct": 62.9193402916207,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.26262044163007847,
+      "median_holding_period": 6.0,
+      "median_trade": 0.007164375360528542,
+      "net_profit_factor": 1.2528553138967062,
+      "payoff_ratio": 0.6008591811545428,
+      "win_rate": 0.6758620689655173,
+      "worst_five_trade_sequence": -0.22599718132405788,
+      "worst_trade": -0.25659321519132045,
+      "yearly_return_matrix": {
+        "2010": 0.02458878133376499,
+        "2011": -0.13576774567613992,
+        "2012": 0.05873770113094175,
+        "2013": -0.007174087596159402,
+        "2014": 0.08156156552622568,
+        "2015": 0.009409548686830173,
+        "2016": 0.021080800472876284,
+        "2017": 0.04140752568401363,
+        "2018": -0.046781347132881665,
+        "2019": 0.05859171221565663,
+        "2020": -0.1406409708257116,
+        "2021": 0.10137864805257836,
+        "2022": -0.0435898558725996,
+        "2023": 0.029126682355807072,
+        "2024": 0.13234328083426675,
+        "2025": 0.07404174639757011
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 3,
+        "2012": 9,
+        "2013": 11,
+        "2014": 11,
+        "2015": 7,
+        "2016": 7,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 10,
+        "2021": 13,
+        "2022": 9,
+        "2023": 10,
+        "2024": 13,
+        "2025": 10
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_15.0|exit_85.0": {
+      "CAGR": 0.004032464906842392,
+      "Calmar": 0.015659564238364093,
+      "Sharpe": 0.09562246018415801,
+      "Sortino": 0.013274385056664433,
+      "annualized_volatility": 0.08969840502654201,
+      "average_holding_period": 10.275590551181102,
+      "average_loss": -0.0258772796872998,
+      "average_win": 0.014838716525459286,
+      "completed_trades": 127,
+      "expectancy_per_trade": 0.0010529855242888827,
+      "exposure_percentage": 33.21455841180962,
+      "five_best_trades_pnl_contribution_pct": 269.2799296131961,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.005612972204083275,
+          "net_return_sum": -0.07296863865308258,
+          "trades": 13,
+          "win_rate": 0.6153846153846154
+        },
+        "2013_2015": {
+          "expectancy": 0.002112845976056411,
+          "net_return_sum": 0.059159687329579505,
+          "trades": 28,
+          "win_rate": 0.6071428571428571
+        },
+        "2016_2018": {
+          "expectancy": 0.002206320992601558,
+          "net_return_sum": 0.0529517038224374,
+          "trades": 24,
+          "win_rate": 0.7083333333333334
+        },
+        "2019_2021": {
+          "expectancy": -0.0011662166254078666,
+          "net_return_sum": -0.03265406551142026,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2022_2024": {
+          "expectancy": 0.002689849441450835,
+          "net_return_sum": 0.07262593491917255,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2025_2027": {
+          "expectancy": 0.007802077096857362,
+          "net_return_sum": 0.054614539678001534,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.1930698666100712,
+      "largest_year_pnl_contribution_pct": 185.18745660263073,
+      "longest_losing_sequence": 6,
+      "maximum_drawdown": -0.25750811743300794,
+      "median_holding_period": 8.0,
+      "median_trade": 0.007678940755241493,
+      "net_profit_factor": 1.1201818946794408,
+      "payoff_ratio": 0.5734264460859043,
+      "win_rate": 0.6614173228346457,
+      "worst_five_trade_sequence": -0.20640297501854118,
+      "worst_trade": -0.24371930702201067,
+      "yearly_return_matrix": {
+        "2010": 0.02458878133376499,
+        "2011": -0.1420250706622516,
+        "2012": 0.04446765067540406,
+        "2013": -0.013148961635112255,
+        "2014": 0.118482817313246,
+        "2015": -0.046174168348554284,
+        "2016": 0.02188079255765174,
+        "2017": 0.05490413343702639,
+        "2018": -0.023833222172240747,
+        "2019": 0.06400909894825446,
+        "2020": -0.13316702068915837,
+        "2021": 0.0365038562294836,
+        "2022": -0.06407318104431457,
+        "2023": 0.013621801720146626,
+        "2024": 0.1230773142433405,
+        "2025": 0.05461453967800155
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 10,
+        "2014": 11,
+        "2015": 7,
+        "2016": 5,
+        "2017": 10,
+        "2018": 9,
+        "2019": 10,
+        "2020": 8,
+        "2021": 10,
+        "2022": 8,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_15.0|exit_90.0": {
+      "CAGR": 0.017739011812900385,
+      "Calmar": 0.07692052192388694,
+      "Sharpe": 0.2469649916293902,
+      "Sortino": 0.03424129724394085,
+      "annualized_volatility": 0.0913630822288044,
+      "average_holding_period": 13.902654867256636,
+      "average_loss": -0.03263607857725553,
+      "average_win": 0.01849898760899757,
+      "completed_trades": 113,
+      "expectancy_per_trade": 0.0031132154821603484,
+      "exposure_percentage": 39.984728938661235,
+      "five_best_trades_pnl_contribution_pct": 59.75681719945647,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.0039244491977029625,
+          "net_return_sum": -0.051017839570138515,
+          "trades": 13,
+          "win_rate": 0.5384615384615384
+        },
+        "2013_2015": {
+          "expectancy": 0.0017741201124699378,
+          "net_return_sum": 0.04257888269927851,
+          "trades": 24,
+          "win_rate": 0.5833333333333334
+        },
+        "2016_2018": {
+          "expectancy": 0.002937671733894803,
+          "net_return_sum": 0.058753434677896066,
+          "trades": 20,
+          "win_rate": 0.8
+        },
+        "2019_2021": {
+          "expectancy": 0.0043004532272697205,
+          "net_return_sum": 0.1032108774544733,
+          "trades": 24,
+          "win_rate": 0.8333333333333334
+        },
+        "2022_2024": {
+          "expectancy": 0.004716069626739206,
+          "net_return_sum": 0.11790174066848016,
+          "trades": 25,
+          "win_rate": 0.64
+        },
+        "2025_2027": {
+          "expectancy": 0.011480893364875688,
+          "net_return_sum": 0.08036625355412981,
+          "trades": 7,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.385170644848458,
+      "largest_year_pnl_contribution_pct": 48.12656629200305,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.23061481343630486,
+      "median_holding_period": 10.0,
+      "median_trade": 0.0128837164256294,
+      "net_profit_factor": 1.3170375753210752,
+      "payoff_ratio": 0.5668262982394501,
+      "win_rate": 0.6991150442477876,
+      "worst_five_trade_sequence": -0.17969323262768275,
+      "worst_trade": -0.2306148134363048,
+      "yearly_return_matrix": {
+        "2010": 0.045560974203621506,
+        "2011": -0.14204992637966976,
+        "2012": 0.045471112605909775,
+        "2013": -0.018766708686495367,
+        "2014": 0.10133861686990522,
+        "2015": -0.039993025484131334,
+        "2016": 0.007431749839679827,
+        "2017": 0.0790801066130545,
+        "2018": -0.02775842177483825,
+        "2019": 0.0958195723008689,
+        "2020": -0.0668775473874862,
+        "2021": 0.07426885254109059,
+        "2022": -0.04267400905227616,
+        "2023": 0.0043358160358938184,
+        "2024": 0.1562399336848625,
+        "2025": 0.08036625355412982
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 8,
+        "2013": 9,
+        "2014": 8,
+        "2015": 7,
+        "2016": 4,
+        "2017": 9,
+        "2018": 7,
+        "2019": 10,
+        "2020": 7,
+        "2021": 7,
+        "2022": 7,
+        "2023": 7,
+        "2024": 11,
+        "2025": 7
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_20.0|exit_80.0": {
+      "CAGR": 0.010036933278859017,
+      "Calmar": 0.035039333253544296,
+      "Sharpe": 0.1619551881161213,
+      "Sortino": 0.025954063837183187,
+      "annualized_volatility": 0.09307710264865304,
+      "average_holding_period": 7.290697674418604,
+      "average_loss": -0.020827071675402806,
+      "average_win": 0.013562875295755507,
+      "completed_trades": 172,
+      "expectancy_per_trade": 0.001366440614123776,
+      "exposure_percentage": 31.91651819801476,
+      "five_best_trades_pnl_contribution_pct": 91.82500644887095,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.00499579128993342,
+          "net_return_sum": -0.08992424321880155,
+          "trades": 18,
+          "win_rate": 0.5555555555555556
+        },
+        "2013_2015": {
+          "expectancy": 0.0006940922315464278,
+          "net_return_sum": 0.022210951409485688,
+          "trades": 32,
+          "win_rate": 0.5625
+        },
+        "2016_2018": {
+          "expectancy": 0.0016545107162328806,
+          "net_return_sum": 0.051289832203219296,
+          "trades": 31,
+          "win_rate": 0.7419354838709677
+        },
+        "2019_2021": {
+          "expectancy": 0.0006031763471684617,
+          "net_return_sum": 0.02412705388673847,
+          "trades": 40,
+          "win_rate": 0.675
+        },
+        "2022_2024": {
+          "expectancy": 0.0026733720032590677,
+          "net_return_sum": 0.0989147641205855,
+          "trades": 37,
+          "win_rate": 0.5675675675675675
+        },
+        "2025_2027": {
+          "expectancy": 0.00917210194486157,
+          "net_return_sum": 0.12840942722806198,
+          "trades": 14,
+          "win_rate": 0.8571428571428571
+        }
+      },
+      "gross_profit_factor": 1.2741236045524147,
+      "largest_year_pnl_contribution_pct": 91.51874346847355,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.28644761035353783,
+      "median_holding_period": 6.0,
+      "median_trade": 0.006305994364584944,
+      "net_profit_factor": 1.1849954990582436,
+      "payoff_ratio": 0.6512137427257014,
+      "win_rate": 0.6453488372093024,
+      "worst_five_trade_sequence": -0.2343088982979309,
+      "worst_trade": -0.25659321519132045,
+      "yearly_return_matrix": {
+        "2010": 0.009190958807831075,
+        "2011": -0.1470652839939881,
+        "2012": 0.04795008196735549,
+        "2013": -0.046506041649451664,
+        "2014": 0.060963503795356894,
+        "2015": 0.007753489263580462,
+        "2016": 0.04490459150710849,
+        "2017": 0.06447468715764403,
+        "2018": -0.0580894464615332,
+        "2019": 0.025768414908775624,
+        "2020": -0.1600937778042013,
+        "2021": 0.15845241678216412,
+        "2022": -0.08280607188079048,
+        "2023": 0.03512229329342614,
+        "2024": 0.14659854270794986,
+        "2025": 0.128409427228062
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 3,
+        "2012": 12,
+        "2013": 11,
+        "2014": 13,
+        "2015": 8,
+        "2016": 8,
+        "2017": 12,
+        "2018": 11,
+        "2019": 11,
+        "2020": 10,
+        "2021": 19,
+        "2022": 10,
+        "2023": 11,
+        "2024": 16,
+        "2025": 14
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_20.0|exit_85.0": {
+      "CAGR": -0.0027968584667852348,
+      "Calmar": -0.009402399985487444,
+      "Sharpe": 0.022419591757497543,
+      "Sortino": 0.0035436199353923764,
+      "annualized_volatility": 0.09560251077133528,
+      "average_holding_period": 10.393103448275863,
+      "average_loss": -0.025164230729179664,
+      "average_win": 0.015299849537544916,
+      "completed_trades": 145,
+      "expectancy_per_trade": 0.00023046792097161975,
+      "exposure_percentage": 38.355815729193175,
+      "five_best_trades_pnl_contribution_pct": 0.0,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.008683010212405758,
+          "net_return_sum": -0.13024515318608637,
+          "trades": 15,
+          "win_rate": 0.5333333333333333
+        },
+        "2013_2015": {
+          "expectancy": -9.78393688803529e-05,
+          "net_return_sum": -0.0030330204352909396,
+          "trades": 31,
+          "win_rate": 0.5161290322580645
+        },
+        "2016_2018": {
+          "expectancy": 0.0026881196020298137,
+          "net_return_sum": 0.07526734885683478,
+          "trades": 28,
+          "win_rate": 0.7142857142857143
+        },
+        "2019_2021": {
+          "expectancy": -0.0008283448222707184,
+          "net_return_sum": -0.027335379134933706,
+          "trades": 33,
+          "win_rate": 0.7272727272727273
+        },
+        "2022_2024": {
+          "expectancy": 0.001211521939823186,
+          "net_return_sum": 0.03634565819469558,
+          "trades": 30,
+          "win_rate": 0.5666666666666667
+        },
+        "2025_2027": {
+          "expectancy": 0.010302299280708211,
+          "net_return_sum": 0.08241839424566569,
+          "trades": 8,
+          "win_rate": 0.75
+        }
+      },
+      "gross_profit_factor": 1.0907534716436411,
+      "largest_year_pnl_contribution_pct": 0.0,
+      "longest_losing_sequence": 5,
+      "maximum_drawdown": -0.29746218743109964,
+      "median_holding_period": 8.0,
+      "median_trade": 0.0058679388962491925,
+      "net_profit_factor": 1.024592408713525,
+      "payoff_ratio": 0.607999890884949,
+      "win_rate": 0.6275862068965518,
+      "worst_five_trade_sequence": -0.2123332416964938,
+      "worst_trade": -0.24371930702201067,
+      "yearly_return_matrix": {
+        "2010": 0.009190958807831075,
+        "2011": -0.15332260898009978,
+        "2012": 0.01388649698618228,
+        "2013": -0.05224159590453259,
+        "2014": 0.09703880324104566,
+        "2015": -0.04783022777180399,
+        "2016": 0.019105425546079524,
+        "2017": 0.09130324481164752,
+        "2018": -0.03514132150089229,
+        "2019": 0.030505599936165802,
+        "2020": -0.15276930112635395,
+        "2021": 0.09492832205525444,
+        "2022": -0.10424524841208821,
+        "2023": 0.03515383733021622,
+        "2024": 0.10543706927656757,
+        "2025": 0.08241839424566569
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 10,
+        "2013": 10,
+        "2014": 13,
+        "2015": 8,
+        "2016": 5,
+        "2017": 12,
+        "2018": 11,
+        "2019": 11,
+        "2020": 8,
+        "2021": 14,
+        "2022": 9,
+        "2023": 9,
+        "2024": 12,
+        "2025": 8
+      }
+    },
+    "param_stability|WILDER_RSI_2|entry_20.0|exit_90.0": {
+      "CAGR": 0.008771153609177018,
+      "Calmar": 0.034444619152630813,
+      "Sharpe": 0.14493746316139483,
+      "Sortino": 0.022523798515739105,
+      "annualized_volatility": 0.09643301391059614,
+      "average_holding_period": 14.04,
+      "average_loss": -0.032418158852495445,
+      "average_win": 0.01841737968463404,
+      "completed_trades": 125,
+      "expectancy_per_trade": 0.0017433230444555687,
+      "exposure_percentage": 44.667854415881905,
+      "five_best_trades_pnl_contribution_pct": 146.2658668393578,
+      "fold_level_metrics": {
+        "2010_2012": {
+          "expectancy": -0.009505387615663037,
+          "net_return_sum": -0.1330754266192825,
+          "trades": 14,
+          "win_rate": 0.5
+        },
+        "2013_2015": {
+          "expectancy": 0.0009163289881682198,
+          "net_return_sum": 0.024740882680541934,
+          "trades": 27,
+          "win_rate": 0.5925925925925926
+        },
+        "2016_2018": {
+          "expectancy": 0.0033575590907939583,
+          "net_return_sum": 0.07722385908826104,
+          "trades": 23,
+          "win_rate": 0.782608695652174
+        },
+        "2019_2021": {
+          "expectancy": 0.0033002699940169063,
+          "net_return_sum": 0.09240755983247338,
+          "trades": 28,
+          "win_rate": 0.7857142857142857
+        },
+        "2022_2024": {
+          "expectancy": 0.002217938585124332,
+          "net_return_sum": 0.05766640321323263,
+          "trades": 26,
+          "win_rate": 0.6153846153846154
+        },
+        "2025_2027": {
+          "expectancy": 0.014136014623102808,
+          "net_return_sum": 0.09895210236171965,
+          "trades": 7,
+          "win_rate": 0.7142857142857143
+        }
+      },
+      "gross_profit_factor": 1.2245346001218844,
+      "largest_year_pnl_contribution_pct": 81.09294379583378,
+      "longest_losing_sequence": 4,
+      "maximum_drawdown": -0.2546451035010818,
+      "median_holding_period": 11.0,
+      "median_trade": 0.010465383499826664,
+      "net_profit_factor": 1.1639516082964596,
+      "payoff_ratio": 0.5681192373827958,
+      "win_rate": 0.672,
+      "worst_five_trade_sequence": -0.17969323262768272,
+      "worst_trade": -0.2306148134363048,
+      "yearly_return_matrix": {
+        "2010": 0.030176685360933007,
+        "2011": -0.1533471549672866,
+        "2012": -0.00990495701292897,
+        "2013": -0.05790036388959856,
+        "2014": 0.11812676113025777,
+        "2015": -0.03548551456011727,
+        "2016": 0.003353722652708016,
+        "2017": 0.11548617226219499,
+        "2018": -0.041616035826641945,
+        "2019": 0.06226885478468597,
+        "2020": -0.08652823401775879,
+        "2021": 0.11666693906554615,
+        "2022": -0.09087650984315013,
+        "2023": 0.027025667027709168,
+        "2024": 0.12151724602867357,
+        "2025": 0.09895210236171967
+      },
+      "yearly_trade_count_matrix": {
+        "2010": 3,
+        "2011": 2,
+        "2012": 9,
+        "2013": 9,
+        "2014": 10,
+        "2015": 8,
+        "2016": 4,
+        "2017": 11,
+        "2018": 8,
+        "2019": 11,
+        "2020": 7,
+        "2021": 10,
+        "2022": 7,
+        "2023": 8,
+        "2024": 11,
+        "2025": 7
+      }
+    }
+  },
+  "reason_codes": [
+    "CONCENTRATED_PNL",
+    "INDEX_PROXY_ONLY",
+    "TREND_FILTER_NOT_INCREMENTAL"
+  ],
+  "research_verdict": "INSUFFICIENT_TRADABLE_DATA",
+  "safety_contract": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "tradability": {
+    "index_signal_study": "COMPLETE",
+    "options_translation": "NOT_EVALUATED_OPTIONS_REQUIRE_SEPARATE_PATH_DEPENDENT_REPLAY",
+    "reason": "No frozen authoritative multi-year NIFTY futures or NIFTYBEES daily instrument dataset was found in this worktree.",
+    "tradable_instrument_study": "INSUFFICIENT_TRADABLE_DATA"
+  },
+  "worktree": {
+    "branch": "research/rsi2-mean-reversion-edge",
+    "initial_worktree_status": "## research/rsi2-mean-reversion-edge...origin/main",
+    "recorded_at_utc": "2026-07-21T12:45:00Z",
+    "source_branch": "origin/main",
+    "source_commit": "d74307a226c984b62592e33368a889edc9f833d0",
+    "worktree_path": "/Users/madhuram/tradebot-rsi2-mean-reversion-research"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "fold_results_path": "runtime/research/rsi2_mean_reversion/evidence_closure/fold_results.csv",
+  "max_dataset_date": "2025-12-31",
+  "reason": "Parameters are fixed globally; no chronological training windows or train-only parameter selection are performed.",
+  "wfa_verdict": "NOT_WFA_RENAMED_TO_CHRONOLOGICAL_OUT_OF_SAMPLE_PARTITION_ANALYSIS"
+}

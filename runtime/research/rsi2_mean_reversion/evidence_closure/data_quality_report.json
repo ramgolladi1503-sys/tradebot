@@ -1,0 +1,28 @@
+{
+  "auto_adjust": true,
+  "chronological_order": true,
+  "exclusive_end_date": "2026-01-01",
+  "input_path": "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv",
+  "library_version": "1.1.0",
+  "local_independent_official_or_broker_reconciliation": "NOT_AVAILABLE_LOCALLY",
+  "missing_value_policy": "drop rows missing open/high/low/close after parsing",
+  "ohlc_consistency": {
+    "high_ge_open_close_low": true,
+    "low_le_open_close_high": true
+  },
+  "positive_prices": true,
+  "qc": {
+    "duplicate_dates": 0,
+    "end": "2025-12-31",
+    "large_calendar_gaps_gt_5d": 1,
+    "non_positive_ohlc_rows": 0,
+    "rows": 3929,
+    "start": "2010-01-04",
+    "status": "PASS"
+  },
+  "sha256": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+  "source_status": "SECONDARY_SMOKE_SOURCE_ONLY",
+  "start_date": "2010-01-01",
+  "timezone_handling": "yfinance daily dates normalized to timezone-naive session dates",
+  "unique_session_dates": true
+}

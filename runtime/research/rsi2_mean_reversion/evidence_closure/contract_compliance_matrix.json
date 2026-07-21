@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "is_order_action": false,
+  "limitations": [
+    "SECONDARY_SMOKE_SOURCE_ONLY",
+    "INSUFFICIENT_TRADABLE_DATA",
+    "NOT_TRUE_WFA"
+  ],
+  "read_only": true,
+  "status": "PASS_WITH_DATA_LIMITATIONS"
+}

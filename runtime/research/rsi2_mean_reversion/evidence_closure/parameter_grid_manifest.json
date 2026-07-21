@@ -1,0 +1,8 @@
+{
+  "combination_id_formula": "sha256(canonical_json({sma,entry,exit,rsi_type,lane}))",
+  "duplicated_combinations": [],
+  "executed_combinations": 192,
+  "expected_grid_size": 192,
+  "missing_combinations": [],
+  "parameter_results_path": "runtime/research/rsi2_mean_reversion/evidence_closure/parameter_results.csv"
+}

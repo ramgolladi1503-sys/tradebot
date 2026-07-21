@@ -1,0 +1,98 @@
+{
+  "base_completed_trades": 127,
+  "results": {
+    "best_calendar_year_removed": {
+      "compound_return": -0.05428475213995343,
+      "expectancy": 9.182627018403076e-05,
+      "profit_factor": 1.0100134744537652,
+      "removed_year": 2024,
+      "sum_return": 0.010651847341347567,
+      "trades": 116
+    },
+    "block_bootstrap_confidence_interval": {
+      "p05": -0.0037455508147839836,
+      "p50": 0.00126945828941777,
+      "p95": 0.005349763350359977
+    },
+    "crash_period_excluded": {
+      "compound_return": 0.4101390454715743,
+      "expectancy": 0.0029956227667198316,
+      "profit_factor": 1.43434620603238,
+      "sum_return": 0.3774484686066988,
+      "trades": 126
+    },
+    "crash_period_only": {
+      "compound_return": -0.24371930702201072,
+      "expectancy": -0.24371930702201067,
+      "profit_factor": 0.0,
+      "sum_return": -0.24371930702201067,
+      "trades": 1
+    },
+    "five_best_trades_removed": {
+      "arithmetic_return_contribution_pct": 133.8271739188512,
+      "authoritative_formula": "arithmetic_return_contribution_pct = sum(five_largest_net_returns) / sum(all_net_returns) * 100",
+      "compounded_return_contribution_pct": 258.6072374834031,
+      "counterfactual_maximum_drawdown_after_removing_five_best": -0.28290213632369443,
+      "counterfactual_profit_factor_after_removing_five_best": 0.959345861467816,
+      "counterfactual_total_return_after_removing_five_best": -0.10541185222333072,
+      "current_269_28_reproduced": true,
+      "five_best_returns": [
+        0.0468709350667392,
+        0.039531093835549,
+        0.0320086650748966,
+        0.0315865876449165,
+        0.0289686760320581
+      ],
+      "five_best_trade_indices": [
+        34,
+        82,
+        96,
+        110,
+        66
+      ]
+    },
+    "inverted_rsi_condition": {
+      "CAGR": 0.017806170409621958,
+      "completed_trades": 302,
+      "expectancy": 0.001023193479544558,
+      "max_drawdown": -0.1094024832453816,
+      "profit_factor": 1.2512810536459378
+    },
+    "one_session_signal_shift_backward": {
+      "CAGR": -0.16685276205704147,
+      "completed_trades": 208,
+      "expectancy": -0.013854611224215541,
+      "max_drawdown": -0.9460183049527114,
+      "profit_factor": 0.017781613557100357
+    },
+    "one_session_signal_shift_forward": {
+      "CAGR": 0.0074803739649478285,
+      "completed_trades": 207,
+      "expectancy": 0.0006601032556382432,
+      "max_drawdown": -0.12029821789714046,
+      "profit_factor": 1.1554468456122224
+    },
+    "randomized_rsi_distribution": {
+      "CAGR": -0.00025957911557972224,
+      "completed_trades": 407,
+      "expectancy": 4.333449530970999e-05,
+      "max_drawdown": -0.15225620516812532,
+      "profit_factor": 1.0112522163984825
+    },
+    "regime_count_matched_random_entries": {
+      "CAGR": -0.004748052906943578,
+      "completed_trades": 345,
+      "expectancy": -0.00017526969752511458,
+      "max_drawdown": -0.19380185429089714,
+      "profit_factor": 0.9527159619742194
+    },
+    "trend_filter_removed": {
+      "CAGR": 5.214067174974524e-05,
+      "completed_trades": 314,
+      "expectancy": 0.0001740599233047417,
+      "max_drawdown": -0.2780482765109422,
+      "profit_factor": 1.029851130956394
+    }
+  },
+  "seed": 20260721
+}

@@ -1,0 +1,73 @@
+{
+  "items": [
+    {
+      "contract": "Wilder RSI hand sequence",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "Simple RSI hand sequence",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "all gain/loss/flat cases",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "deterministic initialization",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "completed-session signal",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "next-open entry",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "next-open exit",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "no same-bar fill",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "open position excluded",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "cost exactly once",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "ledger-equity reconciliation",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "no overlapping positions",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "no future-data mutation",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "fold-boundary isolation",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "parameter-grid completeness",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "negative-control determinism",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    },
+    {
+      "contract": "artifact hash determinism",
+      "test_file": "tests/test_rsi2_mean_reversion_research.py"
+    }
+  ],
+  "status": "CRITICAL_TESTS_ADDED"
+}

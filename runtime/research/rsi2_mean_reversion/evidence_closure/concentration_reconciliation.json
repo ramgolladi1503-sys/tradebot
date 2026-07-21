@@ -1,0 +1,23 @@
+{
+  "arithmetic_return_contribution_pct": 133.8271739188512,
+  "authoritative_formula": "arithmetic_return_contribution_pct = sum(five_largest_net_returns) / sum(all_net_returns) * 100",
+  "compounded_return_contribution_pct": 258.6072374834031,
+  "counterfactual_maximum_drawdown_after_removing_five_best": -0.28290213632369443,
+  "counterfactual_profit_factor_after_removing_five_best": 0.959345861467816,
+  "counterfactual_total_return_after_removing_five_best": -0.10541185222333072,
+  "current_269_28_reproduced": true,
+  "five_best_returns": [
+    0.0468709350667392,
+    0.039531093835549,
+    0.0320086650748966,
+    0.0315865876449165,
+    0.0289686760320581
+  ],
+  "five_best_trade_indices": [
+    34,
+    82,
+    96,
+    110,
+    66
+  ]
+}

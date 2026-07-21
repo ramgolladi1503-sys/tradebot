@@ -1,0 +1,44 @@
+{
+  "completed_trade_count": 127,
+  "compounded_return": 0.06646093450455637,
+  "expectancy": 0.001052985524288867,
+  "five_best_arithmetic_contribution_pct": 133.8271739188512,
+  "ledger_equity_reconciliation": {
+    "absolute_difference": 0.0,
+    "equity_curve_net": 0.06646093450456303,
+    "ledger_compounded_net": 0.06646093450456303,
+    "tolerance": 1e-12
+  },
+  "ledger_sha256": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+  "profit_factor": 1.1201818946794393,
+  "report_semantic_sha256": "02e80be888e0519f97c7f7a8c573f342e91df117b79e64760d3128da126bb734",
+  "sample_entry_exit_rows": [
+    {
+      "entry_timestamp": "2010-10-21",
+      "exit_timestamp": "2010-11-02",
+      "signal_timestamp": "2010-10-20"
+    },
+    {
+      "entry_timestamp": "2010-11-15",
+      "exit_timestamp": "2010-12-02",
+      "signal_timestamp": "2010-11-12"
+    },
+    {
+      "entry_timestamp": "2010-12-09",
+      "exit_timestamp": "2010-12-22",
+      "signal_timestamp": "2010-12-08"
+    },
+    {
+      "entry_timestamp": "2011-01-07",
+      "exit_timestamp": "2011-02-15",
+      "signal_timestamp": "2011-01-06"
+    },
+    {
+      "entry_timestamp": "2011-04-11",
+      "exit_timestamp": "2011-06-02",
+      "signal_timestamp": "2011-04-08"
+    }
+  ],
+  "status": "PASS",
+  "win_rate": 0.6614173228346457
+}
