@@ -1,0 +1,65 @@
+{
+  "alpha_allocation": {
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": 0.004,
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": 0.006
+  },
+  "artifact": "independent_evaluation_statistical_contract",
+  "bid_ask_required": false,
+  "bootstrap": {
+    "ci": "BCa 95 when numerically valid else percentile 95",
+    "resamples": 100000,
+    "seed_derivation": "sha256(sealed_manifest_hash + hypothesis_id + master_seed)"
+  },
+  "candidate_order": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "catastrophic_symbol_contradiction": "any symbol with at least 20 candidate sessions has negative mean and session-clustered 80% interval upper bound <= 0",
+  "cluster": "trading_session",
+  "concentration_gates": {
+    "single_direction_candidate_share_max": 0.8,
+    "single_index_candidate_share_max": 0.7,
+    "single_month_abs_contribution_max": 0.3,
+    "single_session_abs_contribution_max": 0.15,
+    "top_five_sessions_abs_contribution_max": 0.35
+  },
+  "execution_eligibility": false,
+  "master_seed": 2026072101,
+  "option_data_required": false,
+  "option_economics": "OUT_OF_SCOPE",
+  "pass_gates": [
+    "sample",
+    "primary_mean_positive",
+    "clustered_ci_lower_positive",
+    "positive_session_fraction_strict_gt_0_50",
+    "assigned_alpha",
+    "no_catastrophic_symbol_contradiction",
+    "concentration",
+    "determinism",
+    "independent_audit"
+  ],
+  "primary_estimate": "candidate_weighted_arithmetic_mean",
+  "primary_outcome": "outcome_bps = direction * (frozen_exit_close / frozen_entry_reference_close - 1) * 10000",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sample_gates": {
+    "min_candidate_sessions": 40,
+    "min_candidates": 60
+  },
+  "secondary_estimate": "equal_weighted_candidate_session_mean",
+  "sign_flip": {
+    "cluster": "trading_session",
+    "exact_when_feasible": true,
+    "max_assignments": 1000000,
+    "p_value": "(1 + count(null_stat >= observed_stat)) / (1 + assignments)"
+  },
+  "status": "FROZEN_BEFORE_SEALED_EPOCH_OPEN",
+  "unused_alpha_reassignment_allowed": false
+}

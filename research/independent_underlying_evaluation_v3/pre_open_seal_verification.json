@@ -1,0 +1,36 @@
+{
+  "ac16_hashes": {
+    "generator_semantic_hash": "6b9419ca1b631492f78d3e0965046e78f0574c601aab432af1cc7068bea4d596",
+    "parameter_hash": "96962f33f660a0f6927b860b475ac2c595bc62cd7e156e9ad6bfc1816052bc98",
+    "specification_hash": "2064343bc20abe841ba23591683afa041e8f67dda864721746a1f49af475062f"
+  },
+  "ac24_hashes": {
+    "generator_semantic_hash": "4be001a9b7acf482235e90db389e9fd0fd4c0199ed68f8645e8f182b493b2d5f",
+    "parameter_hash": "532cacdebe2ed4909c9a32632d8cc04ede079a1e6fe02ba8b2876e1393172935",
+    "specification_hash": "81137922979a0497e16616ca0c596197c72b4ce1e28dfb153e81829f55f2934b"
+  },
+  "artifact": "pre_open_seal_verification",
+  "exhausted_corpus_overlap": 0,
+  "external_files_checked": 1098,
+  "external_hash_audit": "PASS",
+  "failures": [],
+  "first_session": "2023-01-02",
+  "identity_drift": "NONE",
+  "last_session": "2024-06-28",
+  "old_lockbox_overlap": 0,
+  "opened": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sealed": true,
+  "sealed_session_manifest_file_sha256": "2a1aebe1db84ce07b0fb6547f32bf06bdeb4333243b6e72a3388092457d862bf",
+  "session_count": 366,
+  "session_list_semantic_hash": "d2fdd5bc974e095c0c2cb18155fa3cf644c6a53e4f59a492ef57d7cbe1806208",
+  "verdict": "PASS"
+}
