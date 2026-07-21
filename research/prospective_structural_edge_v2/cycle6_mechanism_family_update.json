@@ -1,0 +1,44 @@
+{
+  "compression_breakout": {
+    "additional_same_corpus_variants_allowed": false,
+    "current_definition_status": "FAILED_PRIOR_DEFINITIONS",
+    "family_level_status": "EXHAUSTED_BY_CURRENT_OHLCV_CORPUS",
+    "fresh_data_confirmation_priority": false,
+    "reason": "AC07, AC14, AC19, and AC27 ancestry show no materially new observable state."
+  },
+  "cross_index_contraction": {
+    "additional_same_corpus_variants_allowed": false,
+    "current_definition_status": "DUPLICATE_OF_COMPRESSION_AND_DISPERSION_FAMILIES",
+    "family_level_status": "EXHAUSTED_BY_CURRENT_OHLCV_CORPUS",
+    "fresh_data_confirmation_priority": false,
+    "reason": "Three-index wrapping does not create independent causal ownership."
+  },
+  "nonconfirmation_reversal": {
+    "additional_same_corpus_variants_allowed": false,
+    "current_definition_status": "UNDERPOWERED_AND_TEMPORALLY_UNSTABLE",
+    "family_level_status": "FRESH_DATA_ONLY_NO_SAME_CORPUS_REPAIR",
+    "fresh_data_confirmation_priority": true,
+    "reason": "AC23 mean positive but CI crossed zero and last two folds were negative."
+  },
+  "opening_repair_state": {
+    "additional_same_corpus_variants_allowed": false,
+    "current_definition_status": "FALSIFIED_BY_CURRENT_DEFINITION",
+    "family_level_status": "EXHAUSTED_FOR_SAME_CORPUS_VARIANTS",
+    "fresh_data_confirmation_priority": false,
+    "reason": "AC22 failed aggregate, controls, counterfactual, and later folds."
+  },
+  "prior_midpoint_rejection": {
+    "additional_same_corpus_variants_allowed": false,
+    "current_definition_status": "UNDERPOWERED_NOT_CONFIRMED_FRESH_DATA_PRIORITY",
+    "family_level_status": "FRESH_DATA_ONLY_NO_NEARBY_VARIANTS",
+    "fresh_data_confirmation_priority": true,
+    "reason": "AC24 had five positive folds but failed sample, CI, and positive-session gates."
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

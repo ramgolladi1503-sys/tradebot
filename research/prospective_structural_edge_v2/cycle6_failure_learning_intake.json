@@ -1,0 +1,87 @@
+{
+  "AC22_lesson": {
+    "aggregate_mean_bps": -2.8202,
+    "clustered_ci": [
+      -7.688702606586144,
+      2.135837180225828
+    ],
+    "fold_means": [
+      0.2323,
+      -1.9536,
+      -3.1796,
+      -4.1613,
+      -10.7809
+    ],
+    "interpretation": "Opening-repair second-side acceptance is falsified; later-fold deterioration, failed controls, and failed counterfactual prohibit threshold repair, direction inversion, or renamed opening-failure descendants.",
+    "matched_counterfactual": "FAIL",
+    "negative_controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+    "positive_session_fraction": 0.4545,
+    "sample": [
+      88,
+      88
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE"
+  },
+  "AC23_lesson": {
+    "aggregate_mean_bps": 1.0507,
+    "clustered_ci": [
+      -2.2055932451773628,
+      4.464451058047442
+    ],
+    "fold_means": [
+      1.1268,
+      6.1877,
+      1.8316,
+      -2.0816,
+      -3.1958
+    ],
+    "interpretation": "Two-index nonconfirmation reversal is unconfirmed and temporally unstable; positive early folds cannot justify broadening thresholds, changing confirmation count, or reversing entry logic on the same corpus.",
+    "matched_counterfactual": "PASS",
+    "negative_controls": "PASS",
+    "positive_session_fraction": 0.5103,
+    "sample": [
+      145,
+      145
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION"
+  },
+  "AC24_lesson": {
+    "aggregate_mean_bps": 2.36,
+    "clustered_ci": [
+      -2.6116770306024364,
+      7.42745196569638
+    ],
+    "fold_means": [
+      5.3585,
+      0.7202,
+      2.0245,
+      7.6147,
+      5.8157
+    ],
+    "interpretation": "Prior-session body-midpoint rejection is underpowered and unconfirmed; five positive folds do not authorize range-midpoint, acceptance, or rotation variants on the same corpus.",
+    "matched_counterfactual": "PASS",
+    "negative_controls": "PASS",
+    "positive_session_fraction": 0.513,
+    "sample": [
+      115,
+      115
+    ],
+    "verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION"
+  },
+  "cycle5_evidence_ingested": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "source_artifacts": [
+    "cumulative_failure_knowledge.json",
+    "mechanism_family_status.json",
+    "cycle5_hypothesis_ancestry_audit.json",
+    "cycle5_mechanism_quality_oracle.json",
+    "cycle_5_rejection_analysis.json",
+    "cycle_6_next_search_plan.json"
+  ]
+}

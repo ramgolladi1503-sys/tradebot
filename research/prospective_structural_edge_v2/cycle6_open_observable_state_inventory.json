@@ -1,0 +1,20 @@
+{
+  "observable_fields": [
+    "prior-session OHLCV path summaries",
+    "current opening path shape",
+    "intraday range location",
+    "VWAP path",
+    "cross-index sign and magnitude relationships",
+    "realized volatility path",
+    "session-clock state"
+  ],
+  "reason": "Available OHLCV-derived families have either failed, are underpowered fresh-data-only candidates, are duplicate/cosmetic descendants, or are statistically infeasible on the 500-session corpus.",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "scientifically_remaining_same_corpus_families": []
+}

@@ -1,0 +1,59 @@
+{
+  "AC25_OPENING_AUCTION_FAILURE_BASKET_MEDIAN_RETURN": {
+    "changed_elements": [
+      "second-side acceptance replaced by basket-median return"
+    ],
+    "could_reasonably_respond_to_prior_outcomes": true,
+    "independent_pre_result_source_for_changed_elements": null,
+    "nearest_ancestor": "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+    "prior_result_available_at_creation": "AC22 failed before AC25 plan-only hypothesis existed",
+    "shared_entry_geometry": "opening failure repaired into a cross-index confirmation variable",
+    "shared_state_variables": [
+      "opening failure",
+      "opening repair",
+      "basket confirmation"
+    ],
+    "verdict": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT"
+  },
+  "AC26_PRIOR_RANGE_MIDPOINT_ACCEPTANCE_ROTATION": {
+    "changed_elements": [
+      "body midpoint to range midpoint",
+      "rejection to acceptance",
+      "directional rejection to rotation"
+    ],
+    "could_reasonably_respond_to_prior_outcomes": true,
+    "independent_pre_result_source_for_changed_elements": null,
+    "nearest_ancestor": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "prior_result_available_at_creation": "AC24 positive folds and failed CI/sample gates were known",
+    "shared_entry_geometry": "midpoint touch then same-session directional response",
+    "shared_state_variables": [
+      "prior-session midpoint",
+      "midpoint revisit",
+      "directional continuation/reversal"
+    ],
+    "verdict": "REJECTED_OUTCOME_DEPENDENT_DESCENDANT"
+  },
+  "AC27_THREE_INDEX_VOLATILITY_CONTRACTION_ASYMMETRY": {
+    "changed_elements": [
+      "three-index asymmetry wrapper"
+    ],
+    "could_reasonably_respond_to_prior_outcomes": true,
+    "independent_pre_result_source_for_changed_elements": null,
+    "nearest_ancestor": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION / AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+    "prior_result_available_at_creation": "AC07, AC14, AC19, and compression-family failures were known",
+    "shared_entry_geometry": "compression/contraction followed by directional release",
+    "shared_state_variables": [
+      "realized volatility contraction",
+      "cross-index dispersion",
+      "breakout timing"
+    ],
+    "verdict": "REJECTED_EXHAUSTED_MECHANISM_FAMILY"
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

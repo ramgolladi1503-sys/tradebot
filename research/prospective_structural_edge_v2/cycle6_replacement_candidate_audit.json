@@ -1,0 +1,18 @@
+{
+  "rejected_replacement_modes": [
+    "threshold/window/horizon edits",
+    "direction inversion",
+    "body midpoint to range midpoint",
+    "single-index state to basket confirmation",
+    "compression asymmetry wrappers"
+  ],
+  "replacement_generation_verdict": "NO_SCIENTIFICALLY_OPEN_SAME_CORPUS_FAMILY",
+  "replacement_hypotheses": [],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}
