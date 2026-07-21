@@ -6,7 +6,6 @@ import json
 import math
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -16,9 +15,7 @@ from research.rsi2_mean_reversion.engine import (
     BASE_COST,
     NEXT_OPEN,
     WILDER_RSI_2,
-    build_trade_ledger,
     load_ohlc,
-    metrics,
     prepare_features,
     sha256_file,
 )
@@ -167,7 +164,9 @@ def base_inputs() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, o
     return raw, feat, primary, report
 
 
-def matched_random_replicates(replicates: int = 1000, seed: int = 20260721) -> tuple[dict[str, object], pd.DataFrame, dict[str, object]]:
+def matched_random_replicates(
+    replicates: int = 1000, seed: int = 20260721, write_artifacts: bool = True
+) -> tuple[dict[str, object], pd.DataFrame, dict[str, object]]:
     raw, feat, base, _ = base_inputs()
     base_count = len(base)
     base_metric = float(base["net_return"].mean())
@@ -218,7 +217,8 @@ def matched_random_replicates(replicates: int = 1000, seed: int = 20260721) -> t
             "overlap_count": int(sum(1 for i in range(1, len(trades)) if trades[i][0] <= trades[i - 1][1])),
         })
     df = pd.DataFrame(rows)
-    df.to_csv(GATE / "matched_random_replicates.csv", index=False)
+    if write_artifacts:
+        df.to_csv(GATE / "matched_random_replicates.csv", index=False)
     summary = {
         "replicates": replicates,
         "base_completed_trades": base_count,
@@ -254,8 +254,9 @@ def matched_random_replicates(replicates: int = 1000, seed: int = 20260721) -> t
             "deterministic_seed_schedule": f"{seed}..{seed + replicates - 1}",
         },
     }
-    write_json(GATE / "matched_random_manifest.json", manifest)
-    write_json(GATE / "matched_random_summary.json", summary)
+    if write_artifacts:
+        write_json(GATE / "matched_random_manifest.json", manifest)
+        write_json(GATE / "matched_random_summary.json", summary)
     if summary["status"] != "PASS":
         raise RuntimeError("Matched random repair failed exact matching assertions")
     return manifest, df, summary
@@ -550,4 +551,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

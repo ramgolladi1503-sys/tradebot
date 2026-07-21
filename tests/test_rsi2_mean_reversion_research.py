@@ -193,8 +193,8 @@ def test_parameter_combination_ids_cover_full_grid_deterministically():
 
 
 def test_matched_random_replicates_exact_count_and_deterministic():
-    _, first, first_summary = matched_random_replicates(replicates=5, seed=20260721)
-    _, second, second_summary = matched_random_replicates(replicates=5, seed=20260721)
+    _, first, first_summary = matched_random_replicates(replicates=5, seed=20260721, write_artifacts=False)
+    _, second, second_summary = matched_random_replicates(replicates=5, seed=20260721, write_artifacts=False)
 
     assert first["completed_trades"].eq(127).all()
     assert first["overlap_count"].eq(0).all()
@@ -204,7 +204,7 @@ def test_matched_random_replicates_exact_count_and_deterministic():
 
 
 def test_verdict_fields_are_distinct_allowed_enums_and_deterministic():
-    _, matched, summary = matched_random_replicates(replicates=5, seed=20260721)
+    _, matched, summary = matched_random_replicates(replicates=5, seed=20260721, write_artifacts=False)
     neighborhood, neighborhood_summary = parameter_neighborhood()
     base = pd.read_csv("runtime/research/rsi2_mean_reversion/completed_trade_ledger.csv")
     base = base[base["rsi_variant"] == "WILDER_RSI_2"].copy()
@@ -220,7 +220,7 @@ def test_verdict_fields_are_distinct_allowed_enums_and_deterministic():
 
 
 def test_control_completeness_matrix_has_every_required_control():
-    _, _, summary = matched_random_replicates(replicates=5, seed=20260721)
+    _, _, summary = matched_random_replicates(replicates=5, seed=20260721, write_artifacts=False)
     rows = control_completeness(summary)
 
     assert {row["control_id"] for row in rows} == set(REQUIRED_CONTROLS)

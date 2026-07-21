@@ -48,8 +48,6 @@ def oracle_metrics_from_ledger(ledger_path: Path, report_path: Path, output_path
     ledger = pd.read_csv(ledger_path)
     report = json.loads(report_path.read_text(encoding="utf-8"))
     primary = ledger[ledger["rsi_variant"] == "WILDER_RSI_2"].copy()
-    wins = primary[primary["net_return"] > 0.0]["net_return"]
-    losses = primary[primary["net_return"] <= 0.0]["net_return"]
     net = primary["net_return"]
     compound = float((1.0 + net).prod() - 1.0)
     gains = float(net[net > 0.0].sum())

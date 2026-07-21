@@ -3,9 +3,8 @@ import runpy
 
 runpy.run_path(str(Path(__file__).with_name("bootstrap.py")))
 
-from research.rsi2_mean_reversion.publication_gate import main
+from research.rsi2_mean_reversion.publication_gate import main  # noqa: E402
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

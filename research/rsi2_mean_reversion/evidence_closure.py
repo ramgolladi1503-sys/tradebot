@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import shutil
 import subprocess
 import sys
@@ -28,11 +27,9 @@ from research.rsi2_mean_reversion.engine import (
     prepare_features,
     run_research,
     sha256_file,
-    simple_rsi,
     validate_ohlc,
-    wilder_rsi,
 )
-from research.rsi2_mean_reversion.oracle import oracle_metrics_from_ledger, oracle_wilder_rsi
+from research.rsi2_mean_reversion.oracle import oracle_metrics_from_ledger
 
 
 ALLOWED_VERDICTS = {
@@ -288,7 +285,8 @@ def negative_controls(input_path: Path) -> dict[str, object]:
     variants["randomized_rsi_distribution"] = (tmp_rsi["trend_ok"] & (tmp_rsi["rsi"] < 15.0)).to_numpy()
     eligible = np.where(feat["trend_ok"].fillna(False).to_numpy())[0]
     chosen = rng.choice(eligible, size=min(int(signal.sum()), len(eligible)), replace=False)
-    random_sig = np.zeros(len(feat), dtype=bool); random_sig[chosen] = True
+    random_sig = np.zeros(len(feat), dtype=bool)
+    random_sig[chosen] = True
     variants["regime_count_matched_random_entries"] = random_sig
     for name, sig in variants.items():
         tmp = feat.copy()
@@ -338,12 +336,14 @@ def tail_risk(ledger_path: Path) -> dict[str, object]:
 
 
 def _profit_factor(series: pd.Series) -> float:
-    gains = float(series[series > 0].sum()); losses = abs(float(series[series <= 0].sum()))
+    gains = float(series[series > 0].sum())
+    losses = abs(float(series[series <= 0].sum()))
     return gains / losses if losses else math.inf if gains else 0.0
 
 
 def _max_dd(equity: pd.Series) -> float:
-    if equity.empty: return 0.0
+    if equity.empty:
+        return 0.0
     return float((equity / equity.cummax() - 1).min())
 
 
@@ -351,10 +351,14 @@ def _drawdown_episodes(ret: pd.Series) -> list[dict[str, object]]:
     eq = (1 + ret).cumprod()
     dd = eq / eq.cummax() - 1
     episodes = []
-    in_dd = False; start = 0; trough = 0
+    in_dd = False
+    start = 0
+    trough = 0
     for i, v in enumerate(dd):
         if v < 0 and not in_dd:
-            in_dd = True; start = i; trough = i
+            in_dd = True
+            start = i
+            trough = i
         if in_dd and v < dd.iloc[trough]:
             trough = i
         if in_dd and v == 0:
