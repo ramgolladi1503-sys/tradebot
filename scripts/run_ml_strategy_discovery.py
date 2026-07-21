@@ -38,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-atr", type=float, default=1.2)
     parser.add_argument("--stop-atr", type=float, default=0.6)
     parser.add_argument("--horizon-bars", type=int, default=30)
+    parser.add_argument("--side", choices=("LONG", "SHORT"), default="LONG")
     return parser.parse_args()
 
 
@@ -61,6 +62,7 @@ def main() -> int:
         target_atr=args.target_atr,
         stop_atr=args.stop_atr,
         barrier_horizon_bars=args.horizon_bars,
+        label_side=args.side,
     )
     bars = read_frame(args.bars)
     option_quotes = read_frame(args.option_quotes) if args.option_quotes else None
