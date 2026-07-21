@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "9",
+    "name": "Vector index mapping",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "Signals index should perfectly align with the original DataFrame index types, or get_indexer should validate -1.",
+    "actual_value": "pos_indices returned -1 due to type mismatch (DatetimeIndex vs String), has_bug=True",
+    "bias": "Index misalignment causes execution on wrong bars (last bar) or crashes."
+  }
+]

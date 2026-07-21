@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "7",
+    "name": "Naive timestamp localization",
+    "classification": "NOT_A_BUG",
+    "expected_value_rule": "All inputs should map to 09:15 local time.",
+    "actual_value": "Has bug: False",
+    "bias": "Works as expected."
+  }
+]

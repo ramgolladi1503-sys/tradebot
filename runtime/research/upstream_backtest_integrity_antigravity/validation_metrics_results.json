@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "14",
+    "name": "Placeholder or invalid validation metrics",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "Trade ledgers must compute real execution/validation grades or omit the fields, rather than hardcoding placeholders.",
+    "actual_value": "The ledger script hardcodes `execution_grade = False`, `live_allowed = False`, etc., for all trades.",
+    "bias": "Corrupts downstream risk analytics and creates a false sense of security or un-auditable safety gates."
+  }
+]

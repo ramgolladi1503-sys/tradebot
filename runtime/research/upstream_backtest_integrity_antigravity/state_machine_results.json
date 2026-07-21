@@ -1,0 +1,11 @@
+[
+  {
+    "suspect_id": "3",
+    "name": "Stale pending-signal execution",
+    "classification": "CONFIRMED_FALSE_POSITIVE_BUG",
+    "expected_value_rule": "Pending signal B should expire if not executed on the immediate next open.",
+    "actual_value_df1_at_0915": "Executes Signal B on Bar 9",
+    "actual_value_df2_at_0915": null,
+    "bias": "State machine misses invalidation of pending_signal when active_trade hits `continue`, causing stale signals to execute days or hours later."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "13",
+    "name": "False WFA or mixed IS/OOS metrics",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "WFA must calculate indicators continuously across train/test boundaries, and correctly label OOS trades.",
+    "actual_value": "WFA slices raw data first, destroying indicator warm-up in test_df, and never sets oos_start_date.",
+    "bias": "Destroys OOS validity by dropping early trades and evaluating on un-warmed indicators, while mislabeling them as IS."
+  }
+]

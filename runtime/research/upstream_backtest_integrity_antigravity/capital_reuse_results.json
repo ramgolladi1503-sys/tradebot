@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "10",
+    "name": "Overlapping trades and capital reuse",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "Multiple concurrent trades across symbols must share a capital pool and be rejected if capital is exhausted.",
+    "actual_value": "Backtest engines evaluate symbols independently, allowing overlapping trades to reuse the same starting capital.",
+    "bias": "Overstates strategy returns by allowing infinite leverage/unbounded capital during overlapping opportunities."
+  }
+]

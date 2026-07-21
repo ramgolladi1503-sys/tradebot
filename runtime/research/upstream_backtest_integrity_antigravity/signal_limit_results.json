@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "5",
+    "name": "Signal-time limit reused at later entry bar",
+    "classification": "CONFIRMED_FALSE_POSITIVE_BUG",
+    "expected_value_rule": "Entry limit price should be based on the entry bar's executable quote.",
+    "actual_value": "Entry limit price used 101.0 (from signal bar) instead of 106.0 (from entry bar)",
+    "bias": "Using the signal-time quote as a resting limit introduces false positive fills if the market touches the old price, instead of hitting the true entry quote."
+  }
+]

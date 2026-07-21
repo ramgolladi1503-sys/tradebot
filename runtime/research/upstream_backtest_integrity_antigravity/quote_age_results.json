@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "8",
+    "name": "Bar vs quote timestamp contract",
+    "classification": "CONFIRMED_FALSE_POSITIVE_BUG",
+    "expected_value_rule": "Quote age should reflect real delay if CSV contains true quote timestamp, instead of hardcoding to 0.",
+    "actual_value": "quote_age_sec is always 0.0 because adapter passes ts_epoch for both evaluated_at and snapshot[ts]",
+    "bias": "Hardcoding age to 0 accepts stale quotes that should have been rejected."
+  }
+]

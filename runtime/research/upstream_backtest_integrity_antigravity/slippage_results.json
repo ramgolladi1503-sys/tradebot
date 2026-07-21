@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "6",
+    "name": "Slippage reported but not applied",
+    "classification": "CONFIRMED_FALSE_POSITIVE_BUG",
+    "expected_value_rule": "fill_price should be worse than the quote by slippage_bp.",
+    "actual_value": "fill_price was 100.0, meaning 0 slippage applied, despite slippage_bp=90.7881 being calculated.",
+    "bias": "Dropping the modeled slippage makes executions unrealistically favorable, causing false positives in strategy expectancy."
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "suspect_id": "4",
+    "name": "Cost unit mixing or double deduction",
+    "classification": "CONFIRMED_FALSE_NEGATIVE_BUG",
+    "expected_value_rule": "net_pnl should subtract ONLY the underlying_cost.",
+    "actual_value": "net_pnl subtracts BOTH underlying_cost and proxy_exec_cost (mixing units)",
+    "cases": [
+      {
+        "delta": 0.5,
+        "gross": 0,
+        "actual_net_pnl": -4.5,
+        "expected_net_pnl": -3.0,
+        "diff": -1.5
+      },
+      {
+        "delta": 0.5,
+        "gross": 10,
+        "actual_net_pnl": 5.5,
+        "expected_net_pnl": 7.0,
+        "diff": -1.5
+      },
+      {
+        "delta": 0.5,
+        "gross": -10,
+        "actual_net_pnl": -14.5,
+        "expected_net_pnl": -13.0,
+        "diff": -1.5
+      },
+      {
+        "delta": 0.25,
+        "gross": 0,
+        "actual_net_pnl": -7.5,
+        "expected_net_pnl": -6.0,
+        "diff": -1.5
+      },
+      {
+        "delta": 0.25,
+        "gross": 10,
+        "actual_net_pnl": 2.5,
+        "expected_net_pnl": 4.0,
+        "diff": -1.5
+      }
+    ],
+    "bias": "Double deduction and unit mixing artificially penalizes strategy performance, leading to false negatives in backtest expectancy."
+  }
+]

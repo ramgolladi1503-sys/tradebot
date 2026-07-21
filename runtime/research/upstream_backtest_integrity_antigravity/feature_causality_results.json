@@ -1,0 +1,29 @@
+[
+  {
+    "suspect_id": "1",
+    "name": "Daily macro EMA lookahead",
+    "classification": "CONFIRMED_BIDIRECTIONAL_CORRUPTION",
+    "expected_value": 100.0,
+    "actual_value_df1": 100.0,
+    "actual_value_df2": 109.52380952380952,
+    "bias": "Lookahead leaks future same-day close into morning bars, shifting macro_bull/macro_bear filter incorrectly."
+  },
+  {
+    "suspect_id": "1",
+    "name": "Daily macro EMA lookahead",
+    "classification": "CONFIRMED_BIDIRECTIONAL_CORRUPTION",
+    "expected_value": 100.0,
+    "actual_value_df1": 100.0,
+    "actual_value_df2": 109.52380952380952,
+    "bias": "Lookahead leaks future same-day close into morning bars, shifting macro_bull/macro_bear filter incorrectly."
+  },
+  {
+    "suspect_id": "2",
+    "name": "Higher-timeframe resample lookahead",
+    "classification": "CONFIRMED_BIDIRECTIONAL_CORRUPTION",
+    "expected_value_rule": "No leak from 09:29 to 09:15",
+    "actual_value_df1_at_0915": null,
+    "actual_value_df2_at_0915": null,
+    "bias": ".resample('15min').last() places the bucket's final value at the bucket's start time label, ffill leaks it to all rows in the bucket."
+  }
+]

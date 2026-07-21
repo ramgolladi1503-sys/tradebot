@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "11",
+    "name": "Stop/target ambiguity",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "Bars hitting both stop and target should invalidate the backtest or throw a warning.",
+    "actual_value": "The engines silently swallow the ambiguity by pessimistically forcing a stop loss.",
+    "bias": "Silently creates false confidence by hiding extreme volatility and lack of intra-bar granularity."
+  }
+]

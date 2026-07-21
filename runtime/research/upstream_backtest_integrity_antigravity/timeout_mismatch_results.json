@@ -1,0 +1,10 @@
+[
+  {
+    "suspect_id": "12",
+    "name": "Timeout timestamp/price mismatch in OptionBacktestEngine",
+    "classification": "CONFIRMED_BUG",
+    "expected_value_rule": "Timeout exits must use prices valid at the timeout timestamp, or fail the trade if no data exists.",
+    "actual_value": "The engine constructs a fake candle with a future timestamp but completely stale prices (even from entry time).",
+    "bias": "Masks missing data risk and overstates liquidity by artificially executing at stale prices hours later."
+  }
+]
