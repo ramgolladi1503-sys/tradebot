@@ -119,6 +119,12 @@ def test_chronological_split_locks_holdout() -> None:
     ].min()
     assert dev_end < validation_start
     assert validation_end < holdout_start
+    dev_sessions = set(split.loc[split["split"] == "DEVELOPMENT", "session_date"])
+    validation_sessions = set(split.loc[split["split"] == "VALIDATION", "session_date"])
+    holdout_sessions = set(split.loc[split["split"] == "HOLDOUT_LOCKED", "session_date"])
+    assert dev_sessions.isdisjoint(validation_sessions)
+    assert dev_sessions.isdisjoint(holdout_sessions)
+    assert validation_sessions.isdisjoint(holdout_sessions)
 
 
 def test_training_does_not_use_locked_holdout() -> None:
@@ -202,6 +208,49 @@ def test_same_bar_collision_is_ambiguous_and_conservative() -> None:
         horizon_bars=1,
         target_atr=1.0,
         stop_atr=1.0,
+        side="LONG",
     )
     assert labels.loc[0, "barrier_outcome"] == "AMBIGUOUS_SAME_BAR"
     assert labels.loc[0, "label_return_r"] == -1.0
+
+
+def test_barrier_labels_never_cross_session_boundary() -> None:
+    bars = pd.DataFrame(
+        {
+            "session_date": ["2026-01-05", "2026-01-05", "2026-01-06", "2026-01-06"],
+            "close": [100.0, 100.0, 120.0, 120.0],
+            "high": [100.0, 100.2, 125.0, 125.0],
+            "low": [100.0, 99.8, 119.0, 119.0],
+        }
+    )
+    labels = compute_triple_barrier_labels(
+        bars,
+        pd.Series([1.0, 1.0, 1.0, 1.0]),
+        horizon_bars=1,
+        target_atr=1.0,
+        stop_atr=1.0,
+        side="LONG",
+    )
+    assert labels.loc[1, "barrier_outcome"] == "UNAVAILABLE"
+    assert labels.loc[1, "label_status"] == "SESSION_ENDED_BEFORE_HORIZON"
+
+
+def test_short_side_labels_are_directionally_correct() -> None:
+    bars = pd.DataFrame(
+        {
+            "session_date": ["2026-01-05"] * 3,
+            "close": [100.0, 99.0, 98.0],
+            "high": [100.0, 99.5, 98.5],
+            "low": [100.0, 98.5, 97.5],
+        }
+    )
+    labels = compute_triple_barrier_labels(
+        bars,
+        pd.Series([1.0, 1.0, 1.0]),
+        horizon_bars=1,
+        target_atr=1.0,
+        stop_atr=1.0,
+        side="SHORT",
+    )
+    assert labels.loc[0, "barrier_outcome"] == "TARGET_FIRST"
+    assert labels.loc[0, "label_return_r"] == 1.0
