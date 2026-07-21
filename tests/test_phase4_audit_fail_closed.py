@@ -90,6 +90,23 @@ def test_selection_audit_reads_status_and_signal_time_and_blocks_missing_scores(
     assert "SELECTED_SCORE_EVIDENCE_MISSING" in result["blockers"]
 
 
+def test_selection_capacity_prefers_same_run_ledger_summary():
+    module = _load(
+        "audit_selection_capacity", "scripts/audit_phase4_8_selection_quality.py"
+    )
+    resolved = module._capacity_metadata(
+        {"active_symbol_days": 999, "max_trades_per_symbol_day": 99},
+        {
+            "cap_saturation": {
+                "active_symbol_days": 12,
+                "max_trades_per_symbol_day": 4,
+            }
+        },
+    )
+    assert resolved["active_symbol_days"] == 12
+    assert resolved["max_trades_per_symbol_day"] == 4
+
+
 def test_accounting_audit_requires_explicit_pnl_model_and_fields():
     module = _load("audit_accounting", "scripts/audit_phase4_10_accounting.py")
     empty = module.audit_accounting([])
