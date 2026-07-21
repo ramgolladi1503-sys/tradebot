@@ -102,10 +102,18 @@ def walk_forward_evaluate(
     scope = scope.sort_values("decision_timestamp", kind="mergesort")
     if folds < 2 or len(scope) < folds * 5:
         raise ValueError("insufficient rows for requested walk-forward folds")
-    indices = np.array_split(np.arange(len(scope)), folds)
+    ordered_sessions = (
+        scope.groupby("session_date", sort=False)["decision_timestamp"]
+        .min()
+        .sort_values(kind="mergesort")
+        .index.to_numpy()
+    )
+    if len(ordered_sessions) < folds:
+        raise ValueError("insufficient complete sessions for requested folds")
+    session_folds = np.array_split(ordered_sessions, folds)
     results: list[dict[str, float | int | None]] = []
-    for fold_number, positions in enumerate(indices, start=1):
-        fold = scope.iloc[positions]
+    for fold_number, fold_sessions in enumerate(session_folds, start=1):
+        fold = scope.loc[scope["session_date"].isin(fold_sessions)].copy()
         selected = candidate_mask(fold, candidate)
         metrics = _metrics(
             fold.loc[selected, "label_return_r"] - cost_r,
