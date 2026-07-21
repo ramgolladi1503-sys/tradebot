@@ -25,7 +25,7 @@ from core.ohlc_buffer import ohlc_buffer
 from core.indicators_live import compute_indicators
 from core.filters import get_bias
 from core.depth_store import depth_store
-from core.market_context import coerce_segment_for_market_context, derive_market_context, is_offhours
+from core.market_context import coerce_segment_for_market_context, derive_market_context
 from core.regime_session_context import resolve_canonical_session_context
 from core.paths import logs_dir
 from core.time_utils import (
@@ -2820,7 +2820,6 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
                 ema = ind["ema"]
             last_ts = ind.get("last_ts")
             bars_ready = bool(ohlc_bars_count >= min_bars and ohlc_bars_count > 0)
-            required_inputs_ok = bars_ready
             indicator_inputs_ok = bars_ready
             if last_ts:
                 try:
@@ -3121,7 +3120,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
             orb_state = _orb_state_from_candles(
                 symbol,
                 bars,
-                now_dt=now,
+                now_dt=cycle_cutoff,
                 segment=segment,
                 market_open=bool(is_market_open),
                 market_mode=market_ctx.mode,
@@ -3137,9 +3136,7 @@ def fetch_live_market_data(*, allow_history_seed: bool = True):
         if orb_low is None:
             orb_low = ltp
 
-        exec_mode_for_policy = str(getattr(cfg, "EXECUTION_MODE", getattr(cfg, "TRADING_MODE", "SIM"))).upper()
         market_open_now = bool(market_ctx.is_market_open)
-        strict_live_market_open = bool(market_ctx.mode == "LIVE" and market_open_now)
         option_chain = _fetch_option_chain_with_context(
             symbol,
             ltp,
