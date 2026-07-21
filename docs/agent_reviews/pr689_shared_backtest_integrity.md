@@ -1,5 +1,14 @@
 # PR 689 — Shared Backtest Integrity Production Review
 
+- mode: SHARED_BACKTEST_INTEGRITY_PRODUCTION_FIX
+- candidate_id: PR689_SHARED_BACKTEST_INTEGRITY_V1
+- decision: DRAFT_FIX_BRANCH_CREATED
+- reason: Independently reproduced shared research defects are repaired with fail-closed regression coverage.
+- timestamp: 2026-07-22T01:21:16+05:30
+- is_order_action: false
+- broker_api_called: false
+- source: docs/agent_reviews/pr689_shared_backtest_integrity.md
+
 ## Agent Work Contract
 
 Repair only shared research/backtest integrity defects that were independently reproduced from repository code. Preserve strategy formulas and all live execution, broker, feed, risk, configuration, and dashboard behavior. Keep the pull request draft and unmerged until repository gates and human review complete.
