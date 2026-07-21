@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "datasets": {
+    "DEVELOPMENT_V1": {
+      "status": "AVAILABLE",
+      "description": "Allowed for V2 candidate generation and testing."
+    },
+    "VALIDATION_V1_CONSUMED": {
+      "status": "LOCKED",
+      "description": "Consumed in V1. Forbidden for V2 selection."
+    },
+    "HOLDOUT_V1_LOCKED": {
+      "status": "LOCKED",
+      "description": "Remains untouched and locked."
+    },
+    "FRESH_CONFIRMATION_V2_LOCKED": {
+      "status": "LOCKED",
+      "description": "Fresh OOS data. Must remain locked until a V2 rule is frozen."
+    }
+  }
+}
