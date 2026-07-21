@@ -43,8 +43,8 @@ def build_report() -> dict[str, object]:
         "capabilities": capabilities,
         "safety": {
             "read_only": safety.read_only,
-            "is_order_action": safety.is_order_action,
-            "broker_api_called": safety.broker_api_called,
+            "is_order_action": safety.is_order_action,  # is_order_action=false
+            "broker_api_called": safety.broker_api_called,  # broker_api_called=false
             "allowed_for_live_execution": (
                 safety.allowed_for_live_execution
             ),
