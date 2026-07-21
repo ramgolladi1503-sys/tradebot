@@ -87,7 +87,38 @@ def test_no_losses_do_not_emit_fake_profit_factor_999():
     assert metrics["profit_factor_state"] == "NO_LOSING_TRADES"
 
 
-def test_main_uses_catalog_rows_and_actual_average_rr(tmp_path, monkeypatch):
+def _write_passing_audits(module, base_dir):
+    for filename, classification, _ in module.REQUIRED_PHASE4_AUDITS:
+        (base_dir / filename).write_text(
+            json.dumps({"classification": classification, "blockers": []})
+        )
+
+
+def test_required_audit_blockers_fail_closed_on_missing_or_failed_report(tmp_path):
+    module = _load_module()
+    base_dir = tmp_path / "audit_reports"
+    base_dir.mkdir()
+
+    missing = module._required_audit_blockers(base_dir)
+    assert len(missing) == len(module.REQUIRED_PHASE4_AUDITS)
+    assert all(value.startswith("PHASE4_AUDIT_REPORT_MISSING:") for value in missing)
+
+    _write_passing_audits(module, base_dir)
+    failed_name, _, failed_blocker = module.REQUIRED_PHASE4_AUDITS[2]
+    (base_dir / failed_name).write_text(
+        json.dumps(
+            {
+                "classification": "PHASE_4_7_INTEGRITY_AUDIT_FAILED",
+                "blockers": ["TRADE_LEDGER_MISSING_OR_EMPTY"],
+            }
+        )
+    )
+    blockers = module._required_audit_blockers(base_dir)
+    assert any(value.startswith(failed_blocker) for value in blockers)
+    assert "TRADE_LEDGER_MISSING_OR_EMPTY" in blockers
+
+
+def test_main_uses_catalog_rows_actual_rr_and_all_audit_gates(tmp_path, monkeypatch):
     module = _load_module()
     base_dir = (
         tmp_path
@@ -109,12 +140,7 @@ def test_main_uses_catalog_rows_and_actual_average_rr(tmp_path, monkeypatch):
             }
         )
     )
-    (base_dir / "phase_4_trade_ledger_audit.json").write_text(
-        json.dumps({"classification": "TRADE_LEDGER_AUDIT_PASSED"})
-    )
-    (base_dir / "phase_4_v2_structural_audit.json").write_text(
-        json.dumps({"classification": "V2_STRUCTURAL_AUDIT_PASSED"})
-    )
+    _write_passing_audits(module, base_dir)
     (config_dir / "candidate_strategy_validation_thresholds.json").write_text(
         json.dumps(
             {
@@ -139,6 +165,7 @@ def test_main_uses_catalog_rows_and_actual_average_rr(tmp_path, monkeypatch):
     module.main()
 
     report = json.loads((base_dir / "phase_4_report.json").read_text())
+    assert report["passed"] is True
     assert report["metrics"]["rows_processed"] == 30 * 375 * 2
     assert report["metrics"]["average_rr"] == 2.25
     assert report["metrics"]["max_drawdown"] == 0.0
