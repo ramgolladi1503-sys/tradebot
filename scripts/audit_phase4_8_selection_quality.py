@@ -30,7 +30,9 @@ def _candidate_timestamp(candidate: dict[str, Any]) -> str | None:
 
 
 def _candidate_score(candidate: dict[str, Any]) -> float | None:
-    for field in ("selection_score", "score", "rank_score", "cost_hurdle_margin"):
+    # Only use fields whose contract is an actual selection/ranking score.
+    # Cost-hurdle margin has different units and must not be mixed into this audit.
+    for field in ("selection_score", "score", "rank_score"):
         value = candidate.get(field)
         if value is not None:
             try:
