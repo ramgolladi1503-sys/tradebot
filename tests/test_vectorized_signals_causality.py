@@ -3,7 +3,11 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
-from core.vectorized_signals import _causal_prior_session_ema, build_vectorized_signals
+from core.vectorized_signals import (
+    _causal_prior_session_ema,
+    _same_session_next_open,
+    build_vectorized_signals,
+)
 
 
 def _intraday_close(values_by_day):
@@ -69,6 +73,40 @@ def test_prior_session_ema_matches_independent_daily_oracle():
         .astype(float)
     )
     pd.testing.assert_series_equal(actual, expected)
+
+
+def test_same_session_next_open_never_crosses_overnight_or_falls_back_to_close():
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-01-05 15:25", tz="Asia/Kolkata"),
+            pd.Timestamp("2026-01-05 15:30", tz="Asia/Kolkata"),
+            pd.Timestamp("2026-01-06 09:15", tz="Asia/Kolkata"),
+            pd.Timestamp("2026-01-06 09:20", tz="Asia/Kolkata"),
+        ]
+    )
+    opens = pd.Series([100.0, 101.0, 200.0, 201.0], index=index)
+
+    actual = _same_session_next_open(opens)
+
+    assert actual.loc[index[0]] == 101.0
+    assert pd.isna(actual.loc[index[1]])
+    assert actual.loc[index[2]] == 201.0
+    assert pd.isna(actual.loc[index[3]])
+
+
+def test_same_session_next_open_rejects_unsorted_input():
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2026-01-05 09:20", tz="Asia/Kolkata"),
+            pd.Timestamp("2026-01-05 09:15", tz="Asia/Kolkata"),
+        ]
+    )
+    try:
+        _same_session_next_open(pd.Series([101.0, 100.0], index=index))
+    except ValueError as exc:
+        assert str(exc) == "open_prices must be sorted chronologically"
+    else:
+        raise AssertionError("unsorted next-open input must fail closed")
 
 
 def test_build_vectorized_signals_does_not_change_earlier_rows_when_late_close_changes():
