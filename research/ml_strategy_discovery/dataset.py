@@ -11,6 +11,7 @@ from .contracts import (
     FEATURE_SCHEMA_VERSION,
     LABEL_SCHEMA_VERSION,
     DiscoveryConfig,
+    TimestampSemantics,
     feature_names_from_frame,
 )
 from .features import compute_causal_features
@@ -18,6 +19,27 @@ from .labels import attach_option_outcome_availability, compute_triple_barrier_l
 from .regimes import classify_deterministic_regimes
 
 _REQUIRED_BAR_COLUMNS = {"open", "high", "low", "close", "volume"}
+_SOURCE_PROVENANCE_COLUMNS = (
+    "source_logical_path",
+    "source_sha256",
+    "source_manifest_record_id",
+)
+
+
+def _source_timestamps_local(
+    values: pd.Series,
+    *,
+    source_timezone: str,
+) -> pd.Series:
+    parsed = pd.to_datetime(values, errors="raise")
+    timezone = getattr(parsed.dt, "tz", None)
+    if timezone is None:
+        return parsed.dt.tz_localize(
+            source_timezone,
+            ambiguous="raise",
+            nonexistent="raise",
+        )
+    return parsed.dt.tz_convert(source_timezone)
 
 
 def normalize_bars(bars: pd.DataFrame, config: DiscoveryConfig) -> pd.DataFrame:
@@ -28,16 +50,37 @@ def normalize_bars(bars: pd.DataFrame, config: DiscoveryConfig) -> pd.DataFrame:
         raise ValueError(f"missing timestamp column: {config.timestamp_column}")
 
     frame = bars.copy()
-    frame["timestamp"] = pd.to_datetime(
-        frame[config.timestamp_column], utc=True, errors="raise"
+    source_local = _source_timestamps_local(
+        frame[config.timestamp_column],
+        source_timezone=config.source_timezone,
     )
-    if frame["timestamp"].duplicated().any():
-        duplicates = frame.loc[frame["timestamp"].duplicated(), "timestamp"].astype(str).tolist()
+    interval = pd.Timedelta(minutes=config.bar_interval_minutes)
+    if config.normalized_timestamp_semantics is TimestampSemantics.START:
+        bar_start_local = source_local
+        bar_end_local = source_local + interval
+    else:
+        bar_end_local = source_local
+        bar_start_local = source_local - interval
+
+    frame["bar_start_timestamp"] = bar_start_local.dt.tz_convert("UTC")
+    frame["bar_end_timestamp"] = bar_end_local.dt.tz_convert("UTC")
+    frame["timestamp"] = frame["bar_end_timestamp"]
+    frame["session_date"] = bar_start_local.dt.date.astype(str)
+
+    if frame["bar_start_timestamp"].duplicated().any():
+        duplicates = frame.loc[
+            frame["bar_start_timestamp"].duplicated(), "bar_start_timestamp"
+        ].astype(str).tolist()
         raise ValueError(f"duplicate timestamps fail closed: {duplicates[:5]}")
-    frame = frame.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+    frame = frame.sort_values("bar_start_timestamp", kind="mergesort").reset_index(
+        drop=True
+    )
 
     for column in _REQUIRED_BAR_COLUMNS:
         frame[column] = pd.to_numeric(frame[column], errors="raise")
+    numeric = frame[list(_REQUIRED_BAR_COLUMNS)].to_numpy(dtype=float)
+    if not np.isfinite(numeric).all():
+        raise ValueError("OHLCV values must be finite")
     if (frame[["open", "high", "low", "close"]] <= 0).any().any():
         raise ValueError("OHLC prices must be positive")
     if (frame["volume"] < 0).any():
@@ -47,18 +90,25 @@ def normalize_bars(bars: pd.DataFrame, config: DiscoveryConfig) -> pd.DataFrame:
     if (frame["low"] > frame[["open", "close", "high"]].min(axis=1)).any():
         raise ValueError("low violates OHLC ordering")
 
-    frame["session_date"] = frame["timestamp"].dt.date.astype(str)
+    if config.strict_bar_cadence:
+        expected = pd.Timedelta(minutes=config.bar_interval_minutes)
+        deltas = frame.groupby("session_date")["bar_start_timestamp"].diff().dropna()
+        if not (deltas == expected).all():
+            sample = deltas.loc[deltas != expected].astype(str).head(5).tolist()
+            raise ValueError(
+                "strict bar cadence violated: "
+                f"expected={expected} observed_samples={sample}"
+            )
     return frame
 
 
-def _quality_status(frame: pd.DataFrame) -> pd.Series:
-    deltas = frame.groupby("session_date")["timestamp"].diff().dt.total_seconds()
-    expected = deltas.dropna().median()
-    if not np.isfinite(expected) or expected <= 0:
-        return pd.Series("INSUFFICIENT_INTERVAL_EVIDENCE", index=frame.index)
-    gaps = deltas > expected * 1.5
+def _quality_status(frame: pd.DataFrame, config: DiscoveryConfig) -> pd.Series:
+    deltas = frame.groupby("session_date")["bar_start_timestamp"].diff()
+    expected = pd.Timedelta(minutes=config.bar_interval_minutes)
     status = pd.Series("OK", index=frame.index)
-    status.loc[gaps] = "MISSING_INTERVAL_BEFORE_DECISION"
+    status.loc[deltas.notna() & (deltas != expected)] = (
+        "MISSING_OR_IRREGULAR_INTERVAL_BEFORE_DECISION"
+    )
     return status
 
 
@@ -86,12 +136,20 @@ def build_discovery_dataset(
     metadata = pd.DataFrame(index=frame.index)
     metadata["instrument"] = config.instrument
     metadata["session_date"] = frame["session_date"]
-    metadata["decision_timestamp"] = frame["timestamp"]
-    metadata["feature_cutoff_timestamp"] = frame["timestamp"]
-    metadata["source_data_max_timestamp"] = frame["timestamp"]
+    metadata["bar_start_timestamp"] = frame["bar_start_timestamp"]
+    metadata["bar_end_timestamp"] = frame["bar_end_timestamp"]
+    metadata["decision_timestamp"] = frame["bar_end_timestamp"]
+    metadata["feature_cutoff_timestamp"] = frame["bar_end_timestamp"]
+    metadata["source_data_max_timestamp"] = frame["bar_end_timestamp"]
+    metadata["timestamp_semantics"] = config.normalized_timestamp_semantics.value
+    metadata["bar_interval_minutes"] = config.bar_interval_minutes
+    metadata["source_timezone"] = config.source_timezone
+    metadata["source_kind"] = config.source_kind
+    for column in _SOURCE_PROVENANCE_COLUMNS:
+        metadata[column] = frame[column] if column in frame.columns else ""
     metadata["feature_schema_version"] = FEATURE_SCHEMA_VERSION
     metadata["label_schema_version"] = LABEL_SCHEMA_VERSION
-    metadata["data_quality_status"] = _quality_status(frame)
+    metadata["data_quality_status"] = _quality_status(frame, config)
 
     dataset = pd.concat([metadata, features, regimes, labels], axis=1)
     dataset = attach_option_outcome_availability(dataset, option_quotes)
@@ -100,14 +158,15 @@ def build_discovery_dataset(
         dataset["source_data_max_timestamp"] <= dataset["decision_timestamp"]
     ).all():
         raise AssertionError("causal timestamp invariant violated")
+    if not (
+        dataset["bar_start_timestamp"] < dataset["bar_end_timestamp"]
+    ).all():
+        raise AssertionError("bar interval ordering invariant violated")
 
-    # Rows without the declared history or future horizon are retained in raw
-    # construction but excluded from the model-ready output.
     minimum_index = config.minimum_history_bars - 1
-    maximum_index = len(dataset) - config.barrier_horizon_bars - 1
-    if maximum_index < minimum_index:
-        raise ValueError("insufficient rows for configured history and label horizon")
-    dataset = dataset.iloc[minimum_index : maximum_index + 1].copy()
+    if len(dataset) <= minimum_index:
+        raise ValueError("insufficient rows for configured history")
+    dataset = dataset.iloc[minimum_index:].copy()
     dataset = dataset.loc[dataset["label_status"] == "MEASURED"].copy()
     if dataset.empty:
         raise ValueError("no rows have a complete same-session label horizon")
@@ -132,13 +191,20 @@ def chronological_split(
     )
     if len(sessions) < 5:
         raise ValueError("at least five complete sessions are required")
-    development_end = int(len(sessions) * (1.0 - validation_fraction - holdout_fraction))
+    development_end = int(
+        len(sessions) * (1.0 - validation_fraction - holdout_fraction)
+    )
     validation_end = int(len(sessions) * (1.0 - holdout_fraction))
     if not 0 < development_end < validation_end < len(sessions):
         raise ValueError("invalid chronological session partition")
-    split_by_session = {session: "DEVELOPMENT" for session in sessions[:development_end]}
+    split_by_session = {
+        session: "DEVELOPMENT" for session in sessions[:development_end]
+    }
     split_by_session.update(
-        {session: "VALIDATION" for session in sessions[development_end:validation_end]}
+        {
+            session: "VALIDATION"
+            for session in sessions[development_end:validation_end]
+        }
     )
     split_by_session.update(
         {session: "HOLDOUT_LOCKED" for session in sessions[validation_end:]}
@@ -150,13 +216,11 @@ def chronological_split(
 
 def model_feature_names(dataset: pd.DataFrame) -> tuple[str, ...]:
     candidates = feature_names_from_frame(dataset.columns)
-    names: list[str] = []
-    for name in candidates:
-        if name in {"option_data_reason"}:
-            continue
-        if pd.api.types.is_numeric_dtype(dataset[name]):
-            names.append(name)
-    return tuple(names)
+    return tuple(
+        name
+        for name in candidates
+        if name in dataset.columns and pd.api.types.is_numeric_dtype(dataset[name])
+    )
 
 
 def semantic_dataset_hash(dataset: pd.DataFrame) -> str:
@@ -164,20 +228,30 @@ def semantic_dataset_hash(dataset: pd.DataFrame) -> str:
     canonical = canonical.sort_values("decision_timestamp", kind="mergesort")
     for column in canonical.columns:
         if pd.api.types.is_datetime64_any_dtype(canonical[column]):
-            canonical[column] = canonical[column].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            canonical[column] = canonical[column].dt.strftime(
+                "%Y-%m-%dT%H:%M:%S.%fZ"
+            )
     records = canonical.where(pd.notna(canonical), None).to_dict(orient="records")
     payload = json.dumps(records, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def provenance_payload(config: DiscoveryConfig, dataset: pd.DataFrame) -> dict[str, object]:
+    config_payload = asdict(config)
+    config_payload["timestamp_semantics"] = (
+        config.normalized_timestamp_semantics.value
+    )
     return {
-        "config": asdict(config),
+        "config": config_payload,
         "feature_schema_version": FEATURE_SCHEMA_VERSION,
         "label_schema_version": LABEL_SCHEMA_VERSION,
         "rows": int(len(dataset)),
         "sessions": int(dataset["session_date"].nunique()),
         "start": str(dataset["decision_timestamp"].min()),
         "end": str(dataset["decision_timestamp"].max()),
+        "source_kind": config.source_kind,
+        "source_record_count": int(
+            dataset["source_manifest_record_id"].replace("", np.nan).nunique()
+        ),
         "semantic_hash": semantic_dataset_hash(dataset),
     }
