@@ -1,0 +1,17 @@
+{
+  "dates_added": 0,
+  "dates_removed": 0,
+  "first_session": "2023-01-02",
+  "last_session": "2024-06-28",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sealed_sessions_used": 366,
+  "verdict": "PASS"
+}

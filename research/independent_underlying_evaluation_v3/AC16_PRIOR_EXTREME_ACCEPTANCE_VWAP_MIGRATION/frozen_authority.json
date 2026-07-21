@@ -1,0 +1,16 @@
+{
+  "alpha": 0.004,
+  "generator_semantic_hash": "6b9419ca1b631492f78d3e0965046e78f0574c601aab432af1cc7068bea4d596",
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "parameter_hash": "96962f33f660a0f6927b860b475ac2c595bc62cd7e156e9ad6bfc1816052bc98",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "specification_hash": "2064343bc20abe841ba23591683afa041e8f67dda864721746a1f49af475062f"
+}

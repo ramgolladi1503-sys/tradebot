@@ -1,0 +1,17 @@
+{
+  "primary_semantic_hash": "b272b025eb34d1026e8af877ab237a706058da9631f161bcfa4ac93581db2d7c",
+  "rerun_semantic_hashes": [
+    "b272b025eb34d1026e8af877ab237a706058da9631f161bcfa4ac93581db2d7c",
+    "b272b025eb34d1026e8af877ab237a706058da9631f161bcfa4ac93581db2d7c"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

@@ -1,0 +1,18 @@
+{
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "single_direction_share": 0.7572815533980582,
+  "single_index_share": 0.5145631067961165,
+  "single_month_abs_contribution": 0.18295355647835804,
+  "single_session_abs_contribution": 0.04747449717328908,
+  "top_five_sessions_abs_contribution": 0.19436823269552134,
+  "verdict": "PASS"
+}

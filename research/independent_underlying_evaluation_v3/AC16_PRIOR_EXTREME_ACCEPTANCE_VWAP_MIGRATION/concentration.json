@@ -1,0 +1,18 @@
+{
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "single_direction_share": 0.6187050359712231,
+  "single_index_share": 0.3489208633093525,
+  "single_month_abs_contribution": 0.2670331508798975,
+  "single_session_abs_contribution": 0.19691923154525132,
+  "top_five_sessions_abs_contribution": 0.29564841562585964,
+  "verdict": "FAIL"
+}

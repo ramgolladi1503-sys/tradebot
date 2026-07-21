@@ -1,0 +1,14 @@
+{
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "semantic_hash": "ba391409d5bea62e6e2068954fc52a5647606c4793b5e17d910e880e8ce0cd2d",
+  "verdict": "PASS"
+}

@@ -1,0 +1,31 @@
+{
+  "alpha": 0.004,
+  "alpha_pass": false,
+  "clustered_ci": {
+    "bca_fallback_reason": "BCa not numerically certified in this offline evaluator; percentile fallback frozen before opening",
+    "ci_95": [
+      -1.52791194365533,
+      7.594857389159364
+    ],
+    "method": "PERCENTILE",
+    "resamples": 100000,
+    "seed": 12340334921703232228
+  },
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sign_flip": {
+    "assignments": 1000000,
+    "method": "DETERMINISTIC_MONTE_CARLO",
+    "observed_stat": 2.3854282854025617,
+    "p_value": 0.18574781425218576,
+    "seed": 9742943886829959147
+  }
+}

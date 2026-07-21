@@ -1,0 +1,16 @@
+{
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "mae_mean_bps": -12.843787349088467,
+  "mae_median_bps": -7.895201089107018,
+  "mfe_mean_bps": 17.334442099098325,
+  "mfe_median_bps": 10.493448637425296,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

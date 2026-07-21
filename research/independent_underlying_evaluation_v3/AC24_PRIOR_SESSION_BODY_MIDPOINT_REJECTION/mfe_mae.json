@@ -1,0 +1,16 @@
+{
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "mae_mean_bps": -23.06938579672344,
+  "mae_median_bps": -17.599007558951605,
+  "mfe_mean_bps": 18.466194043042197,
+  "mfe_median_bps": 12.032725532007404,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

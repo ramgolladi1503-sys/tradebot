@@ -1,0 +1,31 @@
+{
+  "alpha": 0.006,
+  "alpha_pass": false,
+  "clustered_ci": {
+    "bca_fallback_reason": "BCa not numerically certified in this offline evaluator; percentile fallback frozen before opening",
+    "ci_95": [
+      -7.051948420161843,
+      4.207805275980047
+    ],
+    "method": "PERCENTILE",
+    "resamples": 100000,
+    "seed": 8600546340417797160
+  },
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sign_flip": {
+    "assignments": 1000000,
+    "method": "DETERMINISTIC_MONTE_CARLO",
+    "observed_stat": -1.3893901762613328,
+    "p_value": 0.6832823167176832,
+    "seed": 16744548276665591103
+  }
+}

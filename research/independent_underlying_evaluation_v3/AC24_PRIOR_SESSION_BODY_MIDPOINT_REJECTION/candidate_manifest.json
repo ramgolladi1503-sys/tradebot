@@ -1,0 +1,17 @@
+{
+  "candidate_count": 103,
+  "candidate_ids_hash": "6b6162b8557fd746e7944af7d054b3b03e8e5db8b7fe1573cb0868f51386e1b9",
+  "candidate_sessions": 103,
+  "external_ledger": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3/evaluation_ledgers/ec7470123b2082a95d8d1d6f20886e01/AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION/candidate_outcome_ledger.jsonl",
+  "external_ledger_sha256": "47b649fad19f4d15e0ec9b3636fd2118187f9e751d68ccdd09cee11c5aab4b2e",
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

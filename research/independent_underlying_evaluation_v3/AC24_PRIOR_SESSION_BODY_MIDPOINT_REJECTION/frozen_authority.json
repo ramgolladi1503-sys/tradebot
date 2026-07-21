@@ -1,0 +1,16 @@
+{
+  "alpha": 0.006,
+  "generator_semantic_hash": "4be001a9b7acf482235e90db389e9fd0fd4c0199ed68f8645e8f182b493b2d5f",
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "parameter_hash": "532cacdebe2ed4909c9a32632d8cc04ede079a1e6fe02ba8b2876e1393172935",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "specification_hash": "81137922979a0497e16616ca0c596197c72b4ce1e28dfb153e81829f55f2934b"
+}

@@ -1,0 +1,194 @@
+{
+  "direction": {
+    "-1": {
+      "candidates": 25,
+      "mean_bps": -2.7196391488628175,
+      "median_bps": -6.647254436873418,
+      "positive_fraction": 0.44
+    },
+    "1": {
+      "candidates": 78,
+      "mean_bps": -0.9630283260685493,
+      "median_bps": 1.3094546517555816,
+      "positive_fraction": 0.5256410256410257
+    }
+  },
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "month": {
+    "2023-01": {
+      "candidates": 5,
+      "mean_bps": 3.2773996441990407,
+      "median_bps": -0.723108029557773,
+      "positive_fraction": 0.4
+    },
+    "2023-02": {
+      "candidates": 8,
+      "mean_bps": -1.2012501905643567,
+      "median_bps": -4.132190614062337,
+      "positive_fraction": 0.375
+    },
+    "2023-03": {
+      "candidates": 8,
+      "mean_bps": 8.786307227354184,
+      "median_bps": 6.071032392921394,
+      "positive_fraction": 0.625
+    },
+    "2023-04": {
+      "candidates": 5,
+      "mean_bps": -16.189512125202253,
+      "median_bps": 1.064026250874317,
+      "positive_fraction": 0.6
+    },
+    "2023-05": {
+      "candidates": 5,
+      "mean_bps": 5.392131821422064,
+      "median_bps": 2.4526757590215276,
+      "positive_fraction": 0.6
+    },
+    "2023-06": {
+      "candidates": 3,
+      "mean_bps": 6.244942068458123,
+      "median_bps": 6.080374442969383,
+      "positive_fraction": 0.6666666666666666
+    },
+    "2023-07": {
+      "candidates": 7,
+      "mean_bps": -2.13584750867603,
+      "median_bps": -3.5303290825461353,
+      "positive_fraction": 0.42857142857142855
+    },
+    "2023-08": {
+      "candidates": 5,
+      "mean_bps": 4.684613779059932,
+      "median_bps": 10.305974645250515,
+      "positive_fraction": 0.8
+    },
+    "2023-09": {
+      "candidates": 3,
+      "mean_bps": -0.47557207291733644,
+      "median_bps": 6.964575751970958,
+      "positive_fraction": 0.6666666666666666
+    },
+    "2023-10": {
+      "candidates": 2,
+      "mean_bps": -28.767357250357726,
+      "median_bps": -28.767357250357726,
+      "positive_fraction": 0.0
+    },
+    "2023-11": {
+      "candidates": 3,
+      "mean_bps": -19.598366759845387,
+      "median_bps": -21.311084515243106,
+      "positive_fraction": 0.0
+    },
+    "2023-12": {
+      "candidates": 4,
+      "mean_bps": -15.404203447124122,
+      "median_bps": -26.854004009410623,
+      "positive_fraction": 0.25
+    },
+    "2024-01": {
+      "candidates": 5,
+      "mean_bps": -14.807086496989143,
+      "median_bps": -30.784452022620812,
+      "positive_fraction": 0.2
+    },
+    "2024-02": {
+      "candidates": 14,
+      "mean_bps": 8.846662685897956,
+      "median_bps": 10.939236354554627,
+      "positive_fraction": 0.5714285714285714
+    },
+    "2024-03": {
+      "candidates": 2,
+      "mean_bps": -58.38132551642949,
+      "median_bps": -58.38132551642949,
+      "positive_fraction": 0.0
+    },
+    "2024-04": {
+      "candidates": 6,
+      "mean_bps": -5.568313405602635,
+      "median_bps": -10.449736818599064,
+      "positive_fraction": 0.3333333333333333
+    },
+    "2024-05": {
+      "candidates": 9,
+      "mean_bps": 1.7945556792357356,
+      "median_bps": 7.022881066728326,
+      "positive_fraction": 0.6666666666666666
+    },
+    "2024-06": {
+      "candidates": 9,
+      "mean_bps": 7.798036259106183,
+      "median_bps": 6.115909221218185,
+      "positive_fraction": 0.7777777777777778
+    }
+  },
+  "quarter": {
+    "2023Q1": {
+      "candidates": 21,
+      "mean_bps": 3.6698787864435154,
+      "median_bps": -0.723108029557773,
+      "positive_fraction": 0.47619047619047616
+    },
+    "2023Q2": {
+      "candidates": 13,
+      "mean_bps": -2.711698101040507,
+      "median_bps": 1.5548830526368462,
+      "positive_fraction": 0.6153846153846154
+    },
+    "2023Q3": {
+      "candidates": 15,
+      "mean_bps": 0.4696946743876961,
+      "median_bps": 3.603974100030438,
+      "positive_fraction": 0.6
+    },
+    "2023Q4": {
+      "candidates": 9,
+      "mean_bps": -19.77184761874979,
+      "median_bps": -25.3436241905558,
+      "positive_fraction": 0.1111111111111111
+    },
+    "2024Q1": {
+      "candidates": 21,
+      "mean_bps": -3.187847900725396,
+      "median_bps": -1.4306481759229772,
+      "positive_fraction": 0.42857142857142855
+    },
+    "2024Q2": {
+      "candidates": 24,
+      "mean_bps": 2.2051436254775605,
+      "median_bps": 4.96745088762518,
+      "positive_fraction": 0.625
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "symbol": {
+    "BANKNIFTY": {
+      "candidates": 41,
+      "mean_bps": 1.5989034343874893,
+      "median_bps": 3.603974100030438,
+      "positive_fraction": 0.5853658536585366
+    },
+    "NIFTY": {
+      "candidates": 53,
+      "mean_bps": -2.0730778124781213,
+      "median_bps": -1.1855492326262596,
+      "positive_fraction": 0.4716981132075472
+    },
+    "SENSEX": {
+      "candidates": 9,
+      "mean_bps": -10.976567211495993,
+      "median_bps": -9.516628144814465,
+      "positive_fraction": 0.3333333333333333
+    }
+  }
+}

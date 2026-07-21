@@ -1,0 +1,28 @@
+{
+  "alpha_allocation": {
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION": 0.004,
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION": 0.006
+  },
+  "artifact": "epoch_open_record",
+  "candidate_order": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "completed": true,
+  "open_count": 1,
+  "opened": true,
+  "opened_at_utc": "2026-07-21T09:26:09.475752+00:00",
+  "run_id": "ec7470123b2082a95d8d1d6f20886e01",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sealed_session_manifest_file_hash": "2a1aebe1db84ce07b0fb6547f32bf06bdeb4333243b6e72a3388092457d862bf",
+  "session_list_semantic_hash": "d2fdd5bc974e095c0c2cb18155fa3cf644c6a53e4f59a492ef57d7cbe1806208",
+  "source_commit": "0d87771a420d62355f4ac1786b331d7f294630a6"
+}

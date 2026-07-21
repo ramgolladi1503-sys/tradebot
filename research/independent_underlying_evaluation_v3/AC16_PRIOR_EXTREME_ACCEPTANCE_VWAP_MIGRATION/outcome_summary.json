@@ -1,0 +1,19 @@
+{
+  "candidate_count": 278,
+  "candidate_sessions": 140,
+  "equal_session_mean_bps": 2.3854282854025617,
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "median_bps": 1.889536394312774,
+  "positive_candidate_fraction": 0.5935251798561151,
+  "positive_session_fraction": 0.5428571428571428,
+  "primary_mean_bps": 4.692953958959174,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

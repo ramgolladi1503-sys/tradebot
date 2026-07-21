@@ -1,0 +1,19 @@
+{
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "rejection_codes": {
+    "INVALIDATED_BEFORE_ENTRY": 62,
+    "MISSING_PRIOR_SESSION": 1,
+    "SETUP_EXPIRED": 20,
+    "STRUCTURAL_PRECONDITION_NOT_MET": 287
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "silent_drops": false
+}

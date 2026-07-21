@@ -1,0 +1,52 @@
+{
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "pass_gates": {
+    "alpha": false,
+    "clustered_ci_lower_positive": false,
+    "concentration": false,
+    "determinism": true,
+    "independent_audit": true,
+    "positive_session_fraction": true,
+    "primary_mean_positive": true,
+    "sample_candidates": true,
+    "sample_sessions": true,
+    "symbol_stability": true
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "symbol_stability": {
+    "checks": {
+      "BANKNIFTY": {
+        "candidate_sessions": 88,
+        "checked": true,
+        "contradiction": false,
+        "mean_bps": 6.3058315687478235,
+        "upper_interval_proxy_bps": 15.75065834675346
+      },
+      "NIFTY": {
+        "candidate_sessions": 97,
+        "checked": true,
+        "contradiction": false,
+        "mean_bps": 3.7037355518677284,
+        "upper_interval_proxy_bps": 10.654459564996971
+      },
+      "SENSEX": {
+        "candidate_sessions": 93,
+        "checked": true,
+        "contradiction": false,
+        "mean_bps": 4.198555634512606,
+        "upper_interval_proxy_bps": 10.779712278161542
+      }
+    },
+    "failing_symbols": [],
+    "verdict": "PASS"
+  },
+  "verdict": "REJECTED_INDEPENDENT_CLUSTERED_CI"
+}

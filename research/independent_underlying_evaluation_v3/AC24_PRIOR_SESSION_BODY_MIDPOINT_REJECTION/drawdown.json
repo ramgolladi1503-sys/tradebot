@@ -1,0 +1,530 @@
+{
+  "chronological_equal_session_curve": [
+    {
+      "cumulative_equal_session_bps": -20.417027468925262,
+      "equal_session_bps": -20.417027468925262,
+      "session_date": "2023-01-05"
+    },
+    {
+      "cumulative_equal_session_bps": 18.722239348912815,
+      "equal_session_bps": 39.13926681783808,
+      "session_date": "2023-01-09"
+    },
+    {
+      "cumulative_equal_session_bps": 17.999131319355044,
+      "equal_session_bps": -0.723108029557773,
+      "session_date": "2023-01-16"
+    },
+    {
+      "cumulative_equal_session_bps": 49.4653909202536,
+      "equal_session_bps": 31.46625960089855,
+      "session_date": "2023-01-30"
+    },
+    {
+      "cumulative_equal_session_bps": 16.38699822099521,
+      "equal_session_bps": -33.07839269925839,
+      "session_date": "2023-01-31"
+    },
+    {
+      "cumulative_equal_session_bps": 27.40062153231193,
+      "equal_session_bps": 11.013623311316723,
+      "session_date": "2023-02-02"
+    },
+    {
+      "cumulative_equal_session_bps": 25.783494741060675,
+      "equal_session_bps": -1.6171267912512555,
+      "session_date": "2023-02-03"
+    },
+    {
+      "cumulative_equal_session_bps": 42.139825994218505,
+      "equal_session_bps": 16.35633125315783,
+      "session_date": "2023-02-07"
+    },
+    {
+      "cumulative_equal_session_bps": 25.109139443162398,
+      "equal_session_bps": -17.030686551056107,
+      "session_date": "2023-02-10"
+    },
+    {
+      "cumulative_equal_session_bps": 5.53805819535458,
+      "equal_session_bps": -19.571081247807818,
+      "session_date": "2023-02-14"
+    },
+    {
+      "cumulative_equal_session_bps": -1.1091962415188377,
+      "equal_session_bps": -6.647254436873418,
+      "session_date": "2023-02-17"
+    },
+    {
+      "cumulative_equal_session_bps": 20.961474662118952,
+      "equal_session_bps": 22.07067090363779,
+      "session_date": "2023-02-21"
+    },
+    {
+      "cumulative_equal_session_bps": 6.776996696480355,
+      "equal_session_bps": -14.184477965638598,
+      "session_date": "2023-02-24"
+    },
+    {
+      "cumulative_equal_session_bps": 9.112564678190884,
+      "equal_session_bps": 2.335567981710529,
+      "session_date": "2023-03-13"
+    },
+    {
+      "cumulative_equal_session_bps": 68.81266053219038,
+      "equal_session_bps": 59.70009585399949,
+      "session_date": "2023-03-14"
+    },
+    {
+      "cumulative_equal_session_bps": 41.274074638576465,
+      "equal_session_bps": -27.53858589361391,
+      "session_date": "2023-03-17"
+    },
+    {
+      "cumulative_equal_session_bps": 67.12278233002579,
+      "equal_session_bps": 25.848707691449313,
+      "session_date": "2023-03-21"
+    },
+    {
+      "cumulative_equal_session_bps": 76.92927913415804,
+      "equal_session_bps": 9.806496804132259,
+      "session_date": "2023-03-22"
+    },
+    {
+      "cumulative_equal_session_bps": 61.84183323155401,
+      "equal_session_bps": -15.087445902604024,
+      "session_date": "2023-03-23"
+    },
+    {
+      "cumulative_equal_session_bps": 94.11471576532881,
+      "equal_session_bps": 32.272882533774805,
+      "session_date": "2023-03-27"
+    },
+    {
+      "cumulative_equal_session_bps": 77.06745451531381,
+      "equal_session_bps": -17.04726125001499,
+      "session_date": "2023-03-28"
+    },
+    {
+      "cumulative_equal_session_bps": 78.62233756795067,
+      "equal_session_bps": 1.5548830526368462,
+      "session_date": "2023-04-03"
+    },
+    {
+      "cumulative_equal_session_bps": 79.68636381882499,
+      "equal_session_bps": 1.064026250874317,
+      "session_date": "2023-04-05"
+    },
+    {
+      "cumulative_equal_session_bps": 99.802499696362,
+      "equal_session_bps": 20.116135877537022,
+      "session_date": "2023-04-13"
+    },
+    {
+      "cumulative_equal_session_bps": 0.06024993874142126,
+      "equal_session_bps": -99.74224975762058,
+      "session_date": "2023-04-17"
+    },
+    {
+      "cumulative_equal_session_bps": -3.8801061106974544,
+      "equal_session_bps": -3.9403560494388756,
+      "session_date": "2023-04-24"
+    },
+    {
+      "cumulative_equal_session_bps": 26.659857084140306,
+      "equal_session_bps": 30.53996319483776,
+      "session_date": "2023-05-03"
+    },
+    {
+      "cumulative_equal_session_bps": 42.02487716932323,
+      "equal_session_bps": 15.365020085182923,
+      "session_date": "2023-05-09"
+    },
+    {
+      "cumulative_equal_session_bps": 36.680462355476166,
+      "equal_session_bps": -5.344414813847065,
+      "session_date": "2023-05-11"
+    },
+    {
+      "cumulative_equal_session_bps": 20.62787723739134,
+      "equal_session_bps": -16.052585118084828,
+      "session_date": "2023-05-16"
+    },
+    {
+      "cumulative_equal_session_bps": 23.080552996412866,
+      "equal_session_bps": 2.4526757590215276,
+      "session_date": "2023-05-19"
+    },
+    {
+      "cumulative_equal_session_bps": 21.895003763786605,
+      "equal_session_bps": -1.1855492326262596,
+      "session_date": "2023-06-01"
+    },
+    {
+      "cumulative_equal_session_bps": 27.975378206755988,
+      "equal_session_bps": 6.080374442969383,
+      "session_date": "2023-06-02"
+    },
+    {
+      "cumulative_equal_session_bps": 41.81537920178723,
+      "equal_session_bps": 13.840000995031243,
+      "session_date": "2023-06-28"
+    },
+    {
+      "cumulative_equal_session_bps": 45.419353301817665,
+      "equal_session_bps": 3.603974100030438,
+      "session_date": "2023-07-04"
+    },
+    {
+      "cumulative_equal_session_bps": 37.45475643337824,
+      "equal_session_bps": -7.964596868439422,
+      "session_date": "2023-07-06"
+    },
+    {
+      "cumulative_equal_session_bps": 62.648913238111376,
+      "equal_session_bps": 25.194156804733137,
+      "session_date": "2023-07-07"
+    },
+    {
+      "cumulative_equal_session_bps": 58.260595914010324,
+      "equal_session_bps": -4.388317324101054,
+      "session_date": "2023-07-12"
+    },
+    {
+      "cumulative_equal_session_bps": 67.79321494327694,
+      "equal_session_bps": 9.532619029266609,
+      "session_date": "2023-07-14"
+    },
+    {
+      "cumulative_equal_session_bps": 64.2628858607308,
+      "equal_session_bps": -3.5303290825461353,
+      "session_date": "2023-07-25"
+    },
+    {
+      "cumulative_equal_session_bps": 26.864446641055025,
+      "equal_session_bps": -37.39843921967578,
+      "session_date": "2023-07-27"
+    },
+    {
+      "cumulative_equal_session_bps": 37.17042128630554,
+      "equal_session_bps": 10.305974645250515,
+      "session_date": "2023-08-03"
+    },
+    {
+      "cumulative_equal_session_bps": 48.06781554350214,
+      "equal_session_bps": 10.897394257196602,
+      "session_date": "2023-08-04"
+    },
+    {
+      "cumulative_equal_session_bps": 64.70890197349365,
+      "equal_session_bps": 16.641086429991514,
+      "session_date": "2023-08-07"
+    },
+    {
+      "cumulative_equal_session_bps": 47.60418452333436,
+      "equal_session_bps": -17.104717450159292,
+      "session_date": "2023-08-23"
+    },
+    {
+      "cumulative_equal_session_bps": 50.287515536354675,
+      "equal_session_bps": 2.683331013020318,
+      "session_date": "2023-08-29"
+    },
+    {
+      "cumulative_equal_session_bps": 57.25209128832563,
+      "equal_session_bps": 6.964575751970958,
+      "session_date": "2023-09-04"
+    },
+    {
+      "cumulative_equal_session_bps": 36.405234544929485,
+      "equal_session_bps": -20.846856743396145,
+      "session_date": "2023-09-12"
+    },
+    {
+      "cumulative_equal_session_bps": 48.86079931760266,
+      "equal_session_bps": 12.455564772673178,
+      "session_date": "2023-09-14"
+    },
+    {
+      "cumulative_equal_session_bps": 34.302176252027905,
+      "equal_session_bps": -14.55862306557476,
+      "session_date": "2023-10-20"
+    },
+    {
+      "cumulative_equal_session_bps": -8.67391518311279,
+      "equal_session_bps": -42.976091435140695,
+      "session_date": "2023-10-31"
+    },
+    {
+      "cumulative_equal_session_bps": -29.984999698355896,
+      "equal_session_bps": -21.311084515243106,
+      "session_date": "2023-11-10"
+    },
+    {
+      "cumulative_equal_session_bps": -57.952387317834486,
+      "equal_session_bps": -27.96738761947859,
+      "session_date": "2023-11-13"
+    },
+    {
+      "cumulative_equal_session_bps": -67.46901546264895,
+      "equal_session_bps": -9.516628144814465,
+      "session_date": "2023-11-17"
+    },
+    {
+      "cumulative_equal_session_bps": -92.81263965320476,
+      "equal_session_bps": -25.3436241905558,
+      "session_date": "2023-12-15"
+    },
+    {
+      "cumulative_equal_session_bps": -134.63685664461434,
+      "equal_session_bps": -41.82421699140959,
+      "session_date": "2023-12-19"
+    },
+    {
+      "cumulative_equal_session_bps": -163.0012404728798,
+      "equal_session_bps": -28.36438382826545,
+      "session_date": "2023-12-21"
+    },
+    {
+      "cumulative_equal_session_bps": -129.08582925114544,
+      "equal_session_bps": 33.91541122173436,
+      "session_date": "2023-12-26"
+    },
+    {
+      "cumulative_equal_session_bps": -159.87028127376624,
+      "equal_session_bps": -30.784452022620812,
+      "session_date": "2024-01-02"
+    },
+    {
+      "cumulative_equal_session_bps": -118.19738665492797,
+      "equal_session_bps": 41.67289461883827,
+      "session_date": "2024-01-12"
+    },
+    {
+      "cumulative_equal_session_bps": -119.62803483085095,
+      "equal_session_bps": -1.4306481759229772,
+      "session_date": "2024-01-20"
+    },
+    {
+      "cumulative_equal_session_bps": -152.95955623810477,
+      "equal_session_bps": -33.33152140725382,
+      "session_date": "2024-01-23"
+    },
+    {
+      "cumulative_equal_session_bps": -203.12126173609113,
+      "equal_session_bps": -50.161705497986375,
+      "session_date": "2024-01-24"
+    },
+    {
+      "cumulative_equal_session_bps": -170.81714716355,
+      "equal_session_bps": 32.304114572541124,
+      "session_date": "2024-02-01"
+    },
+    {
+      "cumulative_equal_session_bps": -149.53719940445143,
+      "equal_session_bps": 21.279947759098583,
+      "session_date": "2024-02-05"
+    },
+    {
+      "cumulative_equal_session_bps": -123.73190209301943,
+      "equal_session_bps": 25.805297311431996,
+      "session_date": "2024-02-06"
+    },
+    {
+      "cumulative_equal_session_bps": -152.53710068051763,
+      "equal_session_bps": -28.805198587498193,
+      "session_date": "2024-02-07"
+    },
+    {
+      "cumulative_equal_session_bps": -192.53191068809738,
+      "equal_session_bps": -39.99481000757976,
+      "session_date": "2024-02-08"
+    },
+    {
+      "cumulative_equal_session_bps": -87.9164165617341,
+      "equal_session_bps": 104.61549412636329,
+      "session_date": "2024-02-13"
+    },
+    {
+      "cumulative_equal_session_bps": -61.45972989015646,
+      "equal_session_bps": 26.456686671577636,
+      "session_date": "2024-02-14"
+    },
+    {
+      "cumulative_equal_session_bps": -59.51624194664217,
+      "equal_session_bps": 1.9434879435142882,
+      "session_date": "2024-02-15"
+    },
+    {
+      "cumulative_equal_session_bps": -59.79652671596835,
+      "equal_session_bps": -0.28028476932617785,
+      "session_date": "2024-02-16"
+    },
+    {
+      "cumulative_equal_session_bps": -39.86154195037338,
+      "equal_session_bps": 19.934984765594965,
+      "session_date": "2024-02-19"
+    },
+    {
+      "cumulative_equal_session_bps": -8.695354083986238,
+      "equal_session_bps": 31.16618786638714,
+      "session_date": "2024-02-21"
+    },
+    {
+      "cumulative_equal_session_bps": -64.59827124107863,
+      "equal_session_bps": -55.90291715709239,
+      "session_date": "2024-02-22"
+    },
+    {
+      "cumulative_equal_session_bps": -73.29130603118904,
+      "equal_session_bps": -8.69303479011041,
+      "session_date": "2024-02-23"
+    },
+    {
+      "cumulative_equal_session_bps": -79.26798413351975,
+      "equal_session_bps": -5.9766781023307125,
+      "session_date": "2024-02-26"
+    },
+    {
+      "cumulative_equal_session_bps": -180.07761145292898,
+      "equal_session_bps": -100.80962731940923,
+      "session_date": "2024-03-06"
+    },
+    {
+      "cumulative_equal_session_bps": -196.03063516637874,
+      "equal_session_bps": -15.953023713449754,
+      "session_date": "2024-03-13"
+    },
+    {
+      "cumulative_equal_session_bps": -210.16437512339724,
+      "equal_session_bps": -14.133739957018499,
+      "session_date": "2024-04-03"
+    },
+    {
+      "cumulative_equal_session_bps": -198.29556490249644,
+      "equal_session_bps": 11.868810220900805,
+      "session_date": "2024-04-10"
+    },
+    {
+      "cumulative_equal_session_bps": -174.45977493429132,
+      "equal_session_bps": 23.835789968205123,
+      "session_date": "2024-04-22"
+    },
+    {
+      "cumulative_equal_session_bps": -181.22550861447095,
+      "equal_session_bps": -6.765733680179631,
+      "session_date": "2024-04-23"
+    },
+    {
+      "cumulative_equal_session_bps": -203.85611539202486,
+      "equal_session_bps": -22.630606777553908,
+      "session_date": "2024-04-25"
+    },
+    {
+      "cumulative_equal_session_bps": -229.44051559999457,
+      "equal_session_bps": -25.584400207969704,
+      "session_date": "2024-04-26"
+    },
+    {
+      "cumulative_equal_session_bps": -273.71502568254493,
+      "equal_session_bps": -44.27451008255034,
+      "session_date": "2024-05-03"
+    },
+    {
+      "cumulative_equal_session_bps": -265.77535825897615,
+      "equal_session_bps": 7.939667423568775,
+      "session_date": "2024-05-06"
+    },
+    {
+      "cumulative_equal_session_bps": -243.73681549589855,
+      "equal_session_bps": 22.038542763077594,
+      "session_date": "2024-05-09"
+    },
+    {
+      "cumulative_equal_session_bps": -266.41779953374026,
+      "equal_session_bps": -22.68098403784169,
+      "session_date": "2024-05-17"
+    },
+    {
+      "cumulative_equal_session_bps": -259.39491846701196,
+      "equal_session_bps": 7.022881066728326,
+      "session_date": "2024-05-21"
+    },
+    {
+      "cumulative_equal_session_bps": -266.39916312793724,
+      "equal_session_bps": -7.004244660925307,
+      "session_date": "2024-05-22"
+    },
+    {
+      "cumulative_equal_session_bps": -263.67928845976166,
+      "equal_session_bps": 2.7198746681755814,
+      "session_date": "2024-05-27"
+    },
+    {
+      "cumulative_equal_session_bps": -256.09882887618346,
+      "equal_session_bps": 7.580459583578225,
+      "session_date": "2024-05-28"
+    },
+    {
+      "cumulative_equal_session_bps": -213.289514486873,
+      "equal_session_bps": 42.80931438931046,
+      "session_date": "2024-05-30"
+    },
+    {
+      "cumulative_equal_session_bps": -188.00285280332292,
+      "equal_session_bps": 25.286661683550093,
+      "session_date": "2024-06-05"
+    },
+    {
+      "cumulative_equal_session_bps": -187.47045496285372,
+      "equal_session_bps": 0.532397840469212,
+      "session_date": "2024-06-10"
+    },
+    {
+      "cumulative_equal_session_bps": -170.17214994587422,
+      "equal_session_bps": 17.298305016979487,
+      "session_date": "2024-06-11"
+    },
+    {
+      "cumulative_equal_session_bps": -166.35315739184205,
+      "equal_session_bps": 3.8189925540321745,
+      "session_date": "2024-06-14"
+    },
+    {
+      "cumulative_equal_session_bps": -156.80843848680965,
+      "equal_session_bps": 9.54471890503239,
+      "session_date": "2024-06-18"
+    },
+    {
+      "cumulative_equal_session_bps": -168.88637294812276,
+      "equal_session_bps": -12.077934461313111,
+      "session_date": "2024-06-19"
+    },
+    {
+      "cumulative_equal_session_bps": -162.77046372690458,
+      "equal_session_bps": 6.115909221218185,
+      "session_date": "2024-06-20"
+    },
+    {
+      "cumulative_equal_session_bps": -206.55239246059392,
+      "equal_session_bps": -43.781928733689355,
+      "session_date": "2024-06-21"
+    },
+    {
+      "cumulative_equal_session_bps": -143.10718815491737,
+      "equal_session_bps": 63.44520430567657,
+      "session_date": "2024-06-27"
+    }
+  ],
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "max_drawdown_bps": -373.51752537890695,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

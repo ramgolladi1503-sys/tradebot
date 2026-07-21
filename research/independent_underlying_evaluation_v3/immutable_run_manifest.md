@@ -1,0 +1,4 @@
+# Immutable Run Manifest
+
+Run ID: `ec7470123b2082a95d8d1d6f20886e01`
+Task verdict: `INDEPENDENT_CONFIRMATION_CANDIDATES_REJECTED`

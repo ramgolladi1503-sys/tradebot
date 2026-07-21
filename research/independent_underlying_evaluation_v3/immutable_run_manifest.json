@@ -1,0 +1,22 @@
+{
+  "artifact": "immutable_run_manifest",
+  "candidate_order": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "dates_added": 0,
+  "dates_removed": 0,
+  "run_id": "ec7470123b2082a95d8d1d6f20886e01",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "sealed_sessions_used": 366,
+  "semantic_hash": "b272b025eb34d1026e8af877ab237a706058da9631f161bcfa4ac93581db2d7c",
+  "task_verdict": "INDEPENDENT_CONFIRMATION_CANDIDATES_REJECTED"
+}

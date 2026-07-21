@@ -1,0 +1,19 @@
+{
+  "candidate_count": 103,
+  "candidate_sessions": 103,
+  "equal_session_mean_bps": -1.3893901762613328,
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "median_bps": 0.532397840469212,
+  "positive_candidate_fraction": 0.5048543689320388,
+  "positive_session_fraction": 0.5048543689320388,
+  "primary_mean_bps": -1.3893901762613328,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}

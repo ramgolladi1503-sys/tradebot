@@ -1,0 +1,22 @@
+{
+  "FINAL_VERDICT": "INDEPENDENT_CONFIRMATION_CANDIDATES_REJECTED",
+  "both_candidates_evaluated_in_order": true,
+  "confirmed_hypotheses": [],
+  "determinism": "PASS",
+  "epoch_completed": true,
+  "epoch_opened": true,
+  "independent_audit": "PASS",
+  "open_count": 1,
+  "rules_changed_after_open": false,
+  "run_id": "ec7470123b2082a95d8d1d6f20886e01",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "unused_alpha_reassigned": false
+}

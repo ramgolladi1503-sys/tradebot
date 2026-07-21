@@ -1,0 +1,17 @@
+{
+  "candidate_count": 278,
+  "candidate_ids_hash": "a6dfd165f774308f740e62c1c8c00427589f50d2564033f88e7ae99ac6ad4fd5",
+  "candidate_sessions": 140,
+  "external_ledger": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3/evaluation_ledgers/ec7470123b2082a95d8d1d6f20886e01/AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/candidate_outcome_ledger.jsonl",
+  "external_ledger_sha256": "736a841cea8c5b215c1dce7ce78559838832d02651b78826367b080f2d58677a",
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  }
+}
