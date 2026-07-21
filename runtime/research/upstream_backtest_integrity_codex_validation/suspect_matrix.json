@@ -1,0 +1,86 @@
+[
+  {
+    "id": "1",
+    "name": "Daily macro EMA lookahead",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_1"
+  },
+  {
+    "id": "2",
+    "name": "Higher-timeframe resample lookahead",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_2"
+  },
+  {
+    "id": "3",
+    "name": "Stale pending-signal execution",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_3"
+  },
+  {
+    "id": "4",
+    "name": "Cost unit mixing or double deduction",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_4"
+  },
+  {
+    "id": "5",
+    "name": "Signal-time limit reused at later entry bar",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_5"
+  },
+  {
+    "id": "6",
+    "name": "Slippage calculated but not applied",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_6"
+  },
+  {
+    "id": "7",
+    "name": "Naive timestamp localization",
+    "status": "NOT_A_BUG",
+    "test": "test_suspect_7"
+  },
+  {
+    "id": "8",
+    "name": "Bar timestamp versus quote timestamp semantics",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_8"
+  },
+  {
+    "id": "9",
+    "name": "Vector index mapping and -1",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_9"
+  },
+  {
+    "id": "10",
+    "name": "Overlapping trades and capital reuse",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_10"
+  },
+  {
+    "id": "11",
+    "name": "Stop/target ambiguity",
+    "status": "CONTRACT_AMBIGUITY",
+    "test": "test_suspect_11"
+  },
+  {
+    "id": "12",
+    "name": "Timeout timestamp/price mismatch",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_12"
+  },
+  {
+    "id": "13",
+    "name": "False WFA or mixed IS/OOS metrics",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_13"
+  },
+  {
+    "id": "14",
+    "name": "Placeholder or invalid validation metrics",
+    "status": "CONFIRMED_BUG",
+    "test": "test_suspect_14"
+  }
+]
