@@ -1,0 +1,26 @@
+{
+  "alpha_unchanged": true,
+  "artifact": "pre_open_evaluation_audit",
+  "candidate_hashes_verified": true,
+  "evaluator_committed": true,
+  "external_hashes_verified": true,
+  "frozen_order_verified": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "old_corpus_equivalence_verified": true,
+  "override_path_present": false,
+  "prior_sealed_candidate_generation": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "seal_hashes_verified": true,
+  "statistical_contract_committed": true,
+  "verdict": "PASS_READY_TO_OPEN_ONCE"
+}

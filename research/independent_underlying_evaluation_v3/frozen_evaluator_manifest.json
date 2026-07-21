@@ -1,0 +1,46 @@
+{
+  "artifact": "frozen_evaluator_manifest",
+  "broker_network_calls": false,
+  "candidate_order": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "option_data_used": false,
+  "runner_accepts_overrides": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "option_data_used": false,
+    "order_action": false,
+    "read_only": true
+  },
+  "source_files": [
+    {
+      "path": "research/independent_underlying_evaluation_v3/__init__.py",
+      "sha256": "3eaf93054de0c349cad612cc0d78baead6bcbb4f81d7cca281a5afae29877778"
+    },
+    {
+      "path": "research/independent_underlying_evaluation_v3/statistics.py",
+      "sha256": "f769e65e8a798c0219066f9cdc92a91ea2d533ecff1f98677f43536c64dc8840"
+    },
+    {
+      "path": "research/independent_underlying_evaluation_v3/evaluate_ac24.py",
+      "sha256": "052cb1e799b71478eb99ff11d31d3996f67f5b49ae842eefb3633acb46e6fb2f"
+    },
+    {
+      "path": "research/independent_underlying_evaluation_v3/evaluate_ac16.py",
+      "sha256": "6fcad33cb7eb4112797043496422632a6a8ef421837464d352000247c0f06be5"
+    },
+    {
+      "path": "scripts/run_independent_underlying_evaluation_v3.py",
+      "sha256": "c928b031d81367c2dce24a92d07153feabf8bf6b1f9263ab0b2ee474d87f1fee"
+    },
+    {
+      "path": "scripts/audit_independent_underlying_evaluation_v3.py",
+      "sha256": "df07b8d19cf989f5d5527eac05b21f6f9162fa62f1ee725284836baea16cdc25"
+    }
+  ],
+  "status": "FROZEN_BEFORE_SEALED_EPOCH_OPEN"
+}
