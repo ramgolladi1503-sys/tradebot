@@ -1,114 +1,134 @@
 #!/usr/bin/env python3
-import json
-import argparse
-from pathlib import Path
-from collections import defaultdict
+from __future__ import annotations
 
-def main():
+import argparse
+import json
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def audit_integrity(trades: list[dict[str, Any]]) -> dict[str, Any]:
+    failed_blockers: set[str] = set()
+    metrics = {
+        "max_trades_per_symbol_day": 0,
+        "average_trades_per_active_symbol_day": 0.0,
+        "same_candle_ambiguity_rate": 0.0,
+        "max_episode_reentries": 0,
+    }
+
+    if not trades:
+        failed_blockers.add("TRADE_LEDGER_MISSING_OR_EMPTY")
+    else:
+        trades_per_day_symbol: defaultdict[str, int] = defaultdict(int)
+        same_candle_ambiguity = 0
+        episodes_seen: defaultdict[str, int] = defaultdict(int)
+        trades_by_symbol: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+
+        for trade in trades:
+            symbol = str(trade.get("symbol") or "")
+            entry_time = _parse_timestamp(trade.get("entry_time"))
+            exit_time = _parse_timestamp(trade.get("exit_time"))
+            if not symbol or entry_time is None or exit_time is None:
+                failed_blockers.add("INVALID_TRADE_IDENTITY_OR_TIMESTAMP")
+                continue
+            if entry_time >= exit_time:
+                failed_blockers.add("NON_POSITIVE_HOLDING_INTERVAL")
+            trades_by_symbol[symbol].append(trade)
+            trades_per_day_symbol[f"{symbol}_{entry_time.date().isoformat()}"] += 1
+
+            episode_id = trade.get("extension_episode_id")
+            if episode_id:
+                episodes_seen[str(episode_id)] += 1
+            if trade.get("exit_reason") == "SAME_CANDLE_AMBIGUOUS_ASSUMED_STOP":
+                same_candle_ambiguity += 1
+
+        for symbol_trades in trades_by_symbol.values():
+            symbol_trades.sort(key=lambda item: str(item.get("entry_time") or ""))
+            for previous, current in zip(symbol_trades, symbol_trades[1:]):
+                previous_exit = _parse_timestamp(previous.get("exit_time"))
+                current_entry = _parse_timestamp(current.get("entry_time"))
+                if (
+                    previous_exit is not None
+                    and current_entry is not None
+                    and current_entry < previous_exit
+                ):
+                    failed_blockers.add("OVERLAPPING_POSITION_SANITY_FAILED")
+
+        counts = list(trades_per_day_symbol.values())
+        max_trades = max(counts) if counts else 0
+        average_trades = sum(counts) / len(counts) if counts else 0.0
+        max_reentries = max(episodes_seen.values()) if episodes_seen else 0
+        ambiguity_rate = same_candle_ambiguity / len(trades)
+
+        metrics = {
+            "max_trades_per_symbol_day": max_trades,
+            "average_trades_per_active_symbol_day": average_trades,
+            "same_candle_ambiguity_rate": ambiguity_rate,
+            "max_episode_reentries": max_reentries,
+        }
+        if average_trades > 6:
+            failed_blockers.add("OVERTRADING_SANITY_FAILED")
+        if max_reentries > 1:
+            failed_blockers.add("SAME_EXTENSION_REENTRY_FAILED")
+        if ambiguity_rate > 0.1:
+            failed_blockers.add("SAME_CANDLE_FILL_AMBIGUITY_TOO_HIGH")
+
+    blockers = sorted(failed_blockers)
+    return {
+        "classification": (
+            "PHASE_4_7_INTEGRITY_AUDIT_FAILED"
+            if blockers
+            else "PHASE_4_7_INTEGRITY_AUDIT_PASSED"
+        ),
+        "trades_analyzed": len(trades),
+        "blockers": blockers,
+        "metrics": metrics,
+    }
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", type=str, required=True)
     args = parser.parse_args()
-    
+
     base_dir = Path(f"runtime/strategy_validation/{args.strategy}")
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
-    out_dir = base_dir
-    
-    if not ledger_path.exists():
-        print("Trade ledger missing. Cannot run Phase 4.7 Integrity Audit.")
-        return
-        
-    trades = []
-    with open(ledger_path, "r") as f:
-        for line in f:
+    trades: list[dict[str, Any]] = []
+    if ledger_path.exists():
+        for line in ledger_path.read_text().splitlines():
             if line.strip():
                 trades.append(json.loads(line))
-                
-    failed_blockers = set()
-    
-    if not trades:
-        pass # Handle below
-    else:
-        trades_per_day_sym = defaultdict(int)
-        overlaps_found = False
-        same_candle_ambiguity = 0
-        episodes_seen = defaultdict(int)
-        
-        # We need to sort trades by entry_time to check overlaps properly
-        # But we can just check if any trade's entry_time is < previous trade's exit_time for the same symbol
-        trades_by_sym = defaultdict(list)
-        for t in trades:
-            trades_by_sym[t['symbol']].append(t)
-            
-        for sym, sym_trades in trades_by_sym.items():
-            sym_trades.sort(key=lambda x: x['entry_time'])
-            
-            for i in range(len(sym_trades)):
-                t = sym_trades[i]
-                
-                # Check Overtrading
-                day = t['entry_time'][:10]
-                trades_per_day_sym[f"{sym}_{day}"] += 1
-                
-                # Check Overlaps
-                if i > 0:
-                    prev_t = sym_trades[i-1]
-                    if t['entry_time'] < prev_t['exit_time']:
-                        overlaps_found = True
-                        
-                # Check Same Episode Reentry
-                ep_id = t.get('extension_episode_id')
-                if ep_id:
-                    episodes_seen[ep_id] += 1
-                    
-                # Check Same Candle Ambiguity
-                if t.get('exit_reason') == "SAME_CANDLE_AMBIGUOUS_ASSUMED_STOP":
-                    same_candle_ambiguity += 1
-                    
-        # Evaluate Blockers
-        max_trades = max(trades_per_day_sym.values()) if trades_per_day_sym else 0
-        avg_trades = sum(trades_per_day_sym.values()) / len(trades_per_day_sym) if trades_per_day_sym else 0
-        
-        if avg_trades > 6:
-            failed_blockers.add("OVERTRADING_SANITY_FAILED")
-            
-        if overlaps_found:
-            failed_blockers.add("OVERLAPPING_POSITION_SANITY_FAILED")
-            
-        max_reentries = max(episodes_seen.values()) if episodes_seen else 0
-        if max_reentries > 1:
-            failed_blockers.add("SAME_EXTENSION_REENTRY_FAILED")
-            
-        ambiguity_pct = same_candle_ambiguity / len(trades)
-        if ambiguity_pct > 0.1:
-            failed_blockers.add("SAME_CANDLE_FILL_AMBIGUITY_TOO_HIGH")
-            
-    failed_blockers = list(failed_blockers)
-    classification = "PHASE_4_7_INTEGRITY_AUDIT_PASSED"
-    
-    if not trades:
-        # If no trades but we ran Phase 4.7, it's passed but empty
-        classification = "PHASE_4_7_INTEGRITY_AUDIT_PASSED"
-    elif failed_blockers:
-        classification = "PHASE_4_7_INTEGRITY_AUDIT_FAILED"
-        
-    report = {
-        "classification": classification,
-        "strategy_id": args.strategy,
-        "trades_analyzed": len(trades),
-        "blockers": failed_blockers
-    }
-    
-    with open(out_dir / "phase_4_7_integrity_audit.json", "w") as f:
-        json.dump(report, f, indent=2)
-        
-    with open(out_dir / "phase_4_7_integrity_audit.md", "w") as f:
-        f.write("# Phase 4.7 Integrity Audit\n\n")
-        f.write(f"- Classification: {classification}\n")
-        f.write(f"- Trades Analyzed: {len(trades)}\n")
-        if failed_blockers:
-            f.write(f"- Blockers: {', '.join(failed_blockers)}\n")
-            
-    print(f"Phase 4.7 Integrity Audit complete. Result: {classification}")
+
+    report = audit_integrity(trades)
+    report["strategy_id"] = args.strategy
+    base_dir.mkdir(parents=True, exist_ok=True)
+    (base_dir / "phase_4_7_integrity_audit.json").write_text(
+        json.dumps(report, indent=2)
+    )
+    markdown = [
+        "# Phase 4.7 Integrity Audit",
+        "",
+        f"- Classification: {report['classification']}",
+        f"- Trades Analyzed: {report['trades_analyzed']}",
+    ]
+    if report["blockers"]:
+        markdown.append(f"- Blockers: {', '.join(report['blockers'])}")
+    (base_dir / "phase_4_7_integrity_audit.md").write_text(
+        "\n".join(markdown) + "\n"
+    )
+    print(
+        f"Phase 4.7 Integrity Audit complete. Result: {report['classification']}"
+    )
+
 
 if __name__ == "__main__":
     main()
