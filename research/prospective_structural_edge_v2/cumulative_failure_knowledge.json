@@ -1,0 +1,630 @@
+{
+  "prior_hypotheses_analyzed": 18,
+  "records": [
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "WEAK_OR_UNSTABLE",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+      "mean_bps": null,
+      "mechanism": "GAP_ACCEPTANCE_CONTINUATION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+      "mean_bps": null,
+      "mechanism": "GAP_REJECTION_REVERSAL",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+      "mean_bps": null,
+      "mechanism": "PRIOR_DAY_SWEEP_RECLAIM",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+      "mean_bps": null,
+      "mechanism": "NARROW_OPENING_RANGE_EXPANSION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+      "mean_bps": null,
+      "mechanism": "CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC06_FAILED_OPENING_DRIVE_REVERSAL",
+      "mean_bps": null,
+      "mechanism": "FAILED_OPENING_DRIVE_REVERSAL",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "FALSIFIED_BY_CURRENT_DEFINITION",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+      "mean_bps": null,
+      "mechanism": "MIDDAY_COMPRESSION_LATE_EXPANSION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "FALSIFIED_BY_CURRENT_DEFINITION",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+      "mean_bps": null,
+      "mechanism": "VWAP_INVENTORY_TRANSFER",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC09_LARGE_OPENING_RANGE_MEAN_REVERSION",
+      "mean_bps": null,
+      "mechanism": "LARGE_OPENING_RANGE_MEAN_REVERSION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": null,
+      "family_status": "WEAK_OR_UNSTABLE",
+      "final_verdict": "OLDER_CYCLE_CONTRACT_ONLY_OR_LOCKBOX_EVIDENCE",
+      "folds": [],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC10_LATE_SESSION_RANGE_ESCAPE",
+      "mean_bps": null,
+      "mechanism": "LATE_SESSION_RANGE_ESCAPE",
+      "positive_session_fraction": null,
+      "sample_size": [
+        null,
+        null
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": null
+    },
+    {
+      "clustered_ci": null,
+      "concentration": null,
+      "controls": "NOT_RUN_NO_CANDIDATES",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_RESULT_CONCENTRATION|NOT_RUN_NO_CANDIDATES",
+      "folds": [
+        [
+          1,
+          null
+        ],
+        [
+          2,
+          null
+        ],
+        [
+          3,
+          null
+        ],
+        [
+          4,
+          null
+        ],
+        [
+          5,
+          null
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+      "mean_bps": null,
+      "mechanism": "ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+      "positive_session_fraction": null,
+      "sample_size": [
+        0,
+        0
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "NOT_PROMOTED_NO_FINALIST_GATE"
+    },
+    {
+      "clustered_ci": [
+        -1.3492346661921621,
+        14.06970760246494
+      ],
+      "concentration": null,
+      "controls": "PASS",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE",
+      "folds": [
+        [
+          1,
+          23.59877827656
+        ],
+        [
+          2,
+          18.285496351959083
+        ],
+        [
+          3,
+          5.809295225329822
+        ],
+        [
+          4,
+          -11.003046697747926
+        ],
+        [
+          5,
+          8.245332670359414
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+      "mean_bps": 8.012284304383158,
+      "mechanism": "PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+      "positive_session_fraction": 0.6052631578947368,
+      "sample_size": [
+        58,
+        38
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "NOT_PROMOTED_NO_FINALIST_GATE"
+    },
+    {
+      "clustered_ci": [
+        -7.825148930394079,
+        4.9468112323635545
+      ],
+      "concentration": null,
+      "controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "folds": [
+        [
+          1,
+          -4.981801791035721
+        ],
+        [
+          2,
+          -5.106329902143154
+        ],
+        [
+          3,
+          15.301915863220605
+        ],
+        [
+          4,
+          7.61539586109139
+        ],
+        [
+          5,
+          -7.442097541944883
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+      "mean_bps": -1.4089813764476755,
+      "mechanism": "OPENING_DISPERSION_CONVERGENCE",
+      "positive_session_fraction": 0.4375,
+      "sample_size": [
+        32,
+        32
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "NOT_PROMOTED_NO_FINALIST_GATE"
+    },
+    {
+      "clustered_ci": [
+        -5.340079144140667,
+        0.8094672580167369
+      ],
+      "concentration": null,
+      "controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "folds": [
+        [
+          1,
+          -5.411469813248173
+        ],
+        [
+          2,
+          -3.2264242297415744
+        ],
+        [
+          3,
+          4.667765701243554
+        ],
+        [
+          4,
+          3.5855430440527276
+        ],
+        [
+          5,
+          -5.792029730259862
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+      "mean_bps": -3.2923937978696975,
+      "mechanism": "FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+      "positive_session_fraction": 0.39215686274509803,
+      "sample_size": [
+        269,
+        153
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "NOT_PROMOTED_NO_FINALIST_GATE"
+    },
+    {
+      "clustered_ci": [
+        -5.079651643976156,
+        2.9265669182583665
+      ],
+      "concentration": null,
+      "controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "folds": [
+        [
+          1,
+          -8.368834722969009
+        ],
+        [
+          2,
+          -0.5390562688773453
+        ],
+        [
+          3,
+          5.233366375337592
+        ],
+        [
+          4,
+          -0.959099561251703
+        ],
+        [
+          5,
+          3.035711326894817
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+      "mean_bps": -0.7941407302369587,
+      "mechanism": "MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+      "positive_session_fraction": 0.4772727272727273,
+      "sample_size": [
+        150,
+        88
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "NOT_PROMOTED_NO_FINALIST_GATE"
+    },
+    {
+      "clustered_ci": [
+        -2.522725204820559,
+        4.217508674649048
+      ],
+      "concentration": "PASS",
+      "controls": "PASS",
+      "family_status": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+      "final_verdict": "REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION",
+      "folds": [
+        [
+          1,
+          -1.8371502702284952
+        ],
+        [
+          2,
+          6.718601202957791
+        ],
+        [
+          3,
+          1.571242435543447
+        ],
+        [
+          4,
+          0.8257803812732677
+        ],
+        [
+          5,
+          1.5346702602968947
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "mean_bps": 2.546988117649075,
+      "mechanism": "PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "positive_session_fraction": 0.4972677595628415,
+      "sample_size": [
+        371,
+        183
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "PASS"
+    },
+    {
+      "clustered_ci": null,
+      "concentration": "REJECTED_RESULT_CONCENTRATION",
+      "controls": "NOT_RUN_NO_CANDIDATES",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_RESULT_CONCENTRATION|NOT_RUN_NO_CANDIDATES",
+      "folds": [
+        [
+          1,
+          null
+        ],
+        [
+          2,
+          null
+        ],
+        [
+          3,
+          null
+        ],
+        [
+          4,
+          null
+        ],
+        [
+          5,
+          null
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+      "mean_bps": null,
+      "mechanism": "CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+      "positive_session_fraction": null,
+      "sample_size": [
+        0,
+        0
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "REJECTED_PARAMETER_FRAGILITY"
+    },
+    {
+      "clustered_ci": [
+        -2.8777569749597838,
+        0.9838831072834994
+      ],
+      "concentration": "PASS",
+      "controls": "REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "family_status": "PARAMETER_FRAGILE",
+      "final_verdict": "REJECTED_INSUFFICIENT_DEVELOPMENT_SAMPLE|REJECTED_DEVELOPMENT_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_CLUSTERED_CI_LOWER_NOT_POSITIVE|REJECTED_POSITIVE_SESSION_FRACTION|REJECTED_NEGATIVE_CONTROL_FAILURE",
+      "folds": [
+        [
+          1,
+          2.46191855357601
+        ],
+        [
+          2,
+          -4.732937481536791
+        ],
+        [
+          3,
+          -3.3446142384174955
+        ],
+        [
+          4,
+          0.4352460688977766
+        ],
+        [
+          5,
+          -2.506801099068742
+        ]
+      ],
+      "forbidden_cosmetic_descendants": [
+        "renamed window",
+        "threshold-only variant",
+        "direction inversion",
+        "time-of-day-only retest"
+      ],
+      "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+      "mean_bps": -0.9628709427783478,
+      "mechanism": "LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+      "positive_session_fraction": 0.4460431654676259,
+      "sample_size": [
+        278,
+        278
+      ],
+      "scientific_interpretation": "Not confirmed as an underlying structural edge under committed sample, WFA, CI, control, sensitivity and lockbox gates.",
+      "sensitivity": "REJECTED_PARAMETER_FRAGILITY"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

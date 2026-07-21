@@ -1,0 +1,19 @@
+{
+  "family_status": {
+    "compression_breakout": "WEAK_OR_UNSTABLE",
+    "cross_index_convergence_or_realignment": "UNDERPOWERED_NOT_CONFIRMED",
+    "late_continuation": "CONTROL_INDISTINGUISHABLE",
+    "opening_repair_state": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+    "prior_body_midpoint_rejection": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+    "prior_extreme_acceptance": "WEAK_OR_UNSTABLE",
+    "two_index_nonconfirmation_reversal": "OPEN_FOR_MATERIALLY_DISTINCT_MECHANISM",
+    "vwap_continuation": "WEAK_OR_UNSTABLE"
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}
