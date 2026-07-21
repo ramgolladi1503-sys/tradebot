@@ -102,5 +102,6 @@ def test_parameter_ids_are_stable_and_order_independent():
     )
     first = module._stable_parameter_id({"b": 2, "a": 1})
     second = module._stable_parameter_id({"a": 1, "b": 2})
+    expected = "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
     assert first == second
-    assert len(first) == 64
+    assert first == expected
