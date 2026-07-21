@@ -1,0 +1,17 @@
+{
+  "expected_shared_sessions": 0,
+  "primary_window": [
+    "2023-01-02",
+    "2024-06-28"
+  ],
+  "provider_daily_candles_used": false,
+  "provider_missing_dates_not_treated_as_holidays": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "status": "NOT_BUILT_CREDENTIAL_UNAVAILABLE"
+}

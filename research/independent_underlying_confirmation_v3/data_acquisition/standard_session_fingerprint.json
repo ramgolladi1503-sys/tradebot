@@ -1,0 +1,15 @@
+{
+  "derived_from": "first 50 accepted old-corpus sessions integrity metadata only",
+  "dominant_bar_count": 375,
+  "dominant_first_bar_observed": "09:15:00",
+  "dominant_last_bar_observed": "2024-07-01 15:29:00",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "strategy_candidates_calculated": false,
+  "strategy_outcomes_calculated": false
+}

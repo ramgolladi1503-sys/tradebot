@@ -1,0 +1,14 @@
+{
+  "AC24_AC16_files_opened_by_acquisition_runtime": "NO",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "strategy_candidate_counts_calculated": "NO",
+  "strategy_outcomes_calculated": "NO",
+  "strategy_specific_imports": [],
+  "verdict": "PASS"
+}

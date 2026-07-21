@@ -1,0 +1,11 @@
+{
+  "deterministic_monthly_plan_hash": "4af69f9537f5d8442bf54fe58e13b8dbb1fe25f98af6a0b7b92c88ed66658ab9",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS"
+}

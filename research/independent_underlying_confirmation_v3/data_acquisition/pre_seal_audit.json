@@ -1,0 +1,15 @@
+{
+  "candidate_registry_frozen": true,
+  "epoch_opened": false,
+  "epoch_sealed": false,
+  "generator_equivalence_passed": true,
+  "outcome_blindness_passed": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "PASS_WAITING_CREDENTIAL_BLOCKED"
+}

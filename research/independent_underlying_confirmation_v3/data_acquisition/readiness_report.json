@@ -1,0 +1,22 @@
+{
+  "calendar_gate_pass": false,
+  "calendar_span_days": 0,
+  "eligible_independent_sessions": 0,
+  "epoch_opened": false,
+  "epoch_sealed": false,
+  "expected_shared_sessions": 0,
+  "first_eligible_session": null,
+  "last_eligible_session": null,
+  "manifest_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "missing_expected_sessions": 0,
+  "quarantined_sessions": 0,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "session_gate_pass": false,
+  "verdict": "BLOCKED_HISTORICAL_DATA_CREDENTIAL_UNAVAILABLE"
+}

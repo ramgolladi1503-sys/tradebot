@@ -1,0 +1,391 @@
+{
+  "backward_extension_used": false,
+  "extension_plan": [
+    [
+      "2022-01-03",
+      "2022-01-31"
+    ],
+    [
+      "2022-02-01",
+      "2022-02-28"
+    ],
+    [
+      "2022-03-01",
+      "2022-03-31"
+    ],
+    [
+      "2022-04-01",
+      "2022-04-30"
+    ],
+    [
+      "2022-05-01",
+      "2022-05-31"
+    ],
+    [
+      "2022-06-01",
+      "2022-06-30"
+    ],
+    [
+      "2022-07-01",
+      "2022-07-31"
+    ],
+    [
+      "2022-08-01",
+      "2022-08-31"
+    ],
+    [
+      "2022-09-01",
+      "2022-09-30"
+    ],
+    [
+      "2022-10-01",
+      "2022-10-31"
+    ],
+    [
+      "2022-11-01",
+      "2022-11-30"
+    ],
+    [
+      "2022-12-01",
+      "2022-12-30"
+    ]
+  ],
+  "monthly_chunks_per_symbol": 18,
+  "planned_requests": [
+    {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "state": "PLANNED",
+      "symbol": "NIFTY"
+    },
+    {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "state": "PLANNED",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "chunk_end": "2023-01-31",
+      "chunk_start": "2023-01-02",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-02-28",
+      "chunk_start": "2023-02-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-03-31",
+      "chunk_start": "2023-03-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-04-30",
+      "chunk_start": "2023-04-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-05-31",
+      "chunk_start": "2023-05-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-06-30",
+      "chunk_start": "2023-06-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-07-31",
+      "chunk_start": "2023-07-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-08-31",
+      "chunk_start": "2023-08-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-09-30",
+      "chunk_start": "2023-09-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-10-31",
+      "chunk_start": "2023-10-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-11-30",
+      "chunk_start": "2023-11-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2023-12-31",
+      "chunk_start": "2023-12-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-01-31",
+      "chunk_start": "2024-01-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-02-29",
+      "chunk_start": "2024-02-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-03-31",
+      "chunk_start": "2024-03-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-04-30",
+      "chunk_start": "2024-04-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-05-31",
+      "chunk_start": "2024-05-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    },
+    {
+      "chunk_end": "2024-06-28",
+      "chunk_start": "2024-06-01",
+      "state": "PLANNED",
+      "symbol": "SENSEX"
+    }
+  ],
+  "primary_window": [
+    "2023-01-02",
+    "2024-06-28"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

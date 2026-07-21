@@ -1,0 +1,26 @@
+{
+  "key_defects": [
+    "incorrect underlying/option manifest classification",
+    "proceeding after incomplete instrument resolution",
+    "skipping a date merely because any manifest exists",
+    "permanently skipping failed partial fetches",
+    "naive timezone conversion",
+    "missing common-minute alignment checks",
+    "missing full-session completeness checks",
+    "ambiguous per-symbol success aggregation",
+    "unreachable or ineffective HTTP 429 retry behavior",
+    "unused chunk controls",
+    "silent exception loss",
+    "overwriting existing files"
+  ],
+  "legacy_fetcher": "scripts/fetch_upstox_historical_data.py",
+  "legacy_fetcher_used": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "verdict": "FAIL"
+}

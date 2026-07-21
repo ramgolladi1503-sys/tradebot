@@ -1,0 +1,26 @@
+{
+  "api_capability_verified_from_official_docs": true,
+  "api_version": "V3",
+  "broker_trading_api_allowed": false,
+  "extension_trigger": "validated complete session count from primary window below 250",
+  "extension_window": [
+    "2022-01-03",
+    "2022-12-30"
+  ],
+  "historical_market_data_api_allowed": true,
+  "minute_data_available_from": "January 2022",
+  "official_docs_url": "https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/",
+  "one_to_fifteen_minute_max_retrieval": "1 month",
+  "option_data_allowed": false,
+  "primary_window": [
+    "2023-01-02",
+    "2024-06-28"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

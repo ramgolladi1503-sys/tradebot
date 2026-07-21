@@ -1,0 +1,50 @@
+{
+  "resolved": {
+    "BANKNIFTY": {
+      "exchange_segment": "NSE_INDEX",
+      "instrument_key": "NSE_INDEX|Nifty Bank",
+      "instrument_key_hash": "9f6e61eabf284aa652a53dd1674a874e2c1c179e8b87ea3d7f4dd61f7072bb18",
+      "instrument_type": "INDEX",
+      "match_count_in_underlying_key_projection": 1048,
+      "option_match": false,
+      "resolution_status": "UNIQUE_EXACT_INDEX_MATCH",
+      "source_hash": "367a813b33ef1109aa30280a85cd1125d6ec3bbbf8688d19e5f7792359b42f80",
+      "source_identity": "/Users/madhuram/tradebot/runtime/upstox_instruments/complete.json",
+      "symbol_mapping": "BANKNIFTY"
+    },
+    "NIFTY": {
+      "exchange_segment": "NSE_INDEX",
+      "instrument_key": "NSE_INDEX|Nifty 50",
+      "instrument_key_hash": "121a6957c5aa7cf4f820929c690a803774e4554bf96e8142ee60c6acd0dca6e9",
+      "instrument_type": "INDEX",
+      "match_count_in_underlying_key_projection": 1632,
+      "option_match": false,
+      "resolution_status": "UNIQUE_EXACT_INDEX_MATCH",
+      "source_hash": "367a813b33ef1109aa30280a85cd1125d6ec3bbbf8688d19e5f7792359b42f80",
+      "source_identity": "/Users/madhuram/tradebot/runtime/upstox_instruments/complete.json",
+      "symbol_mapping": "NIFTY"
+    },
+    "SENSEX": {
+      "exchange_segment": "BSE_INDEX",
+      "instrument_key": "BSE_INDEX|SENSEX",
+      "instrument_key_hash": "0a9b68bcb533a5d0c2b024693aa13e298caf169407065bf77c56cb19e441c403",
+      "instrument_type": "INDEX",
+      "match_count_in_underlying_key_projection": 2738,
+      "option_match": false,
+      "resolution_status": "UNIQUE_EXACT_INDEX_MATCH",
+      "source_hash": "367a813b33ef1109aa30280a85cd1125d6ec3bbbf8688d19e5f7792359b42f80",
+      "source_identity": "/Users/madhuram/tradebot/runtime/upstox_instruments/complete.json",
+      "symbol_mapping": "SENSEX"
+    }
+  },
+  "retrieval_source": "repo trusted instrument master",
+  "retrieval_timestamp_utc": "2026-07-21T00:00:00Z",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "token_included": false
+}
