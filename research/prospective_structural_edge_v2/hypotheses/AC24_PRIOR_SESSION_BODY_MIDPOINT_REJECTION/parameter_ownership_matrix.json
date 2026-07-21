@@ -1,0 +1,57 @@
+{
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "parameters": [
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input opening_displacement_bps",
+      "name": "opening_displacement_bps",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "direction",
+      "sensitivity_neighbors": [
+        24,
+        25,
+        26
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "basis_points",
+      "value": 25
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input midpoint_touch_tolerance_bps",
+      "name": "midpoint_touch_tolerance_bps",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate timing",
+      "sensitivity_neighbors": [
+        4,
+        5,
+        6
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "basis_points",
+      "value": 5
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input rejection_distance_bps",
+      "name": "rejection_distance_bps",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        11,
+        12,
+        13
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "basis_points",
+      "value": 12
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

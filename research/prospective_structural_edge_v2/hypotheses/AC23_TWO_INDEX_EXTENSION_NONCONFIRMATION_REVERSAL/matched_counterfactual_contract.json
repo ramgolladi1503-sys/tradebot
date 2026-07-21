@@ -1,0 +1,12 @@
+{
+  "counterfactual": "matched one-index extensions where at least two indices confirm the same direction",
+  "frozen_before_outcomes": true,
+  "hypothesis_id": "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

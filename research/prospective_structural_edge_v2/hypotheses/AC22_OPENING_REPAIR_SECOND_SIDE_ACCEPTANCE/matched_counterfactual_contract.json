@@ -1,0 +1,12 @@
+{
+  "counterfactual": "matched sessions with opening gap and repair but no second-side acceptance before expiry",
+  "frozen_before_outcomes": true,
+  "hypothesis_id": "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

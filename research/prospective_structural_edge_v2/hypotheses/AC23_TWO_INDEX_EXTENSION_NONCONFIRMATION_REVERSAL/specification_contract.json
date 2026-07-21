@@ -1,0 +1,80 @@
+{
+  "candidate_identity": "sha256 of hypothesis/spec/parameter/session/symbol/direction/cutoff/evidence",
+  "direction": "defined by completed-bar state sequence",
+  "emission_scope": "single candidate per hypothesis per session",
+  "expiry": "same session natural boundary",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation",
+  "horizon": 45,
+  "hypothesis_id": "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL",
+  "input_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "invalidation": "opposite qualifying state before entry or nonfinite input fails closed",
+  "matched_counterfactual": "matched one-index extensions where at least two indices confirm the same direction",
+  "outcomes_read_before_contract_freeze": false,
+  "parameter_hash": "8b28087ec8898ff5a4a2604c1296530dbe7d66c6f7c507704c92391af41bb27c",
+  "parameters": {
+    "extension_fraction": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input extension_fraction",
+      "name": "extension_fraction",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "direction",
+      "sensitivity_neighbors": [
+        0.27999999999999997,
+        0.35,
+        0.42
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "own_morning_range_fraction",
+      "value": 0.35
+    },
+    "morning_range_end": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input morning_range_end",
+      "name": "morning_range_end",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        74,
+        75,
+        76
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "bar_index",
+      "value": 75
+    },
+    "required_nonconfirming_indices": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input required_nonconfirming_indices",
+      "name": "required_nonconfirming_indices",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "count",
+      "value": 2
+    }
+  },
+  "parameters_optimized": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_rules": "confirmation and entry on same bar prohibited",
+  "schema_version": 1,
+  "specification_hash": "220b8083327146f1b7eea6c6148832dc91a3453ff51c5175c4446f0dce331c4e",
+  "state_sequence": "A single-index range extension rejected by two nonconfirming indices may reverse toward the basket median.",
+  "status": "FROZEN_PRE_OUTCOME_FAILURE_INFORMED",
+  "target": "first deterministic qualifying symbol",
+  "tie_breaking": "earliest timestamp, then NIFTY, BANKNIFTY, SENSEX"
+}

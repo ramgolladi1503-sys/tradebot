@@ -1,0 +1,16 @@
+{
+  "consumed_prior_failures": [
+    "AC16 weak drift",
+    "AC18 control fragility",
+    "AC19-AC21 ancestry rejection"
+  ],
+  "hypothesis_id": "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+  "new_observable_state": "A failed opening gap that repairs to the prior close, then accepts through the opposite side of the opening range, may indicate directional reassessment.",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

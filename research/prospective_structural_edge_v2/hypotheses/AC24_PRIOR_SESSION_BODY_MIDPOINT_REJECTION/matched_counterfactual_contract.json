@@ -1,0 +1,12 @@
+{
+  "counterfactual": "matched midpoint touch where rejection does not reach the frozen distance before expiry",
+  "frozen_before_outcomes": true,
+  "hypothesis_id": "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

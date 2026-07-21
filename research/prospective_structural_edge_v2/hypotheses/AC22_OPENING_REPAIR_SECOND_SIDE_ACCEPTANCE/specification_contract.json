@@ -1,0 +1,80 @@
+{
+  "candidate_identity": "sha256 of hypothesis/spec/parameter/session/symbol/direction/cutoff/evidence",
+  "direction": "defined by completed-bar state sequence",
+  "emission_scope": "single candidate per hypothesis per session",
+  "expiry": "same session natural boundary",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation",
+  "horizon": 45,
+  "hypothesis_id": "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+  "input_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "invalidation": "opposite qualifying state before entry or nonfinite input fails closed",
+  "matched_counterfactual": "matched sessions with opening gap and repair but no second-side acceptance before expiry",
+  "outcomes_read_before_contract_freeze": false,
+  "parameter_hash": "50df15639d6875a01dec493e46dd7b77619add3a285dac838bb569db92609825",
+  "parameters": {
+    "opening_range_end": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input opening_range_end",
+      "name": "opening_range_end",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        29,
+        30,
+        31
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "bar_index",
+      "value": 30
+    },
+    "repair_distance_bps": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input repair_distance_bps",
+      "name": "repair_distance_bps",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate timing",
+      "sensitivity_neighbors": [
+        7,
+        8,
+        9
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "basis_points",
+      "value": 8
+    },
+    "second_side_acceptance_fraction": {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input second_side_acceptance_fraction",
+      "name": "second_side_acceptance_fraction",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        0.144,
+        0.18,
+        0.216
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "opening_range_fraction",
+      "value": 0.18
+    }
+  },
+  "parameters_optimized": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_rules": "confirmation and entry on same bar prohibited",
+  "schema_version": 1,
+  "specification_hash": "c1fe3d8974d65fe2a65cc128c63deeb5fceaccb45ea58bdfa05acaccf56a88d3",
+  "state_sequence": "A failed opening gap that repairs to the prior close, then accepts through the opposite side of the opening range, may indicate directional reassessment.",
+  "status": "FROZEN_PRE_OUTCOME_FAILURE_INFORMED",
+  "target": "first deterministic qualifying symbol",
+  "tie_breaking": "earliest timestamp, then NIFTY, BANKNIFTY, SENSEX"
+}

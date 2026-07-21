@@ -1,0 +1,33 @@
+{
+  "replacements": [
+    "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+    "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL",
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION"
+  ],
+  "results": {
+    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE": {
+      "reason": "Compression-release overlaps AC04, AC07 and AC14 without a new observable causal state.",
+      "verdict": "REJECTED_COSMETIC_VARIANT"
+    },
+    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE": {
+      "reason": "Prior-day acceptance terminology overlaps AC16 and prior-extreme families; OHLCV cannot support value-area claims.",
+      "verdict": "REJECTED_COSMETIC_VARIANT"
+    },
+    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL": {
+      "reason": "Pullback/nonconfirmation risks inverting AC13 and AC17 cross-index realignment logic.",
+      "verdict": "REJECTED_COSMETIC_VARIANT"
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "started": [
+    "AC19_INTRADAY_RANGE_COMPRESSION_RELEASE",
+    "AC20_PRIOR_DAY_INSIDE_VALUE_BREAK_ACCEPTANCE",
+    "AC21_CROSS_INDEX_PULLBACK_NONCONFIRMATION_REVERSAL"
+  ]
+}

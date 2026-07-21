@@ -1,0 +1,57 @@
+{
+  "hypothesis_id": "AC22_OPENING_REPAIR_SECOND_SIDE_ACCEPTANCE",
+  "parameters": [
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input opening_range_end",
+      "name": "opening_range_end",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        29,
+        30,
+        31
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "bar_index",
+      "value": 30
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input repair_distance_bps",
+      "name": "repair_distance_bps",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate timing",
+      "sensitivity_neighbors": [
+        7,
+        8,
+        9
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "basis_points",
+      "value": 8
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input second_side_acceptance_fraction",
+      "name": "second_side_acceptance_fraction",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        0.144,
+        0.18,
+        0.216
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "opening_range_fraction",
+      "value": 0.18
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

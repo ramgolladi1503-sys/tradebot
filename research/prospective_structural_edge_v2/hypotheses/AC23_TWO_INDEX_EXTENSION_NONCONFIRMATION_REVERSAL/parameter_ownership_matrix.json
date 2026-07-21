@@ -1,0 +1,57 @@
+{
+  "hypothesis_id": "AC23_TWO_INDEX_EXTENSION_NONCONFIRMATION_REVERSAL",
+  "parameters": [
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input morning_range_end",
+      "name": "morning_range_end",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        74,
+        75,
+        76
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "bar_index",
+      "value": 75
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input extension_fraction",
+      "name": "extension_fraction",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "direction",
+      "sensitivity_neighbors": [
+        0.27999999999999997,
+        0.35,
+        0.42
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "own_morning_range_fraction",
+      "value": 0.35
+    },
+    {
+      "boundary_semantics": "inclusive threshold; missing or nonfinite input fails closed",
+      "formula": "Frozen Cycle 5 formula input required_nonconfirming_indices",
+      "name": "required_nonconfirming_indices",
+      "owner": "pre_outcome_failure_informed_cycle5_contract",
+      "role": "candidate presence",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Natural completed-bar/session boundary chosen before outcomes.",
+      "unit": "count",
+      "value": 2
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}
