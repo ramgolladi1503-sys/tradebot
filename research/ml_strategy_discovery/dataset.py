@@ -80,6 +80,7 @@ def build_discovery_dataset(
         horizon_bars=config.barrier_horizon_bars,
         target_atr=config.target_atr,
         stop_atr=config.stop_atr,
+        side=config.label_side,
     )
 
     metadata = pd.DataFrame(index=frame.index)
@@ -107,6 +108,9 @@ def build_discovery_dataset(
     if maximum_index < minimum_index:
         raise ValueError("insufficient rows for configured history and label horizon")
     dataset = dataset.iloc[minimum_index : maximum_index + 1].copy()
+    dataset = dataset.loc[dataset["label_status"] == "MEASURED"].copy()
+    if dataset.empty:
+        raise ValueError("no rows have a complete same-session label horizon")
     dataset.reset_index(drop=True, inplace=True)
     return dataset
 
@@ -120,16 +124,26 @@ def chronological_split(
     if len(dataset) < 30:
         raise ValueError("at least 30 model-ready rows are required")
     ordered = dataset.sort_values("decision_timestamp", kind="mergesort").copy()
-    n_rows = len(ordered)
-    development_end = int(n_rows * (1.0 - validation_fraction - holdout_fraction))
-    validation_end = int(n_rows * (1.0 - holdout_fraction))
-    if not 0 < development_end < validation_end < n_rows:
-        raise ValueError("invalid chronological partition")
-    ordered["split"] = "HOLDOUT_LOCKED"
-    ordered.iloc[:development_end, ordered.columns.get_loc("split")] = "DEVELOPMENT"
-    ordered.iloc[
-        development_end:validation_end, ordered.columns.get_loc("split")
-    ] = "VALIDATION"
+    sessions = (
+        ordered.groupby("session_date", sort=False)["decision_timestamp"]
+        .min()
+        .sort_values(kind="mergesort")
+        .index.tolist()
+    )
+    if len(sessions) < 5:
+        raise ValueError("at least five complete sessions are required")
+    development_end = int(len(sessions) * (1.0 - validation_fraction - holdout_fraction))
+    validation_end = int(len(sessions) * (1.0 - holdout_fraction))
+    if not 0 < development_end < validation_end < len(sessions):
+        raise ValueError("invalid chronological session partition")
+    split_by_session = {session: "DEVELOPMENT" for session in sessions[:development_end]}
+    split_by_session.update(
+        {session: "VALIDATION" for session in sessions[development_end:validation_end]}
+    )
+    split_by_session.update(
+        {session: "HOLDOUT_LOCKED" for session in sessions[validation_end:]}
+    )
+    ordered["split"] = ordered["session_date"].map(split_by_session)
     ordered.reset_index(drop=True, inplace=True)
     return ordered
 
