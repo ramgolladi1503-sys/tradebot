@@ -2109,9 +2109,233 @@
       "discovery_candidate_count": 350,
       "discovery_session_count": 168,
       "entry_event": "First next completed bar after setup confirmation.",
-      "final_lockbox_status": "NOT_OPENED",
-      "final_verdict": "PRE_HOLDOUT_FINALIST_FROZEN",
-      "finalist_status": "PRE_HOLDOUT_FINALIST_FROZEN",
+      "final_lockbox_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": -0.030465549915896183,
+          "direction_inversion_mean_bps": -0.9901931765454843,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": 0.9901931765454843,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [
+          "REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES",
+          "REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE"
+        ],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "ca7fdbccc0402aa446f5cf0e9afe289e5c69d74f480f742ec5fdf3f50dc7810f",
+            "direction": -1,
+            "entry_index": 249,
+            "entry_ts": "2026-02-10 13:24:00",
+            "evidence": {
+              "compression_width_bps": 18.343032058836297
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -7.751086019702758,
+            "mfe_bps": 14.904451475694636,
+            "outcome_bps": 7.751086019700537,
+            "session": "20260210",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "3c00ffcf09ef279e2c8b906791bac3a50af49fc16bd4e171b6a3113fb2761240",
+            "direction": -1,
+            "entry_index": 249,
+            "entry_ts": "2026-02-10 13:24:00",
+            "evidence": {
+              "compression_width_bps": 15.78016753154483
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -6.657987112510533,
+            "mfe_bps": 24.300004944048936,
+            "outcome_bps": 8.62736696385924,
+            "session": "20260210",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "c0e13f684aa87f7b36874aa0c30ac5b3f5c69be39939b6102bfa8737132d3ce6",
+            "direction": -1,
+            "entry_index": 248,
+            "entry_ts": "2026-02-10 13:23:00",
+            "evidence": {
+              "compression_width_bps": 17.380358627241492
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -7.994292706197115,
+            "mfe_bps": 15.187732403094678,
+            "outcome_bps": 7.4995435137859,
+            "session": "20260210",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "a6715f688edc936764e8cd20e6c7a903d840bd727139d79796d3d3f35871c78d",
+            "direction": 1,
+            "entry_index": 252,
+            "entry_ts": "2026-02-12 13:27:00",
+            "evidence": {
+              "compression_width_bps": 21.34582945724437
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -27.49567179867629,
+            "mfe_bps": 0.9661163667851191,
+            "outcome_bps": -21.834229889321488,
+            "session": "20260212",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "4f7ee071497955f644e9f5addfdc7b2652b230ebff2c3c18d61932c5e595a276",
+            "direction": -1,
+            "entry_index": 330,
+            "entry_ts": "2026-02-12 14:45:00",
+            "evidence": {
+              "compression_width_bps": 25.956183770495304
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -14.711122964592427,
+            "mfe_bps": 16.057191911298396,
+            "outcome_bps": 3.628169851905838,
+            "session": "20260212",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "23e4925b3ef2dd0219429c693741b98d9b4f4a4b7b9d3f01243cf377262ee0bd",
+            "direction": -1,
+            "entry_index": 275,
+            "entry_ts": "2026-02-13 13:50:00",
+            "evidence": {
+              "compression_width_bps": 32.55622058452592
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -12.780980646223128,
+            "mfe_bps": 2.6463686920863427,
+            "outcome_bps": -4.410614486809461,
+            "session": "20260213",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "746b446bbc8e6b48c5aca162bc2e6ec1ef1b58099c2413d53d89a97ae2829cca",
+            "direction": -1,
+            "entry_index": 273,
+            "entry_ts": "2026-02-13 13:48:00",
+            "evidence": {
+              "compression_width_bps": 29.194454754384907
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -9.176736845195599,
+            "mfe_bps": 5.239187965748737,
+            "outcome_bps": -3.7997709260251256,
+            "session": "20260213",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "a3de947bb7b61c48283ccf40d4ba0a45ebdca79fa7584dd6fefa419292ac14e0",
+            "direction": 1,
+            "entry_index": 314,
+            "entry_ts": "2026-02-16 14:29:00",
+            "evidence": {
+              "compression_width_bps": 34.554508409510134
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -2.810260573605783,
+            "mfe_bps": 29.898049991412545,
+            "outcome_bps": 25.897331813711233,
+            "session": "20260216",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "825bc7b2ab89f31b0547dec7bdc0e2ac7de3456c109c616ee4b5981165cfcac8",
+            "direction": 1,
+            "entry_index": 314,
+            "entry_ts": "2026-02-16 14:29:00",
+            "evidence": {
+              "compression_width_bps": 34.43484755166126
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -4.929175592974788,
+            "mfe_bps": 28.452270152519166,
+            "outcome_bps": 24.891374014917034,
+            "session": "20260216",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "0ce442a6b12dbeba97457e057eb34dc632a5eabfb0146ec39e60eac5506e909b",
+            "direction": 1,
+            "entry_index": 262,
+            "entry_ts": "2026-02-17 13:37:00",
+            "evidence": {
+              "compression_width_bps": 40.95614765587276
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -30.373713466196328,
+            "mfe_bps": 2.850343102904773,
+            "outcome_bps": -14.186378136806788,
+            "session": "20260217",
+            "symbol": "BANKNIFTY"
+          }
+        ],
+        "summary": {
+          "candidate_count": 97,
+          "direction_breakdown": [
+            {
+              "count": 57,
+              "direction": -1,
+              "mean": 0.24807568881948344
+            },
+            {
+              "count": 40,
+              "direction": 1,
+              "mean": 2.047710596555036
+            }
+          ],
+          "mae_mean_bps": -15.21203167426674,
+          "mean_bps": 0.9901931765454843,
+          "median_bps": 0.10796361194387316,
+          "mfe_mean_bps": 14.990848092370141,
+          "positive_candidate_fraction": 0.5051546391752577,
+          "positive_session_fraction": 0.5869565217391305,
+          "session_clustered_mean_ci_95": [
+            -5.070428315098833,
+            5.425789899924263
+          ],
+          "session_count": 46,
+          "single_session_concentration": 0.030927835051546393,
+          "symbol_breakdown": [
+            {
+              "count": 19,
+              "mean": 0.30919588509063695,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 40,
+              "mean": 1.2100255670159652,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 38,
+              "mean": 1.0992893059881914,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.15463917525773196
+        },
+        "verdict": "REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+        "wfa": []
+      },
+      "final_lockbox_status": "OPENED_ONCE_PRE_REGISTERED_FINALIST",
+      "final_verdict": "REJECTED_FINAL_LOCKBOX_FAILURE|REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+      "finalist_status": "REJECTED_FINAL_LOCKBOX_FAILURE",
       "global_hypothesis_number": 7,
       "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
       "hypothesis_name": "Midday range compression late directional expansion",
@@ -2647,9 +2871,254 @@
       "discovery_candidate_count": 701,
       "discovery_session_count": 275,
       "entry_event": "First next completed bar after setup confirmation.",
-      "final_lockbox_status": "NOT_OPENED",
-      "final_verdict": "PRE_HOLDOUT_FINALIST_FROZEN",
-      "finalist_status": "PRE_HOLDOUT_FINALIST_FROZEN",
+      "final_lockbox_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": -0.7504526745583813,
+          "direction_inversion_mean_bps": 0.9774053420196536,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": -0.9774053420196536,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [
+          "REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE",
+          "REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+          "REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION"
+        ],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "ef3bb8b7d34d4922a909c7cc63197f5c6d0e7d49c148ecd7b91dc62e62c98093",
+            "direction": 1,
+            "entry_index": 213,
+            "entry_ts": "2026-02-10 12:48:00",
+            "evidence": {
+              "crosses": 8,
+              "dist_bps": 8.12539637725207,
+              "vwap": 25953.711580594678
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -10.698644581790262,
+            "mfe_bps": 1.866490151860578,
+            "outcome_bps": -10.005926587286496,
+            "session": "20260210",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "364f636e348912d1e863598bdb8b4dec199edd101a6c527255b4cde5bdf30a84",
+            "direction": 1,
+            "entry_index": 212,
+            "entry_ts": "2026-02-10 12:47:00",
+            "evidence": {
+              "crosses": 12,
+              "dist_bps": 8.185253380921242,
+              "vwap": 60722.69693396227
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -8.218697990409751,
+            "mfe_bps": 3.537577713590423,
+            "outcome_bps": -7.330190099554823,
+            "session": "20260210",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "b1a45bb17bdabb3d919471ecb2a65511cbbc459f9541270ed71ac4305acc56f3",
+            "direction": 1,
+            "entry_index": 214,
+            "entry_ts": "2026-02-10 12:49:00",
+            "evidence": {
+              "crosses": 12,
+              "dist_bps": 10.506925386393196,
+              "vwap": 84363.39001557631
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -15.439275812716424,
+            "mfe_bps": 2.7267371316486155,
+            "outcome_bps": -15.017774111081295,
+            "session": "20260210",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "6589696fa7916eccc15afcda96e3be9a8c7e2a7f8bf34dda55d270dcb2600d3f",
+            "direction": 1,
+            "entry_index": 139,
+            "entry_ts": "2026-02-11 11:34:00",
+            "evidence": {
+              "crosses": 5,
+              "dist_bps": 8.042533805128205,
+              "vwap": 25955.824940047965
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -10.530470020887472,
+            "mfe_bps": 2.6181790179902187,
+            "outcome_bps": -6.372185698196864,
+            "session": "20260211",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "b398a7d8cabe8be661e0eaa98feb2e7aab2f65682e94fabda4c82f64214fa01b",
+            "direction": -1,
+            "entry_index": 117,
+            "entry_ts": "2026-02-11 11:12:00",
+            "evidence": {
+              "crosses": 2,
+              "dist_bps": 8.292350812846294,
+              "vwap": 84294.9303133903
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -13.868853396936665,
+            "mfe_bps": 2.882024653180215,
+            "outcome_bps": -6.873889936809263,
+            "session": "20260211",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "3ee457376dfbf6da2555ba9fadf05b15aecdacbcd2d72acc903d69d270582209",
+            "direction": -1,
+            "entry_index": 126,
+            "entry_ts": "2026-02-12 11:21:00",
+            "evidence": {
+              "crosses": 13,
+              "dist_bps": 8.670914445466638,
+              "vwap": 25856.06957671958
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -0.7160398737449114,
+            "mfe_bps": 9.695566939084133,
+            "outcome_bps": 9.347223216721323,
+            "session": "20260212",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "6798337f1015874babe86be45bd9249bd127bb4a364f221f452f578ce551fcda",
+            "direction": 1,
+            "entry_index": 109,
+            "entry_ts": "2026-02-12 11:04:00",
+            "evidence": {
+              "crosses": 6,
+              "dist_bps": 8.781183734158926,
+              "vwap": 60798.96131498471
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -16.946324858253536,
+            "mfe_bps": 2.7695981945830006,
+            "outcome_bps": -14.373968078121857,
+            "session": "20260212",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "b328b6a4fce8427cd60edd610e119ae83514bc5a12d5e88fca1ddffe5c31968f",
+            "direction": -1,
+            "entry_index": 123,
+            "entry_ts": "2026-02-12 11:18:00",
+            "evidence": {
+              "crosses": 9,
+              "dist_bps": 9.825610614934144,
+              "vwap": 83894.30127371274
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -1.369711175878141,
+            "mfe_bps": 12.175873301237816,
+            "outcome_bps": 5.882122035776316,
+            "session": "20260212",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "0ffec95b2d6b4519adf7eb9a87a7b20df21af5feaba69cb50abafed0cc36463e",
+            "direction": -1,
+            "entry_index": 123,
+            "entry_ts": "2026-02-13 11:18:00",
+            "evidence": {
+              "crosses": 4,
+              "dist_bps": 8.157605924182798,
+              "vwap": 25555.6472899729
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -9.616024880239049,
+            "mfe_bps": 2.9376858086271884,
+            "outcome_bps": -7.148368800993232,
+            "session": "20260213",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "2fe0553a017f3f6290d33ae7fdbac5e5700ea5030636157e3f4a2592b488e20f",
+            "direction": -1,
+            "entry_index": 214,
+            "entry_ts": "2026-02-13 12:49:00",
+            "evidence": {
+              "crosses": 2,
+              "dist_bps": 9.89538246576993,
+              "vwap": 60383.902180685356
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -12.303365849373193,
+            "mfe_bps": 6.226299024849613,
+            "outcome_bps": -7.793237128308483,
+            "session": "20260213",
+            "symbol": "BANKNIFTY"
+          }
+        ],
+        "summary": {
+          "candidate_count": 252,
+          "direction_breakdown": [
+            {
+              "count": 130,
+              "direction": -1,
+              "mean": -1.2685863498851029
+            },
+            {
+              "count": 122,
+              "direction": 1,
+              "mean": -0.6671304975728629
+            }
+          ],
+          "mae_mean_bps": -14.783178651903786,
+          "mean_bps": -0.9774053420196536,
+          "median_bps": -0.3170314318512446,
+          "mfe_mean_bps": 14.074119701200464,
+          "positive_candidate_fraction": 0.49603174603174605,
+          "positive_session_fraction": 0.46236559139784944,
+          "session_clustered_mean_ci_95": [
+            -3.241179967818259,
+            1.766704320558139
+          ],
+          "session_count": 93,
+          "single_session_concentration": 0.011904761904761904,
+          "symbol_breakdown": [
+            {
+              "count": 83,
+              "mean": -3.1889892231443016,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 84,
+              "mean": 0.6814599352086441,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 85,
+              "mean": -0.45720794382943164,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.05952380952380952
+        },
+        "verdict": "REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION",
+        "wfa": []
+      },
+      "final_lockbox_status": "OPENED_ONCE_PRE_REGISTERED_FINALIST",
+      "final_verdict": "REJECTED_FINAL_LOCKBOX_FAILURE|REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION",
+      "finalist_status": "REJECTED_FINAL_LOCKBOX_FAILURE",
       "global_hypothesis_number": 8,
       "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
       "hypothesis_name": "VWAP reclaim with distance rejection after two-sided trade",
@@ -3519,6 +3988,6 @@
   "schema_version": 1,
   "total_frozen_hypotheses": 10,
   "total_hypotheses_entering_wfa": 10,
-  "total_hypotheses_reaching_holdout": 0,
+  "total_hypotheses_reaching_holdout": 2,
   "total_screened_hypotheses": 2
 }

@@ -496,9 +496,9 @@ def main() -> int:
         positive_folds = sum(1 for f in folds if f.get("mean_bps") is not None and f["mean_bps"] > 0)
         gate_failures = []
         if summary["candidate_count"] < 100:
-            gate_failures.append("REJECTED_INSUFFICIENT_DISCOVERY_CANDIDATES")
+            gate_failures.append(f"REJECTED_INSUFFICIENT_{args.partition}_CANDIDATES")
         if summary["session_count"] < 30:
-            gate_failures.append("REJECTED_INSUFFICIENT_DISCOVERY_SESSIONS")
+            gate_failures.append(f"REJECTED_INSUFFICIENT_{args.partition}_SESSIONS")
         if summary["mean_bps"] is None or summary["mean_bps"] <= 0:
             gate_failures.append(f"REJECTED_{args.partition}_MEAN_NOT_POSITIVE")
         if args.partition == "FINAL_LOCKBOX" and (

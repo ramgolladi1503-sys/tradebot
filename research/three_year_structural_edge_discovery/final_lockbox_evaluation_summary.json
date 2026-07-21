@@ -1,0 +1,121 @@
+{
+  "available_corpus_research": "BLOCKED",
+  "available_data_period": "2024-07-01 through 2026-07-10",
+  "base_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "complete_sessions": 500,
+  "final_verdict": "BLOCKED_FINAL_LOCKBOX_CONTAMINATED",
+  "finalists": {
+    "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION": {
+      "summary": {
+        "candidate_count": 97,
+        "direction_breakdown": [
+          {
+            "count": 57,
+            "direction": -1,
+            "mean": 0.24807568881948344
+          },
+          {
+            "count": 40,
+            "direction": 1,
+            "mean": 2.047710596555036
+          }
+        ],
+        "mae_mean_bps": -15.21203167426674,
+        "mean_bps": 0.9901931765454843,
+        "median_bps": 0.10796361194387316,
+        "mfe_mean_bps": 14.990848092370141,
+        "positive_candidate_fraction": 0.5051546391752577,
+        "positive_session_fraction": 0.5869565217391305,
+        "session_clustered_mean_ci_95": [
+          -5.070428315098833,
+          5.425789899924263
+        ],
+        "session_count": 46,
+        "single_session_concentration": 0.030927835051546393,
+        "symbol_breakdown": [
+          {
+            "count": 19,
+            "mean": 0.30919588509063695,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 40,
+            "mean": 1.2100255670159652,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 38,
+            "mean": 1.0992893059881914,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.15463917525773196
+      },
+      "verdict": "REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE"
+    },
+    "AC08_VWAP_INVENTORY_TRANSFER": {
+      "summary": {
+        "candidate_count": 252,
+        "direction_breakdown": [
+          {
+            "count": 130,
+            "direction": -1,
+            "mean": -1.2685863498851029
+          },
+          {
+            "count": 122,
+            "direction": 1,
+            "mean": -0.6671304975728629
+          }
+        ],
+        "mae_mean_bps": -14.783178651903786,
+        "mean_bps": -0.9774053420196536,
+        "median_bps": -0.3170314318512446,
+        "mfe_mean_bps": 14.074119701200464,
+        "positive_candidate_fraction": 0.49603174603174605,
+        "positive_session_fraction": 0.46236559139784944,
+        "session_clustered_mean_ci_95": [
+          -3.241179967818259,
+          1.766704320558139
+        ],
+        "session_count": 93,
+        "single_session_concentration": 0.011904761904761904,
+        "symbol_breakdown": [
+          {
+            "count": 83,
+            "mean": -3.1889892231443016,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 84,
+            "mean": 0.6814599352086441,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 85,
+            "mean": -0.45720794382943164,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.05952380952380952
+      },
+      "verdict": "REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION"
+    }
+  },
+  "option_economic_edge": "NOT_EVALUATED_NO_TRUSTED_BID_ASK",
+  "original_blocker_preserved": true,
+  "original_three_year_verdict": "BLOCKED_INSUFFICIENT_HISTORICAL_DATA",
+  "parent_research_commit": "86c023263ded2085330280ceac1c6905a2f3a20f",
+  "reason": "The only preregistered finalists failed the opened final lockbox. Continuing with new hypotheses against the same lockbox would no longer be scientifically valid without a fresh sealed lockbox or new unseen data.",
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "shadow_test_only": "NO",
+  "three_year_certification": "NOT_ESTABLISHED"
+}
