@@ -1,0 +1,38 @@
+{
+  "contract": {
+    "precedence": [
+      "INVALID_BACKTEST",
+      "INSUFFICIENT_DATA",
+      "NO_STRUCTURAL_EDGE",
+      "PARAMETER_FRAGILE",
+      "PROMISING_BUT_UNPROVEN",
+      "STRUCTURAL_EDGE_SUPPORTED"
+    ],
+    "rules": [
+      "valid matched-random control with random mean >= base mean -> NO_STRUCTURAL_EDGE",
+      "materially more than 50% random replicates beating base -> NO_STRUCTURAL_EDGE",
+      "five-best contribution > 100% or return without five best < 0 -> at least PARAMETER_FRAGILE",
+      "bootstrap interval crosses zero -> cannot be STRUCTURAL_EDGE_SUPPORTED",
+      "adverse inverted or shift controls -> cannot be STRUCTURAL_EDGE_SUPPORTED"
+    ],
+    "thresholds": {
+      "bootstrap_interval_crosses_zero_blocks_structural_edge": true,
+      "five_best_concentration_fragile_pct": 100.0,
+      "material_random_fraction_beating_base": 0.5
+    }
+  },
+  "verdict": {
+    "index_signal_verdict": "NO_STRUCTURAL_EDGE",
+    "overall_research_verdict": "NO_STRUCTURAL_EDGE",
+    "reason_codes": [
+      "ADVERSE_CONTROLS_PRESENT",
+      "CONCENTRATED_PNL",
+      "INSUFFICIENT_TRADABLE_DATA",
+      "MATCHED_RANDOM_82_7_PERCENT_BEAT_BASE",
+      "MATCHED_RANDOM_MEAN_EXCEEDS_BASE",
+      "NEGATIVE_WITHOUT_FIVE_BEST",
+      "TREND_FILTER_IMPROVES_POINT_ESTIMATE_BUT_UNCERTAIN"
+    ],
+    "tradable_instrument_verdict": "INSUFFICIENT_TRADABLE_DATA"
+  }
+}

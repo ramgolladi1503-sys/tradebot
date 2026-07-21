@@ -1,0 +1,11 @@
+# Matched Random Comparison V2
+
+```json
+{
+  "comparison": "NUMERICALLY_EQUIVALENT_WITH_DOCUMENTED_SERIALIZATION_DIFFERENCE",
+  "independent_rows": 1000,
+  "independent_semantic_hash": "def927ec8e215dedf7a32427e04a4f0c761dd8ffd01ca4ae34217372043f4546",
+  "v1_rows": 1000,
+  "v1_sha256": "241058b1bb95a380207bf77cd059783fdcd1ab8f6b8d451add12edb8b27be2cf"
+}
+```

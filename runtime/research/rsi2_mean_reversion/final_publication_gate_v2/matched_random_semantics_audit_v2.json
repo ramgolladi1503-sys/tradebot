@@ -1,0 +1,13 @@
+{
+  "current_previous_trend_consistency": "pool uses entry-index trend, then enforces previous-row trend; conservative subset, V1 reproduced exactly",
+  "duplicate_entries": true,
+  "eligible_minus_one_exclusion": "eligible[:-1] excludes only final eligible index to ensure room for exits; no outcome filtering",
+  "entry_timestamp": "next session open",
+  "exit_timestamp": "entry index plus sampled base holding duration, next-open convention",
+  "holding_duration_multiset_exact": true,
+  "non_overlap": true,
+  "signal_timestamp": "base signal uses completed session t close/rsi/trend",
+  "trend_filter_timestamp": "base signal t; random entry N checks N-1 trend state before N open",
+  "uses_only_information_before_entry_open": true,
+  "verdict": "MATCHED_RANDOM_SEMANTICS_VALID"
+}

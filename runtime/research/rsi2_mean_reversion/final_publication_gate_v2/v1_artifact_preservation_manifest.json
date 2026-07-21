@@ -1,0 +1,30 @@
+{
+  "completed_ledger_sha256": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+  "frozen_input_sha256": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+  "immutable_baseline_hashes": {
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/baseline_manifest.json": "9f117281e53af0a43d330be7d8a7aa1488aaa9cb5f0d9c26bc98cb5bc1f00957",
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/completed_trade_ledger.csv": "b4de8d9ce6772ac923f116b361b98376a55a37152060c9fe7e93a6ea2c0b08a8",
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/immutable_baseline_manifest.json": "b6e699f28a33afb6ce8681e802da3d764b22416bd451d01631851ebc775f6397",
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv": "4f73bddb34e003074502c01191020adbade8b87ce095f4e722c49101db5a9d5d",
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/rsi2_mean_reversion_report.json": "818d495c3dbdeb7997e43903b0a03b4025c83df60b06982e5a5eef371167b2f5",
+    "runtime/research/rsi2_mean_reversion/baseline_immutable/a00dfdae7e4f5ff3/rsi2_mean_reversion_summary.md": "fd632d1ee235832f19322f95dfca4b74f3436bcc622403ac53ff5c2bd413b71b"
+  },
+  "negative_controls_sha256": "fb9a619836bafc41685275394d9dca708ff7cbe24b2763f67c5c6161dae9c978",
+  "parameter_grid_sha256": "01e77953ebf96ab5f1fb71ea8b3870df5719d2274fb7af35acc2c97f27949351",
+  "v1_artifacts_preserved": true,
+  "v1_file_hashes": {
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/artifact_hash_manifest.json": "74eef1f0dcc084b771ef2f2d415e1050dc06d2f485db6ea90bb846f0203943f8",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/baseline_immutability_report.json": "5d4e52614b0bbe611ab79adb955571836a38ddbd843c81d56ab554d1dc19b9de",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/control_completeness_matrix.json": "04e30815700b32dd193c594be631e99f10b3fa53d6e8f2197805a6f570fadd34",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/final_publication_report.json": "56130744bb3a70afe96cb89e02aa629dfaddc39620199462d313816a3e65eb92",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/final_publication_summary.md": "8131ce7f701f9f50de5305cfdb487ddd01d2295619b49334ac4137993526f758",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/independent_publication_oracle.json": "63002a0f38f1a8f50dd7f7bbc74c2fce308755251c8d0cdce52985d4c4a9b4b7",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_manifest.json": "a510c20046b06ff10070d0fd3450dab1ee74f14a9fc7de1145186dbdefc273b5",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_replicates.csv": "241058b1bb95a380207bf77cd059783fdcd1ab8f6b8d451add12edb8b27be2cf",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/matched_random_summary.json": "3a7ece94fb32d5deecf59cccf4026f5ec6ea8725e2585a5f5b8ef3d3af444fa7",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_matrix.csv": "9a6bf0d52183b7a3336219ed6e3d699b4a5bc8c45b6f063cbe8d3fb60d2c0b13",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/parameter_neighborhood_summary.json": "26849fd191fad11e5ab9089c2ccfd3742d6a76d2079bd10e37454ea405d3c423",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/pre_repair_manifest.json": "c35cad6c14987abab9079aeeef6be9e01b4d3c97a87851416c8537e74f0fa60c",
+    "runtime/research/rsi2_mean_reversion/final_publication_gate/verdict_decision_table.json": "ec647b03da5a2bae9e92b5476729402659c73b827cd853ad22db1c96bba3e3f9"
+  }
+}

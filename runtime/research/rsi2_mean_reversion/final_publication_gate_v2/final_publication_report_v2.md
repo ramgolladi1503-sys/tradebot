@@ -1,0 +1,357 @@
+# Final Publication Report V2
+
+```json
+{
+  "broker_api_called": false,
+  "concentration": {
+    "five_best_arithmetic_contribution_pct": 133.8271739188512,
+    "without_five_best_return": -0.10541185222333072
+  },
+  "control_truth_matrix": [
+    {
+      "artifact_source": "independent_random_v2",
+      "construction_validity": "PASS",
+      "control_id": "matched_random",
+      "economic_result": "FAIL_SIGNAL_NOT_BETTER_THAN_RANDOM",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "base_expectancy": 0.001052985524288867,
+        "construction_status": "PASS",
+        "economic_control_status": "FAIL_SIGNAL_NOT_BETTER_THAN_RANDOM",
+        "empirical_p_value": 0.8271728271728271,
+        "fraction_random_beating_base": 0.827,
+        "random_mean_expectancy": 0.0027412840378825657,
+        "random_median_expectancy": 0.0027738635853503963,
+        "random_p05_expectancy": -0.00033150586565380445,
+        "random_p95_expectancy": 0.005679415585824379,
+        "replicates": 1000,
+        "seed_end": 20261720,
+        "seed_start": 20260721,
+        "supports_structural_edge": false,
+        "trades_per_replicate": [
+          127
+        ]
+      },
+      "present": true,
+      "reason_codes": [
+        "RANDOM_MEAN_EXCEEDS_BASE",
+        "P_VALUE_0_827"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "one_session_signal_shift_backward",
+      "economic_result": "ADVERSE_NEGATIVE_SHIFT_CONTROL",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "CAGR": -0.16685276205704147,
+        "completed_trades": 208,
+        "expectancy": -0.013854611224215541,
+        "max_drawdown": -0.9460183049527114,
+        "profit_factor": 0.017781613557100357
+      },
+      "present": true,
+      "reason_codes": [
+        "BACKWARD_SHIFT_COLLAPSES"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "one_session_signal_shift_forward",
+      "economic_result": "ADVERSE_POSITIVE_SHIFT_CONTROL",
+      "inconclusive": false,
+      "limitations": [
+        "TIMING_CONTROL_NOT_DIRECTLY_TRADABLE"
+      ],
+      "metrics": {
+        "CAGR": 0.0074803739649478285,
+        "completed_trades": 207,
+        "expectancy": 0.0006601032556382432,
+        "max_drawdown": -0.12029821789714046,
+        "profit_factor": 1.1554468456122224
+      },
+      "present": true,
+      "reason_codes": [
+        "FORWARD_SHIFT_POSITIVE"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "TIMING_CONTROL_NOT_DIRECTLY_TRADABLE",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "inverted_rsi_condition",
+      "economic_result": "ADVERSE_INVERTED_RSI_BETTER_THAN_BASE_PF",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "CAGR": 0.017806170409621958,
+        "completed_trades": 302,
+        "expectancy": 0.001023193479544558,
+        "max_drawdown": -0.1094024832453816,
+        "profit_factor": 1.2512810536459378
+      },
+      "present": true,
+      "reason_codes": [
+        "INVERTED_CONTROL_ADVERSE"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "trend_filter_removed",
+      "economic_result": "INCONCLUSIVE_DIFFERENT_COUNT_UNIVERSE",
+      "inconclusive": true,
+      "limitations": [
+        "NOT_COUNT_MATCHED"
+      ],
+      "metrics": {
+        "CAGR": 5.214067174974524e-05,
+        "completed_trades": 314,
+        "expectancy": 0.0001740599233047417,
+        "max_drawdown": -0.2780482765109422,
+        "profit_factor": 1.029851130956394
+      },
+      "present": true,
+      "reason_codes": [
+        "COUNT_UNIVERSE_DIFFERS"
+      ],
+      "rejects_edge": false,
+      "sample_count_comparability": "NOT_COUNT_MATCHED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "randomized_rsi_distribution",
+      "economic_result": "WEAK_OR_NULL",
+      "inconclusive": true,
+      "limitations": [
+        "NOT_COUNT_MATCHED"
+      ],
+      "metrics": {
+        "CAGR": -0.00025957911557972224,
+        "completed_trades": 407,
+        "expectancy": 4.333449530970999e-05,
+        "max_drawdown": -0.15225620516812532,
+        "profit_factor": 1.0112522163984825
+      },
+      "present": true,
+      "reason_codes": [
+        "RANDOMIZED_RSI_WEAK"
+      ],
+      "rejects_edge": false,
+      "sample_count_comparability": "NOT_COUNT_MATCHED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "block_bootstrap_confidence_interval",
+      "economic_result": "FAIL_INTERVAL_CROSSES_ZERO",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "p05": -0.0037455508147839836,
+        "p50": 0.00126945828941777,
+        "p95": 0.005349763350359977
+      },
+      "present": true,
+      "reason_codes": [
+        "BOOTSTRAP_CROSSES_ZERO"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "best_calendar_year_removed",
+      "economic_result": "ADVERSE_BEST_YEAR_REMOVAL",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "compound_return": -0.05428475213995343,
+        "expectancy": 9.182627018403076e-05,
+        "profit_factor": 1.0100134744537652,
+        "removed_year": 2024,
+        "sum_return": 0.010651847341347567,
+        "trades": 116
+      },
+      "present": true,
+      "reason_codes": [
+        "BEST_YEAR_REMOVAL_NEGATIVE_COMPOUND"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "five_best_trades_removed",
+      "economic_result": "FAIL_CONCENTRATED_PNL",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "arithmetic_return_contribution_pct": 133.8271739188512,
+        "authoritative_formula": "arithmetic_return_contribution_pct = sum(five_largest_net_returns) / sum(all_net_returns) * 100",
+        "compounded_return_contribution_pct": 258.6072374834031,
+        "counterfactual_maximum_drawdown_after_removing_five_best": -0.28290213632369443,
+        "counterfactual_profit_factor_after_removing_five_best": 0.959345861467816,
+        "counterfactual_total_return_after_removing_five_best": -0.10541185222333072,
+        "current_269_28_reproduced": true,
+        "five_best_returns": [
+          0.0468709350667392,
+          0.039531093835549,
+          0.0320086650748966,
+          0.0315865876449165,
+          0.0289686760320581
+        ],
+        "five_best_trade_indices": [
+          34,
+          82,
+          96,
+          110,
+          66
+        ]
+      },
+      "present": true,
+      "reason_codes": [
+        "FIVE_BEST_REMOVAL_NEGATIVE"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "crash_period_only",
+      "economic_result": "TAIL_RISK_ADVERSE",
+      "inconclusive": false,
+      "limitations": [],
+      "metrics": {
+        "compound_return": -0.24371930702201072,
+        "expectancy": -0.24371930702201067,
+        "profit_factor": 0.0,
+        "sum_return": -0.24371930702201067,
+        "trades": 1
+      },
+      "present": true,
+      "reason_codes": [
+        "CRASH_TRADE_LARGE_LOSS"
+      ],
+      "rejects_edge": true,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    },
+    {
+      "artifact_source": "evidence_closure/negative_controls.json",
+      "construction_validity": "PASS",
+      "control_id": "crash_period_excluded",
+      "economic_result": "INCONCLUSIVE_CRASH_EXCLUSION_LOOKAHEAD",
+      "inconclusive": true,
+      "limitations": [],
+      "metrics": {
+        "compound_return": 0.4101390454715743,
+        "expectancy": 0.0029956227667198316,
+        "profit_factor": 1.43434620603238,
+        "sum_return": 0.3774484686066988,
+        "trades": 126
+      },
+      "present": true,
+      "reason_codes": [
+        "CRASH_EXCLUSION_NOT_ACTIONABLE"
+      ],
+      "rejects_edge": false,
+      "sample_count_comparability": "DIRECT_OR_DOCUMENTED",
+      "supports_edge": false
+    }
+  ],
+  "execution_eligibility": false,
+  "index_signal_verdict": "NO_STRUCTURAL_EDGE",
+  "is_order_action": false,
+  "matched_random_semantics": "MATCHED_RANDOM_SEMANTICS_VALID",
+  "overall_research_verdict": "NO_STRUCTURAL_EDGE",
+  "permanent_research_closure": {
+    "CURRENT_DATA_MAY_NOT_BE_USED_TO_TUNE_INVERT_OR_SELECT_NEW_RSI2_VARIANT": true,
+    "PRODUCTION_PROMOTION": "PROHIBITED",
+    "RSI2_MEAN_REVERSION_EXACT_HYPOTHESIS": "PERMANENTLY_CLOSED_FOR_CURRENT_OBSERVABLE_DATA_FAMILY",
+    "SHADOW_PROMOTION": "PROHIBITED",
+    "TESTED_PARAMETER_GRID": "CLOSED",
+    "VALID_FUTURE_WORK": "materially different preregistered hypothesis and genuinely new development data",
+    "explicit_prohibitions": [
+      "changing RSI period or thresholds",
+      "choosing inverted RSI because it looked better",
+      "adding another trend filter",
+      "removing bad years",
+      "selecting crash-excluded results",
+      "optimizing hold time",
+      "using positive parameter neighbors as promotion evidence"
+    ]
+  },
+  "promotion_eligible": false,
+  "publication_integrity_verdict": "PASS_PUBLICATION_GATE",
+  "random_control": {
+    "base_expectancy": 0.001052985524288867,
+    "construction_status": "PASS",
+    "economic_control_status": "FAIL_SIGNAL_NOT_BETTER_THAN_RANDOM",
+    "empirical_p_value": 0.8271728271728271,
+    "fraction_random_beating_base": 0.827,
+    "random_mean_expectancy": 0.0027412840378825657,
+    "random_median_expectancy": 0.0027738635853503963,
+    "random_p05_expectancy": -0.00033150586565380445,
+    "random_p95_expectancy": 0.005679415585824379,
+    "replicates": 1000,
+    "seed_end": 20261720,
+    "seed_start": 20260721,
+    "supports_structural_edge": false,
+    "trades_per_replicate": [
+      127
+    ]
+  },
+  "reason_codes": [
+    "ADVERSE_CONTROLS_PRESENT",
+    "CONCENTRATED_PNL",
+    "INSUFFICIENT_TRADABLE_DATA",
+    "MATCHED_RANDOM_82_7_PERCENT_BEAT_BASE",
+    "MATCHED_RANDOM_MEAN_EXCEEDS_BASE",
+    "NEGATIVE_WITHOUT_FIVE_BEST",
+    "TREND_FILTER_IMPROVES_POINT_ESTIMATE_BUT_UNCERTAIN"
+  ],
+  "shadow_eligible": false,
+  "sidecars_required": true,
+  "strategy_scientific_verdict": "NO_STRUCTURAL_EDGE",
+  "structural_edge_supported": false,
+  "tradable_data_verdict": "INSUFFICIENT_TRADABLE_DATA",
+  "tradable_instrument_verdict": "INSUFFICIENT_TRADABLE_DATA",
+  "trend_filter_incrementality": "TREND_FILTER_IMPROVES_POINT_ESTIMATE_BUT_UNCERTAIN",
+  "v1_artifacts_preserved": true,
+  "v1_random_control_reproduced": true,
+  "worktree_retirement": {
+    "external_data_paths_recorded": [
+      "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv"
+    ],
+    "no_unique_untracked_evidence": true,
+    "readiness_verdict": "SAFE_TO_REMOVE_LOCAL_WORKTREE_AFTER_ARCHITECTURE_REVIEW",
+    "remote_branch_preserved": true,
+    "worktree_removed": false
+  }
+}
+```

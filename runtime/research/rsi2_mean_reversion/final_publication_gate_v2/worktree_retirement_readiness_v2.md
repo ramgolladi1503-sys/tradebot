@@ -1,0 +1,13 @@
+# Worktree Retirement Readiness V2
+
+```json
+{
+  "external_data_paths_recorded": [
+    "runtime/research/rsi2_mean_reversion/frozen_data/nifty50_yfinance_2010-01-01_2026-01-01_auto_adjust_true.csv"
+  ],
+  "no_unique_untracked_evidence": true,
+  "readiness_verdict": "SAFE_TO_REMOVE_LOCAL_WORKTREE_AFTER_ARCHITECTURE_REVIEW",
+  "remote_branch_preserved": true,
+  "worktree_removed": false
+}
+```
