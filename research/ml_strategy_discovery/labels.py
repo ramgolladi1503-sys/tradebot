@@ -29,17 +29,25 @@ def compute_triple_barrier_labels(
     stop_atr: float,
     side: str = "LONG",
 ) -> pd.DataFrame:
-    """Create same-session path labels from future completed bars.
+    """Create same-session labels from the next legal bar open.
 
-    The full configured horizon must exist inside the same session. Rows too near
-    session end are explicitly unavailable, preventing next-session gap leakage.
-    Same-bar target/stop collisions are explicit and valued conservatively as a stop.
+    The observation at ``index`` is a completed decision bar. Entry is the open of
+    ``index + 1``. The entry bar is included in target/stop path evaluation, and the
+    configured horizon must fit completely inside the same session. Same-bar target
+    and stop collisions remain explicit and are valued conservatively as a stop.
     """
 
     normalized_side = side.upper()
     if normalized_side not in {"LONG", "SHORT"}:
         raise ValueError("side must be LONG or SHORT")
+    if horizon_bars < 1:
+        raise ValueError("horizon_bars must be positive")
+    required_columns = {"open", "high", "low", "close"}
+    missing = required_columns.difference(bars.columns)
+    if missing:
+        raise ValueError(f"barrier label columns missing: {sorted(missing)}")
 
+    open_ = bars["open"].to_numpy(dtype=float)
     close = bars["close"].to_numpy(dtype=float)
     high = bars["high"].to_numpy(dtype=float)
     low = bars["low"].to_numpy(dtype=float)
@@ -54,19 +62,45 @@ def compute_triple_barrier_labels(
     mae_atr = np.full(size, np.nan)
     future_close_return_atr = np.full(size, np.nan)
     label_return_r = np.full(size, np.nan)
+    label_entry_price = np.full(size, np.nan)
+    label_entry_timestamp = pd.Series(pd.NaT, index=bars.index, dtype="datetime64[ns, UTC]")
+    label_terminal_timestamp = pd.Series(pd.NaT, index=bars.index, dtype="datetime64[ns, UTC]")
+
+    timestamp_column = None
+    for candidate in ("bar_start_timestamp", "timestamp"):
+        if candidate in bars.columns:
+            timestamp_column = candidate
+            break
+    normalized_timestamps = None
+    if timestamp_column is not None:
+        normalized_timestamps = pd.to_datetime(
+            bars[timestamp_column],
+            utc=True,
+            errors="raise",
+        )
 
     for index in range(size):
         scale = atr_values[index]
-        required_last = index + horizon_bars
+        entry_index = index + 1
+        terminal_index = index + horizon_bars
         if not np.isfinite(scale) or scale <= 0:
             statuses[index] = "ATR_UNAVAILABLE"
             continue
-        if required_last >= size or required_last > session_ends[index]:
+        if terminal_index >= size or terminal_index > session_ends[index]:
             statuses[index] = "SESSION_ENDED_BEFORE_HORIZON"
             continue
 
-        last = required_last
-        entry = close[index]
+        entry = open_[entry_index]
+        if not np.isfinite(entry) or entry <= 0:
+            statuses[index] = "ENTRY_OPEN_UNAVAILABLE"
+            continue
+        label_entry_price[index] = entry
+        if normalized_timestamps is not None:
+            label_entry_timestamp.iloc[index] = normalized_timestamps.iloc[entry_index]
+            label_terminal_timestamp.iloc[index] = normalized_timestamps.iloc[
+                terminal_index
+            ]
+
         if normalized_side == "LONG":
             target = entry + target_atr * scale
             stop = entry - stop_atr * scale
@@ -74,22 +108,29 @@ def compute_triple_barrier_labels(
             target = entry - target_atr * scale
             stop = entry + stop_atr * scale
 
-        future_high = high[index + 1 : last + 1]
-        future_low = low[index + 1 : last + 1]
-        future_close = close[last]
+        future_high = high[entry_index : terminal_index + 1]
+        future_low = low[entry_index : terminal_index + 1]
+        terminal_close = close[terminal_index]
 
         if normalized_side == "LONG":
             mfe_atr[index] = float((np.nanmax(future_high) - entry) / scale)
             mae_atr[index] = float((np.nanmin(future_low) - entry) / scale)
-            future_close_return_atr[index] = float((future_close - entry) / scale)
+            future_close_return_atr[index] = float(
+                (terminal_close - entry) / scale
+            )
         else:
             mfe_atr[index] = float((entry - np.nanmin(future_low)) / scale)
             mae_atr[index] = float((entry - np.nanmax(future_high)) / scale)
-            future_close_return_atr[index] = float((entry - future_close) / scale)
+            future_close_return_atr[index] = float(
+                (entry - terminal_close) / scale
+            )
 
         outcome = BarrierOutcome.NEITHER
         event_bar: int | None = None
-        for offset, (bar_high, bar_low) in enumerate(zip(future_high, future_low), start=1):
+        for offset, (bar_high, bar_low) in enumerate(
+            zip(future_high, future_low),
+            start=1,
+        ):
             if normalized_side == "LONG":
                 hit_target = bar_high >= target
                 hit_stop = bar_low <= stop
@@ -116,17 +157,28 @@ def compute_triple_barrier_labels(
 
         if outcome is BarrierOutcome.TARGET_FIRST:
             label_return_r[index] = target_atr
-        elif outcome in {BarrierOutcome.STOP_FIRST, BarrierOutcome.AMBIGUOUS_SAME_BAR}:
+        elif outcome in {
+            BarrierOutcome.STOP_FIRST,
+            BarrierOutcome.AMBIGUOUS_SAME_BAR,
+        }:
             label_return_r[index] = -stop_atr
         else:
             label_return_r[index] = float(
-                np.clip(future_close_return_atr[index], -stop_atr, target_atr)
+                np.clip(
+                    future_close_return_atr[index],
+                    -stop_atr,
+                    target_atr,
+                )
             )
 
     return pd.DataFrame(
         {
             "label_side": normalized_side,
             "label_status": statuses,
+            "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+            "label_entry_price": label_entry_price,
+            "label_entry_timestamp": label_entry_timestamp,
+            "label_terminal_timestamp": label_terminal_timestamp,
             "barrier_outcome": outcomes,
             "bars_to_event": bars_to_event,
             "mfe_atr": mfe_atr,
@@ -152,11 +204,19 @@ def attach_option_outcome_availability(
         return output
 
     quotes = option_quotes.copy()
-    quotes["timestamp"] = pd.to_datetime(quotes["timestamp"], utc=True, errors="raise")
+    quotes["timestamp"] = pd.to_datetime(
+        quotes["timestamp"],
+        utc=True,
+        errors="raise",
+    )
     quotes = quotes.sort_values("timestamp")
     timestamps = set(quotes["timestamp"].tolist())
     present = output["decision_timestamp"].isin(timestamps)
-    output["option_data_availability"] = np.where(present, "PARTIAL", "UNAVAILABLE")
+    output["option_data_availability"] = np.where(
+        present,
+        "PARTIAL",
+        "UNAVAILABLE",
+    )
     output["option_data_reason"] = np.where(
         present,
         "decision_quote_present_but_full_selection_and_future_path_not_evaluated",
