@@ -123,3 +123,59 @@ def resolve_unique_nifty_index(rows: list[dict[str, Any]]) -> dict[str, Any]:
     row = dict(matches[0])
     row["resolution_status"] = "UNIQUE_EXACT_INDEX_MATCH"
     return row
+
+
+def token_presence_audit(token: str | None) -> dict[str, Any]:
+    return {
+        "token_present": bool(token),
+        "token_printed": False,
+        "token_logged": False,
+        "token_serialized": False,
+        "token_hashed": False,
+        "token_length_reported": False,
+        "token_prefix_suffix_reported": False,
+    }
+
+
+def classify_historical_access(status_code: int, payload: dict[str, Any] | None) -> str:
+    if status_code == 200 and payload and payload.get("status") == "success":
+        return "TOKEN_VALID_HISTORICAL_ACCESS_CONFIRMED"
+    if status_code in {401, 403}:
+        return "TOKEN_INVALID_OR_EXPIRED" if status_code == 401 else "TOKEN_VALID_BUT_HISTORICAL_ACCESS_DENIED"
+    if status_code in {400, 404, 405, 422}:
+        return "ENDPOINT_CONTRACT_MISMATCH"
+    return "PROVIDER_SERVICE_FAILURE"
+
+
+def redacted_error(status_code: int, payload: dict[str, Any] | None) -> dict[str, Any]:
+    code = None
+    message_class = "NO_PROVIDER_ERROR_BODY"
+    if isinstance(payload, dict):
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            first = errors[0]
+            if isinstance(first, dict):
+                code = first.get("errorCode") or first.get("code")
+                message_class = "PROVIDER_ERROR_REDACTED"
+        elif payload.get("code"):
+            code = payload.get("code")
+            message_class = "PROVIDER_ERROR_REDACTED"
+    return {"status_code": status_code, "provider_error_code": code, "message_class": message_class}
+
+
+def classify_chunk_state(chunk: dict[str, str], supported_start: date, supported_end: date) -> str:
+    chunk_start = date.fromisoformat(chunk["start"])
+    chunk_end = date.fromisoformat(chunk["end"])
+    if chunk_end < supported_start or chunk_start > supported_end:
+        return "UNSUPPORTED_BY_PROVIDER"
+    return "PLANNED"
+
+
+def partial_epoch_gate(total_sessions: int) -> dict[str, Any]:
+    return {
+        "partial_provider_epoch": total_sessions > 0,
+        "development_assigned": False,
+        "holdout_assigned": False,
+        "full_session_floor": total_sessions >= 1800,
+        "strategy_authorized": False,
+    }
