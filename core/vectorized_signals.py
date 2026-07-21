@@ -2,6 +2,25 @@ import pandas as pd
 import numpy as np
 
 
+def _causal_prior_session_ema(close: pd.Series, span: int = 20) -> pd.Series:
+    """Return the EMA of completed prior-session closes for each intraday row.
+
+    The current session's final close is not observable until the session ends.
+    Mapping a same-day daily EMA back onto earlier intraday bars leaks future
+    information. This helper computes the daily EMA and shifts it by one
+    completed session before mapping it to intraday rows.
+    """
+    if not isinstance(close.index, pd.DatetimeIndex):
+        raise TypeError("close must use a DatetimeIndex")
+    if span <= 0:
+        raise ValueError("span must be positive")
+
+    session_keys = close.index.normalize()
+    daily_close = close.groupby(session_keys).last()
+    prior_session_ema = daily_close.ewm(span=span, adjust=False).mean().shift(1)
+    return pd.Series(session_keys, index=close.index).map(prior_session_ema).astype(float)
+
+
 def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     """
     Fully vectorized mapping of TradeBuilder and ensemble.py logic.
@@ -66,13 +85,8 @@ def build_vectorized_signals(df: pd.DataFrame, config) -> pd.DataFrame:
     dx = 100 * (pos_di - neg_di).abs() / (pos_di + neg_di).abs()
     adx = dx.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean().fillna(25)
 
-    # Daily 20-EMA Macro Filter
-    # Resample to daily 'close', compute EMA 20, then forward-fill back to
-    # intraday index
-    daily_close = df["close"].resample("D").last()
-    daily_ema_20 = daily_close.ewm(span=20, adjust=False).mean()
-    # Reindex back to intraday and forward fill
-    macro_ema = daily_ema_20.reindex(df.index, method="ffill")
+    # Daily 20-EMA Macro Filter. Only completed prior sessions are legal.
+    macro_ema = _causal_prior_session_ema(df["close"], span=20)
 
     # 15-Minute ORB (Opening Range Breakout)
     # Get high/low of the first 3 bars (09:15, 09:20, 09:25) of each day
