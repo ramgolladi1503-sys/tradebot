@@ -6,6 +6,20 @@ import pandas as pd
 from .contracts import BarrierOutcome
 
 
+def _session_end_positions(bars: pd.DataFrame) -> np.ndarray:
+    size = len(bars)
+    if "session_date" not in bars.columns:
+        return np.full(size, size - 1, dtype=int)
+    sessions = bars["session_date"].astype(str).to_numpy()
+    ends = np.empty(size, dtype=int)
+    end = size - 1
+    for index in range(size - 1, -1, -1):
+        if index == size - 1 or sessions[index] != sessions[index + 1]:
+            end = index
+        ends[index] = end
+    return ends
+
+
 def compute_triple_barrier_labels(
     bars: pd.DataFrame,
     atr: pd.Series,
@@ -13,20 +27,28 @@ def compute_triple_barrier_labels(
     horizon_bars: int,
     target_atr: float,
     stop_atr: float,
+    side: str = "LONG",
 ) -> pd.DataFrame:
-    """Create long-side path labels from future completed bars.
+    """Create same-session path labels from future completed bars.
 
-    Same-bar target/stop collisions are explicitly marked ambiguous and valued
-    conservatively as a stop in ``label_return_r``.
+    The full configured horizon must exist inside the same session. Rows too near
+    session end are explicitly unavailable, preventing next-session gap leakage.
+    Same-bar target/stop collisions are explicit and valued conservatively as a stop.
     """
+
+    normalized_side = side.upper()
+    if normalized_side not in {"LONG", "SHORT"}:
+        raise ValueError("side must be LONG or SHORT")
 
     close = bars["close"].to_numpy(dtype=float)
     high = bars["high"].to_numpy(dtype=float)
     low = bars["low"].to_numpy(dtype=float)
     atr_values = atr.to_numpy(dtype=float)
+    session_ends = _session_end_positions(bars)
     size = len(bars)
 
     outcomes: list[str] = [BarrierOutcome.UNAVAILABLE.value] * size
+    statuses: list[str] = ["INSUFFICIENT_HISTORY_OR_FUTURE"] * size
     bars_to_event = np.full(size, np.nan)
     mfe_atr = np.full(size, np.nan)
     mae_atr = np.full(size, np.nan)
@@ -35,26 +57,45 @@ def compute_triple_barrier_labels(
 
     for index in range(size):
         scale = atr_values[index]
-        last = min(size - 1, index + horizon_bars)
-        if not np.isfinite(scale) or scale <= 0 or last <= index:
+        required_last = index + horizon_bars
+        if not np.isfinite(scale) or scale <= 0:
+            statuses[index] = "ATR_UNAVAILABLE"
+            continue
+        if required_last >= size or required_last > session_ends[index]:
+            statuses[index] = "SESSION_ENDED_BEFORE_HORIZON"
             continue
 
+        last = required_last
         entry = close[index]
-        target = entry + target_atr * scale
-        stop = entry - stop_atr * scale
+        if normalized_side == "LONG":
+            target = entry + target_atr * scale
+            stop = entry - stop_atr * scale
+        else:
+            target = entry - target_atr * scale
+            stop = entry + stop_atr * scale
+
         future_high = high[index + 1 : last + 1]
         future_low = low[index + 1 : last + 1]
         future_close = close[last]
 
-        mfe_atr[index] = float((np.nanmax(future_high) - entry) / scale)
-        mae_atr[index] = float((np.nanmin(future_low) - entry) / scale)
-        future_close_return_atr[index] = float((future_close - entry) / scale)
+        if normalized_side == "LONG":
+            mfe_atr[index] = float((np.nanmax(future_high) - entry) / scale)
+            mae_atr[index] = float((np.nanmin(future_low) - entry) / scale)
+            future_close_return_atr[index] = float((future_close - entry) / scale)
+        else:
+            mfe_atr[index] = float((entry - np.nanmin(future_low)) / scale)
+            mae_atr[index] = float((entry - np.nanmax(future_high)) / scale)
+            future_close_return_atr[index] = float((entry - future_close) / scale)
 
         outcome = BarrierOutcome.NEITHER
         event_bar: int | None = None
         for offset, (bar_high, bar_low) in enumerate(zip(future_high, future_low), start=1):
-            hit_target = bar_high >= target
-            hit_stop = bar_low <= stop
+            if normalized_side == "LONG":
+                hit_target = bar_high >= target
+                hit_stop = bar_low <= stop
+            else:
+                hit_target = bar_low <= target
+                hit_stop = bar_high >= stop
             if hit_target and hit_stop:
                 outcome = BarrierOutcome.AMBIGUOUS_SAME_BAR
                 event_bar = offset
@@ -69,6 +110,7 @@ def compute_triple_barrier_labels(
                 break
 
         outcomes[index] = outcome.value
+        statuses[index] = "MEASURED"
         if event_bar is not None:
             bars_to_event[index] = float(event_bar)
 
@@ -83,6 +125,8 @@ def compute_triple_barrier_labels(
 
     return pd.DataFrame(
         {
+            "label_side": normalized_side,
+            "label_status": statuses,
             "barrier_outcome": outcomes,
             "bars_to_event": bars_to_event,
             "mfe_atr": mfe_atr,
@@ -98,12 +142,7 @@ def attach_option_outcome_availability(
     dataset: pd.DataFrame,
     option_quotes: pd.DataFrame | None,
 ) -> pd.DataFrame:
-    """Declare option evidence availability without fabricating missing fields.
-
-    Full option-path profitability requires historical bid/ask quote sequences and
-    instrument-selection rules. This first implementation records whether the
-    evidence is present; it never substitutes spot returns for option returns.
-    """
+    """Declare option evidence availability without fabricating missing fields."""
 
     output = dataset.copy()
     required = {"timestamp", "bid", "ask", "instrument"}
