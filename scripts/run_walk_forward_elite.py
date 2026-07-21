@@ -199,7 +199,18 @@ def run_walk_forward(
 ) -> dict[str, object]:
     """Run train-only selection, fold OOS evaluation and final holdout validation."""
     plan = build_walk_forward_plan(data)
-    grid = list(parameter_grid or default_parameter_grid())
+    grid = (
+        default_parameter_grid()
+        if parameter_grid is None
+        else list(parameter_grid)
+    )
+    if not grid:
+        return {
+            "status": "REJECTED",
+            "promoted": False,
+            "blockers": ["EMPTY_PARAMETER_GRID"],
+            "fold_reports": [],
+        }
     evaluator = evaluate_fn or _evaluate_parameter_set
 
     if select_fn is None:
