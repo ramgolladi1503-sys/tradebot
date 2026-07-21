@@ -20,6 +20,21 @@ def _session_end_positions(bars: pd.DataFrame) -> np.ndarray:
     return ends
 
 
+def _optional_utc_timestamps(
+    bars: pd.DataFrame,
+    preferred_column: str,
+    fallback_column: str = "timestamp",
+) -> pd.Series | None:
+    column = (
+        preferred_column
+        if preferred_column in bars.columns
+        else fallback_column if fallback_column in bars.columns else None
+    )
+    if column is None:
+        return None
+    return pd.to_datetime(bars[column], utc=True, errors="raise")
+
+
 def compute_triple_barrier_labels(
     bars: pd.DataFrame,
     atr: pd.Series,
@@ -63,21 +78,18 @@ def compute_triple_barrier_labels(
     future_close_return_atr = np.full(size, np.nan)
     label_return_r = np.full(size, np.nan)
     label_entry_price = np.full(size, np.nan)
-    label_entry_timestamp = pd.Series(pd.NaT, index=bars.index, dtype="datetime64[ns, UTC]")
-    label_terminal_timestamp = pd.Series(pd.NaT, index=bars.index, dtype="datetime64[ns, UTC]")
-
-    timestamp_column = None
-    for candidate in ("bar_start_timestamp", "timestamp"):
-        if candidate in bars.columns:
-            timestamp_column = candidate
-            break
-    normalized_timestamps = None
-    if timestamp_column is not None:
-        normalized_timestamps = pd.to_datetime(
-            bars[timestamp_column],
-            utc=True,
-            errors="raise",
-        )
+    label_entry_timestamp = pd.Series(
+        pd.NaT,
+        index=bars.index,
+        dtype="datetime64[ns, UTC]",
+    )
+    label_terminal_timestamp = pd.Series(
+        pd.NaT,
+        index=bars.index,
+        dtype="datetime64[ns, UTC]",
+    )
+    entry_timestamps = _optional_utc_timestamps(bars, "bar_start_timestamp")
+    terminal_timestamps = _optional_utc_timestamps(bars, "bar_end_timestamp")
 
     for index in range(size):
         scale = atr_values[index]
@@ -95,9 +107,10 @@ def compute_triple_barrier_labels(
             statuses[index] = "ENTRY_OPEN_UNAVAILABLE"
             continue
         label_entry_price[index] = entry
-        if normalized_timestamps is not None:
-            label_entry_timestamp.iloc[index] = normalized_timestamps.iloc[entry_index]
-            label_terminal_timestamp.iloc[index] = normalized_timestamps.iloc[
+        if entry_timestamps is not None:
+            label_entry_timestamp.iloc[index] = entry_timestamps.iloc[entry_index]
+        if terminal_timestamps is not None:
+            label_terminal_timestamp.iloc[index] = terminal_timestamps.iloc[
                 terminal_index
             ]
 
