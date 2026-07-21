@@ -11,10 +11,15 @@ from .contracts import RuleCondition, StrategyCandidate
 
 def candidate_mask(dataset: pd.DataFrame, candidate: StrategyCandidate) -> pd.Series:
     mask = pd.Series(True, index=dataset.index)
+    imputation = candidate.imputation_map()
     for condition in candidate.conditions:
         if condition.feature not in dataset.columns:
-            raise ValueError(f"candidate feature missing from dataset: {condition.feature}")
+            raise ValueError(
+                f"candidate feature missing from dataset: {condition.feature}"
+            )
         values = pd.to_numeric(dataset[condition.feature], errors="coerce")
+        if condition.feature in imputation:
+            values = values.fillna(imputation[condition.feature])
         current = (
             values <= condition.threshold
             if condition.operator == "<="
@@ -30,11 +35,11 @@ def _metrics(returns: pd.Series, sessions: pd.Series) -> dict[str, float | int |
         return {
             "trades": 0,
             "sessions": 0,
-            "win_rate": None,
-            "expectancy_r": None,
-            "profit_factor": None,
-            "max_drawdown_r": None,
-            "total_return_r": None,
+            "label_win_rate": None,
+            "label_expectancy_r": None,
+            "label_profit_factor": None,
+            "label_max_drawdown_r": None,
+            "label_total_return_r": None,
         }
     wins = clean[clean > 0]
     losses = clean[clean < 0]
@@ -45,11 +50,13 @@ def _metrics(returns: pd.Series, sessions: pd.Series) -> dict[str, float | int |
     return {
         "trades": int(len(clean)),
         "sessions": int(sessions.loc[clean.index].nunique()),
-        "win_rate": float((clean > 0).mean()),
-        "expectancy_r": float(clean.mean()),
-        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else None,
-        "max_drawdown_r": float(drawdown.min()),
-        "total_return_r": float(clean.sum()),
+        "label_win_rate": float((clean > 0).mean()),
+        "label_expectancy_r": float(clean.mean()),
+        "label_profit_factor": (
+            gross_profit / gross_loss if gross_loss > 0 else None
+        ),
+        "label_max_drawdown_r": float(drawdown.min()),
+        "label_total_return_r": float(clean.sum()),
     }
 
 
@@ -67,7 +74,10 @@ def evaluate_candidate(
         raise ValueError("evaluation scope is empty")
     selected = candidate_mask(scope, candidate)
     returns = scope.loc[selected, "label_return_r"] - cost_r
-    return _metrics(returns, scope["session_date"])
+    metrics = _metrics(returns, scope["session_date"])
+    metrics["claim_boundary"] = "UNDERLYING_RESEARCH_LABELS_NOT_OPTION_PNL"
+    metrics["label_cost_r"] = float(cost_r)
+    return metrics
 
 
 def evaluate_locked_holdout_once(
@@ -80,7 +90,8 @@ def evaluate_locked_holdout_once(
     required = "EVALUATE_FROZEN_CANDIDATE_ONCE"
     if acknowledgement != required:
         raise PermissionError(
-            "locked holdout requires explicit one-time acknowledgement token"
+            "locked holdout requires explicit acknowledgement; the caller must "
+            "also preserve an external consumption record"
         )
     return evaluate_candidate(
         dataset,
@@ -98,10 +109,16 @@ def walk_forward_evaluate(
     folds: int = 5,
     cost_r: float = 0.0,
 ) -> list[dict[str, float | int | None]]:
+    """Segment a frozen rule across contiguous validation-session folds.
+
+    This is not a certifying re-fit walk-forward analysis. The candidate remains
+    frozen and each fold is only a temporal stability slice.
+    """
+
     scope = dataset.loc[dataset["split"].isin(tuple(allowed_splits))].copy()
     scope = scope.sort_values("decision_timestamp", kind="mergesort")
     if folds < 2 or len(scope) < folds * 5:
-        raise ValueError("insufficient rows for requested walk-forward folds")
+        raise ValueError("insufficient rows for requested validation folds")
     ordered_sessions = (
         scope.groupby("session_date", sort=False)["decision_timestamp"]
         .min()
@@ -124,6 +141,8 @@ def walk_forward_evaluate(
                 "fold": fold_number,
                 "start": str(fold["decision_timestamp"].min()),
                 "end": str(fold["decision_timestamp"].max()),
+                "claim_boundary": "FROZEN_RULE_VALIDATION_SLICE_NOT_CERTIFYING_WFA",
+                "label_cost_r": float(cost_r),
             }
         )
         results.append(metrics)
@@ -179,7 +198,9 @@ def run_negative_controls(
         "original": original,
         "label_permutation": label_permutation,
         "timestamp_shift": timestamp_shift,
-        "condition_ablations": {str(i): result for i, result in enumerate(ablations)},
+        "condition_ablations": {
+            str(index): result for index, result in enumerate(ablations)
+        },
     }
 
 
@@ -228,6 +249,5 @@ def cost_stress(
             allowed_splits=allowed_splits,
             cost_r=cost,
         )
-        metrics["cost_r"] = cost
         results.append(metrics)
     return results
