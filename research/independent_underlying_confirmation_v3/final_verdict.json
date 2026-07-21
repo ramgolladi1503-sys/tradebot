@@ -1,0 +1,37 @@
+{
+  "AC16_alpha": 0.004,
+  "AC16_independent_result": "NOT_OPENED",
+  "AC16_verdict": "NOT_EVALUATED",
+  "AC24_alpha": 0.006,
+  "AC24_independent_result": "NOT_OPENED",
+  "AC24_verdict": "NOT_EVALUATED",
+  "FINAL_VERDICT": "WAITING_FOR_INDEPENDENT_UNSEEN_DATA",
+  "bid_ask_required": false,
+  "broker_api_called": false,
+  "confirmation_candidates": [
+    "AC24_PRIOR_SESSION_BODY_MIDPOINT_REJECTION",
+    "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION"
+  ],
+  "cycle7_generated": false,
+  "eligible_independent_sessions": 0,
+  "execution_eligibility": false,
+  "exhausted_epoch_closed": true,
+  "independent_calendar_span": 0,
+  "independent_epoch_opened": false,
+  "independent_epoch_sealed": false,
+  "interim_candidate_counts_inspected": false,
+  "old_corpus_generator_equivalence": "PASS",
+  "option_data_used": false,
+  "option_economic_certification": "OUT_OF_SCOPE",
+  "order_action": false,
+  "production_strategy_created": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "shadow_test_only": false,
+  "underlying_structural_edge_confirmed": "NOT_YET_EVALUATED"
+}

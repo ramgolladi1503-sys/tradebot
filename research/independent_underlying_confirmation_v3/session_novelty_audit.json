@@ -1,0 +1,14 @@
+{
+  "eligible_independent_sessions": 0,
+  "exhausted_corpus_excluded": true,
+  "old_lockbox_excluded": true,
+  "prior_outcome_use_detected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "session_novelty_verdict": "INSUFFICIENT_TRUSTWORTHY_UNSEEN_DATA"
+}

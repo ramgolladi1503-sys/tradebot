@@ -1,0 +1,19 @@
+{
+  "alpha_allocation_frozen": true,
+  "calendar_gate_pass": false,
+  "calendar_span_days": 0,
+  "candidate_registry_frozen": true,
+  "eligible_independent_sessions": 0,
+  "epoch_opened": false,
+  "epoch_sealed": false,
+  "generator_equivalence_passed": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "session_gate_pass": false,
+  "verdict": "WAITING_FOR_INDEPENDENT_UNSEEN_DATA"
+}

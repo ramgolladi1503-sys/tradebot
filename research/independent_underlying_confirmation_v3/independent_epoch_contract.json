@@ -1,0 +1,20 @@
+{
+  "calendar_span_days": 0,
+  "eligible_session_count": 0,
+  "epoch_type": "PROSPECTIVE_CONFIRMATION_EPOCH_V3",
+  "first_session": null,
+  "interim_candidate_counts_inspected": false,
+  "last_session": null,
+  "minimum_calendar_days_required": 365,
+  "minimum_sessions_required": 250,
+  "opened": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "sealed": false,
+  "status": "WAITING_FOR_INDEPENDENT_UNSEEN_DATA"
+}

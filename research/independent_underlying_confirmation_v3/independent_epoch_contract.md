@@ -1,0 +1,5 @@
+# Independent Epoch Contract
+
+Epoch type: `PROSPECTIVE_CONFIRMATION_EPOCH_V3`
+
+Status: `WAITING_FOR_INDEPENDENT_UNSEEN_DATA`

@@ -1,0 +1,15 @@
+{
+  "alpha_frozen_before_outcomes": true,
+  "epoch_opened_exactly_once": false,
+  "no_cycle7_generated": true,
+  "no_strategy_specific_readiness_leakage": true,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_corpus_epoch_closed": true,
+  "verdict": "PASS_WAITING_NOT_OPENED"
+}
