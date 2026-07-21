@@ -1,0 +1,935 @@
+{
+  "canonical_source": {
+    "absolute_path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+    "available_any_session_count": 526,
+    "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+    "complete_session_count": 500,
+    "duplicate_row_count": "not_materialized_full_scan_not_required_for_partition_freeze",
+    "first_complete_session": "20240701",
+    "last_complete_session": "20260710",
+    "missing_or_incomplete_session_count": 26,
+    "sample_files": [
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240701/underlying/BANKNIFTY_20240701.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 27501,
+        "symbol_class": "BANKNIFTY"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240701/underlying/BSE_INDEX|SENSEX_20240701.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 28562,
+        "symbol_class": "SENSEX"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20240701/underlying/NIFTY_20240701.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 27073,
+        "symbol_class": "NIFTY"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250703/underlying/BANKNIFTY_20250703.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 27707,
+        "symbol_class": "BANKNIFTY"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250703/underlying/BSE_INDEX|SENSEX_20250703.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 28616,
+        "symbol_class": "SENSEX"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250703/underlying/NIFTY_20250703.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 27160,
+        "symbol_class": "NIFTY"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260710/underlying/BSE_INDEX|SENSEX_20260710.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 28446,
+        "symbol_class": "SENSEX"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260710/underlying/NSE_INDEX|Nifty 50_20260710.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 26655,
+        "symbol_class": "NIFTY"
+      },
+      {
+        "classification": "TRUSTED_UNDERLYING_1M_CANDLES",
+        "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260710/underlying/NSE_INDEX|Nifty Bank_20260710.parquet",
+        "row_count": 375,
+        "schema": [
+          {
+            "name": "timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "name": "open",
+            "type": "double"
+          },
+          {
+            "name": "high",
+            "type": "double"
+          },
+          {
+            "name": "low",
+            "type": "double"
+          },
+          {
+            "name": "close",
+            "type": "double"
+          },
+          {
+            "name": "volume",
+            "type": "double"
+          },
+          {
+            "name": "oi",
+            "type": "double"
+          },
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "interval",
+            "type": "string"
+          },
+          {
+            "name": "fetch_timestamp",
+            "type": "timestamp[ns]"
+          },
+          {
+            "name": "fetch_start_date",
+            "type": "string"
+          },
+          {
+            "name": "fetch_end_date",
+            "type": "string"
+          },
+          {
+            "name": "data_origin",
+            "type": "string"
+          },
+          {
+            "name": "synthetic",
+            "type": "bool"
+          },
+          {
+            "name": "mock",
+            "type": "bool"
+          },
+          {
+            "name": "fallback",
+            "type": "bool"
+          },
+          {
+            "name": "provider",
+            "type": "string"
+          },
+          {
+            "name": "source_endpoint",
+            "type": "string"
+          },
+          {
+            "name": "__index_level_0__",
+            "type": "int64"
+          }
+        ],
+        "size_bytes": 27790,
+        "symbol_class": "BANKNIFTY"
+      }
+    ],
+    "source_hash": "f58015a4cb08a7c39c6a15174215d990da6d87f7299f9591ddb0e481ed2b9f77",
+    "source_provenance_fields": [
+      "source",
+      "interval",
+      "fetch_timestamp",
+      "fetch_start_date",
+      "fetch_end_date",
+      "data_origin",
+      "synthetic",
+      "mock",
+      "fallback",
+      "provider",
+      "source_endpoint"
+    ],
+    "usable_for_epoch": true
+  },
+  "combination_policy": "Do not combine incompatible sources merely to extend range; older CSVs and recent ticks are inventoried but excluded from epoch.",
+  "other_sources": [
+    {
+      "absolute_path": "/Users/madhuram/tradebot/data/backtest/one_minute",
+      "classification": "INCOMPLETE",
+      "file_count": 494,
+      "first_date": "2022-07-01",
+      "last_date": "2026-06-18",
+      "reason": "Readable one-minute OHLCV but lacks Upstox provenance/synthetic/mock/fallback fields and mostly single-symbol NIFTY coverage; not merged into epoch.",
+      "schema": [
+        {
+          "name": "timestamp",
+          "type": "csv"
+        },
+        {
+          "name": "open",
+          "type": "csv"
+        },
+        {
+          "name": "high",
+          "type": "csv"
+        },
+        {
+          "name": "low",
+          "type": "csv"
+        },
+        {
+          "name": "close",
+          "type": "csv"
+        },
+        {
+          "name": "volume",
+          "type": "csv"
+        },
+        {
+          "name": "oi",
+          "type": "csv"
+        },
+        {
+          "name": "symbol",
+          "type": "csv"
+        }
+      ],
+      "symbol_coverage": [
+        "BANKNIFTY",
+        "NIFTY",
+        "SENSEX"
+      ]
+    },
+    {
+      "absolute_path": "/Users/madhuram/tradebot/.runtime/market_data",
+      "classification": "TRUSTED_UNDERLYING_TICKS_AND_OPTION_TOP_OF_BOOK_FOR_RECENT_DAYS_ONLY",
+      "file_count": 4,
+      "reason": "Recent tick captures include bid/ask/depth but cover only July 2026 fragments; not enough for epoch-level structural validation and not appended to frozen candle corpus.",
+      "sample_file": "/Users/madhuram/tradebot/.runtime/market_data/upstox_full_ticks_20260716.parquet",
+      "sample_row_count": 3339192,
+      "schema": [
+        {
+          "name": "ts",
+          "type": "double"
+        },
+        {
+          "name": "token",
+          "type": "string"
+        },
+        {
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "name": "ltp",
+          "type": "double"
+        },
+        {
+          "name": "bid",
+          "type": "double"
+        },
+        {
+          "name": "ask",
+          "type": "double"
+        },
+        {
+          "name": "vol",
+          "type": "double"
+        },
+        {
+          "name": "oi",
+          "type": "double"
+        },
+        {
+          "name": "depth",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 2
+}

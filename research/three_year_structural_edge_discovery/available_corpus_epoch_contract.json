@@ -1,0 +1,24 @@
+{
+  "AVAILABLE_CORPUS_RESEARCH": "AUTHORIZED",
+  "DATA_MAY_BE_APPENDED_AFTER_EPOCH_FREEZE": "NO",
+  "PERMITTED_STRONGEST_CLAIM": "UNDERLYING_STRUCTURAL_EDGE_CONFIRMED_AVAILABLE_CORPUS",
+  "THREE_YEAR_CERTIFICATION": "BLOCKED_INSUFFICIENT_HISTORICAL_DATA",
+  "available_period_end": "20260710",
+  "available_period_start": "20240701",
+  "base_origin_main_sha": "a48176fc245375f15e316493364915ec37439e29",
+  "complete_session_count": 500,
+  "no_outcome_leakage_statement": "No hypotheses, screening, WFA, or holdout inspection occurred before this amendment.",
+  "option_economic_edge": "NOT_EVALUATED_NO_TRUSTED_BID_ASK",
+  "parent_research_commit": "86c023263ded2085330280ceac1c6905a2f3a20f",
+  "partition_manifest_sha256": "d8223485ec4a244a15604bc8442c1bb2ae2edb6720d5e3bccf516a92ca119085",
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "shadow_test_only": "NO"
+}

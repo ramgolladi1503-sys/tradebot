@@ -1,0 +1,16 @@
+{
+  "new_research_authorization": "PROCEED",
+  "new_research_epoch": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "original_blocker_preserved": true,
+  "original_verdict": "BLOCKED_INSUFFICIENT_HISTORICAL_DATA",
+  "original_verdict_validity": "VALID_FOR_THREE_YEAR_CERTIFICATION",
+  "reason": "No hypotheses, screening, WFA, or holdout inspection occurred before the amendment, so changing the study scope does not create outcome leakage.",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}
