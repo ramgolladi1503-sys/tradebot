@@ -52,7 +52,28 @@ def test_immediate_next_bar_contract():
     assert not is_immediate_next_bar(signal_bar_index=10, current_bar_index=10)
 
 
-def test_ledger_uses_causal_state_and_dimensional_cost_contract(
+def test_inferred_interval_uses_positive_median_and_rejects_single_row():
+    module = _load_script_module()
+    timestamps = pd.Series(
+        pd.to_datetime(
+            [
+                "2026-01-05 09:15:00",
+                "2026-01-05 09:16:00",
+                "2026-01-05 09:17:00",
+            ]
+        )
+    )
+    assert module._infer_bar_interval(timestamps) == pd.Timedelta(minutes=1)
+
+    try:
+        module._infer_bar_interval(pd.Series(pd.to_datetime(["2026-01-05 09:15"])))
+    except ValueError as exc:
+        assert str(exc) == "cannot infer candle interval from fewer than two timestamps"
+    else:
+        raise AssertionError("single-row input must not invent a candle interval")
+
+
+def test_ledger_uses_causal_state_dimensional_cost_and_bar_end_timestamp(
     tmp_path, monkeypatch
 ):
     module = _load_script_module()
@@ -121,7 +142,6 @@ def test_ledger_uses_causal_state_and_dimensional_cost_contract(
         99.5,
         100.0,
     ]
-    # This entry bar would also create a second signal under the old fall-through.
     frame.loc[entry_index, ["open", "high", "low", "close"]] = [
         100.0,
         105.0,
@@ -168,6 +188,11 @@ def test_ledger_uses_causal_state_and_dimensional_cost_contract(
 
     assert [trade["entry_delay_bars"] for trade in ledger] == [1]
     trade = ledger[0]
+    expected_exit = pd.Timestamp(frame.loc[exit_index, "timestamp"]) + pd.Timedelta(
+        minutes=1
+    )
+    assert pd.Timestamp(trade["exit_time"]) == expected_exit
+    assert pd.Timestamp(trade["exit_time"]) > pd.Timestamp(trade["entry_time"])
     assert trade["pnl_model"] == "UNDERLYING_INDEX_PROXY_FIXED_HURDLE"
     assert trade["costs"] == 8.5
     assert trade["net_pnl"] == trade["underlying_net_pnl_after_index_cost"]
