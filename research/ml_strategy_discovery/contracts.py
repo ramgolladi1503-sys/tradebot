@@ -54,8 +54,7 @@ class DiscoveryConfig:
             raise ValueError("timestamp_column is required")
         if not self.source_timezone.strip():
             raise ValueError("source_timezone is required")
-        if self.normalized_timestamp_semantics not in TimestampSemantics:
-            raise ValueError("timestamp_semantics must be START or END")
+        self.normalized_timestamp_semantics
         if self.bar_interval_minutes < 1:
             raise ValueError("bar_interval_minutes must be positive")
         if self.opening_range_bars < 2:
@@ -82,7 +81,10 @@ class DiscoveryConfig:
             if isinstance(self.timestamp_semantics, TimestampSemantics)
             else str(self.timestamp_semantics).upper().strip()
         )
-        return TimestampSemantics(value)
+        try:
+            return TimestampSemantics(value)
+        except ValueError as exc:
+            raise ValueError("timestamp_semantics must be START or END") from exc
 
 
 @dataclass(frozen=True)
@@ -122,7 +124,7 @@ class StrategyCandidate:
     label_side: str = "LONG"
     source_dataset_hash: str = ""
     imputation_values: tuple[FeatureImputation, ...] = ()
-    label_entry_semantics: str = "CURRENT_COMPLETED_BAR_CLOSE_FOR_RESEARCH_LABEL_ONLY"
+    label_entry_semantics: str = "NEXT_LEGAL_BAR_OPEN"
     status: str = "RESEARCH_CANDIDATE"
     candidate_schema_version: str = CANDIDATE_SCHEMA_VERSION
 
@@ -135,9 +137,14 @@ class StrategyCandidate:
             raise ValueError("discovery candidates must remain research-only")
         if self.label_side.upper() not in {"LONG", "SHORT"}:
             raise ValueError("candidate label_side must be LONG or SHORT")
+        if self.label_entry_semantics != "NEXT_LEGAL_BAR_OPEN":
+            raise ValueError("candidate labels must use next legal bar open")
         if self.source_dataset_hash and (
             len(self.source_dataset_hash) != 64
-            or any(character not in "0123456789abcdef" for character in self.source_dataset_hash)
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.source_dataset_hash
+            )
         ):
             raise ValueError("source_dataset_hash must be a lowercase SHA-256 digest")
 
@@ -173,6 +180,10 @@ _METADATA_COLUMNS = {
     "data_quality_status",
     "option_data_availability",
     "option_data_reason",
+    "label_entry_semantics",
+    "label_entry_price",
+    "label_entry_timestamp",
+    "label_terminal_timestamp",
     "barrier_outcome",
     "bars_to_event",
     "mfe_atr",
