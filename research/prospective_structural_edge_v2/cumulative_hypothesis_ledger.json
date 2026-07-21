@@ -1,0 +1,3992 @@
+{
+  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
+  "hypotheses": [
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 34,
+            "direction_breakdown": [
+              {
+                "count": 13,
+                "direction": -1,
+                "mean": 5.828095386137736
+              },
+              {
+                "count": 21,
+                "direction": 1,
+                "mean": 4.2007219764544645
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -21.92738081236989,
+            "mean_bps": 4.822952986039247,
+            "median_bps": 3.8297685302912665,
+            "mfe_mean_bps": 23.11368412572649,
+            "positive_candidate_fraction": 0.5294117647058824,
+            "positive_session_fraction": 0.6111111111111112,
+            "session_count": 18,
+            "single_session_concentration": 0.08823529411764706,
+            "symbol_breakdown": [
+              {
+                "count": 12,
+                "mean": 17.92186722348201,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 13,
+                "mean": -2.4846613118639356,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 9,
+                "mean": -2.0868231224687355,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.4117647058823529,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 36,
+            "direction_breakdown": [
+              {
+                "count": 16,
+                "direction": -1,
+                "mean": 6.268207426890423
+              },
+              {
+                "count": 20,
+                "direction": 1,
+                "mean": -9.849147257111612
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -27.031209485155596,
+            "mean_bps": -2.6858785086662627,
+            "median_bps": -7.101316608877917,
+            "mfe_mean_bps": 19.44006537646592,
+            "positive_candidate_fraction": 0.4166666666666667,
+            "positive_session_fraction": 0.43478260869565216,
+            "session_count": 23,
+            "single_session_concentration": 0.08333333333333333,
+            "symbol_breakdown": [
+              {
+                "count": 18,
+                "mean": 2.382847547136024,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 10,
+                "mean": -11.634376460903152,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 8,
+                "mean": -2.9048896939252997,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.3611111111111111,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 46,
+            "direction_breakdown": [
+              {
+                "count": 17,
+                "direction": -1,
+                "mean": 4.599260429764584
+              },
+              {
+                "count": 29,
+                "direction": 1,
+                "mean": 9.397849655097612
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -18.60573512930129,
+            "mean_bps": 7.624457984865841,
+            "median_bps": 16.117648949778296,
+            "mfe_mean_bps": 25.886544631465323,
+            "positive_candidate_fraction": 0.6304347826086957,
+            "positive_session_fraction": 0.6666666666666666,
+            "session_count": 24,
+            "single_session_concentration": 0.06521739130434782,
+            "symbol_breakdown": [
+              {
+                "count": 21,
+                "mean": 6.949397234071677,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 12,
+                "mean": 7.627902120029932,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 13,
+                "mean": 8.711761534458791,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.32608695652173914,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 26,
+            "direction_breakdown": [
+              {
+                "count": 12,
+                "direction": -1,
+                "mean": -3.1893720318759704
+              },
+              {
+                "count": 14,
+                "direction": 1,
+                "mean": 13.178910687555803
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -18.396560879135283,
+            "mean_bps": 5.6243186632026765,
+            "median_bps": 8.22447607800536,
+            "mfe_mean_bps": 18.140028126685934,
+            "positive_candidate_fraction": 0.5769230769230769,
+            "positive_session_fraction": 0.6666666666666666,
+            "session_count": 12,
+            "single_session_concentration": 0.11538461538461539,
+            "symbol_breakdown": [
+              {
+                "count": 8,
+                "mean": -0.8732911192303741,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 9,
+                "mean": 9.068489630935403,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 9,
+                "mean": 7.955800835410439,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.5769230769230769,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 21,
+            "direction_breakdown": [
+              {
+                "count": 7,
+                "direction": -1,
+                "mean": 0.3503264650904307
+              },
+              {
+                "count": 14,
+                "direction": 1,
+                "mean": -2.4651220299422496
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -11.451905452616849,
+            "mean_bps": -1.5266391982646894,
+            "median_bps": 0.8627304132668989,
+            "mfe_mean_bps": 10.750506230921262,
+            "positive_candidate_fraction": 0.5238095238095238,
+            "positive_session_fraction": 0.45454545454545453,
+            "session_count": 11,
+            "single_session_concentration": 0.14285714285714285,
+            "symbol_breakdown": [
+              {
+                "count": 7,
+                "mean": -6.380932555049013,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": 4.313323837272629,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 7,
+                "mean": -2.512308877017684,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.6190476190476191,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 3
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long gap-up accepted sessions; short gap-down accepted sessions.",
+      "discovery_candidate_count": 202,
+      "discovery_session_count": 110,
+      "entry_event": "First completed bar after 09:30 acceptance confirmation.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 1,
+      "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+      "hypothesis_name": "Gap acceptance continuation after completed first-15-minute confirmation",
+      "invalidation": "Price closes back through prior close before entry or opening range midpoint fails acceptance.",
+      "known_prior_research": "Related to opening drive and ORB, but distinct because trigger is prior-close gap acceptance after first-15-minute confirmation, not opening-range breakout/retest.",
+      "legal_entry_timestamp": "09:31 IST or first next completed one-minute timestamp after acceptance.",
+      "material_distinction_from_prior_work": "Uses overnight inventory acceptance relative to prior close, not generic ORB breakout or raw opening impulse.",
+      "mechanism_family": "overnight gap acceptance continuation",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 3.8890142965760686,
+        "direction_inversion_mean_bps": -1.4883672145972844,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 1.4883672145972844,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "No positive WFA mean, fewer than 4 positive folds, or controls match/exceed signal.",
+      "parameter_hash": "1f1ce49384ab7719c7c3ccad849080fbbb37adebd142889916ea06f201f390e2",
+      "parameter_ownership": "session mechanics and round completed-bar structure",
+      "parameter_sensitivity_neighborhood": {
+        "acceptance_fraction_of_gap": [
+          0.4,
+          0.5,
+          0.6
+        ],
+        "minimum_abs_gap_bps": [
+          16,
+          20,
+          24
+        ],
+        "opening_confirmation_minutes": [
+          14,
+          15,
+          16
+        ],
+        "primary_horizon_minutes": [
+          29,
+          30,
+          31
+        ]
+      },
+      "parameter_units": {
+        "acceptance_fraction_of_gap": "fraction",
+        "minimum_abs_gap_bps": "basis points from prior close to open",
+        "opening_confirmation_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes after entry",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "acceptance_fraction_of_gap": 0.5,
+        "minimum_abs_gap_bps": 20,
+        "opening_confirmation_minutes": 15,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 45
+      },
+      "participants_or_behavior": "Overnight inventory adjustment, index futures hedging, and intraday trend followers adding after the first accepted opening range.",
+      "persistence_rationale": "Opening auction displacement often forces benchmark and intraday participants to transact in the gap direction when price stays outside the prior close area.",
+      "primary_outcome": "Direction-normalized underlying return from legal entry close to +30 completed minutes, clipped at session end.",
+      "required_data": "Underlying one-minute OHLC candles for NIFTY, BANKNIFTY, SENSEX; prior-session close; completed first 15 one-minute bars.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "NOT_RUN_DISCOVERY_WFA_GATE_FAILED",
+      "session_window": "09:15-10:00 IST setup only",
+      "setup_expiry": "10:00 IST",
+      "setup_state_machine": [
+        "LOAD prior complete session close",
+        "WAIT for first 15 completed bars",
+        "MEASURE gap from prior close to session open",
+        "ACCEPT if 09:30 close remains beyond 50% of gap in gap direction and above/below opening range midpoint",
+        "EMIT once at first legal bar after acceptance"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "24094e03d49fc7068b624dd1be3e5145f1d691c3bae244a92b5d0ad77b039c8e",
+      "structural_premise": "A directional overnight gap that is accepted after the opening range reflects inventory repricing rather than immediate mean reversion."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 40,
+            "direction_breakdown": [
+              {
+                "count": 20,
+                "direction": -1,
+                "mean": -19.172945619718995
+              },
+              {
+                "count": 20,
+                "direction": 1,
+                "mean": -3.3351889700165565
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -26.931759878001117,
+            "mean_bps": -11.254067294867776,
+            "median_bps": -9.664711618926901,
+            "mfe_mean_bps": 17.833420766037364,
+            "positive_candidate_fraction": 0.275,
+            "positive_session_fraction": 0.2631578947368421,
+            "session_count": 19,
+            "single_session_concentration": 0.075,
+            "symbol_breakdown": [
+              {
+                "count": 14,
+                "mean": -11.432797912574456,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 11,
+                "mean": -10.340649589794173,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 15,
+                "mean": -11.757091702062183,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.375,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 23,
+            "direction_breakdown": [
+              {
+                "count": 20,
+                "direction": -1,
+                "mean": 13.020318302321588
+              },
+              {
+                "count": 3,
+                "direction": 1,
+                "mean": -13.606140767907782
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -21.42103448146663,
+            "mean_bps": 9.547301901856887,
+            "median_bps": 13.74735889915768,
+            "mfe_mean_bps": 29.09042233202667,
+            "positive_candidate_fraction": 0.5652173913043478,
+            "positive_session_fraction": 0.42857142857142855,
+            "session_count": 14,
+            "single_session_concentration": 0.13043478260869565,
+            "symbol_breakdown": [
+              {
+                "count": 8,
+                "mean": 11.03309038247749,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": 8.691556351897919,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 8,
+                "mean": 8.81029077745038,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.5652173913043478,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 32,
+            "direction_breakdown": [
+              {
+                "count": 21,
+                "direction": -1,
+                "mean": -2.9988485026152416
+              },
+              {
+                "count": 11,
+                "direction": 1,
+                "mean": -18.856316645440398
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -26.549970621490246,
+            "mean_bps": -8.44985317671139,
+            "median_bps": 0.8654508867977917,
+            "mfe_mean_bps": 21.59093040025772,
+            "positive_candidate_fraction": 0.53125,
+            "positive_session_fraction": 0.6111111111111112,
+            "session_count": 18,
+            "single_session_concentration": 0.09375,
+            "symbol_breakdown": [
+              {
+                "count": 12,
+                "mean": -8.440084682487802,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 10,
+                "mean": -8.754911066669813,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 10,
+                "mean": -8.15651747982127,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.46875,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 24,
+            "direction_breakdown": [
+              {
+                "count": 16,
+                "direction": -1,
+                "mean": -3.419363541737192
+              },
+              {
+                "count": 8,
+                "direction": 1,
+                "mean": -12.428195264351238
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -24.32748663370579,
+            "mean_bps": -6.422307449275208,
+            "median_bps": -10.596583489192458,
+            "mfe_mean_bps": 13.527052218162277,
+            "positive_candidate_fraction": 0.2916666666666667,
+            "positive_session_fraction": 0.46153846153846156,
+            "session_count": 13,
+            "single_session_concentration": 0.125,
+            "symbol_breakdown": [
+              {
+                "count": 10,
+                "mean": 1.4551789724009943,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": -9.56947613022103,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 7,
+                "mean": -14.528690799295386,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.5833333333333334,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 26,
+            "direction_breakdown": [
+              {
+                "count": 18,
+                "direction": -1,
+                "mean": 1.7821936901192394
+              },
+              {
+                "count": 8,
+                "direction": 1,
+                "mean": -3.3707993141753043
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -15.500925870391855,
+            "mean_bps": 0.19665738110553313,
+            "median_bps": -0.3721994181798971,
+            "mfe_mean_bps": 17.582552869699683,
+            "positive_candidate_fraction": 0.5,
+            "positive_session_fraction": 0.5,
+            "session_count": 16,
+            "single_session_concentration": 0.11538461538461539,
+            "symbol_breakdown": [
+              {
+                "count": 13,
+                "mean": 2.4833046162988994,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 6,
+                "mean": 2.743821994710497,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 7,
+                "mean": -6.233257153057828,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.5,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 2
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Short failed gap-up; long failed gap-down.",
+      "discovery_candidate_count": 176,
+      "discovery_session_count": 97,
+      "entry_event": "First completed close showing rejection after 09:30 and before 10:15.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 2,
+      "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+      "hypothesis_name": "Gap rejection reversal after failed first-30-minute acceptance",
+      "invalidation": "Gap resumes beyond opening extreme before entry.",
+      "known_prior_research": "Related to mean reversion but not generic VWAP extension; premise is failed overnight gap inventory.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after rejection close.",
+      "material_distinction_from_prior_work": "Candidate identity depends on prior-close gap failure, not stretch-from-VWAP or ORB retest.",
+      "mechanism_family": "overnight gap rejection",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -2.0804525300832717,
+        "direction_inversion_mean_bps": 3.425048079599342,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -3.425048079599342,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Reversal returns fail WFA/control separation or are concentrated in few sessions.",
+      "parameter_hash": "77888e9be020db74d0f6003b3e9bee6c533e4ba65957be8b56475d00ca83f172",
+      "parameter_ownership": "gap mechanics and completed-bar causality",
+      "parameter_sensitivity_neighborhood": {
+        "minimum_abs_gap_bps": [
+          16,
+          20,
+          24
+        ],
+        "minimum_wait_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          44,
+          45,
+          46
+        ],
+        "rejection_fraction_remaining": [
+          0.2,
+          0.25,
+          0.3
+        ]
+      },
+      "parameter_units": {
+        "minimum_abs_gap_bps": "basis points",
+        "minimum_wait_minutes": "completed minutes from open",
+        "primary_horizon_minutes": "completed minutes",
+        "rejection_fraction_remaining": "fraction of initial gap remaining",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "minimum_abs_gap_bps": 20,
+        "minimum_wait_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "rejection_fraction_remaining": 0.25,
+        "setup_expiry_minutes_from_open": 60
+      },
+      "participants_or_behavior": "Opening gap chasers unwind; liquidity providers fade failed displacement; hedgers reduce directional exposure.",
+      "persistence_rationale": "Failed gap acceptance creates predictable inventory pain when price crosses back through prior close/opening midpoint.",
+      "primary_outcome": "Direction-normalized underlying return from legal entry close to +45 completed minutes.",
+      "required_data": "Underlying one-minute OHLC candles; prior-session close; completed first 30 bars.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "NOT_RUN_DISCOVERY_WFA_GATE_FAILED",
+      "session_window": "09:15-10:15 IST setup only",
+      "setup_expiry": "10:15 IST",
+      "setup_state_machine": [
+        "LOAD prior close",
+        "WAIT for gap open and first 30 completed bars",
+        "REJECT if price closes back inside 25% of prior-close gap or crosses prior close",
+        "EMIT reversal at first completed rejection close"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "1175deb06b1f14358f1ab3615bc5283a1f9033cfb4a88f481fd7b714227cbe6e",
+      "structural_premise": "A gap that cannot hold through the first 30 minutes indicates trapped directional open inventory and mean reversion pressure."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 46,
+            "direction_breakdown": [
+              {
+                "count": 20,
+                "direction": -1,
+                "mean": -7.78884081272191
+              },
+              {
+                "count": 26,
+                "direction": 1,
+                "mean": -7.564683402507565
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -23.683181893542244,
+            "mean_bps": -7.66214314607902,
+            "median_bps": -6.2170370027314625,
+            "mfe_mean_bps": 17.24509060523953,
+            "positive_candidate_fraction": 0.3695652173913043,
+            "positive_session_fraction": 0.39285714285714285,
+            "session_count": 28,
+            "single_session_concentration": 0.06521739130434782,
+            "symbol_breakdown": [
+              {
+                "count": 19,
+                "mean": -5.582939607626265,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 15,
+                "mean": -7.144733471837527,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 12,
+                "mean": -11.600977508097742,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.2826086956521739,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 41,
+            "direction_breakdown": [
+              {
+                "count": 14,
+                "direction": -1,
+                "mean": 10.101616259396112
+              },
+              {
+                "count": 27,
+                "direction": 1,
+                "mean": -3.242303620669849
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -19.340556220240426,
+            "mean_bps": 1.3141568261819419,
+            "median_bps": -0.8748585984363899,
+            "mfe_mean_bps": 22.274436696054238,
+            "positive_candidate_fraction": 0.4878048780487805,
+            "positive_session_fraction": 0.4,
+            "session_count": 25,
+            "single_session_concentration": 0.07317073170731707,
+            "symbol_breakdown": [
+              {
+                "count": 16,
+                "mean": 8.096344052266543,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 14,
+                "mean": -4.09614495169638,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 11,
+                "mean": -1.665004149005066,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.34146341463414637,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 29,
+            "direction_breakdown": [
+              {
+                "count": 16,
+                "direction": -1,
+                "mean": 12.100409936244214
+              },
+              {
+                "count": 13,
+                "direction": 1,
+                "mean": -0.23075897971782994
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -15.21145815066399,
+            "mean_bps": 6.5726445601232975,
+            "median_bps": 2.3501656414826044,
+            "mfe_mean_bps": 24.761400835043084,
+            "positive_candidate_fraction": 0.5517241379310345,
+            "positive_session_fraction": 0.6,
+            "session_count": 20,
+            "single_session_concentration": 0.10344827586206896,
+            "symbol_breakdown": [
+              {
+                "count": 14,
+                "mean": 4.748321758512427,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 8,
+                "mean": 9.705471031359185,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 7,
+                "mean": 6.640917053361164,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.4482758620689655,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 24,
+            "direction_breakdown": [
+              {
+                "count": 10,
+                "direction": -1,
+                "mean": 2.7433087811175034
+              },
+              {
+                "count": 14,
+                "direction": 1,
+                "mean": 12.103930498912103
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -20.636980300823467,
+            "mean_bps": 8.20367144983102,
+            "median_bps": 1.447192138165354,
+            "mfe_mean_bps": 31.54621478129121,
+            "positive_candidate_fraction": 0.5416666666666666,
+            "positive_session_fraction": 0.4117647058823529,
+            "session_count": 17,
+            "single_session_concentration": 0.125,
+            "symbol_breakdown": [
+              {
+                "count": 12,
+                "mean": 14.25583290726636,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": 0.5316691764684869,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 5,
+                "mean": 4.419287134693749,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.4583333333333333,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 22,
+            "direction_breakdown": [
+              {
+                "count": 10,
+                "direction": -1,
+                "mean": -0.6926557461082172
+              },
+              {
+                "count": 12,
+                "direction": 1,
+                "mean": 0.2524416071705839
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -12.165015050551604,
+            "mean_bps": -0.1771480988652348,
+            "median_bps": -1.9653288199950047,
+            "mfe_mean_bps": 11.311300481990209,
+            "positive_candidate_fraction": 0.4090909090909091,
+            "positive_session_fraction": 0.42105263157894735,
+            "session_count": 19,
+            "single_session_concentration": 0.09090909090909091,
+            "symbol_breakdown": [
+              {
+                "count": 13,
+                "mean": -1.0290699232506064,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 4,
+                "mean": -1.8066280188067108,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 5,
+                "mean": 3.3414325804899123,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.36363636363636365,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 3
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long after sweep below prior low and reclaim; short after sweep above prior high and reclaim.",
+      "discovery_candidate_count": 213,
+      "discovery_session_count": 136,
+      "entry_event": "First completed reclaim close after sweep.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 3,
+      "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+      "hypothesis_name": "Prior-day liquidity sweep reclaim continuation",
+      "invalidation": "Second close beyond swept extreme before entry.",
+      "known_prior_research": "Distinct from ORB and VWAP; uses previous session extrema as liquidity pools.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after reclaim.",
+      "material_distinction_from_prior_work": "Candidate is anchored on prior-day high/low stop-run failure rather than opening range or VWAP state.",
+      "mechanism_family": "prior-day high/low sweep and reclaim",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 0.360820644586084,
+        "direction_inversion_mean_bps": -0.6585004371710617,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 0.6585004371710617,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Reclaim does not outperform matched random entries around prior-day levels.",
+      "parameter_hash": "f62ddbcc52fd21fb3480fb538ca31d6c444efeff9cb6c2b8b2ee0af425a738c6",
+      "parameter_ownership": "prior-session liquidity level mechanics",
+      "parameter_sensitivity_neighborhood": {
+        "earliest_setup_minutes_from_open": [
+          14,
+          15,
+          16
+        ],
+        "minimum_sweep_bps": [
+          4,
+          5,
+          6
+        ],
+        "primary_horizon_minutes": [
+          29,
+          30,
+          31
+        ]
+      },
+      "parameter_units": {
+        "earliest_setup_minutes_from_open": "minutes from 09:15",
+        "minimum_sweep_bps": "basis points beyond prior extreme",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "earliest_setup_minutes_from_open": 15,
+        "minimum_sweep_bps": 5,
+        "primary_horizon_minutes": 30,
+        "reclaim_close_inside_prior_range": true,
+        "setup_expiry_minutes_from_open": 315
+      },
+      "participants_or_behavior": "Stop orders and breakout liquidity are absorbed; trapped breakout traders unwind; stronger hands reclaim value.",
+      "persistence_rationale": "Prior-day extremes are visible liquidity pools; failed auction beyond them can create short-horizon directional flow.",
+      "primary_outcome": "Direction-normalized underlying return from entry to +30 completed minutes.",
+      "required_data": "Underlying one-minute OHLC candles for current and prior complete session.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "NOT_RUN_DISCOVERY_WFA_GATE_FAILED",
+      "session_window": "09:30-14:30 IST",
+      "setup_expiry": "14:30 IST",
+      "setup_state_machine": [
+        "LOAD prior-day high and low",
+        "WAIT for current session sweep beyond level by minimum bps",
+        "REQUIRE completed close back inside prior range",
+        "EMIT away from swept level on next bar"
+      ],
+      "single_emission_rule": "At most one high sweep and one low sweep per symbol-session; first side only if both occur.",
+      "specification_hash": "1663b112dd7cd827676b4ae26e133fa54b1a8095499a29083c500947b986f077",
+      "structural_premise": "A sweep beyond prior-day high/low followed by reclaim marks failed stop-run liquidity and continuation away from the swept level."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 23,
+            "direction_breakdown": [
+              {
+                "count": 7,
+                "direction": -1,
+                "mean": 1.1344040896860932
+              },
+              {
+                "count": 16,
+                "direction": 1,
+                "mean": -3.039927658385344
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -14.981642459204675,
+            "mean_bps": -1.769478865494036,
+            "median_bps": -4.002612650645387,
+            "mfe_mean_bps": 12.538210364639484,
+            "positive_candidate_fraction": 0.30434782608695654,
+            "positive_session_fraction": 0.3333333333333333,
+            "session_count": 12,
+            "single_session_concentration": 0.13043478260869565,
+            "symbol_breakdown": [
+              {
+                "count": 1,
+                "mean": -7.436816001018531,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 11,
+                "mean": -0.20736315637370756,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 11,
+                "mean": -2.816382107748503,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.4782608695652174,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 31,
+            "direction_breakdown": [
+              {
+                "count": 17,
+                "direction": -1,
+                "mean": -11.719085345019584
+              },
+              {
+                "count": 14,
+                "direction": 1,
+                "mean": -17.46959245396402
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -29.30683649749154,
+            "mean_bps": -14.316088555510625,
+            "median_bps": 2.3668842765722786,
+            "mfe_mean_bps": 18.55264179036056,
+            "positive_candidate_fraction": 0.5483870967741935,
+            "positive_session_fraction": 0.6111111111111112,
+            "session_count": 18,
+            "single_session_concentration": 0.0967741935483871,
+            "symbol_breakdown": [
+              {
+                "count": 3,
+                "mean": -74.48312191209006,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 16,
+                "mean": -7.22851249133398,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 12,
+                "mean": -8.724431635267946,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.41935483870967744,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 7,
+            "direction_breakdown": [
+              {
+                "count": 6,
+                "direction": -1,
+                "mean": -12.670016566772395
+              },
+              {
+                "count": 1,
+                "direction": 1,
+                "mean": 18.171207257873245
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -22.8987364546529,
+            "mean_bps": -8.264127448965874,
+            "median_bps": -9.922996702869114,
+            "mfe_mean_bps": 10.784913518677879,
+            "positive_candidate_fraction": 0.2857142857142857,
+            "positive_session_fraction": 0.4,
+            "session_count": 5,
+            "single_session_concentration": 0.2857142857142857,
+            "symbol_breakdown": [
+              {
+                "count": 2,
+                "mean": -20.759699184430545,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 5,
+                "mean": -3.265898754780006,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 1.0,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 20,
+            "direction_breakdown": [
+              {
+                "count": 10,
+                "direction": -1,
+                "mean": -5.799124372059427
+              },
+              {
+                "count": 10,
+                "direction": 1,
+                "mean": 23.315320750253775
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -18.66841342135911,
+            "mean_bps": 8.758098189097176,
+            "median_bps": 4.488794369478244,
+            "mfe_mean_bps": 20.49431479585334,
+            "positive_candidate_fraction": 0.55,
+            "positive_session_fraction": 0.5454545454545454,
+            "session_count": 11,
+            "single_session_concentration": 0.15,
+            "symbol_breakdown": [
+              {
+                "count": 4,
+                "mean": 15.048890035999907,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": 10.719054926888106,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 9,
+                "mean": 4.4370021277474585,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.6,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 46,
+            "direction_breakdown": [
+              {
+                "count": 26,
+                "direction": -1,
+                "mean": 0.8699423542013474
+              },
+              {
+                "count": 20,
+                "direction": 1,
+                "mean": 2.106679655385024
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -10.993992648477677,
+            "mean_bps": 1.4076542242812067,
+            "median_bps": 1.839352498779201,
+            "mfe_mean_bps": 13.733712116956516,
+            "positive_candidate_fraction": 0.5434782608695652,
+            "positive_session_fraction": 0.46153846153846156,
+            "session_count": 26,
+            "single_session_concentration": 0.06521739130434782,
+            "symbol_breakdown": [
+              {
+                "count": 10,
+                "mean": -2.280012359664352,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 19,
+                "mean": 2.129591044416813,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 17,
+                "mean": 2.7699992982152697,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.32608695652173914,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 2
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long upside escape; short downside escape.",
+      "discovery_candidate_count": 169,
+      "discovery_session_count": 95,
+      "entry_event": "First completed accepted close outside narrow opening balance.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 4,
+      "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+      "hypothesis_name": "Narrow first-30-minute balance escape",
+      "invalidation": "Close back inside opening range before entry.",
+      "known_prior_research": "Related to compression breakout but distinct because compression is first-30-minute market balance width, not indicator compression score.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after escape close.",
+      "material_distinction_from_prior_work": "Uses explicit opening-balance geometry and acceptance rather than generic volatility/compression score.",
+      "mechanism_family": "narrow-opening-range expansion",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -2.929765012832677,
+        "direction_inversion_mean_bps": 3.3918460594921744,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -3.3918460594921744,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "No WFA-positive expansion after narrow balances or controls indistinguishable.",
+      "parameter_hash": "3b7795ca5cadf6328e9379471fd19542683bcb11024971516fd4f064293a7fda",
+      "parameter_ownership": "opening auction/balance structure",
+      "parameter_sensitivity_neighborhood": {
+        "escape_fraction_of_range": [
+          0.16,
+          0.2,
+          0.24
+        ],
+        "max_opening_range_width_bps": [
+          28,
+          35,
+          42
+        ],
+        "opening_range_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          59,
+          60,
+          61
+        ]
+      },
+      "parameter_units": {
+        "escape_fraction_of_range": "fraction",
+        "max_opening_range_width_bps": "basis points of session open",
+        "opening_range_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "escape_fraction_of_range": 0.2,
+        "max_opening_range_width_bps": 35,
+        "opening_range_minutes": 30,
+        "primary_horizon_minutes": 60,
+        "setup_expiry_minutes_from_open": 165
+      },
+      "participants_or_behavior": "Liquidity builds inside early balance; breakout participants and hedgers transact after accepted escape.",
+      "persistence_rationale": "Compression followed by acceptance is a market-structure transition, not an indicator combination.",
+      "primary_outcome": "Direction-normalized underlying return to +60 completed minutes.",
+      "required_data": "Underlying one-minute OHLC; first 30-minute range; same-session bars after 09:45.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "NOT_RUN_DISCOVERY_WFA_GATE_FAILED",
+      "session_window": "09:45-12:00 IST",
+      "setup_expiry": "12:00 IST",
+      "setup_state_machine": [
+        "WAIT first 30 completed bars",
+        "CLASSIFY narrow if opening range width <= 35 bps of open",
+        "WAIT close outside opening range by 20% of range",
+        "EMIT in escape direction next bar"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session.",
+      "specification_hash": "4e7b94dd62d6072c5b2f77132854a76eaca5c230f513ae04e76b05007d7fa4d9",
+      "structural_premise": "Unusually narrow first-30-minute range stores intraday energy; a later accepted escape can continue as balance resolves."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 29,
+            "direction_breakdown": [
+              {
+                "count": 15,
+                "direction": -1,
+                "mean": 5.513117731500131
+              },
+              {
+                "count": 14,
+                "direction": 1,
+                "mean": -10.922961696859378
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -27.263743005963594,
+            "mean_bps": -2.4215413028803208,
+            "median_bps": 0.7725519955044854,
+            "mfe_mean_bps": 17.312420171075498,
+            "positive_candidate_fraction": 0.5172413793103449,
+            "positive_session_fraction": 0.5172413793103449,
+            "session_count": 29,
+            "single_session_concentration": 0.034482758620689655,
+            "symbol_breakdown": [
+              {
+                "count": 29,
+                "mean": -2.421541302880322,
+                "symbol": "MARKET"
+              }
+            ],
+            "top_five_session_concentration": 0.1724137931034483,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 31,
+            "direction_breakdown": [
+              {
+                "count": 22,
+                "direction": -1,
+                "mean": -7.03342353564177
+              },
+              {
+                "count": 9,
+                "direction": 1,
+                "mean": -5.447376080044789
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -25.319686681435684,
+            "mean_bps": -6.572958145307162,
+            "median_bps": -11.611079862749266,
+            "mfe_mean_bps": 19.0986123298855,
+            "positive_candidate_fraction": 0.45161290322580644,
+            "positive_session_fraction": 0.45161290322580644,
+            "session_count": 31,
+            "single_session_concentration": 0.03225806451612903,
+            "symbol_breakdown": [
+              {
+                "count": 31,
+                "mean": -6.572958145307163,
+                "symbol": "MARKET"
+              }
+            ],
+            "top_five_session_concentration": 0.16129032258064516,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 28,
+            "direction_breakdown": [
+              {
+                "count": 15,
+                "direction": -1,
+                "mean": -0.005606400141639749
+              },
+              {
+                "count": 13,
+                "direction": 1,
+                "mean": 4.541820251221575
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -16.75068424549646,
+            "mean_bps": 2.105698830848424,
+            "median_bps": 1.4674403278686077,
+            "mfe_mean_bps": 18.628775765953886,
+            "positive_candidate_fraction": 0.5,
+            "positive_session_fraction": 0.5,
+            "session_count": 28,
+            "single_session_concentration": 0.03571428571428571,
+            "symbol_breakdown": [
+              {
+                "count": 28,
+                "mean": 2.105698830848424,
+                "symbol": "MARKET"
+              }
+            ],
+            "top_five_session_concentration": 0.17857142857142858,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 29,
+            "direction_breakdown": [
+              {
+                "count": 13,
+                "direction": -1,
+                "mean": 7.271566157213935
+              },
+              {
+                "count": 16,
+                "direction": 1,
+                "mean": -1.7642608887336038
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -16.6054820311251,
+            "mean_bps": 2.2862822697946035,
+            "median_bps": 2.0693947540747124,
+            "mfe_mean_bps": 18.72151275161142,
+            "positive_candidate_fraction": 0.5517241379310345,
+            "positive_session_fraction": 0.5517241379310345,
+            "session_count": 29,
+            "single_session_concentration": 0.034482758620689655,
+            "symbol_breakdown": [
+              {
+                "count": 29,
+                "mean": 2.286282269794603,
+                "symbol": "MARKET"
+              }
+            ],
+            "top_five_session_concentration": 0.1724137931034483,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 28,
+            "direction_breakdown": [
+              {
+                "count": 16,
+                "direction": -1,
+                "mean": 4.840989277006408
+              },
+              {
+                "count": 12,
+                "direction": 1,
+                "mean": -2.3670564305485384
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -11.369465289805301,
+            "mean_bps": 1.7518268309114309,
+            "median_bps": 0.46473923882905943,
+            "mfe_mean_bps": 14.276122360025413,
+            "positive_candidate_fraction": 0.5,
+            "positive_session_fraction": 0.5,
+            "session_count": 28,
+            "single_session_concentration": 0.03571428571428571,
+            "symbol_breakdown": [
+              {
+                "count": 28,
+                "mean": 1.751826830911431,
+                "symbol": "MARKET"
+              }
+            ],
+            "top_five_session_concentration": 0.17857142857142858,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 3
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 1,
+      "direction": "Long if leader and laggard both close above first-30-minute range; short if both close below.",
+      "discovery_candidate_count": 177,
+      "discovery_session_count": 177,
+      "entry_event": "Second index completed confirmation close.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 5,
+      "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+      "hypothesis_name": "Cross-index leader escape followed by laggard continuation",
+      "invalidation": "Leader closes back inside its opening range before confirmation.",
+      "known_prior_research": "Distinct from single-symbol ORB/retest because identity requires cross-index lead-lag sequencing.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after cross-index confirmation.",
+      "material_distinction_from_prior_work": "The causal object is market-wide transmission, not a standalone breakout.",
+      "mechanism_family": "cross-index leadership and lag",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -0.638600736630904,
+        "direction_inversion_mean_bps": 0.7754016121917642,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -0.7754016121917642,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Lag confirmation fails WFA/control separation or leader-only control matches it.",
+      "parameter_hash": "6e41a90aa6f4b12c3014588e51ce98cd40e5aa2acc719c5f70c8334f48ee151c",
+      "parameter_ownership": "cross-index market-flow mechanics",
+      "parameter_sensitivity_neighborhood": {
+        "confirmation_window_minutes": [
+          14,
+          15,
+          16
+        ],
+        "escape_fraction_of_range": [
+          0.08,
+          0.1,
+          0.12
+        ],
+        "opening_range_minutes": [
+          29,
+          30,
+          31
+        ],
+        "primary_horizon_minutes": [
+          44,
+          45,
+          46
+        ]
+      },
+      "parameter_units": {
+        "confirmation_window_minutes": "minutes after leader escape",
+        "escape_fraction_of_range": "fraction",
+        "opening_range_minutes": "completed one-minute bars",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "minutes from 09:15"
+      },
+      "parameter_values": {
+        "confirmation_window_minutes": 15,
+        "escape_fraction_of_range": 0.1,
+        "opening_range_minutes": 30,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 195
+      },
+      "participants_or_behavior": "Index arbitrage, basket hedging, and sector/index rotation transmit directional pressure across NIFTY, BANKNIFTY, and SENSEX.",
+      "persistence_rationale": "Cross-index confirmation filters idiosyncratic noise and captures broad index-flow alignment.",
+      "primary_outcome": "Equal-weight direction-normalized underlying return across confirmed symbols to +45 completed minutes.",
+      "required_data": "Synchronized one-minute underlying OHLC for all three indices.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "NOT_RUN_DISCOVERY_WFA_GATE_FAILED",
+      "session_window": "09:45-12:30 IST",
+      "setup_expiry": "12:30 IST",
+      "setup_state_machine": [
+        "WAIT first 30 completed bars for all symbols",
+        "IDENTIFY first index to close outside its opening range",
+        "WAIT up to 15 minutes for second index confirmation same direction",
+        "EMIT on confirming laggard and optionally evaluate all aligned symbols"
+      ],
+      "single_emission_rule": "At most one market-wide candidate per session.",
+      "specification_hash": "03c6214e70c14d2d08c4729531ee013ec5541362c450aeed34d9cb8ebb670048",
+      "structural_premise": "When one index escapes its opening balance and another confirms with lag, broad-market flow is more durable than single-index noise."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 47,
+            "direction_breakdown": [
+              {
+                "count": 23,
+                "direction": -1,
+                "mean": 6.461486704523227
+              },
+              {
+                "count": 24,
+                "direction": 1,
+                "mean": 1.4887824256089777
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -22.91907295417912,
+            "mean_bps": 3.9222334557159497,
+            "median_bps": 3.282055587239263,
+            "mfe_mean_bps": 27.283316747181555,
+            "positive_candidate_fraction": 0.5957446808510638,
+            "positive_session_fraction": 0.6153846153846154,
+            "session_clustered_mean_ci_95": [
+              -5.983063365075397,
+              22.470489630461635
+            ],
+            "session_count": 26,
+            "single_session_concentration": 0.06382978723404255,
+            "symbol_breakdown": [
+              {
+                "count": 20,
+                "mean": -0.2872725415974383,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 13,
+                "mean": 9.694905689558741,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 14,
+                "mean": 4.575474949023915,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.3191489361702128,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 55,
+            "direction_breakdown": [
+              {
+                "count": 28,
+                "direction": -1,
+                "mean": -16.424763393186645
+              },
+              {
+                "count": 27,
+                "direction": 1,
+                "mean": -0.9132177609190487
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -27.59312742193187,
+            "mean_bps": -8.810004628255276,
+            "median_bps": -8.27639826195714,
+            "mfe_mean_bps": 20.33348724612966,
+            "positive_candidate_fraction": 0.41818181818181815,
+            "positive_session_fraction": 0.3939393939393939,
+            "session_clustered_mean_ci_95": [
+              -18.64432666589148,
+              4.680356648532305
+            ],
+            "session_count": 33,
+            "single_session_concentration": 0.05454545454545454,
+            "symbol_breakdown": [
+              {
+                "count": 26,
+                "mean": -9.847616422345995,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 14,
+                "mean": -12.675060278120043,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 15,
+                "mean": -3.404092245290924,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.2727272727272727,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 58,
+            "direction_breakdown": [
+              {
+                "count": 27,
+                "direction": -1,
+                "mean": 6.275739044683836
+              },
+              {
+                "count": 31,
+                "direction": 1,
+                "mean": -10.572955133233277
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -25.509833370658548,
+            "mean_bps": -2.729597498685655,
+            "median_bps": -2.6860543898848954,
+            "mfe_mean_bps": 21.584066942221636,
+            "positive_candidate_fraction": 0.4482758620689655,
+            "positive_session_fraction": 0.5,
+            "session_clustered_mean_ci_95": [
+              -12.464913228894678,
+              8.808281528860089
+            ],
+            "session_count": 30,
+            "single_session_concentration": 0.05172413793103448,
+            "symbol_breakdown": [
+              {
+                "count": 23,
+                "mean": -4.01598281423629,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 17,
+                "mean": -4.977038436838936,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 18,
+                "mean": 1.0367001794404769,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.25862068965517243,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 45,
+            "direction_breakdown": [
+              {
+                "count": 25,
+                "direction": -1,
+                "mean": -0.4677827995320796
+              },
+              {
+                "count": 20,
+                "direction": 1,
+                "mean": -16.644692162882556
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -23.350537552431902,
+            "mean_bps": -7.657520294354514,
+            "median_bps": -4.8910513760414,
+            "mfe_mean_bps": 18.179382643458226,
+            "positive_candidate_fraction": 0.4,
+            "positive_session_fraction": 0.4166666666666667,
+            "session_clustered_mean_ci_95": [
+              -16.457488636662912,
+              0.3361322553765511
+            ],
+            "session_count": 24,
+            "single_session_concentration": 0.06666666666666667,
+            "symbol_breakdown": [
+              {
+                "count": 18,
+                "mean": -5.626364655401117,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 13,
+                "mean": -8.651016770580854,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 14,
+                "mean": -9.346473673655852,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.3333333333333333,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 29,
+            "direction_breakdown": [
+              {
+                "count": 14,
+                "direction": -1,
+                "mean": -1.3980246262936178
+              },
+              {
+                "count": 15,
+                "direction": 1,
+                "mean": -3.8965837941751236
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -15.820304868831858,
+            "mean_bps": -2.6903828165771557,
+            "median_bps": 0.5765774716104399,
+            "mfe_mean_bps": 12.071379002841422,
+            "positive_candidate_fraction": 0.5172413793103449,
+            "positive_session_fraction": 0.35294117647058826,
+            "session_clustered_mean_ci_95": [
+              -12.06445407540529,
+              3.397499954017352
+            ],
+            "session_count": 17,
+            "single_session_concentration": 0.10344827586206896,
+            "symbol_breakdown": [
+              {
+                "count": 13,
+                "mean": -3.9297366152741997,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 7,
+                "mean": -1.5852153443608938,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 9,
+                "mean": -1.7597798079607399,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.5172413793103449,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 1
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 2,
+      "direction": "Defined by the frozen setup state machine.",
+      "discovery_candidate_count": 265,
+      "discovery_session_count": 154,
+      "entry_event": "First next completed bar after setup confirmation.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 6,
+      "hypothesis_id": "AC06_FAILED_OPENING_DRIVE_REVERSAL",
+      "hypothesis_name": "Failed first-hour opening drive reversal",
+      "invalidation": "Setup-specific failed acceptance before entry.",
+      "known_prior_research": "Cycle 1 rejected gap, prior-day sweep, narrow opening escape, and cross-index opening lead-lag families.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "material_distinction_from_prior_work": "Cycle 2 mechanism family is not a threshold variant of Cycle 1; candidate identity depends on a different causal market structure.",
+      "mechanism_family": "failed opening drive",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -5.741734504703009,
+        "direction_inversion_mean_bps": 4.244266766718236,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -4.244266766718236,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Fails sample, WFA, controls, sensitivity, concentration, or positive mean gates.",
+      "parameter_hash": "b82fdf2faa5e35c1061f911875d9dbed3d63b6dac8712fa61988daf834340495",
+      "parameter_ownership": "market-session structure and completed-bar mechanics",
+      "parameter_sensitivity_neighborhood": "integer minutes +/-1; bps/fractions 0.8x/1.0x/1.2x",
+      "parameter_units": {
+        "drive_window_minutes": "completed minutes",
+        "midpoint_reclaim_required": "fraction/bool/count",
+        "minimum_drive_bps": "basis points",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "completed minutes from 09:15"
+      },
+      "parameter_values": {
+        "drive_window_minutes": 45,
+        "midpoint_reclaim_required": true,
+        "minimum_drive_bps": 35,
+        "primary_horizon_minutes": 45,
+        "setup_expiry_minutes_from_open": 90
+      },
+      "participants_or_behavior": "Index hedgers, liquidity providers, intraday momentum/reversal participants, and benchmark-flow execution desks.",
+      "persistence_rationale": "The setup is tied to session microstructure and inventory transfer, not optimized indicator combinations.",
+      "primary_outcome": "Direction-normalized underlying bps over frozen primary horizon.",
+      "required_data": "Underlying one-minute OHLC candles for complete NIFTY, BANKNIFTY, SENSEX sessions.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "DISCOVERY_STATIC_SENSITIVITY_NOT_OPTIMIZED",
+      "session_window": "Intraday completed-bar windows only.",
+      "setup_expiry": "Frozen per parameter values.",
+      "setup_state_machine": [
+        "Use completed bars only",
+        "Compute frozen structural levels",
+        "Wait for causal setup",
+        "Emit first legal next-bar candidate once"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
+      "specification_hash": "c0fe2ecd17dd09bf954396c82bb2421ab92a1886a53f2fdd82e683bea5030c6f",
+      "structural_premise": "Opening drive that extends one direction early and then closes back through the 30-minute opening midpoint signals trapped drive inventory."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 55,
+            "direction_breakdown": [
+              {
+                "count": 26,
+                "direction": -1,
+                "mean": 16.90174321147704
+              },
+              {
+                "count": 29,
+                "direction": 1,
+                "mean": 5.08768579723266
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -11.251878727967542,
+            "mean_bps": 10.672512938511822,
+            "median_bps": 3.96464831735166,
+            "mfe_mean_bps": 22.918272324535764,
+            "positive_candidate_fraction": 0.6,
+            "positive_session_fraction": 0.5769230769230769,
+            "session_clustered_mean_ci_95": [
+              -1.9978005421805294,
+              17.8269770890226
+            ],
+            "session_count": 26,
+            "single_session_concentration": 0.05454545454545454,
+            "symbol_breakdown": [
+              {
+                "count": 15,
+                "mean": 8.889628186619833,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 21,
+                "mean": 11.868103430021595,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 19,
+                "mean": 10.758611409915748,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.2727272727272727,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 36,
+            "direction_breakdown": [
+              {
+                "count": 15,
+                "direction": -1,
+                "mean": 1.2568500336644914
+              },
+              {
+                "count": 21,
+                "direction": 1,
+                "mean": -2.421440745789459
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -13.24651917930954,
+            "mean_bps": -0.8888195876836466,
+            "median_bps": -3.5103935337532644,
+            "mfe_mean_bps": 14.736406130939107,
+            "positive_candidate_fraction": 0.4722222222222222,
+            "positive_session_fraction": 0.5,
+            "session_clustered_mean_ci_95": [
+              -6.515171990707918,
+              5.314202212271662
+            ],
+            "session_count": 20,
+            "single_session_concentration": 0.08333333333333333,
+            "symbol_breakdown": [
+              {
+                "count": 5,
+                "mean": 6.257269445508973,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 14,
+                "mean": -1.4418254925149416,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 17,
+                "mean": -2.535193852290997,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.3611111111111111,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 58,
+            "direction_breakdown": [
+              {
+                "count": 31,
+                "direction": -1,
+                "mean": 0.4254274516975768
+              },
+              {
+                "count": 27,
+                "direction": 1,
+                "mean": 4.193290400789702
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -13.095523221532327,
+            "mean_bps": 2.1794326176542556,
+            "median_bps": 0.2429213931032237,
+            "mfe_mean_bps": 14.6101592637553,
+            "positive_candidate_fraction": 0.5172413793103449,
+            "positive_session_fraction": 0.4642857142857143,
+            "session_clustered_mean_ci_95": [
+              -4.1332804231112075,
+              6.623035480395631
+            ],
+            "session_count": 28,
+            "single_session_concentration": 0.05172413793103448,
+            "symbol_breakdown": [
+              {
+                "count": 17,
+                "mean": 1.9380421697227026,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 20,
+                "mean": 0.7750334922998479,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 21,
+                "mean": 3.7123669091744724,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.25862068965517243,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 54,
+            "direction_breakdown": [
+              {
+                "count": 25,
+                "direction": -1,
+                "mean": 8.939532185884058
+              },
+              {
+                "count": 29,
+                "direction": 1,
+                "mean": -1.7870458439211019
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -10.956727630632216,
+            "mean_bps": 3.1789625032109163,
+            "median_bps": -1.2956256629781393,
+            "mfe_mean_bps": 14.624032379799122,
+            "positive_candidate_fraction": 0.48148148148148145,
+            "positive_session_fraction": 0.38461538461538464,
+            "session_clustered_mean_ci_95": [
+              -6.507773049121922,
+              6.666436032716772
+            ],
+            "session_count": 26,
+            "single_session_concentration": 0.05555555555555555,
+            "symbol_breakdown": [
+              {
+                "count": 18,
+                "mean": 5.896820956836511,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 17,
+                "mean": 2.2509488040439405,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 19,
+                "mean": 1.4344772779781738,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.2777777777777778,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 86,
+            "direction_breakdown": [
+              {
+                "count": 44,
+                "direction": -1,
+                "mean": 7.423403418610979
+              },
+              {
+                "count": 42,
+                "direction": 1,
+                "mean": -0.5353417242852971
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -11.069410040724188,
+            "mean_bps": 3.5365743953360536,
+            "median_bps": 3.143686978723803,
+            "mfe_mean_bps": 13.03460944904095,
+            "positive_candidate_fraction": 0.5813953488372093,
+            "positive_session_fraction": 0.5945945945945946,
+            "session_clustered_mean_ci_95": [
+              -3.3549165451708176,
+              7.570738371650851
+            ],
+            "session_count": 37,
+            "single_session_concentration": 0.03488372093023256,
+            "symbol_breakdown": [
+              {
+                "count": 24,
+                "mean": 6.197292078061374,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 32,
+                "mean": 3.2371819224549436,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 30,
+                "mean": 1.7273522202289797,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.1744186046511628,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 4
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 2,
+      "direction": "Defined by the frozen setup state machine.",
+      "discovery_candidate_count": 350,
+      "discovery_session_count": 168,
+      "entry_event": "First next completed bar after setup confirmation.",
+      "final_lockbox_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": -0.030465549915896183,
+          "direction_inversion_mean_bps": -0.9901931765454843,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": 0.9901931765454843,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [
+          "REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES",
+          "REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE"
+        ],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "ca7fdbccc0402aa446f5cf0e9afe289e5c69d74f480f742ec5fdf3f50dc7810f",
+            "direction": -1,
+            "entry_index": 249,
+            "entry_ts": "2026-02-10 13:24:00",
+            "evidence": {
+              "compression_width_bps": 18.343032058836297
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -7.751086019702758,
+            "mfe_bps": 14.904451475694636,
+            "outcome_bps": 7.751086019700537,
+            "session": "20260210",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "3c00ffcf09ef279e2c8b906791bac3a50af49fc16bd4e171b6a3113fb2761240",
+            "direction": -1,
+            "entry_index": 249,
+            "entry_ts": "2026-02-10 13:24:00",
+            "evidence": {
+              "compression_width_bps": 15.78016753154483
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -6.657987112510533,
+            "mfe_bps": 24.300004944048936,
+            "outcome_bps": 8.62736696385924,
+            "session": "20260210",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "c0e13f684aa87f7b36874aa0c30ac5b3f5c69be39939b6102bfa8737132d3ce6",
+            "direction": -1,
+            "entry_index": 248,
+            "entry_ts": "2026-02-10 13:23:00",
+            "evidence": {
+              "compression_width_bps": 17.380358627241492
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -7.994292706197115,
+            "mfe_bps": 15.187732403094678,
+            "outcome_bps": 7.4995435137859,
+            "session": "20260210",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "a6715f688edc936764e8cd20e6c7a903d840bd727139d79796d3d3f35871c78d",
+            "direction": 1,
+            "entry_index": 252,
+            "entry_ts": "2026-02-12 13:27:00",
+            "evidence": {
+              "compression_width_bps": 21.34582945724437
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -27.49567179867629,
+            "mfe_bps": 0.9661163667851191,
+            "outcome_bps": -21.834229889321488,
+            "session": "20260212",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "4f7ee071497955f644e9f5addfdc7b2652b230ebff2c3c18d61932c5e595a276",
+            "direction": -1,
+            "entry_index": 330,
+            "entry_ts": "2026-02-12 14:45:00",
+            "evidence": {
+              "compression_width_bps": 25.956183770495304
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -14.711122964592427,
+            "mfe_bps": 16.057191911298396,
+            "outcome_bps": 3.628169851905838,
+            "session": "20260212",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "23e4925b3ef2dd0219429c693741b98d9b4f4a4b7b9d3f01243cf377262ee0bd",
+            "direction": -1,
+            "entry_index": 275,
+            "entry_ts": "2026-02-13 13:50:00",
+            "evidence": {
+              "compression_width_bps": 32.55622058452592
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -12.780980646223128,
+            "mfe_bps": 2.6463686920863427,
+            "outcome_bps": -4.410614486809461,
+            "session": "20260213",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "746b446bbc8e6b48c5aca162bc2e6ec1ef1b58099c2413d53d89a97ae2829cca",
+            "direction": -1,
+            "entry_index": 273,
+            "entry_ts": "2026-02-13 13:48:00",
+            "evidence": {
+              "compression_width_bps": 29.194454754384907
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -9.176736845195599,
+            "mfe_bps": 5.239187965748737,
+            "outcome_bps": -3.7997709260251256,
+            "session": "20260213",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "a3de947bb7b61c48283ccf40d4ba0a45ebdca79fa7584dd6fefa419292ac14e0",
+            "direction": 1,
+            "entry_index": 314,
+            "entry_ts": "2026-02-16 14:29:00",
+            "evidence": {
+              "compression_width_bps": 34.554508409510134
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -2.810260573605783,
+            "mfe_bps": 29.898049991412545,
+            "outcome_bps": 25.897331813711233,
+            "session": "20260216",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "825bc7b2ab89f31b0547dec7bdc0e2ac7de3456c109c616ee4b5981165cfcac8",
+            "direction": 1,
+            "entry_index": 314,
+            "entry_ts": "2026-02-16 14:29:00",
+            "evidence": {
+              "compression_width_bps": 34.43484755166126
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -4.929175592974788,
+            "mfe_bps": 28.452270152519166,
+            "outcome_bps": 24.891374014917034,
+            "session": "20260216",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "0ce442a6b12dbeba97457e057eb34dc632a5eabfb0146ec39e60eac5506e909b",
+            "direction": 1,
+            "entry_index": 262,
+            "entry_ts": "2026-02-17 13:37:00",
+            "evidence": {
+              "compression_width_bps": 40.95614765587276
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -30.373713466196328,
+            "mfe_bps": 2.850343102904773,
+            "outcome_bps": -14.186378136806788,
+            "session": "20260217",
+            "symbol": "BANKNIFTY"
+          }
+        ],
+        "summary": {
+          "candidate_count": 97,
+          "direction_breakdown": [
+            {
+              "count": 57,
+              "direction": -1,
+              "mean": 0.24807568881948344
+            },
+            {
+              "count": 40,
+              "direction": 1,
+              "mean": 2.047710596555036
+            }
+          ],
+          "mae_mean_bps": -15.21203167426674,
+          "mean_bps": 0.9901931765454843,
+          "median_bps": 0.10796361194387316,
+          "mfe_mean_bps": 14.990848092370141,
+          "positive_candidate_fraction": 0.5051546391752577,
+          "positive_session_fraction": 0.5869565217391305,
+          "session_clustered_mean_ci_95": [
+            -5.070428315098833,
+            5.425789899924263
+          ],
+          "session_count": 46,
+          "single_session_concentration": 0.030927835051546393,
+          "symbol_breakdown": [
+            {
+              "count": 19,
+              "mean": 0.30919588509063695,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 40,
+              "mean": 1.2100255670159652,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 38,
+              "mean": 1.0992893059881914,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.15463917525773196
+        },
+        "verdict": "REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+        "wfa": []
+      },
+      "final_lockbox_status": "OPENED_ONCE_PRE_REGISTERED_FINALIST",
+      "final_verdict": "REJECTED_FINAL_LOCKBOX_FAILURE|REJECTED_INSUFFICIENT_FINAL_LOCKBOX_CANDIDATES|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+      "finalist_status": "REJECTED_FINAL_LOCKBOX_FAILURE",
+      "global_hypothesis_number": 7,
+      "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+      "hypothesis_name": "Midday range compression late directional expansion",
+      "invalidation": "Setup-specific failed acceptance before entry.",
+      "known_prior_research": "Cycle 1 rejected gap, prior-day sweep, narrow opening escape, and cross-index opening lead-lag families.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "material_distinction_from_prior_work": "Cycle 2 mechanism family is not a threshold variant of Cycle 1; candidate identity depends on a different causal market structure.",
+      "mechanism_family": "midday compression into late expansion",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 4.400189882237496,
+        "direction_inversion_mean_bps": -3.139892401650259,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 3.139892401650259,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Fails sample, WFA, controls, sensitivity, concentration, or positive mean gates.",
+      "parameter_hash": "e61416a985123e14f756c25b739a4802e649d59308b4b25d9c74a446cc22ad39",
+      "parameter_ownership": "market-session structure and completed-bar mechanics",
+      "parameter_sensitivity_neighborhood": "integer minutes +/-1; bps/fractions 0.8x/1.0x/1.2x",
+      "parameter_units": {
+        "compression_end_minutes_from_open": "completed minutes from 09:15",
+        "compression_start_minutes_from_open": "completed minutes from 09:15",
+        "escape_fraction_of_range": "fraction/bool/count",
+        "max_compression_width_bps": "basis points",
+        "primary_horizon_minutes": "completed minutes"
+      },
+      "parameter_values": {
+        "compression_end_minutes_from_open": 225,
+        "compression_start_minutes_from_open": 105,
+        "escape_fraction_of_range": 0.15,
+        "max_compression_width_bps": 45,
+        "primary_horizon_minutes": 45
+      },
+      "participants_or_behavior": "Index hedgers, liquidity providers, intraday momentum/reversal participants, and benchmark-flow execution desks.",
+      "persistence_rationale": "The setup is tied to session microstructure and inventory transfer, not optimized indicator combinations.",
+      "primary_outcome": "Direction-normalized underlying bps over frozen primary horizon.",
+      "required_data": "Underlying one-minute OHLC candles for complete NIFTY, BANKNIFTY, SENSEX sessions.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": 0.8640685598700111,
+          "direction_inversion_mean_bps": -0.796179852595762,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": 0.796179852595762,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "dca891d2fdff9be9b85c34b33b8692eee07425dd7dd525b8dafdd366b4d91e53",
+            "direction": -1,
+            "entry_index": 268,
+            "entry_ts": "2025-09-15 13:43:00",
+            "evidence": {
+              "compression_width_bps": 19.746087607338914
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -15.648827535550414,
+            "mfe_bps": 0.4191650232732158,
+            "outcome_bps": -8.024016159811076,
+            "session": "20250915",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "ff67d77aded55b3a255617c3a1817e09f7db3b3ea1c5fa452592ebb28f607a85",
+            "direction": -1,
+            "entry_index": 268,
+            "entry_ts": "2025-09-15 13:43:00",
+            "evidence": {
+              "compression_width_bps": 23.44032555906391
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -20.605260133428338,
+            "mfe_bps": 1.5688821349923998,
+            "outcome_bps": -19.720483580554227,
+            "session": "20250915",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "c06d8ae18c8c20490f3d7a668d56d1d0f75c96d0c84536fe291428ecd0f8477f",
+            "direction": -1,
+            "entry_index": 269,
+            "entry_ts": "2025-09-15 13:44:00",
+            "evidence": {
+              "compression_width_bps": 21.404810296573146
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -9.55656020076745,
+            "mfe_bps": 5.14141960647696,
+            "outcome_bps": -3.406419744029776,
+            "session": "20250915",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "c67f4a42484248d6177d5da027cfaf9defe00393227c69e5e4a21e96194ea6c8",
+            "direction": 1,
+            "entry_index": 324,
+            "entry_ts": "2025-09-16 14:39:00",
+            "evidence": {
+              "compression_width_bps": 21.297300746602588
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -15.319823613932915,
+            "mfe_bps": 11.138086508446499,
+            "outcome_bps": 10.26606550067033,
+            "session": "20250916",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "5d91a57e1395e461da019e25aa057813bc12e7be69776b02e2fd07e08ea5b552",
+            "direction": -1,
+            "entry_index": 296,
+            "entry_ts": "2025-09-16 14:11:00",
+            "evidence": {
+              "compression_width_bps": 20.354738364026698
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -18.86084834770152,
+            "mfe_bps": 5.203305779120093,
+            "outcome_bps": -12.349905514141835,
+            "session": "20250916",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "f7a55ba9758b99077b87ef3ea04540fb05901b1bffa3e6250c31212b1d189670",
+            "direction": 1,
+            "entry_index": 319,
+            "entry_ts": "2025-09-16 14:34:00",
+            "evidence": {
+              "compression_width_bps": 21.277398957705973
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -3.776219712281481,
+            "mfe_bps": 20.693829917166617,
+            "outcome_bps": 16.634332937353058,
+            "session": "20250916",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "f9679c41beaafd882b4d01e40ec961c2a74bb08d2a2af033d033fd92fdc2d0a2",
+            "direction": -1,
+            "entry_index": 273,
+            "entry_ts": "2025-09-17 13:48:00",
+            "evidence": {
+              "compression_width_bps": 11.374156334317115
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -2.2911498412003795,
+            "mfe_bps": 13.80615292240095,
+            "outcome_bps": 6.300662063298823,
+            "session": "20250917",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "f9c59ae856721a6d28bfb52eddf233c327d24e18db50e8101bf13378040d502b",
+            "direction": -1,
+            "entry_index": 278,
+            "entry_ts": "2025-09-17 13:53:00",
+            "evidence": {
+              "compression_width_bps": 12.65113979036658
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -1.6490850965422688,
+            "mfe_bps": 13.284632692610598,
+            "outcome_bps": -0.3194119335936385,
+            "session": "20250917",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "cda56a1220e58355973fd30d0083a7a56b09e309af7975179e96734b516f8e07",
+            "direction": -1,
+            "entry_index": 229,
+            "entry_ts": "2025-09-18 13:04:00",
+            "evidence": {
+              "compression_width_bps": 29.44060877990549
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -11.829979534134782,
+            "mfe_bps": 4.90944150666639,
+            "outcome_bps": -8.85276801804391,
+            "session": "20250918",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "db05999675443765434bec1288868cb21ce14a17f0c0e86ea8ceff10d86dbdf6",
+            "direction": -1,
+            "entry_index": 283,
+            "entry_ts": "2025-09-18 13:58:00",
+            "evidence": {
+              "compression_width_bps": 31.207239848622816
+            },
+            "horizon_minutes": 45,
+            "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+            "mae_bps": -5.081778226270206,
+            "mfe_bps": 12.165835040744977,
+            "outcome_bps": 8.5622166407473,
+            "session": "20250918",
+            "symbol": "SENSEX"
+          }
+        ],
+        "summary": {
+          "candidate_count": 175,
+          "direction_breakdown": [
+            {
+              "count": 96,
+              "direction": -1,
+              "mean": 4.032165598991585
+            },
+            {
+              "count": 79,
+              "direction": 1,
+              "mean": -3.136157256948529
+            }
+          ],
+          "mae_mean_bps": -11.550213017470044,
+          "mean_bps": 0.796179852595762,
+          "median_bps": -0.8025562394975427,
+          "mfe_mean_bps": 12.396219539970753,
+          "positive_candidate_fraction": 0.48,
+          "positive_session_fraction": 0.527027027027027,
+          "session_clustered_mean_ci_95": [
+            -2.2259697265013667,
+            3.517734494517445
+          ],
+          "session_count": 74,
+          "single_session_concentration": 0.017142857142857144,
+          "symbol_breakdown": [
+            {
+              "count": 47,
+              "mean": -2.0473766954285475,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 66,
+              "mean": 1.5143698919481168,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 62,
+              "mean": 2.1872542906584584,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.08571428571428572
+        },
+        "verdict": "SCREENING_GATE_PASS",
+        "wfa": []
+      },
+      "sensitivity_result": "DISCOVERY_STATIC_SENSITIVITY_NOT_OPTIMIZED",
+      "session_window": "Intraday completed-bar windows only.",
+      "setup_expiry": "Frozen per parameter values.",
+      "setup_state_machine": [
+        "Use completed bars only",
+        "Compute frozen structural levels",
+        "Wait for causal setup",
+        "Emit first legal next-bar candidate once"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
+      "specification_hash": "382d610cca165f7d5a23de6386b4b8137d1047f4e0479dbc3818875b044ff1d9",
+      "structural_premise": "A narrow 11:00-13:00 realized range followed by accepted escape reflects delayed institutional flow after lunch liquidity."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 103,
+            "direction_breakdown": [
+              {
+                "count": 60,
+                "direction": -1,
+                "mean": 2.4600242764019438
+              },
+              {
+                "count": 43,
+                "direction": 1,
+                "mean": 0.8009479979426007
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -12.928608775832444,
+            "mean_bps": 1.767400198986878,
+            "median_bps": 0.8300421198126351,
+            "mfe_mean_bps": 14.053415112143172,
+            "positive_candidate_fraction": 0.5242718446601942,
+            "positive_session_fraction": 0.627906976744186,
+            "session_clustered_mean_ci_95": [
+              -1.5445345869061065,
+              7.377231882661082
+            ],
+            "session_count": 43,
+            "single_session_concentration": 0.02912621359223301,
+            "symbol_breakdown": [
+              {
+                "count": 36,
+                "mean": -4.515415787975559,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 32,
+                "mean": 5.281701055302006,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 35,
+                "mean": 5.016650145517269,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.14563106796116504,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 118,
+            "direction_breakdown": [
+              {
+                "count": 54,
+                "direction": -1,
+                "mean": -4.335457544508539
+              },
+              {
+                "count": 64,
+                "direction": 1,
+                "mean": 1.7422333120535591
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -15.595772977194377,
+            "mean_bps": -1.0390828426443495,
+            "median_bps": -0.6291321011220319,
+            "mfe_mean_bps": 13.339852258223983,
+            "positive_candidate_fraction": 0.4830508474576271,
+            "positive_session_fraction": 0.4444444444444444,
+            "session_clustered_mean_ci_95": [
+              -4.948362563633775,
+              4.736207891621547
+            ],
+            "session_count": 45,
+            "single_session_concentration": 0.025423728813559324,
+            "symbol_breakdown": [
+              {
+                "count": 39,
+                "mean": -1.33973146053078,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 40,
+                "mean": -3.2553830888243653,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 39,
+                "mean": 1.5346942328626083,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.1271186440677966,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 120,
+            "direction_breakdown": [
+              {
+                "count": 69,
+                "direction": -1,
+                "mean": -0.42384917565469626
+              },
+              {
+                "count": 51,
+                "direction": 1,
+                "mean": 2.6267618093602088
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -12.442955035563374,
+            "mean_bps": 0.8726604929766376,
+            "median_bps": -1.1834220680490004,
+            "mfe_mean_bps": 14.29616505413776,
+            "positive_candidate_fraction": 0.4666666666666667,
+            "positive_session_fraction": 0.44680851063829785,
+            "session_clustered_mean_ci_95": [
+              -2.25642463166959,
+              5.870105204461528
+            ],
+            "session_count": 47,
+            "single_session_concentration": 0.025,
+            "symbol_breakdown": [
+              {
+                "count": 41,
+                "mean": -0.0056747267445520395,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 40,
+                "mean": 3.0686315183782735,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 39,
+                "mean": -0.4562394302925048,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.125,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 116,
+            "direction_breakdown": [
+              {
+                "count": 73,
+                "direction": -1,
+                "mean": -1.8775635292808106
+              },
+              {
+                "count": 43,
+                "direction": 1,
+                "mean": 3.9510174648907443
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -12.67126705244278,
+            "mean_bps": 0.2830311495931284,
+            "median_bps": 0.23180443825099317,
+            "mfe_mean_bps": 14.362904911084966,
+            "positive_candidate_fraction": 0.5086206896551724,
+            "positive_session_fraction": 0.4888888888888889,
+            "session_clustered_mean_ci_95": [
+              -3.3758973588584387,
+              3.7950594051320414
+            ],
+            "session_count": 45,
+            "single_session_concentration": 0.02586206896551724,
+            "symbol_breakdown": [
+              {
+                "count": 38,
+                "mean": -1.7075546517104105,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 39,
+                "mean": 3.675022463585941,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 39,
+                "mean": -1.1694150246680322,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.12931034482758622,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 127,
+            "direction_breakdown": [
+              {
+                "count": 76,
+                "direction": -1,
+                "mean": -1.2099070877057505
+              },
+              {
+                "count": 51,
+                "direction": 1,
+                "mean": 2.177541485008557
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -8.473127370259235,
+            "mean_bps": 0.1504069060614123,
+            "median_bps": -1.589840721513136,
+            "mfe_mean_bps": 8.563051725560534,
+            "positive_candidate_fraction": 0.41732283464566927,
+            "positive_session_fraction": 0.46938775510204084,
+            "session_clustered_mean_ci_95": [
+              -1.9071127074810976,
+              3.29398933723694
+            ],
+            "session_count": 49,
+            "single_session_concentration": 0.023622047244094488,
+            "symbol_breakdown": [
+              {
+                "count": 40,
+                "mean": 0.47183890174715143,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 43,
+                "mean": 0.7503401519621603,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 44,
+                "mean": -0.728102398510445,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.11811023622047244,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 4
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 2,
+      "direction": "Defined by the frozen setup state machine.",
+      "discovery_candidate_count": 701,
+      "discovery_session_count": 275,
+      "entry_event": "First next completed bar after setup confirmation.",
+      "final_lockbox_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": -0.7504526745583813,
+          "direction_inversion_mean_bps": 0.9774053420196536,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": -0.9774053420196536,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [
+          "REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE",
+          "REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE",
+          "REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION"
+        ],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "ef3bb8b7d34d4922a909c7cc63197f5c6d0e7d49c148ecd7b91dc62e62c98093",
+            "direction": 1,
+            "entry_index": 213,
+            "entry_ts": "2026-02-10 12:48:00",
+            "evidence": {
+              "crosses": 8,
+              "dist_bps": 8.12539637725207,
+              "vwap": 25953.711580594678
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -10.698644581790262,
+            "mfe_bps": 1.866490151860578,
+            "outcome_bps": -10.005926587286496,
+            "session": "20260210",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "364f636e348912d1e863598bdb8b4dec199edd101a6c527255b4cde5bdf30a84",
+            "direction": 1,
+            "entry_index": 212,
+            "entry_ts": "2026-02-10 12:47:00",
+            "evidence": {
+              "crosses": 12,
+              "dist_bps": 8.185253380921242,
+              "vwap": 60722.69693396227
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -8.218697990409751,
+            "mfe_bps": 3.537577713590423,
+            "outcome_bps": -7.330190099554823,
+            "session": "20260210",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "b1a45bb17bdabb3d919471ecb2a65511cbbc459f9541270ed71ac4305acc56f3",
+            "direction": 1,
+            "entry_index": 214,
+            "entry_ts": "2026-02-10 12:49:00",
+            "evidence": {
+              "crosses": 12,
+              "dist_bps": 10.506925386393196,
+              "vwap": 84363.39001557631
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -15.439275812716424,
+            "mfe_bps": 2.7267371316486155,
+            "outcome_bps": -15.017774111081295,
+            "session": "20260210",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "6589696fa7916eccc15afcda96e3be9a8c7e2a7f8bf34dda55d270dcb2600d3f",
+            "direction": 1,
+            "entry_index": 139,
+            "entry_ts": "2026-02-11 11:34:00",
+            "evidence": {
+              "crosses": 5,
+              "dist_bps": 8.042533805128205,
+              "vwap": 25955.824940047965
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -10.530470020887472,
+            "mfe_bps": 2.6181790179902187,
+            "outcome_bps": -6.372185698196864,
+            "session": "20260211",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "b398a7d8cabe8be661e0eaa98feb2e7aab2f65682e94fabda4c82f64214fa01b",
+            "direction": -1,
+            "entry_index": 117,
+            "entry_ts": "2026-02-11 11:12:00",
+            "evidence": {
+              "crosses": 2,
+              "dist_bps": 8.292350812846294,
+              "vwap": 84294.9303133903
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -13.868853396936665,
+            "mfe_bps": 2.882024653180215,
+            "outcome_bps": -6.873889936809263,
+            "session": "20260211",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "3ee457376dfbf6da2555ba9fadf05b15aecdacbcd2d72acc903d69d270582209",
+            "direction": -1,
+            "entry_index": 126,
+            "entry_ts": "2026-02-12 11:21:00",
+            "evidence": {
+              "crosses": 13,
+              "dist_bps": 8.670914445466638,
+              "vwap": 25856.06957671958
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -0.7160398737449114,
+            "mfe_bps": 9.695566939084133,
+            "outcome_bps": 9.347223216721323,
+            "session": "20260212",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "6798337f1015874babe86be45bd9249bd127bb4a364f221f452f578ce551fcda",
+            "direction": 1,
+            "entry_index": 109,
+            "entry_ts": "2026-02-12 11:04:00",
+            "evidence": {
+              "crosses": 6,
+              "dist_bps": 8.781183734158926,
+              "vwap": 60798.96131498471
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -16.946324858253536,
+            "mfe_bps": 2.7695981945830006,
+            "outcome_bps": -14.373968078121857,
+            "session": "20260212",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "b328b6a4fce8427cd60edd610e119ae83514bc5a12d5e88fca1ddffe5c31968f",
+            "direction": -1,
+            "entry_index": 123,
+            "entry_ts": "2026-02-12 11:18:00",
+            "evidence": {
+              "crosses": 9,
+              "dist_bps": 9.825610614934144,
+              "vwap": 83894.30127371274
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -1.369711175878141,
+            "mfe_bps": 12.175873301237816,
+            "outcome_bps": 5.882122035776316,
+            "session": "20260212",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "0ffec95b2d6b4519adf7eb9a87a7b20df21af5feaba69cb50abafed0cc36463e",
+            "direction": -1,
+            "entry_index": 123,
+            "entry_ts": "2026-02-13 11:18:00",
+            "evidence": {
+              "crosses": 4,
+              "dist_bps": 8.157605924182798,
+              "vwap": 25555.6472899729
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -9.616024880239049,
+            "mfe_bps": 2.9376858086271884,
+            "outcome_bps": -7.148368800993232,
+            "session": "20260213",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "2fe0553a017f3f6290d33ae7fdbac5e5700ea5030636157e3f4a2592b488e20f",
+            "direction": -1,
+            "entry_index": 214,
+            "entry_ts": "2026-02-13 12:49:00",
+            "evidence": {
+              "crosses": 2,
+              "dist_bps": 9.89538246576993,
+              "vwap": 60383.902180685356
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -12.303365849373193,
+            "mfe_bps": 6.226299024849613,
+            "outcome_bps": -7.793237128308483,
+            "session": "20260213",
+            "symbol": "BANKNIFTY"
+          }
+        ],
+        "summary": {
+          "candidate_count": 252,
+          "direction_breakdown": [
+            {
+              "count": 130,
+              "direction": -1,
+              "mean": -1.2685863498851029
+            },
+            {
+              "count": 122,
+              "direction": 1,
+              "mean": -0.6671304975728629
+            }
+          ],
+          "mae_mean_bps": -14.783178651903786,
+          "mean_bps": -0.9774053420196536,
+          "median_bps": -0.3170314318512446,
+          "mfe_mean_bps": 14.074119701200464,
+          "positive_candidate_fraction": 0.49603174603174605,
+          "positive_session_fraction": 0.46236559139784944,
+          "session_clustered_mean_ci_95": [
+            -3.241179967818259,
+            1.766704320558139
+          ],
+          "session_count": 93,
+          "single_session_concentration": 0.011904761904761904,
+          "symbol_breakdown": [
+            {
+              "count": 83,
+              "mean": -3.1889892231443016,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 84,
+              "mean": 0.6814599352086441,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 85,
+              "mean": -0.45720794382943164,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.05952380952380952
+        },
+        "verdict": "REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION",
+        "wfa": []
+      },
+      "final_lockbox_status": "OPENED_ONCE_PRE_REGISTERED_FINALIST",
+      "final_verdict": "REJECTED_FINAL_LOCKBOX_FAILURE|REJECTED_FINAL_LOCKBOX_MEAN_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_CLUSTERED_LOWER_CI_NOT_POSITIVE|REJECTED_FINAL_LOCKBOX_POSITIVE_SESSION_FRACTION",
+      "finalist_status": "REJECTED_FINAL_LOCKBOX_FAILURE",
+      "global_hypothesis_number": 8,
+      "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+      "hypothesis_name": "VWAP reclaim with distance rejection after two-sided trade",
+      "invalidation": "Setup-specific failed acceptance before entry.",
+      "known_prior_research": "Cycle 1 rejected gap, prior-day sweep, narrow opening escape, and cross-index opening lead-lag families.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "material_distinction_from_prior_work": "Cycle 2 mechanism family is not a threshold variant of Cycle 1; candidate identity depends on a different causal market structure.",
+      "mechanism_family": "intraday VWAP inventory transfer",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 1.578005087904998,
+        "direction_inversion_mean_bps": -0.3544845644332788,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 0.3544845644332788,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Fails sample, WFA, controls, sensitivity, concentration, or positive mean gates.",
+      "parameter_hash": "ba8c9c6851b24fc4b9e042fe20cab66211f68586bf879959f4b6e56c16f00296",
+      "parameter_ownership": "market-session structure and completed-bar mechanics",
+      "parameter_sensitivity_neighborhood": "integer minutes +/-1; bps/fractions 0.8x/1.0x/1.2x",
+      "parameter_units": {
+        "earliest_setup_minutes_from_open": "completed minutes from 09:15",
+        "minimum_vwap_crosses": "fraction/bool/count",
+        "primary_horizon_minutes": "completed minutes",
+        "reclaim_distance_bps": "basis points",
+        "setup_expiry_minutes_from_open": "completed minutes from 09:15"
+      },
+      "parameter_values": {
+        "earliest_setup_minutes_from_open": 60,
+        "minimum_vwap_crosses": 2,
+        "primary_horizon_minutes": 30,
+        "reclaim_distance_bps": 8,
+        "setup_expiry_minutes_from_open": 270
+      },
+      "participants_or_behavior": "Index hedgers, liquidity providers, intraday momentum/reversal participants, and benchmark-flow execution desks.",
+      "persistence_rationale": "The setup is tied to session microstructure and inventory transfer, not optimized indicator combinations.",
+      "primary_outcome": "Direction-normalized underlying bps over frozen primary horizon.",
+      "required_data": "Underlying one-minute OHLC candles for complete NIFTY, BANKNIFTY, SENSEX sessions.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": {
+        "controls": {
+          "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+          "deterministic_shuffle_mean_bps": -0.3869805429367711,
+          "direction_inversion_mean_bps": -0.20286017722565738,
+          "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+          "real_mean_bps": 0.20286017722565738,
+          "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+        },
+        "gate_failures": [],
+        "positive_wfa_folds": 0,
+        "rows_sample": [
+          {
+            "candidate_id": "1e29ebff0a6085c5cabac9070459d81e7a4db5c7feb5e1ed5c9070c6619c2bb9",
+            "direction": -1,
+            "entry_index": 93,
+            "entry_ts": "2025-09-15 10:48:00",
+            "evidence": {
+              "crosses": 4,
+              "dist_bps": 10.51669949552414,
+              "vwap": 25093.389964157705
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -7.9976067012355045,
+            "mfe_bps": 2.1340247307533033,
+            "outcome_bps": -0.9373753490216075,
+            "session": "20250915",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "1b6924d45aca7f9498720d7e7178b0f4ebdc6f3d42041b27bc61f7146b5b1715",
+            "direction": 1,
+            "entry_index": 81,
+            "entry_ts": "2025-09-15 10:36:00",
+            "evidence": {
+              "crosses": 4,
+              "dist_bps": 9.566801351414966,
+              "vwap": 54883.94362139918
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -14.157604344091634,
+            "mfe_bps": 0.5459230466864362,
+            "outcome_bps": -3.4393151941303213,
+            "session": "20250915",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "54dfb5544f0c84485eadc9b9cd0fa1b268c65b04b3b905926e7a77e9f92bd173",
+            "direction": -1,
+            "entry_index": 91,
+            "entry_ts": "2025-09-15 10:46:00",
+            "evidence": {
+              "crosses": 6,
+              "dist_bps": 9.06560888743968,
+              "vwap": 81881.28036630037
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -7.436173051715844,
+            "mfe_bps": 2.812861119840804,
+            "outcome_bps": 0.21270657751149002,
+            "session": "20250915",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "3a84bc90dfeeb21499fd64bfcbff29fbbac052ac0bd1efea2422001c54d6ee2c",
+            "direction": 1,
+            "entry_index": 187,
+            "entry_ts": "2025-09-17 12:22:00",
+            "evidence": {
+              "crosses": 5,
+              "dist_bps": 8.529867366782184,
+              "vwap": 55326.40730837789
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -2.6455766950872484,
+            "mfe_bps": 10.48298478838694,
+            "outcome_bps": 2.1128496472733183,
+            "session": "20250917",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "f8cb45c7f89765f3092369c9890faa79ef2f829f39eb67532a4dbfccf7f201c3",
+            "direction": 1,
+            "entry_index": 193,
+            "entry_ts": "2025-09-17 12:28:00",
+            "evidence": {
+              "crosses": 5,
+              "dist_bps": 8.351873280705302,
+              "vwap": 82648.37312607944
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -3.3021932439614154,
+            "mfe_bps": 4.754384414227264,
+            "outcome_bps": -1.0072233512337103,
+            "session": "20250917",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "60ed7abaf5876148df19214d2bd303e369f502f371ca9f00aef29dd2a73f59f8",
+            "direction": -1,
+            "entry_index": 200,
+            "entry_ts": "2025-09-18 12:35:00",
+            "evidence": {
+              "crosses": 14,
+              "dist_bps": 8.369648328231394,
+              "vwap": 25419.8255
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -5.748246489534203,
+            "mfe_bps": 20.551949777649625,
+            "outcome_bps": 13.74067140306301,
+            "session": "20250918",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "332acac12a77a7c267ae00733466584aeb14293d2ac76c4e1a70b71e9f1c1aa1",
+            "direction": -1,
+            "entry_index": 203,
+            "entry_ts": "2025-09-18 12:38:00",
+            "evidence": {
+              "crosses": 11,
+              "dist_bps": 13.932034763686207,
+              "vwap": 55761.4370279146
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -3.9860703002747577,
+            "mfe_bps": 36.45817903021653,
+            "outcome_bps": 22.147827546797892,
+            "session": "20250918",
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "candidate_id": "478f8e14a3944fee0a87b5eee3b25cf8a8062e38246a57abc4889c25a3278dc6",
+            "direction": -1,
+            "entry_index": 199,
+            "entry_ts": "2025-09-18 12:34:00",
+            "evidence": {
+              "crosses": 36,
+              "dist_bps": 8.573397394606719,
+              "vwap": 83021.93800670018
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -10.876345432151435,
+            "mfe_bps": 16.08295257681913,
+            "outcome_bps": 12.476801230386636,
+            "session": "20250918",
+            "symbol": "SENSEX"
+          },
+          {
+            "candidate_id": "6800a9f32378fb6469a1be030d5d4f21d9e67040c6ebdf8e44e8e0501452ad9a",
+            "direction": -1,
+            "entry_index": 93,
+            "entry_ts": "2025-09-19 10:48:00",
+            "evidence": {
+              "crosses": 4,
+              "dist_bps": 8.882655783784,
+              "vwap": 25335.10430107527
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -3.9700331626146834,
+            "mfe_bps": 5.155117688769861,
+            "outcome_bps": 2.3701690523081353,
+            "session": "20250919",
+            "symbol": "NIFTY"
+          },
+          {
+            "candidate_id": "3be542977c5019d63bb47f21e3ac8b441a728e792bfcd32ffd0993d1a5f97147",
+            "direction": -1,
+            "entry_index": 80,
+            "entry_ts": "2025-09-19 10:35:00",
+            "evidence": {
+              "crosses": 2,
+              "dist_bps": 10.463360958555823,
+              "vwap": 55543.61729166666
+            },
+            "horizon_minutes": 30,
+            "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+            "mae_bps": -2.432460920713808,
+            "mfe_bps": 12.558705642498058,
+            "outcome_bps": 7.081164013631458,
+            "session": "20250919",
+            "symbol": "BANKNIFTY"
+          }
+        ],
+        "summary": {
+          "candidate_count": 230,
+          "direction_breakdown": [
+            {
+              "count": 120,
+              "direction": -1,
+              "mean": 2.9971454445582397
+            },
+            {
+              "count": 110,
+              "direction": 1,
+              "mean": -2.845451023500796
+            }
+          ],
+          "mae_mean_bps": -9.647522197563715,
+          "mean_bps": 0.20286017722565738,
+          "median_bps": -0.10937194441174025,
+          "mfe_mean_bps": 9.897198671967189,
+          "positive_candidate_fraction": 0.5,
+          "positive_session_fraction": 0.5164835164835165,
+          "session_clustered_mean_ci_95": [
+            -1.4983194956551367,
+            3.318093065133948
+          ],
+          "session_count": 91,
+          "single_session_concentration": 0.013043478260869565,
+          "symbol_breakdown": [
+            {
+              "count": 78,
+              "mean": -0.42186535273145925,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 73,
+              "mean": 0.3348995981992289,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 79,
+              "mean": 0.6976666785621682,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.06521739130434782
+        },
+        "verdict": "SCREENING_GATE_PASS",
+        "wfa": []
+      },
+      "sensitivity_result": "DISCOVERY_STATIC_SENSITIVITY_NOT_OPTIMIZED",
+      "session_window": "Intraday completed-bar windows only.",
+      "setup_expiry": "Frozen per parameter values.",
+      "setup_state_machine": [
+        "Use completed bars only",
+        "Compute frozen structural levels",
+        "Wait for causal setup",
+        "Emit first legal next-bar candidate once"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
+      "specification_hash": "4ea6251a766a508b75075b4acdd725ede3e9ab8d8450e6b1a39a0df04f6ce769",
+      "structural_premise": "Two-sided trade around VWAP followed by accepted reclaim indicates inventory transfer from weak to strong hands."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 7,
+            "direction_breakdown": [
+              {
+                "count": 1,
+                "direction": -1,
+                "mean": -2.7670578815519598
+              },
+              {
+                "count": 6,
+                "direction": 1,
+                "mean": -15.279243163050886
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -29.671380162422178,
+            "mean_bps": -13.491788122836754,
+            "median_bps": -2.7670578815519598,
+            "mfe_mean_bps": 26.33138233669365,
+            "positive_candidate_fraction": 0.42857142857142855,
+            "positive_session_fraction": 0.25,
+            "session_clustered_mean_ci_95": [
+              -50.40434701770457,
+              10.593121568215347
+            ],
+            "session_count": 4,
+            "single_session_concentration": 0.42857142857142855,
+            "symbol_breakdown": [
+              {
+                "count": 2,
+                "mean": 5.777961957541544,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 2,
+                "mean": -22.56414674212781,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 3,
+                "mean": -20.290049096894915,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 1.0,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 0,
+            "fold": 2,
+            "mean_bps": null,
+            "median_bps": null,
+            "positive_candidate_fraction": null,
+            "positive_session_fraction": null,
+            "session_count": 0,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 7,
+            "direction_breakdown": [
+              {
+                "count": 2,
+                "direction": -1,
+                "mean": 11.370932275301392
+              },
+              {
+                "count": 5,
+                "direction": 1,
+                "mean": 0.46131677632255047
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -22.589276459475155,
+            "mean_bps": 3.578349776030791,
+            "median_bps": 7.841063280851213,
+            "mfe_mean_bps": 32.6579668253749,
+            "positive_candidate_fraction": 0.7142857142857143,
+            "positive_session_fraction": 0.6,
+            "session_clustered_mean_ci_95": [
+              -40.14654891606795,
+              34.223616586382064
+            ],
+            "session_count": 5,
+            "single_session_concentration": 0.2857142857142857,
+            "symbol_breakdown": [
+              {
+                "count": 5,
+                "mean": -1.625836787032543,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 2,
+                "mean": 16.588816183689126,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 1.0,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 9,
+            "direction_breakdown": [
+              {
+                "count": 4,
+                "direction": -1,
+                "mean": 31.894194094682916
+              },
+              {
+                "count": 5,
+                "direction": 1,
+                "mean": 2.3476569201994475
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -16.902693894280176,
+            "mean_bps": 15.47945121996988,
+            "median_bps": 26.854433960934454,
+            "mfe_mean_bps": 42.73357605773878,
+            "positive_candidate_fraction": 0.5555555555555556,
+            "positive_session_fraction": 0.5,
+            "session_clustered_mean_ci_95": [
+              -29.05315138027424,
+              42.41033236775318
+            ],
+            "session_count": 6,
+            "single_session_concentration": 0.2222222222222222,
+            "symbol_breakdown": [
+              {
+                "count": 2,
+                "mean": -48.255808419983005,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 3,
+                "mean": 37.74292727773854,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 4,
+                "mean": 30.64947399661982,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.8888888888888888,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 0,
+            "fold": 5,
+            "mean_bps": null,
+            "median_bps": null,
+            "positive_candidate_fraction": null,
+            "positive_session_fraction": null,
+            "session_count": 0,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 2
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 2,
+      "direction": "Defined by the frozen setup state machine.",
+      "discovery_candidate_count": 28,
+      "discovery_session_count": 20,
+      "entry_event": "First next completed bar after setup confirmation.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_INSUFFICIENT_DISCOVERY_CANDIDATES|REJECTED_INSUFFICIENT_DISCOVERY_SESSIONS|REJECTED_WFA_POSITIVE_FOLD_COUNT|REJECTED_SINGLE_SESSION_CONCENTRATION",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 9,
+      "hypothesis_id": "AC09_LARGE_OPENING_RANGE_MEAN_REVERSION",
+      "hypothesis_name": "Large opening range failed extension mean reversion",
+      "invalidation": "Setup-specific failed acceptance before entry.",
+      "known_prior_research": "Cycle 1 rejected gap, prior-day sweep, narrow opening escape, and cross-index opening lead-lag families.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "material_distinction_from_prior_work": "Cycle 2 mechanism family is not a threshold variant of Cycle 1; candidate identity depends on a different causal market structure.",
+      "mechanism_family": "post-large-opening-range mean reversion",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 3.5927175907727142,
+        "direction_inversion_mean_bps": -0.6886845730860333,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 0.6886845730860333,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Fails sample, WFA, controls, sensitivity, concentration, or positive mean gates.",
+      "parameter_hash": "f681ddd7a141071fe93edcd31dde5091b1019e6c674e566a7de3c518cb4e3fa2",
+      "parameter_ownership": "market-session structure and completed-bar mechanics",
+      "parameter_sensitivity_neighborhood": "integer minutes +/-1; bps/fractions 0.8x/1.0x/1.2x",
+      "parameter_units": {
+        "failed_extension_fraction": "fraction/bool/count",
+        "min_opening_range_width_bps": "basis points",
+        "opening_range_minutes": "completed minutes",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "completed minutes from 09:15"
+      },
+      "parameter_values": {
+        "failed_extension_fraction": 0.1,
+        "min_opening_range_width_bps": 90,
+        "opening_range_minutes": 30,
+        "primary_horizon_minutes": 60,
+        "setup_expiry_minutes_from_open": 180
+      },
+      "participants_or_behavior": "Index hedgers, liquidity providers, intraday momentum/reversal participants, and benchmark-flow execution desks.",
+      "persistence_rationale": "The setup is tied to session microstructure and inventory transfer, not optimized indicator combinations.",
+      "primary_outcome": "Direction-normalized underlying bps over frozen primary horizon.",
+      "required_data": "Underlying one-minute OHLC candles for complete NIFTY, BANKNIFTY, SENSEX sessions.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "DISCOVERY_STATIC_SENSITIVITY_NOT_OPTIMIZED",
+      "session_window": "Intraday completed-bar windows only.",
+      "setup_expiry": "Frozen per parameter values.",
+      "setup_state_machine": [
+        "Use completed bars only",
+        "Compute frozen structural levels",
+        "Wait for causal setup",
+        "Emit first legal next-bar candidate once"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
+      "specification_hash": "fcb43ef88d4d017a994fff42fadb333743c5518937cf39cbf08f783adc5e80b9",
+      "structural_premise": "A very large first-30-minute range that cannot extend often reflects exhausted opening inventory and mean reverts toward its midpoint."
+    },
+    {
+      "WFA_results": {
+        "folds": [
+          {
+            "candidate_count": 65,
+            "direction_breakdown": [
+              {
+                "count": 35,
+                "direction": -1,
+                "mean": 2.774206236243597
+              },
+              {
+                "count": 30,
+                "direction": 1,
+                "mean": 12.77908179961873
+              }
+            ],
+            "fold": 1,
+            "mae_mean_bps": -10.992009355713957,
+            "mean_bps": 7.391841111647505,
+            "median_bps": 5.277085769361811,
+            "mfe_mean_bps": 21.879742199286678,
+            "positive_candidate_fraction": 0.5846153846153846,
+            "positive_session_fraction": 0.5769230769230769,
+            "session_clustered_mean_ci_95": [
+              0.6322952888246003,
+              13.973575830083616
+            ],
+            "session_count": 26,
+            "single_session_concentration": 0.046153846153846156,
+            "symbol_breakdown": [
+              {
+                "count": 20,
+                "mean": 11.993231742541465,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 22,
+                "mean": 5.988964751713823,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 23,
+                "mean": 4.732513602980625,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.23076923076923078,
+            "validation_end": "20241122",
+            "validation_start": "20240911"
+          },
+          {
+            "candidate_count": 67,
+            "direction_breakdown": [
+              {
+                "count": 37,
+                "direction": -1,
+                "mean": -4.039654786555732
+              },
+              {
+                "count": 30,
+                "direction": 1,
+                "mean": -2.0484479871854715
+              }
+            ],
+            "fold": 2,
+            "mae_mean_bps": -16.89450017694946,
+            "mean_bps": -3.148069652509346,
+            "median_bps": -2.2414033722539806,
+            "mfe_mean_bps": 13.128796439618048,
+            "positive_candidate_fraction": 0.43283582089552236,
+            "positive_session_fraction": 0.36666666666666664,
+            "session_clustered_mean_ci_95": [
+              -12.158757705299136,
+              -0.4389451048639993
+            ],
+            "session_count": 30,
+            "single_session_concentration": 0.04477611940298507,
+            "symbol_breakdown": [
+              {
+                "count": 19,
+                "mean": -7.557094543369883,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 24,
+                "mean": -1.9985897979584812,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 24,
+                "mean": -0.8070714684622894,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.22388059701492538,
+            "validation_end": "20250203",
+            "validation_start": "20241125"
+          },
+          {
+            "candidate_count": 52,
+            "direction_breakdown": [
+              {
+                "count": 24,
+                "direction": -1,
+                "mean": -3.103636577513335
+              },
+              {
+                "count": 28,
+                "direction": 1,
+                "mean": 0.7659929852985025
+              }
+            ],
+            "fold": 3,
+            "mae_mean_bps": -12.15492782191499,
+            "mean_bps": -1.0199898898454227,
+            "median_bps": -0.9435318659700709,
+            "mfe_mean_bps": 10.124209108626344,
+            "positive_candidate_fraction": 0.4807692307692308,
+            "positive_session_fraction": 0.4090909090909091,
+            "session_clustered_mean_ci_95": [
+              -8.374391165341633,
+              1.4687727951315652
+            ],
+            "session_count": 22,
+            "single_session_concentration": 0.057692307692307696,
+            "symbol_breakdown": [
+              {
+                "count": 16,
+                "mean": -1.8757853442583767,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 19,
+                "mean": -1.168642770454744,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 17,
+                "mean": -0.048393889716930365,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.28846153846153844,
+            "validation_end": "20250422",
+            "validation_start": "20250204"
+          },
+          {
+            "candidate_count": 51,
+            "direction_breakdown": [
+              {
+                "count": 27,
+                "direction": -1,
+                "mean": -5.547626968197796
+              },
+              {
+                "count": 24,
+                "direction": 1,
+                "mean": -5.772394909637259
+              }
+            ],
+            "fold": 4,
+            "mae_mean_bps": -13.513529620183773,
+            "mean_bps": -5.653400117110485,
+            "median_bps": -2.5711347274604,
+            "mfe_mean_bps": 10.628237359296833,
+            "positive_candidate_fraction": 0.37254901960784315,
+            "positive_session_fraction": 0.4166666666666667,
+            "session_clustered_mean_ci_95": [
+              -12.471407173989745,
+              -0.47609733829195844
+            ],
+            "session_count": 24,
+            "single_session_concentration": 0.058823529411764705,
+            "symbol_breakdown": [
+              {
+                "count": 17,
+                "mean": -4.8695623397705905,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 16,
+                "mean": -3.8682534588739546,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 18,
+                "mean": -7.980488380808412,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.29411764705882354,
+            "validation_end": "20250702",
+            "validation_start": "20250423"
+          },
+          {
+            "candidate_count": 78,
+            "direction_breakdown": [
+              {
+                "count": 42,
+                "direction": -1,
+                "mean": 2.7579334054671816
+              },
+              {
+                "count": 36,
+                "direction": 1,
+                "mean": -1.9713875539778856
+              }
+            ],
+            "fold": 5,
+            "mae_mean_bps": -10.570677907988083,
+            "mean_bps": 0.575169885723305,
+            "median_bps": 0.35023320185789686,
+            "mfe_mean_bps": 11.884798967828035,
+            "positive_candidate_fraction": 0.5,
+            "positive_session_fraction": 0.47058823529411764,
+            "session_clustered_mean_ci_95": [
+              -4.812004825317806,
+              3.691710457504888
+            ],
+            "session_count": 34,
+            "single_session_concentration": 0.038461538461538464,
+            "symbol_breakdown": [
+              {
+                "count": 22,
+                "mean": 1.8927010498914258,
+                "symbol": "BANKNIFTY"
+              },
+              {
+                "count": 29,
+                "mean": -0.07773318216357669,
+                "symbol": "NIFTY"
+              },
+              {
+                "count": 27,
+                "mean": 0.20289223227963332,
+                "symbol": "SENSEX"
+              }
+            ],
+            "top_five_session_concentration": 0.19230769230769232,
+            "validation_end": "20250912",
+            "validation_start": "20250703"
+          }
+        ],
+        "positive_folds": 2
+      },
+      "allowed_symbols": [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+      ],
+      "cycle_number": 2,
+      "direction": "Defined by the frozen setup state machine.",
+      "discovery_candidate_count": 364,
+      "discovery_session_count": 161,
+      "entry_event": "First next completed bar after setup confirmation.",
+      "final_lockbox_status": "NOT_OPENED",
+      "final_verdict": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "finalist_status": "REJECTED_BEFORE_SCREENING",
+      "global_hypothesis_number": 10,
+      "hypothesis_id": "AC10_LATE_SESSION_RANGE_ESCAPE",
+      "hypothesis_name": "Late-session morning range escape continuation",
+      "invalidation": "Setup-specific failed acceptance before entry.",
+      "known_prior_research": "Cycle 1 rejected gap, prior-day sweep, narrow opening escape, and cross-index opening lead-lag families.",
+      "legal_entry_timestamp": "Next completed one-minute timestamp after confirmation.",
+      "material_distinction_from_prior_work": "Cycle 2 mechanism family is not a threshold variant of Cycle 1; candidate identity depends on a different causal market structure.",
+      "mechanism_family": "late-session range escape",
+      "negative_control_result": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -0.00979802807904568,
+        "direction_inversion_mean_bps": -0.18079828492155123,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 0.18079828492155123,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "negative_expectation_falsifier": "Fails sample, WFA, controls, sensitivity, concentration, or positive mean gates.",
+      "parameter_hash": "2342148397215fea60cc56be6c02b5a73b76963eaba68d1da18047a43b6a72bd",
+      "parameter_ownership": "market-session structure and completed-bar mechanics",
+      "parameter_sensitivity_neighborhood": "integer minutes +/-1; bps/fractions 0.8x/1.0x/1.2x",
+      "parameter_units": {
+        "escape_fraction_of_range": "fraction/bool/count",
+        "late_start_minutes_from_open": "completed minutes from 09:15",
+        "morning_range_end_minutes_from_open": "completed minutes from 09:15",
+        "primary_horizon_minutes": "completed minutes",
+        "setup_expiry_minutes_from_open": "completed minutes from 09:15"
+      },
+      "parameter_values": {
+        "escape_fraction_of_range": 0.1,
+        "late_start_minutes_from_open": 285,
+        "morning_range_end_minutes_from_open": 225,
+        "primary_horizon_minutes": 30,
+        "setup_expiry_minutes_from_open": 360
+      },
+      "participants_or_behavior": "Index hedgers, liquidity providers, intraday momentum/reversal participants, and benchmark-flow execution desks.",
+      "persistence_rationale": "The setup is tied to session microstructure and inventory transfer, not optimized indicator combinations.",
+      "primary_outcome": "Direction-normalized underlying bps over frozen primary horizon.",
+      "required_data": "Underlying one-minute OHLC candles for complete NIFTY, BANKNIFTY, SENSEX sessions.",
+      "safety_flags": {
+        "allowed_for_live_execution": false,
+        "broker_api_called": false,
+        "execution_eligibility": false,
+        "is_order_action": false,
+        "read_only": true
+      },
+      "screening_result": "NOT_OPENED_DISCOVERY_GATE_FAILED",
+      "sensitivity_result": "DISCOVERY_STATIC_SENSITIVITY_NOT_OPTIMIZED",
+      "session_window": "Intraday completed-bar windows only.",
+      "setup_expiry": "Frozen per parameter values.",
+      "setup_state_machine": [
+        "Use completed bars only",
+        "Compute frozen structural levels",
+        "Wait for causal setup",
+        "Emit first legal next-bar candidate once"
+      ],
+      "single_emission_rule": "At most one candidate per symbol-session unless explicitly market-wide.",
+      "specification_hash": "6ae0ae75928c444a45e8153d19f6312348092f36c732f47df359b0becf26a114",
+      "structural_premise": "A close outside the morning range after 14:00 can reflect closing hedging/index-flow pressure rather than ordinary midday noise."
+    }
+  ],
+  "multiple_testing": "Holm-Bonferroni across cumulative family; project alpha not reset",
+  "new_hypotheses": [],
+  "prior_hypotheses_carried_forward": 10,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "total_cumulative_hypotheses": 10
+}

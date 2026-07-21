@@ -1,0 +1,29 @@
+{
+  "cycle_1_and_2_complete": true,
+  "final_lockbox_hypotheses": [
+    "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+    "AC08_VWAP_INVENTORY_TRANSFER"
+  ],
+  "finalists_frozen_before_lockbox": true,
+  "lockbox_opened_once": true,
+  "parameters_changed_after_freeze": false,
+  "prior_epoch_closed": true,
+  "prior_epoch_commit": "1a634de22a99767fdac81c16348fbd2afb93d4d9",
+  "production_files_changed": false,
+  "required_conclusion": {
+    "AC07_RETEST_ON_OLD_LOCKBOX": "PROHIBITED",
+    "AC08_RETEST_ON_OLD_LOCKBOX": "PROHIBITED",
+    "OLD_LOCKBOX_REUSABLE": "NO",
+    "PRIOR_EPOCH_CLOSED": "YES"
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "ten_hypothesis_ledger_exists": true,
+  "third_hypothesis_evaluated_after_opening": false
+}

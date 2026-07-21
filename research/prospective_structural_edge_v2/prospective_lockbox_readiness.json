@@ -1,0 +1,23 @@
+{
+  "blockers": [
+    "INSUFFICIENT_ELIGIBLE_SESSIONS",
+    "INSUFFICIENT_CALENDAR_SPAN"
+  ],
+  "calendar_span_days": 0,
+  "eligible_sessions": 0,
+  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
+  "first_eligible_session": null,
+  "last_eligible_session": null,
+  "lockbox_seal_status": "NOT_READY",
+  "prospective_outcomes_inspected": false,
+  "remaining_calendar_days_required": 120,
+  "remaining_sessions_required": 80,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

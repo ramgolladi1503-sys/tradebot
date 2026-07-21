@@ -1,0 +1,13 @@
+{
+  "cycles": [],
+  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
+  "next_cycle": 3,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

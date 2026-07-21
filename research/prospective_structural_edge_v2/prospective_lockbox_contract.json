@@ -1,0 +1,23 @@
+{
+  "calendar_span_days": 0,
+  "eligible_sessions": 0,
+  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
+  "first_eligible_session": null,
+  "last_eligible_session": null,
+  "lockbox_status": "NOT_READY",
+  "prospective_outcomes_inspected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "seal_conditions": {
+    "finalists_frozen": true,
+    "min_calendar_span_days": 120,
+    "min_eligible_sessions": 80,
+    "remaining_alpha_frozen": true
+  }
+}

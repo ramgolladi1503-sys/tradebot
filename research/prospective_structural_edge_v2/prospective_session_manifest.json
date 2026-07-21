@@ -1,0 +1,469 @@
+{
+  "after_session": "20260710",
+  "eligible_first_session": null,
+  "eligible_last_session": null,
+  "eligible_session_count": 0,
+  "epoch_id": "PROSPECTIVE_STRUCTURAL_EDGE_EPOCH_V2",
+  "prospective_outcomes_inspected": false,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "sessions": [
+    {
+      "all_statuses": [
+        "MISSING_REQUIRED_SYMBOL"
+      ],
+      "eligibility_status": "MISSING_REQUIRED_SYMBOL",
+      "session": "20260713",
+      "source_files": [
+        {
+          "first_timestamp": "2026-07-13 09:15:00",
+          "flags": {
+            "fallback": false,
+            "mock": false,
+            "synthetic": false
+          },
+          "last_timestamp": "2026-07-13 15:29:00",
+          "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260713/underlying/BSE_INDEX|SENSEX_20260713.parquet",
+          "row_count": 375,
+          "schema": [
+            {
+              "name": "timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "symbol",
+              "type": "string"
+            },
+            {
+              "name": "open",
+              "type": "double"
+            },
+            {
+              "name": "high",
+              "type": "double"
+            },
+            {
+              "name": "low",
+              "type": "double"
+            },
+            {
+              "name": "close",
+              "type": "double"
+            },
+            {
+              "name": "volume",
+              "type": "double"
+            },
+            {
+              "name": "oi",
+              "type": "double"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "interval",
+              "type": "string"
+            },
+            {
+              "name": "fetch_timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "fetch_start_date",
+              "type": "string"
+            },
+            {
+              "name": "fetch_end_date",
+              "type": "string"
+            },
+            {
+              "name": "data_origin",
+              "type": "string"
+            },
+            {
+              "name": "synthetic",
+              "type": "bool"
+            },
+            {
+              "name": "mock",
+              "type": "bool"
+            },
+            {
+              "name": "fallback",
+              "type": "bool"
+            },
+            {
+              "name": "provider",
+              "type": "string"
+            },
+            {
+              "name": "source_endpoint",
+              "type": "string"
+            },
+            {
+              "name": "__index_level_0__",
+              "type": "int64"
+            }
+          ],
+          "schema_identity": "d0e76fab29d05126a77f40a3801f48c9c2a95110c77495b6eeddb3915260d0ef",
+          "sha256": "2193affbfa519c57da8db493ca8abb377a58804ee25176cfa1d9aa4a0ec10d89",
+          "size_bytes": 28655,
+          "symbol_class": "SENSEX",
+          "timestamp_order_valid": true
+        }
+      ],
+      "symbols_present": [
+        "SENSEX"
+      ]
+    },
+    {
+      "all_statuses": [
+        "MISSING_REQUIRED_SYMBOL"
+      ],
+      "eligibility_status": "MISSING_REQUIRED_SYMBOL",
+      "session": "20260714",
+      "source_files": [
+        {
+          "first_timestamp": "2026-07-14 09:15:00",
+          "flags": {
+            "fallback": false,
+            "mock": false,
+            "synthetic": false
+          },
+          "last_timestamp": "2026-07-14 15:29:00",
+          "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260714/underlying/BSE_INDEX|SENSEX_20260714.parquet",
+          "row_count": 375,
+          "schema": [
+            {
+              "name": "timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "symbol",
+              "type": "string"
+            },
+            {
+              "name": "open",
+              "type": "double"
+            },
+            {
+              "name": "high",
+              "type": "double"
+            },
+            {
+              "name": "low",
+              "type": "double"
+            },
+            {
+              "name": "close",
+              "type": "double"
+            },
+            {
+              "name": "volume",
+              "type": "double"
+            },
+            {
+              "name": "oi",
+              "type": "double"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "interval",
+              "type": "string"
+            },
+            {
+              "name": "fetch_timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "fetch_start_date",
+              "type": "string"
+            },
+            {
+              "name": "fetch_end_date",
+              "type": "string"
+            },
+            {
+              "name": "data_origin",
+              "type": "string"
+            },
+            {
+              "name": "synthetic",
+              "type": "bool"
+            },
+            {
+              "name": "mock",
+              "type": "bool"
+            },
+            {
+              "name": "fallback",
+              "type": "bool"
+            },
+            {
+              "name": "provider",
+              "type": "string"
+            },
+            {
+              "name": "source_endpoint",
+              "type": "string"
+            },
+            {
+              "name": "__index_level_0__",
+              "type": "int64"
+            }
+          ],
+          "schema_identity": "d0e76fab29d05126a77f40a3801f48c9c2a95110c77495b6eeddb3915260d0ef",
+          "sha256": "6000248689a56b6baa0ae436970bbf2709c780b0aee359efaa7b1c40ca534ac0",
+          "size_bytes": 28582,
+          "symbol_class": "SENSEX",
+          "timestamp_order_valid": true
+        }
+      ],
+      "symbols_present": [
+        "SENSEX"
+      ]
+    },
+    {
+      "all_statuses": [
+        "MISSING_REQUIRED_SYMBOL"
+      ],
+      "eligibility_status": "MISSING_REQUIRED_SYMBOL",
+      "session": "20260715",
+      "source_files": [
+        {
+          "first_timestamp": "2026-07-15 09:15:00",
+          "flags": {
+            "fallback": false,
+            "mock": false,
+            "synthetic": false
+          },
+          "last_timestamp": "2026-07-15 15:29:00",
+          "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260715/underlying/BSE_INDEX|SENSEX_20260715.parquet",
+          "row_count": 375,
+          "schema": [
+            {
+              "name": "timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "symbol",
+              "type": "string"
+            },
+            {
+              "name": "open",
+              "type": "double"
+            },
+            {
+              "name": "high",
+              "type": "double"
+            },
+            {
+              "name": "low",
+              "type": "double"
+            },
+            {
+              "name": "close",
+              "type": "double"
+            },
+            {
+              "name": "volume",
+              "type": "double"
+            },
+            {
+              "name": "oi",
+              "type": "double"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "interval",
+              "type": "string"
+            },
+            {
+              "name": "fetch_timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "fetch_start_date",
+              "type": "string"
+            },
+            {
+              "name": "fetch_end_date",
+              "type": "string"
+            },
+            {
+              "name": "data_origin",
+              "type": "string"
+            },
+            {
+              "name": "synthetic",
+              "type": "bool"
+            },
+            {
+              "name": "mock",
+              "type": "bool"
+            },
+            {
+              "name": "fallback",
+              "type": "bool"
+            },
+            {
+              "name": "provider",
+              "type": "string"
+            },
+            {
+              "name": "source_endpoint",
+              "type": "string"
+            },
+            {
+              "name": "__index_level_0__",
+              "type": "int64"
+            }
+          ],
+          "schema_identity": "d0e76fab29d05126a77f40a3801f48c9c2a95110c77495b6eeddb3915260d0ef",
+          "sha256": "55d67786c5a5c6ba91dfeb239328b0e2e154e126df1e5af7b1baebaa6c93b808",
+          "size_bytes": 28554,
+          "symbol_class": "SENSEX",
+          "timestamp_order_valid": true
+        }
+      ],
+      "symbols_present": [
+        "SENSEX"
+      ]
+    },
+    {
+      "all_statuses": [
+        "MISSING_REQUIRED_SYMBOL"
+      ],
+      "eligibility_status": "MISSING_REQUIRED_SYMBOL",
+      "session": "20260716",
+      "source_files": [
+        {
+          "first_timestamp": "2026-07-16 09:15:00",
+          "flags": {
+            "fallback": false,
+            "mock": false,
+            "synthetic": false
+          },
+          "last_timestamp": "2026-07-16 15:29:00",
+          "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20260716/underlying/BSE_INDEX|SENSEX_20260716.parquet",
+          "row_count": 375,
+          "schema": [
+            {
+              "name": "timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "symbol",
+              "type": "string"
+            },
+            {
+              "name": "open",
+              "type": "double"
+            },
+            {
+              "name": "high",
+              "type": "double"
+            },
+            {
+              "name": "low",
+              "type": "double"
+            },
+            {
+              "name": "close",
+              "type": "double"
+            },
+            {
+              "name": "volume",
+              "type": "double"
+            },
+            {
+              "name": "oi",
+              "type": "double"
+            },
+            {
+              "name": "source",
+              "type": "string"
+            },
+            {
+              "name": "interval",
+              "type": "string"
+            },
+            {
+              "name": "fetch_timestamp",
+              "type": "timestamp[ns]"
+            },
+            {
+              "name": "fetch_start_date",
+              "type": "string"
+            },
+            {
+              "name": "fetch_end_date",
+              "type": "string"
+            },
+            {
+              "name": "data_origin",
+              "type": "string"
+            },
+            {
+              "name": "synthetic",
+              "type": "bool"
+            },
+            {
+              "name": "mock",
+              "type": "bool"
+            },
+            {
+              "name": "fallback",
+              "type": "bool"
+            },
+            {
+              "name": "provider",
+              "type": "string"
+            },
+            {
+              "name": "source_endpoint",
+              "type": "string"
+            },
+            {
+              "name": "__index_level_0__",
+              "type": "int64"
+            }
+          ],
+          "schema_identity": "d0e76fab29d05126a77f40a3801f48c9c2a95110c77495b6eeddb3915260d0ef",
+          "sha256": "4abbec36e364bc97b1d2feba01485e5f1ea662309165484840db470e5befc681",
+          "size_bytes": 28575,
+          "symbol_class": "SENSEX",
+          "timestamp_order_valid": true
+        }
+      ],
+      "symbols_present": [
+        "SENSEX"
+      ]
+    },
+    {
+      "all_statuses": [
+        "MISSING_REQUIRED_SYMBOL",
+        "INCOMPLETE_MULTI_INDEX_SESSION"
+      ],
+      "eligibility_status": "MISSING_REQUIRED_SYMBOL",
+      "session": "20260717",
+      "source_files": [],
+      "symbols_present": []
+    }
+  ],
+  "source_root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay"
+}

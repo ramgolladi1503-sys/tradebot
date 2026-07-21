@@ -1,0 +1,24 @@
+{
+  "alpha_reset": false,
+  "prior_alpha_assigned": {
+    "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION": 0.025,
+    "AC08_VWAP_INVENTORY_TRANSFER": 0.015
+  },
+  "prior_alpha_contract_source": "research/three_year_structural_edge_discovery/pre_holdout_finalist_registry.json",
+  "prior_alpha_spent": 0.04,
+  "prospective_allocation_if_finalists_freeze": {
+    "FINALIST_1": 0.005,
+    "FINALIST_2": 0.003,
+    "FINALIST_3": 0.002
+  },
+  "remaining_project_alpha": 0.01,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "unused_prior_finalist_allocation": 0.01
+}

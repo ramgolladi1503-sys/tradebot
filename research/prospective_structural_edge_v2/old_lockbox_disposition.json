@@ -1,0 +1,18 @@
+{
+  "CONTINUATION_REQUIREMENT": "FRESH_PROSPECTIVE_LOCKBOX_REQUIRED",
+  "OLD_EPOCH_EDGE_VERDICT": "NO_EDGE_CONFIRMED_AVAILABLE_CORPUS_EPOCH_V1",
+  "OLD_LOCKBOX_STATUS": "OPENED_ONCE_AND_EXHAUSTED",
+  "old_lockbox_reused": false,
+  "prohibited_retests": [
+    "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+    "AC08_VWAP_INVENTORY_TRANSFER"
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}
