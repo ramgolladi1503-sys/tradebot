@@ -14,10 +14,12 @@ from .contracts import (
     FEATURE_SCHEMA_VERSION,
     LABEL_SCHEMA_VERSION,
     DiscoveryConfig,
+    FeatureImputation,
     RuleCondition,
     StrategyCandidate,
 )
-from .dataset import model_feature_names
+from .dataset import model_feature_names, semantic_dataset_hash
+from .evaluation import candidate_mask
 
 
 @dataclass
@@ -35,8 +37,8 @@ def _binary_target(frame: pd.DataFrame) -> np.ndarray:
     return (frame["barrier_outcome"] == "TARGET_FIRST").astype(int).to_numpy()
 
 
-def _candidate_id(conditions: list[RuleCondition]) -> str:
-    raw = "|".join(
+def _candidate_id(side: str, conditions: list[RuleCondition]) -> str:
+    raw = side.upper() + "|" + "|".join(
         f"{condition.feature}{condition.operator}{condition.threshold:.10g}"
         for condition in conditions
     )
@@ -47,6 +49,7 @@ def extract_tree_candidates(
     tree: DecisionTreeClassifier,
     *,
     feature_names: tuple[str, ...],
+    imputation_statistics: np.ndarray,
     development: pd.DataFrame,
     development_matrix: np.ndarray,
     config: DiscoveryConfig,
@@ -57,18 +60,30 @@ def extract_tree_candidates(
     structure = tree.tree_
     candidates: list[StrategyCandidate] = []
     development_leaf_ids = tree.apply(development_matrix)
+    source_dataset_hash = semantic_dataset_hash(development)
+    imputation_by_feature = {
+        name: float(imputation_statistics[index])
+        for index, name in enumerate(feature_names)
+    }
 
     def visit(node_id: int, conditions: list[RuleCondition]) -> None:
         feature_index = structure.feature[node_id]
         if feature_index == _tree.TREE_UNDEFINED:
+            if not conditions:
+                return
             samples = int(structure.n_node_samples[node_id])
             values = structure.value[node_id][0]
             total = float(values.sum())
-            probability = float(values[1] / total) if total > 0 and len(values) > 1 else 0.0
+            probability = (
+                float(values[1] / total)
+                if total > 0 and len(values) > 1
+                else 0.0
+            )
             if samples < minimum_leaf_rows or probability < minimum_leaf_probability:
                 return
+            condition_features = tuple(dict.fromkeys(item.feature for item in conditions))
             candidate = StrategyCandidate(
-                candidate_id=_candidate_id(conditions),
+                candidate_id=_candidate_id(config.label_side, conditions),
                 conditions=tuple(conditions),
                 target_atr=config.target_atr,
                 stop_atr=config.stop_atr,
@@ -79,9 +94,21 @@ def extract_tree_candidates(
                 discovery_end=str(development["decision_timestamp"].max()),
                 discovery_rows=samples,
                 discovery_sessions=int(
-                    development.loc[development_leaf_ids == node_id, "session_date"].nunique()
+                    development.loc[
+                        development_leaf_ids == node_id, "session_date"
+                    ].nunique()
                 ),
                 leaf_probability=probability,
+                leaf_node_id=int(node_id),
+                label_side=config.label_side.upper(),
+                source_dataset_hash=source_dataset_hash,
+                imputation_values=tuple(
+                    FeatureImputation(
+                        feature=feature,
+                        value=imputation_by_feature[feature],
+                    )
+                    for feature in condition_features
+                ),
             )
             candidates.append(candidate)
             return
@@ -99,10 +126,35 @@ def extract_tree_candidates(
 
     visit(0, [])
     candidates.sort(
-        key=lambda candidate: (candidate.leaf_probability, candidate.discovery_rows),
+        key=lambda candidate: (
+            candidate.leaf_probability,
+            candidate.discovery_rows,
+        ),
         reverse=True,
     )
     return tuple(candidates[:maximum_candidates])
+
+
+def _assert_candidate_leaf_reproduction(
+    *,
+    development: pd.DataFrame,
+    development_matrix: np.ndarray,
+    tree: DecisionTreeClassifier,
+    candidates: tuple[StrategyCandidate, ...],
+) -> None:
+    leaf_ids = tree.apply(development_matrix)
+    for candidate in candidates:
+        expected = pd.Series(
+            leaf_ids == candidate.leaf_node_id,
+            index=development.index,
+        )
+        observed = candidate_mask(development, candidate)
+        if not expected.equals(observed):
+            disagreement = int((expected != observed).sum())
+            raise AssertionError(
+                "extracted candidate does not reproduce its source tree leaf: "
+                f"candidate={candidate.candidate_id} disagreements={disagreement}"
+            )
 
 
 def train_discovery_models(
@@ -112,20 +164,25 @@ def train_discovery_models(
     max_tree_depth: int = 4,
     minimum_leaf_rows: int = 30,
 ) -> DiscoveryArtifacts:
-    """Fit on DEVELOPMENT and score VALIDATION without touching HOLDOUT_LOCKED."""
+    """Fit on DEVELOPMENT and score VALIDATION without fitting on holdout rows."""
 
     config = config or DiscoveryConfig()
     if "split" not in split_dataset.columns:
         raise ValueError("chronological split column is required")
-    development = split_dataset.loc[split_dataset["split"] == "DEVELOPMENT"].copy()
-    validation = split_dataset.loc[split_dataset["split"] == "VALIDATION"].copy()
+    development = split_dataset.loc[
+        split_dataset["split"] == "DEVELOPMENT"
+    ].copy()
+    validation = split_dataset.loc[
+        split_dataset["split"] == "VALIDATION"
+    ].copy()
     if development.empty or validation.empty:
         raise ValueError("development and validation partitions are required")
 
     feature_names = tuple(
         name
         for name in model_feature_names(split_dataset)
-        if development[name].notna().any() and development[name].nunique(dropna=True) > 1
+        if development[name].notna().any()
+        and development[name].nunique(dropna=True) > 1
     )
     if not feature_names:
         raise ValueError("no numeric discovery features available")
@@ -171,7 +228,7 @@ def train_discovery_models(
     metrics: dict[str, float | int | None] = {
         "development_rows": int(len(development)),
         "validation_rows": int(len(validation)),
-        "holdout_rows_not_read": int(
+        "holdout_rows_excluded_from_fit_and_score": int(
             (split_dataset["split"] == "HOLDOUT_LOCKED").sum()
         ),
         "tree_validation_auc": (
@@ -180,7 +237,11 @@ def train_discovery_models(
             else None
         ),
         "tree_validation_precision_at_0_55": float(
-            precision_score(y_validation, tree_probability >= 0.55, zero_division=0)
+            precision_score(
+                y_validation,
+                tree_probability >= 0.55,
+                zero_division=0,
+            )
         ),
         "xgb_validation_auc": (
             float(roc_auc_score(y_validation, xgb_probability))
@@ -188,7 +249,13 @@ def train_discovery_models(
             else None
         ),
         "xgb_validation_precision_at_0_55": (
-            float(precision_score(y_validation, xgb_probability >= 0.55, zero_division=0))
+            float(
+                precision_score(
+                    y_validation,
+                    xgb_probability >= 0.55,
+                    zero_division=0,
+                )
+            )
             if xgb_probability is not None
             else None
         ),
@@ -197,11 +264,19 @@ def train_discovery_models(
     candidates = extract_tree_candidates(
         shallow_tree,
         feature_names=feature_names,
+        imputation_statistics=imputer.statistics_,
         development=development,
         development_matrix=x_development,
         config=config,
         minimum_leaf_rows=minimum_leaf_rows,
     )
+    _assert_candidate_leaf_reproduction(
+        development=development,
+        development_matrix=x_development,
+        tree=shallow_tree,
+        candidates=candidates,
+    )
+
     tree_importance = shallow_tree.feature_importances_
     xgb_importance = (
         xgboost_model.feature_importances_
@@ -218,7 +293,10 @@ def train_discovery_models(
                 }
                 for index, name in enumerate(feature_names)
             ),
-            key=lambda row: (row["xgb_importance"], row["tree_importance"]),
+            key=lambda row: (
+                row["xgb_importance"],
+                row["tree_importance"],
+            ),
             reverse=True,
         )
     )
