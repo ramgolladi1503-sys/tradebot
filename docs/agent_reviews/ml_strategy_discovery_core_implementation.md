@@ -45,6 +45,9 @@ Opening-range values are masked until the opening range is complete.
 ### Path-dependent labels
 
 - target-first, stop-first, neither, and same-bar ambiguity
+- separate LONG and SHORT directional labeling
+- full horizon must remain inside the same trading session
+- incomplete end-of-session labels are excluded from model-ready rows
 - configurable target, stop, and horizon in ATR units
 - bars to event
 - maximum favorable and adverse excursion
@@ -65,6 +68,7 @@ Opening-range values are masked until the opening range is complete.
 - development-only fitting
 - validation-only model metrics
 - locked holdout not passed into fitting or validation scoring
+- no trading session can appear in more than one partition
 - ranked tree and XGBoost feature importance
 - extraction of frozen `StrategyCandidate` rule contracts
 
@@ -72,7 +76,7 @@ Opening-range values are masked until the opening range is complete.
 
 - deterministic rule evaluator
 - profit factor, expectancy, win rate, total R, sessions, and drawdown
-- contiguous frozen-rule validation folds
+- contiguous whole-session frozen-rule validation folds
 - label-permutation control
 - timestamp-shift control
 - individual-condition ablations
@@ -114,17 +118,19 @@ Executed locally against the isolated implementation:
 
 Result:
 
-`7 passed`
+`9 passed`
 
 Covered behaviors:
 
 1. deterministic dataset hashes and explicit missing-option status
 2. duplicate timestamps fail closed
 3. future mutation changes labels but not features
-4. chronological split and holdout ordering
+4. chronological whole-session split and holdout ordering
 5. holdout mutations do not change trained models, candidates, or validation metrics
 6. rule evaluation, negative controls, stability tests, oracle agreement, and holdout guard
 7. same-bar target/stop ambiguity is explicit and conservatively valued
+8. barrier labels never cross a trading-session boundary
+9. short-side barrier labels are directionally correct
 
 ## Truthful final verdict
 
