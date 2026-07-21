@@ -41,6 +41,9 @@ def test_causal_htf_sma_ignores_future_close_in_current_bucket():
 
     assert np.isfinite(actual_base.loc[observation])
     assert actual_base.loc[observation] == actual_mutated.loc[observation]
+    assert base.loc[pd.Timestamp("2026-01-05 13:29", tz="Asia/Kolkata")] != (
+        mutated.loc[pd.Timestamp("2026-01-05 13:29", tz="Asia/Kolkata")]
+    )
 
 
 def test_immediate_next_bar_contract():
@@ -163,9 +166,8 @@ def test_ledger_uses_causal_state_and_dimensional_cost_contract(
         if line.strip()
     ]
 
-    assert len(ledger) == 1
+    assert [trade["entry_delay_bars"] for trade in ledger] == [1]
     trade = ledger[0]
-    assert trade["entry_delay_bars"] == 1
     assert trade["pnl_model"] == "UNDERLYING_INDEX_PROXY_FIXED_HURDLE"
     assert trade["costs"] == 8.5
     assert trade["net_pnl"] == trade["underlying_net_pnl_after_index_cost"]
@@ -174,9 +176,10 @@ def test_ledger_uses_causal_state_and_dimensional_cost_contract(
         trade["proxy_option_gross_pnl"] - trade["proxy_option_execution_cost"]
     )
 
-    passed = [candidate for candidate in candidates if candidate.get("status") == "PASSED"]
-    assert len(passed) == 1
-    assert passed[0]["signal_bar_index"] == signal_index
+    passed = [
+        candidate for candidate in candidates if candidate.get("status") == "PASSED"
+    ]
+    assert [candidate["signal_bar_index"] for candidate in passed] == [signal_index]
     assert not any(
         candidate.get("signal_bar_index") == entry_index for candidate in candidates
     )
