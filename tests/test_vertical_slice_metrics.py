@@ -100,8 +100,11 @@ def test_required_audit_blockers_fail_closed_on_missing_or_failed_report(tmp_pat
     base_dir.mkdir()
 
     missing = module._required_audit_blockers(base_dir)
-    assert len(missing) == len(module.REQUIRED_PHASE4_AUDITS)
-    assert all(value.startswith("PHASE4_AUDIT_REPORT_MISSING:") for value in missing)
+    expected_missing = [
+        f"PHASE4_AUDIT_REPORT_MISSING:{filename}"
+        for filename, _, _ in module.REQUIRED_PHASE4_AUDITS
+    ]
+    assert missing == expected_missing
 
     _write_passing_audits(module, base_dir)
     failed_name, _, failed_blocker = module.REQUIRED_PHASE4_AUDITS[2]
