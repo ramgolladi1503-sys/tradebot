@@ -1,0 +1,131 @@
+{
+  "acceptance_fraction_denominator": "each index own completed-bar morning range",
+  "candidate_counts_calculated_before_v3_freeze": false,
+  "candidate_identity": "canonical sha256 of hypothesis, specification_hash, parameter_hash, session, target symbol, direction, cutoff timestamp and evidence",
+  "completed_bar_semantics": "all predicates use completed one-minute bars; entry is next completed bar after confirmation",
+  "contract_status": "FROZEN_EXECUTABLE_PRE_OUTCOME_V3",
+  "development_returns_calculated_before_v3_freeze": false,
+  "entry_event": "first completed late bar where at least two indices accept outside morning range in same direction",
+  "first_legal_entry_timestamp": "next completed one-minute bar after confirmation",
+  "future_suffix_invariant": true,
+  "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+  "input_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "invalidation": "opposite same-time multi-index acceptance before entry invalidates",
+  "late_session_start": "bar index 286, approximately 14:01 for a 09:15 session start",
+  "missing_data_behavior": "fail closed with explicit rejection code",
+  "morning_range_end": "bar index 75 inclusive",
+  "morning_range_start": "bar index 0",
+  "option_data_used": false,
+  "outcomes_read_before_v3_freeze": false,
+  "parameter_hash": "72e6c98cb82ad15717db0f1a260acf5be16b102079ebf76d380a40cc0ae5fc7b",
+  "parameters": {
+    "acceptance_fraction": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION V3 contract executable rule for acceptance_fraction.",
+      "name": "acceptance_fraction",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0.22400000000000003,
+        0.28,
+        0.336
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "fraction_of_own_morning_range",
+      "value": 0.28
+    },
+    "late_session_start_index": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION V3 contract executable rule for late_session_start_index.",
+      "name": "late_session_start_index",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        285,
+        286,
+        287
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_bar_index",
+      "value": 286
+    },
+    "morning_range_end_index": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION V3 contract executable rule for morning_range_end_index.",
+      "name": "morning_range_end_index",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        74,
+        75,
+        76
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_bar_index",
+      "value": 75
+    },
+    "required_confirmation_bars": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION V3 contract executable rule for required_confirmation_bars.",
+      "name": "required_confirmation_bars",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0,
+        1,
+        2
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_bar_count",
+      "value": 1
+    },
+    "required_confirming_indices": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION V3 contract executable rule for required_confirming_indices.",
+      "name": "required_confirming_indices",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "count",
+      "value": 2
+    }
+  },
+  "parameters_optimized": false,
+  "premise": "Late-session multi-index continuation outside own morning ranges.",
+  "primary_outcome": "direction-normalized underlying close-to-close bps over frozen horizon",
+  "required_confirmation_bars": 1,
+  "required_confirming_indices": 2,
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar confirmation and entry prohibited",
+  "schema_version": 3,
+  "setup_expiry": "bar index 360 inclusive",
+  "single_emission_scope": "one candidate per session",
+  "specification_hash": "8051de34d133967957d41c6b10d98dc4df31e26f9c60825d4231c2fb9e26a30d",
+  "tie_breaking": "symbol order NIFTY, BANKNIFTY, SENSEX; earliest completed timestamp wins",
+  "underlying_only": true
+}

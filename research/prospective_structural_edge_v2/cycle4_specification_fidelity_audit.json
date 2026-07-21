@@ -1,0 +1,92 @@
+{
+  "candidate_counts_calculated_before_v3_freeze": false,
+  "development_returns_calculated_before_v3_freeze": false,
+  "oracle_verdict": "CYCLE4_SPECIFICATION_FIDELITY_PASS",
+  "outcomes_read_before_v3_freeze": false,
+  "parameters_optimized": false,
+  "prospective_sessions_evaluated": false,
+  "results": [
+    {
+      "candidate_affecting_field_classifications": {
+        "candidate identity": "AMBIGUOUS",
+        "confirmation": "AMBIGUOUS",
+        "direction": "GENERIC_PLACEHOLDER",
+        "first legal timestamp": "GENERIC_PLACEHOLDER",
+        "input symbols": "EXPLICIT_AND_EXECUTABLE",
+        "invalidation": "MISSING",
+        "missing-data behavior": "GENERIC_PLACEHOLDER",
+        "normalization formula": "AMBIGUOUS",
+        "parameter ownership": "AMBIGUOUS",
+        "primary outcome": "EXPLICIT_AND_EXECUTABLE",
+        "reference prices": "AMBIGUOUS",
+        "same-bar behavior": "EXPLICIT_AND_EXECUTABLE",
+        "setup expiry": "MISSING",
+        "single-emission ownership": "AMBIGUOUS",
+        "state transitions": "GENERIC_PLACEHOLDER",
+        "target symbol": "GENERIC_PLACEHOLDER",
+        "threshold formula": "AMBIGUOUS",
+        "tie-breaking": "MISSING"
+      },
+      "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+      "v2_hash": "f059c4f368a86b0c3125eee535960c10bc604259be4724b4e70af48f28b10e73",
+      "v2_status": "CYCLE4_PRE_OUTCOME_CONCEPT_CONTRACT_V2"
+    },
+    {
+      "candidate_affecting_field_classifications": {
+        "candidate identity": "AMBIGUOUS",
+        "confirmation": "AMBIGUOUS",
+        "direction": "GENERIC_PLACEHOLDER",
+        "first legal timestamp": "GENERIC_PLACEHOLDER",
+        "input symbols": "EXPLICIT_AND_EXECUTABLE",
+        "invalidation": "MISSING",
+        "missing-data behavior": "GENERIC_PLACEHOLDER",
+        "normalization formula": "AMBIGUOUS",
+        "parameter ownership": "AMBIGUOUS",
+        "primary outcome": "EXPLICIT_AND_EXECUTABLE",
+        "reference prices": "AMBIGUOUS",
+        "same-bar behavior": "EXPLICIT_AND_EXECUTABLE",
+        "setup expiry": "MISSING",
+        "single-emission ownership": "AMBIGUOUS",
+        "state transitions": "GENERIC_PLACEHOLDER",
+        "target symbol": "GENERIC_PLACEHOLDER",
+        "threshold formula": "AMBIGUOUS",
+        "tie-breaking": "MISSING"
+      },
+      "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+      "v2_hash": "30124cca4d260fa11d338166451a827880457a8f8efe417f6a728915dedf645e",
+      "v2_status": "CYCLE4_PRE_OUTCOME_CONCEPT_CONTRACT_V2"
+    },
+    {
+      "candidate_affecting_field_classifications": {
+        "candidate identity": "AMBIGUOUS",
+        "confirmation": "AMBIGUOUS",
+        "direction": "GENERIC_PLACEHOLDER",
+        "first legal timestamp": "GENERIC_PLACEHOLDER",
+        "input symbols": "EXPLICIT_AND_EXECUTABLE",
+        "invalidation": "MISSING",
+        "missing-data behavior": "GENERIC_PLACEHOLDER",
+        "normalization formula": "AMBIGUOUS",
+        "parameter ownership": "AMBIGUOUS",
+        "primary outcome": "EXPLICIT_AND_EXECUTABLE",
+        "reference prices": "AMBIGUOUS",
+        "same-bar behavior": "EXPLICIT_AND_EXECUTABLE",
+        "setup expiry": "MISSING",
+        "single-emission ownership": "AMBIGUOUS",
+        "state transitions": "GENERIC_PLACEHOLDER",
+        "target symbol": "GENERIC_PLACEHOLDER",
+        "threshold formula": "AMBIGUOUS",
+        "tie-breaking": "MISSING"
+      },
+      "hypothesis_id": "AC18_LATE_MULTI_INDEX_CONFIRMATION_CONTINUATION",
+      "v2_hash": "57b4256d3d30b475799af628f6f34b1b760f57f5679cf2f89e094c0d9da9af1d",
+      "v2_status": "CYCLE4_PRE_OUTCOME_CONCEPT_CONTRACT_V2"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+  "parameters": [
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for return_interval.",
+      "name": "return_interval",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0,
+        1,
+        2
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "minute",
+      "value": 1
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for correlation_lookback.",
+      "name": "correlation_lookback",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        44,
+        45,
+        46
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_returns",
+      "value": 45
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for breakdown_correlation_threshold.",
+      "name": "breakdown_correlation_threshold",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0.144,
+        0.18,
+        0.216
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "pearson_correlation",
+      "value": 0.18
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "direction",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for minimum_leader_displacement_bps.",
+      "name": "minimum_leader_displacement_bps",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        21,
+        22,
+        23
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "basis_points",
+      "value": 22
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for realignment_threshold_bps.",
+      "name": "realignment_threshold_bps",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        7,
+        8,
+        9
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "basis_points",
+      "value": 8
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for realignment_confirmation_bars.",
+      "name": "realignment_confirmation_bars",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "consecutive_completed_bars",
+      "value": 2
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

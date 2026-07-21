@@ -1,0 +1,17 @@
+{
+  "candidate_counts_calculated_before_v3_freeze": "NO",
+  "development_returns_calculated_before_v3_freeze": "NO",
+  "historical_outcomes_read_before_v3_freeze": "NO",
+  "hypothesis_id_changed": "NO",
+  "mechanism_family_changed": "NO",
+  "parameter_optimization": "NO",
+  "reason": "PRE_OUTCOME_CONTRACT_NOT_EXECUTABLE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "v2_status": "SUPERSEDED_PRE_OUTCOME_BY_EXECUTABLE_V3"
+}

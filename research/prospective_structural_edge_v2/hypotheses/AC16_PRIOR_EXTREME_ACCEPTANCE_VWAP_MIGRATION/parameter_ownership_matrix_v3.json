@@ -1,0 +1,97 @@
+{
+  "hypothesis_id": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION",
+  "parameters": [
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION V3 contract executable rule for acceptance_fraction.",
+      "name": "acceptance_fraction",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0.20800000000000002,
+        0.26,
+        0.312
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "fraction_of_prior_session_range",
+      "value": 0.26
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION V3 contract executable rule for morning_window_end_index.",
+      "name": "morning_window_end_index",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        59,
+        60,
+        61
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_bar_index",
+      "value": 60
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION V3 contract executable rule for late_start_index.",
+      "name": "late_start_index",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        60,
+        61,
+        62
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_bar_index",
+      "value": 61
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION V3 contract executable rule for minimum_vwap_migration.",
+      "name": "minimum_vwap_migration",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0.096,
+        0.12,
+        0.144
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "fraction_of_prior_session_range",
+      "value": 0.12
+    },
+    {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION V3 contract executable rule for confirmation_count.",
+      "name": "confirmation_count",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC16_PRIOR_EXTREME_ACCEPTANCE_VWAP_MIGRATION/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "consecutive_completed_bars",
+      "value": 2
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

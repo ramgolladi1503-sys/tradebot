@@ -1,0 +1,146 @@
+{
+  "candidate_counts_calculated_before_v3_freeze": false,
+  "candidate_identity": "canonical sha256 of hypothesis, specification_hash, parameter_hash, session, target symbol, direction, cutoff timestamp and evidence",
+  "completed_bar_semantics": "all predicates use completed one-minute bars; entry is next completed bar after confirmation",
+  "contract_status": "FROZEN_EXECUTABLE_PRE_OUTCOME_V3",
+  "correlation_estimator": "Pearson mean across all three pairwise correlations over last 45 completed returns",
+  "development_returns_calculated_before_v3_freeze": false,
+  "entry_event": "second consecutive completed laggard realignment bar in leader direction",
+  "first_legal_entry_timestamp": "next completed one-minute bar after realignment confirmation",
+  "future_suffix_invariant": true,
+  "hypothesis_id": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE",
+  "input_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "invalidation": "zero-variance or nonfinite correlation window fails closed",
+  "laggard_selection_rule": "non-leader with smallest displacement in leader direction; symbol-order tie-break",
+  "leader_selection_rule": "largest absolute 15-minute displacement bps; symbol-order tie-break",
+  "missing_data_behavior": "fail closed with explicit rejection code",
+  "option_data_used": false,
+  "outcomes_read_before_v3_freeze": false,
+  "parameter_hash": "1a6ee5498342595151c6c50f9795816e0a52d9f0859abc28796ff78e4ce2562f",
+  "parameters": {
+    "breakdown_correlation_threshold": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for breakdown_correlation_threshold.",
+      "name": "breakdown_correlation_threshold",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0.144,
+        0.18,
+        0.216
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "pearson_correlation",
+      "value": 0.18
+    },
+    "correlation_lookback": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for correlation_lookback.",
+      "name": "correlation_lookback",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        44,
+        45,
+        46
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "completed_one_minute_returns",
+      "value": 45
+    },
+    "minimum_leader_displacement_bps": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "direction",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for minimum_leader_displacement_bps.",
+      "name": "minimum_leader_displacement_bps",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        21,
+        22,
+        23
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "basis_points",
+      "value": 22
+    },
+    "realignment_confirmation_bars": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for realignment_confirmation_bars.",
+      "name": "realignment_confirmation_bars",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        1,
+        2,
+        3
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "consecutive_completed_bars",
+      "value": 2
+    },
+    "realignment_threshold_bps": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate timing",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for realignment_threshold_bps.",
+      "name": "realignment_threshold_bps",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        7,
+        8,
+        9
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "basis_points",
+      "value": 8
+    },
+    "return_interval": {
+      "boundary_behavior": "inclusive threshold; missing or nonfinite input fails closed",
+      "candidate_gate_role": "candidate presence",
+      "formula": "See AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE V3 contract executable rule for return_interval.",
+      "name": "return_interval",
+      "owner": "pre_outcome_structural_contract_v3",
+      "runtime_read_location": "AC17_CORRELATION_BREAKDOWN_LEADER_RESPONSE/specification_contract_v3.json",
+      "score_role": "evidence only",
+      "sensitivity_neighbors": [
+        0,
+        1,
+        2
+      ],
+      "structural_rationale": "Frozen before outcomes to make the observable underlying-index mechanism executable.",
+      "unit": "minute",
+      "value": 1
+    }
+  },
+  "parameters_optimized": false,
+  "premise": "Observable cross-index one-minute correlation breakdown followed by laggard realignment.",
+  "primary_outcome": "direction-normalized underlying close-to-close bps over frozen horizon",
+  "return_interval": "aligned completed one-minute log returns",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar confirmation and entry prohibited",
+  "schema_version": 3,
+  "setup_expiry": "24 completed bars after breakdown",
+  "single_emission_scope": "first qualifying leader-laggard setup per session",
+  "specification_hash": "69d39e687a4304a9d2d5c8b7de1f74323d32aee2dbcfde062dcc9eadca0d5cc4",
+  "tie_breaking": "symbol order NIFTY, BANKNIFTY, SENSEX; earliest completed timestamp wins",
+  "underlying_only": true
+}
