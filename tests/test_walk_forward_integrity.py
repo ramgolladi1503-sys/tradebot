@@ -44,6 +44,20 @@ def test_walk_forward_plan_has_three_forward_folds_and_untouched_holdout():
         assert fold["test_end"] <= plan["holdout_start"]
 
 
+def test_explicit_empty_parameter_grid_rejects_instead_of_using_defaults():
+    module = _load_module()
+    report = module.run_walk_forward(
+        pd.DataFrame({"row": range(600)}), parameter_grid=[]
+    )
+
+    assert report == {
+        "status": "REJECTED",
+        "promoted": False,
+        "blockers": ["EMPTY_PARAMETER_GRID"],
+        "fold_reports": [],
+    }
+
+
 def test_promotion_uses_final_holdout_expectancy_not_full_sample_expectancy():
     module = _load_module()
     fold_reports = [
