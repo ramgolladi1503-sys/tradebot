@@ -1,0 +1,20 @@
+{
+  "final_lockbox_still_clean": true,
+  "mechanisms_falsified_or_weakened": [
+    "overnight gap acceptance continuation lacked fold stability",
+    "overnight gap rejection had negative discovery mean",
+    "prior-day sweep reclaim lacked fold stability",
+    "narrow opening balance escape had negative discovery mean",
+    "cross-index opening lead-lag had negative discovery mean"
+  ],
+  "mechanisms_still_unexplored": [
+    "failed opening drive reversal",
+    "midday compression into late expansion",
+    "intraday VWAP inventory transfer",
+    "post-large-opening-range mean reversion",
+    "late-session range escape"
+  ],
+  "next_cycle": 2,
+  "schema_version": 1,
+  "why_not_parameter_variants": "Cycle 2 changes causal mechanism families rather than thresholds of Cycle 1 families."
+}

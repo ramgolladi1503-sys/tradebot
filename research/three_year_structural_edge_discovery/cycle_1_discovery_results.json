@@ -1,0 +1,2203 @@
+{
+  "final_lockbox_opened": false,
+  "partition": "DISCOVERY",
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "results": {
+    "AC01_GAP_ACCEPTANCE_CONTINUATION": {
+      "controls": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 3.8890142965760686,
+        "direction_inversion_mean_bps": -1.4883672145972844,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 1.4883672145972844,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "discovery_gate_failures": [
+        "REJECTED_WFA_POSITIVE_FOLD_COUNT"
+      ],
+      "discovery_verdict": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "positive_wfa_folds": 3,
+      "rows_sample": [
+        {
+          "candidate_id": "da0a92b11662aa81477c2bc1ee6bd0d119ae64027918bb1c9b18656e3eaaf038",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-03 09:31:00",
+          "evidence": {
+            "gap_bps": 72.12515237708273
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -3.689238347468482,
+          "mfe_bps": 19.579756592709163,
+          "outcome_bps": 11.78907449582045,
+          "session": "20240703",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "dc3dc67aa57dd12fb01ea1da6681176fa3e60b17cb3fe43eceddefa3529aeaa4",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-03 09:31:00",
+          "evidence": {
+            "gap_bps": 138.87370776691776
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -6.432157761911972,
+          "mfe_bps": 64.71885795147125,
+          "outcome_bps": 48.070920214757784,
+          "session": "20240703",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "be9d0124428d3a6078afbf24949260a2f2ea70f0789edddae06193f0fb585459",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-04 09:31:00",
+          "evidence": {
+            "gap_bps": 32.58435292374129
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -7.449423952257117,
+          "mfe_bps": 15.063022537074033,
+          "outcome_bps": 13.605972673131905,
+          "session": "20240704",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "21219d932e2e42142eb145fc8545299e2768aee7b086170b7d54e88a9ac2465e",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-04 09:31:00",
+          "evidence": {
+            "gap_bps": 40.596507145327365
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -7.721606557611338,
+          "mfe_bps": 15.494291829136753,
+          "outcome_bps": 12.738532922162982,
+          "session": "20240704",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "7559d3d480caf2736c7945f8fd685e4d82c6a9b5a5856d5be1b506de9914e537",
+          "direction": -1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-05 09:31:00",
+          "evidence": {
+            "gap_bps": -37.56482812959816
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -20.265938747234813,
+          "mfe_bps": 3.991149161445273,
+          "outcome_bps": -9.657340198936382,
+          "session": "20240705",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "cce3016443fa24549aa0901851d54b11ce277cb5e214b75c51148f9b4bd097e5",
+          "direction": -1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-05 09:31:00",
+          "evidence": {
+            "gap_bps": -98.64600748816787
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -13.75874114197595,
+          "mfe_bps": 21.563630361209896,
+          "outcome_bps": 0.4102814626250062,
+          "session": "20240705",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "9a611a15b43a6100b24bd1cff420ec828c2cb7e7da128d2a44efc4be2940e391",
+          "direction": -1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-05 09:31:00",
+          "evidence": {
+            "gap_bps": -34.107821389143254
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -23.062038443186772,
+          "mfe_bps": 0.21384021682835375,
+          "outcome_bps": -14.248047858951285,
+          "session": "20240705",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "fb68e046417df29d7aed609e095c9960adb188a60a5ae924890de245db0592d4",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-12 09:31:00",
+          "evidence": {
+            "gap_bps": 20.317603796453643
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -39.21897739996183,
+          "mfe_bps": 5.649497788302593,
+          "outcome_bps": -21.922507722003104,
+          "session": "20240712",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "7355acb49e3139a5742cef8bf41e31435cb5525fcb96b5e68ca47c31b6a86d93",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-12 09:31:00",
+          "evidence": {
+            "gap_bps": 22.44405441532038
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -51.09438299467306,
+          "mfe_bps": 5.13996658585647,
+          "outcome_bps": -31.753156001786962,
+          "session": "20240712",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "2ea76da92da1603b7047a6446430a6abe3e0c28d0d9c2b276aac35252fec1f91",
+          "direction": -1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-18 09:31:00",
+          "evidence": {
+            "gap_bps": -23.291641430667198
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+          "mae_bps": -54.88467490208482,
+          "mfe_bps": 3.6902400287075476,
+          "outcome_bps": -49.62455375619346,
+          "session": "20240718",
+          "symbol": "NIFTY"
+        }
+      ],
+      "summary": {
+        "candidate_count": 202,
+        "direction_breakdown": [
+          {
+            "count": 79,
+            "direction": -1,
+            "mean": 1.1980777030588015
+          },
+          {
+            "count": 123,
+            "direction": 1,
+            "mean": 1.6748133236341958
+          }
+        ],
+        "mae_mean_bps": -20.58027819749942,
+        "mean_bps": 1.4883672145972844,
+        "median_bps": 1.1799608412232931,
+        "mfe_mean_bps": 19.53629435779727,
+        "positive_candidate_fraction": 0.5247524752475248,
+        "positive_session_fraction": 0.5454545454545454,
+        "session_count": 110,
+        "single_session_concentration": 0.01485148514851485,
+        "symbol_breakdown": [
+          {
+            "count": 78,
+            "mean": 4.943523738261123,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 68,
+            "mean": -1.1944306518995975,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 56,
+            "mean": -0.06648910547399356,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.07425742574257425
+      },
+      "wfa": [
+        {
+          "candidate_count": 34,
+          "direction_breakdown": [
+            {
+              "count": 13,
+              "direction": -1,
+              "mean": 5.828095386137736
+            },
+            {
+              "count": 21,
+              "direction": 1,
+              "mean": 4.2007219764544645
+            }
+          ],
+          "fold": 1,
+          "mae_mean_bps": -21.92738081236989,
+          "mean_bps": 4.822952986039247,
+          "median_bps": 3.8297685302912665,
+          "mfe_mean_bps": 23.11368412572649,
+          "positive_candidate_fraction": 0.5294117647058824,
+          "positive_session_fraction": 0.6111111111111112,
+          "session_count": 18,
+          "single_session_concentration": 0.08823529411764706,
+          "symbol_breakdown": [
+            {
+              "count": 12,
+              "mean": 17.92186722348201,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 13,
+              "mean": -2.4846613118639356,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 9,
+              "mean": -2.0868231224687355,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.4117647058823529,
+          "validation_end": "20241122",
+          "validation_start": "20240911"
+        },
+        {
+          "candidate_count": 36,
+          "direction_breakdown": [
+            {
+              "count": 16,
+              "direction": -1,
+              "mean": 6.268207426890423
+            },
+            {
+              "count": 20,
+              "direction": 1,
+              "mean": -9.849147257111612
+            }
+          ],
+          "fold": 2,
+          "mae_mean_bps": -27.031209485155596,
+          "mean_bps": -2.6858785086662627,
+          "median_bps": -7.101316608877917,
+          "mfe_mean_bps": 19.44006537646592,
+          "positive_candidate_fraction": 0.4166666666666667,
+          "positive_session_fraction": 0.43478260869565216,
+          "session_count": 23,
+          "single_session_concentration": 0.08333333333333333,
+          "symbol_breakdown": [
+            {
+              "count": 18,
+              "mean": 2.382847547136024,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 10,
+              "mean": -11.634376460903152,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 8,
+              "mean": -2.9048896939252997,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.3611111111111111,
+          "validation_end": "20250203",
+          "validation_start": "20241125"
+        },
+        {
+          "candidate_count": 46,
+          "direction_breakdown": [
+            {
+              "count": 17,
+              "direction": -1,
+              "mean": 4.599260429764584
+            },
+            {
+              "count": 29,
+              "direction": 1,
+              "mean": 9.397849655097612
+            }
+          ],
+          "fold": 3,
+          "mae_mean_bps": -18.60573512930129,
+          "mean_bps": 7.624457984865841,
+          "median_bps": 16.117648949778296,
+          "mfe_mean_bps": 25.886544631465323,
+          "positive_candidate_fraction": 0.6304347826086957,
+          "positive_session_fraction": 0.6666666666666666,
+          "session_count": 24,
+          "single_session_concentration": 0.06521739130434782,
+          "symbol_breakdown": [
+            {
+              "count": 21,
+              "mean": 6.949397234071677,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 12,
+              "mean": 7.627902120029932,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 13,
+              "mean": 8.711761534458791,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.32608695652173914,
+          "validation_end": "20250422",
+          "validation_start": "20250204"
+        },
+        {
+          "candidate_count": 26,
+          "direction_breakdown": [
+            {
+              "count": 12,
+              "direction": -1,
+              "mean": -3.1893720318759704
+            },
+            {
+              "count": 14,
+              "direction": 1,
+              "mean": 13.178910687555803
+            }
+          ],
+          "fold": 4,
+          "mae_mean_bps": -18.396560879135283,
+          "mean_bps": 5.6243186632026765,
+          "median_bps": 8.22447607800536,
+          "mfe_mean_bps": 18.140028126685934,
+          "positive_candidate_fraction": 0.5769230769230769,
+          "positive_session_fraction": 0.6666666666666666,
+          "session_count": 12,
+          "single_session_concentration": 0.11538461538461539,
+          "symbol_breakdown": [
+            {
+              "count": 8,
+              "mean": -0.8732911192303741,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 9,
+              "mean": 9.068489630935403,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 9,
+              "mean": 7.955800835410439,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.5769230769230769,
+          "validation_end": "20250702",
+          "validation_start": "20250423"
+        },
+        {
+          "candidate_count": 21,
+          "direction_breakdown": [
+            {
+              "count": 7,
+              "direction": -1,
+              "mean": 0.3503264650904307
+            },
+            {
+              "count": 14,
+              "direction": 1,
+              "mean": -2.4651220299422496
+            }
+          ],
+          "fold": 5,
+          "mae_mean_bps": -11.451905452616849,
+          "mean_bps": -1.5266391982646894,
+          "median_bps": 0.8627304132668989,
+          "mfe_mean_bps": 10.750506230921262,
+          "positive_candidate_fraction": 0.5238095238095238,
+          "positive_session_fraction": 0.45454545454545453,
+          "session_count": 11,
+          "single_session_concentration": 0.14285714285714285,
+          "symbol_breakdown": [
+            {
+              "count": 7,
+              "mean": -6.380932555049013,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 7,
+              "mean": 4.313323837272629,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 7,
+              "mean": -2.512308877017684,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.6190476190476191,
+          "validation_end": "20250912",
+          "validation_start": "20250703"
+        }
+      ]
+    },
+    "AC02_GAP_REJECTION_REVERSAL": {
+      "controls": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -2.0804525300832717,
+        "direction_inversion_mean_bps": 3.425048079599342,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -3.425048079599342,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "discovery_gate_failures": [
+        "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE",
+        "REJECTED_WFA_POSITIVE_FOLD_COUNT"
+      ],
+      "discovery_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "positive_wfa_folds": 2,
+      "rows_sample": [
+        {
+          "candidate_id": "1953508b72ddff7d6e5f199692ed50a8e1f59d1e4c1f977da4a13b816e98b1f1",
+          "direction": -1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-02 09:46:00",
+          "evidence": {
+            "gap_bps": 43.77537759372161,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -28.28804409863217,
+          "mfe_bps": 7.388513352246662,
+          "outcome_bps": -21.044810503312306,
+          "session": "20240702",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "3bb9f7abaf1bd81d68cd1e779fcae93065c8bc5b77bc12de12ae35ed63b023b7",
+          "direction": -1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-02 09:46:00",
+          "evidence": {
+            "gap_bps": 51.84548408317039,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -36.12905697605973,
+          "mfe_bps": 8.601244211161596,
+          "outcome_bps": -18.821208101260645,
+          "session": "20240702",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "0c810890df5dc652becc336e4158eb1ad50a9250f6080e3a106006dfa4273d1e",
+          "direction": -1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-02 09:46:00",
+          "evidence": {
+            "gap_bps": 52.88568987671163,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -30.505883881153384,
+          "mfe_bps": 5.058460467456394,
+          "outcome_bps": -22.857027552278808,
+          "session": "20240702",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "33221b42cc3e866307f2e540f1d7af9935ceb53eb2d48e0f68ca64faa95a38c6",
+          "direction": -1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-10 09:46:00",
+          "evidence": {
+            "gap_bps": 27.031912906832176,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -9.558342653039897,
+          "mfe_bps": 52.525321119494265,
+          "outcome_bps": 45.026697073938806,
+          "session": "20240710",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "763d0f0f040121be47f14a5187f39db86b2e1c1697dc6da17e1f14d1d989282a",
+          "direction": -1,
+          "entry_index": 58,
+          "entry_ts": "2024-07-11 10:13:00",
+          "evidence": {
+            "gap_bps": 34.61196755564971,
+            "rejection_index": 57
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -8.419327812394517,
+          "mfe_bps": 22.129040093703534,
+          "outcome_bps": 17.126847774847633,
+          "session": "20240711",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "259d5575be4f0ed08366c22597c0345391894a05b4f0b2ff4a48303232188f4c",
+          "direction": -1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-11 09:46:00",
+          "evidence": {
+            "gap_bps": 32.6457948156665,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -11.202042740159346,
+          "mfe_bps": 40.45571321069308,
+          "outcome_bps": 32.121113173284584,
+          "session": "20240711",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "3c48fb4387de3690787bb454e168fd6daca591b01f028ccc4179b11f5133f178",
+          "direction": -1,
+          "entry_index": 42,
+          "entry_ts": "2024-07-12 09:57:00",
+          "evidence": {
+            "gap_bps": 20.317603796454474,
+            "rejection_index": 41
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -21.846972633792205,
+          "mfe_bps": 1.8274253424888087,
+          "outcome_bps": -9.978974342126357,
+          "session": "20240712",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "163cc01339c482bf853273d34c5a107671358431da17019b3325b0e970a459b0",
+          "direction": -1,
+          "entry_index": 42,
+          "entry_ts": "2024-07-12 09:57:00",
+          "evidence": {
+            "gap_bps": 22.444054415319695,
+            "rejection_index": 41
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -21.03804625017469,
+          "mfe_bps": 4.647460416210558,
+          "outcome_bps": -7.4647096375568545,
+          "session": "20240712",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "f4ac5732be94de9a6d9b657c3cd10f5dd608d526ad4a45a84c7dc44bc38a18cb",
+          "direction": 1,
+          "entry_index": 32,
+          "entry_ts": "2024-07-18 09:47:00",
+          "evidence": {
+            "gap_bps": -23.29164143066744,
+            "rejection_index": 31
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -6.176451466093358,
+          "mfe_bps": 28.15974253949749,
+          "outcome_bps": 11.844971068202259,
+          "session": "20240718",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "71a447d0621a22d8c355b82e2ebfe4a8d0eb3385d1d24d45479dc617fc7fb357",
+          "direction": 1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-18 09:46:00",
+          "evidence": {
+            "gap_bps": -35.286293212110735,
+            "rejection_index": 30
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+          "mae_bps": -6.2894640042543415,
+          "mfe_bps": 38.13702264397811,
+          "outcome_bps": 18.954157431001484,
+          "session": "20240718",
+          "symbol": "BANKNIFTY"
+        }
+      ],
+      "summary": {
+        "candidate_count": 176,
+        "direction_breakdown": [
+          {
+            "count": 119,
+            "direction": -1,
+            "mean": -1.7911089919882517
+          },
+          {
+            "count": 57,
+            "direction": 1,
+            "mean": -6.836254244962847
+          }
+        ],
+        "mae_mean_bps": -21.96469906715746,
+        "mean_bps": -3.425048079599342,
+        "median_bps": -4.153244252164123,
+        "mfe_mean_bps": 19.23441636039786,
+        "positive_candidate_fraction": 0.4375,
+        "positive_session_fraction": 0.4536082474226804,
+        "session_count": 97,
+        "single_session_concentration": 0.017045454545454544,
+        "symbol_breakdown": [
+          {
+            "count": 66,
+            "mean": -2.8865772778103604,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 50,
+            "mean": -3.016377015927585,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 60,
+            "mean": -4.357925181293687,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.08522727272727272
+      },
+      "wfa": [
+        {
+          "candidate_count": 40,
+          "direction_breakdown": [
+            {
+              "count": 20,
+              "direction": -1,
+              "mean": -19.172945619718995
+            },
+            {
+              "count": 20,
+              "direction": 1,
+              "mean": -3.3351889700165565
+            }
+          ],
+          "fold": 1,
+          "mae_mean_bps": -26.931759878001117,
+          "mean_bps": -11.254067294867776,
+          "median_bps": -9.664711618926901,
+          "mfe_mean_bps": 17.833420766037364,
+          "positive_candidate_fraction": 0.275,
+          "positive_session_fraction": 0.2631578947368421,
+          "session_count": 19,
+          "single_session_concentration": 0.075,
+          "symbol_breakdown": [
+            {
+              "count": 14,
+              "mean": -11.432797912574456,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 11,
+              "mean": -10.340649589794173,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 15,
+              "mean": -11.757091702062183,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.375,
+          "validation_end": "20241122",
+          "validation_start": "20240911"
+        },
+        {
+          "candidate_count": 23,
+          "direction_breakdown": [
+            {
+              "count": 20,
+              "direction": -1,
+              "mean": 13.020318302321588
+            },
+            {
+              "count": 3,
+              "direction": 1,
+              "mean": -13.606140767907782
+            }
+          ],
+          "fold": 2,
+          "mae_mean_bps": -21.42103448146663,
+          "mean_bps": 9.547301901856887,
+          "median_bps": 13.74735889915768,
+          "mfe_mean_bps": 29.09042233202667,
+          "positive_candidate_fraction": 0.5652173913043478,
+          "positive_session_fraction": 0.42857142857142855,
+          "session_count": 14,
+          "single_session_concentration": 0.13043478260869565,
+          "symbol_breakdown": [
+            {
+              "count": 8,
+              "mean": 11.03309038247749,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 7,
+              "mean": 8.691556351897919,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 8,
+              "mean": 8.81029077745038,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.5652173913043478,
+          "validation_end": "20250203",
+          "validation_start": "20241125"
+        },
+        {
+          "candidate_count": 32,
+          "direction_breakdown": [
+            {
+              "count": 21,
+              "direction": -1,
+              "mean": -2.9988485026152416
+            },
+            {
+              "count": 11,
+              "direction": 1,
+              "mean": -18.856316645440398
+            }
+          ],
+          "fold": 3,
+          "mae_mean_bps": -26.549970621490246,
+          "mean_bps": -8.44985317671139,
+          "median_bps": 0.8654508867977917,
+          "mfe_mean_bps": 21.59093040025772,
+          "positive_candidate_fraction": 0.53125,
+          "positive_session_fraction": 0.6111111111111112,
+          "session_count": 18,
+          "single_session_concentration": 0.09375,
+          "symbol_breakdown": [
+            {
+              "count": 12,
+              "mean": -8.440084682487802,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 10,
+              "mean": -8.754911066669813,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 10,
+              "mean": -8.15651747982127,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.46875,
+          "validation_end": "20250422",
+          "validation_start": "20250204"
+        },
+        {
+          "candidate_count": 24,
+          "direction_breakdown": [
+            {
+              "count": 16,
+              "direction": -1,
+              "mean": -3.419363541737192
+            },
+            {
+              "count": 8,
+              "direction": 1,
+              "mean": -12.428195264351238
+            }
+          ],
+          "fold": 4,
+          "mae_mean_bps": -24.32748663370579,
+          "mean_bps": -6.422307449275208,
+          "median_bps": -10.596583489192458,
+          "mfe_mean_bps": 13.527052218162277,
+          "positive_candidate_fraction": 0.2916666666666667,
+          "positive_session_fraction": 0.46153846153846156,
+          "session_count": 13,
+          "single_session_concentration": 0.125,
+          "symbol_breakdown": [
+            {
+              "count": 10,
+              "mean": 1.4551789724009943,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 7,
+              "mean": -9.56947613022103,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 7,
+              "mean": -14.528690799295386,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.5833333333333334,
+          "validation_end": "20250702",
+          "validation_start": "20250423"
+        },
+        {
+          "candidate_count": 26,
+          "direction_breakdown": [
+            {
+              "count": 18,
+              "direction": -1,
+              "mean": 1.7821936901192394
+            },
+            {
+              "count": 8,
+              "direction": 1,
+              "mean": -3.3707993141753043
+            }
+          ],
+          "fold": 5,
+          "mae_mean_bps": -15.500925870391855,
+          "mean_bps": 0.19665738110553313,
+          "median_bps": -0.3721994181798971,
+          "mfe_mean_bps": 17.582552869699683,
+          "positive_candidate_fraction": 0.5,
+          "positive_session_fraction": 0.5,
+          "session_count": 16,
+          "single_session_concentration": 0.11538461538461539,
+          "symbol_breakdown": [
+            {
+              "count": 13,
+              "mean": 2.4833046162988994,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 6,
+              "mean": 2.743821994710497,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 7,
+              "mean": -6.233257153057828,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.5,
+          "validation_end": "20250912",
+          "validation_start": "20250703"
+        }
+      ]
+    },
+    "AC03_PRIOR_DAY_SWEEP_RECLAIM": {
+      "controls": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": 0.360820644586084,
+        "direction_inversion_mean_bps": -0.6585004371710617,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": 0.6585004371710617,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "discovery_gate_failures": [
+        "REJECTED_WFA_POSITIVE_FOLD_COUNT"
+      ],
+      "discovery_verdict": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "positive_wfa_folds": 3,
+      "rows_sample": [
+        {
+          "candidate_id": "3a7d6c35ac68cad4ce6ab21a208101ae04ae5836cd5cc9c2b4f119a63b63163b",
+          "direction": -1,
+          "entry_index": 119,
+          "entry_ts": "2024-07-02 11:14:00",
+          "evidence": {
+            "level": 24164.0,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -3.2254796350250636,
+          "mfe_bps": 24.687324898842178,
+          "outcome_bps": 21.482521415324698,
+          "session": "20240702",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "c7266f2082414c9a9592c92765aa7dbd0d64ac1cdeb892d80e1b385f97707627",
+          "direction": 1,
+          "entry_index": 31,
+          "entry_ts": "2024-07-02 09:46:00",
+          "evidence": {
+            "level": 52166.05,
+            "side": "low"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -8.601244211161596,
+          "mfe_bps": 36.12905697605973,
+          "outcome_bps": 13.75432815949651,
+          "session": "20240702",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "2a66a016cdf6a44b6c57bec2565625ecc2892fe359373386480a9d394442ed93",
+          "direction": -1,
+          "entry_index": 144,
+          "entry_ts": "2024-07-02 11:39:00",
+          "evidence": {
+            "level": 79561.0,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -2.0730005444624666,
+          "mfe_bps": 17.91152926469475,
+          "outcome_bps": 0.3306241013911748,
+          "session": "20240702",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "0ddcca4205286835341761358c137d014857ff6f01d15e4713f25b7f9dd19aa0",
+          "direction": -1,
+          "entry_index": 92,
+          "entry_ts": "2024-07-04 10:47:00",
+          "evidence": {
+            "level": 24309.15,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -14.067937442925338,
+          "mfe_bps": 4.216267800877249,
+          "outcome_bps": -12.422564642584621,
+          "session": "20240704",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "b65987163d0fd783d541ddfa41f3c962bd782a94c101ba1fd3589d549428401d",
+          "direction": -1,
+          "entry_index": 92,
+          "entry_ts": "2024-07-04 10:47:00",
+          "evidence": {
+            "level": 80074.3,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -15.61268744436406,
+          "mfe_bps": 1.3426911202152336,
+          "outcome_bps": -13.64548882637484,
+          "session": "20240704",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "c3afe530f70be7b501bf3695b9680ed5291b3f7f74414b23c6d3afd2e2356a39",
+          "direction": -1,
+          "entry_index": 66,
+          "entry_ts": "2024-07-09 10:21:00",
+          "evidence": {
+            "level": 24344.6,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -15.032282442624112,
+          "mfe_bps": 3.141993461367454,
+          "outcome_bps": -13.779592239071548,
+          "session": "20240709",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "dc7490f98ef7646d974a1cabbabc1e623aaba0ff53e956200361a8ad7da87dc5",
+          "direction": 1,
+          "entry_index": 16,
+          "entry_ts": "2024-07-10 09:31:00",
+          "evidence": {
+            "level": 52292.95,
+            "side": "low"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -19.014823723311203,
+          "mfe_bps": 16.271106071932273,
+          "outcome_bps": 9.502631865747624,
+          "session": "20240710",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "ba119a49aed8f46605ac3a93ac5f345e4a5ea91b5ac3d4f51bc9c28ccfde7179",
+          "direction": 1,
+          "entry_index": 282,
+          "entry_ts": "2024-07-11 13:57:00",
+          "evidence": {
+            "level": 52075.4,
+            "side": "low"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -7.563628545210754,
+          "mfe_bps": 29.42904202996921,
+          "outcome_bps": 14.061822104991517,
+          "session": "20240711",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "0b07ee5b4389beb274fd4579153aeb93d6e64f53d651e4ab2f71b0afaf36dbea",
+          "direction": -1,
+          "entry_index": 37,
+          "entry_ts": "2024-07-12 09:52:00",
+          "evidence": {
+            "level": 24402.65,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -3.97627353482477,
+          "mfe_bps": 26.050740529705017,
+          "outcome_bps": 6.25135787691633,
+          "session": "20240712",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "2def4abaf3800424be1d31616635dcbafd247ce23f8c1b2019a7feec93cf760a",
+          "direction": -1,
+          "entry_index": 37,
+          "entry_ts": "2024-07-12 09:52:00",
+          "evidence": {
+            "level": 52400.3,
+            "side": "high"
+          },
+          "horizon_minutes": 30,
+          "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+          "mae_bps": -7.960900795516146,
+          "mfe_bps": 28.106853829068523,
+          "outcome_bps": -0.29626401520044254,
+          "session": "20240712",
+          "symbol": "BANKNIFTY"
+        }
+      ],
+      "summary": {
+        "candidate_count": 213,
+        "direction_breakdown": [
+          {
+            "count": 96,
+            "direction": -1,
+            "mean": 2.112249000672239
+          },
+          {
+            "count": 117,
+            "direction": 1,
+            "mean": -0.5343188969837508
+          }
+        ],
+        "mae_mean_bps": -17.839372654878826,
+        "mean_bps": 0.6585004371710617,
+        "median_bps": 0.24085845808263784,
+        "mfe_mean_bps": 21.035627163784277,
+        "positive_candidate_fraction": 0.5023474178403756,
+        "positive_session_fraction": 0.47058823529411764,
+        "session_count": 136,
+        "single_session_concentration": 0.014084507042253521,
+        "symbol_breakdown": [
+          {
+            "count": 95,
+            "mean": 2.459626305939836,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 62,
+            "mean": -1.1840810962603578,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 56,
+            "mean": -0.3569799639054666,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.07042253521126761
+      },
+      "wfa": [
+        {
+          "candidate_count": 46,
+          "direction_breakdown": [
+            {
+              "count": 20,
+              "direction": -1,
+              "mean": -7.78884081272191
+            },
+            {
+              "count": 26,
+              "direction": 1,
+              "mean": -7.564683402507565
+            }
+          ],
+          "fold": 1,
+          "mae_mean_bps": -23.683181893542244,
+          "mean_bps": -7.66214314607902,
+          "median_bps": -6.2170370027314625,
+          "mfe_mean_bps": 17.24509060523953,
+          "positive_candidate_fraction": 0.3695652173913043,
+          "positive_session_fraction": 0.39285714285714285,
+          "session_count": 28,
+          "single_session_concentration": 0.06521739130434782,
+          "symbol_breakdown": [
+            {
+              "count": 19,
+              "mean": -5.582939607626265,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 15,
+              "mean": -7.144733471837527,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 12,
+              "mean": -11.600977508097742,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.2826086956521739,
+          "validation_end": "20241122",
+          "validation_start": "20240911"
+        },
+        {
+          "candidate_count": 41,
+          "direction_breakdown": [
+            {
+              "count": 14,
+              "direction": -1,
+              "mean": 10.101616259396112
+            },
+            {
+              "count": 27,
+              "direction": 1,
+              "mean": -3.242303620669849
+            }
+          ],
+          "fold": 2,
+          "mae_mean_bps": -19.340556220240426,
+          "mean_bps": 1.3141568261819419,
+          "median_bps": -0.8748585984363899,
+          "mfe_mean_bps": 22.274436696054238,
+          "positive_candidate_fraction": 0.4878048780487805,
+          "positive_session_fraction": 0.4,
+          "session_count": 25,
+          "single_session_concentration": 0.07317073170731707,
+          "symbol_breakdown": [
+            {
+              "count": 16,
+              "mean": 8.096344052266543,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 14,
+              "mean": -4.09614495169638,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 11,
+              "mean": -1.665004149005066,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.34146341463414637,
+          "validation_end": "20250203",
+          "validation_start": "20241125"
+        },
+        {
+          "candidate_count": 29,
+          "direction_breakdown": [
+            {
+              "count": 16,
+              "direction": -1,
+              "mean": 12.100409936244214
+            },
+            {
+              "count": 13,
+              "direction": 1,
+              "mean": -0.23075897971782994
+            }
+          ],
+          "fold": 3,
+          "mae_mean_bps": -15.21145815066399,
+          "mean_bps": 6.5726445601232975,
+          "median_bps": 2.3501656414826044,
+          "mfe_mean_bps": 24.761400835043084,
+          "positive_candidate_fraction": 0.5517241379310345,
+          "positive_session_fraction": 0.6,
+          "session_count": 20,
+          "single_session_concentration": 0.10344827586206896,
+          "symbol_breakdown": [
+            {
+              "count": 14,
+              "mean": 4.748321758512427,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 8,
+              "mean": 9.705471031359185,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 7,
+              "mean": 6.640917053361164,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.4482758620689655,
+          "validation_end": "20250422",
+          "validation_start": "20250204"
+        },
+        {
+          "candidate_count": 24,
+          "direction_breakdown": [
+            {
+              "count": 10,
+              "direction": -1,
+              "mean": 2.7433087811175034
+            },
+            {
+              "count": 14,
+              "direction": 1,
+              "mean": 12.103930498912103
+            }
+          ],
+          "fold": 4,
+          "mae_mean_bps": -20.636980300823467,
+          "mean_bps": 8.20367144983102,
+          "median_bps": 1.447192138165354,
+          "mfe_mean_bps": 31.54621478129121,
+          "positive_candidate_fraction": 0.5416666666666666,
+          "positive_session_fraction": 0.4117647058823529,
+          "session_count": 17,
+          "single_session_concentration": 0.125,
+          "symbol_breakdown": [
+            {
+              "count": 12,
+              "mean": 14.25583290726636,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 7,
+              "mean": 0.5316691764684869,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 5,
+              "mean": 4.419287134693749,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.4583333333333333,
+          "validation_end": "20250702",
+          "validation_start": "20250423"
+        },
+        {
+          "candidate_count": 22,
+          "direction_breakdown": [
+            {
+              "count": 10,
+              "direction": -1,
+              "mean": -0.6926557461082172
+            },
+            {
+              "count": 12,
+              "direction": 1,
+              "mean": 0.2524416071705839
+            }
+          ],
+          "fold": 5,
+          "mae_mean_bps": -12.165015050551604,
+          "mean_bps": -0.1771480988652348,
+          "median_bps": -1.9653288199950047,
+          "mfe_mean_bps": 11.311300481990209,
+          "positive_candidate_fraction": 0.4090909090909091,
+          "positive_session_fraction": 0.42105263157894735,
+          "session_count": 19,
+          "single_session_concentration": 0.09090909090909091,
+          "symbol_breakdown": [
+            {
+              "count": 13,
+              "mean": -1.0290699232506064,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 4,
+              "mean": -1.8066280188067108,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 5,
+              "mean": 3.3414325804899123,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.36363636363636365,
+          "validation_end": "20250912",
+          "validation_start": "20250703"
+        }
+      ]
+    },
+    "AC04_NARROW_OPENING_RANGE_EXPANSION": {
+      "controls": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -2.929765012832677,
+        "direction_inversion_mean_bps": 3.3918460594921744,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -3.3918460594921744,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "discovery_gate_failures": [
+        "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE",
+        "REJECTED_WFA_POSITIVE_FOLD_COUNT"
+      ],
+      "discovery_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "positive_wfa_folds": 2,
+      "rows_sample": [
+        {
+          "candidate_id": "11e8aa33e6cf4b2dc75ced9b26df96ad325b59dcbb701970c57710d6628dbb57",
+          "direction": -1,
+          "entry_index": 92,
+          "entry_ts": "2024-07-04 10:47:00",
+          "evidence": {
+            "width_bps": 29.351935508410524
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -18.842640222853646,
+          "mfe_bps": 1.3426911202152336,
+          "outcome_bps": -12.019271302170509,
+          "session": "20240704",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "de55b66a5fab008642c20ce270be4e9b29396a45293c91bc84e3c7a6309743ff",
+          "direction": 1,
+          "entry_index": 147,
+          "entry_ts": "2024-07-09 11:42:00",
+          "evidence": {
+            "width_bps": 21.395425239209292
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -5.165246907000709,
+          "mfe_bps": 4.18139035328613,
+          "outcome_bps": -0.2869581615005945,
+          "session": "20240709",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "e782edfd80781b68e6e8c039d978fe6127d1194656ceaeb6cc758ad4674c77bf",
+          "direction": 1,
+          "entry_index": 125,
+          "entry_ts": "2024-07-09 11:20:00",
+          "evidence": {
+            "width_bps": 26.126237575869656
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -5.335136132563756,
+          "mfe_bps": 3.5571727366812134,
+          "outcome_bps": 0.05108374157902773,
+          "session": "20240709",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "34792f560cb25bfd37cd38fbdfb099b9ca1a5fa6ea202dfd93d9268e84bba788",
+          "direction": -1,
+          "entry_index": 46,
+          "entry_ts": "2024-07-10 10:01:00",
+          "evidence": {
+            "width_bps": 31.664135307453126
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -6.403349444323858,
+          "mfe_bps": 90.48835801291011,
+          "outcome_bps": 65.36752557748105,
+          "session": "20240710",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "12702e355e45a5e12336c0b1717f24152d2f3c50ce3ee0a881b74de9ebd77ad1",
+          "direction": -1,
+          "entry_index": 39,
+          "entry_ts": "2024-07-16 09:54:00",
+          "evidence": {
+            "width_bps": 30.495533357348567
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -29.97933907969097,
+          "mfe_bps": 2.272319331518835,
+          "outcome_bps": -21.529748288122708,
+          "session": "20240716",
+          "symbol": "BANKNIFTY"
+        },
+        {
+          "candidate_id": "8957e059aef747a8ba1ddde8de87a6f00f81dee4fcd8773d1ac687cf5f9bdcf5",
+          "direction": 1,
+          "entry_index": 88,
+          "entry_ts": "2024-07-16 10:43:00",
+          "evidence": {
+            "width_bps": 17.543340275276062
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -8.74302372610214,
+          "mfe_bps": 2.7684387106119424,
+          "outcome_bps": -2.377716677316455,
+          "session": "20240716",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "84ddf43d27e3939a906626a62f76471656f63dd7375bbd25f2c45501b3d6c3d4",
+          "direction": 1,
+          "entry_index": 33,
+          "entry_ts": "2024-07-18 09:48:00",
+          "evidence": {
+            "width_bps": 28.866760648311256
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -3.6574809709388756,
+          "mfe_bps": 29.178570412604632,
+          "outcome_bps": 8.798273668981782,
+          "session": "20240718",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "8e643c7bbaac7057cb8c08e7f835235c4e2519997d33dd1d10b7c63f06d45ce8",
+          "direction": 1,
+          "entry_index": 35,
+          "entry_ts": "2024-07-18 09:50:00",
+          "evidence": {
+            "width_bps": 32.51722521168584
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -10.059676276400475,
+          "mfe_bps": 11.475207599918047,
+          "outcome_bps": -7.603531453689305,
+          "session": "20240718",
+          "symbol": "SENSEX"
+        },
+        {
+          "candidate_id": "5d6b4bb896ecf1af5898ae3a6ee63924ece1aeb9fbcec86051a85ebd7e963c0a",
+          "direction": -1,
+          "entry_index": 61,
+          "entry_ts": "2024-07-29 10:16:00",
+          "evidence": {
+            "width_bps": 34.638560254658145
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -31.179201000308687,
+          "mfe_bps": 2.3721120038910914,
+          "outcome_bps": -29.751913269151498,
+          "session": "20240729",
+          "symbol": "NIFTY"
+        },
+        {
+          "candidate_id": "a777c78ef02b21325ab6b3e45b8dc37d68e1071c2ac248460a1fbacfa931c24a",
+          "direction": -1,
+          "entry_index": 59,
+          "entry_ts": "2024-07-29 10:14:00",
+          "evidence": {
+            "width_bps": 19.14920056586965
+          },
+          "horizon_minutes": 60,
+          "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+          "mae_bps": -28.213959457521476,
+          "mfe_bps": 5.003684375096684,
+          "outcome_bps": -25.094476896632134,
+          "session": "20240729",
+          "symbol": "SENSEX"
+        }
+      ],
+      "summary": {
+        "candidate_count": 169,
+        "direction_breakdown": [
+          {
+            "count": 87,
+            "direction": -1,
+            "mean": -6.347197983058653
+          },
+          {
+            "count": 82,
+            "direction": 1,
+            "mean": -0.25628975034237383
+          }
+        ],
+        "mae_mean_bps": -17.61702945333186,
+        "mean_bps": -3.3918460594921744,
+        "median_bps": -2.5722264865846167,
+        "mfe_mean_bps": 14.700870712903576,
+        "positive_candidate_fraction": 0.4378698224852071,
+        "positive_session_fraction": 0.4421052631578947,
+        "session_count": 95,
+        "single_session_concentration": 0.01775147928994083,
+        "symbol_breakdown": [
+          {
+            "count": 21,
+            "mean": -10.101855407262306,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 74,
+            "mean": -1.7326326763431419,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 74,
+            "mean": -3.1468676007064404,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.08875739644970414
+      },
+      "wfa": [
+        {
+          "candidate_count": 23,
+          "direction_breakdown": [
+            {
+              "count": 7,
+              "direction": -1,
+              "mean": 1.1344040896860932
+            },
+            {
+              "count": 16,
+              "direction": 1,
+              "mean": -3.039927658385344
+            }
+          ],
+          "fold": 1,
+          "mae_mean_bps": -14.981642459204675,
+          "mean_bps": -1.769478865494036,
+          "median_bps": -4.002612650645387,
+          "mfe_mean_bps": 12.538210364639484,
+          "positive_candidate_fraction": 0.30434782608695654,
+          "positive_session_fraction": 0.3333333333333333,
+          "session_count": 12,
+          "single_session_concentration": 0.13043478260869565,
+          "symbol_breakdown": [
+            {
+              "count": 1,
+              "mean": -7.436816001018531,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 11,
+              "mean": -0.20736315637370756,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 11,
+              "mean": -2.816382107748503,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.4782608695652174,
+          "validation_end": "20241122",
+          "validation_start": "20240911"
+        },
+        {
+          "candidate_count": 31,
+          "direction_breakdown": [
+            {
+              "count": 17,
+              "direction": -1,
+              "mean": -11.719085345019584
+            },
+            {
+              "count": 14,
+              "direction": 1,
+              "mean": -17.46959245396402
+            }
+          ],
+          "fold": 2,
+          "mae_mean_bps": -29.30683649749154,
+          "mean_bps": -14.316088555510625,
+          "median_bps": 2.3668842765722786,
+          "mfe_mean_bps": 18.55264179036056,
+          "positive_candidate_fraction": 0.5483870967741935,
+          "positive_session_fraction": 0.6111111111111112,
+          "session_count": 18,
+          "single_session_concentration": 0.0967741935483871,
+          "symbol_breakdown": [
+            {
+              "count": 3,
+              "mean": -74.48312191209006,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 16,
+              "mean": -7.22851249133398,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 12,
+              "mean": -8.724431635267946,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.41935483870967744,
+          "validation_end": "20250203",
+          "validation_start": "20241125"
+        },
+        {
+          "candidate_count": 7,
+          "direction_breakdown": [
+            {
+              "count": 6,
+              "direction": -1,
+              "mean": -12.670016566772395
+            },
+            {
+              "count": 1,
+              "direction": 1,
+              "mean": 18.171207257873245
+            }
+          ],
+          "fold": 3,
+          "mae_mean_bps": -22.8987364546529,
+          "mean_bps": -8.264127448965874,
+          "median_bps": -9.922996702869114,
+          "mfe_mean_bps": 10.784913518677879,
+          "positive_candidate_fraction": 0.2857142857142857,
+          "positive_session_fraction": 0.4,
+          "session_count": 5,
+          "single_session_concentration": 0.2857142857142857,
+          "symbol_breakdown": [
+            {
+              "count": 2,
+              "mean": -20.759699184430545,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 5,
+              "mean": -3.265898754780006,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 1.0,
+          "validation_end": "20250422",
+          "validation_start": "20250204"
+        },
+        {
+          "candidate_count": 20,
+          "direction_breakdown": [
+            {
+              "count": 10,
+              "direction": -1,
+              "mean": -5.799124372059427
+            },
+            {
+              "count": 10,
+              "direction": 1,
+              "mean": 23.315320750253775
+            }
+          ],
+          "fold": 4,
+          "mae_mean_bps": -18.66841342135911,
+          "mean_bps": 8.758098189097176,
+          "median_bps": 4.488794369478244,
+          "mfe_mean_bps": 20.49431479585334,
+          "positive_candidate_fraction": 0.55,
+          "positive_session_fraction": 0.5454545454545454,
+          "session_count": 11,
+          "single_session_concentration": 0.15,
+          "symbol_breakdown": [
+            {
+              "count": 4,
+              "mean": 15.048890035999907,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 7,
+              "mean": 10.719054926888106,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 9,
+              "mean": 4.4370021277474585,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.6,
+          "validation_end": "20250702",
+          "validation_start": "20250423"
+        },
+        {
+          "candidate_count": 46,
+          "direction_breakdown": [
+            {
+              "count": 26,
+              "direction": -1,
+              "mean": 0.8699423542013474
+            },
+            {
+              "count": 20,
+              "direction": 1,
+              "mean": 2.106679655385024
+            }
+          ],
+          "fold": 5,
+          "mae_mean_bps": -10.993992648477677,
+          "mean_bps": 1.4076542242812067,
+          "median_bps": 1.839352498779201,
+          "mfe_mean_bps": 13.733712116956516,
+          "positive_candidate_fraction": 0.5434782608695652,
+          "positive_session_fraction": 0.46153846153846156,
+          "session_count": 26,
+          "single_session_concentration": 0.06521739130434782,
+          "symbol_breakdown": [
+            {
+              "count": 10,
+              "mean": -2.280012359664352,
+              "symbol": "BANKNIFTY"
+            },
+            {
+              "count": 19,
+              "mean": 2.129591044416813,
+              "symbol": "NIFTY"
+            },
+            {
+              "count": 17,
+              "mean": 2.7699992982152697,
+              "symbol": "SENSEX"
+            }
+          ],
+          "top_five_session_concentration": 0.32608695652173914,
+          "validation_end": "20250912",
+          "validation_start": "20250703"
+        }
+      ]
+    },
+    "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION": {
+      "controls": {
+        "candidate_id_corruption": "PASS_IDS_HASH_CAUSAL_FIELDS",
+        "deterministic_shuffle_mean_bps": -0.638600736630904,
+        "direction_inversion_mean_bps": 0.7754016121917642,
+        "future_suffix_invariance": "PASS_STATIC_PREFIX_ONLY_GENERATORS",
+        "real_mean_bps": -0.7754016121917642,
+        "timestamp_lookahead_trap": "PASS_GENERATORS_USE_COMPLETED_PREFIX_WINDOWS"
+      },
+      "discovery_gate_failures": [
+        "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE",
+        "REJECTED_WFA_POSITIVE_FOLD_COUNT"
+      ],
+      "discovery_verdict": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "positive_wfa_folds": 3,
+      "rows_sample": [
+        {
+          "candidate_id": "bf7d7b21d3a9e5f9d1492ff3669ac4bc8a11d4e3a56e81c159a802f828b0d777",
+          "direction": 1,
+          "entry_index": 40,
+          "entry_ts": "2024-07-03 09:55:00",
+          "evidence": {
+            "confirmations": [
+              "BANKNIFTY"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -13.870909493066685,
+          "mfe_bps": 13.88103212042635,
+          "outcome_bps": -2.147376752095198,
+          "session": "20240703",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "d2f71e24e114caf7ae65c21e92ad30b5f5bf7b7eb21dbb2ff8d0704e80708264",
+          "direction": -1,
+          "entry_index": 32,
+          "entry_ts": "2024-07-10 09:47:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -14.364762782886528,
+          "mfe_bps": 43.33031616791401,
+          "outcome_bps": 32.76118110304852,
+          "session": "20240710",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "55b76599ac273df28989fd6d1e7f553b81adbc254e81e8c37346568c3ce2a527",
+          "direction": -1,
+          "entry_index": 60,
+          "entry_ts": "2024-07-11 10:15:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -6.198286113449451,
+          "mfe_bps": 33.8872957834487,
+          "outcome_bps": 26.49484861697952,
+          "session": "20240711",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "53cd5d878701aa3d2c6e1eee235c0ad40e51037c7b69e2601f6ef80ca40c516c",
+          "direction": 1,
+          "entry_index": 100,
+          "entry_ts": "2024-07-12 10:55:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -11.241800614560555,
+          "mfe_bps": 49.528172048816096,
+          "outcome_bps": 1.4220617451869237,
+          "session": "20240712",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "3e743f40f054abcae2d9ae88c3faeb3ba1ba043b5d169e70b4752416c81bafb8",
+          "direction": 1,
+          "entry_index": 33,
+          "entry_ts": "2024-07-18 09:48:00",
+          "evidence": {
+            "confirmations": [
+              "BANKNIFTY"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -4.560601241443418,
+          "mfe_bps": 27.869742009755488,
+          "outcome_bps": 10.392476459983868,
+          "session": "20240718",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "c75120fe8ff67929c9c6f72d1c872db36781012f3d5cfefdf58e343f40c179e4",
+          "direction": -1,
+          "entry_index": 36,
+          "entry_ts": "2024-07-19 09:51:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -10.548750662925746,
+          "mfe_bps": 14.033946303071422,
+          "outcome_bps": -0.20567561001068788,
+          "session": "20240719",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "dfe3c263c2d2969a0d19f039675a257aa8e9d5283c84ca61b2a3dfb6231bae4a",
+          "direction": 1,
+          "entry_index": 43,
+          "entry_ts": "2024-07-22 09:58:00",
+          "evidence": {
+            "confirmations": [
+              "NIFTY"
+            ],
+            "leader": "SENSEX"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -11.648700657977962,
+          "mfe_bps": 18.666617284445554,
+          "outcome_bps": 13.339657712131043,
+          "session": "20240722",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "2dcac6a1a6fc3e28d6c7d34750dd80cbd9f571922353474f876ce4d955784c85",
+          "direction": -1,
+          "entry_index": 62,
+          "entry_ts": "2024-07-23 10:17:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -37.68039997790185,
+          "mfe_bps": 4.236502524772219,
+          "outcome_bps": -36.74696117968631,
+          "session": "20240723",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "01e13cb96ed8319e22e66e1a0e694d4c54654e1fe5663d81f57ac746444aaf5a",
+          "direction": 1,
+          "entry_index": 46,
+          "entry_ts": "2024-07-26 10:01:00",
+          "evidence": {
+            "confirmations": [
+              "SENSEX"
+            ],
+            "leader": "NIFTY"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -11.815623375357836,
+          "mfe_bps": 7.732697142444807,
+          "outcome_bps": -1.9173759242396837,
+          "session": "20240726",
+          "symbol": "MARKET"
+        },
+        {
+          "candidate_id": "03d659e062674ff3b5a85c5a1ff85a7293343facae69ea5ad7210cac988e03bb",
+          "direction": -1,
+          "entry_index": 59,
+          "entry_ts": "2024-07-29 10:14:00",
+          "evidence": {
+            "confirmations": [
+              "NIFTY"
+            ],
+            "leader": "SENSEX"
+          },
+          "horizon_minutes": 45,
+          "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+          "mae_bps": -34.92766562866641,
+          "mfe_bps": 4.723096002165657,
+          "outcome_bps": -33.271594933247755,
+          "session": "20240729",
+          "symbol": "MARKET"
+        }
+      ],
+      "summary": {
+        "candidate_count": 177,
+        "direction_breakdown": [
+          {
+            "count": 99,
+            "direction": -1,
+            "mean": 0.5754813251784932
+          },
+          {
+            "count": 78,
+            "direction": 1,
+            "mean": -2.4899838019309377
+          }
+        ],
+        "mae_mean_bps": -18.912213434396328,
+        "mean_bps": -0.7754016121917642,
+        "median_bps": -0.7537547752930104,
+        "mfe_mean_bps": 17.975390744563924,
+        "positive_candidate_fraction": 0.480225988700565,
+        "positive_session_fraction": 0.480225988700565,
+        "session_count": 177,
+        "single_session_concentration": 0.005649717514124294,
+        "symbol_breakdown": [
+          {
+            "count": 177,
+            "mean": -0.7754016121917647,
+            "symbol": "MARKET"
+          }
+        ],
+        "top_five_session_concentration": 0.02824858757062147
+      },
+      "wfa": [
+        {
+          "candidate_count": 29,
+          "direction_breakdown": [
+            {
+              "count": 15,
+              "direction": -1,
+              "mean": 5.513117731500131
+            },
+            {
+              "count": 14,
+              "direction": 1,
+              "mean": -10.922961696859378
+            }
+          ],
+          "fold": 1,
+          "mae_mean_bps": -27.263743005963594,
+          "mean_bps": -2.4215413028803208,
+          "median_bps": 0.7725519955044854,
+          "mfe_mean_bps": 17.312420171075498,
+          "positive_candidate_fraction": 0.5172413793103449,
+          "positive_session_fraction": 0.5172413793103449,
+          "session_count": 29,
+          "single_session_concentration": 0.034482758620689655,
+          "symbol_breakdown": [
+            {
+              "count": 29,
+              "mean": -2.421541302880322,
+              "symbol": "MARKET"
+            }
+          ],
+          "top_five_session_concentration": 0.1724137931034483,
+          "validation_end": "20241122",
+          "validation_start": "20240911"
+        },
+        {
+          "candidate_count": 31,
+          "direction_breakdown": [
+            {
+              "count": 22,
+              "direction": -1,
+              "mean": -7.03342353564177
+            },
+            {
+              "count": 9,
+              "direction": 1,
+              "mean": -5.447376080044789
+            }
+          ],
+          "fold": 2,
+          "mae_mean_bps": -25.319686681435684,
+          "mean_bps": -6.572958145307162,
+          "median_bps": -11.611079862749266,
+          "mfe_mean_bps": 19.0986123298855,
+          "positive_candidate_fraction": 0.45161290322580644,
+          "positive_session_fraction": 0.45161290322580644,
+          "session_count": 31,
+          "single_session_concentration": 0.03225806451612903,
+          "symbol_breakdown": [
+            {
+              "count": 31,
+              "mean": -6.572958145307163,
+              "symbol": "MARKET"
+            }
+          ],
+          "top_five_session_concentration": 0.16129032258064516,
+          "validation_end": "20250203",
+          "validation_start": "20241125"
+        },
+        {
+          "candidate_count": 28,
+          "direction_breakdown": [
+            {
+              "count": 15,
+              "direction": -1,
+              "mean": -0.005606400141639749
+            },
+            {
+              "count": 13,
+              "direction": 1,
+              "mean": 4.541820251221575
+            }
+          ],
+          "fold": 3,
+          "mae_mean_bps": -16.75068424549646,
+          "mean_bps": 2.105698830848424,
+          "median_bps": 1.4674403278686077,
+          "mfe_mean_bps": 18.628775765953886,
+          "positive_candidate_fraction": 0.5,
+          "positive_session_fraction": 0.5,
+          "session_count": 28,
+          "single_session_concentration": 0.03571428571428571,
+          "symbol_breakdown": [
+            {
+              "count": 28,
+              "mean": 2.105698830848424,
+              "symbol": "MARKET"
+            }
+          ],
+          "top_five_session_concentration": 0.17857142857142858,
+          "validation_end": "20250422",
+          "validation_start": "20250204"
+        },
+        {
+          "candidate_count": 29,
+          "direction_breakdown": [
+            {
+              "count": 13,
+              "direction": -1,
+              "mean": 7.271566157213935
+            },
+            {
+              "count": 16,
+              "direction": 1,
+              "mean": -1.7642608887336038
+            }
+          ],
+          "fold": 4,
+          "mae_mean_bps": -16.6054820311251,
+          "mean_bps": 2.2862822697946035,
+          "median_bps": 2.0693947540747124,
+          "mfe_mean_bps": 18.72151275161142,
+          "positive_candidate_fraction": 0.5517241379310345,
+          "positive_session_fraction": 0.5517241379310345,
+          "session_count": 29,
+          "single_session_concentration": 0.034482758620689655,
+          "symbol_breakdown": [
+            {
+              "count": 29,
+              "mean": 2.286282269794603,
+              "symbol": "MARKET"
+            }
+          ],
+          "top_five_session_concentration": 0.1724137931034483,
+          "validation_end": "20250702",
+          "validation_start": "20250423"
+        },
+        {
+          "candidate_count": 28,
+          "direction_breakdown": [
+            {
+              "count": 16,
+              "direction": -1,
+              "mean": 4.840989277006408
+            },
+            {
+              "count": 12,
+              "direction": 1,
+              "mean": -2.3670564305485384
+            }
+          ],
+          "fold": 5,
+          "mae_mean_bps": -11.369465289805301,
+          "mean_bps": 1.7518268309114309,
+          "median_bps": 0.46473923882905943,
+          "mfe_mean_bps": 14.276122360025413,
+          "positive_candidate_fraction": 0.5,
+          "positive_session_fraction": 0.5,
+          "session_count": 28,
+          "single_session_concentration": 0.03571428571428571,
+          "symbol_breakdown": [
+            {
+              "count": 28,
+              "mean": 1.751826830911431,
+              "symbol": "MARKET"
+            }
+          ],
+          "top_five_session_concentration": 0.17857142857142858,
+          "validation_end": "20250912",
+          "validation_start": "20250703"
+        }
+      ]
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

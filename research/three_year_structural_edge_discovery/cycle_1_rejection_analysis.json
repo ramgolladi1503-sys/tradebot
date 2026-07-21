@@ -1,0 +1,232 @@
+{
+  "cycle_number": 1,
+  "cycle_verdict": "NO_FINALIST_SURVIVED_DISCOVERY_GATE",
+  "final_lockbox_opened": false,
+  "hypotheses_rejected": [
+    {
+      "hypothesis_id": "AC01_GAP_ACCEPTANCE_CONTINUATION",
+      "rejection_reason": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "summary": {
+        "candidate_count": 202,
+        "direction_breakdown": [
+          {
+            "count": 79,
+            "direction": -1,
+            "mean": 1.1980777030588015
+          },
+          {
+            "count": 123,
+            "direction": 1,
+            "mean": 1.6748133236341958
+          }
+        ],
+        "mae_mean_bps": -20.58027819749942,
+        "mean_bps": 1.4883672145972844,
+        "median_bps": 1.1799608412232931,
+        "mfe_mean_bps": 19.53629435779727,
+        "positive_candidate_fraction": 0.5247524752475248,
+        "positive_session_fraction": 0.5454545454545454,
+        "session_count": 110,
+        "single_session_concentration": 0.01485148514851485,
+        "symbol_breakdown": [
+          {
+            "count": 78,
+            "mean": 4.943523738261123,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 68,
+            "mean": -1.1944306518995975,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 56,
+            "mean": -0.06648910547399356,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.07425742574257425
+      }
+    },
+    {
+      "hypothesis_id": "AC02_GAP_REJECTION_REVERSAL",
+      "rejection_reason": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "summary": {
+        "candidate_count": 176,
+        "direction_breakdown": [
+          {
+            "count": 119,
+            "direction": -1,
+            "mean": -1.7911089919882517
+          },
+          {
+            "count": 57,
+            "direction": 1,
+            "mean": -6.836254244962847
+          }
+        ],
+        "mae_mean_bps": -21.96469906715746,
+        "mean_bps": -3.425048079599342,
+        "median_bps": -4.153244252164123,
+        "mfe_mean_bps": 19.23441636039786,
+        "positive_candidate_fraction": 0.4375,
+        "positive_session_fraction": 0.4536082474226804,
+        "session_count": 97,
+        "single_session_concentration": 0.017045454545454544,
+        "symbol_breakdown": [
+          {
+            "count": 66,
+            "mean": -2.8865772778103604,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 50,
+            "mean": -3.016377015927585,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 60,
+            "mean": -4.357925181293687,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.08522727272727272
+      }
+    },
+    {
+      "hypothesis_id": "AC03_PRIOR_DAY_SWEEP_RECLAIM",
+      "rejection_reason": "REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "summary": {
+        "candidate_count": 213,
+        "direction_breakdown": [
+          {
+            "count": 96,
+            "direction": -1,
+            "mean": 2.112249000672239
+          },
+          {
+            "count": 117,
+            "direction": 1,
+            "mean": -0.5343188969837508
+          }
+        ],
+        "mae_mean_bps": -17.839372654878826,
+        "mean_bps": 0.6585004371710617,
+        "median_bps": 0.24085845808263784,
+        "mfe_mean_bps": 21.035627163784277,
+        "positive_candidate_fraction": 0.5023474178403756,
+        "positive_session_fraction": 0.47058823529411764,
+        "session_count": 136,
+        "single_session_concentration": 0.014084507042253521,
+        "symbol_breakdown": [
+          {
+            "count": 95,
+            "mean": 2.459626305939836,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 62,
+            "mean": -1.1840810962603578,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 56,
+            "mean": -0.3569799639054666,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.07042253521126761
+      }
+    },
+    {
+      "hypothesis_id": "AC04_NARROW_OPENING_RANGE_EXPANSION",
+      "rejection_reason": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "summary": {
+        "candidate_count": 169,
+        "direction_breakdown": [
+          {
+            "count": 87,
+            "direction": -1,
+            "mean": -6.347197983058653
+          },
+          {
+            "count": 82,
+            "direction": 1,
+            "mean": -0.25628975034237383
+          }
+        ],
+        "mae_mean_bps": -17.61702945333186,
+        "mean_bps": -3.3918460594921744,
+        "median_bps": -2.5722264865846167,
+        "mfe_mean_bps": 14.700870712903576,
+        "positive_candidate_fraction": 0.4378698224852071,
+        "positive_session_fraction": 0.4421052631578947,
+        "session_count": 95,
+        "single_session_concentration": 0.01775147928994083,
+        "symbol_breakdown": [
+          {
+            "count": 21,
+            "mean": -10.101855407262306,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 74,
+            "mean": -1.7326326763431419,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 74,
+            "mean": -3.1468676007064404,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.08875739644970414
+      }
+    },
+    {
+      "hypothesis_id": "AC05_CROSS_INDEX_LEAD_LAG_CONFIRMATION",
+      "rejection_reason": "REJECTED_DISCOVERY_MEAN_NOT_POSITIVE|REJECTED_WFA_POSITIVE_FOLD_COUNT",
+      "summary": {
+        "candidate_count": 177,
+        "direction_breakdown": [
+          {
+            "count": 99,
+            "direction": -1,
+            "mean": 0.5754813251784932
+          },
+          {
+            "count": 78,
+            "direction": 1,
+            "mean": -2.4899838019309377
+          }
+        ],
+        "mae_mean_bps": -18.912213434396328,
+        "mean_bps": -0.7754016121917642,
+        "median_bps": -0.7537547752930104,
+        "mfe_mean_bps": 17.975390744563924,
+        "positive_candidate_fraction": 0.480225988700565,
+        "positive_session_fraction": 0.480225988700565,
+        "session_count": 177,
+        "single_session_concentration": 0.005649717514124294,
+        "symbol_breakdown": [
+          {
+            "count": 177,
+            "mean": -0.7754016121917647,
+            "symbol": "MARKET"
+          }
+        ],
+        "top_five_session_concentration": 0.02824858757062147
+      }
+    }
+  ],
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "screening_opened": false
+}
