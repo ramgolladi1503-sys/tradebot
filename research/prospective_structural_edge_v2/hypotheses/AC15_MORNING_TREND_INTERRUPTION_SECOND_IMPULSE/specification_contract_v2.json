@@ -1,0 +1,161 @@
+{
+  "candidate_counts_calculated_before_amendment": false,
+  "candidate_identity": "canonical sha256 of hypothesis_id, specification_hash, parameter_hash, target_symbol, session_date, direction, state timestamps, causal_cutoff, first_legal_entry_timestamp, input_symbol_set, history_hash",
+  "candidate_score": "abs(trend_displacement_bps)+breakout_fraction_observed*100",
+  "confirmation_formula": "first completed bar after pause window closes beyond pause high/low by breakout fraction in trend direction",
+  "cycle": 3,
+  "direction_rule": "long when morning trend up, pause stays above VWAP, and break above pause high; short mirrored",
+  "entry_event": "first completed confirmation bar satisfying formula; entry uses next completed bar close reference",
+  "entry_price_reference": "underlying close at first legal entry timestamp; never option price",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation; same-bar entry prohibited",
+  "future_suffix_behavior": "bars after causal cutoff must not change candidate ID, direction, entry timestamp, score, parameter hash, or history hash through cutoff",
+  "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+  "input_universe": "500 old-epoch complete development sessions only; no post-2026-07-10 prospective sessions; required NIFTY, BANKNIFTY, SENSEX one-minute underlying OHLCV",
+  "invalidation": "VWAP reclaim during pause or opposite pause-range break before confirmation",
+  "leader_symbol_or_basket_owner": "not applicable",
+  "mechanism_family": "morning trend interruption followed by second impulse",
+  "missing_data_behavior": "fail closed with deterministic rejection code; no synthetic/mock/fallback rows accepted",
+  "multiple_setup_behavior": "duplicates rejected after first emitted candidate per target symbol-session or market-session as stated",
+  "normalization_formula": "trend_displacement_bps=(close_10:15/open_09:15-1)*10000; pause_range_ratio=pause_range/morning_range",
+  "opening_window_definition": "all minute offsets are completed bars from 09:15 IST session open; timestamp alignment exact across required indices",
+  "outcome_data_read_before_amendment": false,
+  "parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
+  "parameter_optimization": false,
+  "parameters": {
+    "breakout_fraction": {
+      "boundary_behavior": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "close beyond pause edge by fraction*range",
+      "name": "breakout_fraction",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "second impulse confirmation",
+      "unit": "fraction_of_pause_range",
+      "value": 0.1
+    },
+    "max_pause_range_ratio": {
+      "boundary_behavior": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "pause_range/morning_trend_range <= value",
+      "name": "max_pause_range_ratio",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "pause is interruption not full reversal",
+      "unit": "fraction",
+      "value": 0.5
+    },
+    "min_trend_displacement_bps": {
+      "boundary_behavior": [
+        36,
+        45,
+        54
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(close_10:15/open_09:15-1)*10000 >= value",
+      "name": "min_trend_displacement_bps",
+      "owner": "trend_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "material morning trend",
+      "unit": "bps",
+      "value": 45
+    },
+    "morning_trend_minutes": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15-10:14 trend window, 10:15 close confirms displacement",
+      "name": "morning_trend_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first-hour execution impulse",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "pause_duration_minutes": {
+      "boundary_behavior": [
+        19,
+        20,
+        21
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "20 completed bars after trend established",
+      "name": "pause_duration_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "breakout same bar prohibited",
+      "structural_rationale": "visible interruption, not one-bar pullback",
+      "unit": "completed minutes",
+      "value": 20
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "primary_outcome": "direction-normalized underlying bps from entry close to primary_horizon_minutes; development only, not prospective lockbox",
+  "prior_session_dependency": "required only where specified by state machine; missing required prior session fails closed",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar entry prohibited; confirmation bar cannot be entry bar; pause/compression completion and breakout on the same bar is rejected unless breakout occurs on later completed bar",
+  "schema_version": 2,
+  "secondary_descriptive_horizons": [
+    15,
+    30,
+    60
+  ],
+  "setup_expiry": "as specified by parameterized setup expiry or final state-machine window; after expiry reject SETUP_EXPIRED",
+  "single_emission_scope": "one candidate per hypothesis/session/target symbol except AC11/AC13 market tie rules emit first deterministic target only",
+  "specification_hash": "66b4ada2c5ab4a3d64e2efa5d8c115af650878abdfb5014c7d0893d41eeb6674",
+  "state_machine": [
+    "compute 09:15-10:15 morning displacement bps",
+    "require abs(displacement) >= 45 bps",
+    "compute causal VWAP from completed bars through each cutoff using volume when positive else typical-price unit weights with provenance VWAP_UNIT_WEIGHT_PROXY",
+    "pause window begins 10:15 and lasts 20 completed minutes",
+    "pause range width <= 0.50 * morning trend range",
+    "non-reclaim: for long all pause closes remain above VWAP; for short below VWAP",
+    "after pause complete, breakout beyond pause range by 0.10 * pause range",
+    "same bar pause completion cannot be breakout; emit next bar after later breakout"
+  ],
+  "structural_premise": "A morning trend pauses without reclaiming VWAP and then breaks its pause range, suggesting a second execution impulse.",
+  "target_symbol": "qualifying symbol",
+  "threshold_formula": "trend >= 45 bps; pause_range_ratio <= 0.50; breakout fraction >= 0.10",
+  "tie_breaking": "NIFTY, BANKNIFTY, SENSEX deterministic order unless not applicable"
+}

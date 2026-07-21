@@ -1,0 +1,133 @@
+{
+  "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+  "parameter_hash": "421280c7a1a52a34fcde005539a3de27762118b5986da83a959f033938dafabb",
+  "parameters": {
+    "max_adverse_expansion_fraction": {
+      "boundary_behavior": [
+        0.16,
+        0.2,
+        0.24
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "distance expansion from initial >= value invalidates",
+      "name": "max_adverse_expansion_fraction",
+      "owner": "invalidation",
+      "score_only_role": false,
+      "sensitivity_neighbors": "greater/equal invalidates",
+      "structural_rationale": "convergence premise broken",
+      "unit": "fraction",
+      "value": 0.2
+    },
+    "min_convergence_fraction": {
+      "boundary_behavior": [
+        0.24,
+        0.3,
+        0.36
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "distance contraction / initial distance >= value",
+      "name": "min_convergence_fraction",
+      "owner": "basket_convergence",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "actual convergence, not static laggard",
+      "unit": "fraction",
+      "value": 0.3
+    },
+    "min_initial_dispersion_bps": {
+      "boundary_behavior": [
+        28,
+        35,
+        42
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "max(return_bps)-min(return_bps) >= value",
+      "name": "min_initial_dispersion_bps",
+      "owner": "cross_index_dispersion",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "large enough cross-index opening dislocation",
+      "unit": "bps",
+      "value": 35
+    },
+    "min_residual_distance_bps": {
+      "boundary_behavior": [
+        6.4,
+        8,
+        9.6
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(laggard_return-median_return) >= value at confirmation",
+      "name": "min_residual_distance_bps",
+      "owner": "basket_convergence",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "still has distance to travel toward basket",
+      "unit": "bps",
+      "value": 8
+    },
+    "opening_return_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:45 close return from open",
+      "name": "opening_return_minutes",
+      "owner": "opening_session_structure",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first 30-minute dispersion snapshot",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    },
+    "setup_expiry_minutes_from_open": {
+      "boundary_behavior": [
+        119,
+        120,
+        121
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "last confirmation at 11:15",
+      "name": "setup_expiry_minutes_from_open",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "after expiry reject",
+      "structural_rationale": "opening dispersion should resolve before midday",
+      "unit": "completed minutes",
+      "value": 120
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

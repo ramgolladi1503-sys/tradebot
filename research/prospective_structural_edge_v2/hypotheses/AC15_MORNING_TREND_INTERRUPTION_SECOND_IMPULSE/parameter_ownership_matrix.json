@@ -1,0 +1,116 @@
+{
+  "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+  "parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
+  "parameters": {
+    "breakout_fraction": {
+      "boundary_behavior": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "close beyond pause edge by fraction*range",
+      "name": "breakout_fraction",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "second impulse confirmation",
+      "unit": "fraction_of_pause_range",
+      "value": 0.1
+    },
+    "max_pause_range_ratio": {
+      "boundary_behavior": [
+        0.4,
+        0.5,
+        0.6
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "pause_range/morning_trend_range <= value",
+      "name": "max_pause_range_ratio",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "pause is interruption not full reversal",
+      "unit": "fraction",
+      "value": 0.5
+    },
+    "min_trend_displacement_bps": {
+      "boundary_behavior": [
+        36,
+        45,
+        54
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(close_10:15/open_09:15-1)*10000 >= value",
+      "name": "min_trend_displacement_bps",
+      "owner": "trend_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "material morning trend",
+      "unit": "bps",
+      "value": 45
+    },
+    "morning_trend_minutes": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15-10:14 trend window, 10:15 close confirms displacement",
+      "name": "morning_trend_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first-hour execution impulse",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "pause_duration_minutes": {
+      "boundary_behavior": [
+        19,
+        20,
+        21
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "20 completed bars after trend established",
+      "name": "pause_duration_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "breakout same bar prohibited",
+      "structural_rationale": "visible interruption, not one-bar pullback",
+      "unit": "completed minutes",
+      "value": 20
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

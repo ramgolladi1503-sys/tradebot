@@ -1,0 +1,194 @@
+{
+  "candidate_counts_calculated_before_amendment": false,
+  "candidate_identity": "canonical sha256 of hypothesis_id, specification_hash, parameter_hash, target_symbol, session_date, direction, state timestamps, causal_cutoff, first_legal_entry_timestamp, input_symbol_set, history_hash",
+  "candidate_score": "vol_of_vol_rank_estimate + acceptance_fraction_observed*100",
+  "confirmation_formula": "directional acceptance: after 10:45, completed close beyond compression range edge by acceptance fraction in the trade direction",
+  "cycle": 3,
+  "direction_rule": "long on post-compression close above compression range; short mirrored below",
+  "entry_event": "first completed confirmation bar satisfying formula; entry uses next completed bar close reference",
+  "entry_price_reference": "underlying close at first legal entry timestamp; never option price",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation; same-bar entry prohibited",
+  "future_suffix_behavior": "bars after causal cutoff must not change candidate ID, direction, entry timestamp, score, parameter hash, or history hash through cutoff",
+  "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+  "input_universe": "500 old-epoch complete development sessions only; no post-2026-07-10 prospective sessions; required NIFTY, BANKNIFTY, SENSEX one-minute underlying OHLCV",
+  "invalidation": "close breaks opposite compression edge before entry",
+  "leader_symbol_or_basket_owner": "not applicable",
+  "mechanism_family": "first-hour volatility-of-volatility transition",
+  "missing_data_behavior": "fail closed with deterministic rejection code; no synthetic/mock/fallback rows accepted",
+  "multiple_setup_behavior": "duplicates rejected after first emitted candidate per target symbol-session or market-session as stated",
+  "normalization_formula": "log returns from close; vol-of-vol=std(chunk_realized_vols); compression_ratio=compression_range/first_hour_range",
+  "opening_window_definition": "all minute offsets are completed bars from 09:15 IST session open; timestamp alignment exact across required indices",
+  "outcome_data_read_before_amendment": false,
+  "parameter_hash": "640c50f4f2ff34d0bf770403e99add3da72235833c0e05df98d1aa0c16b90fbd",
+  "parameter_optimization": false,
+  "parameters": {
+    "acceptance_fraction": {
+      "boundary_behavior": [
+        0.12,
+        0.15,
+        0.18
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "close beyond compression edge by fraction*range",
+      "name": "acceptance_fraction",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "direction acceptance beyond noise",
+      "unit": "fraction_of_compression_range",
+      "value": 0.15
+    },
+    "compression_duration_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "10:15-10:44 compression range",
+      "name": "compression_duration_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "same-bar breakout prohibited",
+      "structural_rationale": "half-hour compression after chaos",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "compression_start_minutes_from_open": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "10:15 start",
+      "name": "compression_start_minutes_from_open",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "post first-hour transition start",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "first_hour_minutes": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15-10:14 completed bars",
+      "name": "first_hour_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first hour chaotic state window",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "max_compression_ratio": {
+      "boundary_behavior": [
+        0.48,
+        0.6,
+        0.72
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "compression_range/first_hour_range <= value",
+      "name": "max_compression_ratio",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "compression after chaotic first hour",
+      "unit": "fraction",
+      "value": 0.6
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    },
+    "vol_chunk_minutes": {
+      "boundary_behavior": [
+        9,
+        10,
+        11
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "six 10-minute chunks in first hour",
+      "name": "vol_chunk_minutes",
+      "owner": "volatility_estimator",
+      "score_only_role": false,
+      "sensitivity_neighbors": "non-divisible windows fail closed",
+      "structural_rationale": "vol-of-vol from stable chunks",
+      "unit": "completed minutes",
+      "value": 10
+    },
+    "vol_of_vol_training_percentile": {
+      "boundary_behavior": "validation never refits; fold-specific fitted value comes only from training sessions",
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "fit on train sessions only per fold",
+      "name": "vol_of_vol_training_percentile",
+      "owner": "training_only_empirical_quantile",
+      "score_only_role": false,
+      "sensitivity_neighbors": [
+        0.56,
+        0.7,
+        0.84
+      ],
+      "structural_rationale": "high but not extreme chaos threshold without validation leakage",
+      "unit": "training_fold_quantile",
+      "value": 0.7
+    }
+  },
+  "primary_outcome": "direction-normalized underlying bps from entry close to primary_horizon_minutes; development only, not prospective lockbox",
+  "prior_session_dependency": "required only where specified by state machine; missing required prior session fails closed",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar entry prohibited; confirmation bar cannot be entry bar; pause/compression completion and breakout on the same bar is rejected unless breakout occurs on later completed bar",
+  "schema_version": 2,
+  "secondary_descriptive_horizons": [
+    15,
+    30,
+    60
+  ],
+  "setup_expiry": "as specified by parameterized setup expiry or final state-machine window; after expiry reject SETUP_EXPIRED",
+  "single_emission_scope": "one candidate per hypothesis/session/target symbol except AC11/AC13 market tie rules emit first deterministic target only",
+  "specification_hash": "9a71a48aec9e5ca6b5953c116e62300a5504bf8a6d238a0703c1b9f2f1b620d2",
+  "state_machine": [
+    "compute one-minute log returns for first 60 completed bars",
+    "realized volatility = std of returns over non-overlapping 5-minute chunks",
+    "vol-of-vol = std of six 10-minute realized-vol chunks",
+    "high vol-of-vol threshold is training-fold-only 70th percentile, never validation fitted",
+    "compression window 10:15-10:45 range width <= 0.60 * first-hour range",
+    "directional acceptance is close beyond compression range by 0.15 * compression range after compression complete",
+    "emit next bar once"
+  ],
+  "structural_premise": "A chaotic first-hour volatility state followed by compression and directional acceptance may mark a transition into durable direction.",
+  "target_symbol": "qualifying symbol",
+  "threshold_formula": "fold-fitted vol_of_vol >= training 70th percentile; compression_ratio <= 0.60; acceptance fraction >= 0.15",
+  "tie_breaking": "NIFTY, BANKNIFTY, SENSEX deterministic order unless not applicable"
+}

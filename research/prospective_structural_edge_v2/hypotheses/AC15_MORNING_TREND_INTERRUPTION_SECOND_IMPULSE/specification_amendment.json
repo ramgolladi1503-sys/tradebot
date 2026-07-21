@@ -1,0 +1,21 @@
+{
+  "V1_status": "SUPERSEDED_PRE_OUTCOME_BY_EXECUTABLE_V2",
+  "candidate_counts_calculated_before_amendment": "NO",
+  "candidate_returns_calculated_before_amendment": "NO",
+  "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+  "hypothesis_identity_changed": "NO",
+  "mechanism_family_changed": "NO",
+  "outcome_data_read_before_amendment": "NO",
+  "parameter_optimization": "NO",
+  "reason": "PRE_OUTCOME_SPECIFICATION_INCOMPLETE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "v2_parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
+  "v2_specification_hash": "66b4ada2c5ab4a3d64e2efa5d8c115af650878abdfb5014c7d0893d41eeb6674"
+}

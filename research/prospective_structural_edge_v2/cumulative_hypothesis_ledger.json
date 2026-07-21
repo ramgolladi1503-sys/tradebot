@@ -4078,13 +4078,15 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "FROZEN_NOT_YET_EVALUATED",
+      "status": "V2_SPECIFICATION_FIDELITY_PASS",
       "structural_premise": "One index opens with accepted displacement while another remains inside opening balance; continuation is expected only after the laggard confirms, capturing propagation rather than simultaneous breakout.",
       "symbols": [
         "NIFTY",
         "BANKNIFTY",
         "SENSEX"
-      ]
+      ],
+      "v2_parameter_hash": "07bc149b26d9c00e7a9fe40e951db21fe00e33202640f41d4f608504cddda16a",
+      "v2_specification_hash": "ffa4787639146d8d19662279db35fc954ad065fe96b8b22e02f8c6a879d20b72"
     },
     {
       "cycle_number": 3,
@@ -4188,13 +4190,15 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "FROZEN_NOT_YET_EVALUATED",
+      "status": "V2_SPECIFICATION_FIDELITY_PASS",
       "structural_premise": "When a neutral gap opens near the prior close but the prior session closed in the top/bottom quartile of its range, early continuation may reflect unfinished inventory from the prior close.",
       "symbols": [
         "NIFTY",
         "BANKNIFTY",
         "SENSEX"
-      ]
+      ],
+      "v2_parameter_hash": "9d4c4e4db9754c13f170433163895d6255ed10bbdbb1fab15e062001ba206722",
+      "v2_specification_hash": "a9627916c67783fb0472af26dd07fbbe8cbefc0ae7b94d52b20956a65af14b19"
     },
     {
       "cycle_number": 3,
@@ -4298,13 +4302,15 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "FROZEN_NOT_YET_EVALUATED",
+      "status": "V2_SPECIFICATION_FIDELITY_PASS",
       "structural_premise": "Large dispersion among index opening returns that contracts after the first hour can create directional continuation in the lagging index toward the basket mean.",
       "symbols": [
         "NIFTY",
         "BANKNIFTY",
         "SENSEX"
-      ]
+      ],
+      "v2_parameter_hash": "421280c7a1a52a34fcde005539a3de27762118b5986da83a959f033938dafabb",
+      "v2_specification_hash": "bde898af11a476b4ec938f2b1129e519958f28baf21baec06614874fd7ab9641"
     },
     {
       "cycle_number": 3,
@@ -4408,13 +4414,15 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "FROZEN_NOT_YET_EVALUATED",
+      "status": "V2_SPECIFICATION_FIDELITY_PASS",
       "structural_premise": "A high volatility-of-volatility first hour followed by compression and directional acceptance may mark transition from chaotic repricing to durable inventory direction.",
       "symbols": [
         "NIFTY",
         "BANKNIFTY",
         "SENSEX"
-      ]
+      ],
+      "v2_parameter_hash": "640c50f4f2ff34d0bf770403e99add3da72235833c0e05df98d1aa0c16b90fbd",
+      "v2_specification_hash": "9a71a48aec9e5ca6b5953c116e62300a5504bf8a6d238a0703c1b9f2f1b620d2"
     },
     {
       "cycle_number": 3,
@@ -4518,13 +4526,15 @@
         "Emit first legal next-bar candidate once",
         "Reject all later duplicate setups"
       ],
-      "status": "FROZEN_NOT_YET_EVALUATED",
+      "status": "V2_SPECIFICATION_FIDELITY_PASS",
       "structural_premise": "A morning trend that pauses without reclaiming VWAP and then breaks its pause range may represent second-wave execution flow, distinct from generic trend pullback.",
       "symbols": [
         "NIFTY",
         "BANKNIFTY",
         "SENSEX"
-      ]
+      ],
+      "v2_parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
+      "v2_specification_hash": "66b4ada2c5ab4a3d64e2efa5d8c115af650878abdfb5014c7d0893d41eeb6674"
     }
   ],
   "multiple_testing": "Holm-Bonferroni across cumulative family; project alpha not reset",

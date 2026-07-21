@@ -1,0 +1,99 @@
+{
+  "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+  "parameter_hash": "9d4c4e4db9754c13f170433163895d6255ed10bbdbb1fab15e062001ba206722",
+  "parameters": {
+    "extreme_location_threshold": {
+      "boundary_behavior": [
+        0.6,
+        0.75,
+        0.9
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "top >= value, bottom <= 1-value",
+      "name": "extreme_location_threshold",
+      "owner": "prior_session_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "quartile close marks extreme prior inventory",
+      "unit": "prior_range_fraction",
+      "value": 0.75
+    },
+    "invalidation_bps": {
+      "boundary_behavior": [
+        8,
+        10,
+        12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "opposite move from open > value before confirmation invalidates",
+      "name": "invalidation_bps",
+      "owner": "current_open_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "greater invalidates",
+      "structural_rationale": "neutral premise broken by opposite initiative",
+      "unit": "bps",
+      "value": 10
+    },
+    "neutral_gap_max_bps": {
+      "boundary_behavior": [
+        8,
+        10,
+        12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(open/prior_close-1)*10000 <= value",
+      "name": "neutral_gap_max_bps",
+      "owner": "prior_close_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "near-flat open preserves prior inventory premise",
+      "unit": "bps",
+      "value": 10
+    },
+    "opening_confirmation_minutes": {
+      "boundary_behavior": [
+        14,
+        15,
+        16
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "confirmation at 09:30 after 15 bars",
+      "name": "opening_confirmation_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "lets opening noise settle",
+      "unit": "completed minutes",
+      "value": 15
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 completed bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed before outcomes",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

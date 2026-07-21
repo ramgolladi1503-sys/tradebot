@@ -1,0 +1,21 @@
+{
+  "V1_status": "SUPERSEDED_PRE_OUTCOME_BY_EXECUTABLE_V2",
+  "candidate_counts_calculated_before_amendment": "NO",
+  "candidate_returns_calculated_before_amendment": "NO",
+  "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+  "hypothesis_identity_changed": "NO",
+  "mechanism_family_changed": "NO",
+  "outcome_data_read_before_amendment": "NO",
+  "parameter_optimization": "NO",
+  "reason": "PRE_OUTCOME_SPECIFICATION_INCOMPLETE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "v2_parameter_hash": "640c50f4f2ff34d0bf770403e99add3da72235833c0e05df98d1aa0c16b90fbd",
+  "v2_specification_hash": "9a71a48aec9e5ca6b5953c116e62300a5504bf8a6d238a0703c1b9f2f1b620d2"
+}

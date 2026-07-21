@@ -1,0 +1,21 @@
+{
+  "V1_status": "SUPERSEDED_PRE_OUTCOME_BY_EXECUTABLE_V2",
+  "candidate_counts_calculated_before_amendment": "NO",
+  "candidate_returns_calculated_before_amendment": "NO",
+  "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+  "hypothesis_identity_changed": "NO",
+  "mechanism_family_changed": "NO",
+  "outcome_data_read_before_amendment": "NO",
+  "parameter_optimization": "NO",
+  "reason": "PRE_OUTCOME_SPECIFICATION_INCOMPLETE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "v2_parameter_hash": "9d4c4e4db9754c13f170433163895d6255ed10bbdbb1fab15e062001ba206722",
+  "v2_specification_hash": "a9627916c67783fb0472af26dd07fbbe8cbefc0ae7b94d52b20956a65af14b19"
+}

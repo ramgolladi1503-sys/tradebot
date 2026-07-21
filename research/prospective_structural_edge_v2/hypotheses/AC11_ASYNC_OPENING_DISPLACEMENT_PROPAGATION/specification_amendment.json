@@ -1,0 +1,21 @@
+{
+  "V1_status": "SUPERSEDED_PRE_OUTCOME_BY_EXECUTABLE_V2",
+  "candidate_counts_calculated_before_amendment": "NO",
+  "candidate_returns_calculated_before_amendment": "NO",
+  "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+  "hypothesis_identity_changed": "NO",
+  "mechanism_family_changed": "NO",
+  "outcome_data_read_before_amendment": "NO",
+  "parameter_optimization": "NO",
+  "reason": "PRE_OUTCOME_SPECIFICATION_INCOMPLETE",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "v2_parameter_hash": "07bc149b26d9c00e7a9fe40e951db21fe00e33202640f41d4f608504cddda16a",
+  "v2_specification_hash": "ffa4787639146d8d19662279db35fc954ad065fe96b8b22e02f8c6a879d20b72"
+}

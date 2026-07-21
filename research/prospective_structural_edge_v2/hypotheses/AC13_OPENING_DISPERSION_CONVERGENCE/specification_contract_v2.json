@@ -1,0 +1,179 @@
+{
+  "candidate_counts_calculated_before_amendment": false,
+  "candidate_identity": "canonical sha256 of hypothesis_id, specification_hash, parameter_hash, target_symbol, session_date, direction, state timestamps, causal_cutoff, first_legal_entry_timestamp, input_symbol_set, history_hash",
+  "candidate_score": "initial_dispersion_bps + convergence_fraction*100",
+  "confirmation_formula": "completed bar shows laggard distance to contemporaneous median contracted by threshold within setup window",
+  "cycle": 3,
+  "direction_rule": "trade laggard toward basket median: long if laggard return < median, short if laggard return > median",
+  "entry_event": "first completed confirmation bar satisfying formula; entry uses next completed bar close reference",
+  "entry_price_reference": "underlying close at first legal entry timestamp; never option price",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation; same-bar entry prohibited",
+  "future_suffix_behavior": "bars after causal cutoff must not change candidate ID, direction, entry timestamp, score, parameter hash, or history hash through cutoff",
+  "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+  "input_universe": "500 old-epoch complete development sessions only; no post-2026-07-10 prospective sessions; required NIFTY, BANKNIFTY, SENSEX one-minute underlying OHLCV",
+  "invalidation": "laggard distance expands by >= 20% from initial before confirmation",
+  "leader_symbol_or_basket_owner": "basket center is median opening return across all three indices; laggard is farthest from median",
+  "mechanism_family": "opening dispersion convergence across three indices",
+  "missing_data_behavior": "fail closed with deterministic rejection code; no synthetic/mock/fallback rows accepted",
+  "multiple_setup_behavior": "duplicates rejected after first emitted candidate per target symbol-session or market-session as stated",
+  "normalization_formula": "index_return_bps=(close_t/open_09:15-1)*10000; dispersion=max-min; convergence=(initial_abs_distance-current_abs_distance)/initial_abs_distance",
+  "opening_window_definition": "all minute offsets are completed bars from 09:15 IST session open; timestamp alignment exact across required indices",
+  "outcome_data_read_before_amendment": false,
+  "parameter_hash": "421280c7a1a52a34fcde005539a3de27762118b5986da83a959f033938dafabb",
+  "parameter_optimization": false,
+  "parameters": {
+    "max_adverse_expansion_fraction": {
+      "boundary_behavior": [
+        0.16,
+        0.2,
+        0.24
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "distance expansion from initial >= value invalidates",
+      "name": "max_adverse_expansion_fraction",
+      "owner": "invalidation",
+      "score_only_role": false,
+      "sensitivity_neighbors": "greater/equal invalidates",
+      "structural_rationale": "convergence premise broken",
+      "unit": "fraction",
+      "value": 0.2
+    },
+    "min_convergence_fraction": {
+      "boundary_behavior": [
+        0.24,
+        0.3,
+        0.36
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "distance contraction / initial distance >= value",
+      "name": "min_convergence_fraction",
+      "owner": "basket_convergence",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "actual convergence, not static laggard",
+      "unit": "fraction",
+      "value": 0.3
+    },
+    "min_initial_dispersion_bps": {
+      "boundary_behavior": [
+        28,
+        35,
+        42
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "max(return_bps)-min(return_bps) >= value",
+      "name": "min_initial_dispersion_bps",
+      "owner": "cross_index_dispersion",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "large enough cross-index opening dislocation",
+      "unit": "bps",
+      "value": 35
+    },
+    "min_residual_distance_bps": {
+      "boundary_behavior": [
+        6.4,
+        8,
+        9.6
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(laggard_return-median_return) >= value at confirmation",
+      "name": "min_residual_distance_bps",
+      "owner": "basket_convergence",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "still has distance to travel toward basket",
+      "unit": "bps",
+      "value": 8
+    },
+    "opening_return_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:45 close return from open",
+      "name": "opening_return_minutes",
+      "owner": "opening_session_structure",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first 30-minute dispersion snapshot",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    },
+    "setup_expiry_minutes_from_open": {
+      "boundary_behavior": [
+        119,
+        120,
+        121
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "last confirmation at 11:15",
+      "name": "setup_expiry_minutes_from_open",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "after expiry reject",
+      "structural_rationale": "opening dispersion should resolve before midday",
+      "unit": "completed minutes",
+      "value": 120
+    }
+  },
+  "primary_outcome": "direction-normalized underlying bps from entry close to primary_horizon_minutes; development only, not prospective lockbox",
+  "prior_session_dependency": "required only where specified by state machine; missing required prior session fails closed",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar entry prohibited; confirmation bar cannot be entry bar; pause/compression completion and breakout on the same bar is rejected unless breakout occurs on later completed bar",
+  "schema_version": 2,
+  "secondary_descriptive_horizons": [
+    15,
+    30,
+    60
+  ],
+  "setup_expiry": "as specified by parameterized setup expiry or final state-machine window; after expiry reject SETUP_EXPIRED",
+  "single_emission_scope": "one candidate per hypothesis/session/target symbol except AC11/AC13 market tie rules emit first deterministic target only",
+  "specification_hash": "bde898af11a476b4ec938f2b1129e519958f28baf21baec06614874fd7ab9641",
+  "state_machine": [
+    "choose premise CONVERGENCE_TO_BASKET",
+    "require all three aligned",
+    "compute return_09:45 for each index from session open",
+    "basket center = median of three normalized returns",
+    "dispersion = max return - min return",
+    "require dispersion >= 35 bps",
+    "laggard = farthest from median, tie order NIFTY, BANKNIFTY, SENSEX",
+    "wait until abs(laggard_return-current_median) contracts by >= 30% versus initial distance while still outside median by >= 8 bps",
+    "emit laggard next bar toward median"
+  ],
+  "structural_premise": "Large dispersion among index opening returns that later contracts may create a laggard move toward the basket mean.",
+  "target_symbol": "most negative/positive outlier laggard moving toward basket center",
+  "threshold_formula": "initial dispersion >= 35 bps; convergence >= 0.30; residual distance >= 8 bps",
+  "tie_breaking": "NIFTY, BANKNIFTY, SENSEX deterministic order unless not applicable"
+}

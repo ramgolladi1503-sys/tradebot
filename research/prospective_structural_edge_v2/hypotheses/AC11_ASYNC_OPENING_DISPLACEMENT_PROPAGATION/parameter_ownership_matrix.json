@@ -1,0 +1,133 @@
+{
+  "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+  "parameter_hash": "07bc149b26d9c00e7a9fe40e951db21fe00e33202640f41d4f608504cddda16a",
+  "parameters": {
+    "confirmation_window_minutes": {
+      "boundary_behavior": [
+        14,
+        15,
+        16
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:46 through 10:00 inclusive candidate confirmation window",
+      "name": "confirmation_window_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "expires after window",
+      "structural_rationale": "short propagation horizon",
+      "unit": "completed minutes",
+      "value": 15
+    },
+    "laggard_confirmation_fraction": {
+      "boundary_behavior": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "laggard close beyond range edge by fraction*range",
+      "name": "laggard_confirmation_fraction",
+      "owner": "opening_range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "laggard confirmation beyond noise",
+      "unit": "fraction_of_opening_range",
+      "value": 0.1
+    },
+    "leader_acceptance_fraction": {
+      "boundary_behavior": [
+        0.16,
+        0.2,
+        0.24
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "leader close beyond range edge by fraction*range",
+      "name": "leader_acceptance_fraction",
+      "owner": "opening_range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "accepted displacement, not mere gap",
+      "unit": "fraction_of_opening_range",
+      "value": 0.2
+    },
+    "leader_observation_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15 through 09:44 completed bars; observation at 09:45 close",
+      "name": "leader_observation_minutes",
+      "owner": "opening_session_structure",
+      "score_only_role": false,
+      "sensitivity_neighbors": "fail closed if fewer bars",
+      "structural_rationale": "first 30 minutes defines opening balance",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "max_laggard_displacement_bps": {
+      "boundary_behavior": [
+        9.6,
+        12,
+        14.4
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(laggard close_09:45/open_09:15-1)*10000 <= value",
+      "name": "max_laggard_displacement_bps",
+      "owner": "asynchronous_laggard_definition",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "laggard remains meaningfully undisplaced",
+      "unit": "bps",
+      "value": 12
+    },
+    "min_leader_displacement_bps": {
+      "boundary_behavior": [
+        28,
+        35,
+        42
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(close_09:45/open_09:15-1)*10000 >= value",
+      "name": "min_leader_displacement_bps",
+      "owner": "cross_index_normalized_displacement",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "material opening displacement without raw point scale",
+      "unit": "bps",
+      "value": 35
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 completed bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "development outcome horizon fixed pre-outcome",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

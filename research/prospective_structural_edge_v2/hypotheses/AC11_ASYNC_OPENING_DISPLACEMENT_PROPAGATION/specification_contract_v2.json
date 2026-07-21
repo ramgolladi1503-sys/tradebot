@@ -1,0 +1,177 @@
+{
+  "candidate_counts_calculated_before_amendment": false,
+  "candidate_identity": "canonical sha256 of hypothesis_id, specification_hash, parameter_hash, target_symbol, session_date, direction, state timestamps, causal_cutoff, first_legal_entry_timestamp, input_symbol_set, history_hash",
+  "candidate_score": "abs(leader_displacement_bps) + laggard_confirmation_fraction_observed*100",
+  "confirmation_formula": "laggard completed close crosses its own opening range edge in leader direction within 15 completed minutes after 09:45",
+  "cycle": 3,
+  "direction_rule": "leader direction is sign(close_09:45 / open_09:15 - 1); target direction equals leader direction after laggard confirmation",
+  "entry_event": "first completed confirmation bar satisfying formula; entry uses next completed bar close reference",
+  "entry_price_reference": "underlying close at first legal entry timestamp; never option price",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation; same-bar entry prohibited",
+  "future_suffix_behavior": "bars after causal cutoff must not change candidate ID, direction, entry timestamp, score, parameter hash, or history hash through cutoff",
+  "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+  "input_universe": "500 old-epoch complete development sessions only; no post-2026-07-10 prospective sessions; required NIFTY, BANKNIFTY, SENSEX one-minute underlying OHLCV",
+  "invalidation": "leader closes back inside its opening range before laggard confirmation",
+  "leader_symbol_or_basket_owner": "index with largest absolute normalized displacement at 09:45 among NIFTY, BANKNIFTY, SENSEX; ties broken by NIFTY, BANKNIFTY, SENSEX order",
+  "mechanism_family": "cross-index leadership propagation after asynchronous opening displacement",
+  "missing_data_behavior": "fail closed with deterministic rejection code; no synthetic/mock/fallback rows accepted",
+  "multiple_setup_behavior": "duplicates rejected after first emitted candidate per target symbol-session or market-session as stated",
+  "normalization_formula": "displacement_bps=(close_09:45/open_09:15 - 1)*10000; range-normalized acceptance=(close-range_edge)/opening_range_width",
+  "opening_window_definition": "all minute offsets are completed bars from 09:15 IST session open; timestamp alignment exact across required indices",
+  "outcome_data_read_before_amendment": false,
+  "parameter_hash": "07bc149b26d9c00e7a9fe40e951db21fe00e33202640f41d4f608504cddda16a",
+  "parameter_optimization": false,
+  "parameters": {
+    "confirmation_window_minutes": {
+      "boundary_behavior": [
+        14,
+        15,
+        16
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:46 through 10:00 inclusive candidate confirmation window",
+      "name": "confirmation_window_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "expires after window",
+      "structural_rationale": "short propagation horizon",
+      "unit": "completed minutes",
+      "value": 15
+    },
+    "laggard_confirmation_fraction": {
+      "boundary_behavior": [
+        0.08,
+        0.1,
+        0.12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "laggard close beyond range edge by fraction*range",
+      "name": "laggard_confirmation_fraction",
+      "owner": "opening_range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "laggard confirmation beyond noise",
+      "unit": "fraction_of_opening_range",
+      "value": 0.1
+    },
+    "leader_acceptance_fraction": {
+      "boundary_behavior": [
+        0.16,
+        0.2,
+        0.24
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "leader close beyond range edge by fraction*range",
+      "name": "leader_acceptance_fraction",
+      "owner": "opening_range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "accepted displacement, not mere gap",
+      "unit": "fraction_of_opening_range",
+      "value": 0.2
+    },
+    "leader_observation_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15 through 09:44 completed bars; observation at 09:45 close",
+      "name": "leader_observation_minutes",
+      "owner": "opening_session_structure",
+      "score_only_role": false,
+      "sensitivity_neighbors": "fail closed if fewer bars",
+      "structural_rationale": "first 30 minutes defines opening balance",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "max_laggard_displacement_bps": {
+      "boundary_behavior": [
+        9.6,
+        12,
+        14.4
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(laggard close_09:45/open_09:15-1)*10000 <= value",
+      "name": "max_laggard_displacement_bps",
+      "owner": "asynchronous_laggard_definition",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "laggard remains meaningfully undisplaced",
+      "unit": "bps",
+      "value": 12
+    },
+    "min_leader_displacement_bps": {
+      "boundary_behavior": [
+        28,
+        35,
+        42
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(close_09:45/open_09:15-1)*10000 >= value",
+      "name": "min_leader_displacement_bps",
+      "owner": "cross_index_normalized_displacement",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "material opening displacement without raw point scale",
+      "unit": "bps",
+      "value": 35
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 completed bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "development outcome horizon fixed pre-outcome",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "primary_outcome": "direction-normalized underlying bps from entry close to primary_horizon_minutes; development only, not prospective lockbox",
+  "prior_session_dependency": "required only where specified by state machine; missing required prior session fails closed",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar entry prohibited; confirmation bar cannot be entry bar; pause/compression completion and breakout on the same bar is rejected unless breakout occurs on later completed bar",
+  "schema_version": 2,
+  "secondary_descriptive_horizons": [
+    15,
+    30,
+    60
+  ],
+  "setup_expiry": "as specified by parameterized setup expiry or final state-machine window; after expiry reject SETUP_EXPIRED",
+  "single_emission_scope": "one candidate per hypothesis/session/target symbol except AC11/AC13 market tie rules emit first deterministic target only",
+  "specification_hash": "ffa4787639146d8d19662279db35fc954ad065fe96b8b22e02f8c6a879d20b72",
+  "state_machine": [
+    "require all three aligned one-minute sessions",
+    "compute first-30-minute opening range and 09:45 displacement for each index",
+    "leader = max abs(displacement_bps) with deterministic tie order",
+    "laggard candidates = indices with abs(displacement_bps) <= max_laggard_displacement_bps and still inside their first-30-minute range at 09:45",
+    "leader accepted if 09:45 close is outside leader opening range in leader direction by >= leader_acceptance_fraction * leader opening range",
+    "wait up to confirmation_window_minutes for first laggard close outside its own opening range in leader direction by >= laggard_confirmation_fraction * laggard range",
+    "emit the first confirming laggard only; tie same timestamp by NIFTY, BANKNIFTY, SENSEX"
+  ],
+  "structural_premise": "One index opens with accepted displacement while another remains inside opening balance; continuation is expected only after the laggard confirms.",
+  "target_symbol": "confirming_laggard_symbol",
+  "threshold_formula": "min_leader_displacement_bps >= 35; max_laggard_displacement_bps <= 12; leader_acceptance_fraction >= 0.20; laggard_confirmation_fraction >= 0.10",
+  "tie_breaking": "NIFTY, BANKNIFTY, SENSEX deterministic order unless not applicable"
+}

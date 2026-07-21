@@ -1,0 +1,150 @@
+{
+  "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+  "parameter_hash": "640c50f4f2ff34d0bf770403e99add3da72235833c0e05df98d1aa0c16b90fbd",
+  "parameters": {
+    "acceptance_fraction": {
+      "boundary_behavior": [
+        0.12,
+        0.15,
+        0.18
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "close beyond compression edge by fraction*range",
+      "name": "acceptance_fraction",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "direction acceptance beyond noise",
+      "unit": "fraction_of_compression_range",
+      "value": 0.15
+    },
+    "compression_duration_minutes": {
+      "boundary_behavior": [
+        29,
+        30,
+        31
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "10:15-10:44 compression range",
+      "name": "compression_duration_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "same-bar breakout prohibited",
+      "structural_rationale": "half-hour compression after chaos",
+      "unit": "completed minutes",
+      "value": 30
+    },
+    "compression_start_minutes_from_open": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "10:15 start",
+      "name": "compression_start_minutes_from_open",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "post first-hour transition start",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "first_hour_minutes": {
+      "boundary_behavior": [
+        59,
+        60,
+        61
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "09:15-10:14 completed bars",
+      "name": "first_hour_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "first hour chaotic state window",
+      "unit": "completed minutes",
+      "value": 60
+    },
+    "max_compression_ratio": {
+      "boundary_behavior": [
+        0.48,
+        0.6,
+        0.72
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "compression_range/first_hour_range <= value",
+      "name": "max_compression_ratio",
+      "owner": "range_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "compression after chaotic first hour",
+      "unit": "fraction",
+      "value": 0.6
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed horizon",
+      "unit": "completed minutes",
+      "value": 45
+    },
+    "vol_chunk_minutes": {
+      "boundary_behavior": [
+        9,
+        10,
+        11
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "six 10-minute chunks in first hour",
+      "name": "vol_chunk_minutes",
+      "owner": "volatility_estimator",
+      "score_only_role": false,
+      "sensitivity_neighbors": "non-divisible windows fail closed",
+      "structural_rationale": "vol-of-vol from stable chunks",
+      "unit": "completed minutes",
+      "value": 10
+    },
+    "vol_of_vol_training_percentile": {
+      "boundary_behavior": "validation never refits; fold-specific fitted value comes only from training sessions",
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "fit on train sessions only per fold",
+      "name": "vol_of_vol_training_percentile",
+      "owner": "training_only_empirical_quantile",
+      "score_only_role": false,
+      "sensitivity_neighbors": [
+        0.56,
+        0.7,
+        0.84
+      ],
+      "structural_rationale": "high but not extreme chaos threshold without validation leakage",
+      "unit": "training_fold_quantile",
+      "value": 0.7
+    }
+  },
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

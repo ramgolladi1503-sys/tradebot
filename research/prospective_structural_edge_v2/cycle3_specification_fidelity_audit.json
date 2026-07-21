@@ -1,0 +1,85 @@
+{
+  "all_v2_parameter_hashes_unique": true,
+  "candidate_counts_calculated": false,
+  "candidate_returns_calculated": false,
+  "cycle": 3,
+  "oracle_verdict": "CYCLE3_SPECIFICATION_FIDELITY_PASS",
+  "outcome_files_read": false,
+  "parameter_optimization": false,
+  "required_fields": [
+    "input universe",
+    "target symbol",
+    "leader symbol or basket owner where applicable",
+    "prior-session dependency",
+    "opening-window definition",
+    "direction rule",
+    "normalization formula",
+    "threshold formula",
+    "confirmation formula",
+    "entry event",
+    "entry price reference",
+    "first legal timestamp",
+    "invalidation",
+    "setup expiry",
+    "same-bar behavior",
+    "multiple-setup behavior",
+    "single-emission scope",
+    "candidate identity",
+    "candidate score",
+    "primary outcome",
+    "parameter values",
+    "parameter units",
+    "parameter owners",
+    "sensitivity neighbors"
+  ],
+  "results": [
+    {
+      "generic_placeholders_detected": true,
+      "hypothesis_id": "AC11_ASYNC_OPENING_DISPLACEMENT_PROPAGATION",
+      "parameter_hash": "07bc149b26d9c00e7a9fe40e951db21fe00e33202640f41d4f608504cddda16a",
+      "specification_hash": "ffa4787639146d8d19662279db35fc954ad065fe96b8b22e02f8c6a879d20b72",
+      "v1_status": "FROZEN_PRE_OUTCOME_CONCEPT_CONTRACT_V1",
+      "v2_status": "EXPLICIT_EXECUTABLE_CONTRACT_CREATED"
+    },
+    {
+      "generic_placeholders_detected": true,
+      "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+      "parameter_hash": "9d4c4e4db9754c13f170433163895d6255ed10bbdbb1fab15e062001ba206722",
+      "specification_hash": "a9627916c67783fb0472af26dd07fbbe8cbefc0ae7b94d52b20956a65af14b19",
+      "v1_status": "FROZEN_PRE_OUTCOME_CONCEPT_CONTRACT_V1",
+      "v2_status": "EXPLICIT_EXECUTABLE_CONTRACT_CREATED"
+    },
+    {
+      "generic_placeholders_detected": true,
+      "hypothesis_id": "AC13_OPENING_DISPERSION_CONVERGENCE",
+      "parameter_hash": "421280c7a1a52a34fcde005539a3de27762118b5986da83a959f033938dafabb",
+      "specification_hash": "bde898af11a476b4ec938f2b1129e519958f28baf21baec06614874fd7ab9641",
+      "v1_status": "FROZEN_PRE_OUTCOME_CONCEPT_CONTRACT_V1",
+      "v2_status": "EXPLICIT_EXECUTABLE_CONTRACT_CREATED"
+    },
+    {
+      "generic_placeholders_detected": true,
+      "hypothesis_id": "AC14_FIRST_HOUR_VOL_OF_VOL_TRANSITION",
+      "parameter_hash": "640c50f4f2ff34d0bf770403e99add3da72235833c0e05df98d1aa0c16b90fbd",
+      "specification_hash": "9a71a48aec9e5ca6b5953c116e62300a5504bf8a6d238a0703c1b9f2f1b620d2",
+      "v1_status": "FROZEN_PRE_OUTCOME_CONCEPT_CONTRACT_V1",
+      "v2_status": "EXPLICIT_EXECUTABLE_CONTRACT_CREATED"
+    },
+    {
+      "generic_placeholders_detected": true,
+      "hypothesis_id": "AC15_MORNING_TREND_INTERRUPTION_SECOND_IMPULSE",
+      "parameter_hash": "bb5bf8483154d070f6cc12c87eaa4c545ee9a969b820e342d86043ec034ea1b0",
+      "specification_hash": "66b4ada2c5ab4a3d64e2efa5d8c115af650878abdfb5014c7d0893d41eeb6674",
+      "v1_status": "FROZEN_PRE_OUTCOME_CONCEPT_CONTRACT_V1",
+      "v2_status": "EXPLICIT_EXECUTABLE_CONTRACT_CREATED"
+    }
+  ],
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1
+}

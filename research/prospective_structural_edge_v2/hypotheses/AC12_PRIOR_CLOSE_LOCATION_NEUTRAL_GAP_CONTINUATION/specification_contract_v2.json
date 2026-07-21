@@ -1,0 +1,143 @@
+{
+  "candidate_counts_calculated_before_amendment": false,
+  "candidate_identity": "canonical sha256 of hypothesis_id, specification_hash, parameter_hash, target_symbol, session_date, direction, state timestamps, causal_cutoff, first_legal_entry_timestamp, input_symbol_set, history_hash",
+  "candidate_score": "abs(prior_close_location-0.5)*100 + confirmation_distance_bps",
+  "confirmation_formula": "09:30 completed close confirms in prior-location direction relative to current open and causal VWAP",
+  "cycle": 3,
+  "direction_rule": "long when prior close location >= 0.75 and neutral gap confirmed upward; short when <= 0.25 and neutral gap confirmed downward",
+  "entry_event": "first completed confirmation bar satisfying formula; entry uses next completed bar close reference",
+  "entry_price_reference": "underlying close at first legal entry timestamp; never option price",
+  "first_legal_timestamp": "next completed one-minute bar after confirmation; same-bar entry prohibited",
+  "future_suffix_behavior": "bars after causal cutoff must not change candidate ID, direction, entry timestamp, score, parameter hash, or history hash through cutoff",
+  "hypothesis_id": "AC12_PRIOR_CLOSE_LOCATION_NEUTRAL_GAP_CONTINUATION",
+  "input_universe": "500 old-epoch complete development sessions only; no post-2026-07-10 prospective sessions; required NIFTY, BANKNIFTY, SENSEX one-minute underlying OHLCV",
+  "invalidation": "before confirmation, close crosses opposite side of current open by > 10 bps",
+  "leader_symbol_or_basket_owner": "not applicable",
+  "mechanism_family": "prior-day closing-location continuation after neutral gap",
+  "missing_data_behavior": "fail closed with deterministic rejection code; no synthetic/mock/fallback rows accepted",
+  "multiple_setup_behavior": "duplicates rejected after first emitted candidate per target symbol-session or market-session as stated",
+  "normalization_formula": "prior_close_location=(prior_close-prior_low)/(prior_high-prior_low); neutral_gap_bps=abs(open/prior_close-1)*10000",
+  "opening_window_definition": "all minute offsets are completed bars from 09:15 IST session open; timestamp alignment exact across required indices",
+  "outcome_data_read_before_amendment": false,
+  "parameter_hash": "9d4c4e4db9754c13f170433163895d6255ed10bbdbb1fab15e062001ba206722",
+  "parameter_optimization": false,
+  "parameters": {
+    "extreme_location_threshold": {
+      "boundary_behavior": [
+        0.6,
+        0.75,
+        0.9
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "top >= value, bottom <= 1-value",
+      "name": "extreme_location_threshold",
+      "owner": "prior_session_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "quartile close marks extreme prior inventory",
+      "unit": "prior_range_fraction",
+      "value": 0.75
+    },
+    "invalidation_bps": {
+      "boundary_behavior": [
+        8,
+        10,
+        12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "opposite move from open > value before confirmation invalidates",
+      "name": "invalidation_bps",
+      "owner": "current_open_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "greater invalidates",
+      "structural_rationale": "neutral premise broken by opposite initiative",
+      "unit": "bps",
+      "value": 10
+    },
+    "neutral_gap_max_bps": {
+      "boundary_behavior": [
+        8,
+        10,
+        12
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "abs(open/prior_close-1)*10000 <= value",
+      "name": "neutral_gap_max_bps",
+      "owner": "prior_close_geometry",
+      "score_only_role": false,
+      "sensitivity_neighbors": "equal passes",
+      "structural_rationale": "near-flat open preserves prior inventory premise",
+      "unit": "bps",
+      "value": 10
+    },
+    "opening_confirmation_minutes": {
+      "boundary_behavior": [
+        14,
+        15,
+        16
+      ],
+      "candidate_gate_role": true,
+      "evidence_only_role": false,
+      "formula": "confirmation at 09:30 after 15 bars",
+      "name": "opening_confirmation_minutes",
+      "owner": "market_clock",
+      "score_only_role": false,
+      "sensitivity_neighbors": "insufficient bars fail",
+      "structural_rationale": "lets opening noise settle",
+      "unit": "completed minutes",
+      "value": 15
+    },
+    "primary_horizon_minutes": {
+      "boundary_behavior": [
+        44,
+        45,
+        46
+      ],
+      "candidate_gate_role": false,
+      "evidence_only_role": false,
+      "formula": "entry close to +45 completed bars",
+      "name": "primary_horizon_minutes",
+      "owner": "round_intraday_horizon",
+      "score_only_role": false,
+      "sensitivity_neighbors": "clip at session end",
+      "structural_rationale": "fixed before outcomes",
+      "unit": "completed minutes",
+      "value": 45
+    }
+  },
+  "primary_outcome": "direction-normalized underlying bps from entry close to primary_horizon_minutes; development only, not prospective lockbox",
+  "prior_session_dependency": "required only where specified by state machine; missing required prior session fails closed",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "same_bar_behavior": "same-bar entry prohibited; confirmation bar cannot be entry bar; pause/compression completion and breakout on the same bar is rejected unless breakout occurs on later completed bar",
+  "schema_version": 2,
+  "secondary_descriptive_horizons": [
+    15,
+    30,
+    60
+  ],
+  "setup_expiry": "as specified by parameterized setup expiry or final state-machine window; after expiry reject SETUP_EXPIRED",
+  "single_emission_scope": "one candidate per hypothesis/session/target symbol except AC11/AC13 market tie rules emit first deterministic target only",
+  "specification_hash": "a9627916c67783fb0472af26dd07fbbe8cbefc0ae7b94d52b20956a65af14b19",
+  "state_machine": [
+    "require immediately preceding complete authoritative session",
+    "compute prior range high-low and close location=(prior_close-prior_low)/(prior_high-prior_low)",
+    "require prior range > 0",
+    "require abs(current_open/prior_close-1)*10000 <= neutral_gap_max_bps",
+    "wait opening_confirmation_minutes completed bars",
+    "long confirmation: confirmation close > current open and above VWAP-to-date; short mirrored below open and below VWAP-to-date",
+    "emit same symbol next bar once"
+  ],
+  "structural_premise": "A neutral gap opens near the prior close, while the prior session closed near one extreme of its range, suggesting unfinished prior-session inventory.",
+  "target_symbol": "same symbol whose prior close location qualifies",
+  "threshold_formula": "top >= 0.75, bottom <= 0.25, neutral gap <= 10 bps",
+  "tie_breaking": "NIFTY, BANKNIFTY, SENSEX deterministic order unless not applicable"
+}
