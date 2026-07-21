@@ -1,0 +1,122 @@
+{
+  "final_lockbox_opened_before_this_artifact": false,
+  "finalists": [
+    {
+      "alpha": 0.025,
+      "finalist_id": "FINALIST_1",
+      "frozen_order": 1,
+      "hypothesis_id": "AC07_MIDDAY_COMPRESSION_LATE_EXPANSION",
+      "screening_summary": {
+        "candidate_count": 175,
+        "direction_breakdown": [
+          {
+            "count": 96,
+            "direction": -1,
+            "mean": 4.032165598991585
+          },
+          {
+            "count": 79,
+            "direction": 1,
+            "mean": -3.136157256948529
+          }
+        ],
+        "mae_mean_bps": -11.550213017470044,
+        "mean_bps": 0.796179852595762,
+        "median_bps": -0.8025562394975427,
+        "mfe_mean_bps": 12.396219539970753,
+        "positive_candidate_fraction": 0.48,
+        "positive_session_fraction": 0.527027027027027,
+        "session_clustered_mean_ci_95": [
+          -2.2259697265013667,
+          3.517734494517445
+        ],
+        "session_count": 74,
+        "single_session_concentration": 0.017142857142857144,
+        "symbol_breakdown": [
+          {
+            "count": 47,
+            "mean": -2.0473766954285475,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 66,
+            "mean": 1.5143698919481168,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 62,
+            "mean": 2.1872542906584584,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.08571428571428572
+      }
+    },
+    {
+      "alpha": 0.015,
+      "finalist_id": "FINALIST_2",
+      "frozen_order": 2,
+      "hypothesis_id": "AC08_VWAP_INVENTORY_TRANSFER",
+      "screening_summary": {
+        "candidate_count": 230,
+        "direction_breakdown": [
+          {
+            "count": 120,
+            "direction": -1,
+            "mean": 2.9971454445582397
+          },
+          {
+            "count": 110,
+            "direction": 1,
+            "mean": -2.845451023500796
+          }
+        ],
+        "mae_mean_bps": -9.647522197563715,
+        "mean_bps": 0.20286017722565738,
+        "median_bps": -0.10937194441174025,
+        "mfe_mean_bps": 9.897198671967189,
+        "positive_candidate_fraction": 0.5,
+        "positive_session_fraction": 0.5164835164835165,
+        "session_clustered_mean_ci_95": [
+          -1.4983194956551367,
+          3.318093065133948
+        ],
+        "session_count": 91,
+        "single_session_concentration": 0.013043478260869565,
+        "symbol_breakdown": [
+          {
+            "count": 78,
+            "mean": -0.42186535273145925,
+            "symbol": "BANKNIFTY"
+          },
+          {
+            "count": 73,
+            "mean": 0.3348995981992289,
+            "symbol": "NIFTY"
+          },
+          {
+            "count": 79,
+            "mean": 0.6976666785621682,
+            "symbol": "SENSEX"
+          }
+        ],
+        "top_five_session_concentration": 0.06521739130434782
+      }
+    }
+  ],
+  "no_fourth_finalist_on_same_lockbox": true,
+  "research_epoch_id": "AVAILABLE_CORPUS_EPOCH_2024_2026_V1",
+  "safety_flags": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "is_order_action": false,
+    "read_only": true
+  },
+  "schema_version": 1,
+  "sequential_alpha_allocation": {
+    "FINALIST_1": 0.025,
+    "FINALIST_2": 0.015,
+    "FINALIST_3": 0.01
+  }
+}
