@@ -13,6 +13,38 @@ SUPPORTED_PNL_MODELS = {
     "UNDERLYING_INDEX_PROXY_FIXED_HURDLE",
     "DELTA_PROXY_OPTION",
 }
+REQUIRED_PHASE4_AUDITS = (
+    (
+        "phase_4_trade_ledger_audit.json",
+        "TRADE_LEDGER_AUDIT_PASSED",
+        "TRADE_LEDGER_AUDIT_NOT_PASSED",
+    ),
+    (
+        "phase_4_5_truth_audit.json",
+        "PHASE_4_5_TRUTH_AUDIT_PASSED",
+        "PHASE_4_5_TRUTH_AUDIT_NOT_PASSED",
+    ),
+    (
+        "phase_4_7_integrity_audit.json",
+        "PHASE_4_7_INTEGRITY_AUDIT_PASSED",
+        "PHASE_4_7_INTEGRITY_AUDIT_NOT_PASSED",
+    ),
+    (
+        "phase_4_8_selection_quality_audit.json",
+        "PHASE_4_8_SELECTION_QUALITY_PASSED",
+        "PHASE_4_8_SELECTION_QUALITY_NOT_PASSED",
+    ),
+    (
+        "phase_4_10_accounting_audit.json",
+        "PHASE_4_10_ACCOUNTING_PASSED",
+        "PHASE_4_10_ACCOUNTING_NOT_PASSED",
+    ),
+    (
+        "phase_4_v2_structural_audit.json",
+        "V2_STRUCTURAL_AUDIT_PASSED",
+        "V2_STRUCTURAL_AUDIT_NOT_PASSED",
+    ),
+)
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
@@ -34,6 +66,26 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _required_audit_blockers(base_dir: Path) -> list[str]:
+    blockers: list[str] = []
+    for filename, expected, blocker in REQUIRED_PHASE4_AUDITS:
+        report = _load_json(base_dir / filename)
+        if not report:
+            blockers.append(f"PHASE4_AUDIT_REPORT_MISSING:{filename}")
+            continue
+        classification = report.get("classification")
+        if classification != expected:
+            blockers.append(f"{blocker}:{classification or 'MISSING'}")
+        blockers.extend(str(value) for value in report.get("blockers", []))
+        blockers.extend(
+            str(value) for value in report.get("failed_blockers", [])
+        )
+        blockers.extend(
+            str(value) for value in report.get("suspicious_blockers", [])
+        )
+    return list(dict.fromkeys(blockers))
+
+
 def _resolve_pnl_model(trades: list[dict[str, Any]]) -> tuple[str | None, list[str]]:
     models = {str(trade.get("pnl_model") or "").strip() for trade in trades}
     models.discard("")
@@ -42,7 +94,8 @@ def _resolve_pnl_model(trades: list[dict[str, Any]]) -> tuple[str | None, list[s
         blockers.append("MIXED_PNL_MODELS_IN_LEDGER")
         return None, blockers
     if not models:
-        # Legacy ledgers used underlying-point gross/net fields.
+        # Legacy ledgers used underlying-point gross/net fields. They remain
+        # readable, but current generated ledgers always declare the model.
         return "UNDERLYING_INDEX_PROXY_FIXED_HURDLE", blockers
     model = next(iter(models))
     if model not in SUPPORTED_PNL_MODELS:
@@ -89,15 +142,24 @@ def calculate_trade_metrics(trades: list[dict[str, Any]]) -> dict[str, Any]:
     gross_field, cost_field, net_field = _pnl_fields(effective_model)
 
     gross_values = np.asarray(
-        [float(trade.get(gross_field, trade.get("gross_pnl", 0.0))) for trade in trades],
+        [
+            float(trade.get(gross_field, trade.get("gross_pnl", 0.0)))
+            for trade in trades
+        ],
         dtype=float,
     )
     cost_values = np.asarray(
-        [float(trade.get(cost_field, trade.get("costs", 0.0))) for trade in trades],
+        [
+            float(trade.get(cost_field, trade.get("costs", 0.0)))
+            for trade in trades
+        ],
         dtype=float,
     )
     net_values = np.asarray(
-        [float(trade.get(net_field, trade.get("net_pnl", 0.0))) for trade in trades],
+        [
+            float(trade.get(net_field, trade.get("net_pnl", 0.0)))
+            for trade in trades
+        ],
         dtype=float,
     )
 
@@ -176,25 +238,11 @@ def main() -> None:
     min_trades = int(thresholds.get("min_trades", 30))
     min_expectancy = float(thresholds.get("min_expectancy", 0.1))
 
-    audit = _load_json(base_dir / "phase_4_trade_ledger_audit.json")
-    audit_classification = audit.get(
-        "classification", "TRADE_LEDGER_AUDIT_FAILED"
-    )
-    v2_audit = _load_json(base_dir / "phase_4_v2_structural_audit.json")
-    v2_classification = v2_audit.get(
-        "classification", "V2_STRUCTURAL_AUDIT_FAILED"
-    )
-
     trades = _load_jsonl(base_dir / "phase_4_trade_ledger.jsonl")
     metrics = calculate_trade_metrics(trades)
     blockers_p4 = list(metrics["blockers"])
+    blockers_p4.extend(_required_audit_blockers(base_dir))
 
-    if audit_classification == "TRADE_LEDGER_AUDIT_SUSPICIOUS":
-        blockers_p4.append("TRADE_LEDGER_AUDIT_SUSPICIOUS")
-    if audit_classification == "TRADE_LEDGER_AUDIT_FAILED":
-        blockers_p4.append("TRADE_LEDGER_AUDIT_FAILED")
-    if v2_classification != "V2_STRUCTURAL_AUDIT_PASSED":
-        blockers_p4.extend(v2_audit.get("blockers", ["V2_STRUCTURAL_AUDIT_FAILED"]))
     if not has_sufficient_backtest:
         blockers_p4.append("INSUFFICIENT_HISTORICAL_DATA_FOR_BACKTEST_OR_WFA")
     if not trades:
