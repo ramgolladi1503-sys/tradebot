@@ -110,32 +110,79 @@ def _select_best_params(
     return best_params, best_score
 
 
+def _session_blocks(
+    sessions: pd.DatetimeIndex,
+    *,
+    block_count: int,
+) -> list[pd.DatetimeIndex]:
+    base_size, remainder = divmod(len(sessions), block_count)
+    blocks: list[pd.DatetimeIndex] = []
+    cursor = 0
+    for block_index in range(block_count):
+        size = base_size + (1 if block_index < remainder else 0)
+        blocks.append(sessions[cursor : cursor + size])
+        cursor += size
+    return blocks
+
+
+def _row_bounds(mask: pd.Series) -> tuple[int, int]:
+    positions = [index for index, selected in enumerate(mask.to_numpy()) if selected]
+    if not positions:
+        raise ValueError("walk-forward session block produced no rows")
+    return positions[0], positions[-1] + 1
+
+
 def build_walk_forward_plan(
     data: pd.DataFrame,
     *,
     block_count: int = 6,
-    minimum_block_rows: int = 10,
+    minimum_block_sessions: int = 5,
 ) -> dict[str, object]:
-    """Build three rolling train/test folds plus one untouched final holdout.
+    """Build whole-session rolling folds and one untouched final holdout.
 
-    With six chronological blocks:
+    With six chronological session blocks:
       - fold 1 trains on blocks 0-1 and tests on block 2;
       - fold 2 trains on blocks 1-2 and tests on block 3;
       - fold 3 trains on blocks 2-3 and tests on block 4;
-      - block 5 (plus any remainder) is the final untouched holdout.
+      - block 5 is the final untouched holdout.
+
+    No trading session may appear in more than one lane of the same fold.
     """
     if block_count != 6:
         raise ValueError("the certified plan requires exactly six blocks")
-    fold_size = len(data) // block_count
-    if fold_size < minimum_block_rows:
-        raise ValueError("data is too small for certified walk-forward blocks")
+    if minimum_block_sessions <= 0:
+        raise ValueError("minimum_block_sessions must be positive")
+    if not isinstance(data.index, pd.DatetimeIndex):
+        raise TypeError("certified walk-forward data must use a DatetimeIndex")
+    if data.index.hasnans:
+        raise ValueError("walk-forward index contains invalid timestamps")
+    if not data.index.is_monotonic_increasing:
+        raise ValueError("walk-forward data must be sorted chronologically")
+
+    session_keys = pd.Series(data.index.normalize(), index=data.index)
+    unique_sessions = pd.DatetimeIndex(session_keys.drop_duplicates().to_list())
+    required_sessions = block_count * minimum_block_sessions
+    if len(unique_sessions) < required_sessions:
+        raise ValueError(
+            "data is too small for certified whole-session walk-forward blocks"
+        )
+
+    blocks = _session_blocks(unique_sessions, block_count=block_count)
+    if any(len(block) < minimum_block_sessions for block in blocks):
+        raise ValueError(
+            "data is too small for certified whole-session walk-forward blocks"
+        )
 
     folds: list[dict[str, object]] = []
     for fold_index in range(3):
-        train_start = fold_index * fold_size
-        train_end = train_start + (2 * fold_size)
-        test_start = train_end
-        test_end = test_start + fold_size
+        train_sessions = blocks[fold_index].append(blocks[fold_index + 1])
+        test_sessions = blocks[fold_index + 2]
+        train_mask = session_keys.isin(train_sessions)
+        test_mask = session_keys.isin(test_sessions)
+        train_start, train_end = _row_bounds(train_mask)
+        test_start, test_end = _row_bounds(test_mask)
+        if set(train_sessions).intersection(test_sessions):
+            raise AssertionError("walk-forward train and test sessions overlap")
         folds.append(
             {
                 "fold": fold_index + 1,
@@ -143,17 +190,36 @@ def build_walk_forward_plan(
                 "train_end": train_end,
                 "test_start": test_start,
                 "test_end": test_end,
-                "train_data": data.iloc[train_start:train_end],
-                "test_data": data.iloc[test_start:test_end],
+                "train_start_session": train_sessions[0].isoformat(),
+                "train_end_session": train_sessions[-1].isoformat(),
+                "test_start_session": test_sessions[0].isoformat(),
+                "test_end_session": test_sessions[-1].isoformat(),
+                "train_sessions": [value.isoformat() for value in train_sessions],
+                "test_sessions": [value.isoformat() for value in test_sessions],
+                "train_data": data.loc[train_mask.to_numpy()].copy(),
+                "test_data": data.loc[test_mask.to_numpy()].copy(),
             }
         )
 
-    holdout_start = 5 * fold_size
+    holdout_sessions = blocks[5]
+    holdout_mask = session_keys.isin(holdout_sessions)
+    holdout_start, holdout_end = _row_bounds(holdout_mask)
+    used_pre_holdout_sessions = blocks[0]
+    for block in blocks[1:5]:
+        used_pre_holdout_sessions = used_pre_holdout_sessions.append(block)
+    if set(used_pre_holdout_sessions).intersection(holdout_sessions):
+        raise AssertionError("final holdout sessions overlap walk-forward sessions")
+
     return {
-        "fold_size": fold_size,
+        "block_session_counts": [len(block) for block in blocks],
+        "total_sessions": len(unique_sessions),
         "folds": folds,
         "holdout_start": holdout_start,
-        "holdout_data": data.iloc[holdout_start:],
+        "holdout_end": holdout_end,
+        "holdout_start_session": holdout_sessions[0].isoformat(),
+        "holdout_end_session": holdout_sessions[-1].isoformat(),
+        "holdout_sessions": [value.isoformat() for value in holdout_sessions],
+        "holdout_data": data.loc[holdout_mask.to_numpy()].copy(),
     }
 
 
@@ -199,11 +265,7 @@ def run_walk_forward(
 ) -> dict[str, object]:
     """Run train-only selection, fold OOS evaluation and final holdout validation."""
     plan = build_walk_forward_plan(data)
-    grid = (
-        default_parameter_grid()
-        if parameter_grid is None
-        else list(parameter_grid)
-    )
+    grid = default_parameter_grid() if parameter_grid is None else list(parameter_grid)
     if not grid:
         return {
             "status": "REJECTED",
@@ -235,6 +297,10 @@ def run_walk_forward(
                     "train_end": fold["train_end"],
                     "test_start": fold["test_start"],
                     "test_end": fold["test_end"],
+                    "train_start_session": fold["train_start_session"],
+                    "train_end_session": fold["train_end_session"],
+                    "test_start_session": fold["test_start_session"],
+                    "test_end_session": fold["test_end_session"],
                 }
             )
             continue
@@ -249,6 +315,10 @@ def run_walk_forward(
                 "train_end": fold["train_end"],
                 "test_start": fold["test_start"],
                 "test_end": fold["test_end"],
+                "train_start_session": fold["train_start_session"],
+                "train_end_session": fold["train_end_session"],
+                "test_start_session": fold["test_start_session"],
+                "test_end_session": fold["test_end_session"],
                 "selected_params": best_params,
                 "train_score": train_score,
                 "test_metrics": test_metrics,
@@ -287,11 +357,15 @@ def run_walk_forward(
         "status": "PROMOTED" if promoted else "REJECTED",
         "promoted": promoted,
         "blockers": blockers,
-        "fold_size": plan["fold_size"],
+        "block_session_counts": plan["block_session_counts"],
+        "total_sessions": plan["total_sessions"],
         "fold_reports": fold_reports,
         "selected_params": final_params,
         "stability_penalty": stability_penalty,
         "holdout_start": plan["holdout_start"],
+        "holdout_end": plan["holdout_end"],
+        "holdout_start_session": plan["holdout_start_session"],
+        "holdout_end_session": plan["holdout_end_session"],
         "holdout_metrics": final_holdout_metrics,
     }
 
@@ -344,6 +418,31 @@ def _load_csv(path: str) -> pd.DataFrame:
     return data
 
 
+def _smoke_data() -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    trading_days = pd.bdate_range("2026-01-01", periods=60)
+    row_number = 0
+    for day in trading_days:
+        index = pd.date_range(
+            day + pd.Timedelta(hours=9, minutes=15), periods=20, freq="5min"
+        )
+        values = [100.0 + (row_number + offset) * 0.1 for offset in range(len(index))]
+        frames.append(
+            pd.DataFrame(
+                {
+                    "open": values,
+                    "close": values,
+                    "high": [value + 1.0 for value in values],
+                    "low": [value - 1.0 for value in values],
+                    "volume": 1000,
+                },
+                index=index,
+            )
+        )
+        row_number += len(index)
+    return pd.concat(frames)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run certified walk-forward analysis")
     parser.add_argument("--csv", required=False, help="Path to walk-forward CSV data")
@@ -363,16 +462,5 @@ if __name__ == "__main__":
         print(f"Loading data from {args.csv}...")
         run_walk_forward(_load_csv(args.csv))
     else:
-        print("Generating synthetic data for a non-production smoke test...")
-        dates = pd.date_range("2026-01-01", periods=1000, freq="min")
-        smoke_data = pd.DataFrame(
-            {
-                "open": [100 + i * 0.1 for i in range(1000)],
-                "close": [100 + i * 0.1 for i in range(1000)],
-                "high": [101 + i * 0.1 for i in range(1000)],
-                "low": [99 + i * 0.1 for i in range(1000)],
-                "volume": [1000 for _ in range(1000)],
-            },
-            index=dates,
-        )
-        run_walk_forward(smoke_data)
+        print("Generating multi-session data for a non-production smoke test...")
+        run_walk_forward(_smoke_data())
