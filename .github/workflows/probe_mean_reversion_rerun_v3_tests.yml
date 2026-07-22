@@ -1,5 +1,6 @@
 name: Probe Mean Reversion Rerun V3 Test Failure
 
+# Revision 2: inspect the dependency-corrected run.
 on:
   push:
     branches:
@@ -15,7 +16,7 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     env:
-      SOURCE_JOB_ID: "88902956114"
+      SOURCE_JOB_ID: "88903965667"
     steps:
       - uses: actions/checkout@v4
         with:
