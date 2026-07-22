@@ -54,7 +54,7 @@ jobs:
           import pandas as pd
           import pyarrow.parquet as pq
 
-          root = Path('/tmp/schema-probe/extracted/runtime/upstox_candidate_replay')
+          root = Path('/tmp/schema-probe/extracted/upstox_candidate_replay')
           files = sorted(
               path for path in root.glob('*/underlying/*.parquet')
               if path.is_file() and not path.name.startswith('._')
