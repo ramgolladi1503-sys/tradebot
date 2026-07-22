@@ -1,0 +1,42 @@
+{
+  "campaign_id": "UPSTOX_DEPTH_SHADOW_CAPTURE_V2",
+  "purpose": "Collect causal, two-sided Upstox Market Data Feed V3 order-book evidence for a future liquidity-exhaustion research campaign.",
+  "official_feed_contract": {
+    "api": "Market Data Feed V3",
+    "decoded_path": "feeds[instrument_key].fullFeed.marketFF.marketLevel.bidAskQuote",
+    "full_mode_levels": 5,
+    "full_d30_mode_levels": 30,
+    "normal_full_subscription_limit": 2000,
+    "full_d30_subscription_limit": 50
+  },
+  "storage": {
+    "schema_version": "UPSTOX_DEPTH_SHADOW_V2_1",
+    "default_output_root": ".runtime/research/upstox_depth_shadow_v2",
+    "append_only_parquet_chunks": true,
+    "atomic_chunk_publication": true,
+    "payload_sha256_only": true,
+    "raw_payload_persisted": false,
+    "access_token_persisted": false
+  },
+  "session_readiness": {
+    "minimum_session_minutes": 300.0,
+    "minimum_two_sided_depth_rate": 0.9,
+    "minimum_instrument_coverage_rate": 0.95,
+    "maximum_median_gap_seconds": 5.0,
+    "maximum_p95_gap_seconds": 30.0,
+    "maximum_parse_failure_rate": 0.001
+  },
+  "dataset_readiness": {
+    "minimum_development_sessions": 60,
+    "minimum_future_unseen_holdout_sessions": 20,
+    "development_and_holdout_must_be_chronologically_separate": true
+  },
+  "result_boundary": {
+    "strategy_created": false,
+    "edge_claim_allowed": false,
+    "profitability_claim_allowed": false,
+    "paper_live_allowed": false,
+    "execution_allowed": false,
+    "broker_order_calls_allowed": false
+  }
+}
