@@ -9,6 +9,7 @@ import pandas as pd
 
 RESEARCH_CANDLE = "CANDLE"
 RESEARCH_NON_CANDLE_QUOTE = "NON_CANDLE_QUOTE"
+RESEARCH_APPLEDOUBLE_METADATA = "APPLEDOUBLE_METADATA"
 _REQUIRED_CANDLE_COLUMNS = frozenset({"timestamp", "open", "high", "low", "close"})
 _OHLC_COLUMNS = frozenset({"open", "high", "low", "close"})
 _KNOWN_QUOTE_COLUMNS = frozenset({"ts", "token", "symbol", "ltp", "bid", "ask"})
@@ -99,6 +100,12 @@ def load_research_candle_parquet(
 ) -> tuple[str, pd.DataFrame | None, str | None]:
     """Load one parquet, returning explicit non-candle classification when safe."""
     source = Path(path)
+    if source.name.startswith("._"):
+        counterpart = source.with_name(source.name[2:])
+        if not counterpart.is_file():
+            raise ValueError(f"orphan AppleDouble parquet metadata: {source}")
+        return RESEARCH_APPLEDOUBLE_METADATA, None, None
+
     frame = pd.read_parquet(source)
     classification = classify_research_parquet_columns(frame.columns)
     if classification == RESEARCH_NON_CANDLE_QUOTE:
