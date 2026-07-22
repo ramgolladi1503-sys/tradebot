@@ -5,30 +5,34 @@
     {
       "evidence_dir": "ml_v2_long",
       "family": "causal_ml_rule_discovery_long",
-      "frozen_spec_sha256": "53ef1fdb01e3aeabd553498ccca3c8efee97172b7ba602b33e80157f480ac2d6",
+      "frozen_spec_sha256": "58e62f917bef23d284eb7ded44a4e081465391fe6f03f400a58cd1fc9b952b7e",
       "hypothesis_id": "ML_V2_LONG",
-      "max_variants": 10
+      "max_variants": 10,
+      "spec_path": "specs/ml_v2_long.json"
     },
     {
       "evidence_dir": "ml_v2_short",
       "family": "causal_ml_rule_discovery_short",
-      "frozen_spec_sha256": "ca36f9e4b436f0592a1cc4ab8e6268b2ce3989a0488df86b40e90b85cf99b607",
+      "frozen_spec_sha256": "68f9baf52173dc81c84b5cb101d449ea367119116f092a24cb12db81234fc263",
       "hypothesis_id": "ML_V2_SHORT",
-      "max_variants": 10
+      "max_variants": 10,
+      "spec_path": "specs/ml_v2_short.json"
     },
     {
       "evidence_dir": "him_30",
       "family": "high_information_closing_momentum",
-      "frozen_spec_sha256": "40f0ba77ff09c4c4a836a158cee0e83088349835aa475dba0cd8a2ba842e4ab5",
+      "frozen_spec_sha256": "dd1c4a9eaf5fb59bedc65960b257598dacc4b8549fad8b76cf289478658f344e",
       "hypothesis_id": "HIM_30",
-      "max_variants": 8
+      "max_variants": 8,
+      "spec_path": "specs/him_30.json"
     },
     {
       "evidence_dir": "eogf_30",
       "family": "extreme_overnight_gap_failure",
-      "frozen_spec_sha256": "02c3f1550c21ba9a617f534672270b6f195cce2c9a614be7626cd9defcb65a97",
+      "frozen_spec_sha256": "25f25d20a79a23dc3f6e090847ae374ee037fde74e3339ac67ff98e1b9175d3c",
       "hypothesis_id": "EOGF_30",
-      "max_variants": 8
+      "max_variants": 8,
+      "spec_path": "specs/eogf_30.json"
     }
   ],
   "max_total_hypotheses": 5,
