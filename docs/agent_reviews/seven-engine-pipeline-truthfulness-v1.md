@@ -4,7 +4,7 @@ mode: AGENT_PIPELINE_REPAIR
 candidate_id: SEVEN_ENGINE_PIPELINE_TRUTHFULNESS_V1
 decision: DRAFT_REVIEW_REQUIRED
 reason: Removes false-success, guessed-input, unverified-cache, and fabricated-certification behavior from the legacy strategy pipeline.
-timestamp: 2026-07-22T20:05:00Z
+timestamp: 2026-07-22T20:08:00Z
 is_order_action: false
 broker_api_called: false
 source: PR_705_BRANCH_AND_GITHUB_ACTIONS_FAILURE_REVIEW
@@ -51,7 +51,7 @@ Acceptance requires all repository checks to pass on one immutable PR head, incl
 
 ## Runtime Proof Required After Merge
 
-Run one disposable paper-only strategy through the repaired orchestrator using exact candidate, trace, evidence, and output paths. Confirm that missing sidecars, altered hashes, unknown enum values, zero executable evidence, incomplete statistical sections, and missing Drift baselines block. Re-run the same immutable inputs twice and compare artifact hashes. Do not invoke a broker or enable LIVE.
+Run one disposable paper-only strategy through the repaired orchestrator using exact input paths for candidate records, traces, evidence, and outputs. Confirm that absent sidecars, altered hashes, unknown enum values, zero executable evidence, incomplete statistical sections, and absent Drift baselines block. Re-run the same immutable inputs twice and compare artifact hashes. Do not invoke a broker or enable LIVE.
 
 ## Known Limitation
 
