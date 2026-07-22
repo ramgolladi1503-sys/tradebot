@@ -11,8 +11,10 @@ on:
       - "research/ml_strategy_discovery/**"
       - "scripts/run_structural_edge_campaign.py"
       - "scripts/prepare_structural_edge_campaign_development.py"
+      - "scripts/run_structural_hypothesis_development.py"
       - "scripts/run_ml_strategy_discovery_v2.py"
       - "tests/test_structural_edge_campaign.py"
+      - "tests/test_structural_edge_hypotheses.py"
       - "tests/test_ml_strategy_discovery_v2*.py"
   workflow_dispatch:
 
@@ -52,11 +54,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas scipy scikit-learn pyarrow pytest
 
-      - name: Run campaign and V2 behavioral tests
+      - name: Run campaign, hypothesis, and V2 behavioral tests
         run: |
           set -euo pipefail
           PYTHONPATH=. python -m pytest -q \
             tests/test_structural_edge_campaign.py \
+            tests/test_structural_edge_hypotheses.py \
             tests/test_ml_strategy_discovery_v2*.py
 
       - name: Download immutable private release
@@ -220,6 +223,98 @@ jobs:
             --partition-registry "${V2_ROOT}/short/partition_registry.json" \
             --output "${CAMPAIGN_ROOT}/ml_v2_short/development.json"
 
+      - name: Run HIM-30 and EOGF-30 development twice
+        run: |
+          set -euo pipefail
+          STRUCTURAL_ROOT="${RUNNER_TEMP}/structural"
+          mkdir -p "${STRUCTURAL_ROOT}"
+          for run_name in run-a run-b; do
+            for hypothesis_id in HIM_30 EOGF_30; do
+              evidence_dir="$(echo "${hypothesis_id}" | tr '[:upper:]' '[:lower:]')"
+              PYTHONPATH=. python scripts/run_structural_hypothesis_development.py \
+                --source-project-root "${GITHUB_WORKSPACE}" \
+                --source-manifest docs/research/ml_strategy_discovery_v2_1_source_manifest.json \
+                --contract research/structural_edge_campaign/v1_campaign_contract.json \
+                --hypothesis-id "${hypothesis_id}" \
+                --instrument NIFTY \
+                --output "${STRUCTURAL_ROOT}/${run_name}/${evidence_dir}/development.json" \
+                --bootstrap-iterations 1000 \
+                --permutation-iterations 1000 \
+                --seed 42 \
+                --development-only
+            done
+          done
+
+      - name: Verify structural hypothesis two-run determinism
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "structural"
+          allowed_verdicts = {"NO_STABLE_CANDIDATE", "CANDIDATE_FROZEN"}
+          for hypothesis in ("him_30", "eogf_30"):
+              relative_files = (
+                  "development.json",
+                  f"{hypothesis}_development_source_selection_manifest.json",
+              )
+              for relative in relative_files:
+                  first = root / "run-a" / hypothesis / relative
+                  second = root / "run-b" / hypothesis / relative
+                  if first.read_bytes() != second.read_bytes():
+                      raise SystemExit(
+                          f"structural determinism failed hypothesis={hypothesis} file={relative}"
+                      )
+
+              for run_name in ("run-a", "run-b"):
+                  evidence = root / run_name / hypothesis / "development.json"
+                  sidecar = evidence.with_name(evidence.name + ".sha256")
+                  tokens = sidecar.read_text(encoding="utf-8").strip().split()
+                  if not tokens:
+                      raise SystemExit(
+                          f"missing structural evidence digest hypothesis={hypothesis} run={run_name}"
+                      )
+                  if hashlib.sha256(evidence.read_bytes()).hexdigest() != tokens[0]:
+                      raise SystemExit(
+                          f"structural evidence digest mismatch hypothesis={hypothesis} run={run_name}"
+                      )
+
+              payload = json.loads(
+                  (root / "run-a" / hypothesis / "development.json").read_text(
+                      encoding="utf-8"
+                  )
+              )
+              if payload.get("verdict") not in allowed_verdicts:
+                  raise SystemExit(
+                      f"unsupported structural verdict hypothesis={hypothesis}"
+                  )
+              expected_count = 1 if payload["verdict"] == "CANDIDATE_FROZEN" else 0
+              if payload.get("candidate_count") != expected_count:
+                  raise SystemExit(
+                      f"candidate count mismatch hypothesis={hypothesis}"
+                  )
+              if expected_count == 0 and payload.get("candidate_bundle_hash") is not None:
+                  raise SystemExit(
+                      f"no-candidate structural evidence carries hash hypothesis={hypothesis}"
+                  )
+          print("TWO_RUN_STRUCTURAL_HYPOTHESIS_DETERMINISM_PASS")
+          PY
+
+      - name: Promote deterministic structural development evidence
+        run: |
+          set -euo pipefail
+          CAMPAIGN_ROOT="${RUNNER_TEMP}/campaign"
+          STRUCTURAL_ROOT="${RUNNER_TEMP}/structural/run-a"
+          mkdir -p "${CAMPAIGN_ROOT}"
+          rm -rf "${CAMPAIGN_ROOT}/him_30" "${CAMPAIGN_ROOT}/eogf_30"
+          cp -a "${STRUCTURAL_ROOT}/him_30" "${CAMPAIGN_ROOT}/him_30"
+          cp -a "${STRUCTURAL_ROOT}/eogf_30" "${CAMPAIGN_ROOT}/eogf_30"
+
       - name: Evaluate campaign state
         run: |
           set -euo pipefail
@@ -237,6 +332,7 @@ jobs:
           name: structural-edge-prove-or-kill-${{ github.sha }}
           path: |
             ${{ runner.temp }}/campaign
+            ${{ runner.temp }}/structural
             ${{ runner.temp }}/v2
           if-no-files-found: warn
           retention-days: 30
