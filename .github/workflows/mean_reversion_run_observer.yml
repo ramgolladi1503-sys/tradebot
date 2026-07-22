@@ -1,6 +1,6 @@
-name: Mean Reversion Regeneration Run Observer
+name: Mean Reversion Research Run Observer
 
-# Revision 4: refresh the latest run after AppleDouble sidecar sanitization.
+# Revision 5: publish both regeneration and schema-probe workflow states.
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  publish-run-identity:
+  publish-run-identities:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout evidence branch
@@ -23,50 +23,65 @@ jobs:
           ref: research/postmerge-mean-reversion-rerun-v1
           fetch-depth: 1
 
-      - name: Query latest regeneration run
+      - name: Query latest research runs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/mean-reversion-observer
-          gh api \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/mean_reversion_postmerge_regeneration.yml/runs?branch=research%2Fpostmerge-mean-reversion-rerun-v1&event=push&per_page=10" \
-            > /tmp/mean-reversion-observer/runs.json
+          work=/tmp/mean-reversion-observer
+          mkdir -p "${work}"
+          for workflow in \
+            mean_reversion_postmerge_regeneration.yml \
+            mean_reversion_corpus_schema_probe.yml; do
+            gh api \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=research%2Fpostmerge-mean-reversion-rerun-v1&event=push&per_page=10" \
+              > "${work}/${workflow}.json"
+          done
+
           python - <<'PY'
           import json
           from pathlib import Path
 
-          payload = json.loads(Path('/tmp/mean-reversion-observer/runs.json').read_text())
-          runs = payload.get('workflow_runs', [])
-          if not runs:
-              raise SystemExit('no push-triggered regeneration workflow run found')
-          run = runs[0]
-          result = {
-              'workflow_name': run.get('name'),
-              'workflow_run_id': run.get('id'),
-              'run_number': run.get('run_number'),
-              'event': run.get('event'),
-              'status': run.get('status'),
-              'conclusion': run.get('conclusion'),
-              'head_branch': run.get('head_branch'),
-              'head_sha': run.get('head_sha'),
-              'created_at': run.get('created_at'),
-              'updated_at': run.get('updated_at'),
-              'html_url': run.get('html_url'),
-          }
-          target = Path('docs/research/mean_reversion_postmerge_regeneration/workflow_run_status.json')
+          work = Path('/tmp/mean-reversion-observer')
+          workflows = [
+              'mean_reversion_postmerge_regeneration.yml',
+              'mean_reversion_corpus_schema_probe.yml',
+          ]
+          result = {}
+          for workflow in workflows:
+              payload = json.loads((work / f'{workflow}.json').read_text())
+              runs = payload.get('workflow_runs', [])
+              if not runs:
+                  result[workflow] = {'status': 'NOT_FOUND'}
+                  continue
+              run = runs[0]
+              result[workflow] = {
+                  'workflow_name': run.get('name'),
+                  'workflow_run_id': run.get('id'),
+                  'run_number': run.get('run_number'),
+                  'event': run.get('event'),
+                  'status': run.get('status'),
+                  'conclusion': run.get('conclusion'),
+                  'head_branch': run.get('head_branch'),
+                  'head_sha': run.get('head_sha'),
+                  'created_at': run.get('created_at'),
+                  'updated_at': run.get('updated_at'),
+                  'html_url': run.get('html_url'),
+              }
+
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/workflow_runs_status.json')
           target.parent.mkdir(parents=True, exist_ok=True)
           target.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
           print(json.dumps(result, indent=2, sort_keys=True))
           PY
 
-      - name: Commit workflow identity
+      - name: Commit workflow identities
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/research/mean_reversion_postmerge_regeneration/workflow_run_status.json
+          git add docs/research/mean_reversion_postmerge_regeneration/workflow_runs_status.json
           if ! git diff --cached --quiet; then
-            git commit -m "research: publish regeneration workflow identity"
+            git commit -m "research: publish research workflow identities"
             git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
           fi
