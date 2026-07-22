@@ -230,6 +230,9 @@ def _should_promote(
     stability_penalty: int,
 ) -> tuple[bool, list[str]]:
     blockers: list[str] = []
+    if len(fold_reports) != 3:
+        blockers.append("INCOMPLETE_WALK_FORWARD_FOLDS")
+
     holdout_pf = float(final_holdout_metrics.get("profit_factor", 0.0) or 0.0)
     holdout_expectancy = float(
         final_holdout_metrics.get("after_cost_expectancy", 0.0) or 0.0
@@ -254,6 +257,20 @@ def _should_promote(
     return not blockers, blockers
 
 
+def _fold_report_base(fold: dict[str, object]) -> dict[str, object]:
+    return {
+        "fold": fold["fold"],
+        "train_start": fold["train_start"],
+        "train_end": fold["train_end"],
+        "test_start": fold["test_start"],
+        "test_end": fold["test_end"],
+        "train_start_session": fold["train_start_session"],
+        "train_end_session": fold["train_end_session"],
+        "test_start_session": fold["test_start_session"],
+        "test_end_session": fold["test_end_session"],
+    }
+
+
 def run_walk_forward(
     data: pd.DataFrame,
     *,
@@ -263,7 +280,7 @@ def run_walk_forward(
     | None = None,
     evaluate_fn: Callable[[pd.DataFrame, Params], Metrics] | None = None,
 ) -> dict[str, object]:
-    """Run train-only selection, fold OOS evaluation and final holdout validation."""
+    """Run train-only selection, all-fold OOS evaluation and final holdout validation."""
     plan = build_walk_forward_plan(data)
     grid = default_parameter_grid() if parameter_grid is None else list(parameter_grid)
     if not grid:
@@ -288,37 +305,34 @@ def run_walk_forward(
         train_data = fold["train_data"]
         test_data = fold["test_data"]
         best_params, train_score = selector(train_data, grid)
+        report_base = _fold_report_base(fold)
         if best_params is None:
             fold_reports.append(
                 {
-                    "fold": fold["fold"],
+                    **report_base,
                     "status": "NO_VALID_PARAMETERS",
-                    "train_start": fold["train_start"],
-                    "train_end": fold["train_end"],
-                    "test_start": fold["test_start"],
-                    "test_end": fold["test_end"],
-                    "train_start_session": fold["train_start_session"],
-                    "train_end_session": fold["train_end_session"],
-                    "test_start_session": fold["test_start_session"],
-                    "test_end_session": fold["test_end_session"],
                 }
             )
             continue
 
         test_metrics = evaluator(test_data, best_params)
+        if "error" in test_metrics:
+            fold_reports.append(
+                {
+                    **report_base,
+                    "status": "TEST_METRICS_INVALID",
+                    "selected_params": best_params,
+                    "train_score": train_score,
+                    "test_metrics": test_metrics,
+                }
+            )
+            continue
+
         chosen_params.append(best_params)
         fold_reports.append(
             {
-                "fold": fold["fold"],
+                **report_base,
                 "status": "EVALUATED",
-                "train_start": fold["train_start"],
-                "train_end": fold["train_end"],
-                "test_start": fold["test_start"],
-                "test_end": fold["test_end"],
-                "train_start_session": fold["train_start_session"],
-                "train_end_session": fold["train_end_session"],
-                "test_start_session": fold["test_start_session"],
-                "test_end_session": fold["test_end_session"],
                 "selected_params": best_params,
                 "train_score": train_score,
                 "test_metrics": test_metrics,
@@ -326,11 +340,18 @@ def run_walk_forward(
         )
 
     evaluated_folds = [r for r in fold_reports if r["status"] == "EVALUATED"]
-    if not chosen_params or not evaluated_folds:
+    if not evaluated_folds:
         return {
             "status": "REJECTED",
             "promoted": False,
             "blockers": ["NO_VALID_WALK_FORWARD_FOLDS"],
+            "fold_reports": fold_reports,
+        }
+    if len(evaluated_folds) != len(plan["folds"]):
+        return {
+            "status": "REJECTED",
+            "promoted": False,
+            "blockers": ["INCOMPLETE_WALK_FORWARD_FOLDS"],
             "fold_reports": fold_reports,
         }
 

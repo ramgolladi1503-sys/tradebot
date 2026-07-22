@@ -29,17 +29,28 @@ def _candidate_timestamp(candidate: dict[str, Any]) -> str | None:
     return None
 
 
+def _finite_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        resolved = float(value)
+    except (TypeError, ValueError):
+        return None
+    return resolved if np.isfinite(resolved) else None
+
+
 def _candidate_score(candidate: dict[str, Any]) -> float | None:
-    # Only use fields whose contract is an actual selection/ranking score.
-    # Cost-hurdle margin has different units and must not be mixed into this audit.
+    # A ranked strategy may own one of these score fields. They are optional for
+    # rule-selected strategies and must never be invented from dimensional P&L.
     for field in ("selection_score", "score", "rank_score"):
-        value = candidate.get(field)
+        value = _finite_float(candidate.get(field))
         if value is not None:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                return None
+            return value
     return None
+
+
+def _candidate_cost_hurdle_margin(candidate: dict[str, Any]) -> float | None:
+    return _finite_float(candidate.get("cost_hurdle_margin"))
 
 
 def _capacity_metadata(
@@ -79,18 +90,33 @@ def audit_selection_quality(
 
     selected_scores: list[float] = []
     rejected_scores: list[float] = []
+    selected_cost_margins: list[float] = []
     selected_without_score = 0
     rejected_without_score = 0
+    selected_without_selection_evidence = 0
+    selected_with_invalid_cost_margin = 0
     symbol_day_counts: defaultdict[str, int] = defaultdict(int)
 
     for candidate in candidates:
         selected = _is_selected(candidate)
         score = _candidate_score(candidate)
+        cost_margin = _candidate_cost_hurdle_margin(candidate)
+        has_cost_margin_field = "cost_hurdle_margin" in candidate
+
         if selected:
             if score is None:
                 selected_without_score += 1
             else:
                 selected_scores.append(score)
+
+            if cost_margin is not None and cost_margin > 0:
+                selected_cost_margins.append(cost_margin)
+            elif has_cost_margin_field:
+                selected_with_invalid_cost_margin += 1
+
+            if score is None and not (cost_margin is not None and cost_margin > 0):
+                selected_without_selection_evidence += 1
+
             symbol = str(candidate.get("symbol") or "")
             timestamp = _candidate_timestamp(candidate)
             if symbol and timestamp and len(timestamp) >= 10:
@@ -106,8 +132,10 @@ def audit_selection_quality(
     selected_count = sum(1 for candidate in candidates if _is_selected(candidate))
     if selected_count == 0:
         failed_blockers.add("NO_SELECTED_CANDIDATES")
-    if selected_without_score > 0:
-        failed_blockers.add("SELECTED_SCORE_EVIDENCE_MISSING")
+    if selected_without_selection_evidence > 0:
+        failed_blockers.add("SELECTED_SELECTION_EVIDENCE_MISSING")
+    if selected_with_invalid_cost_margin > 0:
+        failed_blockers.add("SELECTED_COST_HURDLE_MARGIN_INVALID")
 
     max_possible_trades = active_symbol_days * max_trades_per_symbol_day
     if max_possible_trades > 0 and selected_count > max_possible_trades:
@@ -165,6 +193,18 @@ def audit_selection_quality(
             "selected_vs_rejected_score_gap": score_gap,
             "selected_candidates_without_score": selected_without_score,
             "rejected_candidates_without_score": rejected_without_score,
+            "selected_candidates_without_selection_evidence": (
+                selected_without_selection_evidence
+            ),
+            "selected_candidates_with_invalid_cost_margin": (
+                selected_with_invalid_cost_margin
+            ),
+            "selected_cost_hurdle_margin_min": (
+                min(selected_cost_margins) if selected_cost_margins else None
+            ),
+            "selected_cost_hurdle_margin_p50": percentile(
+                selected_cost_margins, 50
+            ),
             "parquet_symbol_days": active_symbol_days,
             "candidate_symbol_days": len(symbol_day_counts),
             "ledger_symbol_days": len(symbol_day_counts),

@@ -19,7 +19,7 @@ def test_trade_ledger_audit_fails_on_empty_and_has_no_fake_pf():
     )
     empty = module.audit_trades([])
     assert empty["classification"] == "TRADE_LEDGER_AUDIT_FAILED"
-    assert "TRADE_LEDGER_MISSING_OR_EMPTY" in empty["failed_blockers"]
+    assert empty["failed_blockers"] == ["TRADE_LEDGER_MISSING_OR_EMPTY"]
 
     no_losses = module.audit_trades(
         [
@@ -47,6 +47,15 @@ def test_truth_audit_uses_declared_index_proxy_cost_and_never_name_errors():
         [
             {
                 "entry_time": "2026-01-01T09:15:00",
+                "exit_time": "2026-01-01T09:20:00",
+                "entry_price": 100.0,
+                "exit_price": 101.0,
+                "direction": "LONG",
+                "gross_pnl": 1.0,
+                "costs": 3.0,
+                "net_pnl": -2.0,
+                "stop_loss": 99.0,
+                "rr_realized": 1.0,
                 "pnl_model": "UNDERLYING_INDEX_PROXY_FIXED_HURDLE",
                 "underlying_execution_cost": 3.0,
             }
@@ -57,16 +66,50 @@ def test_truth_audit_uses_declared_index_proxy_cost_and_never_name_errors():
         "OPTION_REALISM_FAILED_INSUFFICIENT_INDEX_PROXY_SLIPPAGE"
         in result["blockers"]
     )
+    assert (
+        result["canonical_ledger_audit"]["classification"]
+        == "TRADE_LEDGER_AUDIT_PASSED"
+    )
+
+
+def test_truth_audit_fails_when_canonical_ledger_audit_fails():
+    module = _load("audit_truth_canonical", "scripts/audit_phase4_truth.py")
+    result = module.audit_truth(
+        [
+            {
+                "entry_time": "2026-01-01T09:15:00",
+                "exit_time": "2026-01-01T09:15:00",
+                "entry_price": 100.0,
+                "exit_price": 101.0,
+                "direction": "LONG",
+                "gross_pnl": 1.0,
+                "costs": 8.5,
+                "net_pnl": -7.5,
+                "stop_loss": 99.0,
+                "rr_realized": 1.0,
+                "pnl_model": "UNDERLYING_INDEX_PROXY_FIXED_HURDLE",
+                "underlying_execution_cost": 8.5,
+            }
+        ]
+    )
+    assert result["canonical_ledger_audit"]["classification"] == (
+        "TRADE_LEDGER_AUDIT_FAILED"
+    )
+    assert (
+        "CANONICAL_LEDGER_AUDIT_NOT_PASSED:TRADE_LEDGER_AUDIT_FAILED"
+        in result["blockers"]
+    )
+    assert result["classification"] == "PHASE_4_5_TRUTH_AUDIT_FAILED"
 
 
 def test_integrity_audit_fails_on_empty_ledger():
     module = _load("audit_integrity", "scripts/audit_phase4_7_integrity.py")
     result = module.audit_integrity([])
     assert result["classification"] == "PHASE_4_7_INTEGRITY_AUDIT_FAILED"
-    assert "TRADE_LEDGER_MISSING_OR_EMPTY" in result["blockers"]
+    assert result["blockers"] == ["TRADE_LEDGER_MISSING_OR_EMPTY"]
 
 
-def test_selection_audit_reads_status_and_signal_time_and_blocks_missing_scores():
+def test_rule_selected_candidate_passes_with_positive_cost_hurdle_evidence():
     module = _load(
         "audit_selection", "scripts/audit_phase4_8_selection_quality.py"
     )
@@ -76,6 +119,7 @@ def test_selection_audit_reads_status_and_signal_time_and_blocks_missing_scores(
                 "status": "PASSED",
                 "symbol": "NIFTY",
                 "signal_time": "2026-01-01T10:15:00",
+                "cost_hurdle_margin": 1.25,
             },
             {
                 "status": "REJECTED",
@@ -83,11 +127,52 @@ def test_selection_audit_reads_status_and_signal_time_and_blocks_missing_scores(
                 "signal_time": "2026-01-01T10:20:00",
             },
         ],
-        {"active_symbol_days": 1, "max_trades_per_symbol_day": 4},
+        {"active_symbol_days": 2, "max_trades_per_symbol_day": 4},
     )
+    assert result["classification"] == "PHASE_4_8_SELECTION_QUALITY_PASSED"
+    assert result["blockers"] == []
     assert result["metrics"]["selected_trades"] == 1
-    assert result["metrics"]["candidate_symbol_days"] == 1
-    assert "SELECTED_SCORE_EVIDENCE_MISSING" in result["blockers"]
+    assert result["metrics"]["selected_candidates_without_score"] == 1
+    assert result["metrics"]["selected_cost_hurdle_margin_p50"] == 1.25
+
+
+def test_selected_candidate_without_score_or_cost_evidence_fails_closed():
+    module = _load(
+        "audit_selection_missing", "scripts/audit_phase4_8_selection_quality.py"
+    )
+    result = module.audit_selection_quality(
+        [
+            {
+                "status": "PASSED",
+                "symbol": "NIFTY",
+                "signal_time": "2026-01-01T10:15:00",
+            }
+        ],
+        {"active_symbol_days": 2, "max_trades_per_symbol_day": 4},
+    )
+    assert result["classification"] == "PHASE_4_8_SELECTION_QUALITY_FAILED"
+    assert "SELECTED_SELECTION_EVIDENCE_MISSING" in result["blockers"]
+    assert result["metrics"]["selected_candidates_without_selection_evidence"] == 1
+
+
+def test_selected_candidate_with_nonpositive_cost_margin_fails_closed():
+    module = _load(
+        "audit_selection_margin", "scripts/audit_phase4_8_selection_quality.py"
+    )
+    result = module.audit_selection_quality(
+        [
+            {
+                "status": "PASSED",
+                "symbol": "NIFTY",
+                "signal_time": "2026-01-01T10:15:00",
+                "cost_hurdle_margin": 0.0,
+            }
+        ],
+        {"active_symbol_days": 2, "max_trades_per_symbol_day": 4},
+    )
+    assert "SELECTED_COST_HURDLE_MARGIN_INVALID" in result["blockers"]
+    assert "SELECTED_SELECTION_EVIDENCE_MISSING" in result["blockers"]
+    assert result["metrics"]["selected_candidates_with_invalid_cost_margin"] == 1
 
 
 def test_selection_capacity_prefers_same_run_ledger_summary():

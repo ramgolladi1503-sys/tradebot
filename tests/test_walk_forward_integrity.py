@@ -34,6 +34,27 @@ def _session_frame(*, sessions: int = 60, bars_per_session: int = 10) -> pd.Data
     return pd.concat(frames)
 
 
+def _positive_metrics(test_data: pd.DataFrame) -> dict[str, object]:
+    return {
+        "profit_factor": 1.5,
+        "after_cost_expectancy": 1.0,
+        "total_trades": len(test_data),
+        "final_equity": 100000.0,
+        "total_pnl": 0.0,
+        "win_rate_pct": 50.0,
+        "avg_win": 1.0,
+        "avg_loss": -1.0,
+        "max_drawdown_pct": -1.0,
+        "max_drawdown_abs": -100.0,
+        "sharpe_ratio_per_trade": 0.1,
+        "sortino_ratio_per_trade": 0.1,
+        "outcomes": {},
+        "contamination": {},
+        "warnings": [],
+        "profit_factor_oos": None,
+    }
+
+
 def test_walk_forward_plan_has_three_session_folds_and_untouched_holdout():
     module = _load_module()
     data = _session_frame()
@@ -119,7 +140,7 @@ def test_promotion_uses_final_holdout_expectancy_not_full_sample_expectancy():
         stability_penalty=1,
     )
 
-    assert not promoted
+    assert promoted is False
     assert "FINAL_HOLDOUT_EXPECTANCY_NOT_MET" in blockers
 
 
@@ -140,24 +161,7 @@ def test_run_walk_forward_evaluates_session_test_slices_and_holdout_only():
         end = int(test_data["row"].iloc[-1]) + 1
         evaluated_ranges.append((start, end))
         evaluated_session_counts.append(test_data.index.normalize().nunique())
-        return {
-            "profit_factor": 1.5,
-            "after_cost_expectancy": 1.0,
-            "total_trades": len(test_data),
-            "final_equity": 100000.0,
-            "total_pnl": 0.0,
-            "win_rate_pct": 50.0,
-            "avg_win": 1.0,
-            "avg_loss": -1.0,
-            "max_drawdown_pct": -1.0,
-            "max_drawdown_abs": -100.0,
-            "sharpe_ratio_per_trade": 0.1,
-            "sortino_ratio_per_trade": 0.1,
-            "outcomes": {},
-            "contamination": {},
-            "warnings": [],
-            "profit_factor_oos": None,
-        }
+        return _positive_metrics(test_data)
 
     report = module.run_walk_forward(
         data,
@@ -174,3 +178,70 @@ def test_run_walk_forward_evaluates_session_test_slices_and_holdout_only():
         (500, 600),
     ]
     assert evaluated_session_counts == [10, 10, 10, 10]
+
+
+def test_walk_forward_rejects_when_any_fold_has_no_valid_parameters():
+    module = _load_module()
+    params = (15, 1.5, 3.0, 1.0, 0.0, 0.5)
+    selection_calls = 0
+    evaluation_calls = 0
+
+    def select_fn(_train_data, _grid):
+        nonlocal selection_calls
+        selection_calls += 1
+        if selection_calls == 2:
+            return None, -float("inf")
+        return params, 1.0
+
+    def evaluate_fn(test_data, _selected_params):
+        nonlocal evaluation_calls
+        evaluation_calls += 1
+        return _positive_metrics(test_data)
+
+    report = module.run_walk_forward(
+        _session_frame(),
+        parameter_grid=[params],
+        select_fn=select_fn,
+        evaluate_fn=evaluate_fn,
+    )
+
+    assert report["promoted"] is False
+    assert report["blockers"] == ["INCOMPLETE_WALK_FORWARD_FOLDS"]
+    assert [fold["status"] for fold in report["fold_reports"]] == [
+        "EVALUATED",
+        "NO_VALID_PARAMETERS",
+        "EVALUATED",
+    ]
+    assert evaluation_calls == 2
+
+
+def test_walk_forward_rejects_when_any_test_fold_has_no_trades():
+    module = _load_module()
+    params = (15, 1.5, 3.0, 1.0, 0.0, 0.5)
+    evaluation_calls = 0
+
+    def select_fn(_train_data, _grid):
+        return params, 1.0
+
+    def evaluate_fn(test_data, _selected_params):
+        nonlocal evaluation_calls
+        evaluation_calls += 1
+        if evaluation_calls == 1:
+            return {"error": "No trades executed"}
+        return _positive_metrics(test_data)
+
+    report = module.run_walk_forward(
+        _session_frame(),
+        parameter_grid=[params],
+        select_fn=select_fn,
+        evaluate_fn=evaluate_fn,
+    )
+
+    assert report["promoted"] is False
+    assert report["blockers"] == ["INCOMPLETE_WALK_FORWARD_FOLDS"]
+    assert [fold["status"] for fold in report["fold_reports"]] == [
+        "TEST_METRICS_INVALID",
+        "EVALUATED",
+        "EVALUATED",
+    ]
+    assert evaluation_calls == 3
