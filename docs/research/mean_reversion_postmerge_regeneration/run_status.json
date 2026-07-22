@@ -1,0 +1,9 @@
+{
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "execution_allowed": false,
+  "exit_code": 1,
+  "paper_live_allowed": false,
+  "producer_commit": "acd62707994cb8aaa29f7809d6050f0cd756f5c2",
+  "stage": "AUTHORITATIVE_REGENERATION",
+  "status": "FAILED"
+}
