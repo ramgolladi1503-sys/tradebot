@@ -8,12 +8,25 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts.audit_mean_reversion_trade_ledger import audit_trades
+except ModuleNotFoundError:  # Direct script execution from the scripts directory.
+    from audit_mean_reversion_trade_ledger import audit_trades
+
 
 INDEX_PROXY_MODEL = "UNDERLYING_INDEX_PROXY_FIXED_HURDLE"
 
 
 def audit_truth(trades: list[dict[str, Any]]) -> dict[str, Any]:
     failed_blockers: list[str] = []
+    canonical_ledger_report = audit_trades(trades)
+    canonical_classification = canonical_ledger_report.get("classification")
+    if canonical_classification != "TRADE_LEDGER_AUDIT_PASSED":
+        failed_blockers.append(
+            "CANONICAL_LEDGER_AUDIT_NOT_PASSED:"
+            f"{canonical_classification or 'MISSING'}"
+        )
+
     if not trades:
         failed_blockers.append("TRADES_MISSING")
     else:
@@ -58,6 +71,7 @@ def audit_truth(trades: list[dict[str, Any]]) -> dict[str, Any]:
             else "PHASE_4_5_TRUTH_AUDIT_PASSED"
         ),
         "trades_analyzed": len(trades),
+        "canonical_ledger_audit": canonical_ledger_report,
         "blockers": failed_blockers,
     }
 
@@ -77,7 +91,13 @@ def main() -> None:
 
     report = audit_truth(trades)
     report["strategy_id"] = args.strategy
+    canonical_report = dict(report["canonical_ledger_audit"])
+    canonical_report["strategy_id"] = args.strategy
+
     base_dir.mkdir(parents=True, exist_ok=True)
+    (base_dir / "phase_4_trade_ledger_audit.json").write_text(
+        json.dumps(canonical_report, indent=2)
+    )
     (base_dir / "phase_4_5_truth_audit.json").write_text(
         json.dumps(report, indent=2)
     )
@@ -86,6 +106,10 @@ def main() -> None:
         "",
         f"- Classification: {report['classification']}",
         f"- Trades Analyzed: {report['trades_analyzed']}",
+        (
+            "- Canonical Ledger Audit: "
+            f"{canonical_report.get('classification', 'MISSING')}"
+        ),
     ]
     if report["blockers"]:
         markdown.append(f"- Blockers: {', '.join(report['blockers'])}")
