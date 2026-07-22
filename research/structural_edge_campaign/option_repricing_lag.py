@@ -163,6 +163,13 @@ def evaluate_repricing_snapshot(
         previous_iv,
         risk_free_rate,
     )
+    absolute_delta = abs(float(greeks.delta))
+    if not (
+        float(contract_selection["absolute_delta_min"])
+        <= absolute_delta
+        <= float(contract_selection["absolute_delta_max"])
+    ):
+        reasons.append("DELTA_OUTSIDE_FROZEN_BAND")
     futures_change = float(snapshot["futures_price"]) - float(
         snapshot["previous_futures_price"]
     )
