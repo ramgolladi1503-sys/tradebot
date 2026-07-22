@@ -1,0 +1,173 @@
+name: Mean Reversion Frozen Corpus Schema Probe
+
+on:
+  push:
+    branches:
+      - research/postmerge-mean-reversion-rerun-v1
+    paths:
+      - ".github/workflows/mean_reversion_corpus_schema_probe.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+      CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/postmerge-mean-reversion-rerun-v1
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install schema dependencies
+        run: python -m pip install pandas pyarrow
+
+      - name: Download, verify, and probe schemas
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/schema-probe/assets /tmp/schema-probe/extracted
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir /tmp/schema-probe/assets \
+            --pattern upstox_candidate_replay_v1.tar.gz
+          echo "${CORPUS_ARCHIVE_SHA256}  /tmp/schema-probe/assets/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/schema-probe/assets/upstox_candidate_replay_v1.tar.gz -C /tmp/schema-probe/extracted
+
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from collections import Counter, defaultdict
+          from pathlib import Path
+
+          import pandas as pd
+          import pyarrow.parquet as pq
+
+          root = Path('/tmp/schema-probe/extracted/runtime/upstox_candidate_replay')
+          files = sorted(
+              path for path in root.glob('*/underlying/*.parquet')
+              if path.is_file() and not path.name.startswith('._')
+          )
+          if not files:
+              raise SystemExit('no real underlying parquet files found')
+
+          signatures: Counter[tuple[tuple[str, str], ...]] = Counter()
+          examples: dict[tuple[tuple[str, str], ...], list[str]] = defaultdict(list)
+          timestamp_columns: Counter[str] = Counter()
+          unit_votes: Counter[str] = Counter()
+          samples = []
+          malformed = []
+
+          for path in files:
+              schema = pq.ParquetFile(path).schema_arrow
+              signature = tuple((field.name, str(field.type)) for field in schema)
+              signatures[signature] += 1
+              if len(examples[signature]) < 5:
+                  examples[signature].append(path.relative_to(root).as_posix())
+
+              names = set(schema.names)
+              candidate = next(
+                  (name for name in ('timestamp', 'ts', 'time', 'datetime') if name in names),
+                  None,
+              )
+              if candidate is None:
+                  malformed.append({
+                      'path': path.relative_to(root).as_posix(),
+                      'reason': 'NO_TIMESTAMP_CANDIDATE',
+                      'columns': schema.names,
+                  })
+                  continue
+              timestamp_columns[candidate] += 1
+
+              frame = pd.read_parquet(path, columns=[candidate]).head(5)
+              values = frame[candidate].dropna().tolist()
+              inferred = None
+              interpretations = {}
+              if values:
+                  series = pd.Series(values)
+                  if pd.api.types.is_numeric_dtype(series):
+                      plausible = []
+                      for unit in ('s', 'ms', 'us', 'ns'):
+                          converted = pd.to_datetime(series, unit=unit, errors='coerce', utc=True)
+                          valid = converted.dropna()
+                          years = valid.dt.year if not valid.empty else pd.Series(dtype=int)
+                          is_plausible = (
+                              len(valid) == len(series)
+                              and not years.empty
+                              and bool(years.between(2000, 2100).all())
+                          )
+                          interpretations[unit] = [value.isoformat() for value in valid]
+                          if is_plausible:
+                              plausible.append(unit)
+                      if len(plausible) == 1:
+                          inferred = plausible[0]
+                          unit_votes[inferred] += 1
+                      else:
+                          inferred = f'AMBIGUOUS:{plausible}'
+                  else:
+                      converted = pd.to_datetime(series, errors='coerce', utc=True)
+                      inferred = 'datetime-string' if converted.notna().all() else 'UNPARSEABLE'
+
+              if len(samples) < 30 or inferred is None or str(inferred).startswith('AMBIGUOUS'):
+                  samples.append({
+                      'path': path.relative_to(root).as_posix(),
+                      'timestamp_column': candidate,
+                      'raw_values': values,
+                      'inferred_unit': inferred,
+                      'interpretations': interpretations,
+                  })
+
+          signature_rows = [
+              {
+                  'columns': [{'name': name, 'type': type_name} for name, type_name in signature],
+                  'file_count': count,
+                  'examples': examples[signature],
+              }
+              for signature, count in sorted(signatures.items(), key=lambda item: (-item[1], item[0]))
+          ]
+          report = {
+              'classification': (
+                  'CORPUS_SCHEMA_PROBE_COMPLETE' if not malformed else 'CORPUS_SCHEMA_PROBE_WITH_MALFORMED_FILES'
+              ),
+              'total_underlying_files': len(files),
+              'schema_signature_count': len(signatures),
+              'schema_signatures': signature_rows,
+              'timestamp_column_counts': dict(sorted(timestamp_columns.items())),
+              'numeric_timestamp_unit_votes': dict(sorted(unit_votes.items())),
+              'samples': samples,
+              'malformed_files': malformed,
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/corpus_schema_report.json')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          print(json.dumps({
+              'classification': report['classification'],
+              'total_underlying_files': report['total_underlying_files'],
+              'schema_signature_count': report['schema_signature_count'],
+              'timestamp_column_counts': report['timestamp_column_counts'],
+              'numeric_timestamp_unit_votes': report['numeric_timestamp_unit_votes'],
+              'malformed_count': len(malformed),
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Commit schema evidence
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/research/mean_reversion_postmerge_regeneration/corpus_schema_report.json
+          git commit -m "research: publish frozen corpus schema report"
+          git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
