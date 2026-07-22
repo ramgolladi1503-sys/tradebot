@@ -1,0 +1,164 @@
+name: Profile Private Depth Usability
+
+on:
+  push:
+    branches:
+      - ops/observe-liquidity-exhaustion-depth-readiness-v2
+    paths:
+      - ".github/workflows/profile_private_depth_usability.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/observe-liquidity-exhaustion-depth-readiness-v2
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install profile dependencies
+        run: python -m pip install pandas pyarrow
+
+      - name: Download immutable corpus
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/assets" runtime
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir "${RUNNER_TEMP}/assets" \
+            --pattern "upstox_candidate_replay_v1.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/assets/upstox_candidate_replay_v1.tar.gz" -C runtime
+
+      - name: Scan every structured-depth row without retaining values
+        run: |
+          set -euo pipefail
+          mkdir -p docs/ops
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          import pandas as pd
+          import pyarrow.parquet as pq
+
+          root = Path('runtime/upstox_candidate_replay')
+          files = []
+          for path in sorted(root.glob('*/underlying/*.parquet')):
+              if path.name.startswith('._'):
+                  continue
+              names = set(pq.read_schema(path).names)
+              if {'ts', 'token', 'symbol', 'ltp', 'bid', 'ask', 'depth'}.issubset(names):
+                  files.append(path)
+
+          totals = Counter()
+          max_bid_levels = 0
+          max_ask_levels = 0
+          files_with_nonempty_bid = 0
+          files_with_nonempty_ask = 0
+          files_with_two_sided_book = 0
+          parse_error_files = 0
+
+          for index, path in enumerate(files, start=1):
+              series = pd.read_parquet(path, columns=['depth'])['depth']
+              counts = Counter(str(value).strip() for value in series.dropna())
+              file_bid = False
+              file_ask = False
+              file_both = False
+              file_parse_error = False
+              totals['rows'] += len(series)
+              totals['non_null_depth_rows'] += int(series.notna().sum())
+              totals['unique_depth_payloads'] += len(counts)
+
+              for raw, count in counts.items():
+                  if not raw:
+                      totals['empty_string_rows'] += count
+                      continue
+                  try:
+                      payload = json.loads(raw)
+                  except Exception:
+                      totals['json_parse_error_rows'] += count
+                      file_parse_error = True
+                      continue
+                  if not isinstance(payload, dict):
+                      totals['non_dict_payload_rows'] += count
+                      continue
+                  bids = payload.get('bids')
+                  asks = payload.get('asks')
+                  if not isinstance(bids, list) or not isinstance(asks, list):
+                      totals['missing_or_nonlist_side_rows'] += count
+                      continue
+                  bid_levels = len(bids)
+                  ask_levels = len(asks)
+                  max_bid_levels = max(max_bid_levels, bid_levels)
+                  max_ask_levels = max(max_ask_levels, ask_levels)
+                  if bid_levels > 0:
+                      totals['rows_with_nonempty_bids'] += count
+                      file_bid = True
+                  if ask_levels > 0:
+                      totals['rows_with_nonempty_asks'] += count
+                      file_ask = True
+                  if bid_levels > 0 and ask_levels > 0:
+                      totals['rows_with_two_sided_book'] += count
+                      file_both = True
+                  if bid_levels == 0 and ask_levels == 0:
+                      totals['rows_with_both_sides_empty'] += count
+
+              files_with_nonempty_bid += int(file_bid)
+              files_with_nonempty_ask += int(file_ask)
+              files_with_two_sided_book += int(file_both)
+              parse_error_files += int(file_parse_error)
+              if index % 25 == 0:
+                  print(f'profiled {index}/{len(files)} files', flush=True)
+
+          rows = max(int(totals['rows']), 1)
+          result = {
+              'classification': 'STRUCTURED_DEPTH_USABILITY_PROFILE_NO_MARKET_VALUES',
+              'quote_depth_file_count': len(files),
+              'total_rows': int(totals['rows']),
+              'non_null_depth_rows': int(totals['non_null_depth_rows']),
+              'rows_with_nonempty_bids': int(totals['rows_with_nonempty_bids']),
+              'rows_with_nonempty_asks': int(totals['rows_with_nonempty_asks']),
+              'rows_with_two_sided_book': int(totals['rows_with_two_sided_book']),
+              'rows_with_both_sides_empty': int(totals['rows_with_both_sides_empty']),
+              'json_parse_error_rows': int(totals['json_parse_error_rows']),
+              'non_dict_payload_rows': int(totals['non_dict_payload_rows']),
+              'missing_or_nonlist_side_rows': int(totals['missing_or_nonlist_side_rows']),
+              'empty_string_rows': int(totals['empty_string_rows']),
+              'two_sided_book_row_rate': float(totals['rows_with_two_sided_book'] / rows),
+              'both_sides_empty_row_rate': float(totals['rows_with_both_sides_empty'] / rows),
+              'files_with_nonempty_bids': files_with_nonempty_bid,
+              'files_with_nonempty_asks': files_with_nonempty_ask,
+              'files_with_two_sided_book': files_with_two_sided_book,
+              'files_with_json_parse_errors': parse_error_files,
+              'maximum_bid_levels_observed': max_bid_levels,
+              'maximum_ask_levels_observed': max_ask_levels,
+              'contains_market_scalar_values': False,
+          }
+          Path('docs/ops/depth_usability_profile.json').write_text(
+              json.dumps(result, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit usability profile
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ops/depth_usability_profile.json
+          git commit -m "ops: publish private depth usability profile"
+          git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
