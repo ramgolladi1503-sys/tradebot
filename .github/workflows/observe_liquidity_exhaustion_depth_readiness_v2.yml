@@ -1,6 +1,6 @@
 name: Observe Liquidity Exhaustion Depth Readiness V2
 
-# Revision 3: refresh after complete-corpus invalid-row inventory repair.
+# Revision 4: refresh after completed readiness evidence.
 on:
   push:
     branches:
