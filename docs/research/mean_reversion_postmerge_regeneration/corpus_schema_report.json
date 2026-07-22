@@ -1,0 +1,549 @@
+{
+  "classification": "CORPUS_SCHEMA_PROBE_COMPLETE",
+  "execution_allowed": false,
+  "malformed_files": [],
+  "numeric_timestamp_unit_votes": {
+    "s": 129
+  },
+  "paper_live_allowed": false,
+  "samples": [
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240530/underlying/BSE_INDEX|SENSEX_20240530.parquet",
+      "raw_values": [
+        "2024-05-30 09:15:00",
+        "2024-05-30 09:16:00",
+        "2024-05-30 09:17:00",
+        "2024-05-30 09:18:00",
+        "2024-05-30 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240530/underlying/NIFTY_20240530.parquet",
+      "raw_values": [
+        "2024-05-30 09:15:00",
+        "2024-05-30 09:16:00",
+        "2024-05-30 09:17:00",
+        "2024-05-30 09:18:00",
+        "2024-05-30 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240531/underlying/BSE_INDEX|SENSEX_20240531.parquet",
+      "raw_values": [
+        "2024-05-31 09:15:00",
+        "2024-05-31 09:16:00",
+        "2024-05-31 09:17:00",
+        "2024-05-31 09:18:00",
+        "2024-05-31 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240531/underlying/NIFTY_20240531.parquet",
+      "raw_values": [
+        "2024-05-31 09:15:00",
+        "2024-05-31 09:16:00",
+        "2024-05-31 09:17:00",
+        "2024-05-31 09:18:00",
+        "2024-05-31 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240603/underlying/BSE_INDEX|SENSEX_20240603.parquet",
+      "raw_values": [
+        "2024-06-03 09:15:00",
+        "2024-06-03 09:16:00",
+        "2024-06-03 09:17:00",
+        "2024-06-03 09:18:00",
+        "2024-06-03 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240603/underlying/NIFTY_20240603.parquet",
+      "raw_values": [
+        "2024-06-03 09:15:00",
+        "2024-06-03 09:16:00",
+        "2024-06-03 09:17:00",
+        "2024-06-03 09:18:00",
+        "2024-06-03 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240604/underlying/BSE_INDEX|SENSEX_20240604.parquet",
+      "raw_values": [
+        "2024-06-04 09:15:00",
+        "2024-06-04 09:16:00",
+        "2024-06-04 09:17:00",
+        "2024-06-04 09:18:00",
+        "2024-06-04 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240604/underlying/NIFTY_20240604.parquet",
+      "raw_values": [
+        "2024-06-04 09:15:00",
+        "2024-06-04 09:16:00",
+        "2024-06-04 09:17:00",
+        "2024-06-04 09:18:00",
+        "2024-06-04 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240605/underlying/BSE_INDEX|SENSEX_20240605.parquet",
+      "raw_values": [
+        "2024-06-05 09:15:00",
+        "2024-06-05 09:16:00",
+        "2024-06-05 09:17:00",
+        "2024-06-05 09:18:00",
+        "2024-06-05 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240605/underlying/NIFTY_20240605.parquet",
+      "raw_values": [
+        "2024-06-05 09:15:00",
+        "2024-06-05 09:16:00",
+        "2024-06-05 09:17:00",
+        "2024-06-05 09:18:00",
+        "2024-06-05 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240606/underlying/BSE_INDEX|SENSEX_20240606.parquet",
+      "raw_values": [
+        "2024-06-06 09:15:00",
+        "2024-06-06 09:16:00",
+        "2024-06-06 09:17:00",
+        "2024-06-06 09:18:00",
+        "2024-06-06 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240606/underlying/NIFTY_20240606.parquet",
+      "raw_values": [
+        "2024-06-06 09:15:00",
+        "2024-06-06 09:16:00",
+        "2024-06-06 09:17:00",
+        "2024-06-06 09:18:00",
+        "2024-06-06 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240607/underlying/BSE_INDEX|SENSEX_20240607.parquet",
+      "raw_values": [
+        "2024-06-07 09:15:00",
+        "2024-06-07 09:16:00",
+        "2024-06-07 09:17:00",
+        "2024-06-07 09:18:00",
+        "2024-06-07 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240607/underlying/NIFTY_20240607.parquet",
+      "raw_values": [
+        "2024-06-07 09:15:00",
+        "2024-06-07 09:16:00",
+        "2024-06-07 09:17:00",
+        "2024-06-07 09:18:00",
+        "2024-06-07 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240610/underlying/BSE_INDEX|SENSEX_20240610.parquet",
+      "raw_values": [
+        "2024-06-10 09:15:00",
+        "2024-06-10 09:16:00",
+        "2024-06-10 09:17:00",
+        "2024-06-10 09:18:00",
+        "2024-06-10 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240610/underlying/NIFTY_20240610.parquet",
+      "raw_values": [
+        "2024-06-10 09:15:00",
+        "2024-06-10 09:16:00",
+        "2024-06-10 09:17:00",
+        "2024-06-10 09:18:00",
+        "2024-06-10 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240611/underlying/BSE_INDEX|SENSEX_20240611.parquet",
+      "raw_values": [
+        "2024-06-11 09:15:00",
+        "2024-06-11 09:16:00",
+        "2024-06-11 09:17:00",
+        "2024-06-11 09:18:00",
+        "2024-06-11 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240611/underlying/NIFTY_20240611.parquet",
+      "raw_values": [
+        "2024-06-11 09:15:00",
+        "2024-06-11 09:16:00",
+        "2024-06-11 09:17:00",
+        "2024-06-11 09:18:00",
+        "2024-06-11 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240612/underlying/BSE_INDEX|SENSEX_20240612.parquet",
+      "raw_values": [
+        "2024-06-12 09:15:00",
+        "2024-06-12 09:16:00",
+        "2024-06-12 09:17:00",
+        "2024-06-12 09:18:00",
+        "2024-06-12 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240612/underlying/NIFTY_20240612.parquet",
+      "raw_values": [
+        "2024-06-12 09:15:00",
+        "2024-06-12 09:16:00",
+        "2024-06-12 09:17:00",
+        "2024-06-12 09:18:00",
+        "2024-06-12 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240613/underlying/BSE_INDEX|SENSEX_20240613.parquet",
+      "raw_values": [
+        "2024-06-13 09:15:00",
+        "2024-06-13 09:16:00",
+        "2024-06-13 09:17:00",
+        "2024-06-13 09:18:00",
+        "2024-06-13 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240613/underlying/NIFTY_20240613.parquet",
+      "raw_values": [
+        "2024-06-13 09:15:00",
+        "2024-06-13 09:16:00",
+        "2024-06-13 09:17:00",
+        "2024-06-13 09:18:00",
+        "2024-06-13 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240614/underlying/BSE_INDEX|SENSEX_20240614.parquet",
+      "raw_values": [
+        "2024-06-14 09:15:00",
+        "2024-06-14 09:16:00",
+        "2024-06-14 09:17:00",
+        "2024-06-14 09:18:00",
+        "2024-06-14 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240614/underlying/NIFTY_20240614.parquet",
+      "raw_values": [
+        "2024-06-14 09:15:00",
+        "2024-06-14 09:16:00",
+        "2024-06-14 09:17:00",
+        "2024-06-14 09:18:00",
+        "2024-06-14 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240618/underlying/BSE_INDEX|SENSEX_20240618.parquet",
+      "raw_values": [
+        "2024-06-18 09:15:00",
+        "2024-06-18 09:16:00",
+        "2024-06-18 09:17:00",
+        "2024-06-18 09:18:00",
+        "2024-06-18 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240618/underlying/NIFTY_20240618.parquet",
+      "raw_values": [
+        "2024-06-18 09:15:00",
+        "2024-06-18 09:16:00",
+        "2024-06-18 09:17:00",
+        "2024-06-18 09:18:00",
+        "2024-06-18 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240619/underlying/BSE_INDEX|SENSEX_20240619.parquet",
+      "raw_values": [
+        "2024-06-19 09:15:00",
+        "2024-06-19 09:16:00",
+        "2024-06-19 09:17:00",
+        "2024-06-19 09:18:00",
+        "2024-06-19 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240619/underlying/NIFTY_20240619.parquet",
+      "raw_values": [
+        "2024-06-19 09:15:00",
+        "2024-06-19 09:16:00",
+        "2024-06-19 09:17:00",
+        "2024-06-19 09:18:00",
+        "2024-06-19 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240620/underlying/BSE_INDEX|SENSEX_20240620.parquet",
+      "raw_values": [
+        "2024-06-20 09:15:00",
+        "2024-06-20 09:16:00",
+        "2024-06-20 09:17:00",
+        "2024-06-20 09:18:00",
+        "2024-06-20 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    },
+    {
+      "inferred_unit": "datetime-string",
+      "interpretations": {},
+      "path": "20240620/underlying/NIFTY_20240620.parquet",
+      "raw_values": [
+        "2024-06-20 09:15:00",
+        "2024-06-20 09:16:00",
+        "2024-06-20 09:17:00",
+        "2024-06-20 09:18:00",
+        "2024-06-20 09:19:00"
+      ],
+      "timestamp_column": "timestamp"
+    }
+  ],
+  "schema_signature_count": 2,
+  "schema_signatures": [
+    {
+      "columns": [
+        {
+          "name": "timestamp",
+          "type": "timestamp[ns]"
+        },
+        {
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "name": "open",
+          "type": "double"
+        },
+        {
+          "name": "high",
+          "type": "double"
+        },
+        {
+          "name": "low",
+          "type": "double"
+        },
+        {
+          "name": "close",
+          "type": "double"
+        },
+        {
+          "name": "volume",
+          "type": "double"
+        },
+        {
+          "name": "oi",
+          "type": "double"
+        },
+        {
+          "name": "source",
+          "type": "string"
+        },
+        {
+          "name": "interval",
+          "type": "string"
+        },
+        {
+          "name": "fetch_timestamp",
+          "type": "timestamp[ns]"
+        },
+        {
+          "name": "fetch_start_date",
+          "type": "string"
+        },
+        {
+          "name": "fetch_end_date",
+          "type": "string"
+        },
+        {
+          "name": "data_origin",
+          "type": "string"
+        },
+        {
+          "name": "synthetic",
+          "type": "bool"
+        },
+        {
+          "name": "mock",
+          "type": "bool"
+        },
+        {
+          "name": "fallback",
+          "type": "bool"
+        },
+        {
+          "name": "provider",
+          "type": "string"
+        },
+        {
+          "name": "source_endpoint",
+          "type": "string"
+        },
+        {
+          "name": "__index_level_0__",
+          "type": "int64"
+        }
+      ],
+      "examples": [
+        "20240530/underlying/BSE_INDEX|SENSEX_20240530.parquet",
+        "20240530/underlying/NIFTY_20240530.parquet",
+        "20240531/underlying/BSE_INDEX|SENSEX_20240531.parquet",
+        "20240531/underlying/NIFTY_20240531.parquet",
+        "20240603/underlying/BSE_INDEX|SENSEX_20240603.parquet"
+      ],
+      "file_count": 1547
+    },
+    {
+      "columns": [
+        {
+          "name": "ts",
+          "type": "double"
+        },
+        {
+          "name": "token",
+          "type": "string"
+        },
+        {
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "name": "ltp",
+          "type": "double"
+        },
+        {
+          "name": "bid",
+          "type": "double"
+        },
+        {
+          "name": "ask",
+          "type": "double"
+        },
+        {
+          "name": "vol",
+          "type": "double"
+        },
+        {
+          "name": "oi",
+          "type": "double"
+        },
+        {
+          "name": "depth",
+          "type": "string"
+        }
+      ],
+      "examples": [
+        "20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet",
+        "20260709/underlying/BANKNIFTY 56200 PE 28 JUL 26.parquet",
+        "20260709/underlying/BANKNIFTY 56300 CE 28 JUL 26.parquet",
+        "20260709/underlying/BANKNIFTY 56300 PE 28 JUL 26.parquet",
+        "20260709/underlying/BANKNIFTY 56400 CE 28 JUL 26.parquet"
+      ],
+      "file_count": 129
+    }
+  ],
+  "timestamp_column_counts": {
+    "timestamp": 1547,
+    "ts": 129
+  },
+  "total_underlying_files": 1676
+}
