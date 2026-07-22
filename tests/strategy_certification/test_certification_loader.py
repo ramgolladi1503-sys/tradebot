@@ -111,7 +111,7 @@ def _complete_stats_shape(strategy_id: str) -> dict:
     }
 
 
-def _loader(test_dir: Path, monkeypatch, strategy_id: str) -> DiskCertificationLoader:
+def _loader(test_dir: Path, monkeypatch) -> DiskCertificationLoader:
     loader = DiskCertificationLoader(str(test_dir))
     monkeypatch.setattr(loader, "_load_manifest", lambda sid: _get_valid_manifest(sid))
     return loader
@@ -123,28 +123,29 @@ def test_loader_blocks_until_strict_statistics_deserializer(test_dir, monkeypatc
     create_mock_evidence_file(test_dir, strategy_id, _valid_evidence(strategy_id))
     create_mock_stats_file(test_dir, strategy_id, _complete_stats_shape(strategy_id))
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(
-        CertificationValidationError,
-        match="STRICT_STATISTICS_DESERIALIZER_REQUIRED",
-    ):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationValidationError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "STRICT_STATISTICS_DESERIALIZER_REQUIRED" in str(exc.value)
+    assert "fabricated VALID/STABLE defaults are forbidden" in str(exc.value)
 
 
 def test_loader_missing_truth_artifact(test_dir, monkeypatch):
     strategy_id = "test_strategy"
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationInputMissingError, match="Strategy Truth missing"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationInputMissingError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "Strategy Truth missing" in str(exc.value)
 
 
 def test_loader_missing_outcome_artifact(test_dir, monkeypatch):
     strategy_id = "test_strategy"
     create_mock_truth_file(test_dir, strategy_id, _valid_truth(strategy_id))
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationInputMissingError, match="Outcome Evidence missing"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationInputMissingError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "Outcome Evidence missing" in str(exc.value)
 
 
 def test_loader_missing_statistical_artifact(test_dir, monkeypatch):
@@ -152,9 +153,10 @@ def test_loader_missing_statistical_artifact(test_dir, monkeypatch):
     create_mock_truth_file(test_dir, strategy_id, _valid_truth(strategy_id))
     create_mock_evidence_file(test_dir, strategy_id, _valid_evidence(strategy_id))
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationInputMissingError, match="Statistical Validation missing"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationInputMissingError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "Statistical Validation missing" in str(exc.value)
 
 
 def test_loader_mismatched_strategy_id(test_dir, monkeypatch):
@@ -169,9 +171,11 @@ def test_loader_mismatched_strategy_id(test_dir, monkeypatch):
         },
     )
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationValidationError, match="mismatch"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationValidationError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "strategy_id mismatch" in str(exc.value)
+    assert "different_strategy" in str(exc.value)
 
 
 def test_loader_malformed_report(test_dir, monkeypatch):
@@ -179,9 +183,10 @@ def test_loader_malformed_report(test_dir, monkeypatch):
     path = test_dir / "docs" / "strategy_truth" / f"{strategy_id}_truth.json"
     path.write_text("invalid json", encoding="utf-8")
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationValidationError, match="Failed to parse Strategy Truth"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationValidationError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "Failed to parse Strategy Truth" in str(exc.value)
 
 
 def test_loader_rejects_incomplete_outcome_evidence(test_dir, monkeypatch):
@@ -193,9 +198,11 @@ def test_loader_rejects_incomplete_outcome_evidence(test_dir, monkeypatch):
         {"strategy_id": strategy_id, "run_id": "run-1"},
     )
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationValidationError, match="missing required fields"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationValidationError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "Outcome Evidence missing required fields" in str(exc.value)
+    assert "executable_count" in str(exc.value)
 
 
 def test_loader_rejects_zero_executable_records(test_dir, monkeypatch):
@@ -205,6 +212,7 @@ def test_loader_rejects_zero_executable_records(test_dir, monkeypatch):
     create_mock_truth_file(test_dir, strategy_id, _valid_truth(strategy_id))
     create_mock_evidence_file(test_dir, strategy_id, evidence)
 
-    loader = _loader(test_dir, monkeypatch, strategy_id)
-    with pytest.raises(CertificationValidationError, match="zero executable records"):
+    loader = _loader(test_dir, monkeypatch)
+    with pytest.raises(CertificationValidationError) as exc:
         loader.load_certification_inputs(strategy_id)
+    assert "zero executable records" in str(exc.value)
