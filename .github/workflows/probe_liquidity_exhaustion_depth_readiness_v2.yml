@@ -1,0 +1,74 @@
+name: Probe Liquidity Exhaustion Depth Readiness V2
+
+on:
+  push:
+    branches:
+      - ops/observe-liquidity-exhaustion-depth-readiness-v2
+    paths:
+      - ".github/workflows/probe_liquidity_exhaustion_depth_readiness_v2.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_JOB_ID: "89043886341"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/observe-liquidity-exhaustion-depth-readiness-v2
+          fetch-depth: 1
+
+      - name: Extract failing test evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/probe docs/ops
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${SOURCE_JOB_ID}/logs" > /tmp/probe/logs.bin
+          python - <<'PY'
+          from __future__ import annotations
+
+          import io
+          import re
+          import zipfile
+          from pathlib import Path
+
+          payload = Path('/tmp/probe/logs.bin').read_bytes()
+          if payload.startswith(b'PK'):
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  text = '\n'.join(
+                      archive.read(name).decode('utf-8', errors='replace')
+                      for name in archive.namelist()
+                      if not name.endswith('/')
+                  )
+          else:
+              text = payload.decode('utf-8', errors='replace')
+          lines = text.splitlines()
+          markers = (
+              'FAILURES', 'ERRORS', 'FAILED ', 'ERROR ', 'E       ',
+              'AssertionError', 'Traceback', 'short test summary info',
+          )
+          chosen = []
+          for index, line in enumerate(lines):
+              if any(marker.lower() in line.lower() for marker in markers):
+                  chosen.extend(lines[max(0, index - 10):min(len(lines), index + 45)])
+                  chosen.append('---')
+          chosen.extend(['--- FINAL LOG TAIL ---'] + lines[-240:])
+          cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in chosen]
+          Path('docs/ops/liquidity_exhaustion_depth_readiness_v2_failure.txt').write_text(
+              '\n'.join(cleaned) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit diagnostic extract
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ops/liquidity_exhaustion_depth_readiness_v2_failure.txt
+          git commit -m "ops: publish depth-readiness failure extract"
+          git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
