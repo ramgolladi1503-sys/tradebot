@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from research.kite_five_minute_campaign.engine import build_five_minute_features
 from research.kite_five_minute_campaign.contract import campaign_contract, contract_hash, frozen_variants
 
 
-REAL_ARCHIVE = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
+REAL_ARCHIVE = Path(os.environ.get("KITE_ARCHIVE", "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"))
 REAL_ARCHIVE_SHA = "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
 
 
