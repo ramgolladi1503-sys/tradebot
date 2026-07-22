@@ -33,6 +33,14 @@
       "hypothesis_id": "EOGF_30",
       "max_variants": 8,
       "spec_path": "specs/eogf_30.json"
+    },
+    {
+      "evidence_dir": "dorl_v3",
+      "family": "directional_option_repricing_lag_buy",
+      "frozen_spec_sha256": "08a6c62e9e74dc7629cbedfab89108fec36f983232a4431d2721289b7ea950ef",
+      "hypothesis_id": "DORL_V3",
+      "max_variants": 4,
+      "spec_path": "specs/dorl_v3.json"
     }
   ],
   "max_total_hypotheses": 5,
