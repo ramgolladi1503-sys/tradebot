@@ -1,0 +1,23 @@
+{
+  "both_sides_empty_row_rate": 1.0,
+  "classification": "STRUCTURED_DEPTH_USABILITY_PROFILE_NO_MARKET_VALUES",
+  "contains_market_scalar_values": false,
+  "empty_string_rows": 0,
+  "files_with_json_parse_errors": 0,
+  "files_with_nonempty_asks": 0,
+  "files_with_nonempty_bids": 0,
+  "files_with_two_sided_book": 0,
+  "json_parse_error_rows": 0,
+  "maximum_ask_levels_observed": 0,
+  "maximum_bid_levels_observed": 0,
+  "missing_or_nonlist_side_rows": 0,
+  "non_dict_payload_rows": 0,
+  "non_null_depth_rows": 2778666,
+  "quote_depth_file_count": 129,
+  "rows_with_both_sides_empty": 2778666,
+  "rows_with_nonempty_asks": 0,
+  "rows_with_nonempty_bids": 0,
+  "rows_with_two_sided_book": 0,
+  "total_rows": 2778666,
+  "two_sided_book_row_rate": 0.0
+}
