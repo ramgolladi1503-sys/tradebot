@@ -28,7 +28,8 @@ class FittedImputer:
             value = self.values.get(name)
             if value is None or not np.isfinite(float(value)):
                 raise ValueError(f"imputation value is missing or non-finite: {name}")
-            output[name] = pd.to_numeric(output[name], errors="raise").fillna(
+            numeric = pd.to_numeric(output[name], errors="raise").astype(float)
+            output[name] = numeric.replace([np.inf, -np.inf], np.nan).fillna(
                 float(value)
             )
         matrix = output.to_numpy(dtype=float)
@@ -37,14 +38,39 @@ class FittedImputer:
         return output
 
 
+def finite_training_features(
+    frame: pd.DataFrame, features: Iterable[str]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Partition requested features using training data only.
+
+    A feature with no finite value in the current training fold cannot receive a
+    truthful training median. Such a feature is excluded from that fold's model
+    search rather than assigned a fabricated constant.
+    """
+
+    names = require_causal_features(features)
+    missing = [name for name in names if name not in frame.columns]
+    if missing:
+        raise ValueError(f"feature is missing: {missing}")
+    usable: list[str] = []
+    excluded: list[str] = []
+    for name in names:
+        numeric = pd.to_numeric(frame[name], errors="raise").astype(float)
+        if np.isfinite(numeric.to_numpy(dtype=float)).any():
+            usable.append(name)
+        else:
+            excluded.append(name)
+    return tuple(usable), tuple(excluded)
+
+
 def fit_imputer(frame: pd.DataFrame, features: Iterable[str]) -> FittedImputer:
     names = require_causal_features(features)
     values: dict[str, float] = {}
     for name in names:
         if name not in frame.columns:
             raise ValueError(f"feature is missing: {name}")
-        numeric = pd.to_numeric(frame[name], errors="raise")
-        finite = numeric[np.isfinite(numeric.astype(float))]
+        numeric = pd.to_numeric(frame[name], errors="raise").astype(float)
+        finite = numeric[np.isfinite(numeric.to_numpy(dtype=float))]
         median = finite.median(skipna=True)
         if pd.isna(median) or not np.isfinite(float(median)):
             raise ValueError(f"feature has no finite development median: {name}")
@@ -102,9 +128,11 @@ def rule_mask(
         fill_value = float(imputation[feature])
         if not np.isfinite(fill_value):
             raise RuleReproductionError(f"imputation value is non-finite: {feature}")
-        raw = pd.to_numeric(frame[feature], errors="raise")
-        depended |= raw.isna()
-        values = raw.fillna(fill_value)
+        raw = pd.to_numeric(frame[feature], errors="raise").astype(float)
+        nonfinite = ~np.isfinite(raw.to_numpy(dtype=float))
+        nonfinite_mask = pd.Series(nonfinite, index=frame.index, dtype=bool)
+        depended |= nonfinite_mask
+        values = raw.mask(nonfinite_mask, fill_value)
         mask &= values <= float(threshold) if operator == "<=" else values > float(threshold)
     if return_imputation_dependency:
         return mask, depended & mask
@@ -150,14 +178,19 @@ def generate_candidates(
     min_samples_leaf: int = 50,
     seed: int = 42,
 ) -> list[dict[str, Any]]:
-    feature_names = require_causal_features(features)
-    required = {"session_date", target_column, *feature_names}
+    requested_feature_names = require_causal_features(features)
+    required = {"session_date", target_column, *requested_feature_names}
     missing = required.difference(frame.columns)
     if missing:
         raise ValueError(f"candidate training frame missing columns: {sorted(missing)}")
     target = pd.to_numeric(frame[target_column], errors="raise")
     if target.isna().any() or not np.isfinite(target.astype(float)).all():
         raise ValueError("candidate training target contains missing/non-finite values")
+    feature_names, excluded_features = finite_training_features(
+        frame, requested_feature_names
+    )
+    if not feature_names:
+        return []
     imputer = fit_imputer(frame, feature_names)
     matrix = imputer.transform(frame, feature_names)
     labels = (target > 0).astype(int)
@@ -175,9 +208,15 @@ def generate_candidates(
     extracted: list[tuple[int, list[dict[str, Any]]]] = []
     _extract_conditions(tree_model.tree_, feature_names, 0, [], extracted)
     dataset_hash = semantic_frame_hash(
-        frame, ["session_date", target_column, *feature_names]
+        frame, ["session_date", target_column, *requested_feature_names]
     )
-    feature_schema_hash = canonical_hash(feature_names)
+    feature_schema_hash = canonical_hash(
+        {
+            "requested_features": requested_feature_names,
+            "usable_training_features": feature_names,
+            "excluded_nonfinite_features": excluded_features,
+        }
+    )
     candidates: list[dict[str, Any]] = []
     seen_masks: set[str] = set()
     base_probability = float(labels.mean())
@@ -193,6 +232,8 @@ def generate_candidates(
             "conditions": exact_conditions,
             "imputation_values": dict(imputer.values),
             "feature_names": list(feature_names),
+            "requested_feature_names": list(requested_feature_names),
+            "excluded_nonfinite_features": list(excluded_features),
             "feature_schema_hash": feature_schema_hash,
             "source_dataset_hash": dataset_hash,
             "leaf_probability": positive_probability,
