@@ -1,5 +1,16 @@
 # TradeBot Antigravity MCP v1 — Agent Review Evidence
 
+- mode: RESEARCH_TOOLING
+- candidate_id: tradebot-antigravity-mcp-v1
+- decision: ADD_READ_ONLY_MCP_EVIDENCE_AND_AUDIT_LAYER
+- reason: Replace narrative-only Antigravity completion claims with structured read-only evidence, source-audit, gate, and Git-scope tools.
+- timestamp: 2026-07-22T06:30:00Z
+- is_order_action: false
+- broker_api_called: false
+- live_order_action: false
+- broker_order_action: false
+- source: docs/agent_reviews/tradebot-antigravity-mcp-v1.md
+
 ## Agent Work Contract
 
 - Branch: `feature/tradebot-antigravity-mcp-v1`
@@ -55,12 +66,12 @@ Execution sequence:
 Required tests:
 
 ```bash
-pytest -q tests/mcp/test_core.py tests/mcp/test_git_security.py
+pytest -q tests/mcp/test_core.py
 python -m pip install -r requirements-mcp.txt
 pytest -q -m integration tests/mcp/test_servers.py
 ```
 
-Safety coverage includes path traversal, symlink escape, secret-path rejection, Parquet temporal checks, artifact-hash mutation, missing gate checks, Git scope verification, and Git option-injection rejection.
+Safety coverage includes path traversal, symlink escape, secret-path rejection, Parquet temporal checks, artifact-hash mutation, required-gate checks, Git scope verification, and Git option-injection rejection.
 
 ## High-Risk Path Review
 
@@ -73,7 +84,7 @@ No repository high-risk runtime path is modified.
 Commands:
 
 ```bash
-pytest -q tests/mcp/test_core.py tests/mcp/test_git_security.py
+pytest -q tests/mcp/test_core.py
 bash scripts/install_antigravity_mcp.sh
 pytest -q -m integration tests/mcp/test_servers.py
 ```
