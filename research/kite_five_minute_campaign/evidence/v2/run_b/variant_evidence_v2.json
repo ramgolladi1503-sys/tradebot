@@ -1,0 +1,5704 @@
+[
+  {
+    "bootstrap": {
+      "lower_bps": -6.542707102041339,
+      "status": "EVALUATED",
+      "upper_bps": 5.122966135013821
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "PASS",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        4.960187987161323,
+        -3.887946071107057,
+        4.44021144451094,
+        -8.971807849982248
+      ],
+      "positive_fold_count": 2,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 0.6332109301363187,
+          "profit_factor": 1.1019394974403303
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -2.2664218602726374,
+          "profit_factor": 0.7073873365736199
+        },
+        "shift_1": {
+          "net_expectancy_bps": -2.266421860272638,
+          "profit_factor": 0.7073873365736199
+        },
+        "shift_5": {
+          "net_expectancy_bps": -2.2664218602726374,
+          "profit_factor": 0.7073873365736199
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 456,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 436
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 0.75,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": 1.3667890698636813,
+    "largest_month_contribution": 0.14163843442702592,
+    "largest_trade_contribution": 0.10014538951507616,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.7164644267000384,
+      "positive_fraction": 0.23529411764705882,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.055273719344255,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.7332811636652249,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": -0.8809111423763404,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.8790946260641572,
+          "trade_count": 31
+        },
+        {
+          "net_expectancy_bps": 0.14447489354611456,
+          "omitted_month": "2024-10",
+          "profit_factor": 1.022140890202575,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": -0.7520022894375274,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.8932749490371228,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.8828439574481246,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.8747057453490017,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 0.16935709368337715,
+          "omitted_month": "2025-01",
+          "profit_factor": 1.0278264927672616,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": 0.22187693737510125,
+          "omitted_month": "2025-02",
+          "profit_factor": 1.0348522226870096,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": -1.997838355052353,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.7164644267000384,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.9600723569979479,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.8637453998906106,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -1.202916840150541,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.8292806247103389,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.7092888451440489,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.899336891378324,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.47695355435570275,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.9305874143562136,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.2604602960680169,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9608612312863958,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 1.289790867514531,
+          "omitted_month": "2026-03",
+          "profit_factor": 1.2434345447379787,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": -1.04785042770435,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.8545999138236844,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": -0.6088962795907795,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.9130548892615555,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -0.6885094888827045,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.9022859221021885,
+          "trade_count": 34
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 94.95554344741694,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 0.9988,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.21053968566561732
+    },
+    "net_expectancy_bps": -0.6332109301363187,
+    "profit_factor": 0.9074908398536189,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -2.3289284180582825,
+          "profit_factor": 0.6869410148308571,
+          "regime": "medium",
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -2.640775995039893,
+          "profit_factor": 0.6431347827568312,
+          "regime": "high",
+          "trade_count": 13
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 35,
+    "trade_count": 35,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D0.75_H30"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -6.9858871423946285,
+      "status": "EVALUATED",
+      "upper_bps": 10.417030618207365
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "PASS",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "PASS",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "PASS",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "PASS"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        4.263814240109344,
+        2.9258138811172616,
+        5.023173630994224,
+        -5.331452365990248
+      ],
+      "positive_fold_count": 3,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": -1.9218170526304412,
+          "profit_factor": 0.8228827915910175
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -0.9999999999999998,
+          "profit_factor": 0.9030781150799669
+        },
+        "shift_1": {
+          "net_expectancy_bps": -0.9999999999999988,
+          "profit_factor": 0.9030781150799669
+        },
+        "shift_5": {
+          "net_expectancy_bps": -0.9999999999999996,
+          "profit_factor": 0.9030781150799669
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "bootstrap_lower_bound_positive",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 456,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 436
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 0.75,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": 3.921817052630441,
+    "largest_month_contribution": 0.12085873048966699,
+    "largest_trade_contribution": 0.09283421771969286,
+    "leave_one_month_out": {
+      "min_profit_factor": 1.0995698079854819,
+      "positive_fraction": 1.0,
+      "rows": [
+        {
+          "net_expectancy_bps": 2.097047335539209,
+          "omitted_month": "2024-08",
+          "profit_factor": 1.2276294542186146,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": 1.0723046921603394,
+          "omitted_month": "2024-09",
+          "profit_factor": 1.1067570944100529,
+          "trade_count": 31
+        },
+        {
+          "net_expectancy_bps": 0.9578217798199948,
+          "omitted_month": "2024-10",
+          "profit_factor": 1.106600882858436,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": 1.9349758173095182,
+          "omitted_month": "2024-11",
+          "profit_factor": 1.2105218365354196,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 1.8358919006149383,
+          "omitted_month": "2024-12",
+          "profit_factor": 1.1997416872813222,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 2.2178243904646227,
+          "omitted_month": "2025-01",
+          "profit_factor": 1.2710079522172903,
+          "trade_count": 30
+        },
+        {
+          "net_expectancy_bps": 3.3824182763857538,
+          "omitted_month": "2025-02",
+          "profit_factor": 1.4251091159221758,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": 0.9151790320508845,
+          "omitted_month": "2025-03",
+          "profit_factor": 1.0995698079854819,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 1.5389554760335107,
+          "omitted_month": "2025-07",
+          "profit_factor": 1.1674355463580406,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 1.2861521904861528,
+          "omitted_month": "2025-08",
+          "profit_factor": 1.1399310103945792,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 2.1047954582202113,
+          "omitted_month": "2025-10",
+          "profit_factor": 1.2321924077860515,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 1.4683103826130757,
+          "omitted_month": "2025-11",
+          "profit_factor": 1.159749489159783,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 2.7028301697751025,
+          "omitted_month": "2026-01",
+          "profit_factor": 1.3192253139805619,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 4.5736655686685825,
+          "omitted_month": "2026-03",
+          "profit_factor": 1.6595541176334778,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": 1.2020272183903635,
+          "omitted_month": "2026-05",
+          "profit_factor": 1.126931944445627,
+          "trade_count": 33
+        },
+        {
+          "net_expectancy_bps": 1.2880266934703584,
+          "omitted_month": "2026-06",
+          "profit_factor": 1.140134952897269,
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": 2.059519166122917,
+          "omitted_month": "2026-07",
+          "profit_factor": 1.2260685692762452,
+          "trade_count": 34
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 108.29999585428584,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 0.9095,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": 0.4246751758096149
+    },
+    "net_expectancy_bps": 1.9218170526304412,
+    "profit_factor": 1.215239898341454,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": 4.846826703510188,
+          "profit_factor": 1.6262656072116637,
+          "regime": "medium",
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -4.097428155781733,
+          "profit_factor": 0.6271719905492884,
+          "regime": "high",
+          "trade_count": 13
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 35,
+    "trade_count": 35,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D0.75_H60"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -16.187614902248267,
+      "status": "EVALUATED",
+      "upper_bps": -1.2652126419713243
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "FAIL",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "PASS",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [],
+      "positive_fold_count": 0,
+      "status": "NOT_EVALUABLE",
+      "valid_fold_count": 0
+    },
+    "controls": {
+      "status": "NOT_EVALUABLE"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "minimum_trade_support",
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 477,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 457
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 1.0,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -6.9020579988191395,
+    "largest_month_contribution": 0.3486160051187534,
+    "largest_trade_contribution": 0.18218624099284542,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.08216108749569913,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -8.94094453110741,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.20795683118890285,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -11.848389414108919,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.08216108749569913,
+          "trade_count": 11
+        },
+        {
+          "net_expectancy_bps": -10.222301211355298,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.14345506922371398,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -9.848808251505595,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.1747507134065053,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -8.958436146949506,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.23646012972103983,
+          "trade_count": 11
+        },
+        {
+          "net_expectancy_bps": -7.928707541276538,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.2428547696497777,
+          "trade_count": 12
+        },
+        {
+          "net_expectancy_bps": -8.56323688423149,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.21515586852188878,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -4.991944233393107,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.33750629434096313,
+          "trade_count": 12
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 133.60254952638215,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.2829210568460954
+    },
+    "net_expectancy_bps": -8.90205799881914,
+    "profit_factor": 0.19670219871425354,
+    "regime_stability": {
+      "rows": [],
+      "status": "NOT_EVALUABLE"
+    },
+    "signal_count": 14,
+    "trade_count": 14,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.00_H30"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -20.811222895354973,
+      "status": "EVALUATED",
+      "upper_bps": 6.795787119801054
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "FAIL",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [],
+      "positive_fold_count": 0,
+      "status": "NOT_EVALUABLE",
+      "valid_fold_count": 0
+    },
+    "controls": {
+      "status": "NOT_EVALUABLE"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "minimum_trade_support",
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 477,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 457
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 1.0,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -4.971871607353161,
+    "largest_month_contribution": 0.2971292861463577,
+    "largest_trade_contribution": 0.22133985891592187,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.2408691916775763,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -7.074397729650793,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.5000614090185652,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -12.069001561108742,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.29977931587657114,
+          "trade_count": 11
+        },
+        {
+          "net_expectancy_bps": -11.07139531459429,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.2408691916775763,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -7.621586273575852,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.4774117639055014,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -6.849642167350812,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.5402275398229917,
+          "trade_count": 11
+        },
+        {
+          "net_expectancy_bps": -4.437499685356651,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.6187118360254006,
+          "trade_count": 12
+        },
+        {
+          "net_expectancy_bps": -5.613351813281246,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.5576376255931809,
+          "trade_count": 13
+        },
+        {
+          "net_expectancy_bps": -1.1615696315788722,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.8684129151914654,
+          "trade_count": 12
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 174.91634079503558,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.936637194439748
+    },
+    "net_expectancy_bps": -6.971871607353161,
+    "profit_factor": 0.4851884011565635,
+    "regime_stability": {
+      "rows": [],
+      "status": "NOT_EVALUABLE"
+    },
+    "signal_count": 14,
+    "trade_count": 14,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.00_H60"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -23.574100403875864,
+      "status": "EVALUATED",
+      "upper_bps": 1.451983915403467
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "FAIL",
+      "largest_trade_contribution": "FAIL",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "FAIL",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [],
+      "positive_fold_count": 0,
+      "status": "NOT_EVALUABLE",
+      "valid_fold_count": 0
+    },
+    "controls": {
+      "status": "NOT_EVALUABLE"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "minimum_trade_support",
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "largest_trade_contribution",
+      "largest_month_contribution",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 486,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 466
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 1.25,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -8.22872747612835,
+    "largest_month_contribution": 0.49988952008890347,
+    "largest_trade_contribution": 0.49988952008890347,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.0,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -12.014052015886733,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.1466885313955619,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -14.851185286198163,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.0,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -10.48962619483612,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.16449956508513863,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -9.459226223045789,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.17920738888610957,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -4.329547660674947,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.32296058025503627,
+          "trade_count": 4
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 56.31731182769783,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.4762048467569786
+    },
+    "net_expectancy_bps": -10.22872747612835,
+    "profit_factor": 0.13906472118135071,
+    "regime_stability": {
+      "rows": [],
+      "status": "NOT_EVALUABLE"
+    },
+    "signal_count": 5,
+    "trade_count": 5,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.25_H30"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -36.01209759406387,
+      "status": "EVALUATED",
+      "upper_bps": 28.030222708836266
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "FAIL",
+      "largest_trade_contribution": "FAIL",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "FAIL",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [],
+      "positive_fold_count": 0,
+      "status": "NOT_EVALUABLE",
+      "valid_fold_count": 0
+    },
+    "controls": {
+      "status": "NOT_EVALUABLE"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "minimum_trade_support",
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "largest_trade_contribution",
+      "largest_month_contribution",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 486,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 466
+    },
+    "frozen_parameters": {
+      "dislocation_threshold": 1.25,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -1.0307461169609653,
+    "largest_month_contribution": 0.3925714701725682,
+    "largest_trade_contribution": 0.3925714701725682,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.2930481437045704,
+      "positive_fraction": 0.4,
+      "rows": [
+        {
+          "net_expectancy_bps": -9.294465865152755,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.5724656470466937,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -15.36891679289659,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.2930481437045704,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": -4.653176300952685,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.7859594356611508,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": 2.3697245863708076,
+          "omitted_month": "2026-01",
+          "profit_factor": 1.1520854247207422,
+          "trade_count": 4
+        },
+        {
+          "net_expectancy_bps": 11.793103787826391,
+          "omitted_month": "2026-03",
+          "profit_factor": 2.9150377852403233,
+          "trade_count": 4
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 86.95877466639845,
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 0.9976,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.1609898588253808
+    },
+    "net_expectancy_bps": -3.030746116960965,
+    "profit_factor": 0.8257366132062074,
+    "regime_stability": {
+      "rows": [],
+      "status": "NOT_EVALUABLE"
+    },
+    "signal_count": 5,
+    "trade_count": 5,
+    "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.25_H60"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -11.492278547366592,
+      "status": "EVALUATED",
+      "upper_bps": -1.475593753685679
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -5.220244858769664,
+        -8.94711233955845,
+        -3.269456468345476,
+        -8.163486996569496
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 6.3909291944383595,
+          "profit_factor": 1.8443389426040429
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -13.781858388876717,
+          "profit_factor": 0.2672127474159398
+        },
+        "shift_1": {
+          "net_expectancy_bps": -13.781858388876719,
+          "profit_factor": 0.2672127474159398
+        },
+        "shift_5": {
+          "net_expectancy_bps": -13.781858388876719,
+          "profit_factor": 0.2672127474159398
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 362,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 342
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.55,
+      "expansion_ratio": 1.25,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -4.3909291944383595,
+    "largest_month_contribution": 0.08101243715948726,
+    "largest_trade_contribution": 0.040745699342469736,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.45604792149559836,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -6.408313332000553,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.5434470067082349,
+          "trade_count": 127
+        },
+        {
+          "net_expectancy_bps": -5.83136711091271,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.5682549186149206,
+          "trade_count": 123
+        },
+        {
+          "net_expectancy_bps": -4.954019685653362,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.615130624657577,
+          "trade_count": 121
+        },
+        {
+          "net_expectancy_bps": -8.02087149330114,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.45604792149559836,
+          "trade_count": 121
+        },
+        {
+          "net_expectancy_bps": -6.698283949886196,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.5188930158831838,
+          "trade_count": 126
+        },
+        {
+          "net_expectancy_bps": -6.430219514387649,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.5427913841701874,
+          "trade_count": 126
+        },
+        {
+          "net_expectancy_bps": -7.149987684285877,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.5077288284287287,
+          "trade_count": 123
+        },
+        {
+          "net_expectancy_bps": -6.340779877045834,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.5458051551882175,
+          "trade_count": 124
+        },
+        {
+          "net_expectancy_bps": -5.652788219720376,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.5762889263146461,
+          "trade_count": 127
+        },
+        {
+          "net_expectancy_bps": -5.90512861096724,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.5614357907096715,
+          "trade_count": 119
+        },
+        {
+          "net_expectancy_bps": -5.971648734788016,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.569699173936962,
+          "trade_count": 121
+        },
+        {
+          "net_expectancy_bps": -6.925321510145934,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.520231423259092,
+          "trade_count": 122
+        },
+        {
+          "net_expectancy_bps": -6.204051512664355,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.5558350284277409,
+          "trade_count": 122
+        },
+        {
+          "net_expectancy_bps": -6.978025281611644,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.524776618395588,
+          "trade_count": 121
+        },
+        {
+          "net_expectancy_bps": -6.500513216889251,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.541556350224526,
+          "trade_count": 124
+        },
+        {
+          "net_expectancy_bps": -6.8498440025463045,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.5177803532959177,
+          "trade_count": 126
+        },
+        {
+          "net_expectancy_bps": -6.384487494214282,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.5469896505885186,
+          "trade_count": 126
+        },
+        {
+          "net_expectancy_bps": -6.443391360853805,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.5499701052019819,
+          "trade_count": 121
+        },
+        {
+          "net_expectancy_bps": -5.96606172788904,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.5665705002627411,
+          "trade_count": 123
+        },
+        {
+          "net_expectancy_bps": -5.456691021641931,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.5638297606525609,
+          "trade_count": 120
+        },
+        {
+          "net_expectancy_bps": -6.598737439332019,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.5309780309339436,
+          "trade_count": 128
+        },
+        {
+          "net_expectancy_bps": -6.251554974999223,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.5540365150423029,
+          "trade_count": 125
+        },
+        {
+          "net_expectancy_bps": -6.974206254794524,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.5155608350397877,
+          "trade_count": 124
+        },
+        {
+          "net_expectancy_bps": -6.447664745369392,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.5408533406272222,
+          "trade_count": 127
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 903.9951661548971,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.485178178455174
+    },
+    "net_expectancy_bps": -6.3909291944383595,
+    "profit_factor": 0.5421996884087308,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -10.344823513241131,
+          "profit_factor": 0.4029780015375519,
+          "regime": "low",
+          "trade_count": 48
+        },
+        {
+          "net_expectancy_bps": -5.193648010514999,
+          "profit_factor": 0.5733685615440781,
+          "regime": "medium",
+          "trade_count": 40
+        },
+        {
+          "net_expectancy_bps": -2.930058951862784,
+          "profit_factor": 0.7508617169647701,
+          "regime": "high",
+          "trade_count": 41
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 129,
+    "trade_count": 129,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.25_Q0.55"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -11.07535936959522,
+      "status": "EVALUATED",
+      "upper_bps": -0.7283679919764048
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -3.026086761876971,
+        -10.941758854938417,
+        -2.9393570178547628,
+        -6.480160708225259
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 5.846840835723854,
+          "profit_factor": 1.7850522439157728
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -12.693681671447706,
+          "profit_factor": 0.289580542398984
+        },
+        "shift_1": {
+          "net_expectancy_bps": -12.693681671447706,
+          "profit_factor": 0.289580542398984
+        },
+        "shift_5": {
+          "net_expectancy_bps": -12.693681671447706,
+          "profit_factor": 0.289580542398984
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 379,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 359
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.7,
+      "expansion_ratio": 1.25,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -3.846840835723854,
+    "largest_month_contribution": 0.05478401564643618,
+    "largest_trade_contribution": 0.04190528772978015,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.4818691864557516,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -5.857019097114485,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.5619428365423064,
+          "trade_count": 110
+        },
+        {
+          "net_expectancy_bps": -4.9480337823506035,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.6076595678071759,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -5.381510235105199,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.5884961479214896,
+          "trade_count": 106
+        },
+        {
+          "net_expectancy_bps": -7.1968884924759795,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.4818691864557516,
+          "trade_count": 106
+        },
+        {
+          "net_expectancy_bps": -6.187156744992512,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.5324436183799389,
+          "trade_count": 109
+        },
+        {
+          "net_expectancy_bps": -5.6915467026222615,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.5712475557348321,
+          "trade_count": 110
+        },
+        {
+          "net_expectancy_bps": -6.330490323221195,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.5406626785516506,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -5.763299180114081,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.5654904449778403,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -4.984731012936463,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.6033745014397702,
+          "trade_count": 110
+        },
+        {
+          "net_expectancy_bps": -5.226731492388477,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.5868633991485657,
+          "trade_count": 102
+        },
+        {
+          "net_expectancy_bps": -5.470744900613446,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.5863855235502565,
+          "trade_count": 105
+        },
+        {
+          "net_expectancy_bps": -6.431481254822162,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.5340066426077558,
+          "trade_count": 105
+        },
+        {
+          "net_expectancy_bps": -5.59343421012928,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.5781490267731916,
+          "trade_count": 105
+        },
+        {
+          "net_expectancy_bps": -6.255319406681565,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.5473546011248392,
+          "trade_count": 106
+        },
+        {
+          "net_expectancy_bps": -5.948410714138228,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.559955889839334,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -6.404904779092105,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.5268338189123379,
+          "trade_count": 110
+        },
+        {
+          "net_expectancy_bps": -5.824419557702044,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.5663265021145122,
+          "trade_count": 109
+        },
+        {
+          "net_expectancy_bps": -6.147363804315514,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.5543360630012454,
+          "trade_count": 106
+        },
+        {
+          "net_expectancy_bps": -5.5652842612618345,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.5784026853836469,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -5.024529684209172,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.5797500419088287,
+          "trade_count": 105
+        },
+        {
+          "net_expectancy_bps": -6.081573871648843,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.5466357206999837,
+          "trade_count": 111
+        },
+        {
+          "net_expectancy_bps": -5.580495236833581,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.5777048502297134,
+          "trade_count": 109
+        },
+        {
+          "net_expectancy_bps": -6.497363393579852,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.5281218371109201,
+          "trade_count": 107
+        },
+        {
+          "net_expectancy_bps": -5.902452092549418,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.5587892667445321,
+          "trade_count": 110
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 773.1811618212623,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.2112640281397087
+    },
+    "net_expectancy_bps": -5.846840835723854,
+    "profit_factor": 0.5602076933089386,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -8.464584902402537,
+          "profit_factor": 0.4472759620784448,
+          "regime": "low",
+          "trade_count": 41
+        },
+        {
+          "net_expectancy_bps": -7.961961580194333,
+          "profit_factor": 0.41136927194320194,
+          "regime": "medium",
+          "trade_count": 36
+        },
+        {
+          "net_expectancy_bps": -0.6047878775877579,
+          "profit_factor": 0.9434261593852957,
+          "regime": "high",
+          "trade_count": 35
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 112,
+    "trade_count": 112,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.25_Q0.70"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -15.232710688988542,
+      "status": "EVALUATED",
+      "upper_bps": -2.821830518641008
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -4.048890393178078,
+        -12.070771015455819,
+        -4.001936808889089,
+        -15.742448730922893
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 8.891545396520137,
+          "profit_factor": 2.3446234242220116
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -18.78309079304027,
+          "profit_factor": 0.1678049977246576
+        },
+        "shift_1": {
+          "net_expectancy_bps": -18.78309079304027,
+          "profit_factor": 0.1678049977246576
+        },
+        "shift_5": {
+          "net_expectancy_bps": -18.783090793040273,
+          "profit_factor": 0.1678049977246576
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 400,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 380
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.55,
+      "expansion_ratio": 1.5,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -6.8915453965201365,
+    "largest_month_contribution": 0.11606884432232256,
+    "largest_trade_contribution": 0.05622569375920368,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.33900536757445393,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -8.972545597357913,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.42658899456683846,
+          "trade_count": 89
+        },
+        {
+          "net_expectancy_bps": -7.845031916910984,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.4631478938111688,
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": -7.579184202373407,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.4728105206115327,
+          "trade_count": 86
+        },
+        {
+          "net_expectancy_bps": -10.816650018610789,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.33900536757445393,
+          "trade_count": 86
+        },
+        {
+          "net_expectancy_bps": -9.709790241598975,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.3826348721747759,
+          "trade_count": 89
+        },
+        {
+          "net_expectancy_bps": -9.152049556958335,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.4161923208650777,
+          "trade_count": 90
+        },
+        {
+          "net_expectancy_bps": -9.423196195068062,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.4129669954640986,
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": -8.708749817118594,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.4350587803258233,
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": -7.8944367292727184,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.46134024617766,
+          "trade_count": 89
+        },
+        {
+          "net_expectancy_bps": -8.757362522215173,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.42229245216624844,
+          "trade_count": 82
+        },
+        {
+          "net_expectancy_bps": -8.645681354936142,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.4419450956830873,
+          "trade_count": 85
+        },
+        {
+          "net_expectancy_bps": -9.642273208441662,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.3990509546570697,
+          "trade_count": 86
+        },
+        {
+          "net_expectancy_bps": -8.828512494593276,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.4356702537933541,
+          "trade_count": 84
+        },
+        {
+          "net_expectancy_bps": -9.98845571175654,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.4021724228876664,
+          "trade_count": 83
+        },
+        {
+          "net_expectancy_bps": -8.810820176570113,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.43978312794757296,
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": -9.253743665500467,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.4097052710386771,
+          "trade_count": 90
+        },
+        {
+          "net_expectancy_bps": -8.73545962858419,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.43355683664825034,
+          "trade_count": 90
+        },
+        {
+          "net_expectancy_bps": -9.431821396111449,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.42186564042697905,
+          "trade_count": 84
+        },
+        {
+          "net_expectancy_bps": -8.645608520371582,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.44015951680330484,
+          "trade_count": 86
+        },
+        {
+          "net_expectancy_bps": -6.692166487606611,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.5111385135918836,
+          "trade_count": 86
+        },
+        {
+          "net_expectancy_bps": -8.69307759356927,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.4347516322237268,
+          "trade_count": 90
+        },
+        {
+          "net_expectancy_bps": -9.415453596209012,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.40838772035868215,
+          "trade_count": 88
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 830.9232534169329,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.7986838014008324
+    },
+    "net_expectancy_bps": -8.891545396520137,
+    "profit_factor": 0.42650772387118757,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -12.852934617661811,
+          "profit_factor": 0.34652357088335406,
+          "regime": "low",
+          "trade_count": 34
+        },
+        {
+          "net_expectancy_bps": -8.768790137533715,
+          "profit_factor": 0.3657344737125698,
+          "regime": "medium",
+          "trade_count": 27
+        },
+        {
+          "net_expectancy_bps": -4.512450678980686,
+          "profit_factor": 0.6330093088018999,
+          "regime": "high",
+          "trade_count": 30
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 91,
+    "trade_count": 91,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.50_Q0.55"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -14.018061795724217,
+      "status": "EVALUATED",
+      "upper_bps": -1.676647919779549
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        0.26112080601140086,
+        -12.533031804559595,
+        -5.735048105935164,
+        -13.226287328386164
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 7.808311608217379,
+          "profit_factor": 2.1396910295508946
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -16.61662321643476,
+          "profit_factor": 0.20529635492251141
+        },
+        "shift_1": {
+          "net_expectancy_bps": -16.61662321643476,
+          "profit_factor": 0.20529635492251141
+        },
+        "shift_5": {
+          "net_expectancy_bps": -16.61662321643476,
+          "profit_factor": 0.20529635492251141
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 407,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 387
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.7,
+      "expansion_ratio": 1.5,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -5.808311608217381,
+    "largest_month_contribution": 0.1292839618379155,
+    "largest_trade_contribution": 0.05387740917935606,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.36718267855709136,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -7.869806124046119,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.4680646884213622,
+          "trade_count": 82
+        },
+        {
+          "net_expectancy_bps": -6.6160665097272915,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.5152412998937085,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -7.64674038029117,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.4771764927127354,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -9.835436020347537,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.36718267855709136,
+          "trade_count": 79
+        },
+        {
+          "net_expectancy_bps": -8.669986286698004,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.4174034613418976,
+          "trade_count": 82
+        },
+        {
+          "net_expectancy_bps": -8.332320162223112,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.45230086896187266,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -7.555359726203067,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.479682191115986,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -6.699663572099991,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.5116158590191597,
+          "trade_count": 82
+        },
+        {
+          "net_expectancy_bps": -7.531616944380954,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.46887789145923847,
+          "trade_count": 75
+        },
+        {
+          "net_expectancy_bps": -7.634086953329601,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.4795663187625172,
+          "trade_count": 79
+        },
+        {
+          "net_expectancy_bps": -8.557000505479879,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.4368503277208878,
+          "trade_count": 79
+        },
+        {
+          "net_expectancy_bps": -7.641072643542372,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.48145289711932066,
+          "trade_count": 77
+        },
+        {
+          "net_expectancy_bps": -8.514305879454286,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.44990626132833755,
+          "trade_count": 78
+        },
+        {
+          "net_expectancy_bps": -7.666361242106594,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.4841002710217798,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -8.188005709662283,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.4481057482721441,
+          "trade_count": 83
+        },
+        {
+          "net_expectancy_bps": -7.626010970837405,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.4762286468279728,
+          "trade_count": 83
+        },
+        {
+          "net_expectancy_bps": -8.367596983931191,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.4581598606247188,
+          "trade_count": 78
+        },
+        {
+          "net_expectancy_bps": -7.769167408312805,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.4732145015255189,
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -5.3454919233050155,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.576774668041404,
+          "trade_count": 79
+        },
+        {
+          "net_expectancy_bps": -7.5800545473272525,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.47773656934215014,
+          "trade_count": 83
+        },
+        {
+          "net_expectancy_bps": -8.33737605522618,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.44692070675596274,
+          "trade_count": 81
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 699.0919629713862,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.4641853663938598
+    },
+    "net_expectancy_bps": -7.808311608217379,
+    "profit_factor": 0.4673571960573638,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -9.693934641309527,
+          "profit_factor": 0.42759770748121084,
+          "regime": "low",
+          "trade_count": 32
+        },
+        {
+          "net_expectancy_bps": -10.435466824253977,
+          "profit_factor": 0.301092731371053,
+          "regime": "medium",
+          "trade_count": 25
+        },
+        {
+          "net_expectancy_bps": -3.1409479985928046,
+          "profit_factor": 0.7317879464898408,
+          "regime": "high",
+          "trade_count": 27
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 84,
+    "trade_count": 84,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.50_Q0.70"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -16.25620651748238,
+      "status": "EVALUATED",
+      "upper_bps": -1.5285987727794572
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        1.7077368734173692,
+        -8.759174795464423,
+        -9.562044930248778,
+        -19.74058502626256
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 8.909071872587464,
+          "profit_factor": 2.3512455837663873
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -18.818143745174932,
+          "profit_factor": 0.17773945691447995
+        },
+        "shift_1": {
+          "net_expectancy_bps": -18.818143745174932,
+          "profit_factor": 0.17773945691447995
+        },
+        "shift_5": {
+          "net_expectancy_bps": -18.81814374517493,
+          "profit_factor": 0.17773945691447995
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 429,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 409
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.55,
+      "expansion_ratio": 1.75,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -6.909071872587465,
+    "largest_month_contribution": 0.17052369630922917,
+    "largest_trade_contribution": 0.08260453684491649,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.29670302034959606,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -9.180804394475489,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.417329927500687,
+          "trade_count": 61
+        },
+        {
+          "net_expectancy_bps": -8.691521647096335,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.4315143214210374,
+          "trade_count": 60
+        },
+        {
+          "net_expectancy_bps": -6.930555551249182,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.49781502399830013,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -11.815153098554706,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.29670302034959606,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -10.139555785339784,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.35648169259440016,
+          "trade_count": 61
+        },
+        {
+          "net_expectancy_bps": -9.468165177355074,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.4099925421655059,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -8.636087225972554,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.43807787431393935,
+          "trade_count": 58
+        },
+        {
+          "net_expectancy_bps": -8.90472544848487,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.42940520328629067,
+          "trade_count": 61
+        },
+        {
+          "net_expectancy_bps": -9.02967779011138,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.4164519929887438,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -8.928618203052629,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.42895876523671256,
+          "trade_count": 58
+        },
+        {
+          "net_expectancy_bps": -8.955324208949325,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.43194959571658115,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -8.256750578511584,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.46209198200568385,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -9.286974373036417,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.42360348193187647,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -8.75518144954834,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.4376234956201468,
+          "trade_count": 60
+        },
+        {
+          "net_expectancy_bps": -9.44375008052676,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.40064178391633304,
+          "trade_count": 61
+        },
+        {
+          "net_expectancy_bps": -8.679068714584712,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.43570531762729936,
+          "trade_count": 61
+        },
+        {
+          "net_expectancy_bps": -9.239947399623073,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.43796881512058755,
+          "trade_count": 56
+        },
+        {
+          "net_expectancy_bps": -8.79889600490491,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.4299837231149856,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -5.592248121951913,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.5618675760350358,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -9.300502698780075,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.41307625075488497,
+          "trade_count": 60
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 589.2967991933766,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.3742737106952267
+    },
+    "net_expectancy_bps": -8.909071872587464,
+    "profit_factor": 0.4253064872951855,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -13.668475807771536,
+          "profit_factor": 0.30054544437931635,
+          "regime": "low",
+          "trade_count": 26
+        },
+        {
+          "net_expectancy_bps": -10.928854547954815,
+          "profit_factor": 0.31239936820981784,
+          "regime": "medium",
+          "trade_count": 15
+        },
+        {
+          "net_expectancy_bps": -1.5737746132876531,
+          "profit_factor": 0.8460301729920482,
+          "regime": "high",
+          "trade_count": 21
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 62,
+    "trade_count": 62,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.75_Q0.55"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -13.650618056162521,
+      "status": "EVALUATED",
+      "upper_bps": -0.2827833164583765
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        9.365708999128737,
+        -9.810342760282474,
+        -9.096100254367835,
+        -18.83050515926683
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 7.092809793697102,
+          "profit_factor": 2.0410694431939165
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -15.185619587394203,
+          "profit_factor": 0.23119288223758802
+        },
+        "shift_1": {
+          "net_expectancy_bps": -15.185619587394203,
+          "profit_factor": 0.23119288223758802
+        },
+        "shift_5": {
+          "net_expectancy_bps": -15.185619587394203,
+          "profit_factor": 0.23119288223758802
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 431,
+    "exclusion_reasons_by_count": {
+      "INSUFFICIENT_PRIOR_20_SESSIONS": 20,
+      "NO_SIGNAL": 411
+    },
+    "frozen_parameters": {
+      "efficiency_threshold": 0.7,
+      "expansion_ratio": 1.75,
+      "holding_minutes": 60
+    },
+    "gross_expectancy_bps": -5.092809793697102,
+    "largest_month_contribution": 0.18791638759279222,
+    "largest_trade_contribution": 0.06673390694742726,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.3419855345473251,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -7.342969484481496,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.4807504968934619,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -6.805128109434196,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.500724423417081,
+          "trade_count": 58
+        },
+        {
+          "net_expectancy_bps": -6.810886481336782,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.5065939447891417,
+          "trade_count": 56
+        },
+        {
+          "net_expectancy_bps": -9.939451966164027,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.3419855345473251,
+          "trade_count": 55
+        },
+        {
+          "net_expectancy_bps": -8.334220922493731,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.4106553102350851,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -7.575927666409695,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.4733874974457927,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -6.6803426897823455,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.5107246202295617,
+          "trade_count": 56
+        },
+        {
+          "net_expectancy_bps": -7.0575319301522095,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.49538632673105965,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -7.05268664650458,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.48637102889110734,
+          "trade_count": 55
+        },
+        {
+          "net_expectancy_bps": -6.983321201758138,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.49868193297311975,
+          "trade_count": 56
+        },
+        {
+          "net_expectancy_bps": -7.045092278059883,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.500125480412505,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -6.251652990846611,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.5404066125676454,
+          "trade_count": 55
+        },
+        {
+          "net_expectancy_bps": -7.3883792900096825,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.4888000237917098,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -6.8709830774879945,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.506356514706185,
+          "trade_count": 58
+        },
+        {
+          "net_expectancy_bps": -7.614828583619249,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.46152629850334187,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -6.824225815441878,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.5037902492838137,
+          "trade_count": 59
+        },
+        {
+          "net_expectancy_bps": -7.350458352120708,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.49934559996586375,
+          "trade_count": 55
+        },
+        {
+          "net_expectancy_bps": -6.88317536510163,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.499528698387646,
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -3.4902595358665875,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.6804560361054255,
+          "trade_count": 55
+        },
+        {
+          "net_expectancy_bps": -7.435108507727721,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.47664054754513985,
+          "trade_count": 58
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 575.664775727033,
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.0552304397924335
+    },
+    "net_expectancy_bps": -7.092809793697102,
+    "profit_factor": 0.48993923422574737,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -9.524437605144298,
+          "profit_factor": 0.40048903531965563,
+          "regime": "low",
+          "trade_count": 24
+        },
+        {
+          "net_expectancy_bps": -10.928854547954815,
+          "profit_factor": 0.31239936820981784,
+          "regime": "medium",
+          "trade_count": 15
+        },
+        {
+          "net_expectancy_bps": -1.5737746132876531,
+          "profit_factor": 0.8460301729920482,
+          "regime": "high",
+          "trade_count": 21
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 60,
+    "trade_count": 60,
+    "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.75_Q0.70"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.699281835223509,
+      "status": "EVALUATED",
+      "upper_bps": 0.7106770627412046
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -4.326641674606147,
+        -1.2094833075245957,
+        -1.5226920442554062,
+        -2.907824446597804
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 2.4948374041404637,
+          "profit_factor": 1.3447003692836976
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -5.989674808280929,
+          "profit_factor": 0.4907799578216151
+        },
+        "shift_1": {
+          "net_expectancy_bps": -5.989674808280927,
+          "profit_factor": 0.4907799578216151
+        },
+        "shift_5": {
+          "net_expectancy_bps": -5.989674808280927,
+          "profit_factor": 0.4907799578216151
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 317,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 5,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 311
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 1,
+      "excursion_bps": 2,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -0.4948374041404639,
+    "largest_month_contribution": 0.047553656768255265,
+    "largest_trade_contribution": 0.023528942246992295,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.6924311009102933,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.815382948104387,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.7188410499324293,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -2.488598137450963,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.7476538908487914,
+          "trade_count": 169
+        },
+        {
+          "net_expectancy_bps": -2.2629628688357215,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.7661306049402531,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -2.7962591228292193,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.7182226258143977,
+          "trade_count": 165
+        },
+        {
+          "net_expectancy_bps": -2.3450529902872392,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.7534004056997375,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -1.7585884990694844,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.8082700881276469,
+          "trade_count": 167
+        },
+        {
+          "net_expectancy_bps": -2.60052909488318,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.7307128416360829,
+          "trade_count": 165
+        },
+        {
+          "net_expectancy_bps": -1.854125934066106,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.802043328551343,
+          "trade_count": 167
+        },
+        {
+          "net_expectancy_bps": -2.2536883997414394,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.7632374688575712,
+          "trade_count": 166
+        },
+        {
+          "net_expectancy_bps": -3.0171119251144356,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.6924311009102933,
+          "trade_count": 167
+        },
+        {
+          "net_expectancy_bps": -3.0204821354962017,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.6953790690709464,
+          "trade_count": 170
+        },
+        {
+          "net_expectancy_bps": -2.4243285285075826,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.748710282609499,
+          "trade_count": 164
+        },
+        {
+          "net_expectancy_bps": -3.0093837187000747,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.7058891774730536,
+          "trade_count": 163
+        },
+        {
+          "net_expectancy_bps": -2.4458043756554977,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.7507233070021021,
+          "trade_count": 170
+        },
+        {
+          "net_expectancy_bps": -2.5407338913219513,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.7439287684630445,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -2.6004587889717525,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.7315337713848066,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -2.6969958646059218,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.7268485624194441,
+          "trade_count": 168
+        },
+        {
+          "net_expectancy_bps": -2.0639369434761687,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.7869972419890393,
+          "trade_count": 164
+        },
+        {
+          "net_expectancy_bps": -2.352987793163619,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.7608126748015395,
+          "trade_count": 163
+        },
+        {
+          "net_expectancy_bps": -2.803390938518915,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.7173646178795642,
+          "trade_count": 167
+        },
+        {
+          "net_expectancy_bps": -2.470167174859244,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.7424070429110312,
+          "trade_count": 169
+        },
+        {
+          "net_expectancy_bps": -2.279580751153075,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.7613889664001114,
+          "trade_count": 166
+        },
+        {
+          "net_expectancy_bps": -2.7312401957297743,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.7192545372652545,
+          "trade_count": 165
+        },
+        {
+          "net_expectancy_bps": -2.3296208485003,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.7591709295504688,
+          "trade_count": 169
+        },
+        {
+          "net_expectancy_bps": -2.4090209697354834,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.7524354184207639,
+          "trade_count": 172
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 477.1827918817894,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.5126763039125926
+    },
+    "net_expectancy_bps": -2.4948374041404637,
+    "profit_factor": 0.7436600917516558,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -1.2858331549127195,
+          "profit_factor": 0.8478281685225434,
+          "regime": "low",
+          "trade_count": 57
+        },
+        {
+          "net_expectancy_bps": -2.510704894898457,
+          "profit_factor": 0.7419846433452733,
+          "regime": "medium",
+          "trade_count": 56
+        },
+        {
+          "net_expectancy_bps": -4.823385055737611,
+          "profit_factor": 0.6027695640582366,
+          "regime": "high",
+          "trade_count": 54
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 174,
+    "trade_count": 174,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X2_C1"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.836281079184314,
+      "status": "EVALUATED",
+      "upper_bps": 0.3608780464108046
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -5.556157968816063,
+        2.092534871952838,
+        -3.6889943722005945,
+        -4.141571046563551
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 2.815043748792928,
+          "profit_factor": 1.4623094866373383
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -6.630087497585856,
+          "profit_factor": 0.4115989012194363
+        },
+        "shift_1": {
+          "net_expectancy_bps": -6.6300874975858575,
+          "profit_factor": 0.4115989012194363
+        },
+        "shift_5": {
+          "net_expectancy_bps": -6.6300874975858575,
+          "profit_factor": 0.4115989012194363
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 336,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 2,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 333
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 2,
+      "excursion_bps": 2,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -0.8150437487929282,
+    "largest_month_contribution": 0.06877748011093747,
+    "largest_trade_contribution": 0.03099077474560485,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.6165283956772114,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -3.049571262311308,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.6708304695579743,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -2.836187339625271,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.6853363917239341,
+          "trade_count": 150
+        },
+        {
+          "net_expectancy_bps": -2.355200105588978,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.7259434482363895,
+          "trade_count": 149
+        },
+        {
+          "net_expectancy_bps": -2.961751327366863,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.6671716483390181,
+          "trade_count": 147
+        },
+        {
+          "net_expectancy_bps": -2.7913440857970153,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.6873916529008586,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.599581669189652,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.7043238195368242,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.9024892666939213,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.6699369365400656,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -1.8556804899334025,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.7734203007976391,
+          "trade_count": 149
+        },
+        {
+          "net_expectancy_bps": -3.148263360416483,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.6517727423171957,
+          "trade_count": 149
+        },
+        {
+          "net_expectancy_bps": -3.50648512453189,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.6165283956772114,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -2.913970308293391,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.6774169595409767,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.9706467723474224,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.6694150982209965,
+          "trade_count": 146
+        },
+        {
+          "net_expectancy_bps": -3.5626760196715543,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.6206073462252786,
+          "trade_count": 145
+        },
+        {
+          "net_expectancy_bps": -2.5192529147207066,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.7125303271412902,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.756164285773684,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.6938100674539139,
+          "trade_count": 149
+        },
+        {
+          "net_expectancy_bps": -3.20476184470379,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.6493697594364356,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -3.0084571744920923,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.6653622820887761,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -2.29399675002077,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.7361796852997303,
+          "trade_count": 146
+        },
+        {
+          "net_expectancy_bps": -2.397842279649716,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.7299928522973098,
+          "trade_count": 145
+        },
+        {
+          "net_expectancy_bps": -2.8397909663298297,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.6881683621395073,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -3.1662714192458465,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.644720105728289,
+          "trade_count": 152
+        },
+        {
+          "net_expectancy_bps": -2.3288820376996076,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.7230043920324637,
+          "trade_count": 148
+        },
+        {
+          "net_expectancy_bps": -3.0612524131320713,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.6584309776810421,
+          "trade_count": 146
+        },
+        {
+          "net_expectancy_bps": -2.58486949052355,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.7057709574460214,
+          "trade_count": 150
+        },
+        {
+          "net_expectancy_bps": -2.770591394585794,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.6886703193106943,
+          "trade_count": 154
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 460.26359748840076,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.7595919463292982
+    },
+    "net_expectancy_bps": -2.815043748792928,
+    "profit_factor": 0.6838497658245762,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -2.350592097194462,
+          "profit_factor": 0.733759532673166,
+          "regime": "low",
+          "trade_count": 51
+        },
+        {
+          "net_expectancy_bps": -4.31064596465058,
+          "profit_factor": 0.5977002250877624,
+          "regime": "medium",
+          "trade_count": 51
+        },
+        {
+          "net_expectancy_bps": -2.5116683840957266,
+          "profit_factor": 0.6981177487077217,
+          "regime": "high",
+          "trade_count": 45
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 155,
+    "trade_count": 155,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X2_C2"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -6.289106743639687,
+      "status": "EVALUATED",
+      "upper_bps": 0.627796295265329
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -5.208363008092303,
+        -2.291136508263068,
+        0.9906444379332047,
+        -4.538645298924474
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 2.7770706714407325,
+          "profit_factor": 1.3745327928059248
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -6.554141342881465,
+          "profit_factor": 0.47217985053796924
+        },
+        "shift_1": {
+          "net_expectancy_bps": -6.554141342881466,
+          "profit_factor": 0.47217985053796924
+        },
+        "shift_5": {
+          "net_expectancy_bps": -6.554141342881466,
+          "profit_factor": 0.47217985053796924
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 330,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 4,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 325
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 1,
+      "excursion_bps": 4,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -0.7770706714407326,
+    "largest_month_contribution": 0.04390742906264828,
+    "largest_trade_contribution": 0.024509721206119838,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.6740297004544362,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -3.077753294525188,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.705386004076413,
+          "trade_count": 156
+        },
+        {
+          "net_expectancy_bps": -2.763586990586174,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.7311877630559565,
+          "trade_count": 157
+        },
+        {
+          "net_expectancy_bps": -2.536673753199474,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.7500451829183851,
+          "trade_count": 155
+        },
+        {
+          "net_expectancy_bps": -3.2115748938793893,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.6932395342647433,
+          "trade_count": 153
+        },
+        {
+          "net_expectancy_bps": -2.2330662764908653,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.770670460622373,
+          "trade_count": 156
+        },
+        {
+          "net_expectancy_bps": -2.218777438886473,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.7732064451098383,
+          "trade_count": 155
+        },
+        {
+          "net_expectancy_bps": -2.563920777724426,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.7416123398562757,
+          "trade_count": 153
+        },
+        {
+          "net_expectancy_bps": -2.0951019530555643,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.7865534057892064,
+          "trade_count": 154
+        },
+        {
+          "net_expectancy_bps": -2.5301891773764456,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.7465735234209576,
+          "trade_count": 153
+        },
+        {
+          "net_expectancy_bps": -3.3562620862053762,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.6740297004544362,
+          "trade_count": 154
+        },
+        {
+          "net_expectancy_bps": -3.3534307822666976,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.677607221616101,
+          "trade_count": 157
+        },
+        {
+          "net_expectancy_bps": -2.7191824401109987,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.7315696764140737,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -3.3579880854672415,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.6860843501602277,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.668480394681873,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.7389990782261908,
+          "trade_count": 158
+        },
+        {
+          "net_expectancy_bps": -2.867672210990647,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.7241642089849698,
+          "trade_count": 156
+        },
+        {
+          "net_expectancy_bps": -2.902475782766269,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.7143106966599896,
+          "trade_count": 155
+        },
+        {
+          "net_expectancy_bps": -2.946235349316827,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.7153237382533867,
+          "trade_count": 154
+        },
+        {
+          "net_expectancy_bps": -2.951569473711468,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.7160474884376185,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -2.695248228615438,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.7393414989494012,
+          "trade_count": 151
+        },
+        {
+          "net_expectancy_bps": -3.04187734684086,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.7060264983841741,
+          "trade_count": 155
+        },
+        {
+          "net_expectancy_bps": -2.7593905277739066,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.7254750109237652,
+          "trade_count": 156
+        },
+        {
+          "net_expectancy_bps": -2.54533319244919,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.743527928401429,
+          "trade_count": 155
+        },
+        {
+          "net_expectancy_bps": -2.717916700358729,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.7321698697925086,
+          "trade_count": 153
+        },
+        {
+          "net_expectancy_bps": -2.6396255439230063,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.7403107568583719,
+          "trade_count": 156
+        },
+        {
+          "net_expectancy_bps": -2.687787902993839,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.736383223088447,
+          "trade_count": 159
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 493.112615804931,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.580773039152914
+    },
+    "net_expectancy_bps": -2.7770706714407325,
+    "profit_factor": 0.7275199291234324,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -1.347200642060201,
+          "profit_factor": 0.8508238741202538,
+          "regime": "low",
+          "trade_count": 53
+        },
+        {
+          "net_expectancy_bps": -2.393523404902218,
+          "profit_factor": 0.7625256961649591,
+          "regime": "medium",
+          "trade_count": 50
+        },
+        {
+          "net_expectancy_bps": -5.585834255537673,
+          "profit_factor": 0.5511279033350193,
+          "regime": "high",
+          "trade_count": 52
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 161,
+    "trade_count": 161,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X4_C1"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -6.186639991622781,
+      "status": "EVALUATED",
+      "upper_bps": 0.5982378735039476
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -4.8384684023784,
+        0.45879546145071626,
+        -1.2653343143452613,
+        -5.468891530014226
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 2.759119179532638,
+          "profit_factor": 1.42959857009376
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -6.518238359065276,
+          "profit_factor": 0.43129788098524185
+        },
+        "shift_1": {
+          "net_expectancy_bps": -6.518238359065276,
+          "profit_factor": 0.43129788098524185
+        },
+        "shift_5": {
+          "net_expectancy_bps": -6.518238359065276,
+          "profit_factor": 0.43129788098524185
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 352,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 2,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 349
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 2,
+      "excursion_bps": 4,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -0.7591191795326383,
+    "largest_month_contribution": 0.0736912601603478,
+    "largest_trade_contribution": 0.033204898473532855,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.626913912564081,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -3.0266033320354455,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.6833560670617008,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -2.6144122661162488,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.7147566565079241,
+          "trade_count": 135
+        },
+        {
+          "net_expectancy_bps": -2.2414330874051926,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.7466327612014658,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -3.0607873427939083,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.6703692576812939,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.3234716318320103,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.7373466954550736,
+          "trade_count": 136
+        },
+        {
+          "net_expectancy_bps": -2.821657787326196,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.6957473651970478,
+          "trade_count": 137
+        },
+        {
+          "net_expectancy_bps": -2.920190987527349,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.677888653361161,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -1.6818208864075923,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.7996427901108273,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -3.1299024480766073,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.6651555710433039,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -3.5314059342640336,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.626913912564081,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.8681133440328517,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.6927341002665832,
+          "trade_count": 135
+        },
+        {
+          "net_expectancy_bps": -2.9300016434988962,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.6847041683699407,
+          "trade_count": 130
+        },
+        {
+          "net_expectancy_bps": -3.3382236141215293,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.6549585059217218,
+          "trade_count": 130
+        },
+        {
+          "net_expectancy_bps": -2.4019998225806956,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.7321058078855811,
+          "trade_count": 136
+        },
+        {
+          "net_expectancy_bps": -2.734659219041415,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.705885273858985,
+          "trade_count": 134
+        },
+        {
+          "net_expectancy_bps": -3.193369062536334,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.6622103459766784,
+          "trade_count": 135
+        },
+        {
+          "net_expectancy_bps": -2.8418152235408,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.6918776048325546,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -2.8886345353570704,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.6885620502484046,
+          "trade_count": 130
+        },
+        {
+          "net_expectancy_bps": -2.368082807728538,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.742768648617149,
+          "trade_count": 130
+        },
+        {
+          "net_expectancy_bps": -2.761327097529388,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.7047585810453382,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -3.150434122187511,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.6574363743868108,
+          "trade_count": 136
+        },
+        {
+          "net_expectancy_bps": -2.28227226398251,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.7370915979061867,
+          "trade_count": 134
+        },
+        {
+          "net_expectancy_bps": -2.7542330904125385,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.7004804716335852,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.4323275046307975,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.7294972837883766,
+          "trade_count": 134
+        },
+        {
+          "net_expectancy_bps": -2.7091076786836603,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.7048323540034231,
+          "trade_count": 138
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 402.5382431607143,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.5543934568925302
+    },
+    "net_expectancy_bps": -2.759119179532638,
+    "profit_factor": 0.6994970622658186,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -2.556722253556171,
+          "profit_factor": 0.7395835813849402,
+          "regime": "low",
+          "trade_count": 44
+        },
+        {
+          "net_expectancy_bps": -3.087882639184467,
+          "profit_factor": 0.6992671026433662,
+          "regime": "medium",
+          "trade_count": 45
+        },
+        {
+          "net_expectancy_bps": -3.2631664602101416,
+          "profit_factor": 0.6170988138139812,
+          "regime": "high",
+          "trade_count": 43
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 139,
+    "trade_count": 139,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X4_C2"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -6.798642186058748,
+      "status": "EVALUATED",
+      "upper_bps": 0.8034765276235001
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -7.453686194180199,
+        -0.2820122560314858,
+        -2.594713000868056,
+        -1.571588991021648
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 3.008187600187062,
+          "profit_factor": 1.395214668185077
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -7.016375200374125,
+          "profit_factor": 0.46211686467661955
+        },
+        "shift_1": {
+          "net_expectancy_bps": -7.016375200374124,
+          "profit_factor": 0.46211686467661955
+        },
+        "shift_5": {
+          "net_expectancy_bps": -7.0163752003741235,
+          "profit_factor": 0.46211686467661955
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 354,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 4,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 349
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 1,
+      "excursion_bps": 6,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -1.008187600187062,
+    "largest_month_contribution": 0.0558509257345812,
+    "largest_trade_contribution": 0.027816509348588755,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.6397384911981175,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -3.372294220224233,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.691666662067283,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.9420837930993526,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.7239398062620112,
+          "trade_count": 134
+        },
+        {
+          "net_expectancy_bps": -2.722363037098207,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.7411368341456888,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -3.374502074432936,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.6896216542669551,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.3740277443654887,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.764920573904121,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.0653328546370027,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.7927449808161976,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -3.0319353795585213,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.710526657069856,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.306478610697548,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.774533605359227,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.7297074981570986,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.7375194845784501,
+          "trade_count": 129
+        },
+        {
+          "net_expectancy_bps": -3.9275658179638473,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.6397384911981175,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -3.6955034281168504,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.6603496660428241,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -2.6774573956859804,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.7409497708907747,
+          "trade_count": 130
+        },
+        {
+          "net_expectancy_bps": -3.496493898219116,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.6822275476739638,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.8944248274736197,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.7274223446192242,
+          "trade_count": 135
+        },
+        {
+          "net_expectancy_bps": -3.029767705049442,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.7193564425274511,
+          "trade_count": 133
+        },
+        {
+          "net_expectancy_bps": -3.167153201927032,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.7012436269095597,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -2.8263327678484726,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.7347132988381371,
+          "trade_count": 131
+        },
+        {
+          "net_expectancy_bps": -3.291951556200554,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.6977843662134994,
+          "trade_count": 128
+        },
+        {
+          "net_expectancy_bps": -3.003654610503861,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.7229762045251087,
+          "trade_count": 128
+        },
+        {
+          "net_expectancy_bps": -3.4098814075585158,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.6855653439187924,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.996047314063629,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.7138470271040432,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -3.1539528885180492,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.7045438077829118,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.9523610719267834,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.7213219019327269,
+          "trade_count": 129
+        },
+        {
+          "net_expectancy_bps": -2.8545068786034737,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.730800579626057,
+          "trade_count": 132
+        },
+        {
+          "net_expectancy_bps": -2.906456294071777,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.7265990763291963,
+          "trade_count": 135
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 479.2761853856997,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -1.5354915104224187
+    },
+    "net_expectancy_bps": -3.008187600187062,
+    "profit_factor": 0.7167355839949847,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -3.748927786852379,
+          "profit_factor": 0.6533989081054168,
+          "regime": "low",
+          "trade_count": 43
+        },
+        {
+          "net_expectancy_bps": -1.2697675698853441,
+          "profit_factor": 0.8731266734004467,
+          "regime": "medium",
+          "trade_count": 42
+        },
+        {
+          "net_expectancy_bps": -5.043921215567248,
+          "profit_factor": 0.5843901552842358,
+          "regime": "high",
+          "trade_count": 46
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 137,
+    "trade_count": 137,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X6_C1"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -7.787109182480626,
+      "status": "EVALUATED",
+      "upper_bps": -0.21378550039432578
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "FAIL",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -8.025273816123576,
+        -2.007398186448903,
+        -3.18110449028741,
+        -2.4006096846804383
+      ],
+      "positive_fold_count": 0,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": true,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 3.937659992911847,
+          "profit_factor": 1.646217015930838
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -8.875319985823696,
+          "profit_factor": 0.3286714494912869
+        },
+        "shift_1": {
+          "net_expectancy_bps": -8.875319985823696,
+          "profit_factor": 0.3286714494912869
+        },
+        "shift_5": {
+          "net_expectancy_bps": -8.875319985823696,
+          "profit_factor": 0.3286714494912869
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 370,
+    "exclusion_reasons_by_count": {
+      "AMBIGUOUS_BOTH_DIRECTIONS": 2,
+      "NO_PRIOR_SESSION": 1,
+      "NO_SIGNAL": 367
+    },
+    "frozen_parameters": {
+      "confirmation_bars": 2,
+      "excursion_bps": 6,
+      "holding_minutes": 30
+    },
+    "gross_expectancy_bps": -1.9376599929118472,
+    "largest_month_contribution": 0.08192232853517767,
+    "largest_trade_contribution": 0.036913775063785514,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.5264178673080167,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -4.3085003160696616,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.5900980441439782,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -3.757516525564607,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.6226029934792343,
+          "trade_count": 118
+        },
+        {
+          "net_expectancy_bps": -3.355789534670593,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.6505958113242847,
+          "trade_count": 116
+        },
+        {
+          "net_expectancy_bps": -4.129411256791249,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.591742342920041,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -3.4655206365800857,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.6414716171397821,
+          "trade_count": 118
+        },
+        {
+          "net_expectancy_bps": -3.593451002698197,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.6329191486922014,
+          "trade_count": 119
+        },
+        {
+          "net_expectancy_bps": -3.8856004725352227,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.5991892672482697,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -2.753230183300057,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.699578203786882,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -4.427967989404222,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.5687171419513538,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -4.870954394325838,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.5264178673080167,
+          "trade_count": 116
+        },
+        {
+          "net_expectancy_bps": -4.1037144840318955,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.5990984758259768,
+          "trade_count": 117
+        },
+        {
+          "net_expectancy_bps": -3.7263047706530825,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.6259313610692019,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -4.4798755583795895,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.572589831225719,
+          "trade_count": 115
+        },
+        {
+          "net_expectancy_bps": -3.6572052157706016,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.6288238283133948,
+          "trade_count": 119
+        },
+        {
+          "net_expectancy_bps": -3.864198544002651,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.6179651549320361,
+          "trade_count": 117
+        },
+        {
+          "net_expectancy_bps": -4.479009543843606,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.5682467959298373,
+          "trade_count": 117
+        },
+        {
+          "net_expectancy_bps": -3.646039316144884,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.6340696410921154,
+          "trade_count": 116
+        },
+        {
+          "net_expectancy_bps": -4.2332435365116945,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.5851815439637499,
+          "trade_count": 113
+        },
+        {
+          "net_expectancy_bps": -3.5784826624286317,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.6466605159175113,
+          "trade_count": 112
+        },
+        {
+          "net_expectancy_bps": -4.043286060056286,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.6059476307362146,
+          "trade_count": 116
+        },
+        {
+          "net_expectancy_bps": -4.418629947498291,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.5612045351577443,
+          "trade_count": 118
+        },
+        {
+          "net_expectancy_bps": -4.157251523260519,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.5886442678361155,
+          "trade_count": 118
+        },
+        {
+          "net_expectancy_bps": -4.015432106472029,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.602716944038086,
+          "trade_count": 113
+        },
+        {
+          "net_expectancy_bps": -3.61095843799848,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.6333467935134447,
+          "trade_count": 116
+        },
+        {
+          "net_expectancy_bps": -3.8899679403803495,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.6123270389512837,
+          "trade_count": 120
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 495.4775363480112,
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -2.057133909709022
+    },
+    "net_expectancy_bps": -3.937659992911847,
+    "profit_factor": 0.6074533250007499,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -6.564701949468636,
+          "profit_factor": 0.4778942138578322,
+          "regime": "low",
+          "trade_count": 37
+        },
+        {
+          "net_expectancy_bps": -1.8363304732881958,
+          "profit_factor": 0.8083557155999785,
+          "regime": "medium",
+          "trade_count": 38
+        },
+        {
+          "net_expectancy_bps": -4.411062020020884,
+          "profit_factor": 0.5333658267130458,
+          "regime": "high",
+          "trade_count": 39
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 121,
+    "trade_count": 121,
+    "variant_id": "FAILED_AUCTION_REACCEPTANCE_X6_C2"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -4.674604691407513,
+      "status": "EVALUATED",
+      "upper_bps": 1.8266295130878523
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        0.17598857153648118,
+        -2.618535684475775,
+        -3.3973948550771866,
+        0.12849934142798491
+      ],
+      "positive_fold_count": 2,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 1.426510414162304,
+          "profit_factor": 1.1418358213441147
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -3.853020828324608,
+          "profit_factor": 0.6970910255910675
+        },
+        "shift_1": {
+          "net_expectancy_bps": -3.853020828324608,
+          "profit_factor": 0.6970910255910675
+        },
+        "shift_5": {
+          "net_expectancy_bps": -3.853020828324608,
+          "profit_factor": 0.6970910255910675
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 185,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 185
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 8,
+      "peer_threshold_bps": 4
+    },
+    "gross_expectancy_bps": 0.5734895858376964,
+    "largest_month_contribution": 0.03227108545465085,
+    "largest_trade_contribution": 0.015094779615437422,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.8151606311705686,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.048744123329665,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.8260440201325926,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.254597906841737,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.890855414467712,
+          "trade_count": 298
+        },
+        {
+          "net_expectancy_bps": -1.0998859908034935,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.9034211027154355,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.0383138490450237,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.9068508029957919,
+          "trade_count": 297
+        },
+        {
+          "net_expectancy_bps": -2.213933079954713,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.8151606311705686,
+          "trade_count": 292
+        },
+        {
+          "net_expectancy_bps": -1.053935717175326,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.905533095669006,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.6717691634291745,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.8541696739463196,
+          "trade_count": 293
+        },
+        {
+          "net_expectancy_bps": -1.769798192112866,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8463681249977232,
+          "trade_count": 293
+        },
+        {
+          "net_expectancy_bps": -1.4171075368280768,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.8764833829580485,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.2924970387892074,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.8837422471465289,
+          "trade_count": 296
+        },
+        {
+          "net_expectancy_bps": -1.365631003384465,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.8801470933708325,
+          "trade_count": 290
+        },
+        {
+          "net_expectancy_bps": -1.2509528623003896,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.8897511383723442,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.1846042252259499,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.8968808190755694,
+          "trade_count": 291
+        },
+        {
+          "net_expectancy_bps": -1.3494551182471133,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.882868244120636,
+          "trade_count": 296
+        },
+        {
+          "net_expectancy_bps": -1.5677431967287137,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.867718515799623,
+          "trade_count": 291
+        },
+        {
+          "net_expectancy_bps": -1.296656526951023,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.887280056086896,
+          "trade_count": 293
+        },
+        {
+          "net_expectancy_bps": -1.3938668054589864,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.8789670742137149,
+          "trade_count": 295
+        },
+        {
+          "net_expectancy_bps": -1.5242672283527037,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.8696442907275651,
+          "trade_count": 292
+        },
+        {
+          "net_expectancy_bps": -0.7611947955721037,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9317959036307972,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.4359190453825907,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.8754316379499808,
+          "trade_count": 293
+        },
+        {
+          "net_expectancy_bps": -1.6181869810271394,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.8558084263573412,
+          "trade_count": 290
+        },
+        {
+          "net_expectancy_bps": -1.6660885909215388,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.8558319399658115,
+          "trade_count": 291
+        },
+        {
+          "net_expectancy_bps": -1.2264011832891748,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.8929869925268874,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.8286392834554104,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.8453178817744785,
+          "trade_count": 294
+        },
+        {
+          "net_expectancy_bps": -1.3529794156822408,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.8826573868562207,
+          "trade_count": 301
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 851.447806887024,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.8667733042404323
+    },
+    "net_expectancy_bps": -1.426510414162304,
+    "profit_factor": 0.8757826487023745,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.3893559968114175,
+          "profit_factor": 0.6634594893246882,
+          "regime": "low",
+          "trade_count": 99
+        },
+        {
+          "net_expectancy_bps": 2.011642162759255,
+          "profit_factor": 1.2063056611882434,
+          "regime": "medium",
+          "trade_count": 89
+        },
+        {
+          "net_expectancy_bps": -3.271893217548725,
+          "profit_factor": 0.733933640656969,
+          "regime": "high",
+          "trade_count": 106
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 306,
+    "trade_count": 306,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N8_P4"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.215243144403415,
+      "status": "EVALUATED",
+      "upper_bps": 1.7210031106548982
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        0.4135328982104369,
+        -1.9731248557111205,
+        -3.4050703795314536,
+        -2.0140803583142715
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 1.744685673836602,
+          "profit_factor": 1.1714230431542934
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -4.489371347673204,
+          "profit_factor": 0.6639678731638857
+        },
+        "shift_1": {
+          "net_expectancy_bps": -4.4893713476732025,
+          "profit_factor": 0.6639678731638857
+        },
+        "shift_5": {
+          "net_expectancy_bps": -4.4893713476732025,
+          "profit_factor": 0.6639678731638857
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 215,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 215
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 8,
+      "peer_threshold_bps": 8
+    },
+    "gross_expectancy_bps": 0.2553143261633981,
+    "largest_month_contribution": 0.03442130530401037,
+    "largest_trade_contribution": 0.01631255093559476,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.788789071808425,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.502360993627414,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.7950968269625776,
+          "trade_count": 268
+        },
+        {
+          "net_expectancy_bps": -1.5630269980749059,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.8691752154941094,
+          "trade_count": 268
+        },
+        {
+          "net_expectancy_bps": -1.3628342454925442,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.8844197599791356,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.3235965258861764,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.8855221429161332,
+          "trade_count": 267
+        },
+        {
+          "net_expectancy_bps": -2.639272971725242,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.788789071808425,
+          "trade_count": 262
+        },
+        {
+          "net_expectancy_bps": -1.4679984876715928,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.8741309459224392,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.9428059162965907,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.8367805799526774,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -2.1428590476589617,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8211875949307939,
+          "trade_count": 263
+        },
+        {
+          "net_expectancy_bps": -1.7265958970640383,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.8547251630189631,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.6075194839354976,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.8605917472244812,
+          "trade_count": 266
+        },
+        {
+          "net_expectancy_bps": -1.6811089657135188,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.8572954550281312,
+          "trade_count": 262
+        },
+        {
+          "net_expectancy_bps": -1.6173816767517788,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.8629855261630314,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.4525863378448087,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.8779963044151184,
+          "trade_count": 262
+        },
+        {
+          "net_expectancy_bps": -1.7760697704398287,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.8525640754210277,
+          "trade_count": 267
+        },
+        {
+          "net_expectancy_bps": -1.861371939193942,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.8482173178096228,
+          "trade_count": 263
+        },
+        {
+          "net_expectancy_bps": -1.6157468503493804,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.8649671395788627,
+          "trade_count": 263
+        },
+        {
+          "net_expectancy_bps": -1.6951747946578852,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.8578854793104059,
+          "trade_count": 268
+        },
+        {
+          "net_expectancy_bps": -1.8044475806263613,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.8507068411498274,
+          "trade_count": 264
+        },
+        {
+          "net_expectancy_bps": -1.1197517235951053,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9038322490082689,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.6854443020247087,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.8589194965077371,
+          "trade_count": 264
+        },
+        {
+          "net_expectancy_bps": -1.912341569657125,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.8362344425464446,
+          "trade_count": 262
+        },
+        {
+          "net_expectancy_bps": -1.6997883655051567,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.856520492727156,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.536299269440358,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.8710714239801844,
+          "trade_count": 264
+        },
+        {
+          "net_expectancy_bps": -2.2212146869697507,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.8193354285587157,
+          "trade_count": 265
+        },
+        {
+          "net_expectancy_bps": -1.6688851046700797,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.8607140909340982,
+          "trade_count": 271
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 846.3217420415672,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.9798748775165501
+    },
+    "net_expectancy_bps": -1.744685673836602,
+    "profit_factor": 0.8536625652397086,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.660679599333205,
+          "profit_factor": 0.6513877533274984,
+          "regime": "low",
+          "trade_count": 93
+        },
+        {
+          "net_expectancy_bps": 1.2074420562054355,
+          "profit_factor": 1.1174933537818021,
+          "regime": "medium",
+          "trade_count": 81
+        },
+        {
+          "net_expectancy_bps": -3.563748405391483,
+          "profit_factor": 0.7201809075554887,
+          "regime": "high",
+          "trade_count": 94
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 276,
+    "trade_count": 276,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N8_P8"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.1771862498096395,
+      "status": "EVALUATED",
+      "upper_bps": 1.8620894600687283
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        -0.43755344129371954,
+        -2.345314499061222,
+        -5.334340345836969,
+        1.5895976885467664
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 1.6301971977855139,
+          "profit_factor": 1.1567018882325382
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -4.260394395571027,
+          "profit_factor": 0.6813841371552949
+        },
+        "shift_1": {
+          "net_expectancy_bps": -4.260394395571029,
+          "profit_factor": 0.6813841371552949
+        },
+        "shift_5": {
+          "net_expectancy_bps": -4.260394395571028,
+          "profit_factor": 0.6813841371552949
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 209,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 209
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 12,
+      "peer_threshold_bps": 4
+    },
+    "gross_expectancy_bps": 0.3698028022144856,
+    "largest_month_contribution": 0.033620568801615,
+    "largest_trade_contribution": 0.015725999589297678,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.8025791378267233,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.3074487312526446,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.812882960753775,
+          "trade_count": 271
+        },
+        {
+          "net_expectancy_bps": -1.3957292936485757,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.8832905669400197,
+          "trade_count": 277
+        },
+        {
+          "net_expectancy_bps": -1.3026202325627556,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.890370879760936,
+          "trade_count": 273
+        },
+        {
+          "net_expectancy_bps": -1.2145884110191287,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.8960525209774753,
+          "trade_count": 273
+        },
+        {
+          "net_expectancy_bps": -2.4782350509764086,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.8025791378267233,
+          "trade_count": 269
+        },
+        {
+          "net_expectancy_bps": -1.2402100291643001,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.8937211804476131,
+          "trade_count": 271
+        },
+        {
+          "net_expectancy_bps": -1.9815002679174583,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.835896909391784,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -2.0139564807840884,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8335416086597799,
+          "trade_count": 269
+        },
+        {
+          "net_expectancy_bps": -1.4802970406453682,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.8766561890059573,
+          "trade_count": 271
+        },
+        {
+          "net_expectancy_bps": -1.4918475975127037,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.8719967164544912,
+          "trade_count": 272
+        },
+        {
+          "net_expectancy_bps": -1.576076744448665,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.8683152329168532,
+          "trade_count": 266
+        },
+        {
+          "net_expectancy_bps": -1.4480872761413501,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.8783960082517996,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -1.3779897100471967,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.8858174612403049,
+          "trade_count": 267
+        },
+        {
+          "net_expectancy_bps": -1.5538313898639542,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.871516917072036,
+          "trade_count": 272
+        },
+        {
+          "net_expectancy_bps": -1.8780139709725678,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.8490349306599819,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -1.4644862743429685,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.8780378948793958,
+          "trade_count": 271
+        },
+        {
+          "net_expectancy_bps": -1.5846751132377657,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.8680599092479593,
+          "trade_count": 275
+        },
+        {
+          "net_expectancy_bps": -1.5879584039728203,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.8693457860601341,
+          "trade_count": 271
+        },
+        {
+          "net_expectancy_bps": -0.914795159037217,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9218497579462844,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -1.6502888599960936,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.8636907205161352,
+          "trade_count": 269
+        },
+        {
+          "net_expectancy_bps": -1.882968623594487,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.8400967509483483,
+          "trade_count": 267
+        },
+        {
+          "net_expectancy_bps": -1.9027535692884567,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.8433089649707647,
+          "trade_count": 267
+        },
+        {
+          "net_expectancy_bps": -1.4213532256624724,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.8818688891672217,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -2.0771236013990397,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.8328372844118668,
+          "trade_count": 270
+        },
+        {
+          "net_expectancy_bps": -1.5539719392137346,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.8715031769364538,
+          "trade_count": 277
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 874.4356407975692,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.9215653257674261
+    },
+    "net_expectancy_bps": -1.6301971977855139,
+    "profit_factor": 0.8645269884775744,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.746432959260706,
+          "profit_factor": 0.6510927623967614,
+          "regime": "low",
+          "trade_count": 92
+        },
+        {
+          "net_expectancy_bps": 1.936433982801628,
+          "profit_factor": 1.1941298671983434,
+          "regime": "medium",
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": -3.881701417621994,
+          "profit_factor": 0.7078794111980472,
+          "regime": "high",
+          "trade_count": 92
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 282,
+    "trade_count": 282,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N12_P4"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.591731270820478,
+      "status": "EVALUATED",
+      "upper_bps": 1.860131482647961
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        0.882869023114969,
+        -2.967481087711021,
+        -4.734301874044113,
+        -0.5627661644534139
+      ],
+      "positive_fold_count": 1,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 1.8454200257733948,
+          "profit_factor": 1.1751384810977445
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -4.690840051546789,
+          "profit_factor": 0.6615193748857927
+        },
+        "shift_1": {
+          "net_expectancy_bps": -4.690840051546789,
+          "profit_factor": 0.6615193748857927
+        },
+        "shift_5": {
+          "net_expectancy_bps": -4.69084005154679,
+          "profit_factor": 0.6615193748857927
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 235,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 235
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 12,
+      "peer_threshold_bps": 8
+    },
+    "gross_expectancy_bps": 0.1545799742266049,
+    "largest_month_contribution": 0.035268105463893834,
+    "largest_trade_contribution": 0.016958321805338815,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.7845526523188747,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -2.667447689158202,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.7901404014758101,
+          "trade_count": 248
+        },
+        {
+          "net_expectancy_bps": -1.59095191698458,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.8707302553045957,
+          "trade_count": 251
+        },
+        {
+          "net_expectancy_bps": -1.4912034020733047,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.8780482940515176,
+          "trade_count": 247
+        },
+        {
+          "net_expectancy_bps": -1.3939050729987696,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.8839341803171501,
+          "trade_count": 247
+        },
+        {
+          "net_expectancy_bps": -2.795708417840032,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.7845526523188747,
+          "trade_count": 243
+        },
+        {
+          "net_expectancy_bps": -1.5567084303422296,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.8711913433661784,
+          "trade_count": 246
+        },
+        {
+          "net_expectancy_bps": -2.145167206702435,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.8272963573347284,
+          "trade_count": 246
+        },
+        {
+          "net_expectancy_bps": -2.2817539512485343,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8170718880918628,
+          "trade_count": 243
+        },
+        {
+          "net_expectancy_bps": -1.6657302946611692,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.8647108851243214,
+          "trade_count": 246
+        },
+        {
+          "net_expectancy_bps": -1.7011970054712575,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.8579719785510914,
+          "trade_count": 246
+        },
+        {
+          "net_expectancy_bps": -1.782416651388549,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.8545585061522688,
+          "trade_count": 242
+        },
+        {
+          "net_expectancy_bps": -1.7122466324828918,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.8605148933361353,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -1.535007855927384,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.8761225706733229,
+          "trade_count": 242
+        },
+        {
+          "net_expectancy_bps": -1.8830158272328796,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.8497575451085047,
+          "trade_count": 247
+        },
+        {
+          "net_expectancy_bps": -2.065374713413745,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.8379469501566544,
+          "trade_count": 246
+        },
+        {
+          "net_expectancy_bps": -1.6717865190588512,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.8648474655482179,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -1.885798955524212,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.8480334399302135,
+          "trade_count": 250
+        },
+        {
+          "net_expectancy_bps": -1.738120306316766,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.8601657204063592,
+          "trade_count": 247
+        },
+        {
+          "net_expectancy_bps": -1.1739938260073062,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9029888268331437,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -1.786276952268894,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.8563080495111182,
+          "trade_count": 244
+        },
+        {
+          "net_expectancy_bps": -2.0666779704907876,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.829706472426345,
+          "trade_count": 243
+        },
+        {
+          "net_expectancy_bps": -1.8013803978691985,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.8538005950144668,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -1.6249069170136952,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.8689377700893984,
+          "trade_count": 244
+        },
+        {
+          "net_expectancy_bps": -2.3653721333309012,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.8152879757092693,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -1.7655862310146557,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.8582497067100858,
+          "trade_count": 251
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 841.0872987063333,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.9699645955371535
+    },
+    "net_expectancy_bps": -1.8454200257733948,
+    "profit_factor": 0.8509635384128171,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.807215488188758,
+          "profit_factor": 0.652538107151436,
+          "regime": "low",
+          "trade_count": 87
+        },
+        {
+          "net_expectancy_bps": 1.1844056817888216,
+          "profit_factor": 1.1138288772657587,
+          "regime": "medium",
+          "trade_count": 80
+        },
+        {
+          "net_expectancy_bps": -4.173478197307629,
+          "profit_factor": 0.697129611685834,
+          "regime": "high",
+          "trade_count": 81
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 256,
+    "trade_count": 256,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N12_P8"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -4.810543833992932,
+      "status": "EVALUATED",
+      "upper_bps": 2.848668394357671
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        3.094929037773381,
+        -2.128752442138768,
+        -6.568187652285601,
+        1.6721838207439976
+      ],
+      "positive_fold_count": 2,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 0.966081765415502,
+          "profit_factor": 1.0879960128514647
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -2.932163530831004,
+          "profit_factor": 0.7728920470368312
+        },
+        "shift_1": {
+          "net_expectancy_bps": -2.932163530831004,
+          "profit_factor": 0.7728920470368312
+        },
+        "shift_5": {
+          "net_expectancy_bps": -2.932163530831004,
+          "profit_factor": 0.7728920470368312
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 242,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 242
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 16,
+      "peer_threshold_bps": 4
+    },
+    "gross_expectancy_bps": 1.033918234584498,
+    "largest_month_contribution": 0.037267502865921724,
+    "largest_trade_contribution": 0.017431850669209454,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.849124484257291,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -1.7230047446444534,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.8594757142739526,
+          "trade_count": 241
+        },
+        {
+          "net_expectancy_bps": -0.7412454922213098,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.9375419656372317,
+          "trade_count": 245
+        },
+        {
+          "net_expectancy_bps": -0.47191721597911085,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.9593791965165462,
+          "trade_count": 244
+        },
+        {
+          "net_expectancy_bps": -0.4684224417548633,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.9594255744350754,
+          "trade_count": 240
+        },
+        {
+          "net_expectancy_bps": -1.8753313246938297,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.849124484257291,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -0.7737349984517113,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.9339630504080831,
+          "trade_count": 240
+        },
+        {
+          "net_expectancy_bps": -1.4066682066440006,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.8829399342590104,
+          "trade_count": 238
+        },
+        {
+          "net_expectancy_bps": -1.6257992073195342,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8670483173178142,
+          "trade_count": 237
+        },
+        {
+          "net_expectancy_bps": -0.8171860688748975,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.9313873815393914,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -1.1314289585582165,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.9042465643243947,
+          "trade_count": 240
+        },
+        {
+          "net_expectancy_bps": -0.858691690284506,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.9276263656162499,
+          "trade_count": 233
+        },
+        {
+          "net_expectancy_bps": -0.7604703483890741,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.9353007809422446,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -0.6882111716493945,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.9424133785083965,
+          "trade_count": 237
+        },
+        {
+          "net_expectancy_bps": -0.851384468016488,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.92910855146693,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -1.2446820829380298,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.8991333675441145,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -0.6390923957210589,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.9460114876694365,
+          "trade_count": 240
+        },
+        {
+          "net_expectancy_bps": -0.8951421733608705,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.9248808734908522,
+          "trade_count": 242
+        },
+        {
+          "net_expectancy_bps": -0.8474114872899282,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.9295432054417991,
+          "trade_count": 239
+        },
+        {
+          "net_expectancy_bps": -0.11744068672149188,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9898468131216884,
+          "trade_count": 237
+        },
+        {
+          "net_expectancy_bps": -0.8474417350187315,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.9292207638640183,
+          "trade_count": 237
+        },
+        {
+          "net_expectancy_bps": -1.0291941493433414,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.9112420022067917,
+          "trade_count": 235
+        },
+        {
+          "net_expectancy_bps": -1.2345040718502691,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.8976753861060213,
+          "trade_count": 234
+        },
+        {
+          "net_expectancy_bps": -0.6485677299660252,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.9454460939796645,
+          "trade_count": 238
+        },
+        {
+          "net_expectancy_bps": -1.5060810563068805,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.8785985995890415,
+          "trade_count": 238
+        },
+        {
+          "net_expectancy_bps": -0.9649761075004102,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.9197165370188358,
+          "trade_count": 246
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 834.823576174012,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.5038175343563255
+    },
+    "net_expectancy_bps": -0.966081765415502,
+    "profit_factor": 0.9191210153235386,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.499303302315266,
+          "profit_factor": 0.6645298474377783,
+          "regime": "low",
+          "trade_count": 85
+        },
+        {
+          "net_expectancy_bps": 2.8687362110013535,
+          "profit_factor": 1.2800380039509642,
+          "regime": "medium",
+          "trade_count": 75
+        },
+        {
+          "net_expectancy_bps": -3.061217019600211,
+          "profit_factor": 0.7630913222223269,
+          "regime": "high",
+          "trade_count": 81
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 249,
+    "trade_count": 249,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N16_P4"
+  },
+  {
+    "bootstrap": {
+      "lower_bps": -5.065591762822086,
+      "status": "EVALUATED",
+      "upper_bps": 2.881478547018016
+    },
+    "candidate_eligibility": false,
+    "candidate_gates": {
+      "bootstrap_lower_bound_positive": "FAIL",
+      "chronological_fold_stability": "FAIL",
+      "controls": "PASS",
+      "largest_month_contribution": "PASS",
+      "largest_trade_contribution": "PASS",
+      "leave_one_month_out_stability": "FAIL",
+      "leave_one_regime_out_stability": "NOT_EVALUABLE",
+      "minimum_trade_support": "PASS",
+      "multiple_testing": "FAIL",
+      "net_expectancy_positive": "FAIL",
+      "parameter_neighbour_stability": "FAIL",
+      "profit_factor": "FAIL"
+    },
+    "candidate_hash": null,
+    "chronological_folds": {
+      "folds": [
+        2.1207231766243253,
+        -0.3662399141485021,
+        -6.481875447127949,
+        0.5893473966194913
+      ],
+      "positive_fold_count": 2,
+      "status": "EVALUATED",
+      "valid_fold_count": 4
+    },
+    "controls": {
+      "any_control_meets_economic_gate": false,
+      "rows": {
+        "direction_inversion": {
+          "net_expectancy_bps": 1.0416647590946242,
+          "profit_factor": 1.0928076780654838
+        },
+        "random_date_placebo": {
+          "net_expectancy_bps": -3.0833295181892484,
+          "profit_factor": 0.7679201735650818
+        },
+        "shift_1": {
+          "net_expectancy_bps": -3.0833295181892475,
+          "profit_factor": 0.7679201735650818
+        },
+        "shift_5": {
+          "net_expectancy_bps": -3.083329518189249,
+          "profit_factor": 0.7679201735650818
+        }
+      },
+      "status": "EVALUATED"
+    },
+    "cost_assumption_bps": 2.0,
+    "exact_rejection_reasons": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "excluded_session_count": 264,
+    "exclusion_reasons_by_count": {
+      "NO_SIGNAL": 264
+    },
+    "frozen_parameters": {
+      "holding_minutes": 60,
+      "nifty_threshold_bps": 16,
+      "peer_threshold_bps": 8
+    },
+    "gross_expectancy_bps": 0.9583352409053758,
+    "largest_month_contribution": 0.03894326250661634,
+    "largest_trade_contribution": 0.01866053788168863,
+    "leave_one_month_out": {
+      "min_profit_factor": 0.8402905554480473,
+      "positive_fraction": 0.0,
+      "rows": [
+        {
+          "net_expectancy_bps": -1.9005470415720342,
+          "omitted_month": "2024-07",
+          "profit_factor": 0.8491458583839493,
+          "trade_count": 221
+        },
+        {
+          "net_expectancy_bps": -0.7960030776692401,
+          "omitted_month": "2024-08",
+          "profit_factor": 0.9346834780614868,
+          "trade_count": 223
+        },
+        {
+          "net_expectancy_bps": -0.5002312676798318,
+          "omitted_month": "2024-09",
+          "profit_factor": 0.9580104017329333,
+          "trade_count": 222
+        },
+        {
+          "net_expectancy_bps": -0.49690333370269174,
+          "omitted_month": "2024-10",
+          "profit_factor": 0.9580262728242818,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -2.0465793886075803,
+          "omitted_month": "2024-11",
+          "profit_factor": 0.8402905554480473,
+          "trade_count": 217
+        },
+        {
+          "net_expectancy_bps": -0.9851204543041978,
+          "omitted_month": "2024-12",
+          "profit_factor": 0.9187776764546957,
+          "trade_count": 219
+        },
+        {
+          "net_expectancy_bps": -1.3444309058308275,
+          "omitted_month": "2025-01",
+          "profit_factor": 0.8907332607937126,
+          "trade_count": 217
+        },
+        {
+          "net_expectancy_bps": -1.7731067574918569,
+          "omitted_month": "2025-02",
+          "profit_factor": 0.8592350503448176,
+          "trade_count": 215
+        },
+        {
+          "net_expectancy_bps": -0.8582947194330219,
+          "omitted_month": "2025-03",
+          "profit_factor": 0.9295674251731039,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -1.2268187650458326,
+          "omitted_month": "2025-04",
+          "profit_factor": 0.8989200372299209,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -0.9172544758334245,
+          "omitted_month": "2025-05",
+          "profit_factor": 0.9242781016907727,
+          "trade_count": 213
+        },
+        {
+          "net_expectancy_bps": -0.887435309948066,
+          "omitted_month": "2025-06",
+          "profit_factor": 0.9265811262500682,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -0.6937329635938771,
+          "omitted_month": "2025-07",
+          "profit_factor": 0.9432914633334637,
+          "trade_count": 216
+        },
+        {
+          "net_expectancy_bps": -1.051079280013816,
+          "omitted_month": "2025-08",
+          "profit_factor": 0.9154514045836161,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -1.2862513655841212,
+          "omitted_month": "2025-09",
+          "profit_factor": 0.8979115827604288,
+          "trade_count": 219
+        },
+        {
+          "net_expectancy_bps": -0.6847968610049254,
+          "omitted_month": "2025-10",
+          "profit_factor": 0.9436880663420774,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -1.0655208714820974,
+          "omitted_month": "2025-11",
+          "profit_factor": 0.9133222726029565,
+          "trade_count": 221
+        },
+        {
+          "net_expectancy_bps": -0.8869086668657415,
+          "omitted_month": "2025-12",
+          "profit_factor": 0.927979044761255,
+          "trade_count": 218
+        },
+        {
+          "net_expectancy_bps": -0.23916139392722469,
+          "omitted_month": "2026-01",
+          "profit_factor": 0.9799718027943803,
+          "trade_count": 216
+        },
+        {
+          "net_expectancy_bps": -0.8146258709150265,
+          "omitted_month": "2026-02",
+          "profit_factor": 0.9335411662568617,
+          "trade_count": 216
+        },
+        {
+          "net_expectancy_bps": -1.2440800025502428,
+          "omitted_month": "2026-03",
+          "profit_factor": 0.8961425648319348,
+          "trade_count": 214
+        },
+        {
+          "net_expectancy_bps": -0.9507804221965003,
+          "omitted_month": "2026-04",
+          "profit_factor": 0.9220064274671895,
+          "trade_count": 216
+        },
+        {
+          "net_expectancy_bps": -0.6956604650830263,
+          "omitted_month": "2026-05",
+          "profit_factor": 0.9430718265522531,
+          "trade_count": 216
+        },
+        {
+          "net_expectancy_bps": -1.6605148184005214,
+          "omitted_month": "2026-06",
+          "profit_factor": 0.869850322209918,
+          "trade_count": 217
+        },
+        {
+          "net_expectancy_bps": -1.0414627820139313,
+          "omitted_month": "2026-07",
+          "profit_factor": 0.915685018750186,
+          "trade_count": 224
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "maximum_drawdown_bps": 757.2618994689014,
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "multiple_testing": {
+      "fwer_adjusted_p_value": 1.0,
+      "null_distribution_hash": "5249cef19550868d07cbbad88823f3178dd705adc70c404a957ae245b1278ced",
+      "observed_stat": -0.5054488480260375
+    },
+    "net_expectancy_bps": -1.0416647590946242,
+    "profit_factor": 0.9150740977316574,
+    "regime_stability": {
+      "rows": [
+        {
+          "net_expectancy_bps": -4.56458262342148,
+          "profit_factor": 0.6631247576895307,
+          "regime": "low",
+          "trade_count": 82
+        },
+        {
+          "net_expectancy_bps": 2.0799693215362596,
+          "profit_factor": 1.1929842536373112,
+          "regime": "medium",
+          "trade_count": 68
+        },
+        {
+          "net_expectancy_bps": -2.6360990835397704,
+          "profit_factor": 0.8009549322023969,
+          "regime": "high",
+          "trade_count": 71
+        }
+      ],
+      "status": "EVALUATED"
+    },
+    "signal_count": 227,
+    "trade_count": 227,
+    "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N16_P8"
+  }
+]

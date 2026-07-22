@@ -1,6 +1,12 @@
 name: kite-five-minute-governed-discovery
 
 on:
+  push:
+    branches:
+      - research/kite-five-minute-governed-discovery-v1
+  pull_request:
+    branches:
+      - research/structural-edge-prove-or-kill-v1
   workflow_dispatch:
     inputs:
       archive_sha256:
@@ -19,20 +25,23 @@ on:
 permissions:
   contents: read
 
+env:
+  KITE_ARCHIVE_RELEASE_TAG: kite-five-minute-corpus-v1
+  KITE_ARCHIVE_ASSET_NAME: kite_candidate_replay.zip
+  KITE_ARCHIVE_SHA256: f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d
+  KITE_ARCHIVE_SIZE_BYTES: "7966978"
+
 jobs:
   governed-campaign:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: research/kite-five-minute-governed-discovery-v1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Refuse unexpected branch or commit
         run: |
-          test "${GITHUB_REF_NAME}" = "research/kite-five-minute-governed-discovery-v1" || {
-            echo "unexpected branch: ${GITHUB_REF_NAME}" >&2
-            exit 2
-          }
           if [ -n "${{ inputs.expected_head_sha }}" ]; then
             test "$(git rev-parse HEAD)" = "${{ inputs.expected_head_sha }}" || {
               echo "unexpected head: $(git rev-parse HEAD)" >&2
@@ -55,11 +64,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p .private_kite_archive
-          gh release download "${{ inputs.archive_release_tag }}" \
-            --pattern "${{ inputs.archive_asset_name }}" \
+          gh release download "${KITE_ARCHIVE_RELEASE_TAG}" \
+            --pattern "${KITE_ARCHIVE_ASSET_NAME}" \
             --dir .private_kite_archive \
             --clobber
-          FOUND="$(find .private_kite_archive -type f -name "${{ inputs.archive_asset_name }}" | wc -l | tr -d ' ')"
+          FOUND="$(find .private_kite_archive -type f -name "${KITE_ARCHIVE_ASSET_NAME}" | wc -l | tr -d ' ')"
           test "$FOUND" = "1" || {
             echo "expected exactly one archive asset, found $FOUND" >&2
             exit 2
@@ -67,16 +76,23 @@ jobs:
 
       - name: Verify archive SHA
         run: |
-          ARCHIVE=".private_kite_archive/${{ inputs.archive_asset_name }}"
+          ARCHIVE=".private_kite_archive/${KITE_ARCHIVE_ASSET_NAME}"
           test -n "$ARCHIVE"
-          echo "${{ inputs.archive_sha256 }}  $ARCHIVE" | sha256sum -c -
+          test "$(wc -c < "$ARCHIVE" | tr -d ' ')" = "${KITE_ARCHIVE_SIZE_BYTES}"
+          echo "${KITE_ARCHIVE_SHA256}  $ARCHIVE" | sha256sum -c -
           echo "KITE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Run focused tests
-        run: pytest -q tests/test_kite_five_minute_campaign.py
+        run: pytest -q tests/test_kite_five_minute_campaign.py tests/test_kite_five_minute_campaign_v2.py
 
       - name: Run governed campaign twice
-        run: python scripts/run_kite_five_minute_campaign.py --archive "$KITE_ARCHIVE" --output-root "$GITHUB_WORKSPACE"
+        run: |
+          PRE="$(python - <<'PY'
+import json
+print(json.load(open('research/kite_five_minute_campaign/evidence/v2/pre_outcome_freeze_manifest.json'))['pre_outcome_freeze_commit'])
+PY
+)"
+          python scripts/run_kite_five_minute_campaign.py --archive "$KITE_ARCHIVE" --output-root "$GITHUB_WORKSPACE" --allow-real-outcome --pre-outcome-freeze-commit "$PRE"
 
       - name: Run independent audit
         run: python scripts/audit_kite_five_minute_campaign.py

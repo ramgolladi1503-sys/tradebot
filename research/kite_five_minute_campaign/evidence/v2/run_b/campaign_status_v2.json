@@ -1,0 +1,18 @@
+{
+  "allowed_for_live_execution": false,
+  "archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "broker_api_called": false,
+  "campaign_contract_hash": "b568212e0f770b1560cb6729396deaf0bc0fc178a6b9d9bd88311f5816b7865b",
+  "campaign_id": "kite-five-minute-governed-discovery-v2",
+  "candidate_bundle_hash": null,
+  "candidate_count": 0,
+  "code_commit": "3050ae0fce11bab8530023e9818de960ed72f3e2",
+  "is_order_action": false,
+  "pre_outcome_freeze_commit": "b5dc6074c756de41df53914e259b4a489ab3f478",
+  "read_only": true,
+  "schema_version": "2.0",
+  "source_manifest_hash": "38d66a08f60f8c5e16db109542afd1a80fe52c73536f39d442439bcfe3eb4e7a",
+  "status": "NO_EDGE_FOUND_WITHIN_PREREGISTERED_SEARCH_BUDGET",
+  "trade_count": 3129,
+  "variant_count": 24
+}

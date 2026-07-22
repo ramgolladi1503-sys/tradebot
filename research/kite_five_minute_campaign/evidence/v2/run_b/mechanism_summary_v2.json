@@ -1,0 +1,72 @@
+[
+  {
+    "best_net_expectancy_bps": 1.9218170526304412,
+    "best_profit_factor": 1.215239898341454,
+    "best_support": 35,
+    "closest_failed_gates": [
+      "bootstrap_lower_bound_positive",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "closest_variant": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D0.75_H60",
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -5.846840835723854,
+    "best_profit_factor": 0.5602076933089386,
+    "best_support": 129,
+    "closest_failed_gates": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "closest_variant": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.25_Q0.55",
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -2.4948374041404637,
+    "best_profit_factor": 0.7436600917516558,
+    "best_support": 174,
+    "closest_failed_gates": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "controls",
+      "multiple_testing"
+    ],
+    "closest_variant": "FAILED_AUCTION_REACCEPTANCE_X2_C1",
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -0.966081765415502,
+    "best_profit_factor": 0.9191210153235386,
+    "best_support": 306,
+    "closest_failed_gates": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "multiple_testing"
+    ],
+    "closest_variant": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N8_P4",
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "variant_count": 6
+  }
+]

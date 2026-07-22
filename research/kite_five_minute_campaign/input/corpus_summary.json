@@ -35,7 +35,7 @@
     "2024-11-01",
     "2025-10-21"
   ],
-  "governing_commit": "182345beb2bb5415ba9ac2b1be4a5af47c35254e",
+  "governing_commit": "3050ae0fce11bab8530023e9818de960ed72f3e2",
   "incomplete_flag_reconciliation": {
     "explanation": "Seven INCOMPLETE_SESSION secondary flags coexist with six excluded underlying files because one incomplete file is an OPT_MOCK option file whose primary disposition is REJECT_MOCK_DATA.",
     "incomplete_underlying_primary_rejections": 6,

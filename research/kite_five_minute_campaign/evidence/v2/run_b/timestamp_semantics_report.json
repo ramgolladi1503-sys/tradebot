@@ -1,0 +1,115 @@
+{
+  "basis": "Kite rows align to 5-minute starts; completion is represented as timestamp plus five minutes.",
+  "provider_timestamp_convention": "candle_open_time",
+  "samples": [
+    {
+      "date": "2024-07-09",
+      "first_completion": "2024-07-09T09:20:00+05:30",
+      "first_timestamp": "2024-07-09T09:15:00+05:30",
+      "instrument": "BANKNIFTY",
+      "last_completion": "2024-07-09T15:30:00+05:30",
+      "last_timestamp": "2024-07-09T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-09",
+      "first_completion": "2024-07-09T09:20:00+05:30",
+      "first_timestamp": "2024-07-09T09:15:00+05:30",
+      "instrument": "NIFTY",
+      "last_completion": "2024-07-09T15:30:00+05:30",
+      "last_timestamp": "2024-07-09T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-09",
+      "first_completion": "2024-07-09T09:20:00+05:30",
+      "first_timestamp": "2024-07-09T09:15:00+05:30",
+      "instrument": "SENSEX",
+      "last_completion": "2024-07-09T15:30:00+05:30",
+      "last_timestamp": "2024-07-09T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-10",
+      "first_completion": "2024-07-10T09:20:00+05:30",
+      "first_timestamp": "2024-07-10T09:15:00+05:30",
+      "instrument": "BANKNIFTY",
+      "last_completion": "2024-07-10T15:30:00+05:30",
+      "last_timestamp": "2024-07-10T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-10",
+      "first_completion": "2024-07-10T09:20:00+05:30",
+      "first_timestamp": "2024-07-10T09:15:00+05:30",
+      "instrument": "NIFTY",
+      "last_completion": "2024-07-10T15:30:00+05:30",
+      "last_timestamp": "2024-07-10T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-10",
+      "first_completion": "2024-07-10T09:20:00+05:30",
+      "first_timestamp": "2024-07-10T09:15:00+05:30",
+      "instrument": "SENSEX",
+      "last_completion": "2024-07-10T15:30:00+05:30",
+      "last_timestamp": "2024-07-10T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-11",
+      "first_completion": "2024-07-11T09:20:00+05:30",
+      "first_timestamp": "2024-07-11T09:15:00+05:30",
+      "instrument": "BANKNIFTY",
+      "last_completion": "2024-07-11T15:30:00+05:30",
+      "last_timestamp": "2024-07-11T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-11",
+      "first_completion": "2024-07-11T09:20:00+05:30",
+      "first_timestamp": "2024-07-11T09:15:00+05:30",
+      "instrument": "NIFTY",
+      "last_completion": "2024-07-11T15:30:00+05:30",
+      "last_timestamp": "2024-07-11T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-11",
+      "first_completion": "2024-07-11T09:20:00+05:30",
+      "first_timestamp": "2024-07-11T09:15:00+05:30",
+      "instrument": "SENSEX",
+      "last_completion": "2024-07-11T15:30:00+05:30",
+      "last_timestamp": "2024-07-11T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-12",
+      "first_completion": "2024-07-12T09:20:00+05:30",
+      "first_timestamp": "2024-07-12T09:15:00+05:30",
+      "instrument": "BANKNIFTY",
+      "last_completion": "2024-07-12T15:30:00+05:30",
+      "last_timestamp": "2024-07-12T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-12",
+      "first_completion": "2024-07-12T09:20:00+05:30",
+      "first_timestamp": "2024-07-12T09:15:00+05:30",
+      "instrument": "NIFTY",
+      "last_completion": "2024-07-12T15:30:00+05:30",
+      "last_timestamp": "2024-07-12T15:25:00+05:30",
+      "row_count": 75
+    },
+    {
+      "date": "2024-07-12",
+      "first_completion": "2024-07-12T09:20:00+05:30",
+      "first_timestamp": "2024-07-12T09:15:00+05:30",
+      "instrument": "SENSEX",
+      "last_completion": "2024-07-12T15:30:00+05:30",
+      "last_timestamp": "2024-07-12T15:25:00+05:30",
+      "row_count": 75
+    }
+  ],
+  "schema_version": "1.0"
+}
