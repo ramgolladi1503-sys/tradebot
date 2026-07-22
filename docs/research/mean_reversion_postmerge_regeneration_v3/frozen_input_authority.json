@@ -1,0 +1,23 @@
+{
+  "appledouble_files_verified": 1676,
+  "candle_files_verified": 1547,
+  "classification": "UPSTOX_CANDLE_FILES_VALID",
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "first_date": "20240530",
+  "last_date": "20260716",
+  "manifest_verified": true,
+  "parquet_files_verified": 1676,
+  "producer_commit": "a64ddee5f68921bffbac684e2ea06de8943b704a",
+  "quote_depth_files_verified": 129,
+  "symbols": [
+    "BANKNIFTY",
+    "BSE_INDEX|SENSEX",
+    "NIFTY",
+    "NSE_INDEX|Nifty 50",
+    "NSE_INDEX|Nifty Bank"
+  ],
+  "timestamp_order_contract": "NORMALIZED_AND_DUPLICATE_REJECTED",
+  "underlying_parquet_files_classified": 3352,
+  "underlying_rows": 578246,
+  "underlying_symbol_days": 1547
+}
