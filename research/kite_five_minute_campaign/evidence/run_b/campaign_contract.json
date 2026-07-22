@@ -1,0 +1,49 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_id": "kite-five-minute-governed-discovery-v1",
+  "is_order_action": false,
+  "max_total_variants": 24,
+  "mechanisms": [
+    {
+      "causal_timestamps": "signals use completed bars at or before decision timestamp",
+      "economic_rationale": "Causal five-minute structural index behavior screen; underlying-only development evidence.",
+      "family": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "max_variants": 6
+    },
+    {
+      "causal_timestamps": "signals use completed bars at or before decision timestamp",
+      "economic_rationale": "Causal five-minute structural index behavior screen; underlying-only development evidence.",
+      "family": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "max_variants": 6
+    },
+    {
+      "causal_timestamps": "signals use completed bars at or before decision timestamp",
+      "economic_rationale": "Causal five-minute structural index behavior screen; underlying-only development evidence.",
+      "family": "FAILED_AUCTION_REACCEPTANCE",
+      "max_variants": 6
+    },
+    {
+      "causal_timestamps": "signals use completed bars at or before decision timestamp",
+      "economic_rationale": "Causal five-minute structural index behavior screen; underlying-only development evidence.",
+      "family": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "max_variants": 6
+    }
+  ],
+  "minimum_support": 30,
+  "read_only": true,
+  "schema_version": "1.0",
+  "selection_rule": "select one candidate only if all frozen gates pass; otherwise no edge found",
+  "source_manifest_hash": "717d1fdac5d67dae6151e173ab531896b6054edd288f8fb55b24ffba80ffac55",
+  "stability_gates": [
+    "after_cost_expectancy_positive",
+    "profit_factor_above_threshold",
+    "bootstrap_lower_bound_positive",
+    "chronological_fold_stability",
+    "leave_one_month_out_stability",
+    "concentration_guard",
+    "placebo_shift_control",
+    "multiple_testing_accounting"
+  ],
+  "transaction_cost_assumption_bps": 2.0
+}

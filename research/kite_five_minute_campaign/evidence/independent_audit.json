@@ -1,0 +1,33 @@
+{
+  "accepted_file_counts": {
+    "BANKNIFTY": 491,
+    "NIFTY": 491,
+    "SENSEX": 491
+  },
+  "allowed_for_live_execution": false,
+  "audit_hash": "dc9bc41b777aa675ed3cd95ea62330f63c6e4179a7cc965ae40e554b138e7740",
+  "broker_api_called": false,
+  "candidate_count": 0,
+  "candidate_hashes": [],
+  "date_range": {
+    "maximum_date": "2026-07-08",
+    "minimum_date": "2024-07-09",
+    "unique_dates": 491
+  },
+  "final_campaign_verdict": "NO_EDGE_FOUND_WITHIN_PREREGISTERED_SEARCH_BUDGET",
+  "is_order_action": false,
+  "matches_primary_verdict": true,
+  "read_only": true,
+  "schema_version": "1.0",
+  "session_counts_by_instrument": {
+    "BANKNIFTY": 491,
+    "NIFTY": 491,
+    "SENSEX": 491
+  },
+  "variant_counts": {
+    "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION": 6,
+    "FAILED_AUCTION_REACCEPTANCE": 6,
+    "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION": 6,
+    "VOLATILITY_STATE_TRANSITION_CONTINUATION": 6
+  }
+}

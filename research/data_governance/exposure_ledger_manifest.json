@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "append_only": true,
+  "broker_api_called": false,
+  "classification_counts": {
+    "KNOWN_DEVELOPMENT": 1473
+  },
+  "entry_count": 1473,
+  "governing_commit": "17b667d084b9439756d3196ee8dc85b3660f4fba",
+  "is_order_action": false,
+  "read_only": true,
+  "schema_version": "1.0"
+}

@@ -1,0 +1,29 @@
+{
+  "accepted_counts_by_instrument": {
+    "BANKNIFTY": 491,
+    "NIFTY": 491,
+    "SENSEX": 491
+  },
+  "accepted_files": 1473,
+  "allowed_for_live_execution": false,
+  "archive_path": "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip",
+  "archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "broker_api_called": false,
+  "date_coverage": {
+    "maximum_date": "2026-07-08",
+    "minimum_date": "2024-07-09",
+    "unique_dates": 491
+  },
+  "governing_commit": "17b667d084b9439756d3196ee8dc85b3660f4fba",
+  "is_order_action": false,
+  "read_only": true,
+  "rejected_counts_by_reason": {
+    "APPLE_METADATA": 2544,
+    "INCOMPLETE_SESSION": 7,
+    "MOCK_DATA": 30,
+    "NOT_NATIVE_5M": 30
+  },
+  "rejected_files": 2580,
+  "schema_version": "1.0",
+  "total_files": 4053
+}
