@@ -95,7 +95,7 @@ Use this mode for the continuous structural-edge research worktree:
 ```bash
 cd /Users/madhuram/tradebot-antigravity-mcp-v1
 
-aCTIVE_RESEARCH=/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1
+ACTIVE_RESEARCH=/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1
 
 TRADEBOT_TARGET_ROOT="$ACTIVE_RESEARCH" \
 TRADEBOT_MCP_CONFIG_ROOT="$ACTIVE_RESEARCH" \
