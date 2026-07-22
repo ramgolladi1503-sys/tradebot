@@ -28,7 +28,7 @@ jobs:
       CORPUS_TAG: upstox-corpus-v1
       CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
       PYTHONHASHSEED: "0"
-      EVIDENCE_DIR: ${{ runner.temp }}/postmerge-evidence
+      EVIDENCE_DIR: /tmp/postmerge-evidence
       EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
 
     steps:
@@ -155,6 +155,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mean-reversion-postmerge-regeneration-${{ github.sha }}
-          path: ${{ runner.temp }}/postmerge-evidence
+          path: /tmp/postmerge-evidence
           if-no-files-found: warn
           retention-days: 30
