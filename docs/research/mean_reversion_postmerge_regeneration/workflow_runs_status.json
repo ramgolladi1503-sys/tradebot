@@ -1,16 +1,16 @@
 {
   "mean_reversion_corpus_schema_probe.yml": {
     "conclusion": "failure",
-    "created_at": "2026-07-22T07:58:52Z",
+    "created_at": "2026-07-22T08:04:04Z",
     "event": "push",
     "head_branch": "research/postmerge-mean-reversion-rerun-v1",
-    "head_sha": "0963b7c163c84d048c745d34e16f74534a7160d7",
-    "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29902206647",
-    "run_number": 1,
+    "head_sha": "34d8cbf354f2dde90254b83462ca4bb46e75b47a",
+    "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29902540452",
+    "run_number": 2,
     "status": "completed",
-    "updated_at": "2026-07-22T07:59:24Z",
+    "updated_at": "2026-07-22T08:04:42Z",
     "workflow_name": "Mean Reversion Frozen Corpus Schema Probe",
-    "workflow_run_id": 29902206647
+    "workflow_run_id": 29902540452
   },
   "mean_reversion_postmerge_regeneration.yml": {
     "conclusion": "failure",
