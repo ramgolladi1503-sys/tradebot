@@ -1,11 +1,11 @@
 {
-  "conclusion": null,
+  "conclusion": "success",
   "created_at": "2026-07-22T21:13:07Z",
   "head_sha": "771a9a255279c71dd0245b4cd85ec3e2c1d83785",
   "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29958334365",
   "run_number": 3,
-  "status": "in_progress",
-  "updated_at": "2026-07-22T21:13:10Z",
+  "status": "completed",
+  "updated_at": "2026-07-22T21:14:33Z",
   "workflow_name": "Upstox Depth Shadow Capture V2",
   "workflow_run_id": 29958334365
 }
