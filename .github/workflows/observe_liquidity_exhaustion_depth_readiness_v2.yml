@@ -1,5 +1,6 @@
 name: Observe Liquidity Exhaustion Depth Readiness V2
 
+# Revision 2: refresh after UTC timestamp test repair.
 on:
   push:
     branches:
