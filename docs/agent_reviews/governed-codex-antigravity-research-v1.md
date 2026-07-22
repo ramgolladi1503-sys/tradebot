@@ -3,8 +3,11 @@
 mode: AGENT_RESEARCH_CONTROL_PLANE
 candidate_id: GOVERNED_CODEX_ANTIGRAVITY_RESEARCH_V1
 decision: DRAFT_REVIEW_REQUIRED
+reason: Adds fail-closed role-separated research governance above the existing worktree supervisor.
+timestamp: 2026-07-22T16:49:13Z
 is_order_action: false
 broker_api_called: false
+source: PR_697_BRANCH_AND_REPRODUCED_LOCAL_VALIDATION
 allowed_for_live_execution: false
 
 ## Agent Work Contract
@@ -41,7 +44,7 @@ Local validation against the published layering:
 
 - `python -m pytest -q tests/test_governed_strategy_research.py` -> 14 passed.
 - `python -m compileall -q core scripts` -> passed.
-- CLI initialization/status smoke -> `INTAKE`, integrity valid, paper false, live false.
+- CLI initialization check -> `INTAKE`, integrity valid, paper false, live false.
 
 ## Acceptance Proof
 
