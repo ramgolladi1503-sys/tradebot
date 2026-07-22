@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import datetime
 from pathlib import Path
@@ -133,7 +134,11 @@ def audit_trades(trades: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def main() -> None:
-    base_dir = Path(f"runtime/strategy_validation/{STRATEGY_ID}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--strategy", default=STRATEGY_ID)
+    args = parser.parse_args()
+
+    base_dir = Path(f"runtime/strategy_validation/{args.strategy}")
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
     trades: list[dict[str, Any]] = []
     if ledger_path.exists():
@@ -142,6 +147,7 @@ def main() -> None:
                 trades.append(json.loads(line))
 
     report = audit_trades(trades)
+    report["strategy_id"] = args.strategy
     base_dir.mkdir(parents=True, exist_ok=True)
     (base_dir / "phase_4_trade_ledger_audit.json").write_text(
         json.dumps(report, indent=2)
@@ -149,6 +155,7 @@ def main() -> None:
     markdown = [
         "# Phase 4 Trade Ledger Audit",
         "",
+        f"- Strategy: {args.strategy}",
         f"- Classification: {report['classification']}",
         f"- Trade Count: {report['trade_count']}",
         f"- Profit Factor State: {report['profit_factor_state']}",
@@ -165,7 +172,8 @@ def main() -> None:
         "\n".join(markdown) + "\n"
     )
     print(
-        f"Audited Phase 4 trade ledger. Result: {report['classification']}"
+        f"Audited Phase 4 trade ledger for {args.strategy}. "
+        f"Result: {report['classification']}"
     )
 
 
