@@ -1,0 +1,227 @@
+{
+  "accepted_manifest_sha256": "38d66a08f60f8c5e16db109542afd1a80fe52c73536f39d442439bcfe3eb4e7a",
+  "allowed_for_live_execution": false,
+  "archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "broker_api_called": false,
+  "campaign_id": "kite-five-minute-governed-discovery-v2",
+  "is_order_action": false,
+  "pre_outcome_freeze_commit": "b5dc6074c756de41df53914e259b4a489ab3f478",
+  "read_only": true,
+  "real_data_outcome_observed": false,
+  "schema_version": "1.0",
+  "status": "PRE_OUTCOME_FROZEN",
+  "v2_contract_hash": "b568212e0f770b1560cb6729396deaf0bc0fc178a6b9d9bd88311f5816b7865b",
+  "variant_count": 24,
+  "variants": [
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 0.75,
+        "holding_minutes": 30
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D0.75_H30"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 0.75,
+        "holding_minutes": 60
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D0.75_H60"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 1.0,
+        "holding_minutes": 30
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.00_H30"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 1.0,
+        "holding_minutes": 60
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.00_H60"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 1.25,
+        "holding_minutes": 30
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.25_H30"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "dislocation_threshold": 1.25,
+        "holding_minutes": 60
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_D1.25_H60"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.55,
+        "expansion_ratio": 1.25,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.25_Q0.55"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.7,
+        "expansion_ratio": 1.25,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.25_Q0.70"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.55,
+        "expansion_ratio": 1.5,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.50_Q0.55"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.7,
+        "expansion_ratio": 1.5,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.50_Q0.70"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.55,
+        "expansion_ratio": 1.75,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.75_Q0.55"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "efficiency_threshold": 0.7,
+        "expansion_ratio": 1.75,
+        "holding_minutes": 60
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_E1.75_Q0.70"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 1,
+        "excursion_bps": 2,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X2_C1"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 2,
+        "excursion_bps": 2,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X2_C2"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 1,
+        "excursion_bps": 4,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X4_C1"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 2,
+        "excursion_bps": 4,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X4_C2"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 1,
+        "excursion_bps": 6,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X6_C1"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "confirmation_bars": 2,
+        "excursion_bps": 6,
+        "holding_minutes": 30
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_X6_C2"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 8,
+        "peer_threshold_bps": 4
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N8_P4"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 8,
+        "peer_threshold_bps": 8
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N8_P8"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 12,
+        "peer_threshold_bps": 4
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N12_P4"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 12,
+        "peer_threshold_bps": 8
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N12_P8"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 16,
+        "peer_threshold_bps": 4
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N16_P4"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "holding_minutes": 60,
+        "nifty_threshold_bps": 16,
+        "peer_threshold_bps": 8
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_N16_P8"
+    }
+  ]
+}
