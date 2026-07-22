@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from core.research_backtest_integrity import (
+    RESEARCH_APPLEDOUBLE_METADATA,
     RESEARCH_NON_CANDLE_QUOTE,
     causal_completed_htf_sma,
     is_immediate_next_bar,
@@ -281,6 +282,7 @@ def main() -> None:
     contract_resolution_failures = 0
     quote_truth_propagated = 0
     non_candle_parquet_files_skipped = 0
+    non_candle_only_date_directories = 0
     non_candle_schema_distribution: dict[str, int] = {}
 
     def record_exit(
@@ -326,15 +328,17 @@ def main() -> None:
             if not underlying_dir.exists():
                 continue
 
-            total_calendar_days += 1
-            parquet_trading_days += 1
             day_trades_calendar = 0
+            day_has_candle = False
 
             for parquet_file in sorted(underlying_dir.glob("*.parquet")):
                 classification, df, resolved_symbol = load_research_candle_parquet(
                     parquet_file
                 )
-                if classification == RESEARCH_NON_CANDLE_QUOTE:
+                if classification in {
+                    RESEARCH_NON_CANDLE_QUOTE,
+                    RESEARCH_APPLEDOUBLE_METADATA,
+                }:
                     non_candle_parquet_files_skipped += 1
                     non_candle_schema_distribution[classification] = (
                         non_candle_schema_distribution.get(classification, 0) + 1
@@ -343,6 +347,7 @@ def main() -> None:
                 if df is None or resolved_symbol is None:
                     raise AssertionError("candle classification returned no frame or symbol")
 
+                day_has_candle = True
                 parquet_symbol_days += 1
                 symbol = resolved_symbol
                 bar_interval = _infer_bar_interval(df["timestamp"])
@@ -703,8 +708,17 @@ def main() -> None:
                     one_trade_symbol_days += 1
                 max_trades_observed = max(max_trades_observed, trades_today)
 
-            if day_trades_calendar == 0:
-                zero_trade_calendar_days += 1
+            if day_has_candle:
+                total_calendar_days += 1
+                parquet_trading_days += 1
+                if day_trades_calendar == 0:
+                    zero_trade_calendar_days += 1
+            else:
+                non_candle_only_date_directories += 1
+                if day_trades_calendar != 0:
+                    raise AssertionError(
+                        "non-candle-only date directory produced trades"
+                    )
 
     _write_jsonl(base_dir / "phase_4_trade_ledger.jsonl", ledger_rows)
     _write_jsonl(base_dir / "phase_4_candidates.jsonl", candidates)
@@ -754,6 +768,7 @@ def main() -> None:
             "parquet_trading_days": parquet_trading_days,
             "parquet_symbol_days": parquet_symbol_days,
             "non_candle_parquet_files_skipped": non_candle_parquet_files_skipped,
+            "non_candle_only_date_directories": non_candle_only_date_directories,
             "non_candle_schema_distribution": dict(
                 sorted(non_candle_schema_distribution.items())
             ),
