@@ -1,9 +1,9 @@
-name: Mean Reversion Post-Merge Regeneration
+name: Mean Reversion Post-Merge Regeneration V3
 
 on:
   push:
     branches:
-      - research/postmerge-mean-reversion-rerun-v1
+      - research/postmerge-mean-reversion-rerun-v3
     paths:
       - ".github/workflows/mean_reversion_postmerge_regeneration.yml"
       - "scripts/run_mean_reversion_postmerge_regeneration.py"
@@ -16,8 +16,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: mean-reversion-postmerge-${{ github.ref }}
-  cancel-in-progress: true
+  group: mean-reversion-postmerge-v3-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   regenerate-frozen-evidence:
@@ -27,16 +27,24 @@ jobs:
       CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
       CORPUS_TAG: upstox-corpus-v1
       CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+      PRODUCTION_BASE_SHA: a64ddee5f68921bffbac684e2ea06de8943b704a
       PYTHONHASHSEED: "0"
       EVIDENCE_DIR: /tmp/postmerge-evidence
-      EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
+      EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v3
 
     steps:
       - name: Checkout evidence branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          ref: research/postmerge-mean-reversion-rerun-v1
+          ref: research/postmerge-mean-reversion-rerun-v3
+
+      - name: Verify production ancestry
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "${PRODUCTION_BASE_SHA}" HEAD
+          test "$(git show -s --format=%P "${PRODUCTION_BASE_SHA}" | wc -w | tr -d ' ')" -ge 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,95 +58,38 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pyarrow pytest pyyaml
 
-      - name: Run frozen post-merge regeneration
+      - name: Download and verify immutable corpus archive
         env:
           GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
         run: |
-          set -Eeuo pipefail
-          mkdir -p "${EVIDENCE_DIR}" "${RUNNER_TEMP}/corpus-assets"
-
-          write_status() {
-            STATUS_VALUE="$1" STAGE_VALUE="$2" EXIT_VALUE="$3" python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          path = Path(os.environ["EVIDENCE_DIR"]) / "run_status.json"
-          path.write_text(json.dumps({
-              "status": os.environ["STATUS_VALUE"],
-              "stage": os.environ["STAGE_VALUE"],
-              "exit_code": int(os.environ["EXIT_VALUE"]),
-              "producer_commit": os.environ["GITHUB_SHA"],
-              "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
-              "execution_allowed": False,
-              "paper_live_allowed": False,
-          }, indent=2, sort_keys=True) + "\n")
-          PY
-          }
-
-          stage="CORPUS_DOWNLOAD"
-          trap 'rc=$?; write_status FAILED "${stage}" "${rc}"; exit "${rc}"' ERR
-          write_status PREFLIGHT CORPUS_ACCESS_PENDING 0
+          set -euo pipefail
           test -n "${GH_TOKEN}"
-
+          mkdir -p "${RUNNER_TEMP}/corpus-assets" runtime
           gh release download "${CORPUS_TAG}" \
             --repo "${CORPUS_REPO}" \
             --dir "${RUNNER_TEMP}/corpus-assets" \
             --pattern "upstox_candidate_replay_v1.tar.gz" \
             --pattern "upstox_candidate_replay_v1.tar.gz.sha256" \
             --pattern "parquet_sha256_manifest.txt"
-
-          stage="CORPUS_VERIFY_OR_EXTRACT"
           assets="${RUNNER_TEMP}/corpus-assets"
           echo "${CORPUS_ARCHIVE_SHA256}  ${assets}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
           test "$(awk '{print $1}' "${assets}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
-          mkdir -p runtime
           tar -xzf "${assets}/upstox_candidate_replay_v1.tar.gz" -C runtime
           test -d runtime/upstox_candidate_replay
           test -f "${assets}/parquet_sha256_manifest.txt"
 
-          stage="APPLEDOUBLE_SIDECAR_SANITIZATION"
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-
-          root = Path('runtime/upstox_candidate_replay')
-          sidecars = sorted(path for path in root.rglob('._*.parquet') if path.is_file())
-          records = []
-          for sidecar in sidecars:
-              counterpart = sidecar.with_name(sidecar.name[2:])
-              if not counterpart.is_file():
-                  raise RuntimeError(f'orphan AppleDouble parquet sidecar: {sidecar}')
-              records.append({
-                  'sidecar': sidecar.relative_to(root).as_posix(),
-                  'sidecar_sha256': hashlib.sha256(sidecar.read_bytes()).hexdigest(),
-                  'counterpart': counterpart.relative_to(root).as_posix(),
-              })
-          for sidecar in sidecars:
-              sidecar.unlink()
-          target = Path(os.environ['EVIDENCE_DIR']) / 'appledouble_cleanup.json'
-          target.write_text(json.dumps({
-              'classification': 'APPLEDOUBLE_METADATA_SIDECARS_REMOVED',
-              'producer_commit': os.environ['GITHUB_SHA'],
-              'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
-              'removed_count': len(records),
-              'records': records,
-          }, indent=2, sort_keys=True) + '\n')
-          print(f'removed {len(records)} verified AppleDouble parquet sidecars')
-          PY
-
-          stage="AUTHORITATIVE_REGENERATION"
+      - name: Run authoritative post-merge regeneration
+        run: |
+          set -euo pipefail
+          assets="${RUNNER_TEMP}/corpus-assets"
           PYTHONPATH=. python scripts/run_mean_reversion_postmerge_regeneration.py \
             --project-root "${GITHUB_WORKSPACE}" \
             --corpus-root "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay" \
             --manifest "${assets}/parquet_sha256_manifest.txt" \
             --output-dir "${EVIDENCE_DIR}" \
-            --producer-commit "${GITHUB_SHA}"
-          trap - ERR
+            --producer-commit "${PRODUCTION_BASE_SHA}"
 
-      - name: Publish summary
+      - name: Publish workflow summary
         if: always()
         run: |
           summary="${EVIDENCE_DIR}/postmerge_regeneration_summary.json"
@@ -156,30 +107,40 @@ jobs:
         run: |
           set -euo pipefail
           source_dir="${EVIDENCE_DIR}"
-          target_dir="docs/research/mean_reversion_postmerge_regeneration"
-
+          target_dir="docs/research/mean_reversion_postmerge_regeneration_v3"
           git fetch origin "${EVIDENCE_BRANCH}"
           git checkout "${EVIDENCE_BRANCH}"
           git pull --ff-only origin "${EVIDENCE_BRANCH}"
-
           mkdir -p "${target_dir}"
           for name in \
             run_status.json \
             postmerge_regeneration_summary.json \
             phase4_semantic_hash_manifest.json \
             artifact_hash_manifest.json \
-            frozen_input_authority.json \
-            appledouble_cleanup.json; do
+            frozen_input_authority.json; do
             if test -f "${source_dir}/${name}"; then
               cp "${source_dir}/${name}" "${target_dir}/${name}"
             fi
           done
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
+          target = Path('docs/research/mean_reversion_postmerge_regeneration_v3/workflow_identity.json')
+          target.write_text(json.dumps({
+              'workflow_sha': os.environ['GITHUB_SHA'],
+              'production_base_sha': os.environ['PRODUCTION_BASE_SHA'],
+              'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }, indent=2, sort_keys=True) + '\n')
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${target_dir}"
           if ! git diff --cached --quiet; then
-            git commit -m "research: publish mean-reversion regeneration index"
+            git commit -m "research: publish mean-reversion regeneration v3 index"
             git push origin HEAD:"${EVIDENCE_BRANCH}"
           fi
 
@@ -187,7 +148,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mean-reversion-postmerge-regeneration-${{ github.sha }}
+          name: mean-reversion-postmerge-regeneration-v3-${{ github.sha }}
           path: /tmp/postmerge-evidence
           if-no-files-found: warn
           retention-days: 30
