@@ -98,7 +98,9 @@ class HypothesisContract:
         hypothesis_id = str(raw.get("hypothesis_id", "")).strip()
         family = str(raw.get("family", "")).strip()
         frozen_spec_sha256 = str(raw.get("frozen_spec_sha256", "")).strip().lower()
-        spec_path = str(raw.get("spec_path", "")).strip()
+        spec_path = str(
+            raw.get("spec_path", f"specs/{hypothesis_id.lower()}.json")
+        ).strip()
         evidence_dir = str(raw.get("evidence_dir", "")).strip()
         max_variants = int(raw.get("max_variants", 0))
         if not hypothesis_id:
