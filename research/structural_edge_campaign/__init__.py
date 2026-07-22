@@ -18,6 +18,17 @@ from .hypothesis_features import (
     HypothesisDevelopmentError,
     build_session_features,
 )
+from .option_repricing_lag import (
+    Black76Greeks,
+    RepricingLagError,
+    audit_data_readiness,
+    black76_greeks,
+    black76_price,
+    development_evidence_from_readiness,
+    evaluate_repricing_snapshot,
+    implied_volatility_black76,
+    signal_fingerprint,
+)
 
 __all__ = [
     "CampaignAdapterError",
@@ -32,4 +43,13 @@ __all__ = [
     "CampaignEvaluation",
     "CampaignEvidenceError",
     "evaluate_campaign",
+    "Black76Greeks",
+    "RepricingLagError",
+    "audit_data_readiness",
+    "black76_greeks",
+    "black76_price",
+    "development_evidence_from_readiness",
+    "evaluate_repricing_snapshot",
+    "implied_volatility_black76",
+    "signal_fingerprint",
 ]
