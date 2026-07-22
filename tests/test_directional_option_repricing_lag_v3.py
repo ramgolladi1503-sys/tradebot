@@ -25,10 +25,19 @@ SPEC_PATH = Path(__file__).resolve().parents[1] / "research/structural_edge_camp
 SPEC = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
 
 
-def _snapshot(*, option_type: str = "CE", bearish: bool = False) -> dict:
+def _snapshot(
+    *,
+    option_type: str = "CE",
+    bearish: bool = False,
+    strike_override: float | None = None,
+) -> dict:
     previous_futures = 25000.0
     current_futures = 24950.0 if bearish else 25050.0
-    strike = 25500.0 if bearish else 24500.0
+    strike = (
+        strike_override
+        if strike_override is not None
+        else (25150.0 if bearish else 24850.0)
+    )
     years = 3.0 / 365.0
     vol = 0.18
     previous_mid = black76_price(
@@ -208,6 +217,17 @@ def test_bearish_pe_underreaction_is_symmetric() -> None:
     assert result["direction"] == "BEARISH"
     assert result["option_type"] == "PE"
     assert result["repricing_lag"] > result["required_cost_buffer"]
+
+
+def test_contract_delta_band_is_enforced() -> None:
+    result = evaluate_repricing_snapshot(
+        _snapshot(strike_override=24500.0),
+        specification=SPEC,
+        variant=SPEC["variant_grid"][0],
+    )
+    assert result["signal"] is False
+    assert "DELTA_OUTSIDE_FROZEN_BAND" in result["rejection_reasons"]
+    assert abs(result["delta"]) > SPEC["contract_selection"]["absolute_delta_max"]
 
 
 def test_wrong_option_side_and_stale_quote_fail_closed() -> None:
