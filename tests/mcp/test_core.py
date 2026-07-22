@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -13,12 +12,12 @@ from tools.tradebot_mcp.core import (
     DataAuditService,
     EvidenceService,
     GateService,
-    GitAuditService,
     SafePathPolicy,
     SafetyError,
     Settings,
     sha256_file,
 )
+from tools.tradebot_mcp.safe_git import SafeGitAuditService
 
 
 def _settings(root: Path) -> Settings:
@@ -170,7 +169,7 @@ def test_gate_service_rejects_missing_check(tmp_path: Path) -> None:
     assert any("missing check" in failure for failure in result["failures"])
 
 
-def test_git_audit_is_read_only_and_checks_scope(tmp_path: Path) -> None:
+def test_git_audit_checks_scope_and_rejects_option_injection(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init"], cwd=root, check=True, capture_output=True)
@@ -192,9 +191,11 @@ def test_git_audit_is_read_only_and_checks_scope(tmp_path: Path) -> None:
         ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
     ).stdout.strip()
 
-    service = GitAuditService(_settings(root))
+    service = SafeGitAuditService(_settings(root))
     scope = service.verify_commit_scope(base, head, ["allowed/"])
 
     assert scope["passes"]
     assert service.check_worktree_clean()["clean"]
     assert service.get_branch_head("HEAD")["sha"] == head
+    with pytest.raises(SafetyError):
+        service.get_branch_head("--help")
