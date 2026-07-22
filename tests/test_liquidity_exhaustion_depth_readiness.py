@@ -84,10 +84,34 @@ def test_readiness_passes_when_all_preregistered_requirements_hold() -> None:
     summary = summarize_depth_readiness(
         [first, second],
         candle_dates={"20260709", "20260710"},
+        future_holdout_sessions_available=1,
         contract=contract,
     )
     assert summary["classification"] == "DEPTH_DATA_READY_FOR_EXHAUSTION_DISCOVERY"
     assert summary["blockers"] == []
+
+
+def test_readiness_requires_unseen_holdout_sessions() -> None:
+    first = audit_quote_frame(_quote_frame(with_sizes=True), source="x", date_key="20260709")
+    second = audit_quote_frame(_quote_frame(with_sizes=True), source="y", date_key="20260710")
+    contract = DepthReadinessContract(
+        minimum_development_sessions=2,
+        minimum_future_holdout_sessions=1,
+        minimum_session_span_minutes=0.01,
+        maximum_median_gap_seconds=2.0,
+        maximum_p95_gap_seconds=2.0,
+    )
+    summary = summarize_depth_readiness(
+        [first, second],
+        candle_dates={"20260709", "20260710"},
+        future_holdout_sessions_available=0,
+        contract=contract,
+    )
+    assert summary["classification"] == "DEPTH_DATA_NOT_READY_FOR_EXHAUSTION_DISCOVERY"
+    assert any(
+        blocker.startswith("FUTURE_UNSEEN_HOLDOUT_SESSION_COUNT_BELOW_MINIMUM")
+        for blocker in summary["blockers"]
+    )
 
 
 def test_missing_required_columns_fail_closed() -> None:

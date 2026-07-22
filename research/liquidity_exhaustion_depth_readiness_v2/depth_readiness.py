@@ -169,6 +169,7 @@ def summarize_depth_readiness(
     file_audits: list[dict[str, Any]],
     *,
     candle_dates: set[str],
+    future_holdout_sessions_available: int = 0,
     contract: DepthReadinessContract = DepthReadinessContract(),
 ) -> dict[str, Any]:
     contract.validate()
@@ -201,9 +202,17 @@ def summarize_depth_readiness(
     )
 
     blockers: list[str] = []
+    if future_holdout_sessions_available < 0:
+        raise ValueError("future_holdout_sessions_available cannot be negative")
     if len(dates) < contract.minimum_development_sessions:
         blockers.append(
             f"DEVELOPMENT_SESSION_COUNT_BELOW_MINIMUM:{len(dates)}<{contract.minimum_development_sessions}"
+        )
+    if future_holdout_sessions_available < contract.minimum_future_holdout_sessions:
+        blockers.append(
+            "FUTURE_UNSEEN_HOLDOUT_SESSION_COUNT_BELOW_MINIMUM:"
+            f"{future_holdout_sessions_available}<"
+            f"{contract.minimum_future_holdout_sessions}"
         )
     short_sessions = sorted(
         date_key
@@ -251,6 +260,7 @@ def summarize_depth_readiness(
         "unique_token_count": len(unique_tokens),
         "quote_dates_with_candle_authority": sorted(set(dates).intersection(candle_dates)),
         "future_holdout_sessions_required": contract.minimum_future_holdout_sessions,
+        "future_holdout_sessions_available": int(future_holdout_sessions_available),
         "strategy_created": False,
         "edge_claim_allowed": False,
         "execution_allowed": False,

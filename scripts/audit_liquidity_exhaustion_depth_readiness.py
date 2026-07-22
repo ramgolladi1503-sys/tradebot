@@ -27,7 +27,9 @@ from research.liquidity_exhaustion_depth_readiness_v2.depth_readiness import (
 CAMPAIGN_ID = "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2"
 EXPECTED_ARCHIVE_SHA256 = "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7"
 EXPECTED_REAL_FILES = 1676
+EXPECTED_CANDLE_FILES = 1547
 EXPECTED_QUOTE_FILES = 129
+EXPECTED_APPLEDOUBLE_FILES = 1676
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -120,8 +122,15 @@ def _collect_audits(corpus_root: Path) -> tuple[list[dict[str, Any]], set[str], 
                 date_key=date_key,
             )
         )
-    if counts["quote_depth_files"] != EXPECTED_QUOTE_FILES:
-        raise RuntimeError(f"unexpected quote/depth count: {counts}")
+    expected_counts = {
+        "candle_files": EXPECTED_CANDLE_FILES,
+        "quote_depth_files": EXPECTED_QUOTE_FILES,
+        "appledouble_files": EXPECTED_APPLEDOUBLE_FILES,
+    }
+    if counts != expected_counts:
+        raise RuntimeError(
+            f"unexpected classified corpus counts expected={expected_counts} actual={counts}"
+        )
     return audits, candle_dates, counts
 
 
@@ -144,7 +153,12 @@ def _run_once(
 ) -> dict[str, Any]:
     target.mkdir(parents=True, exist_ok=True)
     audits, candle_dates, counts = _collect_audits(corpus_root)
-    summary = summarize_depth_readiness(audits, candle_dates=candle_dates, contract=contract)
+    summary = summarize_depth_readiness(
+        audits,
+        candle_dates=candle_dates,
+        future_holdout_sessions_available=0,
+        contract=contract,
+    )
     summary["campaign_id"] = CAMPAIGN_ID
     summary["corpus_archive_sha256"] = EXPECTED_ARCHIVE_SHA256
     summary["classification_counts"] = counts
