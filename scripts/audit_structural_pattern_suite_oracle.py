@@ -28,7 +28,7 @@ REQUIRED_MUTATIONS = {
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit structural pattern suite v2 oracle results.")
-    parser.add_argument("--run-dir", type=Path, default=Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v3/run-a"))
+    parser.add_argument("--run-dir", type=Path, default=Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v4/run-a"))
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args(argv)
 

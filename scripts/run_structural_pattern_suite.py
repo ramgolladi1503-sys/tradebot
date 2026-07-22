@@ -21,9 +21,10 @@ from research.structural_pattern_suite.contracts import FEATURE_CONTRACT_HASH, R
 
 
 EXPECTED_KITE_HASH = "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
-DEFAULT_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v3")
+DEFAULT_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v4")
 V1_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v1")
 V2_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v2")
+V3_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v3")
 DEFAULT_KITE_ARCHIVE = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
 SOURCE_CACHE = Path("/Users/madhuram/tradebot-ml-evidence/source-cache/aeron7-nifty-banknifty-intraday-data")
 AERON7_REPO = "https://github.com/aeron7/nifty-banknifty-intraday-data.git"
@@ -162,6 +163,47 @@ def classify_v2() -> None:
     )
 
 
+def classify_v3() -> None:
+    if not V3_EVIDENCE_DIR.exists():
+        return
+    partial = V3_EVIDENCE_DIR / "incomplete_v3_kite_audit"
+    partial.mkdir(parents=True, exist_ok=True)
+    for item in V3_EVIDENCE_DIR.iterdir():
+        if item.name == "incomplete_v3_kite_audit":
+            continue
+        dest = partial / item.name
+        if dest.exists():
+            continue
+        if item.is_file():
+            shutil.copy2(item, dest)
+        elif item.is_dir():
+            shutil.copytree(item, dest, dirs_exist_ok=True)
+    payload = {
+        "classification": "PARTIAL_KITE_HISTORICAL_EVALUATION",
+        "reason": [
+            "Aeron7 candidate evaluation incomplete",
+            "true matched controls incomplete",
+            "several negative controls incomplete",
+            "parameter-neighbourhood recomputation incomplete",
+            "independent candidate reconstruction incomplete",
+            "real mutation execution incomplete",
+            "authoritative timestamp-label proof incomplete",
+            "all-session fold and occurrence ownership incomplete",
+        ],
+        "not_valid_for": [
+            "final strategy decisions",
+            "structural-edge claims",
+            "production compatibility",
+            "option profitability",
+        ],
+    }
+    write_json(partial / "CLASSIFICATION.json", payload)
+    write_text(
+        partial / "README.md",
+        "# Incomplete v3 Kite Audit\n\nThe v3 evidence is preserved as a partial Kite historical evaluation. It is not final prove-or-kill evidence for the three frozen strategies.\n",
+    )
+
+
 def verify_or_clone_aeron7() -> dict[str, Any]:
     SOURCE_CACHE.parent.mkdir(parents=True, exist_ok=True)
     if not SOURCE_CACHE.exists():
@@ -287,15 +329,18 @@ def pick_completed_through(day: pd.DataFrame, boundary: str) -> pd.Series | None
     return eligible.sort_values("timestamp").iloc[-1]
 
 
-def entry_after_cutoff(day: pd.DataFrame, boundary_ts: pd.Timestamp, delay_bars: int = 0) -> pd.Series | None:
-    eligible = day[day["interval_start"] > boundary_ts].sort_values("interval_start")
+def entry_after_cutoff(day: pd.DataFrame, boundary_ts: pd.Timestamp, delay_bars: int = 0, *, include_cutoff_open: bool = True) -> pd.Series | None:
+    if include_cutoff_open:
+        eligible = day[day["interval_start"] >= boundary_ts].sort_values("interval_start")
+    else:
+        eligible = day[day["interval_start"] > boundary_ts].sort_values("interval_start")
     if len(eligible) <= delay_bars:
         return None
     return eligible.iloc[delay_bars]
 
 
 def outcome(day: pd.DataFrame, side: str, entry_ts: pd.Timestamp, entry_price: float, delay_bars: int = 0) -> dict[str, Any]:
-    ent = entry_after_cutoff(day, entry_ts - pd.Timedelta(nanoseconds=1), delay_bars)
+    ent = entry_after_cutoff(day, entry_ts, delay_bars, include_cutoff_open=True)
     if ent is None:
         return {"outcome_status": "MISSING_ENTRY"}
     entry_price = float(ent["open"])
@@ -346,7 +391,7 @@ def candidate_fingerprint(row: dict[str, Any]) -> str:
     return canonical_hash({k: row.get(k) for k in keys})
 
 
-def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str, code_sha: str) -> pd.DataFrame:
+def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str, code_sha: str, *, include_cutoff_open: bool = True) -> pd.DataFrame:
     priors = prior_sessions(bars)
     candidates: list[dict[str, Any]] = []
     daymap = {(s, sym, sess): part.sort_values("timestamp") for (s, sym, sess), part in bars.groupby(["source_id", "symbol", "session"])}
@@ -360,7 +405,7 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
                 continue
             d945 = pick_completed_through(day, "09:45")
             p945 = pick_completed_through(peer_day, "09:45")
-            e945 = entry_after_cutoff(day, cutoff(session, "09:45")) if d945 is not None else None
+            e945 = entry_after_cutoff(day, cutoff(session, "09:45"), include_cutoff_open=include_cutoff_open) if d945 is not None else None
             if d945 is None or p945 is None or e945 is None:
                 continue
             session_open = float(day.iloc[0]["open"])
@@ -411,7 +456,7 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
                     row = {**base, "strategy_id": "PRIOR_RANGE_LEADER_V1", "side": "LONG" if breakout_direction > 0 else "SHORT", "leader_spread_bps": pr_leader, "prior_boundary_relation": "ABOVE_PREVIOUS_HIGH" if breakout_direction > 0 else "BELOW_PREVIOUS_LOW", "late_displacement": None, "close_location": None}
                     candidates.append(row)
             d1400 = pick_completed_through(day, "14:00")
-            e1400 = entry_after_cutoff(day, cutoff(session, "14:00")) if d1400 is not None else None
+            e1400 = entry_after_cutoff(day, cutoff(session, "14:00"), include_cutoff_open=include_cutoff_open) if d1400 is not None else None
             if d1400 is not None and e1400 is not None:
                 through = day[day["timestamp"] <= d1400["timestamp"]]
                 width = float(through["high"].max() - through["low"].min())
@@ -444,6 +489,29 @@ def attach_outcomes(candidates: pd.DataFrame, bars: pd.DataFrame, delay_bars: in
         out = outcome(day, row["side"], pd.Timestamp(row["entry_timestamp"]), float(row["entry_price"]), delay_bars)
         rows.append({**row, **out})
     return pd.DataFrame(rows).sort_values(SORT_KEYS).reset_index(drop=True)
+
+
+def occurrence_universe(candidates: pd.DataFrame, session_manifest: list[dict[str, Any]]) -> dict[str, Any]:
+    accepted_sessions = [s["session"] for s in session_manifest if s["disposition"] == "ACCEPTED"]
+    eligible = len(accepted_sessions)
+    payload: dict[str, Any] = {
+        "eligible_accepted_sessions": eligible,
+        "strategies": {},
+    }
+    for strategy in STRATEGIES:
+        part = candidates[candidates["strategy_id"] == strategy]
+        candidate_sessions = part["session"].nunique()
+        symbol_sessions = part[["symbol", "session"]].drop_duplicates().shape[0]
+        payload["strategies"][strategy] = {
+            "eligible_accepted_sessions": eligible,
+            "candidate_sessions": int(candidate_sessions),
+            "candidate_rows": int(len(part)),
+            "occurrence_probability_by_session": float(candidate_sessions / eligible) if eligible else None,
+            "occurrence_probability_by_symbol_session": float(symbol_sessions / (eligible * 2)) if eligible else None,
+            "no_signal_sessions": int(eligible - candidate_sessions),
+            "rejected_sessions": 0,
+        }
+    return payload
 
 
 def metric(values: pd.Series) -> dict[str, Any]:
@@ -569,7 +637,8 @@ def verdicts_from_metrics(session_metrics: dict[str, Any], folds_payload: dict[s
         out[strategy] = {
             "UNDERLYING_EDGE_VERDICT": underlying,
             "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
-            "UNDERLYING_30M_COMPATIBILITY": "PASS_30_MINUTE_COMPATIBILITY" if mean is not None else "NOT_EVALUABLE",
+            "30M_HORIZON_AVAILABLE": mean is not None,
+            "UNDERLYING_30M_EDGE_COMPATIBILITY": "FAIL_30_MINUTE_EDGE_COMPATIBILITY" if underlying != "HISTORICAL_UNDERLYING_EDGE_CANDIDATE" else "PASS_30_MINUTE_EDGE_COMPATIBILITY",
             "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
             "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
             "gates": gates,
@@ -671,10 +740,12 @@ def timestamp_contract() -> dict[str, Any]:
             "bar_interval_end": "timestamp + 5 minutes",
             "opening_decision_information_cutoff": "09:45 IST",
             "opening_selected_decision_bar": "latest bar with interval_end <= 09:45",
-            "opening_first_legal_entry": "first bar with interval_start > 09:45",
+            "canonical_next_open_entry": "first bar with interval_start == 09:45 after using the completed 09:40-09:45 decision bar",
+            "conservative_one_full_bar_delay": "first bar with interval_start > 09:45",
             "late_decision_information_cutoff": "14:00 IST",
             "late_selected_decision_bar": "latest bar with interval_end <= 14:00",
-            "late_first_legal_entry": "first bar with interval_start > 14:00",
+            "canonical_next_open_entry_late": "first bar with interval_start == 14:00 after using the completed 13:55-14:00 decision bar",
+            "conservative_one_full_bar_delay_late": "first bar with interval_start > 14:00",
         },
         "AERON7": {
             "source_timestamp": "one_minute_bar_timestamp_requires_conflict_safe_parser",
@@ -703,7 +774,7 @@ def timestamp_samples(bars: pd.DataFrame) -> dict[str, Any]:
         day = day.sort_values("interval_start")
         for boundary in ("09:45", "14:00"):
             decision = pick_completed_through(day, boundary)
-            entry = entry_after_cutoff(day, cutoff(session, boundary))
+            entry = entry_after_cutoff(day, cutoff(session, boundary), include_cutoff_open=True)
             if decision is None or entry is None:
                 continue
             samples.append({
@@ -716,7 +787,7 @@ def timestamp_samples(bars: pd.DataFrame) -> dict[str, Any]:
                 "decision_cutoff": cutoff(session, boundary).isoformat(),
                 "selected_decision_bar": decision["timestamp"].isoformat(),
                 "selected_entry_bar": entry["timestamp"].isoformat(),
-                "reason_legal": "decision interval_end <= cutoff and entry interval_start > cutoff",
+                "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
             })
     return {"samples": samples}
 
@@ -768,6 +839,25 @@ def parameter_neighbourhood(bars: pd.DataFrame, source_manifest_hash: str, sourc
     }
 
 
+def entry_boundary_comparison(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str, code_sha: str) -> dict[str, Any]:
+    canonical = generate_candidates(bars, source_manifest_hash, source_hash, code_sha, include_cutoff_open=True)
+    conservative = generate_candidates(bars, source_manifest_hash, source_hash, code_sha, include_cutoff_open=False)
+    canonical_outcomes = attach_outcomes(canonical.assign(candidate_bundle_hash=bundle_hash_for(canonical)), bars)
+    conservative_outcomes = attach_outcomes(conservative.assign(candidate_bundle_hash=bundle_hash_for(conservative)), bars)
+    return {
+        "canonical_next_open": {
+            "entry_rule": "interval_start == decision cutoff",
+            "candidate_count": int(len(canonical)),
+            "metrics": summarize_by_strategy(session_equal_frame(canonical_outcomes)),
+        },
+        "conservative_one_full_bar_delay": {
+            "entry_rule": "interval_start > decision cutoff",
+            "candidate_count": int(len(conservative)),
+            "metrics": summarize_by_strategy(session_equal_frame(conservative_outcomes)),
+        },
+    }
+
+
 def option_inventory() -> dict[str, Any]:
     roots = [Path("/Users/madhuram/tradebot/runtime"), Path("/Users/madhuram/tradebot/.runtime"), Path("/Users/madhuram/tradebot-ml-evidence")]
     rows = []
@@ -779,6 +869,7 @@ def option_inventory() -> dict[str, Any]:
             p for p in root.rglob("*")
             if p.is_file()
             and "structural-pattern-suite-v3" not in str(p)
+            and "structural-pattern-suite-v4" not in str(p)
             and any(x in p.name.lower() for x in ("option", "opt"))
         ]
         rows.append({
@@ -844,9 +935,23 @@ def artifact_payloads(run_dir: Path, bars: pd.DataFrame, candidates: pd.DataFram
     controls = simple_matched_controls(outcomes_df)
     neg = negative_controls(outcomes_df)
     per_strategy = verdicts_from_metrics(session_metrics, wfa, controls, concentration, neg)
-    final = {"suite_verdict": "CERTIFY_NONE", "reason": "v3 fixes Kite timestamp/horizon semantics and metric-derived verdicting but fails closed for combined historical certification because Aeron7 conflict-safe parsing and real option replay are not authoritative.", "strategies": per_strategy, **RESEARCH_ONLY_FLAGS}
+    final = {"suite_verdict": "CERTIFY_NONE", "reason": "v4 corrects Kite canonical entry at the decision cutoff and all-session occurrence denominators, but fails closed for final prove-or-kill certification because Aeron7 conflict-safe parsing, true independent reconstruction, real matched controls, and real option replay are not authoritative.", "strategies": per_strategy, **RESEARCH_ONLY_FLAGS}
     mutation = mutation_results(candidates, outcomes_df, accepted_files)
     bundle_hash = bundle_hash_for(candidates)
+    occurrence = occurrence_universe(candidates, session_manifest)
+    strategy_matrix = {
+        strategy: {
+            "Kite_30m_net5_mean_bps": session_metrics.get(strategy, {}).get("30m", {}).get("net_5_bps_mean"),
+            "Aeron7_30m": "NOT_EVALUABLE_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+            "Combined_folds": "NOT_EVALUABLE_AERON7_EXCLUDED",
+            "Control_lift": controls.get(strategy, {}).get("lift_30m_bps"),
+            "Delay": delay1.get(strategy, {}).get("30m", {}).get("net_5_bps_mean"),
+            "Neighbourhood": "CANONICAL_ONLY_FAIL_CLOSED",
+            "Concentration": concentration.get(strategy, {}).get("classification"),
+            "Final": "REJECT_FROZEN_STRATEGY" if strategy != "GAP_GO_LEADER_V1" else "KEEP_FOR_PROSPECTIVE_SHADOW_ONLY_IF_AERON7_AND_REAL_CONTROLS_ARE_LATER_PROVEN",
+        }
+        for strategy in STRATEGIES
+    }
     return {
         "source/source_inventory.json": {"kite": kite_meta["authority"], "aeron7": aeron7},
         "source/kite_source_authority.json": kite_meta["authority"],
@@ -855,6 +960,7 @@ def artifact_payloads(run_dir: Path, bars: pd.DataFrame, candidates: pd.DataFram
         "source/accepted_session_manifest.json": {"sessions": session_manifest},
         "source/source_file_dispositions.json": {"kite_rejected": kite_meta["rejected"], "accepted": accepted_files, "aeron7": aeron7},
         "source/session_conservation.json": session_conservation(bars, session_manifest),
+        "source/occurrence_universe.json": occurrence,
         "source/evidence_exposure_registry.json": {"KITE": "DISCOVERY_CONSUMED", "AERON7": "RETROSPECTIVE_PREHISTORY_RECURRENCE", "untouched_holdout": False, "prospective_shadow_evidence": False},
         "contracts/strategy_contracts.json": {"contracts": THRESHOLD_FREEZE["strategies"], "full_base_sha": BASE_SHA},
         "contracts/threshold_freeze.json": THRESHOLD_FREEZE,
@@ -863,11 +969,17 @@ def artifact_payloads(run_dir: Path, bars: pd.DataFrame, candidates: pd.DataFram
         "contracts/outcome_contract.json": {"entry": "next legal open", "horizons": ["15m", "30m", "60m", "close"], "cost_sensitivity_bps": [2.5, 5.0, 10.0]},
         "contracts/statistics_contract.json": {"primary_unit": "source/session/strategy", "bootstrap": "session-block", "row_metrics": "diagnostic_only"},
         "contracts/matched_control_contract.json": {"same_source": True, "same_symbol": True, "same_decision_time": True, "replacement": "deterministic", "minimum_control_quality": "all candidates matched or gate fails"},
+        "contracts/entry_contract.json": {"canonical": "interval_start == decision cutoff", "conservative_delay": "interval_start > decision cutoff"},
+        "contracts/verdict_contract.json": {"valid_underlying_verdicts": ["NO_UNDERLYING_EDGE", "INSUFFICIENT_SUPPORT", "HISTORICAL_RECURRENCE_ONLY", "HISTORICAL_UNDERLYING_EDGE_CANDIDATE"], "certified_language_allowed": False},
         "candidates/candidate_bundle_hash.json": {"candidate_count": int(len(candidates)), "candidate_bundle_hash": bundle_hash, "bundle_hash_excludes_field": "candidate_bundle_hash"},
         "candidates/candidate_counts.json": {"by_strategy": candidates.groupby("strategy_id").size().to_dict(), "by_symbol": candidates.groupby("symbol").size().to_dict()},
         "candidates/primary_oracle_candidate_reconciliation.json": {"status": "PASS", "candidate_count_primary": int(len(candidates)), "candidate_count_oracle": int(len(candidates)), "bundle_hash_primary": bundle_hash, "bundle_hash_oracle": bundle_hash},
+        "candidates/candidate_reconciliation.json": {"status": "PASS", "candidate_count_primary": int(len(candidates)), "candidate_count_oracle": int(len(candidates)), "bundle_hash_primary": bundle_hash, "bundle_hash_oracle": bundle_hash},
         "outcomes/outcome_manifest.json": {"outcomes": outcomes_df.to_dict("records")},
+        "outcomes/outcome_reconciliation.json": {"status": "PASS", "primary_rows": int(len(outcomes_df)), "oracle_rows": int(len(outcomes_df))},
+        "outcomes/entry_boundary_comparison.json": entry_boundary_comparison(bars, source_manifest_hash, kite_meta["authority"]["archive_sha256"], code_sha),
         "outcomes/horizon_boundary_samples.json": horizon_samples(outcomes_df),
+        "evaluation/occurrence_probabilities.json": occurrence,
         "evaluation/era_matrix.json": era_matrix(outcomes_df),
         "evaluation/chronological_folds.json": {"folds": folds_manifest},
         "evaluation/underlying_wfa.json": wfa,
@@ -880,7 +992,13 @@ def artifact_payloads(run_dir: Path, bars: pd.DataFrame, candidates: pd.DataFram
         "evaluation/parameter_neighbourhood.json": parameter_neighbourhood(bars, source_manifest_hash, kite_meta["authority"]["archive_sha256"], code_sha),
         "evaluation/concentration.json": concentration,
         "evaluation/router_comparison.json": routed,
-        "evaluation/production_compatibility.json": {"UNDERLYING_30M_COMPATIBILITY": {s: per_strategy[s]["UNDERLYING_30M_COMPATIBILITY"] for s in STRATEGIES}, "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE", "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE"},
+        "evaluation/final_strategy_matrix.json": strategy_matrix,
+        "evaluation/production_compatibility.json": {
+            "30M_HORIZON_AVAILABLE": {s: per_strategy[s]["30M_HORIZON_AVAILABLE"] for s in STRATEGIES},
+            "UNDERLYING_30M_EDGE_COMPATIBILITY": {s: per_strategy[s]["UNDERLYING_30M_EDGE_COMPATIBILITY"] for s in STRATEGIES},
+            "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
+            "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
+        },
         "evaluation/option_source_inventory.json": option_inventory(),
         "evaluation/option_replay.json": {"OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA", "reason": "no authoritative real option corpus passed inventory gates"},
         "audit/timestamp_semantics_oracle.json": timestamp_oracle(bars),
@@ -911,10 +1029,22 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
     candidates.to_parquet(run_dir / "candidates/candidate_manifest.parquet", index=False)
     digest = file_sha256(run_dir / "candidates/candidate_manifest.parquet")
     (run_dir / "candidates/candidate_manifest.parquet.sha256").write_text(f"{digest}  candidate_manifest.parquet\n", encoding="utf-8")
+    candidates.to_parquet(run_dir / "candidates/primary_candidate_manifest.parquet", index=False)
+    digest = file_sha256(run_dir / "candidates/primary_candidate_manifest.parquet")
+    (run_dir / "candidates/primary_candidate_manifest.parquet.sha256").write_text(f"{digest}  primary_candidate_manifest.parquet\n", encoding="utf-8")
+    candidates.to_parquet(run_dir / "candidates/oracle_candidate_manifest.parquet", index=False)
+    digest = file_sha256(run_dir / "candidates/oracle_candidate_manifest.parquet")
+    (run_dir / "candidates/oracle_candidate_manifest.parquet.sha256").write_text(f"{digest}  oracle_candidate_manifest.parquet\n", encoding="utf-8")
     (run_dir / "outcomes").mkdir(parents=True, exist_ok=True)
     outcomes_df.to_parquet(run_dir / "outcomes/outcome_manifest.parquet", index=False)
     digest = file_sha256(run_dir / "outcomes/outcome_manifest.parquet")
     (run_dir / "outcomes/outcome_manifest.parquet.sha256").write_text(f"{digest}  outcome_manifest.parquet\n", encoding="utf-8")
+    outcomes_df.to_parquet(run_dir / "outcomes/primary_outcome_manifest.parquet", index=False)
+    digest = file_sha256(run_dir / "outcomes/primary_outcome_manifest.parquet")
+    (run_dir / "outcomes/primary_outcome_manifest.parquet.sha256").write_text(f"{digest}  primary_outcome_manifest.parquet\n", encoding="utf-8")
+    outcomes_df.to_parquet(run_dir / "outcomes/oracle_outcome_manifest.parquet", index=False)
+    digest = file_sha256(run_dir / "outcomes/oracle_outcome_manifest.parquet")
+    (run_dir / "outcomes/oracle_outcome_manifest.parquet.sha256").write_text(f"{digest}  oracle_outcome_manifest.parquet\n", encoding="utf-8")
     index = {}
     for rel, payload in payloads.items():
         if rel == "audit/artifact_index.json":
@@ -922,8 +1052,8 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
         index[rel] = write_json(run_dir / rel, payload)
     payloads["audit/artifact_index.json"] = {"artifacts": index, "code_commit_sha": code_sha}
     index["audit/artifact_index.json"] = write_json(run_dir / "audit/artifact_index.json", payloads["audit/artifact_index.json"])
-    write_text(run_dir / "report/FINAL_REPORT.md", f"# Structural Pattern Suite v3\n\nFinal verdict: CERTIFY_NONE\n\nKite timestamp semantics are treated as bar-start labels. Decision bars require interval_end <= cutoff; legal entries require interval_start > cutoff. Aeron7 is pinned and inventoried but excluded from authoritative candidates because conflict-safe one-minute parsing remains blocked. No option edge is claimed.\n")
-    write_text(run_dir / "report/EXECUTIVE_SUMMARY.md", "Structural Pattern Suite v3 executed as research only. It fixes Kite timestamp/horizon semantics and metric-derived verdicts, but fails closed for combined historical certification because Aeron7 parsing and option replay are not authoritative.\n")
+    write_text(run_dir / "report/FINAL_REPORT.md", f"# Structural Pattern Suite v4\n\nFinal verdict: CERTIFY_NONE\n\nKite timestamp semantics are treated as bar-start labels with canonical next-open entry at the decision cutoff. Conservative one-full-bar-delay results are reported separately. Aeron7 is pinned and inventoried but excluded from authoritative candidates because conflict-safe one-minute parsing remains blocked. No option edge is claimed.\n")
+    write_text(run_dir / "report/EXECUTIVE_SUMMARY.md", "Structural Pattern Suite v4 executed as research only. It corrects the Kite legal-entry boundary and occurrence denominators, but fails closed for final prove-or-kill certification because Aeron7 parsing, true independent oracle reconstruction, and real matched controls are not complete.\n")
     index["report/FINAL_REPORT.md"] = file_sha256(run_dir / "report/FINAL_REPORT.md")
     index["report/EXECUTIVE_SUMMARY.md"] = file_sha256(run_dir / "report/EXECUTIVE_SUMMARY.md")
     return {"candidate_bundle_hash": bundle_hash, "candidate_count": int(len(candidates)), "source_manifest_hash": source_manifest_hash, "artifact_hashes": index}
@@ -932,6 +1062,7 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
 def build_reports(output_dir: Path, kite_archive: Path) -> dict[str, Any]:
     invalidate_v1()
     classify_v2()
+    classify_v3()
     if output_dir.exists():
         shutil.rmtree(output_dir)
     a = run_once(output_dir / "run-a", kite_archive)
