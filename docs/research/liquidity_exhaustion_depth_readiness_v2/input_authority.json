@@ -3,5 +3,5 @@
   "classification": "DEPTH_READINESS_INPUT_AUTHORITY_VALID",
   "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
   "manifest_files_verified": 1676,
-  "producer_commit": "5d399513404cdff7b6be6491bf56c1da5950fa11"
+  "producer_commit": "f6c4bf42fbb174ebe4ddd48fd4da1b4a6fc456a5"
 }

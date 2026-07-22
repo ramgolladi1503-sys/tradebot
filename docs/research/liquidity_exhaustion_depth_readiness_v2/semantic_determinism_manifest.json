@@ -1,0 +1,9 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
+  "classification": "TWO_RUN_SEMANTIC_DETERMINISM_PASSED",
+  "files": {
+    "depth_file_audits.json": "0a1e269405ddb66c5dac2036d956383054fcf1b446b2ce6abfce78e8a4d9e41d",
+    "depth_file_inventory.csv": "df1ef607584bfedcc7f9163e415f6c6af19421e416404276099e2c00ca66aa85",
+    "depth_readiness_summary.json": "f305f82c944e12454f70bb75e2fd6b0b2a1b305954fc96943db7c85ca2349b16"
+  }
+}

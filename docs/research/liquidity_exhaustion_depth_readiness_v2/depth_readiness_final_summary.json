@@ -1,0 +1,54 @@
+{
+  "active_top_of_book_rows": 0,
+  "aggregate_median_gap_seconds": 0.904269576,
+  "aggregate_p95_gap_seconds": 1.8067799136,
+  "blockers": [
+    "DEVELOPMENT_SESSION_COUNT_BELOW_MINIMUM:1<60",
+    "FUTURE_UNSEEN_HOLDOUT_SESSION_COUNT_BELOW_MINIMUM:0<20",
+    "INVALID_PRICE_ROW_RATE_TOO_HIGH:0.9424198518281794>0.0",
+    "NO_ACTIVE_TOP_OF_BOOK_ROWS"
+  ],
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
+  "classification": "DEPTH_DATA_NOT_READY_FOR_EXHAUSTION_DISCOVERY",
+  "classification_counts": {
+    "appledouble_files": 1676,
+    "candle_files": 1547,
+    "quote_depth_files": 129
+  },
+  "contract": {
+    "maximum_crossed_market_rate": 0.001,
+    "maximum_invalid_price_row_rate": 0.0,
+    "maximum_median_gap_seconds": 5.0,
+    "maximum_p95_gap_seconds": 30.0,
+    "minimum_development_sessions": 60,
+    "minimum_future_holdout_sessions": 20,
+    "minimum_session_span_minutes": 300.0,
+    "requires_bid_and_ask_size_or_structured_depth": true
+  },
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "crossed_market_rate": 0.0,
+  "depth_capable_file_count": 129,
+  "edge_claim_allowed": false,
+  "execution_allowed": false,
+  "future_holdout_sessions_available": 0,
+  "future_holdout_sessions_required": 20,
+  "invalid_price_row_rate": 0.9424198518281794,
+  "invalid_price_rows": 2618670,
+  "producer_commit": "f6c4bf42fbb174ebe4ddd48fd4da1b4a6fc456a5",
+  "quote_dates_with_candle_authority": [
+    "20260709"
+  ],
+  "quote_depth_dates": [
+    "20260709"
+  ],
+  "quote_depth_files": 129,
+  "quote_depth_sessions": 1,
+  "session_spans_minutes": {
+    "20260709": 372.26519456666665
+  },
+  "strategy_created": false,
+  "total_quote_rows": 2778666,
+  "two_run_semantic_determinism": true,
+  "unique_symbol_count": 129,
+  "unique_token_count": 129
+}
