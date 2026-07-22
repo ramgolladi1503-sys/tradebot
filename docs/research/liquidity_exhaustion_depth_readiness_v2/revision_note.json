@@ -1,0 +1,10 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
+  "superseded_failed_run_id": 29956033952,
+  "superseded_head_sha": "5d399513404cdff7b6be6491bf56c1da5950fa11",
+  "failure_class": "AUDIT_ABORTED_ON_INVALID_PRICE_ROW",
+  "revision": "Inventory invalid price rows across the complete corpus and fail the readiness gate through an explicit zero-tolerance invalid-row-rate contract instead of aborting on the first affected file.",
+  "strategy_created": false,
+  "edge_claim_allowed": false,
+  "execution_allowed": false
+}
