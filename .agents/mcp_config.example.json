@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "tradebot-data-audit": {
+      "args": ["-m", "tools.tradebot_mcp.data_audit_server"],
+      "command": "/absolute/path/to/tradebot/.venv-mcp/bin/python",
+      "cwd": "/absolute/path/to/tradebot",
+      "env": {
+        "TRADEBOT_DATA_ROOTS": "/absolute/path/to/tradebot/runtime",
+        "TRADEBOT_EVIDENCE_ROOTS": "/absolute/path/to/tradebot-ml-evidence",
+        "TRADEBOT_ROOT": "/absolute/path/to/tradebot"
+      }
+    },
+    "tradebot-evidence": {
+      "args": ["-m", "tools.tradebot_mcp.evidence_server"],
+      "command": "/absolute/path/to/tradebot/.venv-mcp/bin/python",
+      "cwd": "/absolute/path/to/tradebot",
+      "env": {
+        "TRADEBOT_DATA_ROOTS": "/absolute/path/to/tradebot/runtime",
+        "TRADEBOT_EVIDENCE_ROOTS": "/absolute/path/to/tradebot-ml-evidence",
+        "TRADEBOT_ROOT": "/absolute/path/to/tradebot"
+      }
+    },
+    "tradebot-gates": {
+      "args": ["-m", "tools.tradebot_mcp.gates_server"],
+      "command": "/absolute/path/to/tradebot/.venv-mcp/bin/python",
+      "cwd": "/absolute/path/to/tradebot",
+      "env": {
+        "TRADEBOT_DATA_ROOTS": "/absolute/path/to/tradebot/runtime",
+        "TRADEBOT_EVIDENCE_ROOTS": "/absolute/path/to/tradebot-ml-evidence",
+        "TRADEBOT_ROOT": "/absolute/path/to/tradebot"
+      }
+    },
+    "tradebot-git-audit": {
+      "args": ["-m", "tools.tradebot_mcp.git_audit_server"],
+      "command": "/absolute/path/to/tradebot/.venv-mcp/bin/python",
+      "cwd": "/absolute/path/to/tradebot",
+      "env": {
+        "TRADEBOT_DATA_ROOTS": "/absolute/path/to/tradebot/runtime",
+        "TRADEBOT_EVIDENCE_ROOTS": "/absolute/path/to/tradebot-ml-evidence",
+        "TRADEBOT_ROOT": "/absolute/path/to/tradebot"
+      }
+    }
+  }
+}
