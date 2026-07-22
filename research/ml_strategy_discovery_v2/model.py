@@ -90,6 +90,7 @@ def semantic_frame_hash(frame: pd.DataFrame, columns: Iterable[str]) -> str:
     if sort_columns:
         canonical = canonical.sort_values(sort_columns, kind="mergesort")
     canonical = canonical.reset_index(drop=True)
+    canonical = canonical.replace([np.inf, -np.inf], np.nan)
     for name in canonical.columns:
         if pd.api.types.is_datetime64_any_dtype(canonical[name]):
             canonical[name] = canonical[name].astype(str)
