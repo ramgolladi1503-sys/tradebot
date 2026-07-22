@@ -1,0 +1,329 @@
+2026-07-22T07:52:46.8348521Z (node:2068) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-07-22T07:53:52.4531183Z trap 'rc=$?; write_status FAILED "${stage}" "${rc}"; exit "${rc}"' ERR
+2026-07-22T07:53:52.4545559Z         raise RuntimeError(f'orphan AppleDouble parquet sidecar: {sidecar}')
+2026-07-22T07:54:00.6683508Z Traceback (most recent call last):
+2026-07-22T07:54:00.6720206Z   File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+2026-07-22T07:54:00.6721258Z pyarrow.lib.ArrowInvalid: No match for FieldRef.Name(timestamp) in ts: double
+2026-07-22T07:54:00.7810073Z ##[error]Process completed with exit code 1.
+2026-07-22T07:54:06.1439254Z (node:2407) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+--- LOG TAIL ---
+2026-07-22T07:53:54.4993876Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4995086Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.4995504Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.4996900Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4997466Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4997952Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4998368Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4998633Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.4999013Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.4999386Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.4999763Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5000133Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5000520Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5000919Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5002175Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5003586Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5003935Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5004305Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5004679Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5006717Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5007239Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5007637Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5008719Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5009152Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5011010Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5011278Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5011706Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5014432Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5014909Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5015474Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5016042Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5016557Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5018747Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5019994Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5020363Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5020831Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5021295Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5021785Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5022100Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5022478Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5024259Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5024638Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5025012Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5025376Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5025750Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5027926Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5029326Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5029708Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5030087Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5030469Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5030863Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5031128Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5031480Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5031983Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5032710Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5033108Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5033481Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5034223Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5036544Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5039442Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5039703Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5040070Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5040468Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5040864Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5041238Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5041616Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5042188Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5044404Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5045745Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5046106Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5046588Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5047057Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5047458Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5047924Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5048320Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5048876Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5051375Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5053217Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5055327Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5055787Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5056230Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5056631Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5057315Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5057683Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5058425Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5060508Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5062694Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5063080Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5063446Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5063835Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5064227Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5064583Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5065236Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5068021Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5069190Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5069660Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5070036Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5070417Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5072070Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5072456Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5074205Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5076381Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5079667Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5079935Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5080323Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5080722Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5081104Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5081476Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5081848Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5082283Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5084280Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5085637Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5086108Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5086688Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5087188Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5087587Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5088436Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5088737Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5089205Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5089705Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5090193Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5090673Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5091140Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5091606Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5093138Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5094854Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5095201Z tar: Ignoring unknown extended header keyword 'SCHILY.fflags'
+2026-07-22T07:53:54.5095687Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.FinderInfo'
+2026-07-22T07:53:54.5096057Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5096522Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5097005Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5097564Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5100255Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.5101308Z tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+2026-07-22T07:53:54.7596977Z removed 1676 verified AppleDouble parquet sidecars
+2026-07-22T07:53:56.1396197Z verified 250/1676 parquet files
+2026-07-22T07:53:56.1497577Z verified 500/1676 parquet files
+2026-07-22T07:53:56.1601717Z verified 750/1676 parquet files
+2026-07-22T07:53:56.1704940Z verified 1000/1676 parquet files
+2026-07-22T07:53:56.1807685Z verified 1250/1676 parquet files
+2026-07-22T07:53:56.1910504Z verified 1500/1676 parquet files
+2026-07-22T07:54:00.6683508Z Traceback (most recent call last):
+2026-07-22T07:54:00.6695295Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 500, in <module>
+2026-07-22T07:54:00.6696393Z     raise SystemExit(main())
+2026-07-22T07:54:00.6696786Z                      ^^^^^^
+2026-07-22T07:54:00.6697615Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 419, in main
+2026-07-22T07:54:00.6698652Z     prerequisites = _verify_corpus_and_build_authority(
+2026-07-22T07:54:00.6699174Z                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T07:54:00.6700217Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 135, in _verify_corpus_and_build_authority
+2026-07-22T07:54:00.6701163Z     frame = pd.read_parquet(
+2026-07-22T07:54:00.6701522Z             ^^^^^^^^^^^^^^^^
+2026-07-22T07:54:00.6702262Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pandas/io/parquet.py", line 671, in read_parquet
+2026-07-22T07:54:00.6703020Z     return impl.read(
+2026-07-22T07:54:00.6703347Z            ^^^^^^^^^^
+2026-07-22T07:54:00.6704054Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pandas/io/parquet.py", line 260, in read
+2026-07-22T07:54:00.6705522Z     pa_table = self.api.parquet.read_table(
+2026-07-22T07:54:00.6706141Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T07:54:00.6707423Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pyarrow/parquet/core.py", line 1964, in read_table
+2026-07-22T07:54:00.6709052Z     return dataset.read(columns=columns, use_threads=use_threads,
+2026-07-22T07:54:00.6709868Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T07:54:00.6711291Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pyarrow/parquet/core.py", line 1590, in read
+2026-07-22T07:54:00.6712552Z     table = self._dataset.to_table(
+2026-07-22T07:54:00.6713100Z             ^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T07:54:00.6713975Z   File "pyarrow/_dataset.pyx", line 579, in pyarrow._dataset.Dataset.to_table
+2026-07-22T07:54:00.6715241Z   File "pyarrow/_dataset.pyx", line 415, in pyarrow._dataset.Dataset.scanner
+2026-07-22T07:54:00.6716453Z   File "pyarrow/_dataset.pyx", line 3706, in pyarrow._dataset.Scanner.from_dataset
+2026-07-22T07:54:00.6717750Z   File "pyarrow/_dataset.pyx", line 3619, in pyarrow._dataset.Scanner._make_scan_options
+2026-07-22T07:54:00.6719112Z   File "pyarrow/_dataset.pyx", line 3569, in pyarrow._dataset._populate_builder
+2026-07-22T07:54:00.6720206Z   File "pyarrow/error.pxi", line 92, in pyarrow.lib.check_status
+2026-07-22T07:54:00.6721258Z pyarrow.lib.ArrowInvalid: No match for FieldRef.Name(timestamp) in ts: double
+2026-07-22T07:54:00.6722140Z token: string
+2026-07-22T07:54:00.6722555Z symbol: string
+2026-07-22T07:54:00.6722961Z ltp: double
+2026-07-22T07:54:00.6723357Z bid: double
+2026-07-22T07:54:00.6723745Z ask: double
+2026-07-22T07:54:00.6724143Z vol: double
+2026-07-22T07:54:00.6724533Z oi: double
+2026-07-22T07:54:00.6725196Z depth: string
+2026-07-22T07:54:00.6725629Z __fragment_index: int32
+2026-07-22T07:54:00.6726116Z __batch_index: int32
+2026-07-22T07:54:00.6726601Z __last_in_fragment: bool
+2026-07-22T07:54:00.6727084Z __filename: string
+2026-07-22T07:54:00.7810073Z ##[error]Process completed with exit code 1.
+2026-07-22T07:54:00.7855068Z ##[group]Run summary="${EVIDENCE_DIR}/postmerge_regeneration_summary.json"
+2026-07-22T07:54:00.7855571Z summary="${EVIDENCE_DIR}/postmerge_regeneration_summary.json"
+2026-07-22T07:54:00.7855953Z status="${EVIDENCE_DIR}/run_status.json"
+2026-07-22T07:54:00.7856264Z if test -f "${summary}"; then
+2026-07-22T07:54:00.7856568Z   cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
+2026-07-22T07:54:00.7856876Z elif test -f "${status}"; then
+2026-07-22T07:54:00.7857168Z   cat "${status}" >> "${GITHUB_STEP_SUMMARY}"
+2026-07-22T07:54:00.7857451Z else
+2026-07-22T07:54:00.7857979Z   echo "Post-merge regeneration did not create a status artifact." >> "${GITHUB_STEP_SUMMARY}"
+2026-07-22T07:54:00.7858420Z fi
+2026-07-22T07:54:00.7895339Z shell: /usr/bin/bash -e {0}
+2026-07-22T07:54:00.7895605Z env:
+2026-07-22T07:54:00.7895884Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+2026-07-22T07:54:00.7896280Z   CORPUS_TAG: upstox-corpus-v1
+2026-07-22T07:54:00.7896661Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+2026-07-22T07:54:00.7897049Z   PYTHONHASHSEED: 0
+2026-07-22T07:54:00.7897278Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+2026-07-22T07:54:00.7897613Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
+2026-07-22T07:54:00.7898082Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.7898466Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-22T07:54:00.7898847Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.7899202Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.7899562Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.7899908Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T07:54:00.7900205Z ##[endgroup]
+2026-07-22T07:54:00.7998394Z ##[group]Run set -euo pipefail
+2026-07-22T07:54:00.7998734Z set -euo pipefail
+2026-07-22T07:54:00.7998991Z source_dir="${EVIDENCE_DIR}"
+2026-07-22T07:54:00.7999365Z target_dir="docs/research/mean_reversion_postmerge_regeneration"
+2026-07-22T07:54:00.7999711Z 
+2026-07-22T07:54:00.7999933Z git fetch origin "${EVIDENCE_BRANCH}"
+2026-07-22T07:54:00.8000227Z git checkout "${EVIDENCE_BRANCH}"
+2026-07-22T07:54:00.8000538Z git pull --ff-only origin "${EVIDENCE_BRANCH}"
+2026-07-22T07:54:00.8000836Z 
+2026-07-22T07:54:00.8001043Z mkdir -p "${target_dir}"
+2026-07-22T07:54:00.8001294Z for name in \
+2026-07-22T07:54:00.8001517Z   run_status.json \
+2026-07-22T07:54:00.8001804Z   postmerge_regeneration_summary.json \
+2026-07-22T07:54:00.8002112Z   phase4_semantic_hash_manifest.json \
+2026-07-22T07:54:00.8002405Z   artifact_hash_manifest.json \
+2026-07-22T07:54:00.8002709Z   frozen_input_authority.json \
+2026-07-22T07:54:00.8002986Z   appledouble_cleanup.json; do
+2026-07-22T07:54:00.8003276Z   if test -f "${source_dir}/${name}"; then
+2026-07-22T07:54:00.8003609Z     cp "${source_dir}/${name}" "${target_dir}/${name}"
+2026-07-22T07:54:00.8003908Z   fi
+2026-07-22T07:54:00.8004103Z done
+2026-07-22T07:54:00.8004294Z 
+2026-07-22T07:54:00.8004523Z git config user.name "github-actions[bot]"
+2026-07-22T07:54:00.8004928Z git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+2026-07-22T07:54:00.8005328Z git add "${target_dir}"
+2026-07-22T07:54:00.8005597Z if ! git diff --cached --quiet; then
+2026-07-22T07:54:00.8006104Z   git commit -m "research: publish mean-reversion regeneration index"
+2026-07-22T07:54:00.8006500Z   git push origin HEAD:"${EVIDENCE_BRANCH}"
+2026-07-22T07:54:00.8006790Z fi
+2026-07-22T07:54:00.8036469Z shell: /usr/bin/bash -e {0}
+2026-07-22T07:54:00.8036735Z env:
+2026-07-22T07:54:00.8037016Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+2026-07-22T07:54:00.8037422Z   CORPUS_TAG: upstox-corpus-v1
+2026-07-22T07:54:00.8037996Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+2026-07-22T07:54:00.8038417Z   PYTHONHASHSEED: 0
+2026-07-22T07:54:00.8038660Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+2026-07-22T07:54:00.8039011Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
+2026-07-22T07:54:00.8039396Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.8039795Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-22T07:54:00.8040201Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.8040550Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.8040928Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:00.8041285Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T07:54:00.8041585Z ##[endgroup]
+2026-07-22T07:54:01.2436401Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T07:54:01.2436875Z  * branch            research/postmerge-mean-reversion-rerun-v1 -> FETCH_HEAD
+2026-07-22T07:54:02.3061850Z Already on 'research/postmerge-mean-reversion-rerun-v1'
+2026-07-22T07:54:02.3063692Z M	runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+2026-07-22T07:54:02.3064325Z Your branch is up to date with 'origin/research/postmerge-mean-reversion-rerun-v1'.
+2026-07-22T07:54:02.7799094Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T07:54:02.7799831Z  * branch            research/postmerge-mean-reversion-rerun-v1 -> FETCH_HEAD
+2026-07-22T07:54:02.7865359Z Already up to date.
+2026-07-22T07:54:03.1140460Z [research/postmerge-mean-reversion-rerun-v1 0bb71e0] research: publish mean-reversion regeneration index
+2026-07-22T07:54:03.1141676Z  2 files changed, 8389 insertions(+), 1 deletion(-)
+2026-07-22T07:54:03.1142403Z  create mode 100644 docs/research/mean_reversion_postmerge_regeneration/appledouble_cleanup.json
+2026-07-22T07:54:05.6256674Z To https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T07:54:05.6257317Z    01de7c1..0bb71e0  HEAD -> research/postmerge-mean-reversion-rerun-v1
+2026-07-22T07:54:05.6367694Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-22T07:54:05.6369543Z ##[group]Run actions/upload-artifact@v4
+2026-07-22T07:54:05.6369851Z with:
+2026-07-22T07:54:05.6370236Z   name: mean-reversion-postmerge-regeneration-01de7c1753fd11953b8133880a34c1c014e6f09d
+2026-07-22T07:54:05.6370709Z   path: /tmp/postmerge-evidence
+2026-07-22T07:54:05.6370972Z   if-no-files-found: warn
+2026-07-22T07:54:05.6371223Z   retention-days: 30
+2026-07-22T07:54:05.6371448Z   compression-level: 6
+2026-07-22T07:54:05.6371669Z   overwrite: false
+2026-07-22T07:54:05.6371887Z   include-hidden-files: false
+2026-07-22T07:54:05.6372122Z env:
+2026-07-22T07:54:05.6372384Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+2026-07-22T07:54:05.6372752Z   CORPUS_TAG: upstox-corpus-v1
+2026-07-22T07:54:05.6373139Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+2026-07-22T07:54:05.6373537Z   PYTHONHASHSEED: 0
+2026-07-22T07:54:05.6373780Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+2026-07-22T07:54:05.6374117Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
+2026-07-22T07:54:05.6374504Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:05.6375059Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-22T07:54:05.6375454Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:05.6375820Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:05.6376173Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T07:54:05.6376534Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T07:54:05.6376837Z ##[endgroup]
+2026-07-22T07:54:05.7987249Z (node:2407) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-22T07:54:05.7988362Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-22T07:54:05.8079115Z With the provided path, there will be 2 files uploaded
+2026-07-22T07:54:05.8079860Z Artifact name is valid!
+2026-07-22T07:54:05.8080243Z Root directory input is valid!
+2026-07-22T07:54:06.1114370Z Beginning upload of artifact content to blob storage
+2026-07-22T07:54:06.1439254Z (node:2407) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-07-22T07:54:06.4281473Z Uploaded bytes 15426
+2026-07-22T07:54:06.4889434Z Finished uploading artifact content to blob storage!
+2026-07-22T07:54:06.4890264Z SHA256 digest of uploaded artifact zip is 64f7e908bf8de527a1f16faa94c9b46c4ae7bb7431c837b2d27a4054bbcbcb2e
+2026-07-22T07:54:06.4892053Z Finalizing artifact upload
+2026-07-22T07:54:06.6976287Z Artifact mean-reversion-postmerge-regeneration-01de7c1753fd11953b8133880a34c1c014e6f09d.zip successfully finalized. Artifact ID 8522223770
+2026-07-22T07:54:06.6977437Z Artifact mean-reversion-postmerge-regeneration-01de7c1753fd11953b8133880a34c1c014e6f09d has been successfully uploaded! Final size is 15426 bytes. Artifact ID is 8522223770
+2026-07-22T07:54:06.6982956Z Artifact download URL: https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29901811973/artifacts/8522223770
+2026-07-22T07:54:06.7239360Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-22T07:54:06.7240488Z Post job cleanup.
+2026-07-22T07:54:06.8131089Z [command]/usr/bin/git version
+2026-07-22T07:54:06.8176991Z git version 2.54.0
+2026-07-22T07:54:06.8218696Z Temporarily overriding HOME='/home/runner/work/_temp/177ad7b7-bd53-4f5b-ba45-fe8886972e0c' before making global git config changes
+2026-07-22T07:54:06.8219877Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-22T07:54:06.8225242Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-22T07:54:06.8265223Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-22T07:54:06.8298355Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-22T07:54:06.8531968Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-22T07:54:06.8562531Z http.https://github.com/.extraheader
+2026-07-22T07:54:06.8579735Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-22T07:54:06.8605586Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-22T07:54:06.8837743Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-22T07:54:06.8873610Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-22T07:54:06.9294760Z Cleaning up orphan processes
+2026-07-22T07:54:06.9545764Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
