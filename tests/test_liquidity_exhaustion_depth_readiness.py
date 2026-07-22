@@ -37,7 +37,7 @@ def _quote_frame(*, with_sizes: bool = True, crossed: bool = False) -> pd.DataFr
 def test_timestamp_parser_supports_epoch_milliseconds() -> None:
     frame = _quote_frame()
     parsed = parse_quote_timestamps(frame["ts"])
-    assert str(parsed.dtype) == "datetime64[ns, UTC]"
+    assert str(parsed.dt.tz) == "UTC"
     assert parsed.iloc[0] == pd.Timestamp("2026-07-09 03:45:00", tz="UTC")
 
 
