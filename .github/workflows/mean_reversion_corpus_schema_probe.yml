@@ -152,7 +152,7 @@ jobs:
           }
           target = Path('docs/research/mean_reversion_postmerge_regeneration/corpus_schema_report.json')
           target.parent.mkdir(parents=True, exist_ok=True)
-          target.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+          target.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + '\n')
           print(json.dumps({
               'classification': report['classification'],
               'total_underlying_files': report['total_underlying_files'],
@@ -160,7 +160,7 @@ jobs:
               'timestamp_column_counts': report['timestamp_column_counts'],
               'numeric_timestamp_unit_votes': report['numeric_timestamp_unit_votes'],
               'malformed_count': len(malformed),
-          }, indent=2, sort_keys=True))
+          }, indent=2, sort_keys=True, default=str))
           PY
 
       - name: Commit schema evidence
