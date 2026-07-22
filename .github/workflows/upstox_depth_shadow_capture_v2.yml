@@ -1,0 +1,109 @@
+name: Upstox Depth Shadow Capture V2
+
+on:
+  push:
+    branches:
+      - research/upstox-depth-shadow-capture-v2
+    paths:
+      - ".github/workflows/upstox_depth_shadow_capture_v2.yml"
+      - "research/upstox_depth_shadow_capture_v2/**"
+      - "scripts/capture_upstox_depth_shadow.py"
+      - "tests/test_upstox_depth_shadow_capture_v2.py"
+      - "docs/agent_reviews/upstox_depth_shadow_capture_v2.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-shadow-recorder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PRODUCTION_BASE_SHA: fa502c07425c67a9f2ba440a20900d772db82689
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout isolated research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/upstox-depth-shadow-capture-v2
+          fetch-depth: 0
+
+      - name: Verify base ancestry and strict scope
+        run: |
+          set -euo pipefail
+          git cat-file -e "${PRODUCTION_BASE_SHA}^{commit}"
+          git merge-base --is-ancestor "${PRODUCTION_BASE_SHA}" HEAD
+          git diff --name-only "${PRODUCTION_BASE_SHA}..HEAD" > /tmp/changed.txt
+          forbidden="$(grep -Ev '^(research/upstox_depth_shadow_capture_v2/|scripts/capture_upstox_depth_shadow.py$|tests/test_upstox_depth_shadow_capture_v2.py$|docs/agent_reviews/upstox_depth_shadow_capture_v2.md$|.github/workflows/upstox_depth_shadow_capture_v2.yml$)' /tmp/changed.txt || true)"
+          if test -n "${forbidden}"; then
+            printf '%s\n' "${forbidden}" >&2
+            echo "Forbidden production or unrelated file in shadow-recorder diff" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow pytest
+
+      - name: Prove no production or order-path imports
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          paths = [
+              Path('research/upstox_depth_shadow_capture_v2/parser.py'),
+              Path('research/upstox_depth_shadow_capture_v2/session.py'),
+              Path('scripts/capture_upstox_depth_shadow.py'),
+          ]
+          forbidden_roots = {
+              'core', 'strategies', 'config', 'kiteconnect',
+          }
+          forbidden_calls = {
+              'place_order', 'modify_order', 'cancel_order', 'exit_order',
+          }
+          for path in paths:
+              tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      for alias in node.names:
+                          if alias.name.split('.')[0] in forbidden_roots:
+                              raise SystemExit(f'forbidden import in {path}: {alias.name}')
+                  elif isinstance(node, ast.ImportFrom):
+                      root = (node.module or '').split('.')[0]
+                      if root in forbidden_roots:
+                          raise SystemExit(f'forbidden import in {path}: {node.module}')
+                  elif isinstance(node, ast.Call):
+                      func = node.func
+                      name = func.attr if isinstance(func, ast.Attribute) else (
+                          func.id if isinstance(func, ast.Name) else ''
+                      )
+                      if name in forbidden_calls:
+                          raise SystemExit(f'forbidden order call in {path}: {name}')
+          print('isolated shadow-recorder import and call boundary: PASS')
+          PY
+
+      - name: Compile and exercise CLI contract
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            research/upstox_depth_shadow_capture_v2/parser.py \
+            research/upstox_depth_shadow_capture_v2/session.py \
+            scripts/capture_upstox_depth_shadow.py
+          PYTHONPATH=. python scripts/capture_upstox_depth_shadow.py --help >/tmp/help.txt
+          grep -q "Research-only Upstox V3 full-depth shadow recorder" /tmp/help.txt
+
+      - name: Run deterministic parser, storage, and readiness tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q tests/test_upstox_depth_shadow_capture_v2.py
