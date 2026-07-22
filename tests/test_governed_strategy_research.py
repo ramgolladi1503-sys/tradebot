@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from core.governed_strategy_research import (
+from core.governed_strategy_research_supervised import (
     AgentRole,
     GovernedResearchStore,
     MANDATORY_GATES,
@@ -18,6 +18,16 @@ from core.governed_strategy_research import (
 
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def manifest_hash(payload: dict) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def write_supervisor_implementation(
@@ -32,13 +42,14 @@ def write_supervisor_implementation(
         "state": "VERIFIED",
         "base_commit": "a" * 40,
         "head_commit": "b" * 40,
+        "branch": "research/opening-state-v1",
         "changed_paths": sorted(set(changed_paths)),
-        "manifest_sha256": "c" * 64,
         "safety": {
             "broker_api_called": False,
             "allowed_for_live_execution": False,
         },
     }
+    payload["manifest_sha256"] = manifest_hash(payload)
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
     return path.relative_to(store.root).as_posix(), file_sha256(path)
 
@@ -49,14 +60,22 @@ def write_supervisor_review(
 ) -> tuple[str, str]:
     path = store.root / "supervisor" / "review_manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
+    implementation_manifest = json.loads(
+        (store.root / "supervisor" / "implementation_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
     payload = {
         "schema_version": 1,
         "reviewer": "antigravity",
         "implementer": "codex",
         "decision": decision,
-        "implementation_manifest_sha256": "c" * 64,
-        "manifest_sha256": "d" * 64,
+        "implementation_manifest_sha256": implementation_manifest[
+            "manifest_sha256"
+        ],
+        "blockers": [],
     }
+    payload["manifest_sha256"] = manifest_hash(payload)
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
     return path.relative_to(store.root).as_posix(), file_sha256(path)
 
@@ -304,3 +323,20 @@ def test_frozen_hypothesis_tampering_is_detected(tmp_path: Path):
     status = store.status()
     assert status.integrity_ok is False
     assert "frozen_hypothesis_hash_invalid" in status.blockers
+
+
+def test_rehashed_forged_supervisor_manifest_is_rejected(tmp_path: Path):
+    store = init_store(tmp_path)
+    store.freeze_hypothesis(hypothesis())
+    payload = implementation_payload(store)
+    path = store.root / payload["supervisor_manifest"]
+    forged = json.loads(path.read_text(encoding="utf-8"))
+    forged["state"] = "VERIFIED"
+    forged["manifest_sha256"] = "0" * 64
+    path.write_text(json.dumps(forged, sort_keys=True), encoding="utf-8")
+    payload["supervisor_manifest_file_sha256"] = file_sha256(path)
+    with pytest.raises(
+        ResearchError,
+        match="supervisor_manifest_internal_hash_invalid",
+    ):
+        store.record_implementation(payload)
