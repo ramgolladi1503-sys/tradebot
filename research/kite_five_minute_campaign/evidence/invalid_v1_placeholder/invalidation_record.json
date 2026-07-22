@@ -1,0 +1,38 @@
+{
+  "active_campaign_status": "INVALID_IMPLEMENTATION_PENDING_V2",
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "candidate_bundle_hash": null,
+  "defects": [
+    "all four mechanism labels used the same cross_index_dislocation feature and six threshold variants",
+    "no actual forward trade return was calculated",
+    "cross-index feature was incorrectly treated as PnL",
+    "bootstrap lower bound was min(mean, 0)",
+    "LOMO, neighbour, placebo and shifted-signal gates were hard-coded",
+    "leave-one-regime-out was not implemented",
+    "p-value was placeholder arithmetic",
+    "chronological folds were interleaved not contiguous",
+    "independent audit imported primary evaluator/feature logic",
+    "NO_EDGE_FOUND_WITHIN_PREREGISTERED_SEARCH_BUDGET verdict is invalid"
+  ],
+  "interpretation": "This result must not be interpreted as evidence for or against any preregistered mechanism.",
+  "invalidated_head_sha": "f20f56bd78cbc8b503f2259514d97d13d3c529fe",
+  "is_order_action": false,
+  "old_campaign_contract_hash": "12422de64622e0e0f6df7b2cc6f1f7219b62aee642d60d9832b5b62461a69ddb",
+  "old_evidence_hashes": {
+    "independent_audit.json": "9139f16948b60be74a4dcec6ae18cc06642ec6a5a237908d49f8694091930786",
+    "run_a/campaign_contract.json": "12422de64622e0e0f6df7b2cc6f1f7219b62aee642d60d9832b5b62461a69ddb",
+    "run_a/development_results.json": "5177045d50f46fa923963c3d52301de41ad662eb98bb1e95e4eff8afdccd0a59",
+    "run_a/five_minute_features.json": "f0e96415beb0fde25b31ffe295e14d6e62096f38f2342189e61422bb06d35a61",
+    "run_a/mechanism_summary.json": "78c8f1bb08ccaba126fdff2ed84ab14ff2a76426619fad4885b5744f7cf65b79",
+    "run_a/variant_evidence.json": "64f8c886011f48294ff1999d622fe79fc06cc74c9aadecdc7db3b388677295f8",
+    "run_b/campaign_contract.json": "12422de64622e0e0f6df7b2cc6f1f7219b62aee642d60d9832b5b62461a69ddb",
+    "run_b/development_results.json": "5177045d50f46fa923963c3d52301de41ad662eb98bb1e95e4eff8afdccd0a59",
+    "run_b/five_minute_features.json": "f0e96415beb0fde25b31ffe295e14d6e62096f38f2342189e61422bb06d35a61",
+    "run_b/mechanism_summary.json": "78c8f1bb08ccaba126fdff2ed84ab14ff2a76426619fad4885b5744f7cf65b79",
+    "run_b/variant_evidence.json": "64f8c886011f48294ff1999d622fe79fc06cc74c9aadecdc7db3b388677295f8"
+  },
+  "read_only": true,
+  "schema_version": "1.0",
+  "status": "INVALID_IMPLEMENTATION"
+}

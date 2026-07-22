@@ -7,6 +7,7 @@ from .governance import (
     build_exposure_ledger,
 )
 from .inventory import certify_archive
+from .v2 import run_v2_campaign, v2_contract, v2_variants
 
 __all__ = [
     "ProspectiveAccessError",
@@ -17,4 +18,7 @@ __all__ = [
     "certify_archive",
     "contract_hash",
     "run_campaign",
+    "run_v2_campaign",
+    "v2_contract",
+    "v2_variants",
 ]
