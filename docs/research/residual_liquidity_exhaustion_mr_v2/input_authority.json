@@ -1,0 +1,31 @@
+{
+  "appledouble_files": 1676,
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "candle_files": 1547,
+  "candle_rows": 578246,
+  "canonical_session_counts": {
+    "BANKNIFTY": 500,
+    "NIFTY": 521,
+    "SENSEX": 526
+  },
+  "canonical_symbol_file_counts": {
+    "BANKNIFTY": 500,
+    "NIFTY": 521,
+    "SENSEX": 526
+  },
+  "classification": "RESIDUAL_PATTERN_ATLAS_INPUT_AUTHORITY_VALID",
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "first_date": "20240530",
+  "last_date": "20260716",
+  "manifest_files_verified": 1676,
+  "producer_commit": "c8f88036e57d381d0ee20d3ea7a22a46c75d20c9",
+  "quote_depth_files": 129,
+  "raw_symbol_file_counts": {
+    "BANKNIFTY": 495,
+    "BSE_INDEX|SENSEX": 526,
+    "NIFTY": 516,
+    "NSE_INDEX|Nifty 50": 5,
+    "NSE_INDEX|Nifty Bank": 5
+  },
+  "underlying_files_classified": 3352
+}

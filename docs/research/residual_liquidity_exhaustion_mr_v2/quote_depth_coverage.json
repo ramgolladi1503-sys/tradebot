@@ -1,0 +1,14 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "classification": "QUOTE_DEPTH_COVERAGE_INVENTORIED_NOT_USED_FOR_SIGNALS",
+  "dates_with_quote_depth": 1,
+  "files_by_date": {
+    "20260709": 129
+  },
+  "quote_depth_files": 129,
+  "reason": "Stage A is candle residual discovery; quote/depth coverage is not yet synchronized into a causal exhaustion event contract.",
+  "schema_hash_counts": {
+    "3dd14facf19875b2": 129
+  },
+  "signal_claim_allowed": false
+}

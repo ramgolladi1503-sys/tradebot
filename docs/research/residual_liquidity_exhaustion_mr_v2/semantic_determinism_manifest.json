@@ -1,0 +1,12 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "classification": "TWO_RUN_SEMANTIC_DETERMINISM_PASSED",
+  "files": {
+    "negative_controls.json": "8b2efe22506990aca5b16300ed3ae243cc280cf11c193f10bbbd7e20be98eef5",
+    "pattern_atlas_summary.json": "c7fcf7a4203b1c06fdd6f4df4830dcb462df5b75dba46fed214172bdb1967c37",
+    "residual_event_ledger.jsonl": "e1a9bff12667f95489579327cba580cacd9ecca45cffff17a85bbb8fe671fe13",
+    "residual_event_ledger.parquet": "e259ea6bd1487cbe23643eb93c18aa88be78ebaa66d32e2e094e9f6b85ea1a6c",
+    "residual_segment_metrics.csv": "2ca6d250ebe7145291cebcd22abb53e54b2647556c1b76d160c6425f55c21a91"
+  },
+  "producer_commit": "c8f88036e57d381d0ee20d3ea7a22a46c75d20c9"
+}

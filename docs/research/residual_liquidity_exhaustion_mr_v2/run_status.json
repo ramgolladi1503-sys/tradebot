@@ -1,0 +1,9 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "classification": "PATTERN_ATLAS_COMPLETE_DEVELOPMENT_ONLY",
+  "event_count": 491,
+  "execution_allowed": false,
+  "producer_commit": "c8f88036e57d381d0ee20d3ea7a22a46c75d20c9",
+  "status": "COMPLETE",
+  "two_run_semantic_determinism": true
+}
