@@ -8,10 +8,15 @@ from .contracts import (
     CampaignThresholds,
     HypothesisContract,
 )
+from .development import run_preregistered_development_screen
 from .evaluator import (
     CampaignEvaluation,
     CampaignEvidenceError,
     evaluate_campaign,
+)
+from .hypothesis_features import (
+    HypothesisDevelopmentError,
+    build_session_features,
 )
 
 __all__ = [
@@ -21,6 +26,9 @@ __all__ = [
     "CampaignContractError",
     "CampaignThresholds",
     "HypothesisContract",
+    "run_preregistered_development_screen",
+    "HypothesisDevelopmentError",
+    "build_session_features",
     "CampaignEvaluation",
     "CampaignEvidenceError",
     "evaluate_campaign",
