@@ -15,6 +15,20 @@ on:
       - "scripts/run_directional_option_repricing_lag_development.py"
       - "tests/test_directional_option_repricing_lag_v3.py"
       - "docs/agent_reviews/directional_option_repricing_lag_v3.md"
+  pull_request:
+    branches:
+      - research/structural-edge-prove-or-kill-v1
+    paths:
+      - ".github/workflows/directional_option_repricing_lag_v3.yml"
+      - "research/structural_edge_campaign/option_repricing_lag.py"
+      - "research/structural_edge_campaign/option_repricing_lag_math.py"
+      - "research/structural_edge_campaign/option_repricing_lag_data.py"
+      - "research/structural_edge_campaign/specs/dorl_v3.json"
+      - "research/structural_edge_campaign/v1_campaign_contract.json"
+      - "research/structural_edge_campaign/__init__.py"
+      - "scripts/run_directional_option_repricing_lag_development.py"
+      - "tests/test_directional_option_repricing_lag_v3.py"
+      - "docs/agent_reviews/directional_option_repricing_lag_v3.md"
   workflow_dispatch:
 
 permissions:
