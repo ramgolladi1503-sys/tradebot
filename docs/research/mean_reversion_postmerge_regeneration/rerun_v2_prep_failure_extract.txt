@@ -1,0 +1,331 @@
+2026-07-22T08:43:25.6783182Z  * [new branch]        agent-elite-09-ariadne-ci-test-failure-clusterer -> origin/agent-elite-09-ariadne-ci-test-failure-clusterer
+2026-07-22T08:43:25.7046663Z  * [new branch]        feat/kite-ws-subprocess -> origin/feat/kite-ws-subprocess
+2026-07-22T08:43:25.7206904Z  * [new branch]        feature/edge-10-runtime-readiness-failure-snapshot -> origin/feature/edge-10-runtime-readiness-failure-snapshot
+2026-07-22T08:43:25.8054942Z  * [new branch]        feed-00-canonical-runtime-feed-truth-state-machine-duplicate-test -> origin/feed-00-canonical-runtime-feed-truth-state-machine-duplicate-test
+2026-07-22T08:43:25.8103180Z  * [new branch]        fix/indicator-readiness-truth-mismatch-strategy-selection -> origin/fix/indicator-readiness-truth-mismatch-strategy-selection
+2026-07-22T08:43:25.8106109Z  * [new branch]        fix/instance-lock-subprocess-readiness -> origin/fix/instance-lock-subprocess-readiness
+2026-07-22T08:43:28.8143589Z git push origin HEAD:research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:31.8941431Z  ! [remote rejected]   HEAD -> research/postmerge-mean-reversion-rerun-v2 (refusing to allow a GitHub App to create or update workflow `.github/workflows/mean_reversion_postmerge_regeneration.yml` without `workflows` permission)
+2026-07-22T08:43:31.8943090Z error: failed to push some refs to 'https://github.com/ramgolladi1503-sys/tradebot'
+2026-07-22T08:43:31.8963842Z ##[error]Process completed with exit code 1.
+--- LOG TAIL ---
+2026-07-22T08:43:25.8043697Z  * [new branch]        feature/symbol-clustering-portfolio-selection -> origin/feature/symbol-clustering-portfolio-selection
+2026-07-22T08:43:25.8046185Z  * [new branch]        feature/tradebot-antigravity-mcp-v1 -> origin/feature/tradebot-antigravity-mcp-v1
+2026-07-22T08:43:25.8047966Z  * [new branch]        feature/upstox-daily-capture -> origin/feature/upstox-daily-capture
+2026-07-22T08:43:25.8049411Z  * [new branch]        feature/wfa-backtest    -> origin/feature/wfa-backtest
+2026-07-22T08:43:25.8051427Z  * [new branch]        feed-00-canonical-runtime-feed-truth-state-machine -> origin/feed-00-canonical-runtime-feed-truth-state-machine
+2026-07-22T08:43:25.8054942Z  * [new branch]        feed-00-canonical-runtime-feed-truth-state-machine-duplicate-test -> origin/feed-00-canonical-runtime-feed-truth-state-machine-duplicate-test
+2026-07-22T08:43:25.8057704Z  * [new branch]        fix-stale-kite-instruments-cache -> origin/fix-stale-kite-instruments-cache
+2026-07-22T08:43:25.8059509Z  * [new branch]        fix/backtest-execution-realism -> origin/fix/backtest-execution-realism
+2026-07-22T08:43:25.8061581Z  * [new branch]        fix/backtest-runtime-replay-readiness-verdict -> origin/fix/backtest-runtime-replay-readiness-verdict
+2026-07-22T08:43:25.8064185Z  * [new branch]        fix/backtest-truth-mode-boundaries -> origin/fix/backtest-truth-mode-boundaries
+2026-07-22T08:43:25.8066205Z  * [new branch]        fix/canonical-ranked-runtime-bridge -> origin/fix/canonical-ranked-runtime-bridge
+2026-07-22T08:43:25.8068132Z  * [new branch]        fix/canonical-strategy-input-truth -> origin/fix/canonical-strategy-input-truth
+2026-07-22T08:43:25.8070116Z  * [new branch]        fix/canonical-strategy-phase2-handoff -> origin/fix/canonical-strategy-phase2-handoff
+2026-07-22T08:43:25.8071937Z  * [new branch]        fix/ci-test-tiering-feed-soak -> origin/fix/ci-test-tiering-feed-soak
+2026-07-22T08:43:25.8074060Z  * [new branch]        fix/compression-breakout-phase3b-closure -> origin/fix/compression-breakout-phase3b-closure
+2026-07-22T08:43:25.8076046Z  * [new branch]        fix/decision-engine-hardening -> origin/fix/decision-engine-hardening
+2026-07-22T08:43:25.8077445Z  * [new branch]        fix/depth-owner         -> origin/fix/depth-owner
+2026-07-22T08:43:25.8079041Z  * [new branch]        fix/feed-connection-truth-fail-closed -> origin/fix/feed-connection-truth-fail-closed
+2026-07-22T08:43:25.8080967Z  * [new branch]        fix/feed-index-aliases-resolution -> origin/fix/feed-index-aliases-resolution
+2026-07-22T08:43:25.8083011Z  * [new branch]        fix/feed-reactor-not-restartable-recovery -> origin/fix/feed-reactor-not-restartable-recovery
+2026-07-22T08:43:25.8085121Z  * [new branch]        fix/feed-recovery-budget-3 -> origin/fix/feed-recovery-budget-3
+2026-07-22T08:43:25.8086838Z  * [new branch]        fix/feed-ws-reconnect-truth-20260629 -> origin/fix/feed-ws-reconnect-truth-20260629
+2026-07-22T08:43:25.8089107Z  * [new branch]        fix/final-action-downgrade-after-decision-reject -> origin/fix/final-action-downgrade-after-decision-reject
+2026-07-22T08:43:25.8091321Z  * [new branch]        fix/four-strategy-contract-freeze -> origin/fix/four-strategy-contract-freeze
+2026-07-22T08:43:25.8093439Z  * [new branch]        fix/four-strategy-data-suitability-integrity -> origin/fix/four-strategy-data-suitability-integrity
+2026-07-22T08:43:25.8096098Z  * [new branch]        fix/four-strategy-objective-math-repairs-v3 -> origin/fix/four-strategy-objective-math-repairs-v3
+2026-07-22T08:43:25.8098188Z  * [new branch]        fix/gating-readiness-improvements -> origin/fix/gating-readiness-improvements
+2026-07-22T08:43:25.8100438Z  * [new branch]        fix/htf-safety-integration-and-fail-closed -> origin/fix/htf-safety-integration-and-fail-closed
+2026-07-22T08:43:25.8103180Z  * [new branch]        fix/indicator-readiness-truth-mismatch-strategy-selection -> origin/fix/indicator-readiness-truth-mismatch-strategy-selection
+2026-07-22T08:43:25.8106109Z  * [new branch]        fix/instance-lock-subprocess-readiness -> origin/fix/instance-lock-subprocess-readiness
+2026-07-22T08:43:25.8108338Z  * [new branch]        fix/live-feed-stability-and-dynamic-regimes -> origin/fix/live-feed-stability-and-dynamic-regimes
+2026-07-22T08:43:25.8110442Z  * [new branch]        fix/live-test-regression-isolation -> origin/fix/live-test-regression-isolation
+2026-07-22T08:43:25.8112041Z  * [new branch]        fix/local-full-pytest   -> origin/fix/local-full-pytest
+2026-07-22T08:43:25.8113412Z  * [new branch]        fix/local-pytest-after-45 -> origin/fix/local-pytest-after-45
+2026-07-22T08:43:25.8115716Z  * [new branch]        fix/mean-reversion-corpus-file-classification-v1 -> origin/fix/mean-reversion-corpus-file-classification-v1
+2026-07-22T08:43:25.8117960Z  * [new branch]        fix/ml-confidence-telemetry-truth -> origin/fix/ml-confidence-telemetry-truth
+2026-07-22T08:43:25.8119744Z  * [new branch]        fix/no-executable-trades-control -> origin/fix/no-executable-trades-control
+2026-07-22T08:43:25.8121671Z  * [new branch]        fix/opening-range-retest-owner-defects -> origin/fix/opening-range-retest-owner-defects
+2026-07-22T08:43:25.8124065Z  * [new branch]        fix/opening-range-retest-owner-integration -> origin/fix/opening-range-retest-owner-integration
+2026-07-22T08:43:25.8126777Z  * [new branch]        fix/opening-range-retest-runtime-owner-enforcement -> origin/fix/opening-range-retest-runtime-owner-enforcement
+2026-07-22T08:43:25.8129482Z  * [new branch]        fix/opening-range-retest-temporal-implementation -> origin/fix/opening-range-retest-temporal-implementation
+2026-07-22T08:43:25.8131950Z  * [new branch]        fix/opportunity-engine-hardening-20260409 -> origin/fix/opportunity-engine-hardening-20260409
+2026-07-22T08:43:25.8134285Z  * [new branch]        fix/opportunity-score-separation -> origin/fix/opportunity-score-separation
+2026-07-22T08:43:25.8136015Z  * [new branch]        fix/orb-context-cycle-cutoff -> origin/fix/orb-context-cycle-cutoff
+2026-07-22T08:43:25.8137586Z  * [new branch]        fix/orb-cycle-cutoff-main-v2 -> origin/fix/orb-cycle-cutoff-main-v2
+2026-07-22T08:43:25.8139373Z  * [new branch]        fix/orb-merged-partition-assignments -> origin/fix/orb-merged-partition-assignments
+2026-07-22T08:43:25.8141420Z  * [new branch]        fix/orb-outcomes-v2-portable-sidecars -> origin/fix/orb-outcomes-v2-portable-sidecars
+2026-07-22T08:43:25.8143339Z  * [new branch]        fix/orb-postmerge-audit-metadata -> origin/fix/orb-postmerge-audit-metadata
+2026-07-22T08:43:25.8145441Z  * [new branch]        fix/orb-source-provenance-repair -> origin/fix/orb-source-provenance-repair
+2026-07-22T08:43:25.8147412Z  * [new branch]        fix/orchestrator-report-test-isolation -> origin/fix/orchestrator-report-test-isolation
+2026-07-22T08:43:25.8149541Z  * [new branch]        fix/phase2-block-fallback-salvage-clean -> origin/fix/phase2-block-fallback-salvage-clean
+2026-07-22T08:43:25.8151565Z  * [new branch]        fix/pr247-advisory-schema-boundary -> origin/fix/pr247-advisory-schema-boundary
+2026-07-22T08:43:25.8153345Z  * [new branch]        fix/pr689-semantic-closure-v1 -> origin/fix/pr689-semantic-closure-v1
+2026-07-22T08:43:25.8155652Z  * [new branch]        fix/regime-entropy-truth-contract-prod-grade -> origin/fix/regime-entropy-truth-contract-prod-grade
+2026-07-22T08:43:25.8157771Z  * [new branch]        fix/shared-backtest-integrity-v1 -> origin/fix/shared-backtest-integrity-v1
+2026-07-22T08:43:25.8160165Z  * [new branch]        fix/stale-indicator-blocker-before-strategy-generation -> origin/fix/stale-indicator-blocker-before-strategy-generation
+2026-07-22T08:43:25.8162822Z  * [new branch]        fix/telemetry-schema-and-paths-clean -> origin/fix/telemetry-schema-and-paths-clean
+2026-07-22T08:43:25.8165310Z  * [new branch]        fix/trade-builder-candidate-breadth-expiry -> origin/fix/trade-builder-candidate-breadth-expiry
+2026-07-22T08:43:25.8167250Z  * [new branch]        fix/trend-pullback-temporal -> origin/fix/trend-pullback-temporal
+2026-07-22T08:43:25.8169143Z  * [new branch]        fix/unit-scope-execution-selection-safety -> origin/fix/unit-scope-execution-selection-safety
+2026-07-22T08:43:25.8171095Z  * [new branch]        fix/vwap-mean-reversion-intent -> origin/fix/vwap-mean-reversion-intent
+2026-07-22T08:43:25.8172830Z  * [new branch]        fix/vwap-reclaim-phase3b-closure -> origin/fix/vwap-reclaim-phase3b-closure
+2026-07-22T08:43:25.8175549Z  * [new branch]        fix/ws-recovery-blocked-lifecycle-no-silent-dead-state -> origin/fix/ws-recovery-blocked-lifecycle-no-silent-dead-state
+2026-07-22T08:43:25.8178443Z  * [new branch]        fix/ws-recovery-reactor-not-restartable-thread-storm -> origin/fix/ws-recovery-reactor-not-restartable-thread-storm
+2026-07-22T08:43:25.8181064Z  * [new branch]        fix/ws1006-reactor-not-restartable-fail-closed -> origin/fix/ws1006-reactor-not-restartable-fail-closed
+2026-07-22T08:43:25.8183568Z  * [new branch]        fix/ws1006-recovery-budget-and-restart-scheduling -> origin/fix/ws1006-recovery-budget-and-restart-scheduling
+2026-07-22T08:43:25.8186343Z  * [new branch]        hardening/codeql-sensitive-data-alerts -> origin/hardening/codeql-sensitive-data-alerts
+2026-07-22T08:43:25.8188450Z  * [new branch]        hardening/codeql-sensitive-redaction-v2 -> origin/hardening/codeql-sensitive-redaction-v2
+2026-07-22T08:43:25.8190708Z  * [new branch]        hardening/elite-runtime-truth-roadmap -> origin/hardening/elite-runtime-truth-roadmap
+2026-07-22T08:43:25.8192743Z  * [new branch]        hardening/main-branch-protection-docs -> origin/hardening/main-branch-protection-docs
+2026-07-22T08:43:25.8194992Z  * [new branch]        hardening/main-stale-executable-quality -> origin/hardening/main-stale-executable-quality
+2026-07-22T08:43:25.8197036Z  * [new branch]        implement/opening-range-retest-owner -> origin/implement/opening-range-retest-owner
+2026-07-22T08:43:25.8199248Z  * [new branch]        integration/four-strategy-data-suitability-main -> origin/integration/four-strategy-data-suitability-main
+2026-07-22T08:43:25.8201678Z  * [new branch]        live-feed-execution-truth-hardening-minimal -> origin/live-feed-execution-truth-hardening-minimal
+2026-07-22T08:43:25.8204280Z  * [new branch]        live-truth-23-verified-post-start-feed-recovery -> origin/live-truth-23-verified-post-start-feed-recovery
+2026-07-22T08:43:25.8206765Z  * [new branch]        live-truth-31-pre-market-live-readiness-gate -> origin/live-truth-31-pre-market-live-readiness-gate
+2026-07-22T08:43:25.8208465Z  * [new branch]        main                    -> origin/main
+2026-07-22T08:43:25.8209427Z  * [new branch]        main-v2                 -> origin/main-v2
+2026-07-22T08:43:25.8210635Z  * [new branch]        obs/pr-obs-04-cycle-events -> origin/obs/pr-obs-04-cycle-events
+2026-07-22T08:43:25.8212499Z  * [new branch]        obs/pr-obs-05-candidate-lifecycle-events -> origin/obs/pr-obs-05-candidate-lifecycle-events
+2026-07-22T08:43:25.8214757Z  * [new branch]        obs/pr-obs-09-local-observability-stack -> origin/obs/pr-obs-09-local-observability-stack
+2026-07-22T08:43:25.8216724Z  * [new branch]        observability/feed-staleness-pack -> origin/observability/feed-staleness-pack
+2026-07-22T08:43:25.8218439Z  * [new branch]        oi-shadow-01-roadmap-contract -> origin/oi-shadow-01-roadmap-contract
+2026-07-22T08:43:25.8219944Z  * [new branch]        phase2-hardening-pass   -> origin/phase2-hardening-pass
+2026-07-22T08:43:25.8221342Z  * [new branch]        phase23-freeze-boundary-v2 -> origin/phase23-freeze-boundary-v2
+2026-07-22T08:43:25.8223189Z  * [new branch]        qa/all-available-data-strategy-edge-audit -> origin/qa/all-available-data-strategy-edge-audit
+2026-07-22T08:43:25.8226232Z  * [new branch]        qa/all-strategy-available-data-backtest-20260629 -> origin/qa/all-strategy-available-data-backtest-20260629
+2026-07-22T08:43:25.8228594Z  * [new branch]        qa/antigravity-elite-test-pack-20260610 -> origin/qa/antigravity-elite-test-pack-20260610
+2026-07-22T08:43:25.8230774Z  * [new branch]        qa/canonical-strategy-input-runtime-proof -> origin/qa/canonical-strategy-input-runtime-proof
+2026-07-22T08:43:25.8232767Z  * [new branch]        qa/edge-first-behavior-strategy -> origin/qa/edge-first-behavior-strategy
+2026-07-22T08:43:25.8234505Z  * [new branch]        qa/edge-proof-minimum-loop -> origin/qa/edge-proof-minimum-loop
+2026-07-22T08:43:25.8236248Z  * [new branch]        qa/eight-year-backtest-strategy-edge -> origin/qa/eight-year-backtest-strategy-edge
+2026-07-22T08:43:25.8238650Z  * [new branch]        qa/full-implemented-strategy-truth-audit-after-fixes -> origin/qa/full-implemented-strategy-truth-audit-after-fixes
+2026-07-22T08:43:25.8240696Z  * [new branch]        rag/roadmap-prod-rag    -> origin/rag/roadmap-prod-rag
+2026-07-22T08:43:25.8242381Z  * [new branch]        rag/roadmap-prod-rag-7334660385321954389 -> origin/rag/roadmap-prod-rag-7334660385321954389
+2026-07-22T08:43:25.8244212Z  * [new branch]        rag/roadmap-prod-rag-v2 -> origin/rag/roadmap-prod-rag-v2
+2026-07-22T08:43:25.8245902Z  * [new branch]        ram/agent-command-center-live-sidecar -> origin/ram/agent-command-center-live-sidecar
+2026-07-22T08:43:25.8247731Z  * [new branch]        ram/backtest-trust-integration -> origin/ram/backtest-trust-integration
+2026-07-22T08:43:25.8249898Z  * [new branch]        ram/candidate-executability-blocker-evidence-pack -> origin/ram/candidate-executability-blocker-evidence-pack
+2026-07-22T08:43:25.8252389Z  * [new branch]        ram/candidate-outcome-fixture-loader -> origin/ram/candidate-outcome-fixture-loader
+2026-07-22T08:43:25.8254475Z  * [new branch]        ram/candidate-outcome-report-writer -> origin/ram/candidate-outcome-report-writer
+2026-07-22T08:43:25.8256438Z  * [new branch]        ram/candidate-outcome-truth-contract -> origin/ram/candidate-outcome-truth-contract
+2026-07-22T08:43:25.8258562Z  * [new branch]        ram/canonical-feed-runtime-snapshot-truth -> origin/ram/canonical-feed-runtime-snapshot-truth
+2026-07-22T08:43:25.8261404Z  * [new branch]        ram/disable-kiteticker-internal-autoretry-after-terminal-ws1006 -> origin/ram/disable-kiteticker-internal-autoretry-after-terminal-ws1006
+2026-07-22T08:43:25.8264688Z  * [new branch]        ram/edge-next-01-score-separation-audit-fix -> origin/ram/edge-next-01-score-separation-audit-fix
+2026-07-22T08:43:25.8267057Z  * [new branch]        ram/edge-next-02-regime-aware-ranking-weights -> origin/ram/edge-next-02-regime-aware-ranking-weights
+2026-07-22T08:43:25.8269458Z  * [new branch]        ram/edge-next-04-strategy-baseline-comparison -> origin/ram/edge-next-04-strategy-baseline-comparison
+2026-07-22T08:43:25.8271968Z  * [new branch]        ram/edge-next-05-offline-replay-topn-quality-test -> origin/ram/edge-next-05-offline-replay-topn-quality-test
+2026-07-22T08:43:25.8274990Z  * [new branch]        ram/edge-next-06-bearish-range-no-trade-coverage-hardening -> origin/ram/edge-next-06-bearish-range-no-trade-coverage-hardening
+2026-07-22T08:43:25.8278333Z  * [new branch]        ram/execution-truth-normalization-before-candidate-classification -> origin/ram/execution-truth-normalization-before-candidate-classification
+2026-07-22T08:43:25.8280772Z  * [new branch]        ram/feed-latency-gates  -> origin/ram/feed-latency-gates
+2026-07-22T08:43:25.8282736Z  * [new branch]        ram/feed-stab-05-exact-option-token-freshness-gate -> origin/ram/feed-stab-05-exact-option-token-freshness-gate
+2026-07-22T08:43:25.8285117Z  * [new branch]        ram/feed-stab-07-feed-event-journal -> origin/ram/feed-stab-07-feed-event-journal
+2026-07-22T08:43:25.8287464Z  * [new branch]        ram/feed-stab-09-recovery-proof-terminal-reactor-gate -> origin/ram/feed-stab-09-recovery-proof-terminal-reactor-gate
+2026-07-22T08:43:25.8290536Z  * [new branch]        ram/fix-executable-truth-normalization-under-stale-feed -> origin/ram/fix-executable-truth-normalization-under-stale-feed
+2026-07-22T08:43:25.8293161Z  * [new branch]        ram/fix-regime-session-context-propagation -> origin/ram/fix-regime-session-context-propagation
+2026-07-22T08:43:25.8295947Z  * [new branch]        ram/fresh-feedtruth-audit-proof-pack -> origin/ram/fresh-feedtruth-audit-proof-pack
+2026-07-22T08:43:25.8297725Z  * [new branch]        ram/live-rca-auth-tightening -> origin/ram/live-rca-auth-tightening
+2026-07-22T08:43:25.8299231Z  * [new branch]        ram/ml-admission-hardening -> origin/ram/ml-admission-hardening
+2026-07-22T08:43:25.8300620Z  * [new branch]        ram/next-isolated-work  -> origin/ram/next-isolated-work
+2026-07-22T08:43:25.8302409Z  * [new branch]        ram/offline-feed-candidate-truth-proof-pack -> origin/ram/offline-feed-candidate-truth-proof-pack
+2026-07-22T08:43:25.8304886Z  * [new branch]        ram/phase2-hard-execution-evidence -> origin/ram/phase2-hard-execution-evidence
+2026-07-22T08:43:25.8306663Z  * [new branch]        ram/pr-candidate-phase2-truth -> origin/ram/pr-candidate-phase2-truth
+2026-07-22T08:43:25.8308530Z  * [new branch]        ram/pr-edge-01-runtime-candidate-journal -> origin/ram/pr-edge-01-runtime-candidate-journal
+2026-07-22T08:43:25.8310599Z  * [new branch]        ram/pr-execution-feed-truth-hardening -> origin/ram/pr-execution-feed-truth-hardening
+2026-07-22T08:43:25.8312532Z  * [new branch]        ram/pr1-candidate-flow-diagnostics -> origin/ram/pr1-candidate-flow-diagnostics
+2026-07-22T08:43:25.8314658Z  * [new branch]        ram/pr3-score-separation-mainline -> origin/ram/pr3-score-separation-mainline
+2026-07-22T08:43:25.8316686Z  * [new branch]        ram/pr4-selector-fallback-contract -> origin/ram/pr4-selector-fallback-contract
+2026-07-22T08:43:25.8318758Z  * [new branch]        ram/pr502-command-center-session-scoped-rca -> origin/ram/pr502-command-center-session-scoped-rca
+2026-07-22T08:43:25.8321047Z  * [new branch]        ram/pr521-candidate-supply-zero-attribution -> origin/ram/pr521-candidate-supply-zero-attribution
+2026-07-22T08:43:25.8323629Z  * [new branch]        ram/pr522-current-session-feed-lifecycle-stabilization -> origin/ram/pr522-current-session-feed-lifecycle-stabilization
+2026-07-22T08:43:25.8326685Z  * [new branch]        ram/pr523-live-option-feed-truth-after-subscribe-ws1006 -> origin/ram/pr523-live-option-feed-truth-after-subscribe-ws1006
+2026-07-22T08:43:25.8329144Z  * [new branch]        ram/pr525-ws1006-feed-survival-recovery -> origin/ram/pr525-ws1006-feed-survival-recovery
+2026-07-22T08:43:25.8331267Z  * [new branch]        ram/pr526-single-feed-recovery-coordinator -> origin/ram/pr526-single-feed-recovery-coordinator
+2026-07-22T08:43:25.8333394Z  * [new branch]        ram/pr527-candidate-lifecycle-snapshot -> origin/ram/pr527-candidate-lifecycle-snapshot
+2026-07-22T08:43:25.8335417Z  * [new branch]        ram/pr528-phase2-boundary-cleanup -> origin/ram/pr528-phase2-boundary-cleanup
+2026-07-22T08:43:25.8337542Z  * [new branch]        ram/pr529-regime-aware-dynamic-scoring-profiles -> origin/ram/pr529-regime-aware-dynamic-scoring-profiles
+2026-07-22T08:43:25.8340132Z  * [new branch]        ram/pr530-regime-profile-opportunity-scoring-opt-in -> origin/ram/pr530-regime-profile-opportunity-scoring-opt-in
+2026-07-22T08:43:25.8342694Z  * [new branch]        ram/pr531-ranking-profile-metadata-propagation -> origin/ram/pr531-ranking-profile-metadata-propagation
+2026-07-22T08:43:25.8345388Z  * [new branch]        ram/pr532-advanced-score-delta-evidence -> origin/ram/pr532-advanced-score-delta-evidence
+2026-07-22T08:43:25.8346995Z  * [new branch]        ram/prod-fixes          -> origin/ram/prod-fixes
+2026-07-22T08:43:25.8348679Z  * [new branch]        ram/ranking-snapshot-truth-label-contract -> origin/ram/ranking-snapshot-truth-label-contract
+2026-07-22T08:43:25.8350720Z  * [new branch]        ram/real-candidate-supply-contract -> origin/ram/real-candidate-supply-contract
+2026-07-22T08:43:25.8352518Z  * [new branch]        ram/replay-context-proof -> origin/ram/replay-context-proof
+2026-07-22T08:43:25.8354686Z  * [new branch]        ram/stale-option-mutation-guard-tightening -> origin/ram/stale-option-mutation-guard-tightening
+2026-07-22T08:43:25.8356836Z  * [new branch]        ram/stale-option-refresh-churn-guard -> origin/ram/stale-option-refresh-churn-guard
+2026-07-22T08:43:25.8358642Z  * [new branch]        ram/trade-quality-truth-audit -> origin/ram/trade-quality-truth-audit
+2026-07-22T08:43:25.8360339Z  * [new branch]        ram/tradebot-agent-command-center -> origin/ram/tradebot-agent-command-center
+2026-07-22T08:43:25.8362542Z  * [new branch]        ram/ws1006-reactor-restart-suppression-regression -> origin/ram/ws1006-reactor-restart-suppression-regression
+2026-07-22T08:43:25.8365006Z  * [new branch]        ram/ws1006-reactor-terminal-state-guard -> origin/ram/ws1006-reactor-terminal-state-guard
+2026-07-22T08:43:25.8367171Z  * [new branch]        rebuild/opportunity-engine-v2-product-bible -> origin/rebuild/opportunity-engine-v2-product-bible
+2026-07-22T08:43:25.8369591Z  * [new branch]        research/four-strategy-data-suitability-v2-clean -> origin/research/four-strategy-data-suitability-v2-clean
+2026-07-22T08:43:25.8371871Z  * [new branch]        research/htf-cost-adjusted-edge-retest -> origin/research/htf-cost-adjusted-edge-retest
+2026-07-22T08:43:25.8374255Z  * [new branch]        research/independent-underlying-confirmation-v3 -> origin/research/independent-underlying-confirmation-v3
+2026-07-22T08:43:25.8376697Z  * [new branch]        research/independent-underlying-evaluation-v3 -> origin/research/independent-underlying-evaluation-v3
+2026-07-22T08:43:25.8378987Z  * [new branch]        research/ml-strategy-discovery-core -> origin/research/ml-strategy-discovery-core
+2026-07-22T08:43:25.8381090Z  * [new branch]        research/ml-strategy-discovery-foundation-v1 -> origin/research/ml-strategy-discovery-foundation-v1
+2026-07-22T08:43:25.8383373Z  * [new branch]        research/ml-strategy-discovery-v2-stability -> origin/research/ml-strategy-discovery-v2-stability
+2026-07-22T08:43:25.8386084Z  * [new branch]        research/opening-dislocation-reversal-v1 -> origin/research/opening-dislocation-reversal-v1
+2026-07-22T08:43:25.8388322Z  * [new branch]        research/opening-range-retest-causal-replay -> origin/research/opening-range-retest-causal-replay
+2026-07-22T08:43:25.8390539Z  * [new branch]        research/orb-corrected-score-edge-cf1b639 -> origin/research/orb-corrected-score-edge-cf1b639
+2026-07-22T08:43:25.8392540Z  * [new branch]        research/orb-fidelity-audit-cf1b639 -> origin/research/orb-fidelity-audit-cf1b639
+2026-07-22T08:43:25.8394970Z  * [new branch]        research/orb-option-data-recoverability-cf1b639 -> origin/research/orb-option-data-recoverability-cf1b639
+2026-07-22T08:43:25.8397133Z  * [new branch]        research/orb-outcomes-v2-certified -> origin/research/orb-outcomes-v2-certified
+2026-07-22T08:43:25.8399039Z  * [new branch]        research/orb-outcomes-v2-clean-history -> origin/research/orb-outcomes-v2-clean-history
+2026-07-22T08:43:25.8401053Z  * [new branch]        research/orb-phase1-v2-recertification -> origin/research/orb-phase1-v2-recertification
+2026-07-22T08:43:25.8403408Z  * [new branch]        research/orb-structural-edge-screen-v1 -> origin/research/orb-structural-edge-screen-v1
+2026-07-22T08:43:25.8405994Z  * [new branch]        research/orb-underlying-edge-cf1b639 -> origin/research/orb-underlying-edge-cf1b639
+2026-07-22T08:43:25.8408068Z  * [new branch]        research/postmerge-mean-reversion-rerun-v1 -> origin/research/postmerge-mean-reversion-rerun-v1
+2026-07-22T08:43:25.8410299Z  * [new branch]        research/postmerge-mean-reversion-rerun-v2 -> origin/research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:25.8412824Z  * [new branch]        research/prospective-structural-edge-fresh-lockbox-v2 -> origin/research/prospective-structural-edge-fresh-lockbox-v2
+2026-07-22T08:43:25.8415302Z  * [new branch]        research/rsi2-mean-reversion-edge -> origin/research/rsi2-mean-reversion-edge
+2026-07-22T08:43:25.8417444Z  * [new branch]        research/strategy-outcomes-foundation -> origin/research/strategy-outcomes-foundation
+2026-07-22T08:43:25.8419373Z  * [new branch]        research/strategy-replay-foundation -> origin/research/strategy-replay-foundation
+2026-07-22T08:43:25.8421395Z  * [new branch]        research/structural-edge-prove-or-kill-v1 -> origin/research/structural-edge-prove-or-kill-v1
+2026-07-22T08:43:25.8423745Z  * [new branch]        research/three-year-structural-edge-treasure-hunt -> origin/research/three-year-structural-edge-treasure-hunt
+2026-07-22T08:43:25.8426351Z  * [new branch]        research/trend-pullback-horizon-sweep -> origin/research/trend-pullback-horizon-sweep
+2026-07-22T08:43:25.8428279Z  * [new branch]        research/vibe-trading-sidecar-pilot -> origin/research/vibe-trading-sidecar-pilot
+2026-07-22T08:43:25.8430095Z  * [new branch]        rewrite/depth-subscription-engine -> origin/rewrite/depth-subscription-engine
+2026-07-22T08:43:25.8432034Z  * [new branch]        stabilization/tb-edge-candidate-unblock -> origin/stabilization/tb-edge-candidate-unblock
+2026-07-22T08:43:25.8434439Z  * [new branch]        tb-edge-01-kill-fallback-execution-in-live -> origin/tb-edge-01-kill-fallback-execution-in-live
+2026-07-22T08:43:25.8436648Z  * [new branch]        tb-edge-01-kill-fallback-execution-live -> origin/tb-edge-01-kill-fallback-execution-live
+2026-07-22T08:43:25.8438532Z  * [new branch]        test-stab-01-restore-main-suite -> origin/test-stab-01-restore-main-suite
+2026-07-22T08:43:25.8440440Z  * [new branch]        test-stab-02-depth-subscription-pruning -> origin/test-stab-02-depth-subscription-pruning
+2026-07-22T08:43:25.8442604Z  * [new branch]        test-stab-04a-websocket-compat-code -> origin/test-stab-04a-websocket-compat-code
+2026-07-22T08:43:25.8444510Z  * [new branch]        test/ai-cert-agent-evals-v2 -> origin/test/ai-cert-agent-evals-v2
+2026-07-22T08:43:25.8446114Z  * [new branch]        test/ai-cert-agent-evals-v2-main -> origin/test/ai-cert-agent-evals-v2-main
+2026-07-22T08:43:25.8448117Z  * [new branch]        test/opening-range-retest-temporal-fixtures -> origin/test/opening-range-retest-temporal-fixtures
+2026-07-22T08:43:25.8449973Z  * [new branch]        tmp-test-should-not-exist -> origin/tmp-test-should-not-exist
+2026-07-22T08:43:25.8451240Z  * [new branch]        tmp-tree-test           -> origin/tmp-tree-test
+2026-07-22T08:43:25.8453253Z  * [new branch]        trace/latency-guard-degrade-exit-only-prebuild-skip-rca -> origin/trace/latency-guard-degrade-exit-only-prebuild-skip-rca
+2026-07-22T08:43:25.8456206Z  * [new branch]        trace/phase2-candidate-starvation-after-indicators -> origin/trace/phase2-candidate-starvation-after-indicators
+2026-07-22T08:43:25.8459201Z  * [new branch]        trace/regime-unstable-candidate-starvation-under-healthy-feed -> origin/trace/regime-unstable-candidate-starvation-under-healthy-feed
+2026-07-22T08:43:25.8461763Z  * [new branch]        trace/strategy-no-qualified-reasons -> origin/trace/strategy-no-qualified-reasons
+2026-07-22T08:43:25.8464165Z  * [new branch]        trace/strategy-qualification-predicate-reasons -> origin/trace/strategy-qualification-predicate-reasons
+2026-07-22T08:43:25.8465988Z  * [new branch]        update-scripts          -> origin/update-scripts
+2026-07-22T08:43:25.8467411Z  * [new branch]        validation/live-evidence-pack-v2 -> origin/validation/live-evidence-pack-v2
+2026-07-22T08:43:25.8469235Z  * [new branch]        validation/live-market-evidence-pack -> origin/validation/live-market-evidence-pack
+2026-07-22T08:43:25.8471089Z  * [new tag]           phase1_candidate_shadow_stable_2026_03_24 -> phase1_candidate_shadow_stable_2026_03_24
+2026-07-22T08:43:25.8473822Z ##[endgroup]
+2026-07-22T08:43:25.8474961Z ##[group]Determining the checkout info
+2026-07-22T08:43:25.8476151Z [command]/usr/bin/git branch --list --remote origin/research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:25.8477487Z   origin/research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:25.8479513Z ##[endgroup]
+2026-07-22T08:43:25.8480039Z [command]/usr/bin/git sparse-checkout disable
+2026-07-22T08:43:25.8481729Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-22T08:43:25.8483736Z ##[group]Checking out the ref
+2026-07-22T08:43:25.8485843Z [command]/usr/bin/git checkout --progress --force -B research/postmerge-mean-reversion-rerun-v2 refs/remotes/origin/research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:27.5425571Z Updating files:  69% (3752/5409)
+2026-07-22T08:43:27.5456459Z Updating files:  70% (3787/5409)
+2026-07-22T08:43:27.5486601Z Updating files:  71% (3841/5409)
+2026-07-22T08:43:27.5516766Z Updating files:  72% (3895/5409)
+2026-07-22T08:43:27.5546077Z Updating files:  73% (3949/5409)
+2026-07-22T08:43:27.5584149Z Updating files:  74% (4003/5409)
+2026-07-22T08:43:27.5612993Z Updating files:  75% (4057/5409)
+2026-07-22T08:43:27.5643609Z Updating files:  76% (4111/5409)
+2026-07-22T08:43:27.5697793Z Updating files:  77% (4165/5409)
+2026-07-22T08:43:27.5728718Z Updating files:  78% (4220/5409)
+2026-07-22T08:43:27.5756282Z Updating files:  79% (4274/5409)
+2026-07-22T08:43:27.5789238Z Updating files:  80% (4328/5409)
+2026-07-22T08:43:27.5820102Z Updating files:  81% (4382/5409)
+2026-07-22T08:43:27.5854098Z Updating files:  82% (4436/5409)
+2026-07-22T08:43:27.5885792Z Updating files:  83% (4490/5409)
+2026-07-22T08:43:27.5917640Z Updating files:  84% (4544/5409)
+2026-07-22T08:43:27.5950698Z Updating files:  85% (4598/5409)
+2026-07-22T08:43:27.5984758Z Updating files:  86% (4652/5409)
+2026-07-22T08:43:27.6018204Z Updating files:  87% (4706/5409)
+2026-07-22T08:43:27.6054683Z Updating files:  88% (4760/5409)
+2026-07-22T08:43:27.6086028Z Updating files:  89% (4815/5409)
+2026-07-22T08:43:27.6118397Z Updating files:  90% (4869/5409)
+2026-07-22T08:43:27.6150860Z Updating files:  91% (4923/5409)
+2026-07-22T08:43:27.6182021Z Updating files:  92% (4977/5409)
+2026-07-22T08:43:27.6212816Z Updating files:  93% (5031/5409)
+2026-07-22T08:43:27.6243121Z Updating files:  94% (5085/5409)
+2026-07-22T08:43:27.6271613Z Updating files:  95% (5139/5409)
+2026-07-22T08:43:27.6301264Z Updating files:  96% (5193/5409)
+2026-07-22T08:43:27.6334472Z Updating files:  97% (5247/5409)
+2026-07-22T08:43:27.6362304Z Updating files:  98% (5301/5409)
+2026-07-22T08:43:27.6397283Z Updating files:  99% (5355/5409)
+2026-07-22T08:43:27.6397759Z Updating files: 100% (5409/5409)
+2026-07-22T08:43:27.6398115Z Updating files: 100% (5409/5409), done.
+2026-07-22T08:43:27.6463139Z Switched to a new branch 'research/postmerge-mean-reversion-rerun-v2'
+2026-07-22T08:43:27.6467901Z branch 'research/postmerge-mean-reversion-rerun-v2' set up to track 'origin/research/postmerge-mean-reversion-rerun-v2'.
+2026-07-22T08:43:27.6831647Z Encountered 1 file that should have been a pointer, but wasn't:
+2026-07-22T08:43:27.6832226Z 	runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+2026-07-22T08:43:27.6910129Z ##[endgroup]
+2026-07-22T08:43:27.6962677Z [command]/usr/bin/git log -1 --format=%H
+2026-07-22T08:43:27.6991091Z 949236ce30c8022a109f3a27fa958d6bc404bc3f
+2026-07-22T08:43:27.7199114Z ##[group]Run set -euo pipefail
+2026-07-22T08:43:27.7199495Z set -euo pipefail
+2026-07-22T08:43:27.7199900Z git fetch origin research/postmerge-mean-reversion-rerun-v1
+2026-07-22T08:43:27.7200430Z git checkout origin/research/postmerge-mean-reversion-rerun-v1 -- \
+2026-07-22T08:43:27.7200939Z   .github/workflows/mean_reversion_postmerge_regeneration.yml \
+2026-07-22T08:43:27.7201399Z   scripts/run_mean_reversion_postmerge_regeneration.py \
+2026-07-22T08:43:27.7201790Z   tests/test_mean_reversion_ledger_timing.py \
+2026-07-22T08:43:27.7202151Z   tests/test_mean_reversion_ledger_accounting.py \
+2026-07-22T08:43:27.7202555Z   docs/agent_reviews/mean_reversion_postmerge_regeneration.md
+2026-07-22T08:43:27.7283407Z shell: /usr/bin/bash -e {0}
+2026-07-22T08:43:27.7283694Z ##[endgroup]
+2026-07-22T08:43:28.0218560Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T08:43:28.6653177Z  * branch              research/postmerge-mean-reversion-rerun-v1 -> FETCH_HEAD
+2026-07-22T08:43:28.6694521Z ##[group]Run set -euo pipefail
+2026-07-22T08:43:28.6694863Z set -euo pipefail
+2026-07-22T08:43:28.6695182Z python tools/prepare_mean_reversion_rerun_v2.py
+2026-07-22T08:43:28.6756392Z shell: /usr/bin/bash -e {0}
+2026-07-22T08:43:28.6756646Z ##[endgroup]
+2026-07-22T08:43:28.7140019Z ##[group]Run set -euo pipefail
+2026-07-22T08:43:28.7140341Z set -euo pipefail
+2026-07-22T08:43:28.7140722Z python -m py_compile scripts/run_mean_reversion_postmerge_regeneration.py
+2026-07-22T08:43:28.7141139Z python - <<'PY'
+2026-07-22T08:43:28.7141375Z from pathlib import Path
+2026-07-22T08:43:28.7141624Z import yaml
+2026-07-22T08:43:28.7141818Z 
+2026-07-22T08:43:28.7142163Z workflow = Path('.github/workflows/mean_reversion_postmerge_regeneration.yml')
+2026-07-22T08:43:28.7142659Z payload = yaml.safe_load(workflow.read_text())
+2026-07-22T08:43:28.7143137Z assert payload['jobs']['regenerate-frozen-evidence']['runs-on'] == 'ubuntu-latest'
+2026-07-22T08:43:28.7143719Z assert 'research/postmerge-mean-reversion-rerun-v2' in workflow.read_text()
+2026-07-22T08:43:28.7144581Z assert 'research/postmerge-mean-reversion-rerun-v1' not in workflow.read_text()
+2026-07-22T08:43:28.7145053Z PY
+2026-07-22T08:43:28.7205783Z shell: /usr/bin/bash -e {0}
+2026-07-22T08:43:28.7206035Z ##[endgroup]
+2026-07-22T08:43:28.8141286Z ##[group]Run set -euo pipefail
+2026-07-22T08:43:28.8141609Z set -euo pipefail
+2026-07-22T08:43:28.8141895Z git config user.name "github-actions[bot]"
+2026-07-22T08:43:28.8142352Z git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+2026-07-22T08:43:28.8142779Z git add -A
+2026-07-22T08:43:28.8143098Z git commit -m "research: prepare clean mean-reversion rerun v2"
+2026-07-22T08:43:28.8143589Z git push origin HEAD:research/postmerge-mean-reversion-rerun-v2
+2026-07-22T08:43:28.8206600Z shell: /usr/bin/bash -e {0}
+2026-07-22T08:43:28.8206851Z ##[endgroup]
+2026-07-22T08:43:29.6938385Z [research/postmerge-mean-reversion-rerun-v2 268bea04] research: prepare clean mean-reversion rerun v2
+2026-07-22T08:43:29.6939404Z  8 files changed, 981 insertions(+), 267 deletions(-)
+2026-07-22T08:43:29.6940159Z  create mode 100644 .github/workflows/mean_reversion_postmerge_regeneration.yml
+2026-07-22T08:43:29.6941128Z  delete mode 100644 .github/workflows/prepare_mean_reversion_rerun_v2.yml
+2026-07-22T08:43:29.6941996Z  create mode 100644 docs/agent_reviews/mean_reversion_postmerge_regeneration.md
+2026-07-22T08:43:29.6942873Z  create mode 100644 scripts/run_mean_reversion_postmerge_regeneration.py
+2026-07-22T08:43:29.6943661Z  create mode 100644 tests/test_mean_reversion_ledger_accounting.py
+2026-07-22T08:43:29.6944649Z  create mode 100644 tests/test_mean_reversion_ledger_timing.py
+2026-07-22T08:43:29.6945355Z  delete mode 100644 tools/prepare_mean_reversion_rerun_v2.py
+2026-07-22T08:43:31.8939819Z To https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T08:43:31.8941431Z  ! [remote rejected]   HEAD -> research/postmerge-mean-reversion-rerun-v2 (refusing to allow a GitHub App to create or update workflow `.github/workflows/mean_reversion_postmerge_regeneration.yml` without `workflows` permission)
+2026-07-22T08:43:31.8943090Z error: failed to push some refs to 'https://github.com/ramgolladi1503-sys/tradebot'
+2026-07-22T08:43:31.8963842Z ##[error]Process completed with exit code 1.
+2026-07-22T08:43:31.9097627Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-22T08:43:31.9099334Z Post job cleanup.
+2026-07-22T08:43:32.0002302Z [command]/usr/bin/git version
+2026-07-22T08:43:32.0051051Z git version 2.54.0
+2026-07-22T08:43:32.0097714Z Temporarily overriding HOME='/home/runner/work/_temp/87d65dae-b5a7-49c5-806b-13819c88c442' before making global git config changes
+2026-07-22T08:43:32.0099173Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-22T08:43:32.0112966Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-22T08:43:32.0148019Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-22T08:43:32.0188469Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-22T08:43:32.0448949Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-22T08:43:32.0483034Z http.https://github.com/.extraheader
+2026-07-22T08:43:32.0496004Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-22T08:43:32.0533513Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-22T08:43:32.0806444Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-22T08:43:32.0849734Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-22T08:43:32.1278423Z Cleaning up orphan processes
+2026-07-22T08:43:32.1602848Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
