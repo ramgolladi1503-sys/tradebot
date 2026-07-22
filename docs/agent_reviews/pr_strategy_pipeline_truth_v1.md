@@ -4,14 +4,14 @@ mode: RESEARCH
 candidate_id: STRATEGY_PIPELINE_TRUTH_V1
 decision: DRAFT_REVIEW_REQUIRED
 reason: Replace scan-all and exit-code Truth execution with one exact Registry-backed implementation audit, a separate AST oracle, and hash-verified blocked diagnostics.
-timestamp: 2026-07-23T05:24:00Z
+timestamp: 2026-07-22T19:25:00Z
 is_order_action: false
 broker_api_called: false
 source: agent/strategy-pipeline-truth-v1
 
 ## Agent Work Contract
 
-Implement only the Truth-stage repair above merged PRs #700 and #701. Truth must consume exactly the signed Registry result manifest for the same strategy and pipeline run. It must independently verify the Registry artifact, implementation-file hash, canonical contract hash, declared strategy identity, and current source before running the existing Truth scanners and auditors on exactly one implementation. Success requires both the existing audit verdict and an independent AST structural oracle to pass with no residual audit blockers.
+Implement only the Truth-stage repair above draft PRs #700 and #701. Truth must consume exactly the signed Registry result manifest for the same strategy and pipeline run. It must independently verify the Registry artifact, implementation-file hash, canonical contract hash, declared strategy identity, and current source before running the existing Truth scanners and auditors on exactly one implementation. Success requires both the existing audit verdict and an independent AST structural oracle to pass with no residual audit blockers.
 
 ## Scope Guard
 
@@ -51,7 +51,7 @@ Covered isolated cases include Oracle ORB success, missing-window failure, direc
 
 ## Acceptance Proof
 
-Acceptance requires the 38-test isolated suite, the real existing-engine integration smoke, Python compilation, and every required repository workflow to pass on one immutable head against current `main`. A mismatch, partial verification, manual-review verdict, unknown oracle paradigm, direct broker coupling, contract hash mismatch, changed implementation, or residual audit blocker must prevent Truth SUCCESS.
+Acceptance requires the 38-test isolated suite, the real existing-engine integration smoke, Python compilation, all repository workflows, and all parent-stack workflows to pass on immutable heads. A mismatch, partial verification, manual-review verdict, unknown oracle paradigm, direct broker coupling, contract hash mismatch, changed implementation, or residual audit blocker must prevent Truth SUCCESS.
 
 ## Runtime Proof Required After Merge
 
@@ -63,4 +63,4 @@ This PR does not prove structural edge, positive expectancy, realistic fills, co
 
 ## Human Approval
 
-Human review is required before merge. This PR grants no paper or live trading authority, performs no automatic deployment, and cannot create an order action.
+Human review is required before merge. This stacked PR grants no paper or live trading authority, performs no automatic merge or deployment, and cannot create an order action.
