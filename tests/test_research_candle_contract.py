@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from core.research_backtest_integrity import (
+    RESEARCH_APPLEDOUBLE_METADATA,
     RESEARCH_CANDLE,
     RESEARCH_NON_CANDLE_QUOTE,
     classify_research_parquet_columns,
@@ -58,6 +59,26 @@ def test_known_quote_depth_parquet_is_explicitly_non_candle(tmp_path):
     assert classification == RESEARCH_NON_CANDLE_QUOTE
     assert frame is None
     assert symbol is None
+
+
+def test_appledouble_sidecar_with_real_counterpart_is_metadata(tmp_path):
+    real = tmp_path / "NIFTY_20260105.parquet"
+    sidecar = tmp_path / "._NIFTY_20260105.parquet"
+    _candle_frame("NIFTY").to_parquet(real)
+    sidecar.write_bytes(b"AppleDouble metadata")
+
+    classification, frame, symbol = load_research_candle_parquet(sidecar)
+
+    assert classification == RESEARCH_APPLEDOUBLE_METADATA
+    assert frame is None
+    assert symbol is None
+
+
+def test_orphan_appledouble_sidecar_fails_closed(tmp_path):
+    sidecar = tmp_path / "._NIFTY_20260105.parquet"
+    sidecar.write_bytes(b"AppleDouble metadata")
+    with pytest.raises(ValueError, match="orphan AppleDouble parquet metadata"):
+        load_research_candle_parquet(sidecar)
 
 
 def test_partial_ohlc_schema_fails_closed():
