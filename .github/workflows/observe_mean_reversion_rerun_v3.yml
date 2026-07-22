@@ -1,6 +1,6 @@
 name: Observe Mean Reversion Rerun V3
 
-# Revision 3: refresh after installing the required joblib dependency.
+# Revision 4: refresh after installing the focused WFA/backtest dependency set.
 on:
   push:
     branches:
