@@ -1,0 +1,8 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
+  "error": "20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet contains invalid nonpositive prices",
+  "error_type": "ValueError",
+  "execution_allowed": false,
+  "status": "FAILED",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/tradebot/tradebot/scripts/audit_liquidity_exhaustion_depth_readiness.py\", line 216, in main\n    summary_a = _run_once(corpus_root=corpus_root, contract=contract, target=run_a)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/tradebot/tradebot/scripts/audit_liquidity_exhaustion_depth_readiness.py\", line 155, in _run_once\n    audits, candle_dates, counts = _collect_audits(corpus_root)\n                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/tradebot/tradebot/scripts/audit_liquidity_exhaustion_depth_readiness.py\", line 119, in _collect_audits\n    audit_quote_frame(\n  File \"/home/runner/work/tradebot/tradebot/research/liquidity_exhaustion_depth_readiness_v2/depth_readiness.py\", line 121, in audit_quote_frame\n    raise ValueError(f\"{source} contains invalid nonpositive prices\")\nValueError: 20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet contains invalid nonpositive prices\n"
+}
