@@ -5,8 +5,9 @@ candidate_id: NONE
 candidate_bundle_hash: NONE
 decision: REAL_CORPUS_CERTIFICATION_PENDING
 reason: The earlier V2 LONG result was produced by prototype code containing pass-only tests, invalid registry code, malformed fold logic, placeholder provenance, and simulated or non-gating analysis. That result is revoked. The live branch now contains a clean-room, development-only replacement with executable behavioral tests and an immutable private-corpus certification workflow. No repaired candidate is recognized until generated workflow artifacts are independently reviewed.
+timestamp: 2026-07-22T07:08:00Z
 source: PR #688 branch `research/ml-strategy-discovery-v2-stability`
-code_commit_sha: `98f011bb6ee9c3b84b2b861e98cbebd330022be9`
+code_commit_sha: `e14e17b7afcb6aa98710856c1898e1ea73d362fb`
 read_only: true
 is_order_action: false
 broker_api_called: false
@@ -61,7 +62,7 @@ Safety fields remain read-only and non-executable. Tests cover forbidden feature
 
 - Clean-room compile: passed for `research/ml_strategy_discovery_v2`, the V2 runner, and split V2 tests.
 - Behavioral suite: `52 passed` in the isolated fixture.
-- Remote repaired head: `98f011bb6ee9c3b84b2b861e98cbebd330022be9`.
+- Repaired implementation head before this evidence-only commit: `e14e17b7afcb6aa98710856c1898e1ea73d362fb`.
 - Corpus archive SHA-256: `8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7`.
 - Minimal V1 evidence archive SHA-256: `c0e2d6d872ac292d3453bf835688b096a2817176e8dd000180b09f0b46054d58`.
 - GitHub repository gates and the private-corpus workflow are required to complete successfully before the PR may leave draft status.
