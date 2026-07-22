@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Refuse unexpected branch or commit
         run: |
@@ -87,11 +87,7 @@ jobs:
 
       - name: Run governed campaign twice
         run: |
-          PRE="$(python - <<'PY'
-import json
-print(json.load(open('research/kite_five_minute_campaign/evidence/v2/pre_outcome_freeze_manifest.json'))['pre_outcome_freeze_commit'])
-PY
-)"
+          PRE="$(python -c "import json; print(json.load(open('research/kite_five_minute_campaign/evidence/v2/pre_outcome_freeze_manifest.json'))['pre_outcome_freeze_commit'])")"
           python scripts/run_kite_five_minute_campaign.py --archive "$KITE_ARCHIVE" --output-root "$GITHUB_WORKSPACE" --allow-real-outcome --pre-outcome-freeze-commit "$PRE"
 
       - name: Run independent audit
