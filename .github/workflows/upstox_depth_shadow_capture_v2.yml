@@ -1,5 +1,6 @@
 name: Upstox Depth Shadow Capture V2
 
+# Revision 2: validate recorder, deterministic universe, and immutable split registry.
 on:
   push:
     branches:
@@ -8,7 +9,10 @@ on:
       - ".github/workflows/upstox_depth_shadow_capture_v2.yml"
       - "research/upstox_depth_shadow_capture_v2/**"
       - "scripts/capture_upstox_depth_shadow.py"
+      - "scripts/build_upstox_depth_shadow_universe.py"
+      - "scripts/update_upstox_depth_shadow_dataset_registry.py"
       - "tests/test_upstox_depth_shadow_capture_v2.py"
+      - "tests/test_upstox_depth_shadow_dataset_v2.py"
       - "docs/agent_reviews/upstox_depth_shadow_capture_v2.md"
   workflow_dispatch:
 
@@ -36,7 +40,7 @@ jobs:
           git cat-file -e "${PRODUCTION_BASE_SHA}^{commit}"
           git merge-base --is-ancestor "${PRODUCTION_BASE_SHA}" HEAD
           git diff --name-only "${PRODUCTION_BASE_SHA}..HEAD" > /tmp/changed.txt
-          forbidden="$(grep -Ev '^(research/upstox_depth_shadow_capture_v2/|scripts/capture_upstox_depth_shadow.py$|tests/test_upstox_depth_shadow_capture_v2.py$|docs/agent_reviews/upstox_depth_shadow_capture_v2.md$|.github/workflows/upstox_depth_shadow_capture_v2.yml$)' /tmp/changed.txt || true)"
+          forbidden="$(grep -Ev '^(research/upstox_depth_shadow_capture_v2/|scripts/capture_upstox_depth_shadow.py$|scripts/build_upstox_depth_shadow_universe.py$|scripts/update_upstox_depth_shadow_dataset_registry.py$|tests/test_upstox_depth_shadow_capture_v2.py$|tests/test_upstox_depth_shadow_dataset_v2.py$|docs/agent_reviews/upstox_depth_shadow_capture_v2.md$|.github/workflows/upstox_depth_shadow_capture_v2.yml$)' /tmp/changed.txt || true)"
           if test -n "${forbidden}"; then
             printf '%s\n' "${forbidden}" >&2
             echo "Forbidden production or unrelated file in shadow-recorder diff" >&2
@@ -64,7 +68,11 @@ jobs:
           paths = [
               Path('research/upstox_depth_shadow_capture_v2/parser.py'),
               Path('research/upstox_depth_shadow_capture_v2/session.py'),
+              Path('research/upstox_depth_shadow_capture_v2/universe.py'),
+              Path('research/upstox_depth_shadow_capture_v2/dataset_registry.py'),
               Path('scripts/capture_upstox_depth_shadow.py'),
+              Path('scripts/build_upstox_depth_shadow_universe.py'),
+              Path('scripts/update_upstox_depth_shadow_dataset_registry.py'),
           ]
           forbidden_roots = {
               'core', 'strategies', 'config', 'kiteconnect',
@@ -93,17 +101,27 @@ jobs:
           print('isolated shadow-recorder import and call boundary: PASS')
           PY
 
-      - name: Compile and exercise CLI contract
+      - name: Compile and exercise CLI contracts
         run: |
           set -euo pipefail
           python -m py_compile \
             research/upstox_depth_shadow_capture_v2/parser.py \
             research/upstox_depth_shadow_capture_v2/session.py \
-            scripts/capture_upstox_depth_shadow.py
-          PYTHONPATH=. python scripts/capture_upstox_depth_shadow.py --help >/tmp/help.txt
-          grep -q "Research-only Upstox V3 full-depth shadow recorder" /tmp/help.txt
+            research/upstox_depth_shadow_capture_v2/universe.py \
+            research/upstox_depth_shadow_capture_v2/dataset_registry.py \
+            scripts/capture_upstox_depth_shadow.py \
+            scripts/build_upstox_depth_shadow_universe.py \
+            scripts/update_upstox_depth_shadow_dataset_registry.py
+          PYTHONPATH=. python scripts/capture_upstox_depth_shadow.py --help >/tmp/capture-help.txt
+          PYTHONPATH=. python scripts/build_upstox_depth_shadow_universe.py --help >/tmp/universe-help.txt
+          PYTHONPATH=. python scripts/update_upstox_depth_shadow_dataset_registry.py --help >/tmp/registry-help.txt
+          grep -q "Research-only Upstox V3 full-depth shadow recorder" /tmp/capture-help.txt
+          grep -q "deterministic Upstox depth-shadow instrument universe" /tmp/universe-help.txt
+          grep -q "immutable development/holdout registry" /tmp/registry-help.txt
 
-      - name: Run deterministic parser, storage, and readiness tests
+      - name: Run deterministic parser, storage, universe, and registry tests
         run: |
           set -euo pipefail
-          PYTHONPATH=. python -m pytest -q tests/test_upstox_depth_shadow_capture_v2.py
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_upstox_depth_shadow_capture_v2.py \
+            tests/test_upstox_depth_shadow_dataset_v2.py
