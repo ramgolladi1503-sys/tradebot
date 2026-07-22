@@ -25,11 +25,11 @@ The signal uses only contemporaneous or backward-looking fields. The candidate d
 
 ## GSD Review
 
-The frozen campaign now contains exactly five hypotheses and exactly forty total variants. DORL-V3 consumes the remaining four-variant budget. The specification freezes DTE, delta band, time window, buy-only execution, quote age, OFI, option-flow, book-imbalance, IV-shock, cost-buffer, latency, holding-time, and negative-control contracts before any outcome screen.
+The frozen campaign now contains exactly five hypotheses and exactly forty total variants. DORL-V3 consumes the remaining four-variant budget. The specification freezes DTE, 0.55–0.70 absolute-delta band, time window, buy-only execution, quote age, OFI, option-flow, book-imbalance, IV-shock, cost-buffer, latency, holding-time, and negative-control contracts before any outcome screen. The signal oracle rejects contracts outside the frozen delta band.
 
 ## QA / Safety Review
 
-The focused suite proves Black-76 inversion, finite Greeks, bullish CE and bearish PE symmetry, stale/wrong-side rejection, already-repriced IV rejection, future-mutation isolation, complete-data readiness, missing-futures rejection, candidate-free blocked evidence, and invalid-quote rejection. All artifacts are read-only, contain no order action, call no broker, and grant no live permission.
+The focused suite proves Black-76 inversion, finite Greeks, bullish CE and bearish PE symmetry, frozen delta-band rejection, stale/wrong-side rejection, already-repriced IV rejection, future-mutation isolation, complete-data readiness, missing-futures rejection, candidate-free blocked evidence, and invalid-quote rejection. All artifacts are read-only, contain no order action, call no broker, and grant no live permission.
 
 ## Acceptance Proof
 
