@@ -71,6 +71,8 @@ There are no write tools for reset, checkout, merge, deletion, force-push, or re
 
 ## Installation
 
+### Same checkout as the audited worktree
+
 From the repository root:
 
 ```bash
@@ -79,19 +81,45 @@ bash scripts/install_antigravity_mcp.sh
 
 The installer:
 
-1. creates `.venv-mcp`;
+1. creates `.venv-mcp` in the MCP code checkout;
 2. installs the stable MCP Python SDK line from `requirements-mcp.txt`;
-3. writes the ignored workspace config `.agents/mcp_config.json`;
-4. points the four servers at the current repository and evidence roots;
-5. performs an import smoke check.
+3. writes the ignored workspace config `.agents/mcp_config.json` into the audited target worktree;
+4. points the four servers at the audited target, evidence roots, and data roots;
+5. keeps the server process working directory on the MCP code checkout so Python modules remain importable;
+6. performs an import smoke check.
 
-Override roots when needed:
+### Isolated MCP code checkout auditing another TradeBot worktree
+
+Use this mode for the continuous structural-edge research worktree:
 
 ```bash
-TRADEBOT_EVIDENCE_ROOT=/Users/madhuram/tradebot-ml-evidence \
-TRADEBOT_DATA_ROOTS="/Users/madhuram/tradebot/runtime:/another/read-only/root" \
+cd /Users/madhuram/tradebot-antigravity-mcp-v1
+
+aCTIVE_RESEARCH=/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1
+
+TRADEBOT_TARGET_ROOT="$ACTIVE_RESEARCH" \
+TRADEBOT_MCP_CONFIG_ROOT="$ACTIVE_RESEARCH" \
+TRADEBOT_EVIDENCE_ROOTS="/Users/madhuram/tradebot-ml-evidence:$ACTIVE_RESEARCH/research" \
+TRADEBOT_DATA_ROOTS="/Users/madhuram/tradebot/runtime" \
 bash scripts/install_antigravity_mcp.sh
 ```
+
+The resulting workspace configuration is written to:
+
+```text
+/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1/.agents/mcp_config.json
+```
+
+Open that target worktree in Antigravity and reload its MCP servers. The server commands still use the isolated MCP checkout's `.venv-mcp` and source modules, while `TRADEBOT_ROOT` points at the active research worktree.
+
+Environment controls:
+
+- `TRADEBOT_TARGET_ROOT`: repository/worktree that evidence and Git tools audit;
+- `TRADEBOT_MCP_CONFIG_ROOT`: workspace receiving `.agents/mcp_config.json`; defaults to the target root;
+- `TRADEBOT_EVIDENCE_ROOTS`: `os.pathsep`-separated read-only evidence roots;
+- `TRADEBOT_EVIDENCE_ROOT`: legacy single evidence-root alias;
+- `TRADEBOT_DATA_ROOTS`: `os.pathsep`-separated local data roots;
+- `TRADEBOT_MCP_VENV`: optional isolated virtual-environment path.
 
 Antigravity supports workspace MCP configuration under `.agents/mcp_config.json`. Reload MCP servers from the Antigravity MCP manager after installation.
 
