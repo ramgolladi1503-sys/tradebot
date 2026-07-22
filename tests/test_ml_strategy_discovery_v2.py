@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from research.ml_strategy_discovery_v2 import artifacts, pipeline
 from research.ml_strategy_discovery_v2.contracts import (
     DEVELOPMENT,
     FRESH_CONSUMED,
@@ -21,7 +19,6 @@ from research.ml_strategy_discovery_v2.contracts import (
     is_forbidden_feature,
     require_causal_features,
 )
-from research.ml_strategy_discovery_v2.controls import run_negative_controls
 from research.ml_strategy_discovery_v2.data import (
     ConfirmationAuthorizationError,
     DatasetRegistryViolation,
@@ -34,50 +31,6 @@ from research.ml_strategy_discovery_v2.data import (
     locked_confirmation_metadata,
     select_development_bars,
 )
-from research.ml_strategy_discovery_v2.folds import (
-    fold_manifest_hash,
-    generate_anchored_folds,
-    generate_nested_folds,
-)
-from research.ml_strategy_discovery_v2.freeze import (
-    candidate_bundle,
-    write_frozen_registry,
-)
-from research.ml_strategy_discovery_v2.gates import (
-    base_rate_gate,
-    bootstrap_gate,
-    concentration_gate,
-    concentration_metrics,
-    fold_gate,
-    imputation_dependence,
-    performance_metrics,
-    session_bootstrap_expectancy,
-    support_gate,
-)
-from research.ml_strategy_discovery_v2.model import (
-    RuleReproductionError,
-    fit_imputer,
-    generate_candidates,
-    rule_mask,
-    semantic_frame_hash,
-)
-from research.ml_strategy_discovery_v2.source import (
-    SourceCertificationError,
-    development_manifest_payload,
-    load_and_verify_manifest,
-    resolve_source_file,
-    verify_manifest_sidecar,
-    verify_record_file,
-)
-from research.ml_strategy_discovery_v2.stability import (
-    benjamini_hochberg,
-    jaccard_selected_rows,
-    max_statistic_test,
-    permuted_labels_by_session,
-    recurrence_summary,
-    rule_similarity,
-)
-
 
 def _registry_payload() -> dict:
     return {
@@ -177,7 +130,7 @@ def test_load_registry_accepts_exact_contract(tmp_path: Path) -> None:
     path.write_text(json.dumps(_registry_payload()), encoding="utf-8")
     registry = load_registry(path)
     assert registry.classify("2024-01-01") == DEVELOPMENT
-    assert len(registry.source_hash) == 64
+    assert registry.source_hash == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_load_registry_rejects_boundary_mutation(tmp_path: Path) -> None:
@@ -281,3 +234,5 @@ def test_confirmation_authorization_rejects_wrong_binding(tmp_path: Path) -> Non
             evaluation_id="eval-1",
             state_path=state,
         )
+
+

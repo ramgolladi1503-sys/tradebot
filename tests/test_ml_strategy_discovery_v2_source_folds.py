@@ -2,64 +2,25 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from research.ml_strategy_discovery_v2 import artifacts, pipeline
 from research.ml_strategy_discovery_v2.contracts import (
     DEVELOPMENT,
     FRESH_CONSUMED,
     FRESH_LOCKED,
     HOLDOUT_LOCKED,
     VALIDATION_CONSUMED,
-    StabilityConfig,
     canonical_hash,
-    is_forbidden_feature,
-    require_causal_features,
 )
-from research.ml_strategy_discovery_v2.controls import run_negative_controls
-from research.ml_strategy_discovery_v2.data import (
-    ConfirmationAuthorizationError,
-    DatasetRegistryViolation,
-    TokenReplayViolation,
-    consume_confirmation_authorization,
-    default_registry,
-    issue_confirmation_authorization,
-    load_development_for_selection,
-    load_registry,
-    locked_confirmation_metadata,
-    select_development_bars,
-)
+from research.ml_strategy_discovery_v2.data import default_registry
 from research.ml_strategy_discovery_v2.folds import (
     fold_manifest_hash,
     generate_anchored_folds,
     generate_nested_folds,
-)
-from research.ml_strategy_discovery_v2.freeze import (
-    candidate_bundle,
-    write_frozen_registry,
-)
-from research.ml_strategy_discovery_v2.gates import (
-    base_rate_gate,
-    bootstrap_gate,
-    concentration_gate,
-    concentration_metrics,
-    fold_gate,
-    imputation_dependence,
-    performance_metrics,
-    session_bootstrap_expectancy,
-    support_gate,
-)
-from research.ml_strategy_discovery_v2.model import (
-    RuleReproductionError,
-    fit_imputer,
-    generate_candidates,
-    rule_mask,
-    semantic_frame_hash,
 )
 from research.ml_strategy_discovery_v2.source import (
     SourceCertificationError,
@@ -69,15 +30,6 @@ from research.ml_strategy_discovery_v2.source import (
     verify_manifest_sidecar,
     verify_record_file,
 )
-from research.ml_strategy_discovery_v2.stability import (
-    benjamini_hochberg,
-    jaccard_selected_rows,
-    max_statistic_test,
-    permuted_labels_by_session,
-    recurrence_summary,
-    rule_similarity,
-)
-
 
 def _registry_payload() -> dict:
     return {
@@ -258,11 +210,13 @@ def test_source_symlink_is_rejected(tmp_path: Path) -> None:
 def test_anchored_folds_are_chronological_and_embargoed() -> None:
     sessions = pd.bdate_range("2024-01-01", periods=30).strftime("%Y-%m-%d")
     folds = generate_anchored_folds(sessions, num_folds=5, embargo_sessions=1)
-    assert len(folds) == 5
+    assert [fold.fold for fold in folds] == [1, 2, 3, 4, 5]
     for fold in folds:
         assert max(fold.train_sessions) < min(fold.validation_sessions)
         assert not set(fold.train_sessions) & set(fold.validation_sessions)
-        assert len(fold.embargo_sessions) == 1
+        ordered = sorted(set(sessions))
+        expected_previous = ordered[ordered.index(fold.validation_start) - 1]
+        assert fold.embargo_sessions == (expected_previous,)
 
 
 def test_fold_generation_is_deterministic() -> None:
@@ -286,3 +240,5 @@ def test_nested_folds_never_use_outer_validation_in_inner_training() -> None:
 def test_too_many_folds_fail_closed() -> None:
     with pytest.raises(ValueError, match="too few sessions"):
         generate_anchored_folds(["2024-01-01", "2024-01-02"], num_folds=3)
+
+
