@@ -1,0 +1,40 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "stage": "A_HISTORICAL_PATTERN_ATLAS",
+  "purpose": "Measure whether extreme cross-index residual displacement historically reverted, and whether immediate contraction plus failed continuation improved that behavior.",
+  "development_only": true,
+  "final_holdout_status": "NOT_ASSIGNED_REQUIRES_NEW_UNSEEN_DATA",
+  "frozen_corpus": {
+    "repository": "ramgolladi1503-sys/tradebot-research-corpus",
+    "tag": "upstox-corpus-v1",
+    "archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+    "expected_candle_files": 1547,
+    "expected_quote_depth_files": 129,
+    "expected_appledouble_files": 1676
+  },
+  "canonical_indices": ["NIFTY", "BANKNIFTY", "SENSEX"],
+  "bar_minutes": 5,
+  "volatility_window_bars": 60,
+  "volatility_min_periods": 30,
+  "residual_definition": "target standardized log return minus mean standardized log return of available peer indices",
+  "causality": "the volatility normalizer is shifted by one completed bar",
+  "event_threshold_abs_residual_z": 2.0,
+  "confirmation": {
+    "immediate_next_completed_bar_only": true,
+    "maximum_residual_contraction_ratio": 0.5,
+    "maximum_continuation_extension_fraction_of_event_range": 0.25
+  },
+  "outcome_horizons_minutes": [5, 15, 30, 60],
+  "negative_control": {
+    "type": "direction permutation within target symbol and time-of-day bucket",
+    "permutations": 500,
+    "seed": 42
+  },
+  "result_boundary": {
+    "strategy_created": false,
+    "structural_edge_claim_allowed": false,
+    "profitability_claim_allowed": false,
+    "paper_live_allowed": false,
+    "execution_allowed": false
+  }
+}
