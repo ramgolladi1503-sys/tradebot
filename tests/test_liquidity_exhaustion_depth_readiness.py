@@ -54,7 +54,31 @@ def test_quote_frame_audit_reports_gaps_spreads_and_crossed_markets() -> None:
     assert audit["median_gap_seconds"] == pytest.approx(1.0)
     assert audit["p95_gap_seconds"] == pytest.approx(1.0)
     assert audit["crossed_market_count"] == 1
+    assert audit["invalid_price_row_count"] == 0
     assert audit["depth_capability"]["supports_imbalance_or_replenishment"] is True
+
+
+def test_nonpositive_ltp_is_inventoried_and_blocks_readiness() -> None:
+    frame = _quote_frame(with_sizes=True)
+    frame.loc[2, "ltp"] = 0.0
+    audit = audit_quote_frame(frame, source="x", date_key="20260709")
+    assert audit["invalid_price_row_count"] == 1
+    contract = DepthReadinessContract(
+        minimum_development_sessions=1,
+        minimum_future_holdout_sessions=1,
+        minimum_session_span_minutes=0.01,
+        maximum_median_gap_seconds=2.0,
+        maximum_p95_gap_seconds=2.0,
+        maximum_invalid_price_row_rate=0.0,
+    )
+    summary = summarize_depth_readiness(
+        [audit],
+        candle_dates={"20260709"},
+        future_holdout_sessions_available=1,
+        contract=contract,
+    )
+    assert summary["classification"] == "DEPTH_DATA_NOT_READY_FOR_EXHAUSTION_DISCOVERY"
+    assert any(blocker.startswith("INVALID_PRICE_ROW_RATE_TOO_HIGH") for blocker in summary["blockers"])
 
 
 def test_readiness_fails_closed_for_one_session() -> None:

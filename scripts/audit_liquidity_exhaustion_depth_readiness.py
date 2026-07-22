@@ -60,6 +60,7 @@ def _load_contract(project_root: Path) -> tuple[dict[str, Any], DepthReadinessCo
         maximum_median_gap_seconds=float(raw["maximum_median_gap_seconds"]),
         maximum_p95_gap_seconds=float(raw["maximum_p95_gap_seconds"]),
         maximum_crossed_market_rate=float(raw["maximum_crossed_market_rate"]),
+        maximum_invalid_price_row_rate=float(raw["maximum_invalid_price_row_rate"]),
         requires_bid_and_ask_size_or_structured_depth=bool(
             raw["requires_bid_and_ask_size_or_structured_depth"]
         ),

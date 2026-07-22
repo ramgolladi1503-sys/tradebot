@@ -18,6 +18,7 @@ class DepthReadinessContract:
     maximum_median_gap_seconds: float = 5.0
     maximum_p95_gap_seconds: float = 30.0
     maximum_crossed_market_rate: float = 0.001
+    maximum_invalid_price_row_rate: float = 0.0
     requires_bid_and_ask_size_or_structured_depth: bool = True
 
     def validate(self) -> None:
@@ -33,6 +34,8 @@ class DepthReadinessContract:
             raise ValueError("maximum_p95_gap_seconds cannot be below the median limit")
         if not 0 <= self.maximum_crossed_market_rate <= 1:
             raise ValueError("maximum_crossed_market_rate must be between zero and one")
+        if not 0 <= self.maximum_invalid_price_row_rate <= 1:
+            raise ValueError("maximum_invalid_price_row_rate must be between zero and one")
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -114,13 +117,17 @@ def audit_quote_frame(
     ltp = pd.to_numeric(frame["ltp"], errors="coerce")
     bid = pd.to_numeric(frame["bid"], errors="coerce")
     ask = pd.to_numeric(frame["ask"], errors="coerce")
-    missing_price_count = int((ltp.isna() | bid.isna() | ask.isna()).sum())
-    if missing_price_count:
-        raise ValueError(f"{source} contains missing/non-numeric top-of-book prices")
-    if (ltp <= 0).any() or (bid < 0).any() or (ask < 0).any():
-        raise ValueError(f"{source} contains invalid nonpositive prices")
+    invalid_price = (
+        ltp.isna()
+        | bid.isna()
+        | ask.isna()
+        | (ltp <= 0)
+        | (bid < 0)
+        | (ask < 0)
+    )
+    invalid_price_count = int(invalid_price.sum())
 
-    active = (bid > 0) & (ask > 0)
+    active = (~invalid_price) & (bid > 0) & (ask > 0)
     crossed = active & (bid > ask)
     locked = active & (bid == ask)
     midpoint = (bid + ask) / 2.0
@@ -155,6 +162,8 @@ def audit_quote_frame(
         "median_gap_seconds": float(gaps.median()) if not gaps.empty else None,
         "p95_gap_seconds": float(gaps.quantile(0.95)) if not gaps.empty else None,
         "maximum_gap_seconds": float(gaps.max()) if not gaps.empty else None,
+        "invalid_price_row_count": invalid_price_count,
+        "invalid_price_row_rate": float(invalid_price_count / row_count),
         "active_top_of_book_rows": int(active.sum()),
         "crossed_market_count": int(crossed.sum()),
         "crossed_market_rate": float(crossed.sum() / max(int(active.sum()), 1)),
@@ -195,6 +204,9 @@ def summarize_depth_readiness(
     p95_gaps = [item["p95_gap_seconds"] for item in file_audits if item["p95_gap_seconds"] is not None]
     crossed_rows = sum(int(item["crossed_market_count"]) for item in file_audits)
     active_rows = sum(int(item["active_top_of_book_rows"]) for item in file_audits)
+    total_rows = sum(int(item["row_count"]) for item in file_audits)
+    invalid_price_rows = sum(int(item["invalid_price_row_count"]) for item in file_audits)
+    invalid_price_rate = float(invalid_price_rows / max(total_rows, 1))
     crossed_rate = float(crossed_rows / max(active_rows, 1))
     depth_ready_files = sum(
         bool(item["depth_capability"]["supports_imbalance_or_replenishment"])
@@ -229,6 +241,13 @@ def summarize_depth_readiness(
         blockers.append("P95_QUOTE_GAP_TOO_LARGE_OR_MISSING")
     if crossed_rate > contract.maximum_crossed_market_rate:
         blockers.append("CROSSED_MARKET_RATE_TOO_HIGH")
+    if invalid_price_rate > contract.maximum_invalid_price_row_rate:
+        blockers.append(
+            "INVALID_PRICE_ROW_RATE_TOO_HIGH:"
+            f"{invalid_price_rate}>{contract.maximum_invalid_price_row_rate}"
+        )
+    if active_rows == 0:
+        blockers.append("NO_ACTIVE_TOP_OF_BOOK_ROWS")
     if contract.requires_bid_and_ask_size_or_structured_depth and depth_ready_files != len(file_audits):
         blockers.append(
             f"BID_ASK_SIZE_OR_STRUCTURED_DEPTH_MISSING:{depth_ready_files}/{len(file_audits)}"
@@ -255,6 +274,10 @@ def summarize_depth_readiness(
         "aggregate_median_gap_seconds": aggregate_median_gap,
         "aggregate_p95_gap_seconds": aggregate_p95_gap,
         "crossed_market_rate": crossed_rate,
+        "total_quote_rows": total_rows,
+        "invalid_price_rows": invalid_price_rows,
+        "invalid_price_row_rate": invalid_price_rate,
+        "active_top_of_book_rows": active_rows,
         "depth_capable_file_count": depth_ready_files,
         "unique_symbol_count": len(unique_symbols),
         "unique_token_count": len(unique_tokens),

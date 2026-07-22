@@ -7,8 +7,16 @@
   "maximum_median_gap_seconds": 5.0,
   "maximum_p95_gap_seconds": 30.0,
   "maximum_crossed_market_rate": 0.001,
+  "maximum_invalid_price_row_rate": 0.0,
   "requires_bid_and_ask_size_or_structured_depth": true,
-  "required_columns": ["ts", "token", "symbol", "ltp", "bid", "ask"],
+  "required_columns": [
+    "ts",
+    "token",
+    "symbol",
+    "ltp",
+    "bid",
+    "ask"
+  ],
   "result_boundary": {
     "strategy_created": false,
     "edge_claim_allowed": false,

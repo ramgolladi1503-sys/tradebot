@@ -19,6 +19,7 @@ Determine whether the immutable quote/depth corpus is capable of supporting a ca
 - aggregate median quote gap no greater than 5 seconds;
 - aggregate p95 quote gap no greater than 30 seconds;
 - crossed-market rate no greater than 0.1%;
+- zero missing, non-numeric, nonpositive-LTP or negative bid/ask rows;
 - bid and ask size columns, or a non-null structured depth/order-book field;
 - quote dates must have corresponding candle authority.
 
