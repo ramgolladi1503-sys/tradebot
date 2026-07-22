@@ -36,15 +36,15 @@ jobs:
       - name: Checkout evidence branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           ref: research/postmerge-mean-reversion-rerun-v3
 
       - name: Verify production ancestry
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main
+          git cat-file -e "${PRODUCTION_BASE_SHA}^{commit}"
           git merge-base --is-ancestor "${PRODUCTION_BASE_SHA}" HEAD
-          test "$(git show -s --format=%P "${PRODUCTION_BASE_SHA}" | wc -w | tr -d ' ')" -ge 1
+          test "$(git rev-list --count "${PRODUCTION_BASE_SHA}..HEAD")" -ge 1
 
       - name: Set up Python
         uses: actions/setup-python@v5
