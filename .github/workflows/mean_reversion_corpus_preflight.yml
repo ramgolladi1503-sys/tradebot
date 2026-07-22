@@ -1,0 +1,147 @@
+name: Mean Reversion Corpus Access Preflight
+
+on:
+  push:
+    branches:
+      - research/postmerge-mean-reversion-rerun-v1
+    paths:
+      - ".github/workflows/mean_reversion_corpus_preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-corpus-access:
+    runs-on: ubuntu-latest
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+      CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+
+    steps:
+      - name: Checkout evidence branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/postmerge-mean-reversion-rerun-v1
+          fetch-depth: 1
+
+      - name: Evaluate private release access
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set +e
+          mkdir -p /tmp/corpus-preflight
+          credential_present=false
+          if test -n "${GH_TOKEN}"; then credential_present=true; fi
+
+          if test "${credential_present}" != true; then
+            STATUS=FAILED STAGE=CORPUS_CREDENTIAL_MISSING EXIT_CODE=1 CREDENTIAL_PRESENT=false python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path('/tmp/corpus-preflight/status.json').write_text(json.dumps({
+              'status': os.environ['STATUS'],
+              'stage': os.environ['STAGE'],
+              'exit_code': int(os.environ['EXIT_CODE']),
+              'credential_present': os.environ['CREDENTIAL_PRESENT'] == 'true',
+              'producer_commit': os.environ['GITHUB_SHA'],
+              'corpus_repo': os.environ['CORPUS_REPO'],
+              'corpus_tag': os.environ['CORPUS_TAG'],
+              'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }, indent=2, sort_keys=True) + '\n')
+          PY
+          else
+            gh release view "${CORPUS_TAG}" --repo "${CORPUS_REPO}" --json tagName,assets > /tmp/corpus-preflight/release.json
+            rc=$?
+            if test "${rc}" -ne 0; then
+              STATUS=FAILED STAGE=CORPUS_RELEASE_ACCESS_FAILED EXIT_CODE="${rc}" CREDENTIAL_PRESENT=true python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path('/tmp/corpus-preflight/status.json').write_text(json.dumps({
+              'status': os.environ['STATUS'],
+              'stage': os.environ['STAGE'],
+              'exit_code': int(os.environ['EXIT_CODE']),
+              'credential_present': os.environ['CREDENTIAL_PRESENT'] == 'true',
+              'producer_commit': os.environ['GITHUB_SHA'],
+              'corpus_repo': os.environ['CORPUS_REPO'],
+              'corpus_tag': os.environ['CORPUS_TAG'],
+              'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }, indent=2, sort_keys=True) + '\n')
+          PY
+            else
+              python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          release = json.loads(Path('/tmp/corpus-preflight/release.json').read_text())
+          names = sorted(str(item.get('name')) for item in release.get('assets', []))
+          required = {
+              'upstox_candidate_replay_v1.tar.gz',
+              'upstox_candidate_replay_v1.tar.gz.sha256',
+              'parquet_sha256_manifest.txt',
+          }
+          missing = sorted(required - set(names))
+          status = 'PASSED' if not missing else 'FAILED'
+          stage = 'CORPUS_RELEASE_ASSETS_VERIFIED' if not missing else 'CORPUS_RELEASE_ASSETS_MISSING'
+          Path('/tmp/corpus-preflight/status.json').write_text(json.dumps({
+              'status': status,
+              'stage': stage,
+              'exit_code': 0 if not missing else 1,
+              'credential_present': True,
+              'producer_commit': os.environ['GITHUB_SHA'],
+              'corpus_repo': os.environ['CORPUS_REPO'],
+              'corpus_tag': release.get('tagName'),
+              'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
+              'release_assets': names,
+              'missing_required_assets': missing,
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }, indent=2, sort_keys=True) + '\n')
+          if missing:
+              raise SystemExit(1)
+          PY
+              rc=$?
+            fi
+          fi
+          exit "${rc:-1}"
+
+      - name: Commit preflight evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          target="docs/research/mean_reversion_postmerge_regeneration"
+          mkdir -p "${target}"
+          if test -f /tmp/corpus-preflight/status.json; then
+            cp /tmp/corpus-preflight/status.json "${target}/corpus_preflight_status.json"
+          else
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/corpus_preflight_status.json')
+          target.write_text(json.dumps({
+              'status': 'FAILED',
+              'stage': 'PREFLIGHT_STATUS_NOT_CREATED',
+              'producer_commit': os.environ['GITHUB_SHA'],
+              'execution_allowed': False,
+              'paper_live_allowed': False,
+          }, indent=2, sort_keys=True) + '\n')
+          PY
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${target}/corpus_preflight_status.json"
+          if ! git diff --cached --quiet; then
+            git commit -m "research: publish corpus access preflight"
+            git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
+          fi
