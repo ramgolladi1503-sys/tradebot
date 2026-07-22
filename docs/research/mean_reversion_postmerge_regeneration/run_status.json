@@ -3,7 +3,7 @@
   "execution_allowed": false,
   "exit_code": 1,
   "paper_live_allowed": false,
-  "producer_commit": "acd62707994cb8aaa29f7809d6050f0cd756f5c2",
+  "producer_commit": "01de7c1753fd11953b8133880a34c1c014e6f09d",
   "stage": "AUTHORITATIVE_REGENERATION",
   "status": "FAILED"
 }
