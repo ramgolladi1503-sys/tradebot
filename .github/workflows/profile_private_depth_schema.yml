@@ -1,0 +1,158 @@
+name: Profile Private Depth Schema
+
+on:
+  push:
+    branches:
+      - ops/observe-liquidity-exhaustion-depth-readiness-v2
+    paths:
+      - ".github/workflows/profile_private_depth_schema.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/observe-liquidity-exhaustion-depth-readiness-v2
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install schema dependencies
+        run: python -m pip install pandas pyarrow numpy
+
+      - name: Download immutable corpus
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/assets" runtime
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir "${RUNNER_TEMP}/assets" \
+            --pattern "upstox_candidate_replay_v1.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/assets/upstox_candidate_replay_v1.tar.gz" -C runtime
+
+      - name: Profile structure without scalar values
+        run: |
+          set -euo pipefail
+          mkdir -p docs/ops
+          python - <<'PY'
+          from __future__ import annotations
+
+          import ast
+          import json
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from typing import Any
+
+          import numpy as np
+          import pandas as pd
+          import pyarrow.parquet as pq
+
+          root = Path('runtime/upstox_candidate_replay')
+          files = []
+          for path in sorted(root.glob('*/underlying/*.parquet')):
+              if path.name.startswith('._'):
+                  continue
+              schema = pq.read_schema(path)
+              names = set(schema.names)
+              if {'ts', 'token', 'symbol', 'ltp', 'bid', 'ask', 'depth'}.issubset(names):
+                  files.append(path)
+
+          type_counts = Counter()
+          key_paths = Counter()
+          sequence_lengths = defaultdict(Counter)
+          parse_modes = Counter()
+          file_schemas = Counter()
+          sampled_non_null = 0
+
+          def normalize(value: Any) -> tuple[Any, str]:
+              if isinstance(value, str):
+                  text = value.strip()
+                  if not text:
+                      return None, 'empty_string'
+                  try:
+                      return json.loads(text), 'json_string'
+                  except Exception:
+                      try:
+                          return ast.literal_eval(text), 'literal_string'
+                      except Exception:
+                          return value, 'opaque_string'
+              if isinstance(value, np.ndarray):
+                  return value.tolist(), 'numpy_array'
+              return value, type(value).__name__
+
+          def walk(value: Any, path: str, depth: int = 0) -> None:
+              if depth > 6:
+                  key_paths[path + '.<depth_limit>'] += 1
+                  return
+              value, mode = normalize(value)
+              type_counts[f'{path}:{type(value).__name__}'] += 1
+              if isinstance(value, dict):
+                  for key in sorted(value, key=lambda x: str(x)):
+                      child = f'{path}.{key}'
+                      key_paths[child] += 1
+                      walk(value[key], child, depth + 1)
+              elif isinstance(value, (list, tuple)):
+                  sequence_lengths[path][len(value)] += 1
+                  for index, item in enumerate(value[:3]):
+                      walk(item, f'{path}[]', depth + 1)
+
+          for path in files:
+              schema = pq.read_schema(path)
+              file_schemas[str(schema.field('depth').type)] += 1
+              series = pd.read_parquet(path, columns=['depth'])['depth']
+              for raw in series:
+                  if raw is None:
+                      continue
+                  try:
+                      if bool(pd.isna(raw)):
+                          continue
+                  except Exception:
+                      pass
+                  normalized, mode = normalize(raw)
+                  parse_modes[mode] += 1
+                  walk(normalized, 'depth')
+                  sampled_non_null += 1
+                  if sampled_non_null >= 500:
+                      break
+              if sampled_non_null >= 500:
+                  break
+
+          output = {
+              'classification': 'STRUCTURED_DEPTH_SCHEMA_PROFILE_NO_MARKET_VALUES',
+              'quote_depth_file_count': len(files),
+              'sampled_non_null_depth_rows': sampled_non_null,
+              'depth_arrow_type_counts': dict(sorted(file_schemas.items())),
+              'parse_mode_counts': dict(sorted(parse_modes.items())),
+              'key_path_counts': dict(sorted(key_paths.items())),
+              'value_type_counts': dict(sorted(type_counts.items())),
+              'sequence_length_counts': {
+                  key: {str(length): count for length, count in sorted(values.items())}
+                  for key, values in sorted(sequence_lengths.items())
+              },
+              'contains_market_scalar_values': False,
+          }
+          Path('docs/ops/depth_schema_profile.json').write_text(
+              json.dumps(output, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit schema profile
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ops/depth_schema_profile.json
+          git commit -m "ops: publish private depth schema profile"
+          git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
