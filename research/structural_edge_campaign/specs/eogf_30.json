@@ -1,0 +1,42 @@
+{
+  "bar_interval_minutes": 1,
+  "development_only": true,
+  "direction": "opposite_overnight_gap_after_open_reclaim_failure",
+  "entry_time": "09:45",
+  "exit_time": "10:15",
+  "extension_window": {
+    "end_exclusive": "09:30",
+    "start": "09:15"
+  },
+  "failure_observation_end_exclusive": "09:45",
+  "family": "extreme_overnight_gap_failure",
+  "features": [
+    "absolute_gap_prior_atr",
+    "gap_direction_extension_prior_atr",
+    "opening_reclaim_failure"
+  ],
+  "gap_reference": "previous_completed_session_close",
+  "hypothesis_id": "EOGF_30",
+  "instrument": "NIFTY",
+  "max_variants": 8,
+  "outcome": "opposite_gap_return_bps_entry_to_exit",
+  "schema_version": "1.0",
+  "variant_grid": [
+    {
+      "absolute_gap_prior_atr_min": 0.35,
+      "extension_prior_atr_min": 0.1
+    },
+    {
+      "absolute_gap_prior_atr_min": 0.35,
+      "extension_prior_atr_min": 0.2
+    },
+    {
+      "absolute_gap_prior_atr_min": 0.5,
+      "extension_prior_atr_min": 0.1
+    },
+    {
+      "absolute_gap_prior_atr_min": 0.5,
+      "extension_prior_atr_min": 0.2
+    }
+  ]
+}
