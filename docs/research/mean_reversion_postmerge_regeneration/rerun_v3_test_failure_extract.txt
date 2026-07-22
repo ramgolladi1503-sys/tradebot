@@ -1,0 +1,588 @@
+2026-07-22T10:57:29.2099861Z  * [new branch]        docs/roadmap            -> origin/docs/roadmap
+2026-07-22T10:57:29.2100935Z  * [new branch]        docs/trend-pullback-provenance-boundary -> origin/docs/trend-pullback-provenance-boundary
+2026-07-22T10:57:29.2102745Z  * [new branch]        edge-02-hard-fallback-execution-kill-gate -> origin/edge-02-hard-fallback-execution-kill-gate
+2026-07-22T10:57:29.2104271Z  * [new branch]        edge-12-edge-readiness-report -> origin/edge-12-edge-readiness-report
+2026-07-22T10:57:29.2105496Z  * [new branch]        edge-94-end-to-end-edge-acceptance-suite -> origin/edge-94-end-to-end-edge-acceptance-suite
+2026-07-22T10:57:29.2106665Z  * [new branch]        edge-95-paper-only-edge-gate -> origin/edge-95-paper-only-edge-gate
+2026-07-22T10:57:29.2107733Z  * [new branch]        edge-96-live-pilot-risk-throttle -> origin/edge-96-live-pilot-risk-throttle
+2026-07-22T10:57:29.2108892Z  * [new branch]        edge-97-final-edge-readiness-report -> origin/edge-97-final-edge-readiness-report
+2026-07-22T10:57:29.2109925Z  * [new branch]        edge17-lifecycle        -> origin/edge17-lifecycle
+2026-07-22T10:57:29.2111020Z  * [new branch]        edge18-runtime-startup-boundary-proof -> origin/edge18-runtime-startup-boundary-proof
+2026-07-22T10:57:29.2112516Z  * [new branch]        edge19-startup-boundary-proof -> origin/edge19-startup-boundary-proof
+2026-07-22T10:57:29.2113527Z  * [new branch]        edge20-init-proof       -> origin/edge20-init-proof
+2026-07-22T10:57:29.2114337Z  * [new branch]        edge20-probe            -> origin/edge20-probe
+2026-07-22T10:57:29.2115165Z  * [new branch]        edge21-activate-probe   -> origin/edge21-activate-probe
+2026-07-22T10:57:29.2116099Z  * [new branch]        edge23-orch-stage-proof -> origin/edge23-orch-stage-proof
+2026-07-22T10:57:29.2117067Z  * [new branch]        edge24-startup-warmup-proof -> origin/edge24-startup-warmup-proof
+2026-07-22T10:57:29.2118074Z  * [new branch]        edge25-market-warmup-proof -> origin/edge25-market-warmup-proof
+2026-07-22T10:57:29.2119141Z  * [new branch]        edge26-debug-forensics-agent-v1 -> origin/edge26-debug-forensics-agent-v1
+2026-07-22T10:57:29.2120311Z  * [new branch]        edge26-debug-forensics-cli-path-fix -> origin/edge26-debug-forensics-cli-path-fix
+2026-07-22T10:57:29.2121579Z  * [new branch]        edge26-fast-engine-cycle-boundary-proof -> origin/edge26-fast-engine-cycle-boundary-proof
+2026-07-22T10:57:29.2123324Z  * [new branch]        edge26-recon-boundary-proof -> origin/edge26-recon-boundary-proof
+2026-07-22T10:57:29.2124457Z  * [new branch]        edge27-legacy-cycle-boundary-proof -> origin/edge27-legacy-cycle-boundary-proof
+2026-07-22T10:57:29.2125640Z  * [new branch]        edge27-recon-once-internal-proof -> origin/edge27-recon-once-internal-proof
+2026-07-22T10:57:29.2126817Z  * [new branch]        edge28-main-post-db-boundary-proof -> origin/edge28-main-post-db-boundary-proof
+2026-07-22T10:57:29.2128001Z  * [new branch]        edge28-recon-broker-resolve-guard -> origin/edge28-recon-broker-resolve-guard
+2026-07-22T10:57:29.2129211Z  * [new branch]        edge28-recon-broker-resolve-guard-v2 -> origin/edge28-recon-broker-resolve-guard-v2
+2026-07-22T10:57:29.2130603Z  * [new branch]        edge29-fast-loop-timer-trigger-before-feed-debug -> origin/edge29-fast-loop-timer-trigger-before-feed-debug
+2026-07-22T10:57:29.2132024Z  * [new branch]        edge30-deferred-work-ledger -> origin/edge30-deferred-work-ledger
+2026-07-22T10:57:29.2133230Z  * [new branch]        edge31-executable-trade-truth-firebreak -> origin/edge31-executable-trade-truth-firebreak
+2026-07-22T10:57:29.2134612Z  * [new branch]        edge32-candidate-quote-freshness-contract -> origin/edge32-candidate-quote-freshness-contract
+2026-07-22T10:57:29.2135951Z  * [new branch]        edge33-option-bid-ask-spread-truth-gate -> origin/edge33-option-bid-ask-spread-truth-gate
+2026-07-22T10:57:29.2137270Z  * [new branch]        edge34-execution-first-scoring-reweight -> origin/edge34-execution-first-scoring-reweight
+2026-07-22T10:57:29.2138577Z  * [new branch]        edge35-strategy-signal-quality-contract -> origin/edge35-strategy-signal-quality-contract
+2026-07-22T10:57:29.2139782Z  * [new branch]        edge36-feed-recovery-evidence -> origin/edge36-feed-recovery-evidence
+2026-07-22T10:57:29.2141357Z  * [new branch]        feat-pr1-pr2-logging-fallback-contract-6572871801744978796 -> origin/feat-pr1-pr2-logging-fallback-contract-6572871801744978796
+2026-07-22T10:57:29.2143107Z  * [new branch]        feat/audit-only-live-supervisor -> origin/feat/audit-only-live-supervisor
+2026-07-22T10:57:29.2144271Z  * [new branch]        feat/continuous-architecture-phase3 -> origin/feat/continuous-architecture-phase3
+2026-07-22T10:57:29.2145430Z  * [new branch]        feat/elite-regime-router-phase1 -> origin/feat/elite-regime-router-phase1
+2026-07-22T10:57:29.2146515Z  * [new branch]        feat/elite-regime-router-phase2 -> origin/feat/elite-regime-router-phase2
+2026-07-22T10:57:29.2147540Z  * [new branch]        feat/kite-intraday-history -> origin/feat/kite-intraday-history
+2026-07-22T10:57:29.2148476Z  * [new branch]        feat/kite-ws-subprocess -> origin/feat/kite-ws-subprocess
+2026-07-22T10:57:29.2149367Z  * [new branch]        feat/ml-acceptance-gate -> origin/feat/ml-acceptance-gate
+2026-07-22T10:57:29.2150257Z  * [new branch]        feat/quant-master-build -> origin/feat/quant-master-build
+---
+2026-07-22T10:57:29.2151274Z  * [new branch]        feat/stock-options-subsystem-v1 -> origin/feat/stock-options-subsystem-v1
+2026-07-22T10:57:29.2152783Z  * [new branch]        feat/strict-research-boundaries-enforcement -> origin/feat/strict-research-boundaries-enforcement
+2026-07-22T10:57:29.2154050Z  * [new branch]        feat/worktree-supervisor-main-v2 -> origin/feat/worktree-supervisor-main-v2
+2026-07-22T10:57:29.2155398Z  * [new branch]        feature/adaptive-position-sizing-drawdown-control -> origin/feature/adaptive-position-sizing-drawdown-control
+---
+2026-07-22T10:58:12.4703091Z verified 250/1676 parquet files
+2026-07-22T10:58:12.4843020Z verified 500/1676 parquet files
+2026-07-22T10:58:12.4982106Z verified 750/1676 parquet files
+2026-07-22T10:58:12.5187168Z verified 1000/1676 parquet files
+2026-07-22T10:58:12.5329699Z verified 1250/1676 parquet files
+2026-07-22T10:58:12.5470304Z verified 1500/1676 parquet files
+2026-07-22T10:58:22.6664265Z + /opt/hostedtoolcache/Python/3.12.13/x64/bin/python -m pytest -q tests/test_phase4_audit_fail_closed.py tests/test_walk_forward_integrity.py tests/test_mean_reversion_ledger_integrity.py tests/test_parameter_discovery_integrity.py tests/test_tearsheet_oos_metrics.py tests/test_vectorized_signals_causality.py tests/test_vertical_slice_metrics.py tests/test_mean_reversion_ledger_timing.py tests/test_mean_reversion_ledger_accounting.py tests/test_research_candle_contract.py tests/test_mean_reversion_corpus_directory_accounting.py
+2026-07-22T10:58:30.5800717Z .........FFFFFFF.......................................                  [100%]
+2026-07-22T10:58:30.5801536Z =================================== FAILURES ===================================
+2026-07-22T10:58:30.5802736Z _____ test_walk_forward_plan_has_three_session_folds_and_untouched_holdout _____
+2026-07-22T10:58:30.5803269Z 
+2026-07-22T10:58:30.5803620Z     def test_walk_forward_plan_has_three_session_folds_and_untouched_holdout():
+2026-07-22T10:58:30.5804278Z >       module = _load_module()
+2026-07-22T10:58:30.5804669Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5804914Z 
+2026-07-22T10:58:30.5805098Z tests/test_walk_forward_integrity.py:59: 
+2026-07-22T10:58:30.5805662Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.5806300Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.5806893Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.5807812Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.5808512Z     ???
+2026-07-22T10:58:30.5809233Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.5809799Z     ???
+2026-07-22T10:58:30.5810160Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.5810902Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.5811896Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.5812786Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5813406Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5813957Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.5814606Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5815230Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5815817Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.5816764Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5817391Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5817898Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.5818498Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5819061Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5819426Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.5819839Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5820257Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5820604Z core/ci_last_contracts.py:813: in importing
+2026-07-22T10:58:30.5821007Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5821432Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+---
+2026-07-22T10:58:30.5862338Z name = 'joblib'
+2026-07-22T10:58:30.5862970Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa18be60>, ...}
+2026-07-22T10:58:30.5864035Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa18be60>, ...}
+2026-07-22T10:58:30.5864714Z fromlist = None, level = 0
+2026-07-22T10:58:30.5864866Z 
+2026-07-22T10:58:30.5865057Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.5865509Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5865899Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5866301Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.5866518Z 
+2026-07-22T10:58:30.5866674Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.5867112Z ___________ test_walk_forward_rejects_non_datetime_or_unsorted_data ____________
+2026-07-22T10:58:30.5867421Z 
+2026-07-22T10:58:30.5867590Z     def test_walk_forward_rejects_non_datetime_or_unsorted_data():
+2026-07-22T10:58:30.5867952Z >       module = _load_module()
+2026-07-22T10:58:30.5868205Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5868355Z 
+2026-07-22T10:58:30.5868475Z tests/test_walk_forward_integrity.py:97: 
+2026-07-22T10:58:30.5868821Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.5869221Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.5869560Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.5869893Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.5870352Z     ???
+2026-07-22T10:58:30.5870619Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.5870975Z     ???
+2026-07-22T10:58:30.5871197Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.5871640Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.5872388Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.5872831Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5873218Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5873553Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.5873954Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5874331Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5874666Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.5875039Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5875534Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5875859Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.5876232Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5876593Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5876906Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.5877274Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5877636Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5877945Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.5904419Z name = 'joblib'
+2026-07-22T10:58:30.5905025Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa219760>, ...}
+2026-07-22T10:58:30.5906079Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa219760>, ...}
+2026-07-22T10:58:30.5906745Z fromlist = None, level = 0
+2026-07-22T10:58:30.5906894Z 
+2026-07-22T10:58:30.5907080Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.5907544Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5907929Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5908274Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.5908500Z 
+2026-07-22T10:58:30.5908650Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.5909089Z _____ test_explicit_empty_parameter_grid_rejects_instead_of_using_defaults _____
+2026-07-22T10:58:30.5909404Z 
+2026-07-22T10:58:30.5909608Z     def test_explicit_empty_parameter_grid_rejects_instead_of_using_defaults():
+2026-07-22T10:58:30.5910009Z >       module = _load_module()
+2026-07-22T10:58:30.5910244Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5910390Z 
+2026-07-22T10:58:30.5910509Z tests/test_walk_forward_integrity.py:115: 
+2026-07-22T10:58:30.5910840Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.5911219Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.5911554Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.5912123Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.5912440Z     ???
+2026-07-22T10:58:30.5912711Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.5913044Z     ???
+2026-07-22T10:58:30.5913440Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.5913886Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.5914369Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.5914801Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5915182Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5915506Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.5915886Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5916249Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5916578Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.5916939Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5917304Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5917618Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.5917972Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5918356Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5918669Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.5919030Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5919393Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5919700Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.5946175Z name = 'joblib'
+2026-07-22T10:58:30.5946796Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa40ed80>, ...}
+2026-07-22T10:58:30.5947857Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fa40ed80>, ...}
+2026-07-22T10:58:30.5948521Z fromlist = None, level = 0
+2026-07-22T10:58:30.5948681Z 
+2026-07-22T10:58:30.5948866Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.5949314Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5949702Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5950040Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.5950274Z 
+2026-07-22T10:58:30.5950419Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.5950870Z ___ test_promotion_uses_final_holdout_expectancy_not_full_sample_expectancy ____
+2026-07-22T10:58:30.5951190Z 
+2026-07-22T10:58:30.5951406Z     def test_promotion_uses_final_holdout_expectancy_not_full_sample_expectancy():
+2026-07-22T10:58:30.5952028Z >       module = _load_module()
+2026-07-22T10:58:30.5952279Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5952423Z 
+2026-07-22T10:58:30.5952539Z tests/test_walk_forward_integrity.py:127: 
+2026-07-22T10:58:30.5952873Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.5953268Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.5953599Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.5953938Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.5954263Z     ???
+2026-07-22T10:58:30.5954528Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.5954998Z     ???
+2026-07-22T10:58:30.5955235Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.5955673Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.5956161Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.5956595Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5956968Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5957309Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.5957690Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5958062Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5958385Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.5958753Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5959162Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5959476Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.5959834Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5960205Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5960513Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.5960875Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5961238Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5961542Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.5988113Z name = 'joblib'
+2026-07-22T10:58:30.5988746Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fac8c1a0>, ...}
+2026-07-22T10:58:30.5989804Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fac8c1a0>, ...}
+2026-07-22T10:58:30.5990471Z fromlist = None, level = 0
+2026-07-22T10:58:30.5990627Z 
+2026-07-22T10:58:30.5990812Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.5991258Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5991643Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5992264Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.5992506Z 
+2026-07-22T10:58:30.5992650Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.5993086Z _____ test_run_walk_forward_evaluates_session_test_slices_and_holdout_only _____
+2026-07-22T10:58:30.5993393Z 
+2026-07-22T10:58:30.5993603Z     def test_run_walk_forward_evaluates_session_test_slices_and_holdout_only():
+2026-07-22T10:58:30.5993991Z >       module = _load_module()
+2026-07-22T10:58:30.5994225Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5994377Z 
+2026-07-22T10:58:30.5994496Z tests/test_walk_forward_integrity.py:148: 
+2026-07-22T10:58:30.5994827Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.5995212Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.5995545Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.5995879Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.5996194Z     ???
+2026-07-22T10:58:30.5996464Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.5996808Z     ???
+2026-07-22T10:58:30.5997036Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.5997613Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.5998123Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.5998558Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.5998930Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.5999261Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.5999648Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6000015Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6000332Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.6000697Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6001068Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6001388Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.6001946Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6002326Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6002643Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.6003003Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6003364Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6003666Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.6030342Z name = 'joblib'
+2026-07-22T10:58:30.6031108Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61faacc500>, ...}
+2026-07-22T10:58:30.6032481Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61faacc500>, ...}
+2026-07-22T10:58:30.6033169Z fromlist = None, level = 0
+2026-07-22T10:58:30.6033321Z 
+2026-07-22T10:58:30.6033512Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.6033965Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6034350Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6034697Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6034941Z 
+2026-07-22T10:58:30.6035095Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.6035536Z _______ test_walk_forward_rejects_when_any_fold_has_no_valid_parameters ________
+2026-07-22T10:58:30.6035845Z 
+2026-07-22T10:58:30.6036036Z     def test_walk_forward_rejects_when_any_fold_has_no_valid_parameters():
+2026-07-22T10:58:30.6036417Z >       module = _load_module()
+2026-07-22T10:58:30.6036657Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6036810Z 
+2026-07-22T10:58:30.6036923Z tests/test_walk_forward_integrity.py:184: 
+2026-07-22T10:58:30.6037256Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.6037649Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.6037983Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.6038319Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.6038639Z     ???
+2026-07-22T10:58:30.6038899Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.6039422Z     ???
+2026-07-22T10:58:30.6039648Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.6040094Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.6040584Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.6041029Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6041406Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6041866Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.6042255Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6042635Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6042961Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.6043322Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6043686Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6044000Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.6044370Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6044733Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6045041Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.6045403Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6045768Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6046079Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.6072739Z name = 'joblib'
+2026-07-22T10:58:30.6073363Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fab705f0>, ...}
+2026-07-22T10:58:30.6074425Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fab705f0>, ...}
+2026-07-22T10:58:30.6075096Z fromlist = None, level = 0
+2026-07-22T10:58:30.6075250Z 
+2026-07-22T10:58:30.6075426Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.6075877Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6076265Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6076605Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6076829Z 
+2026-07-22T10:58:30.6559808Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.6561012Z __________ test_walk_forward_rejects_when_any_test_fold_has_no_trades __________
+2026-07-22T10:58:30.6562099Z 
+2026-07-22T10:58:30.6562639Z     def test_walk_forward_rejects_when_any_test_fold_has_no_trades():
+2026-07-22T10:58:30.6563692Z >       module = _load_module()
+2026-07-22T10:58:30.6564327Z                  ^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6564738Z 
+2026-07-22T10:58:30.6565062Z tests/test_walk_forward_integrity.py:219: 
+2026-07-22T10:58:30.6566038Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.6567177Z tests/test_walk_forward_integrity.py:14: in _load_module
+2026-07-22T10:58:30.6568167Z     spec.loader.exec_module(module)
+2026-07-22T10:58:30.6569128Z <frozen importlib._bootstrap_external>:999: in exec_module
+2026-07-22T10:58:30.6569895Z     ???
+2026-07-22T10:58:30.6570503Z <frozen importlib._bootstrap>:488: in _call_with_frames_removed
+2026-07-22T10:58:30.6571293Z     ???
+2026-07-22T10:58:30.6572050Z scripts/run_walk_forward_elite.py:14: in <module>
+2026-07-22T10:58:30.6573445Z     from core.backtest_elite import EliteBacktestConfig, VectorizedBacktestEngine
+2026-07-22T10:58:30.6574676Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.6575718Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6576318Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6576827Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.6577407Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6577967Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6578438Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.6578986Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6579544Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6580008Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.6580420Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6580800Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6581126Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.6581496Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6582103Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6582463Z core/ci_last_contracts.py:813: in importing
+---
+2026-07-22T10:58:30.6621249Z name = 'joblib'
+2026-07-22T10:58:30.6622288Z globals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fab75ac0>, ...}
+2026-07-22T10:58:30.6623395Z locals = {'__name__': 'core.alpha_ensemble', '__doc__': None, '__package__': 'core', '__loader__': <_frozen_importlib_external.SourceFileLoader object at 0x7f61fab75ac0>, ...}
+2026-07-22T10:58:30.6624072Z fromlist = None, level = 0
+2026-07-22T10:58:30.6624230Z 
+2026-07-22T10:58:30.6624413Z     def _import(name, globals=None, locals=None, fromlist=(), level=0):
+2026-07-22T10:58:30.6624870Z >       module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6625271Z                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6625623Z E       ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6625851Z 
+2026-07-22T10:58:30.6625987Z core/ci_compat_contracts.py:670: ModuleNotFoundError
+2026-07-22T10:58:30.6626367Z =========================== short test summary info ============================
+2026-07-22T10:58:30.6627192Z FAILED tests/test_walk_forward_integrity.py::test_walk_forward_plan_has_three_session_folds_and_untouched_holdout - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6628241Z FAILED tests/test_walk_forward_integrity.py::test_walk_forward_rejects_non_datetime_or_unsorted_data - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6629281Z FAILED tests/test_walk_forward_integrity.py::test_explicit_empty_parameter_grid_rejects_instead_of_using_defaults - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6630386Z FAILED tests/test_walk_forward_integrity.py::test_promotion_uses_final_holdout_expectancy_not_full_sample_expectancy - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6631469Z FAILED tests/test_walk_forward_integrity.py::test_run_walk_forward_evaluates_session_test_slices_and_holdout_only - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6633173Z FAILED tests/test_walk_forward_integrity.py::test_walk_forward_rejects_when_any_fold_has_no_valid_parameters - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6634199Z FAILED tests/test_walk_forward_integrity.py::test_walk_forward_rejects_when_any_test_fold_has_no_trades - ModuleNotFoundError: No module named 'joblib'
+2026-07-22T10:58:30.6634850Z 7 failed, 48 passed in 7.06s
+2026-07-22T10:58:30.8371225Z Traceback (most recent call last):
+2026-07-22T10:58:30.8381533Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 547, in <module>
+2026-07-22T10:58:30.8383092Z     raise SystemExit(main())
+2026-07-22T10:58:30.8383492Z                      ^^^^^^
+2026-07-22T10:58:30.8384297Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 473, in main
+2026-07-22T10:58:30.8385129Z     _run_focused_tests(project_root)
+2026-07-22T10:58:30.8386075Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 242, in _run_focused_tests
+2026-07-22T10:58:30.8387000Z     _run(
+2026-07-22T10:58:30.8387717Z   File "/home/runner/work/tradebot/tradebot/scripts/run_mean_reversion_postmerge_regeneration.py", line 37, in _run
+2026-07-22T10:58:30.8388574Z     subprocess.run(command, cwd=cwd, check=True)
+2026-07-22T10:58:30.8389331Z   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/subprocess.py", line 571, in run
+2026-07-22T10:58:30.8390115Z     raise CalledProcessError(retcode, process.args,
+2026-07-22T10:58:30.8394139Z subprocess.CalledProcessError: Command '['/opt/hostedtoolcache/Python/3.12.13/x64/bin/python', '-m', 'pytest', '-q', 'tests/test_phase4_audit_fail_closed.py', 'tests/test_walk_forward_integrity.py', 'tests/test_mean_reversion_ledger_integrity.py', 'tests/test_parameter_discovery_integrity.py', 'tests/test_tearsheet_oos_metrics.py', 'tests/test_vectorized_signals_causality.py', 'tests/test_vertical_slice_metrics.py', 'tests/test_mean_reversion_ledger_timing.py', 'tests/test_mean_reversion_ledger_accounting.py', 'tests/test_research_candle_contract.py', 'tests/test_mean_reversion_corpus_directory_accounting.py']' returned non-zero exit status 1.
+2026-07-22T10:58:30.9309156Z ##[error]Process completed with exit code 1.
+2026-07-22T10:58:30.9362350Z ##[group]Run summary="${EVIDENCE_DIR}/postmerge_regeneration_summary.json"
+2026-07-22T10:58:30.9362954Z summary="${EVIDENCE_DIR}/postmerge_regeneration_summary.json"
+2026-07-22T10:58:30.9363386Z status="${EVIDENCE_DIR}/run_status.json"
+2026-07-22T10:58:30.9363708Z if test -f "${summary}"; then
+2026-07-22T10:58:30.9364037Z   cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
+2026-07-22T10:58:30.9364367Z elif test -f "${status}"; then
+2026-07-22T10:58:30.9364688Z   cat "${status}" >> "${GITHUB_STEP_SUMMARY}"
+2026-07-22T10:58:30.9364989Z else
+2026-07-22T10:58:30.9365405Z   echo "Post-merge regeneration did not create a status artifact." >> "${GITHUB_STEP_SUMMARY}"
+---
+2026-07-22T10:58:30.9365890Z fi
+2026-07-22T10:58:30.9424391Z shell: /usr/bin/bash -e {0}
+2026-07-22T10:58:30.9424781Z env:
+---
+2026-07-22T10:58:30.9425238Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+---
+2026-07-22T10:58:30.9425889Z   CORPUS_TAG: upstox-corpus-v1
+---
+2026-07-22T10:58:30.9426699Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+---
+2026-07-22T10:58:30.9427617Z   PRODUCTION_BASE_SHA: a64ddee5f68921bffbac684e2ea06de8943b704a
+---
+2026-07-22T10:58:30.9428284Z   PYTHONHASHSEED: 0
+---
+2026-07-22T10:58:30.9428687Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+---
+2026-07-22T10:58:30.9429349Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v3
+---
+2026-07-22T10:58:30.9430134Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9430986Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+---
+--- FINAL LOG TAIL ---
+2026-07-22T10:58:30.6609115Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6609496Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6609818Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.6610197Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6610565Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6610903Z core/ci_last_contracts.py:813: in importing
+2026-07-22T10:58:30.6611265Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6611641Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6612295Z core/ci_compat_contracts.py:670: in _import
+2026-07-22T10:58:30.6612668Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6613271Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6613589Z core/alpha_ensemble.py:7: in <module>
+2026-07-22T10:58:30.6613855Z     import joblib
+2026-07-22T10:58:30.6614155Z core/depth_hook_cleanup.py:137: in import_without_depth_repatch
+2026-07-22T10:58:30.6614599Z     module = original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6614977Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6615306Z core/_ci_last5_contracts_base.py:449: in importing
+2026-07-22T10:58:30.6615691Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6616062Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6616390Z core/ci_finish_contracts.py:549: in importing
+2026-07-22T10:58:30.6616760Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6617125Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6617440Z core/ci_tail_contracts.py:308: in importing
+2026-07-22T10:58:30.6617813Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6618177Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6618489Z core/ci_final_contracts.py:224: in importing
+2026-07-22T10:58:30.6618850Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6619215Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6619527Z core/ci_last_contracts.py:813: in importing
+2026-07-22T10:58:30.6619888Z     module = _original_import(name, globals, locals, fromlist, level)
+2026-07-22T10:58:30.6620260Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-22T10:58:30.6620781Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-22T10:58:30.6621161Z 
+2026-07-22T10:58:30.9432189Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9433384Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9434114Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9434865Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T10:58:30.9435502Z ##[endgroup]
+2026-07-22T10:58:30.9584580Z ##[group]Run set -euo pipefail
+2026-07-22T10:58:30.9584961Z set -euo pipefail
+2026-07-22T10:58:30.9585230Z source_dir="${EVIDENCE_DIR}"
+2026-07-22T10:58:30.9585632Z target_dir="docs/research/mean_reversion_postmerge_regeneration_v3"
+2026-07-22T10:58:30.9586066Z git fetch origin "${EVIDENCE_BRANCH}"
+2026-07-22T10:58:30.9586381Z git checkout "${EVIDENCE_BRANCH}"
+2026-07-22T10:58:30.9586726Z git pull --ff-only origin "${EVIDENCE_BRANCH}"
+2026-07-22T10:58:30.9587074Z mkdir -p "${target_dir}"
+2026-07-22T10:58:30.9587341Z for name in \
+2026-07-22T10:58:30.9587589Z   run_status.json \
+2026-07-22T10:58:30.9587876Z   postmerge_regeneration_summary.json \
+2026-07-22T10:58:30.9588207Z   phase4_semantic_hash_manifest.json \
+2026-07-22T10:58:30.9588516Z   artifact_hash_manifest.json \
+2026-07-22T10:58:30.9588808Z   frozen_input_authority.json; do
+2026-07-22T10:58:30.9589152Z   if test -f "${source_dir}/${name}"; then
+2026-07-22T10:58:30.9589513Z     cp "${source_dir}/${name}" "${target_dir}/${name}"
+2026-07-22T10:58:30.9589826Z   fi
+2026-07-22T10:58:30.9590024Z done
+2026-07-22T10:58:30.9590229Z python - <<'PY'
+2026-07-22T10:58:30.9590464Z import json
+2026-07-22T10:58:30.9590676Z import os
+2026-07-22T10:58:30.9590902Z from pathlib import Path
+2026-07-22T10:58:30.9591160Z 
+2026-07-22T10:58:30.9591575Z target = Path('docs/research/mean_reversion_postmerge_regeneration_v3/workflow_identity.json')
+2026-07-22T10:58:30.9592351Z target.write_text(json.dumps({
+2026-07-22T10:58:30.9592678Z     'workflow_sha': os.environ['GITHUB_SHA'],
+2026-07-22T10:58:30.9593076Z     'production_base_sha': os.environ['PRODUCTION_BASE_SHA'],
+2026-07-22T10:58:30.9593549Z     'corpus_archive_sha256': os.environ['CORPUS_ARCHIVE_SHA256'],
+2026-07-22T10:58:30.9593932Z     'execution_allowed': False,
+2026-07-22T10:58:30.9594221Z     'paper_live_allowed': False,
+2026-07-22T10:58:30.9594516Z }, indent=2, sort_keys=True) + '\n')
+2026-07-22T10:58:30.9594798Z PY
+2026-07-22T10:58:30.9595044Z git config user.name "github-actions[bot]"
+2026-07-22T10:58:30.9595501Z git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+2026-07-22T10:58:30.9595935Z git add "${target_dir}"
+2026-07-22T10:58:30.9596224Z if ! git diff --cached --quiet; then
+2026-07-22T10:58:30.9596640Z   git commit -m "research: publish mean-reversion regeneration v3 index"
+2026-07-22T10:58:30.9597099Z   git push origin HEAD:"${EVIDENCE_BRANCH}"
+2026-07-22T10:58:30.9597393Z fi
+2026-07-22T10:58:30.9656473Z shell: /usr/bin/bash -e {0}
+2026-07-22T10:58:30.9656735Z env:
+2026-07-22T10:58:30.9657029Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+2026-07-22T10:58:30.9657414Z   CORPUS_TAG: upstox-corpus-v1
+2026-07-22T10:58:30.9657844Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+2026-07-22T10:58:30.9658394Z   PRODUCTION_BASE_SHA: a64ddee5f68921bffbac684e2ea06de8943b704a
+2026-07-22T10:58:30.9658759Z   PYTHONHASHSEED: 0
+2026-07-22T10:58:30.9659001Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+2026-07-22T10:58:30.9659369Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v3
+2026-07-22T10:58:30.9659785Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9660225Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-22T10:58:30.9660903Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9661298Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9661957Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:30.9662684Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T10:58:30.9663056Z ##[endgroup]
+2026-07-22T10:58:31.1052449Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T10:58:31.1053205Z  * branch              research/postmerge-mean-reversion-rerun-v3 -> FETCH_HEAD
+2026-07-22T10:58:32.2367617Z Already on 'research/postmerge-mean-reversion-rerun-v3'
+2026-07-22T10:58:32.2372451Z M	runtime/strategy_validation/MEAN_REVERSION_EXTENSION/historical_data_catalog.json
+2026-07-22T10:58:32.2374130Z M	runtime/strategy_validation/MEAN_REVERSION_EXTENSION/upstox_candle_file_audit.json
+2026-07-22T10:58:32.2375664Z M	runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+2026-07-22T10:58:32.2376901Z Your branch is up to date with 'origin/research/postmerge-mean-reversion-rerun-v3'.
+2026-07-22T10:58:32.4914036Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T10:58:32.4914774Z  * branch              research/postmerge-mean-reversion-rerun-v3 -> FETCH_HEAD
+2026-07-22T10:58:32.5001011Z Already up to date.
+2026-07-22T10:58:32.8597938Z [research/postmerge-mean-reversion-rerun-v3 4140a71e] research: publish mean-reversion regeneration v3 index
+2026-07-22T10:58:32.8598931Z  3 files changed, 32 insertions(+), 1 deletion(-)
+2026-07-22T10:58:32.8599523Z  create mode 100644 docs/research/mean_reversion_postmerge_regeneration_v3/frozen_input_authority.json
+2026-07-22T10:58:32.8600241Z  create mode 100644 docs/research/mean_reversion_postmerge_regeneration_v3/run_status.json
+2026-07-22T10:58:34.4396191Z To https://github.com/ramgolladi1503-sys/tradebot
+2026-07-22T10:58:34.4396915Z    d85f727b..4140a71e  HEAD -> research/postmerge-mean-reversion-rerun-v3
+2026-07-22T10:58:34.4557747Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-22T10:58:34.4559083Z ##[group]Run actions/upload-artifact@v4
+2026-07-22T10:58:34.4559371Z with:
+2026-07-22T10:58:34.4559790Z   name: mean-reversion-postmerge-regeneration-v3-d85f727bbfaf0bfdfa909de9f24276e7cd96e640
+2026-07-22T10:58:34.4560303Z   path: /tmp/postmerge-evidence
+2026-07-22T10:58:34.4560569Z   if-no-files-found: warn
+2026-07-22T10:58:34.4560806Z   retention-days: 30
+2026-07-22T10:58:34.4561049Z   compression-level: 6
+2026-07-22T10:58:34.4561271Z   overwrite: false
+2026-07-22T10:58:34.4561499Z   include-hidden-files: false
+2026-07-22T10:58:34.4561994Z env:
+2026-07-22T10:58:34.4562290Z   CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+2026-07-22T10:58:34.4562680Z   CORPUS_TAG: upstox-corpus-v1
+2026-07-22T10:58:34.4563097Z   CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+2026-07-22T10:58:34.4563622Z   PRODUCTION_BASE_SHA: a64ddee5f68921bffbac684e2ea06de8943b704a
+2026-07-22T10:58:34.4563973Z   PYTHONHASHSEED: 0
+2026-07-22T10:58:34.4564214Z   EVIDENCE_DIR: /tmp/postmerge-evidence
+2026-07-22T10:58:34.4564573Z   EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v3
+2026-07-22T10:58:34.4564980Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:34.4565404Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-22T10:58:34.4565840Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:34.4566224Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:34.4566617Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-22T10:58:34.4567010Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-22T10:58:34.4567349Z ##[endgroup]
+2026-07-22T10:58:34.6309959Z (node:2661) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-22T10:58:34.6310967Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-22T10:58:34.6399327Z With the provided path, there will be 4 files uploaded
+2026-07-22T10:58:34.6406203Z Artifact name is valid!
+2026-07-22T10:58:34.6407081Z Root directory input is valid!
+2026-07-22T10:58:34.7789265Z Beginning upload of artifact content to blob storage
+2026-07-22T10:58:34.8037192Z (node:2661) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-07-22T10:58:34.8272913Z Uploaded bytes 3745
+2026-07-22T10:58:34.8418486Z Finished uploading artifact content to blob storage!
+2026-07-22T10:58:34.8419737Z SHA256 digest of uploaded artifact zip is b22bb5e4db46e650dea0c7a668eb39b86d7620585dcd64be71e0425e91aed1e4
+2026-07-22T10:58:34.8420738Z Finalizing artifact upload
+2026-07-22T10:58:35.0034648Z Artifact mean-reversion-postmerge-regeneration-v3-d85f727bbfaf0bfdfa909de9f24276e7cd96e640.zip successfully finalized. Artifact ID 8527052974
+2026-07-22T10:58:35.0036731Z Artifact mean-reversion-postmerge-regeneration-v3-d85f727bbfaf0bfdfa909de9f24276e7cd96e640 has been successfully uploaded! Final size is 3745 bytes. Artifact ID is 8527052974
+2026-07-22T10:58:35.0042059Z Artifact download URL: https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29913860678/artifacts/8527052974
+2026-07-22T10:58:35.0250338Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-22T10:58:35.0251632Z Post job cleanup.
+2026-07-22T10:58:35.1157689Z [command]/usr/bin/git version
+2026-07-22T10:58:35.1202938Z git version 2.54.0
+2026-07-22T10:58:35.1277233Z Temporarily overriding HOME='/home/runner/work/_temp/32874386-3a35-495d-805a-5aad50dfaaef' before making global git config changes
+2026-07-22T10:58:35.1278799Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-22T10:58:35.1283968Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-22T10:58:35.1329035Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-22T10:58:35.1372646Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-22T10:58:35.1654323Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-22T10:58:35.1685830Z http.https://github.com/.extraheader
+2026-07-22T10:58:35.1700281Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-22T10:58:35.1742705Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-22T10:58:35.2060181Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-22T10:58:35.2109180Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-22T10:58:35.2601678Z Cleaning up orphan processes
+2026-07-22T10:58:35.2863488Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
