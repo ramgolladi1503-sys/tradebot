@@ -56,7 +56,11 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          python -m pip install numpy pandas pyarrow pytest pyyaml joblib
+          python -m pip install \
+            numpy pandas pyarrow pytest pyyaml \
+            joblib requests python-dotenv \
+            scikit-learn xgboost scipy statsmodels \
+            holidays plotly kiteconnect openpyxl flask websockets
 
       - name: Download and verify immutable corpus archive
         env:
