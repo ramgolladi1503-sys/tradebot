@@ -1,0 +1,18 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
+  "purpose": "Determine whether the frozen quote/depth corpus can support a causal liquidity-exhaustion discovery equation.",
+  "minimum_development_sessions": 60,
+  "minimum_future_holdout_sessions": 20,
+  "minimum_session_span_minutes": 300.0,
+  "maximum_median_gap_seconds": 5.0,
+  "maximum_p95_gap_seconds": 30.0,
+  "maximum_crossed_market_rate": 0.001,
+  "requires_bid_and_ask_size_or_structured_depth": true,
+  "required_columns": ["ts", "token", "symbol", "ltp", "bid", "ask"],
+  "result_boundary": {
+    "strategy_created": false,
+    "edge_claim_allowed": false,
+    "paper_live_allowed": false,
+    "execution_allowed": false
+  }
+}
