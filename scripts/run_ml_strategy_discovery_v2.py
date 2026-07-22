@@ -185,7 +185,7 @@ def main() -> int:
         outer_folds=args.outer_folds,
         inner_folds=args.inner_folds,
         bootstrap_iterations=args.bootstrap_iterations,
-        permutation_iterations=args.permutations,
+        permutation_iterations=args.permutation_iterations,
         seed=args.seed,
     )
     LOGGER.info(
