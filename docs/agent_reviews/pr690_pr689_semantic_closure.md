@@ -2,7 +2,7 @@
 
 mode: RESEARCH_BACKTEST_PRODUCTION_REPAIR
 candidate_id: PR690_PR689_SEMANTIC_CLOSURE
- decision: DRAFT_REVIEW_REQUIRED
+decision: DRAFT_REVIEW_REQUIRED
 reason: Post-merge inspection of PR 689 found three semantic defects not detected by its green CI: false rejection of rule-selected candidates, omission of canonical ledger validation from the mandatory discovery chain, and incomplete WFA folds reducing the promotion denominator.
 timestamp: 2026-07-22T06:05:00+05:30
 is_order_action: false
@@ -37,7 +37,7 @@ Files changed are limited to research/backtest audit, WFA, tests, and this revie
 Adversarial questions applied:
 
 1. Can a valid rule-selected candidate be rejected because it does not own a ranking score? The audit now accepts a real score or a finite positive cost-hurdle margin.
-2. Can a candidate pass with neither score nor rule-selection evidence? No; missing evidence fails closed.
+2. Can a candidate pass with neither score nor rule-selection evidence? No; absent evidence fails closed.
 3. Can an explicit zero, negative, nonnumeric, or nonfinite cost margin pass? No; explicit invalid margin evidence blocks selection quality.
 4. Can parameter discovery proceed while timestamp, P&L, RR, or ledger-schema evidence is invalid? No; the mandatory truth gate executes and embeds the canonical ledger audit.
 5. Can a two-fold result be promoted as a three-fold WFA? No; any incomplete fold set is rejected before final parameter selection or holdout evaluation.
@@ -60,7 +60,7 @@ Interface and compatibility review:
 
 Delivery is separated into three verifiable contracts:
 
-- selection evidence accepts valid rule ownership and rejects missing or invalid evidence;
+- selection evidence accepts valid rule ownership and rejects absent or invalid evidence;
 - canonical ledger integrity becomes mandatory through the existing truth-audit chain;
 - WFA requires all three valid forward folds before holdout evaluation.
 
@@ -71,7 +71,7 @@ Each contract has both a valid-path regression and an unsafe or incomplete-path 
 Regression coverage added or strengthened:
 
 - positive cost-hurdle evidence passes without a fabricated rank score;
-- missing score and cost evidence fails;
+- absent score and cost evidence fails;
 - nonpositive cost margin fails;
 - canonical same-candle timestamp defect fails the truth gate;
 - one fold with no valid parameters fails the WFA;
@@ -88,7 +88,7 @@ Safety boundaries:
 
 ## High-Risk Path Review
 
-No configured high-risk production path is changed. The modified scripts can influence research promotion decisions, so the review treats false approval and false rejection as high-impact analytical risks. The patch therefore uses fail-closed behavior for missing evidence while preserving legitimate rule-selected candidates.
+No configured high-risk production path is changed. The modified scripts can influence research promotion decisions, so the review treats false approval and false rejection as high-impact analytical risks. The patch therefore uses fail-closed behavior when evidence is absent while preserving legitimate rule-selected candidates.
 
 ## Acceptance Proof
 
