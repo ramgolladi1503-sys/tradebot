@@ -9,24 +9,28 @@ from .contracts import canonical_hash
 from .model import rule_mask
 
 
-def _permuted_labels_by_session(
+def permuted_labels_by_session(
     frame: pd.DataFrame,
     *,
     rng: np.random.Generator,
 ) -> pd.Series:
     """Permute complete label vectors between same-length sessions."""
+    required = {"session_date", "label_return_r"}
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"permutation frame missing columns: {sorted(missing)}")
     result = pd.Series(index=frame.index, dtype=float)
-    grouped: dict[int, list[tuple[str, np.ndarray, np.ndarray]]] = {}
-    for session, group in frame.groupby("session_date", sort=True):
+    grouped: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {}
+    for _, group in frame.groupby("session_date", sort=True):
         indices = group.index.to_numpy()
-        labels = group["label_return_r"].astype(float).to_numpy()
-        grouped.setdefault(len(group), []).append((str(session), indices, labels))
+        labels = pd.to_numeric(group["label_return_r"], errors="raise").to_numpy(
+            dtype=float
+        )
+        grouped.setdefault(len(group), []).append((indices, labels))
     for items in grouped.values():
         order = rng.permutation(len(items))
         for destination_index, source_index in enumerate(order):
-            destination_indices = items[destination_index][1]
-            source_labels = items[int(source_index)][2]
-            result.loc[destination_indices] = source_labels
+            result.loc[items[destination_index][0]] = items[int(source_index)][1]
     if result.isna().any():
         raise AssertionError("session permutation failed to assign all labels")
     return result
@@ -36,8 +40,8 @@ def benjamini_hochberg(p_values: list[float]) -> list[float]:
     if not p_values:
         return []
     values = np.asarray(p_values, dtype=float)
-    if ((values < 0) | (values > 1)).any():
-        raise ValueError("p-values must be in [0, 1]")
+    if not np.isfinite(values).all() or ((values < 0) | (values > 1)).any():
+        raise ValueError("p-values must be finite and in [0, 1]")
     order = np.argsort(values)
     ranked = values[order]
     adjusted = np.empty(len(values), dtype=float)
@@ -55,26 +59,33 @@ def max_statistic_test(
     *,
     iterations: int,
     seed: int,
+    alpha: float = 0.05,
 ) -> dict[str, Any]:
     if iterations < 100:
         raise ValueError("at least 100 permutations are required")
+    if not 0 < alpha < 1:
+        raise ValueError("alpha must be in (0, 1)")
     if not candidates:
         return {
-            "iterations": iterations,
-            "seed": seed,
+            "iterations": int(iterations),
+            "seed": int(seed),
+            "alpha": float(alpha),
             "hypothesis_count": 0,
             "candidates": [],
             "null_distribution_hash": canonical_hash([]),
+            "null_max_expectancy_quantiles": {},
         }
     masks = [rule_mask(frame, candidate) for candidate in candidates]
     observed = [
-        float(frame.loc[mask, "label_return_r"].mean()) if mask.any() else 0.0
+        float(pd.to_numeric(frame.loc[mask, "label_return_r"], errors="raise").mean())
+        if mask.any()
+        else 0.0
         for mask in masks
     ]
     rng = np.random.default_rng(seed)
     null_matrix = np.empty((iterations, len(candidates)), dtype=float)
     for iteration in range(iterations):
-        permuted = _permuted_labels_by_session(frame, rng=rng)
+        permuted = permuted_labels_by_session(frame, rng=rng)
         for index, mask in enumerate(masks):
             null_matrix[iteration, index] = (
                 float(permuted.loc[mask].mean()) if mask.any() else 0.0
@@ -101,13 +112,14 @@ def max_statistic_test(
                 "max_statistic_fwer_p_value": family_p,
                 "bh_fdr_q_value": q_value,
                 "passes_adjusted_significance": bool(
-                    family_p <= 0.05 and q_value <= 0.05 and statistic > 0
+                    family_p <= alpha and q_value <= alpha and statistic > 0
                 ),
             }
         )
     return {
         "iterations": int(iterations),
         "seed": int(seed),
+        "alpha": float(alpha),
         "hypothesis_count": len(candidates),
         "candidates": records,
         "null_distribution_hash": canonical_hash(max_null.tolist()),
@@ -129,8 +141,13 @@ def _condition_map(candidate: dict[str, Any]) -> dict[tuple[str, str], float]:
 
 
 def rule_similarity(
-    left: dict[str, Any], right: dict[str, Any], *, relative_tolerance: float = 0.10
+    left: dict[str, Any],
+    right: dict[str, Any],
+    *,
+    relative_tolerance: float = 0.10,
 ) -> float:
+    if relative_tolerance <= 0:
+        raise ValueError("relative_tolerance must be positive")
     left_map = _condition_map(left)
     right_map = _condition_map(right)
     keys = set(left_map) | set(right_map)
@@ -141,8 +158,8 @@ def rule_similarity(
         if key not in left_map or key not in right_map:
             scores.append(0.0)
             continue
-        denominator = max(abs(left_map[key]), abs(right_map[key]), 1.0)
-        distance = abs(left_map[key] - right_map[key]) / denominator
+        scale = max(abs(left_map[key]), abs(right_map[key]), 1e-12)
+        distance = abs(left_map[key] - right_map[key]) / scale
         scores.append(max(0.0, 1.0 - distance / relative_tolerance))
     return float(np.mean(scores))
 
@@ -164,6 +181,8 @@ def recurrence_summary(
     fold_candidates: list[list[dict[str, Any]]],
     *,
     minimum_similarity: float = 0.80,
+    minimum_jaccard: float = 0.40,
+    minimum_fraction: float = 0.60,
 ) -> dict[str, Any]:
     best_similarities: list[float] = []
     best_jaccards: list[float] = []
@@ -183,24 +202,27 @@ def recurrence_summary(
         best = max(scored, key=lambda item: (item[0], item[1]))
         best_similarities.append(float(best[0]))
         best_jaccards.append(float(best[1]))
-        if best[0] >= minimum_similarity:
+        if best[0] >= minimum_similarity and best[1] >= minimum_jaccard:
             recurring += 1
     fold_count = len(fold_candidates)
-    condition_keys = sorted(f"{key[0]}:{key[1]}" for key in _condition_map(candidate))
+    median_similarity = (
+        float(np.median(best_similarities)) if best_similarities else 0.0
+    )
+    median_jaccard = float(np.median(best_jaccards)) if best_jaccards else 0.0
+    recurrence_fraction = float(recurring / fold_count) if fold_count else 0.0
     return {
         "fold_count": fold_count,
         "recurring_folds": recurring,
-        "recurrence_fraction": float(recurring / fold_count) if fold_count else 0.0,
-        "median_rule_similarity": float(np.median(best_similarities))
-        if best_similarities
-        else 0.0,
-        "median_selected_row_jaccard": float(np.median(best_jaccards))
-        if best_jaccards
-        else 0.0,
-        "condition_signature": condition_keys,
+        "recurrence_fraction": recurrence_fraction,
+        "median_rule_similarity": median_similarity,
+        "median_selected_row_jaccard": median_jaccard,
+        "condition_signature": sorted(
+            f"{key[0]}:{key[1]}" for key in _condition_map(candidate)
+        ),
         "passes_recurrence": bool(
             fold_count > 0
-            and recurring / fold_count >= 0.60
-            and np.median(best_similarities) >= minimum_similarity
+            and recurrence_fraction >= minimum_fraction
+            and median_similarity >= minimum_similarity
+            and median_jaccard >= minimum_jaccard
         ),
     }

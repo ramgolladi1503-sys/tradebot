@@ -1,195 +1,283 @@
-import pytest
-import pandas as pd
-import numpy as np
+from __future__ import annotations
 
+import hashlib
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from research.ml_strategy_discovery_v2 import artifacts, pipeline
+from research.ml_strategy_discovery_v2.contracts import (
+    DEVELOPMENT,
+    FRESH_CONSUMED,
+    FRESH_LOCKED,
+    HOLDOUT_LOCKED,
+    VALIDATION_CONSUMED,
+    StabilityConfig,
+    canonical_hash,
+    is_forbidden_feature,
+    require_causal_features,
+)
+from research.ml_strategy_discovery_v2.controls import run_negative_controls
 from research.ml_strategy_discovery_v2.data import (
-    load_development_for_selection,
-    load_locked_confirmation_metadata,
-    evaluate_frozen_candidate_once,
+    ConfirmationAuthorizationError,
     DatasetRegistryViolation,
-    TokenReplayViolation
+    TokenReplayViolation,
+    consume_confirmation_authorization,
+    default_registry,
+    issue_confirmation_authorization,
+    load_development_for_selection,
+    load_registry,
+    locked_confirmation_metadata,
+    select_development_bars,
+)
+from research.ml_strategy_discovery_v2.folds import (
+    fold_manifest_hash,
+    generate_anchored_folds,
+    generate_nested_folds,
+)
+from research.ml_strategy_discovery_v2.freeze import (
+    candidate_bundle,
+    write_frozen_registry,
 )
 from research.ml_strategy_discovery_v2.gates import (
-    minimum_support_gate,
-    base_rate_lift_gate,
-    fold_gates,
-    concentration_gates,
+    base_rate_gate,
     bootstrap_gate,
-    imputation_dependence_gate
+    concentration_gate,
+    concentration_metrics,
+    fold_gate,
+    imputation_dependence,
+    performance_metrics,
+    session_bootstrap_expectancy,
+    support_gate,
 )
-from research.ml_strategy_discovery_v2.folds import generate_nested_folds
-from research.ml_strategy_discovery_v2.stability import multiple_testing_and_stability
-from research.ml_strategy_discovery_v2.controls import run_negative_controls
-from research.ml_strategy_discovery_v2.model import generate_candidates, rule_mask
+from research.ml_strategy_discovery_v2.model import (
+    RuleReproductionError,
+    fit_imputer,
+    generate_candidates,
+    rule_mask,
+    semantic_frame_hash,
+)
+from research.ml_strategy_discovery_v2.source import (
+    SourceCertificationError,
+    development_manifest_payload,
+    load_and_verify_manifest,
+    resolve_source_file,
+    verify_manifest_sidecar,
+    verify_record_file,
+)
+from research.ml_strategy_discovery_v2.stability import (
+    benjamini_hochberg,
+    jaccard_selected_rows,
+    max_statistic_test,
+    permuted_labels_by_session,
+    recurrence_summary,
+    rule_similarity,
+)
 
-@pytest.fixture
-def dummy_dataset():
-    dates = ["2024-05-30", "2025-09-08", "2026-02-06", "2026-07-11", "2026-08-01"]
-    return pd.DataFrame({
-        "session_date": dates,
-        "label_return_r": [0.5, 0.5, 0.5, 0.5, 0.5],
-        "expectancy": [0.5] * 5
-    })
 
-def test_v1_validation_blocked(dummy_dataset):
-    with pytest.raises(DatasetRegistryViolation, match="VALIDATION_V1_CONSUMED"):
-        load_development_for_selection(dummy_dataset)
+def _registry_payload() -> dict:
+    return {
+        "ranges": [
+            {"name": DEVELOPMENT, "start": None, "end": "2025-09-05", "status": "A"},
+            {"name": VALIDATION_CONSUMED, "start": "2025-09-08", "end": "2026-02-05", "status": "B"},
+            {"name": HOLDOUT_LOCKED, "start": "2026-02-06", "end": "2026-07-10", "status": "C"},
+            {"name": FRESH_CONSUMED, "start": "2026-07-11", "end": "2026-07-21", "status": "D"},
+            {"name": FRESH_LOCKED, "start": "2026-07-22", "end": None, "status": "E"},
+        ]
+    }
 
-def test_v1_holdout_blocked(dummy_dataset):
-    with pytest.raises(DatasetRegistryViolation, match="HOLDOUT_V1_LOCKED"):
-        load_development_for_selection(dummy_dataset)
 
-def test_fresh_outcomes_blocked_before_freeze(dummy_dataset):
-    with pytest.raises(DatasetRegistryViolation):
-        _ = load_development_for_selection(pd.DataFrame({"session_date": ["2026-08-01"]}))
+def _candidate(threshold: float = 0.5) -> dict:
+    return {
+        "conditions": [{"feature": "f1", "operator": ">", "threshold": threshold}],
+        "imputation_values": {"f1": 0.0},
+        "rule_hash": canonical_hash({"threshold": threshold}),
+    }
 
-def test_metadata_only_fresh_inventory_allowed(dummy_dataset):
-    with pytest.raises(DatasetRegistryViolation):
-        load_locked_confirmation_metadata(dummy_dataset)
-    # Give it only allowed dates to verify column stripping
-    df = load_locked_confirmation_metadata(pd.DataFrame({
-        "session_date": ["2026-08-01"],
-        "label_return_r": [0.5],
-        "expectancy": [0.5]
-    }))
-    assert "2026-08-01" in df["session_date"].values
-    assert "label_return_r" not in df.columns
-    assert "expectancy" not in df.columns
 
-def test_consumed_confirmation_cannot_be_relocked():
-    df = pd.DataFrame({"session_date": ["2026-07-11"]})
-    with pytest.raises(DatasetRegistryViolation, match="Consumed confirmation cannot be relocked"):
-        evaluate_frozen_candidate_once(df, "token123", "h1", "h1", "m1", "m1")
+def _frame(sessions: int = 20, rows_per_session: int = 10) -> pd.DataFrame:
+    rng = np.random.default_rng(7)
+    dates = pd.bdate_range("2024-01-01", periods=sessions).strftime("%Y-%m-%d")
+    records = []
+    for session_index, session in enumerate(dates):
+        for bar in range(rows_per_session):
+            f1 = float(rng.normal())
+            records.append(
+                {
+                    "session_date": session,
+                    "decision_timestamp": pd.Timestamp(session) + pd.Timedelta(minutes=bar),
+                    "f1": f1,
+                    "f2": float(rng.normal()),
+                    "label_return_r": 0.6 if f1 > 0.5 else -0.3,
+                    "trend_regime": float(session_index % 3 - 1),
+                    "volatility_regime": float(session_index % 2),
+                    "gap_regime": float(session_index % 2),
+                    "time_regime": float(bar // max(1, rows_per_session // 3)),
+                }
+            )
+    return pd.DataFrame.from_records(records)
 
-def test_candidate_bound_token_required(dummy_dataset):
-    with pytest.raises(DatasetRegistryViolation, match="Generic acknowledgement"):
-        evaluate_frozen_candidate_once(dummy_dataset, "generic_token", "h1", "h1", "m1", "m1")
 
-def test_token_replay_rejected(dummy_dataset):
-    evaluate_frozen_candidate_once(pd.DataFrame({"session_date": ["2026-08-01"]}), "unique1", "h1", "h1", "m1", "m1")
+def _write_manifest(tmp_path: Path, records: list[dict], policies: list[dict] | None = None) -> Path:
+    path = tmp_path / "manifest.json"
+    payload = {
+        "source_manifest_version": "v2",
+        "record_count": len(records),
+        "records": records,
+        "special_session_policies": policies or [],
+    }
+    path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    Path(f"{path}.sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    return path
+
+
+# Contracts and configuration
+
+def test_canonical_hash_is_order_independent() -> None:
+    assert canonical_hash({"b": 2, "a": 1}) == canonical_hash({"a": 1, "b": 2})
+
+
+def test_forbidden_features_cover_labels_timestamps_and_source_ids() -> None:
+    assert is_forbidden_feature("label_return_r")
+    assert is_forbidden_feature("decision_timestamp")
+    assert is_forbidden_feature("source_manifest_record_id")
+    assert not is_forbidden_feature("distance_from_vwap_atr")
+
+
+def test_require_causal_features_rejects_duplicates_and_leakage() -> None:
+    with pytest.raises(ValueError, match="unique"):
+        require_causal_features(["f1", "f1"])
+    with pytest.raises(ValueError, match="forbidden"):
+        require_causal_features(["f1", "future_return"])
+
+
+def test_stability_config_rejects_invalid_iterations() -> None:
+    with pytest.raises(ValueError, match="at least 100"):
+        StabilityConfig(bootstrap_iterations=99)
+
+
+# Dataset registry and confirmation lock
+
+def test_default_registry_classifies_all_frozen_boundaries() -> None:
+    registry = default_registry()
+    assert registry.classify("2025-09-05") == DEVELOPMENT
+    assert registry.classify("2025-09-08") == VALIDATION_CONSUMED
+    assert registry.classify("2026-02-06") == HOLDOUT_LOCKED
+    assert registry.classify("2026-07-21") == FRESH_CONSUMED
+    assert registry.classify("2026-07-22") == FRESH_LOCKED
+
+
+def test_load_registry_accepts_exact_contract(tmp_path: Path) -> None:
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(_registry_payload()), encoding="utf-8")
+    registry = load_registry(path)
+    assert registry.classify("2024-01-01") == DEVELOPMENT
+    assert len(registry.source_hash) == 64
+
+
+def test_load_registry_rejects_boundary_mutation(tmp_path: Path) -> None:
+    payload = _registry_payload()
+    payload["ranges"][0]["end"] = "2025-09-06"
+    path = tmp_path / "registry.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(DatasetRegistryViolation, match="boundaries"):
+        load_registry(path)
+
+
+def test_development_loader_rejects_consumed_and_locked_rows() -> None:
+    frame = pd.DataFrame(
+        {"session_date": ["2024-01-01", "2025-09-08", "2026-02-06", "2026-07-22"]}
+    )
+    with pytest.raises(DatasetRegistryViolation, match="forbidden partitions"):
+        load_development_for_selection(frame)
+
+
+def test_development_loader_accepts_only_development() -> None:
+    frame = pd.DataFrame({"session_date": ["2024-01-01", "2025-09-05"], "x": [1, 2]})
+    selected = load_development_for_selection(frame)
+    assert selected["v2_dataset"].eq(DEVELOPMENT).all()
+
+
+def test_raw_bar_selection_happens_before_labels() -> None:
+    frame = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2025-09-05 09:15"), pd.Timestamp("2025-09-08 09:15")],
+            "open": [1.0, 2.0],
+        }
+    )
+    selected = select_development_bars(frame, registry=default_registry())
+    assert selected["session_date"].tolist() == ["2025-09-05"]
+
+
+def test_locked_confirmation_metadata_strips_outcomes() -> None:
+    frame = pd.DataFrame(
+        {
+            "session_date": ["2026-07-21", "2026-07-22"],
+            "instrument": ["NIFTY", "NIFTY"],
+            "label_return_r": [1.0, -1.0],
+            "expectancy": [1.0, -1.0],
+            "source_sha256": ["a", "b"],
+        }
+    )
+    metadata = locked_confirmation_metadata(frame)
+    assert set(metadata["v2_dataset"]) == {FRESH_CONSUMED, FRESH_LOCKED}
+    assert "label_return_r" not in metadata
+    assert "expectancy" not in metadata
+
+
+def test_confirmation_authorization_is_bound_and_one_time(tmp_path: Path) -> None:
+    state = tmp_path / "state.json"
+    token = issue_confirmation_authorization(
+        candidate_bundle_hash="a" * 64,
+        fresh_manifest_hash="b" * 64,
+        code_sha="c" * 40,
+        side="LONG",
+        evaluation_id="eval-1",
+        state_path=state,
+    )
+    consume_confirmation_authorization(
+        token=token,
+        candidate_bundle_hash="a" * 64,
+        fresh_manifest_hash="b" * 64,
+        code_sha="c" * 40,
+        side="LONG",
+        evaluation_id="eval-1",
+        state_path=state,
+    )
     with pytest.raises(TokenReplayViolation):
-        evaluate_frozen_candidate_once(pd.DataFrame({"session_date": ["2026-08-01"]}), "unique1", "h1", "h1", "m1", "m1")
+        consume_confirmation_authorization(
+            token=token,
+            candidate_bundle_hash="a" * 64,
+            fresh_manifest_hash="b" * 64,
+            code_sha="c" * 40,
+            side="LONG",
+            evaluation_id="eval-1",
+            state_path=state,
+        )
 
-def test_wrong_candidate_hash_rejected():
-    with pytest.raises(DatasetRegistryViolation, match="Wrong candidate hash"):
-        evaluate_frozen_candidate_once(pd.DataFrame(), "tok2", "expected", "actual", "m", "m")
 
-def test_wrong_manifest_hash_rejected():
-    with pytest.raises(DatasetRegistryViolation, match="Wrong manifest hash"):
-        evaluate_frozen_candidate_once(pd.DataFrame(), "tok3", "h", "h", "expected", "actual")
-
-def test_source_delta_deterministic():
-    assert True # Proved in script generation
-
-def test_manifest_sidecar_mismatch():
-    assert True # Proved in script execution block
-
-def test_source_byte_mismatch():
-    assert True
-
-def test_path_escape():
-    assert True
-    
-def test_duplicate_session():
-    assert True
-    
-def test_incomplete_standard_session():
-    assert True
-    
-def test_special_session_policy():
-    assert True
-
-def test_minimum_row_support():
-    df = pd.DataFrame({"session_date": ["2024-05-30"] * 50})
-    assert not minimum_support_gate(df, pd.Series(True, index=df.index), 100, 30)
-
-def test_minimum_session_support():
-    df = pd.DataFrame({"session_date": ["2024-05-30"] * 150})
-    assert not minimum_support_gate(df, pd.Series(True, index=df.index), 100, 30)
-
-def test_fold_coverage():
-    res = [{"trades": 0}, {"trades": 10}, {"trades": 10}]
-    assert not fold_gates(res) # Only 66% trade bearing < 70%
-
-def test_concentration():
-    df = pd.DataFrame({
-        "session_date": ["2024-05-30"] * 10,
-        "label_return_r": [10.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    })
-    # Top trade is 10 out of 10.9 > 50%
-    assert not concentration_gates(df, pd.Series(True, index=df.index))
-
-def test_base_rate_lift():
-    assert not base_rate_lift_gate({"label_expectancy_r": 0.1}, {"label_expectancy_r": 0.2})
-
-def test_nested_fold_determinism():
-    df = pd.DataFrame({"session_date": ["2024-05-30", "2024-05-31", "2024-06-01"]})
-    folds = generate_nested_folds(df, 3)
-    assert folds[0]["val_sessions"] == ["2024-05-30"]
-
-def test_purge_embargo():
-    df = pd.DataFrame({"session_date": ["2024-05-30", "2024-05-31", "2024-06-01", "2024-06-02"]})
-    folds = generate_nested_folds(df, 2)
-    # Fold 1 val is 2024-05-30, 2024-05-31. 
-    # Embargo drops 2024-06-01 from train. Train is only 2024-06-02
-    assert "2024-06-01" not in folds[0]["train_sessions"]
-
-def test_exact_rule_oracle():
-    assert True
-
-def test_imputation_dependence():
-    assert True
-
-def test_equivalent_rule_rejection():
-    # Proven by hash check in model.py
-    assert True
-
-def test_threshold_stability():
-    assert True
-
-def test_family_level_multiple_testing_correction():
-    df = pd.DataFrame({"session_date": ["2024-05-30"]*10, "label_return_r": [0.1]*10})
-    # Stat is 0.1. Iterations will produce noise. We ensure function runs
-    res = multiple_testing_and_stability(df, [{"c":1}], [pd.Series(True, index=df.index)])
-    assert len(res) == 1
-
-def test_stability_recurrence():
-    assert True
-
-def test_control_comparison():
-    df = pd.DataFrame({
-        "session_date": ["2024-05-30"]*10, 
-        "label_return_r": [0.1]*10,
-        "f1": [1]*10
-    })
-    ctrl = run_negative_controls(df, {"conditions": []})
-    assert "placebo" in ctrl
-    assert "loyo_2024" in ctrl
-
-def test_one_bar_latency():
-    df = pd.DataFrame({"session_date": ["2024-05-30"]*10, "label_return_r": [0.1]*10})
-    ctrl = run_negative_controls(df, {"conditions": []})
-    assert "one_bar_latency" in ctrl
-
-def test_two_bar_latency():
-    df = pd.DataFrame({"session_date": ["2024-05-30"]*10, "label_return_r": [0.1]*10})
-    ctrl = run_negative_controls(df, {"conditions": []})
-    assert "two_bar_latency" in ctrl
-
-def test_at_most_one_freeze_per_side():
-    assert True
-
-def test_no_token_when_no_candidate():
-    assert True
-
-def test_verdict_changes_with_fixture():
-    assert True
-
-def test_hard_coded_verdict_impossible():
-    assert True
-
-def test_no_fresh_metric_access_in_dev_mode():
-    assert True
-
-def test_no_option_claims():
-    assert True
+def test_confirmation_authorization_rejects_wrong_binding(tmp_path: Path) -> None:
+    state = tmp_path / "state.json"
+    token = issue_confirmation_authorization(
+        candidate_bundle_hash="a" * 64,
+        fresh_manifest_hash="b" * 64,
+        code_sha="c" * 40,
+        side="SHORT",
+        evaluation_id="eval-1",
+        state_path=state,
+    )
+    with pytest.raises(ConfirmationAuthorizationError, match="binding mismatch"):
+        consume_confirmation_authorization(
+            token=token,
+            candidate_bundle_hash="d" * 64,
+            fresh_manifest_hash="b" * 64,
+            code_sha="c" * 40,
+            side="SHORT",
+            evaluation_id="eval-1",
+            state_path=state,
+        )

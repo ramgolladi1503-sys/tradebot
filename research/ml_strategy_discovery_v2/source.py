@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts import sha256_file
-from .contracts import canonical_hash
+from .contracts import DEVELOPMENT, canonical_hash
 
 
 class SourceCertificationError(ValueError):
@@ -30,7 +30,7 @@ def verify_manifest_sidecar(manifest_path: str | Path) -> str:
             f"source manifest sidecar filename mismatch: {declared_filename} != {manifest.name}"
         )
     actual = sha256_file(manifest)
-    if declared_digest != actual:
+    if declared_digest.lower() != actual:
         raise SourceCertificationError(
             f"source manifest sidecar digest mismatch: {declared_digest} != {actual}"
         )
@@ -42,7 +42,10 @@ def load_and_verify_manifest(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     manifest = Path(manifest_path)
     manifest_hash = verify_manifest_sidecar(manifest)
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SourceCertificationError("source manifest JSON is malformed") from exc
     if not isinstance(payload, dict) or payload.get("source_manifest_version") not in {
         "v2",
         "v2.1",
@@ -51,6 +54,8 @@ def load_and_verify_manifest(
     records = payload.get("records")
     if not isinstance(records, list) or not records:
         raise SourceCertificationError("source manifest records are required")
+    if payload.get("record_count") is not None and int(payload["record_count"]) != len(records):
+        raise SourceCertificationError("source manifest record_count mismatch")
     expected = sorted(
         records,
         key=lambda item: (
@@ -83,9 +88,7 @@ def load_and_verify_manifest(
         symbol = str(record.get("symbol") or "")
         session_date = str(record.get("session_date") or "")
         digest = str(record.get("actual_sha256") or "")
-        if len(digest) != 64 or any(
-            character not in "0123456789abcdef" for character in digest
-        ):
+        if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise SourceCertificationError(f"invalid source digest: {logical_path}")
         if not record_id or not symbol or not session_date:
             raise SourceCertificationError(
@@ -108,7 +111,7 @@ def load_and_verify_manifest(
     if not isinstance(policies, list):
         raise SourceCertificationError("special_session_policies must be a list")
     for policy in policies:
-        if policy.get("policy") != "EXCLUDE_SPECIAL_SESSION_WITH_RECORDED_REASON":
+        if not isinstance(policy, dict) or policy.get("policy") != "EXCLUDE_SPECIAL_SESSION_WITH_RECORDED_REASON":
             raise SourceCertificationError("unsupported special-session policy")
         required = {"session_date", "symbol", "expected_rows", "actual_rows", "reason"}
         if required.difference(policy):
@@ -138,10 +141,6 @@ def selected_instrument_records(
         for record in payload["records"]
         if str(record.get("symbol") or "").upper().strip()
         in {normalized, f"NSE_INDEX|{normalized}"}
-        or (
-            normalized == "NIFTY"
-            and str(record.get("symbol") or "").upper().strip() == "NIFTY"
-        )
     ]
     if not records:
         raise SourceCertificationError(f"manifest contains no records for {instrument}")
@@ -157,19 +156,28 @@ def development_manifest_payload(
     selected = [
         record
         for record in selected_instrument_records(payload, instrument)
-        if registry.classify(str(record["session_date"])) == "DEVELOPMENT_V1"
+        if registry.classify(str(record["session_date"])) == DEVELOPMENT
     ]
     if not selected:
         raise SourceCertificationError("manifest contains no DEVELOPMENT_V1 records")
+    selected = sorted(
+        selected,
+        key=lambda item: (
+            str(item["session_date"]),
+            str(item["logical_path"]),
+            str(item["actual_sha256"]),
+        ),
+    )
     return {
         "source_manifest_version": "v2",
         "selection_contract": "ML_STRATEGY_DISCOVERY_V2_DEVELOPMENT_ONLY",
         "parent_manifest_record_set_hash": canonical_hash(payload["records"]),
+        "record_count": len(selected),
         "records": selected,
         "special_session_policies": [
             policy
             for policy in payload.get("special_session_policies", [])
-            if registry.classify(str(policy["session_date"])) == "DEVELOPMENT_V1"
+            if registry.classify(str(policy["session_date"])) == DEVELOPMENT
         ],
     }
 
@@ -184,7 +192,6 @@ def resolve_source_file(project_root: str | Path, logical_path: str) -> Path:
         or logical.parts[:2] != ("runtime", "upstox_candidate_replay")
     ):
         raise SourceCertificationError(f"unsafe source logical path: {logical_path!r}")
-    unresolved = root / logical
     current = root
     for part in logical.parts:
         current = current / part
@@ -192,7 +199,7 @@ def resolve_source_file(project_root: str | Path, logical_path: str) -> Path:
             raise SourceCertificationError(
                 f"source path contains a symlink: {logical_path}"
             )
-    resolved = unresolved.resolve()
+    resolved = (root / logical).resolve()
     try:
         resolved.relative_to(allowed)
     except ValueError as exc:

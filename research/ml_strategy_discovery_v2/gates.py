@@ -14,7 +14,7 @@ def label_profit_factor(returns: pd.Series) -> float | None:
     gains = float(numeric[numeric > 0].sum())
     losses = float(-numeric[numeric < 0].sum())
     if losses == 0:
-        return None if gains == 0 else float("inf")
+        return None
     return gains / losses
 
 
@@ -25,11 +25,24 @@ def max_drawdown(returns: pd.Series) -> float:
     return float(-drawdown.min()) if len(drawdown) else 0.0
 
 
+def _validated_mask(frame: pd.DataFrame, mask: pd.Series) -> pd.Series:
+    if not isinstance(mask, pd.Series):
+        raise TypeError("mask must be a pandas Series")
+    aligned = mask.reindex(frame.index)
+    if aligned.isna().any():
+        raise ValueError("mask does not align with frame index")
+    return aligned.astype(bool)
+
+
 def performance_metrics(frame: pd.DataFrame, mask: pd.Series) -> dict[str, Any]:
-    selected = frame.loc[mask].copy()
-    returns = pd.to_numeric(
-        selected.get("label_return_r", pd.Series(dtype=float)), errors="raise"
-    ).dropna()
+    required = {"session_date", "label_return_r"}
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"metric frame missing columns: {sorted(missing)}")
+    selected = frame.loc[_validated_mask(frame, mask)].copy()
+    returns = pd.to_numeric(selected["label_return_r"], errors="raise").dropna().astype(float)
+    if not np.isfinite(returns.to_numpy()).all():
+        raise ValueError("metric returns must be finite")
     positive = returns[returns > 0]
     negative = returns[returns < 0]
     return {
@@ -45,12 +58,24 @@ def performance_metrics(frame: pd.DataFrame, mask: pd.Series) -> dict[str, Any]:
         "gross_positive_r": float(positive.sum()),
         "gross_negative_r": float(negative.sum()),
         "label_pf": label_profit_factor(returns),
+        "label_pf_unbounded": bool(len(returns) and negative.empty and not positive.empty),
         "max_drawdown_r": max_drawdown(returns),
     }
 
 
+def _regime_signature(frame: pd.DataFrame) -> tuple[pd.Series | None, list[str]]:
+    columns = [
+        name
+        for name in ("trend_regime", "volatility_regime", "gap_regime", "time_regime")
+        if name in frame.columns
+    ]
+    if not columns:
+        return None, []
+    return frame[columns].astype(str).agg("|".join, axis=1), columns
+
+
 def concentration_metrics(frame: pd.DataFrame, mask: pd.Series) -> dict[str, Any]:
-    selected = frame.loc[mask].copy()
+    selected = frame.loc[_validated_mask(frame, mask)].copy()
     returns = pd.to_numeric(selected["label_return_r"], errors="raise").astype(float)
     positives = returns[returns > 0]
     total_positive = float(positives.sum())
@@ -61,26 +86,15 @@ def concentration_metrics(frame: pd.DataFrame, mask: pd.Series) -> dict[str, Any
         return float(values.nlargest(n).sum() / total_positive)
 
     selected["year"] = selected["session_date"].astype(str).str[:4]
-    positive_frame = selected[selected["label_return_r"] > 0]
+    positive_frame = selected.loc[returns > 0].copy()
     year = positive_frame.groupby("year")["label_return_r"].sum()
-    regime_column = next(
-        (
-            name
-            for name in (
-                "regime",
-                "deterministic_regime",
-                "volatility_regime",
-                "trend_regime",
-            )
-            if name in selected.columns
-        ),
-        None,
-    )
-    regime = (
-        positive_frame.groupby(regime_column)["label_return_r"].sum()
-        if regime_column is not None and not positive_frame.empty
-        else pd.Series(dtype=float)
-    )
+    signature, regime_columns = _regime_signature(selected)
+    regime = pd.Series(dtype=float)
+    if signature is not None and not positive_frame.empty:
+        positive_signature = signature.loc[positive_frame.index]
+        regime = positive_frame.assign(_regime=positive_signature).groupby("_regime")[
+            "label_return_r"
+        ].sum()
     session = positive_frame.groupby("session_date")["label_return_r"].sum()
     return {
         "top1_trade_positive_contribution": contribution(positives, 1),
@@ -95,7 +109,7 @@ def concentration_metrics(frame: pd.DataFrame, mask: pd.Series) -> dict[str, Any
         "largest_regime_positive_contribution": float(regime.max() / total_positive)
         if total_positive > 0 and not regime.empty
         else None,
-        "regime_column": regime_column,
+        "regime_columns": regime_columns,
     }
 
 
@@ -106,16 +120,23 @@ def session_bootstrap_expectancy(
     iterations: int,
     seed: int,
 ) -> dict[str, Any]:
-    selected = frame.loc[mask, ["session_date", "label_return_r"]].copy()
+    if iterations < 100:
+        raise ValueError("at least 100 bootstrap iterations are required")
+    selected = frame.loc[
+        _validated_mask(frame, mask), ["session_date", "label_return_r"]
+    ].copy()
     if selected.empty:
         return {
-            "iterations": iterations,
+            "iterations": int(iterations),
+            "seed": int(seed),
             "lower_95": None,
             "median": None,
             "upper_95": None,
         }
     session_groups = {
-        str(session): group["label_return_r"].astype(float).to_numpy()
+        str(session): pd.to_numeric(group["label_return_r"], errors="raise").to_numpy(
+            dtype=float
+        )
         for session, group in selected.groupby("session_date", sort=True)
     }
     sessions = np.array(sorted(session_groups), dtype=object)
@@ -166,9 +187,9 @@ def support_gate(
         reasons.append("MIN_ROWS")
     if metrics["sessions"] < config.min_sessions:
         reasons.append("MIN_SESSIONS")
-    if metrics["support_rate"] < 0.005:
+    if metrics["support_rate"] < config.min_support_rate:
         reasons.append("EXTREMELY_RARE")
-    if metrics["support_rate"] > 0.95:
+    if metrics["support_rate"] > config.max_support_rate:
         reasons.append("NEAR_UNIVERSAL")
     return not reasons, reasons
 
@@ -176,17 +197,20 @@ def support_gate(
 def base_rate_gate(
     candidate_metrics: dict[str, Any], base_metrics: dict[str, Any]
 ) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    if candidate_metrics["expectancy_r"] <= 0:
+        reasons.append("NON_POSITIVE_EXPECTANCY")
     if candidate_metrics["expectancy_r"] <= base_metrics["expectancy_r"]:
-        return False, ["NO_BASE_RATE_LIFT"]
-    return True, []
+        reasons.append("NO_BASE_RATE_LIFT")
+    return not reasons, reasons
 
 
 def fold_gate(
     fold_results: list[dict[str, Any]], config: StabilityConfig
 ) -> tuple[bool, list[str], dict[str, Any]]:
-    reasons: list[str] = []
     if not fold_results:
         return False, ["NO_OUTER_FOLDS"], {}
+    reasons: list[str] = []
     trade_bearing = [item for item in fold_results if item["metrics"]["rows"] > 0]
     coverage = len(trade_bearing) / len(fold_results)
     expectations = [item["metrics"]["expectancy_r"] for item in trade_bearing]
@@ -216,29 +240,22 @@ def concentration_gate(
     values: dict[str, Any], config: StabilityConfig
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
-    if (
-        values["top5_trade_positive_contribution"]
-        > config.max_top5_positive_contribution
-    ):
+    if values["top5_trade_positive_contribution"] > config.max_top5_positive_contribution:
         reasons.append("TOP5_TRADE_CONCENTRATION")
-    if (
-        values["largest_year_positive_contribution"]
-        > config.max_year_positive_contribution
-    ):
+    if values["largest_year_positive_contribution"] > config.max_year_positive_contribution:
         reasons.append("YEAR_CONCENTRATION")
     regime_value = values.get("largest_regime_positive_contribution")
-    if (
-        regime_value is not None
-        and regime_value > config.max_regime_positive_contribution
-    ):
+    if regime_value is None:
+        reasons.append("MISSING_REGIME_CONCENTRATION")
+    elif regime_value > config.max_regime_positive_contribution:
         reasons.append("REGIME_CONCENTRATION")
     return not reasons, reasons
 
 
 def bootstrap_gate(values: dict[str, Any]) -> tuple[bool, list[str]]:
     lower = values.get("lower_95")
-    if lower is None or lower < -0.1:
-        return False, ["BOOTSTRAP_LOWER_BOUND_MATERIALLY_NEGATIVE"]
+    if lower is None or lower <= 0:
+        return False, ["BOOTSTRAP_LOWER_BOUND_NOT_POSITIVE"]
     return True, []
 
 

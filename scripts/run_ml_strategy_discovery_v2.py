@@ -6,7 +6,6 @@ import json
 import logging
 from pathlib import Path
 
-
 from research.ml_strategy_discovery.contracts import DiscoveryConfig, TimestampSemantics
 from research.ml_strategy_discovery.dataset import (
     build_discovery_dataset,
@@ -27,10 +26,7 @@ from research.ml_strategy_discovery_v2.contracts import (
     canonical_hash,
     require_causal_features,
 )
-from research.ml_strategy_discovery_v2.data import (
-    load_development_for_selection,
-    load_registry,
-)
+from research.ml_strategy_discovery_v2.data import load_development_for_selection, load_registry
 from research.ml_strategy_discovery_v2.freeze import (
     candidate_bundle,
     write_frozen_registry,
@@ -81,8 +77,7 @@ def _resolve(root: Path, value: str) -> Path:
 def _required_evidence_hashes(args: argparse.Namespace) -> dict[str, str]:
     requirements = {
         "v1_long_evidence_manifest": Path(args.v1_long_dir) / "evidence_manifest.json",
-        "v1_short_evidence_manifest": Path(args.v1_short_dir)
-        / "evidence_manifest.json",
+        "v1_short_evidence_manifest": Path(args.v1_short_dir) / "evidence_manifest.json",
         "v1_audit_final_report": Path(args.v1_audit_dir) / "final_report.md",
     }
     hashes: dict[str, str] = {}
@@ -140,8 +135,6 @@ def main() -> int:
     source_payload, source_identity = load_and_verify_manifest(manifest_path)
     v1_hashes = _required_evidence_hashes(args)
 
-    # The parent manifest is read as metadata only. Only DEVELOPMENT records are
-    # materialized into a child selection manifest before any parquet is opened.
     selected_manifest = development_manifest_payload(
         source_payload,
         instrument=args.instrument,
@@ -176,9 +169,7 @@ def main() -> int:
         label_side=args.side,
         random_seed=args.seed,
     )
-    dataset = build_discovery_dataset(
-        source_bundle.bars, config=config, option_quotes=None
-    )
+    dataset = build_discovery_dataset(source_bundle.bars, config=config, option_quotes=None)
     development = load_development_for_selection(dataset, registry=registry)
     features = require_causal_features(model_feature_names(development))
     stability_config = StabilityConfig(
@@ -208,10 +199,11 @@ def main() -> int:
         "registry": registry.source_hash,
         **v1_hashes,
     }
-    seeds = [args.seed]
-    common = dict(
-        code_sha=code_sha, input_hashes=input_hashes, deterministic_seeds=seeds
-    )
+    common = {
+        "code_sha": code_sha,
+        "input_hashes": input_hashes,
+        "deterministic_seeds": [args.seed],
+    }
     write_json(
         output_dir / "input_inventory.json",
         envelope(
@@ -248,9 +240,7 @@ def main() -> int:
         envelope(
             {
                 "features": list(features),
-                "feature_schema_hash": result.get(
-                    "feature_schema_hash", canonical_hash(features)
-                ),
+                "feature_schema_hash": result["feature_schema_hash"],
             },
             **common,
         ),
@@ -265,28 +255,20 @@ def main() -> int:
             **common,
         ),
     )
-    write_json(
-        output_dir / "candidate_funnel.json",
-        envelope(result["candidate_funnel"], **common),
-    )
+    write_json(output_dir / "candidate_funnel.json", envelope(result["candidate_funnel"], **common))
     write_json(
         output_dir / "outer_fold_results.json",
         envelope(
-            {
-                "results": result["outer_fold_results"],
-                "summary": result.get("fold_summary", {}),
-            },
+            {"results": result["outer_fold_results"], "summary": result["fold_summary"]},
             **common,
         ),
     )
-    write_json(
-        output_dir / "multiple_testing.json",
-        envelope(result["multiple_testing"], **common),
-    )
+    write_json(output_dir / "multiple_testing.json", envelope(result["multiple_testing"], **common))
     write_json(
         output_dir / "stability_selection.json",
         envelope(
             {
+                "screened_consensus_candidate": result.get("screened_consensus_candidate"),
                 "recurrence": result.get("recurrence"),
                 "gate_results": result.get("gate_results", {}),
             },
@@ -295,13 +277,7 @@ def main() -> int:
     )
     write_json(
         output_dir / "negative_controls.json",
-        envelope(
-            result.get(
-                "negative_controls",
-                {"passes": False, "rejection_reasons": ["NO_CANDIDATE_TO_CONTROL"]},
-            ),
-            **common,
-        ),
+        envelope(result["negative_controls"], **common),
     )
 
     bundles: list[dict] = []
@@ -329,7 +305,7 @@ def main() -> int:
         bundles=bundles,
         code_sha=code_sha,
         input_hashes=input_hashes,
-        seeds=seeds,
+        seeds=[args.seed],
     )
     confirmation_status = "NEED_NEW_FRESH_CONFIRMATION_DATA"
     write_json(
@@ -347,10 +323,9 @@ def main() -> int:
         ),
     )
     _write_report(output_dir / "final_report.md", result, confirmation_status)
-    semantic_manifest = build_semantic_hash_manifest(output_dir)
     write_json(
         output_dir / "semantic_hash_manifest.json",
-        envelope(semantic_manifest, **common),
+        envelope(build_semantic_hash_manifest(output_dir), **common),
     )
     LOGGER.info(
         "development verdict=%s frozen_registry_verdict=%s",

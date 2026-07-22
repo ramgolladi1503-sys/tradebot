@@ -22,9 +22,7 @@ def sha256_file(path: str | Path) -> str:
 
 def resolve_code_sha(project_root: str | Path) -> str:
     environment_sha = os.environ.get("GITHUB_SHA", "").strip().lower()
-    if len(environment_sha) == 40 and all(
-        character in "0123456789abcdef" for character in environment_sha
-    ):
+    if len(environment_sha) == 40 and all(c in "0123456789abcdef" for c in environment_sha):
         return environment_sha
     completed = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -34,9 +32,7 @@ def resolve_code_sha(project_root: str | Path) -> str:
         text=True,
     )
     value = completed.stdout.strip().lower()
-    if len(value) != 40 or any(
-        character not in "0123456789abcdef" for character in value
-    ):
+    if len(value) != 40 or any(c not in "0123456789abcdef" for c in value):
         raise ValueError("unable to derive a valid Git commit SHA")
     return value
 
@@ -65,7 +61,7 @@ def write_json(path: str | Path, payload: dict[str, Any]) -> None:
     fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=str(target.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, sort_keys=True, indent=2, default=str)
+            json.dump(payload, handle, sort_keys=True, indent=2, default=str, allow_nan=False)
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
@@ -105,4 +101,11 @@ def build_semantic_hash_manifest(directory: str | Path) -> dict[str, Any]:
                 "semantic_sha256": semantic_hash(payload),
             }
         )
-    return {"artifacts": records, "manifest_semantic_sha256": canonical_hash(records)}
+    semantic_records = [
+        {"path": item["path"], "semantic_sha256": item["semantic_sha256"]}
+        for item in records
+    ]
+    return {
+        "artifacts": records,
+        "manifest_semantic_sha256": canonical_hash(semantic_records),
+    }

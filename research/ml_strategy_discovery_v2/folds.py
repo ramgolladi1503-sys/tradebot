@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 import numpy as np
@@ -25,16 +25,20 @@ class Fold:
         return self.validation_sessions[-1]
 
     def to_dict(self) -> dict[str, Any]:
-        payload = asdict(self)
-        payload["validation_start"] = self.validation_start
-        payload["validation_end"] = self.validation_end
-        return payload
+        return {
+            "fold": self.fold,
+            "train_sessions": list(self.train_sessions),
+            "validation_sessions": list(self.validation_sessions),
+            "embargo_sessions": list(self.embargo_sessions),
+            "validation_start": self.validation_start,
+            "validation_end": self.validation_end,
+        }
 
 
 def _ordered_sessions(values: Iterable[str]) -> list[str]:
     sessions = sorted({str(value) for value in values})
-    if len(sessions) < 6:
-        raise ValueError("at least six sessions are required for walk-forward folds")
+    if not sessions:
+        raise ValueError("at least one session is required")
     return sessions
 
 
@@ -46,19 +50,21 @@ def generate_anchored_folds(
 ) -> list[Fold]:
     """Create chronological anchored walk-forward folds.
 
-    The first chunk is initial training. Every subsequent chunk is scored once using
-    only earlier sessions; sessions immediately before validation are embargoed.
+    The first chunk is initial training. Each later chunk is scored once using only
+    earlier sessions; the latest earlier sessions are embargoed.
     """
     ordered = _ordered_sessions(sessions)
     if num_folds < 2:
         raise ValueError("num_folds must be at least two")
     if embargo_sessions < 0:
         raise ValueError("embargo_sessions cannot be negative")
+    if len(ordered) < num_folds + 2:
+        raise ValueError("too few sessions for requested walk-forward folds")
     chunks = [
-        list(map(str, chunk))
+        [str(value) for value in chunk]
         for chunk in np.array_split(np.array(ordered, dtype=object), num_folds + 1)
     ]
-    if any(not chunk for chunks in chunks):
+    if any(not chunk for chunk in chunks):
         raise ValueError("too many folds for available sessions")
     folds: list[Fold] = []
     for index in range(1, len(chunks)):
@@ -90,7 +96,7 @@ def generate_nested_folds(
     outer_folds: int = 5,
     inner_folds: int = 4,
     embargo_sessions: int = 1,
-) => list[dict[str, Any]]:
+) -> list[dict[str, Any]]:
     if "session_date" not in frame.columns:
         raise ValueError("session_date is required")
     outer = generate_anchored_folds(
@@ -100,7 +106,12 @@ def generate_nested_folds(
     )
     output: list[dict[str, Any]] = []
     for outer_fold in outer:
-        maximum_inner = min(inner_folds, max(2, len(outer_fold.train_sessions) // 3))
+        available = len(outer_fold.train_sessions)
+        maximum_inner = min(inner_folds, available - 2)
+        if maximum_inner < 2:
+            raise ValueError(
+                f"outer fold {outer_fold.fold} has too few training sessions for nested CV"
+            )
         inner = generate_anchored_folds(
             outer_fold.train_sessions,
             num_folds=maximum_inner,

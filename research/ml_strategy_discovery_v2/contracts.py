@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-SCHEMA_VERSION = "ml_strategy_discovery_v2_certified_repair_v1"
+SCHEMA_VERSION = "ml_strategy_discovery_v2_certified_repair_v2"
 DEVELOPMENT = "DEVELOPMENT_V1"
 VALIDATION_CONSUMED = "VALIDATION_V1_CONSUMED"
 HOLDOUT_LOCKED = "HOLDOUT_V1_LOCKED"
@@ -76,7 +76,12 @@ FORBIDDEN_SUBSTRINGS = ("timestamp", "hash", "record_id")
 
 def canonical_json(value: Any) -> str:
     return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+        allow_nan=False,
     )
 
 
@@ -85,7 +90,7 @@ def canonical_hash(value: Any) -> str:
 
 
 def is_forbidden_feature(name: str) -> bool:
-    lowered = name.lower().strip()
+    lowered = str(name).lower().strip()
     return (
         lowered in FORBIDDEN_EXACT
         or lowered.startswith(FORBIDDEN_PREFIXES)
@@ -97,6 +102,8 @@ def require_causal_features(columns: Iterable[str]) -> tuple[str, ...]:
     features = tuple(str(column) for column in columns)
     if not features:
         raise ValueError("at least one causal feature is required")
+    if len(set(features)) != len(features):
+        raise ValueError("causal feature names must be unique")
     forbidden = sorted({name for name in features if is_forbidden_feature(name)})
     if forbidden:
         raise ValueError(f"forbidden model features: {forbidden}")
@@ -110,12 +117,18 @@ class StabilityConfig:
     embargo_sessions: int = 1
     min_rows: int = 100
     min_sessions: int = 30
+    min_support_rate: float = 0.005
+    max_support_rate: float = 0.95
     min_trade_bearing_fold_fraction: float = 0.70
     max_fold_positive_contribution: float = 0.40
     max_top5_positive_contribution: float = 0.50
     max_year_positive_contribution: float = 0.60
     max_regime_positive_contribution: float = 0.60
     max_imputed_selection_fraction: float = 0.30
+    min_recurrence_fraction: float = 0.60
+    min_rule_similarity: float = 0.80
+    min_selected_row_jaccard: float = 0.40
+    adjusted_alpha: float = 0.05
     bootstrap_iterations: int = 1000
     permutation_iterations: int = 1000
     seed: int = 42
@@ -127,15 +140,23 @@ class StabilityConfig:
             raise ValueError("embargo_sessions cannot be negative")
         if self.min_rows < 1 or self.min_sessions < 2:
             raise ValueError("support thresholds must be positive")
-        for value in (
+        fractions = (
+            self.min_support_rate,
+            self.max_support_rate,
             self.min_trade_bearing_fold_fraction,
             self.max_fold_positive_contribution,
             self.max_top5_positive_contribution,
             self.max_year_positive_contribution,
             self.max_regime_positive_contribution,
             self.max_imputed_selection_fraction,
-        ):
-            if not 0 < value <= 1:
-                raise ValueError("fraction thresholds must be in (0, 1]")
+            self.min_recurrence_fraction,
+            self.min_rule_similarity,
+            self.min_selected_row_jaccard,
+            self.adjusted_alpha,
+        )
+        if any(not 0 < value <= 1 for value in fractions):
+            raise ValueError("fraction thresholds must be in (0, 1]")
+        if self.min_support_rate >= self.max_support_rate:
+            raise ValueError("min_support_rate must be below max_support_rate")
         if self.bootstrap_iterations < 100 or self.permutation_iterations < 100:
             raise ValueError("statistical iterations must be at least 100")

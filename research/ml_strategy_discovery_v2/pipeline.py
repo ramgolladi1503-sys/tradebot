@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, replace
 from typing import Any
 
 import numpy as np
@@ -36,6 +37,15 @@ def _candidate_medoid(candidates: list[dict[str, Any]]) -> dict[str, Any] | None
     return max(scores, key=lambda item: (item[0], item[1]))[2]
 
 
+def _adaptive_inner_config(config: StabilityConfig, train: pd.DataFrame) -> StabilityConfig:
+    session_count = int(train["session_date"].nunique())
+    return replace(
+        config,
+        min_rows=min(config.min_rows, max(20, len(train) // 100)),
+        min_sessions=min(config.min_sessions, max(5, session_count // 3)),
+    )
+
+
 def _select_candidate_on_inner_folds(
     frame: pd.DataFrame,
     inner_folds: list[dict[str, Any]],
@@ -51,22 +61,23 @@ def _select_candidate_on_inner_folds(
         validation = frame[
             frame["session_date"].isin(fold["validation_sessions"])
         ].copy()
+        if train.empty or validation.empty:
+            continue
+        inner_config = _adaptive_inner_config(config, train)
         candidates = generate_candidates(
             train,
             features=features,
-            min_samples_leaf=max(
-                20, min(config.min_rows // 2, max(20, len(train) // 20))
-            ),
+            min_samples_leaf=max(20, min(inner_config.min_rows // 2, len(train) // 10)),
             seed=config.seed + seed_offset + inner_index,
         )
         hypothesis_count += len(candidates)
         base_validation = performance_metrics(
-            validation, pd.Series(True, index=validation.index)
+            validation, pd.Series(True, index=validation.index, dtype=bool)
         )
         eligible: list[tuple[float, int, str, dict[str, Any]]] = []
         for candidate in candidates:
             train_metrics = performance_metrics(train, rule_mask(train, candidate))
-            support_ok, _ = support_gate(train_metrics, config)
+            support_ok, _ = support_gate(train_metrics, inner_config)
             if not support_ok:
                 continue
             validation_metrics = performance_metrics(
@@ -90,18 +101,72 @@ def _select_candidate_on_inner_folds(
                 )
             )
         if eligible:
-            selected.append(
-                max(eligible, key=lambda item: (item[0], item[1], item[2]))[3]
-            )
+            selected.append(max(eligible, key=lambda item: (item[0], item[1], item[2]))[3])
     medoid = _candidate_medoid(selected)
     if medoid is None:
         return None, selected, hypothesis_count
-    recurring = sum(
-        rule_similarity(medoid, candidate) >= 0.80 for candidate in selected
+    recurrence = recurrence_summary(
+        frame,
+        medoid,
+        [[candidate] for candidate in selected],
+        minimum_similarity=config.min_rule_similarity,
+        minimum_jaccard=config.min_selected_row_jaccard,
+        minimum_fraction=config.min_recurrence_fraction,
     )
-    if recurring / max(1, len(inner_folds)) < 0.60:
+    if not recurrence["passes_recurrence"]:
         return None, selected, hypothesis_count
     return medoid, selected, hypothesis_count
+
+
+def _empty_result(
+    *,
+    side: str,
+    frame: pd.DataFrame,
+    features: tuple[str, ...],
+    folds: list[dict[str, Any]],
+    outer_records: list[dict[str, Any]],
+    funnel: dict[str, Any],
+    config: StabilityConfig,
+    reasons: list[str],
+) -> dict[str, Any]:
+    return {
+        "side": side,
+        "verdict": "NO_STABLE_CANDIDATE",
+        "candidate": None,
+        "screened_consensus_candidate": None,
+        "development_dataset_hash": semantic_frame_hash(
+            frame, ["session_date", "label_return_r", *features]
+        ),
+        "feature_schema_hash": canonical_hash(features),
+        "search_space_hash": canonical_hash(
+            {"features": features, "config": asdict(config), "hypothesis_rule_hashes": []}
+        ),
+        "fold_manifest_hash": fold_manifest_hash(folds),
+        "folds": folds,
+        "outer_fold_results": outer_records,
+        "fold_summary": fold_gate(outer_records, config)[2],
+        "candidate_funnel": funnel,
+        "candidate_metrics": {},
+        "base_metrics": {},
+        "multiple_testing": max_statistic_test(
+            frame,
+            [],
+            iterations=config.permutation_iterations,
+            seed=config.seed,
+            alpha=config.adjusted_alpha,
+        ),
+        "candidate_significance": None,
+        "recurrence": None,
+        "concentration": {},
+        "bootstrap": {},
+        "imputation_dependence": {},
+        "negative_controls": {
+            "passes": False,
+            "rejection_reasons": ["NO_CANDIDATE_TO_CONTROL"],
+        },
+        "gate_results": {},
+        "rejection_reasons": sorted(set(reasons)),
+    }
 
 
 def run_stability_first_discovery(
@@ -119,12 +184,10 @@ def run_stability_first_discovery(
     missing = required.difference(development.columns)
     if missing:
         raise ValueError(f"development dataset missing columns: {sorted(missing)}")
-    frame = development.sort_values(
-        ["session_date", "decision_timestamp"]
-        if "decision_timestamp" in development.columns
-        else ["session_date"],
-        kind="mergesort",
-    ).reset_index(drop=True)
+    sort_columns = ["session_date"]
+    if "decision_timestamp" in development.columns:
+        sort_columns.append("decision_timestamp")
+    frame = development.sort_values(sort_columns, kind="mergesort").reset_index(drop=True)
     folds = generate_nested_folds(
         frame,
         outer_folds=config.outer_folds,
@@ -156,7 +219,8 @@ def run_stability_first_discovery(
                     "fold": outer["fold"],
                     "candidate": None,
                     "metrics": performance_metrics(
-                        outer_validation, pd.Series(False, index=outer_validation.index)
+                        outer_validation,
+                        pd.Series(False, index=outer_validation.index, dtype=bool),
                     ),
                     "reason": "NO_RECURRING_INNER_CANDIDATE",
                 }
@@ -186,19 +250,23 @@ def run_stability_first_discovery(
     }
     consensus = _candidate_medoid(outer_candidates)
     if consensus is None:
-        return {
-            "side": side,
-            "verdict": "NO_STABLE_CANDIDATE",
-            "candidate": None,
-            "folds": folds,
-            "fold_manifest_hash": fold_manifest_hash(folds),
-            "outer_fold_results": outer_records,
-            "candidate_funnel": funnel,
-            "multiple_testing": max_statistic_test(
-                frame, [], iterations=config.permutation_iterations, seed=config.seed
-            ),
-            "rejection_reasons": ["NO_OUTER_CONSENSUS_CANDIDATE"],
-        }
+        funnel.update(
+            {
+                "unique_hypotheses": 0,
+                "consensus_candidate_identified": 0,
+                "surviving_candidates": 0,
+            }
+        )
+        return _empty_result(
+            side=side,
+            frame=frame,
+            features=feature_names,
+            folds=folds,
+            outer_records=outer_records,
+            funnel=funnel,
+            config=config,
+            reasons=["NO_OUTER_CONSENSUS_CANDIDATE"],
+        )
 
     unique_hypotheses: dict[str, dict[str, Any]] = {}
     for group in all_inner_candidates:
@@ -212,6 +280,7 @@ def run_stability_first_discovery(
         hypotheses,
         iterations=config.permutation_iterations,
         seed=config.seed,
+        alpha=config.adjusted_alpha,
     )
     significance_by_hash = {
         item["rule_hash"]: item for item in multiple_testing["candidates"]
@@ -220,10 +289,19 @@ def run_stability_first_discovery(
     if significance is None:
         raise AssertionError("consensus candidate missing from multiple-testing family")
 
-    recurrence = recurrence_summary(frame, consensus, all_inner_candidates)
+    recurrence = recurrence_summary(
+        frame,
+        consensus,
+        [[candidate] for candidate in outer_candidates],
+        minimum_similarity=config.min_rule_similarity,
+        minimum_jaccard=config.min_selected_row_jaccard,
+        minimum_fraction=config.min_recurrence_fraction,
+    )
     full_mask = rule_mask(frame, consensus)
     candidate_metrics = performance_metrics(frame, full_mask)
-    base_metrics = performance_metrics(frame, pd.Series(True, index=frame.index))
+    base_metrics = performance_metrics(
+        frame, pd.Series(True, index=frame.index, dtype=bool)
+    )
     concentration = concentration_metrics(frame, full_mask)
     bootstrap = session_bootstrap_expectancy(
         frame,
@@ -234,17 +312,19 @@ def run_stability_first_discovery(
     imputation = imputation_dependence(frame, consensus)
     controls = run_negative_controls(frame, consensus, seed=config.seed)
 
-    gate_results: dict[str, dict[str, Any]] = {}
-    for name, result in (
-        ("support", support_gate(candidate_metrics, config)),
-        ("base_rate", base_rate_gate(candidate_metrics, base_metrics)),
-        ("folds", fold_gate(outer_records, config)[:2]),
-        ("concentration", concentration_gate(concentration, config)),
-        ("bootstrap", bootstrap_gate(bootstrap)),
-        ("imputation", imputation_gate(imputation, config)),
-    ):
-        gate_results[name] = {"passes": bool(result[0]), "reasons": list(result[1])}
-    fold_summary = fold_gate(outer_records, config)[2]
+    fold_result = fold_gate(outer_records, config)
+    checks = {
+        "support": support_gate(candidate_metrics, config),
+        "base_rate": base_rate_gate(candidate_metrics, base_metrics),
+        "folds": fold_result[:2],
+        "concentration": concentration_gate(concentration, config),
+        "bootstrap": bootstrap_gate(bootstrap),
+        "imputation": imputation_gate(imputation, config),
+    }
+    gate_results = {
+        name: {"passes": bool(result[0]), "reasons": list(result[1])}
+        for name, result in checks.items()
+    }
     gate_results["adjusted_significance"] = {
         "passes": bool(significance["passes_adjusted_significance"]),
         "reasons": []
@@ -272,9 +352,7 @@ def run_stability_first_discovery(
     )
     return {
         "side": side,
-        "verdict": f"ONE_{side}_V2_CANDIDATE_FROZEN"
-        if passes
-        else "NO_STABLE_CANDIDATE",
+        "verdict": f"ONE_{side}_V2_CANDIDATE_FROZEN" if passes else "NO_STABLE_CANDIDATE",
         "candidate": consensus if passes else None,
         "screened_consensus_candidate": consensus,
         "development_dataset_hash": semantic_frame_hash(
@@ -284,14 +362,14 @@ def run_stability_first_discovery(
         "search_space_hash": canonical_hash(
             {
                 "features": feature_names,
-                "config": config.__dict__,
+                "config": asdict(config),
                 "hypothesis_rule_hashes": sorted(unique_hypotheses),
             }
         ),
         "fold_manifest_hash": fold_manifest_hash(folds),
         "folds": folds,
         "outer_fold_results": outer_records,
-        "fold_summary": fold_summary,
+        "fold_summary": fold_result[2],
         "candidate_funnel": funnel,
         "candidate_metrics": candidate_metrics,
         "base_metrics": base_metrics,

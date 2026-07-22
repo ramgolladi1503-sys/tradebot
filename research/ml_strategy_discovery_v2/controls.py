@@ -24,7 +24,12 @@ def _session_permutation(frame: pd.DataFrame, rng: np.random.Generator) -> pd.Se
     buckets: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {}
     for _, group in frame.groupby("session_date", sort=True):
         buckets.setdefault(len(group), []).append(
-            (group.index.to_numpy(), group["label_return_r"].astype(float).to_numpy())
+            (
+                group.index.to_numpy(),
+                pd.to_numeric(group["label_return_r"], errors="raise").to_numpy(
+                    dtype=float
+                ),
+            )
         )
     for items in buckets.values():
         order = rng.permutation(len(items))
@@ -82,12 +87,24 @@ def _delayed_feature_frame(
 
 
 def _perturbed_candidate(candidate: dict[str, Any], factor: float) -> dict[str, Any]:
-    updated = dict(candidate)
-    updated["conditions"] = [
-        {**condition, "threshold": float(condition["threshold"]) * factor}
-        for condition in candidate["conditions"]
+    return {
+        **candidate,
+        "conditions": [
+            {**condition, "threshold": float(condition["threshold"]) * factor}
+            for condition in candidate["conditions"]
+        ],
+    }
+
+
+def _regime_key(frame: pd.DataFrame) -> pd.Series:
+    columns = [
+        name
+        for name in ("trend_regime", "volatility_regime", "gap_regime", "time_regime")
+        if name in frame.columns
     ]
-    return updated
+    if not columns:
+        raise ValueError("real deterministic regime columns are required for LORO")
+    return frame[columns].astype(str).agg("|".join, axis=1)
 
 
 def run_negative_controls(
@@ -97,29 +114,36 @@ def run_negative_controls(
     seed: int = 42,
     cost_stress_r: float = 0.10,
 ) -> dict[str, Any]:
-    """Run deterministic, development-only controls and return a gating verdict."""
+    """Run deterministic development-only controls and return a gating verdict."""
     required = {"session_date", "label_return_r"}
     missing = required.difference(frame.columns)
     if missing:
         raise ValueError(f"control frame missing columns: {sorted(missing)}")
     original_mask = rule_mask(frame, candidate)
     original = performance_metrics(frame, original_mask)
+    if original["rows"] == 0:
+        return {
+            "seed": int(seed),
+            "original": original,
+            "controls": {},
+            "threshold_variants_positive_with_support": 0,
+            "threshold_variant_count": 0,
+            "passes": False,
+            "rejection_reasons": ["NO_ORIGINAL_SUPPORT"],
+        }
     rng = np.random.default_rng(seed)
     controls: dict[str, dict[str, Any]] = {}
 
     row_permutation = pd.Series(
-        rng.permutation(frame["label_return_r"].astype(float).to_numpy()),
+        rng.permutation(pd.to_numeric(frame["label_return_r"], errors="raise").to_numpy()),
         index=frame.index,
     )
     controls["row_label_permutation"] = _metrics_for_returns(
         frame, original_mask, row_permutation
     )
-
-    session_permutation = _session_permutation(frame, rng)
     controls["whole_session_label_permutation"] = _metrics_for_returns(
-        frame, original_mask, session_permutation
+        frame, original_mask, _session_permutation(frame, rng)
     )
-
     controls["timestamp_shift_one_session"] = performance_metrics(
         frame, _shift_mask_across_sessions(frame, original_mask, 1)
     )
@@ -134,32 +158,32 @@ def run_negative_controls(
     )
 
     candidate_features = sorted(
-        {condition["feature"] for condition in candidate["conditions"]}
+        {str(condition["feature"]) for condition in candidate["conditions"]}
     )
     for delay in (1, 2):
         delayed = _delayed_feature_frame(frame, candidate_features, delay)
-        delayed_mask = rule_mask(delayed, candidate)
         controls[f"delayed_features_{delay}_bar"] = performance_metrics(
-            frame, delayed_mask
+            frame, rule_mask(delayed, candidate)
         )
 
-    reversed_returns = -frame["label_return_r"].astype(float)
     controls["reversed_direction_proxy"] = _metrics_for_returns(
-        frame, original_mask, reversed_returns
+        frame, original_mask, -pd.to_numeric(frame["label_return_r"], errors="raise")
     )
 
     ablations: list[tuple[str, dict[str, Any]]] = []
     for index in range(len(candidate["conditions"])):
-        ablated = dict(candidate)
-        ablated["conditions"] = [
+        remaining = [
             condition
             for condition_index, condition in enumerate(candidate["conditions"])
             if condition_index != index
         ]
-        if not ablated["conditions"]:
-            metrics = performance_metrics(frame, pd.Series(True, index=frame.index))
-        else:
-            metrics = performance_metrics(frame, rule_mask(frame, ablated))
+        metrics = (
+            performance_metrics(frame, pd.Series(True, index=frame.index))
+            if not remaining
+            else performance_metrics(
+                frame, rule_mask(frame, {**candidate, "conditions": remaining})
+            )
+        )
         name = f"condition_ablation_{index}"
         controls[name] = metrics
         ablations.append((name, metrics))
@@ -190,23 +214,17 @@ def run_negative_controls(
             subset, rule_mask(subset, candidate)
         )
 
-    regime_columns = [
-        name
-        for name in ("trend_regime", "volatility_regime", "gap_regime", "time_regime")
-        if name in frame.columns
-    ]
-    if not regime_columns:
-        raise ValueError("real deterministic regime columns are required for LORO")
-    regime_key = frame[regime_columns].astype(str).agg("|".join, axis=1)
+    regime_key = _regime_key(frame)
     for regime in sorted(regime_key.unique()):
         subset = frame[regime_key != regime]
         controls[f"leave_regime_out_{regime}"] = performance_metrics(
             subset, rule_mask(subset, candidate)
         )
 
-    stressed = frame["label_return_r"].astype(float) - float(cost_stress_r)
     controls["abstract_cost_stress"] = _metrics_for_returns(
-        frame, original_mask, stressed
+        frame,
+        original_mask,
+        pd.to_numeric(frame["label_return_r"], errors="raise") - float(cost_stress_r),
     )
 
     rejection_reasons: list[str] = []

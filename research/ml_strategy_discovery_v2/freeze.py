@@ -65,15 +65,14 @@ def write_frozen_registry(
         if side in seen_sides:
             raise ValueError(f"at most one frozen candidate per side: {side}")
         seen_sides.add(side)
+    verdict = "NO_STABLE_CANDIDATE"
+    if len(bundles) == 1:
+        verdict = f"ONE_{bundles[0]['side']}_V2_CANDIDATE_FROZEN"
+    elif len(bundles) == 2:
+        verdict = "ONE_CANDIDATE_PER_SIDE_FROZEN"
     payload = envelope(
         {
-            "verdict": (
-                "NO_STABLE_CANDIDATE"
-                if not bundles
-                else "ONE_CANDIDATE_PER_SIDE_FROZEN"
-                if len(bundles) == 2
-                else f"ONE_{bundles[0]['side']}_V2_CANDIDATE_FROZEN"
-            ),
+            "verdict": verdict,
             "candidates": bundles,
             "confirmation_token_issued": False,
         },
