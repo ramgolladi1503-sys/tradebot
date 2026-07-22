@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from scripts import generate_mean_reversion_trade_ledger as generator
 
@@ -38,9 +39,7 @@ def _write_quote(path: Path) -> None:
     ).to_parquet(path)
 
 
-def test_quote_only_date_does_not_pollute_trading_day_or_capacity_counts(
-    tmp_path, monkeypatch
-):
+def _prepare_runtime(tmp_path: Path) -> Path:
     base = tmp_path / "runtime/strategy_validation/MEAN_REVERSION_EXTENSION"
     base.mkdir(parents=True)
     (base / "upstox_candle_file_audit.json").write_text(
@@ -49,7 +48,13 @@ def test_quote_only_date_does_not_pollute_trading_day_or_capacity_counts(
     contract = tmp_path / "configs/strategy_risk_contracts"
     contract.mkdir(parents=True)
     (contract / "MEAN_REVERSION_EXTENSION.json").write_text("{}")
+    return base
 
+
+def test_quote_only_date_is_excluded_from_real_generator_economics(
+    tmp_path, monkeypatch
+):
+    base = _prepare_runtime(tmp_path)
     candle_dir = tmp_path / "runtime/upstox_candidate_replay/20260105/underlying"
     candle_dir.mkdir(parents=True)
     _write_candle(candle_dir / "NIFTY_20260105.parquet")
@@ -62,17 +67,58 @@ def test_quote_only_date_does_not_pollute_trading_day_or_capacity_counts(
     monkeypatch.setattr(sys, "argv", ["generate_mean_reversion_trade_ledger.py"])
     generator.main()
 
-    summary = json.loads(
-        (base / "phase_4_trade_ledger_summary.json").read_text()
-    )
-    reconciliation = summary["reconciliation"]
-    assert reconciliation["parquet_trading_days"] == 1
-    assert reconciliation["parquet_symbol_days"] == 1
-    assert reconciliation["candidate_trading_days"] == 1
-    assert reconciliation["ledger_trading_days"] == 1
-    assert reconciliation["non_candle_parquet_files_skipped"] == 1
-    assert reconciliation["non_candle_only_date_directories"] == 1
-    assert reconciliation["non_candle_schema_distribution"] == {
-        "NON_CANDLE_QUOTE": 1
+    summary_path = base / "phase_4_trade_ledger_summary.json"
+    first_summary_bytes = summary_path.read_bytes()
+    summary = json.loads(first_summary_bytes)
+    assert summary["reconciliation"] == {
+        "historical_data_catalog_days": 0,
+        "parquet_trading_days": 1,
+        "parquet_symbol_days": 1,
+        "non_candle_parquet_files_skipped": 1,
+        "non_candle_only_date_directories": 1,
+        "non_candle_schema_distribution": {"NON_CANDLE_QUOTE": 1},
+        "candidate_trading_days": 1,
+        "ledger_trading_days": 1,
+        "active_symbol_days_used_for_capacity": 1,
     }
     assert summary["cap_saturation"]["active_symbol_days"] == 1
+    assert summary["cap_saturation"]["max_possible_trades"] == 4
+    assert summary["zero_trade_metrics"] == {
+        "zero_trade_calendar_days": 1,
+        "zero_trade_symbol_days": 1,
+        "one_trade_symbol_days": 0,
+        "capped_symbol_days": 0,
+    }
+
+    telemetry = json.loads((base / "phase_4_pipeline_telemetry.json").read_text())
+    assert telemetry["feed_snapshots_seen"] == 20
+    assert telemetry["fresh_spot_snapshots"] == 20
+    assert (base / "phase_4_trade_ledger.jsonl").read_text() == ""
+    assert (base / "phase_4_candidates.jsonl").read_text() == ""
+
+    generator.main()
+    assert summary_path.read_bytes() == first_summary_bytes
+
+
+def test_partial_candle_in_date_directory_aborts_real_generator(
+    tmp_path, monkeypatch
+):
+    base = _prepare_runtime(tmp_path)
+    malformed_dir = tmp_path / "runtime/upstox_candidate_replay/20260105/underlying"
+    malformed_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "timestamp": ["2026-01-05 09:15:00"],
+            "symbol": ["NIFTY"],
+            "open": [100.0],
+            "high": [101.0],
+            "close": [100.5],
+        }
+    ).to_parquet(malformed_dir / "NIFTY_20260105.parquet")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["generate_mean_reversion_trade_ledger.py"])
+    with pytest.raises(ValueError, match="partial candle schema"):
+        generator.main()
+
+    assert not (base / "phase_4_trade_ledger_summary.json").exists()
