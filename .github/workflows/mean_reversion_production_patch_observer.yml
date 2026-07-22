@@ -1,6 +1,6 @@
 name: Mean Reversion Production Patch Observer
 
-# Revision 2: observe the simplified guarded patch runner.
+# Revision 3: observe corpus classification and date-accounting patch runners.
 on:
   push:
     branches:
@@ -21,24 +21,38 @@ jobs:
           ref: research/postmerge-mean-reversion-rerun-v1
           fetch-depth: 1
 
-      - name: Query production patch workflow
+      - name: Query production patch workflows
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api \
-            "/repos/${GITHUB_REPOSITORY}/actions/workflows/apply_mean_reversion_corpus_classification_patch.yml/runs?branch=fix%2Fmean-reversion-corpus-file-classification-v1&event=push&per_page=10" \
-            > /tmp/patch-runs.json
+          work=/tmp/production-patch-observer
+          mkdir -p "${work}"
+          for workflow in \
+            apply_mean_reversion_corpus_classification_patch.yml \
+            apply_mean_reversion_date_accounting_patch.yml; do
+            gh api \
+              "/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs?branch=fix%2Fmean-reversion-corpus-file-classification-v1&event=push&per_page=10" \
+              > "${work}/${workflow}.json"
+          done
           python - <<'PY'
           import json
           from pathlib import Path
 
-          payload = json.loads(Path('/tmp/patch-runs.json').read_text())
-          runs = payload.get('workflow_runs', [])
-          result = {'status': 'NOT_FOUND'}
-          if runs:
+          work = Path('/tmp/production-patch-observer')
+          workflows = [
+              'apply_mean_reversion_corpus_classification_patch.yml',
+              'apply_mean_reversion_date_accounting_patch.yml',
+          ]
+          result = {}
+          for workflow in workflows:
+              payload = json.loads((work / f'{workflow}.json').read_text())
+              runs = payload.get('workflow_runs', [])
+              if not runs:
+                  result[workflow] = {'status': 'NOT_FOUND'}
+                  continue
               run = runs[0]
-              result = {
+              result[workflow] = {
                   'workflow_run_id': run.get('id'),
                   'run_number': run.get('run_number'),
                   'status': run.get('status'),
@@ -48,7 +62,7 @@ jobs:
                   'updated_at': run.get('updated_at'),
                   'html_url': run.get('html_url'),
               }
-          target = Path('docs/research/mean_reversion_postmerge_regeneration/production_patch_workflow_status.json')
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/production_patch_workflows_status.json')
           target.parent.mkdir(parents=True, exist_ok=True)
           target.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
           print(json.dumps(result, indent=2, sort_keys=True))
@@ -59,6 +73,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/research/mean_reversion_postmerge_regeneration/production_patch_workflow_status.json
-          git commit -m "research: publish production patch workflow status"
+          git add docs/research/mean_reversion_postmerge_regeneration/production_patch_workflows_status.json
+          git commit -m "research: publish production patch workflow statuses"
           git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
