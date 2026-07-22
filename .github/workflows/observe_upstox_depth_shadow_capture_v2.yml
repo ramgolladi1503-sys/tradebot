@@ -1,5 +1,6 @@
 name: Observe Upstox Depth Shadow Capture V2
 
+# Revision 2: refresh after universe and immutable split-registry controls.
 on:
   push:
     branches:
