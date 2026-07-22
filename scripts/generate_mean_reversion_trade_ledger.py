@@ -11,8 +11,10 @@ import numpy as np
 import pandas as pd
 
 from core.research_backtest_integrity import (
+    RESEARCH_NON_CANDLE_QUOTE,
     causal_completed_htf_sma,
     is_immediate_next_bar,
+    load_research_candle_parquet,
 )
 
 
@@ -278,6 +280,8 @@ def main() -> None:
     contract_resolution_successes = 0
     contract_resolution_failures = 0
     quote_truth_propagated = 0
+    non_candle_parquet_files_skipped = 0
+    non_candle_schema_distribution: dict[str, int] = {}
 
     def record_exit(
         *,
@@ -326,12 +330,21 @@ def main() -> None:
             parquet_trading_days += 1
             day_trades_calendar = 0
 
-            for parquet_file in underlying_dir.glob("*.parquet"):
+            for parquet_file in sorted(underlying_dir.glob("*.parquet")):
+                classification, df, resolved_symbol = load_research_candle_parquet(
+                    parquet_file
+                )
+                if classification == RESEARCH_NON_CANDLE_QUOTE:
+                    non_candle_parquet_files_skipped += 1
+                    non_candle_schema_distribution[classification] = (
+                        non_candle_schema_distribution.get(classification, 0) + 1
+                    )
+                    continue
+                if df is None or resolved_symbol is None:
+                    raise AssertionError("candle classification returned no frame or symbol")
+
                 parquet_symbol_days += 1
-                symbol = parquet_file.stem.split("_")[0]
-                df = pd.read_parquet(parquet_file)
-                df = df.sort_values("timestamp").reset_index(drop=True)
-                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                symbol = resolved_symbol
                 bar_interval = _infer_bar_interval(df["timestamp"])
                 df.set_index("timestamp", inplace=True)
                 df["htf_sma"] = causal_completed_htf_sma(
@@ -740,6 +753,10 @@ def main() -> None:
             "historical_data_catalog_days": catalog_days,
             "parquet_trading_days": parquet_trading_days,
             "parquet_symbol_days": parquet_symbol_days,
+            "non_candle_parquet_files_skipped": non_candle_parquet_files_skipped,
+            "non_candle_schema_distribution": dict(
+                sorted(non_candle_schema_distribution.items())
+            ),
             "candidate_trading_days": total_calendar_days,
             "ledger_trading_days": total_calendar_days,
             "active_symbol_days_used_for_capacity": parquet_symbol_days,
