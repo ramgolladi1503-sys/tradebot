@@ -1,0 +1,29 @@
+{
+  "classification": "STRUCTURED_DEPTH_SCHEMA_PROFILE_NO_MARKET_VALUES",
+  "contains_market_scalar_values": false,
+  "depth_arrow_type_counts": {
+    "string": 1
+  },
+  "key_path_counts": {
+    "depth.asks": 500,
+    "depth.bids": 500
+  },
+  "parse_mode_counts": {
+    "json_string": 500
+  },
+  "quote_depth_file_count": 129,
+  "sampled_non_null_depth_rows": 500,
+  "sequence_length_counts": {
+    "depth.asks": {
+      "0": 500
+    },
+    "depth.bids": {
+      "0": 500
+    }
+  },
+  "value_type_counts": {
+    "depth.asks:list": 500,
+    "depth.bids:list": 500,
+    "depth:dict": 500
+  }
+}
