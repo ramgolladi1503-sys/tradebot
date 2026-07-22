@@ -1,0 +1,13 @@
+{
+  "conclusion": "failure",
+  "created_at": "2026-07-22T07:45:07Z",
+  "event": "push",
+  "head_branch": "research/postmerge-mean-reversion-rerun-v1",
+  "head_sha": "4feec7986c7430c522c4fd439f269abd2e36c3b2",
+  "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29901353010",
+  "run_number": 9,
+  "status": "completed",
+  "updated_at": "2026-07-22T07:45:07Z",
+  "workflow_name": ".github/workflows/mean_reversion_postmerge_regeneration.yml",
+  "workflow_run_id": 29901353010
+}
