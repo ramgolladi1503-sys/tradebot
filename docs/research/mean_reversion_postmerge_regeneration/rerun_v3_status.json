@@ -1,11 +1,11 @@
 {
-  "conclusion": "failure",
-  "created_at": "2026-07-22T10:55:05Z",
-  "head_sha": "303bb28a7033c4378dd200f0d5c28bea85d3ff7a",
-  "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29913737564",
-  "run_number": 12,
-  "status": "completed",
-  "updated_at": "2026-07-22T10:55:34Z",
+  "conclusion": null,
+  "created_at": "2026-07-22T10:57:03Z",
+  "head_sha": "d85f727bbfaf0bfdfa909de9f24276e7cd96e640",
+  "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29913860678",
+  "run_number": 13,
+  "status": "in_progress",
+  "updated_at": "2026-07-22T10:57:22Z",
   "workflow_name": "Mean Reversion Post-Merge Regeneration V3",
-  "workflow_run_id": 29913737564
+  "workflow_run_id": 29913860678
 }
