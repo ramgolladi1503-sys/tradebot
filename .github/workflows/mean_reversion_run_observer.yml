@@ -1,5 +1,6 @@
 name: Mean Reversion Regeneration Run Observer
 
+# Revision 2: refresh the latest push-run identity after workflow validation fixes.
 on:
   push:
     branches:
