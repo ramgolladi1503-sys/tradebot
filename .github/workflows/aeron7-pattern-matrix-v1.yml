@@ -7,6 +7,12 @@ on:
     paths:
       - research/aeron7_pattern_matrix_v1.py
       - .github/workflows/aeron7-pattern-matrix-v1.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - research/aeron7_pattern_matrix_v1.py
+      - .github/workflows/aeron7-pattern-matrix-v1.yml
   workflow_dispatch:
 
 permissions:
