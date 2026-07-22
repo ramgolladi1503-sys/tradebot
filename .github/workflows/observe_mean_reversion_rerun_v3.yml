@@ -1,6 +1,6 @@
 name: Observe Mean Reversion Rerun V3
 
-# Revision 2: refresh after ancestry verification repair.
+# Revision 3: refresh after installing the required joblib dependency.
 on:
   push:
     branches:
