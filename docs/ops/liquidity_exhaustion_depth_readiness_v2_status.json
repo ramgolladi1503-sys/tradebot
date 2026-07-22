@@ -1,0 +1,11 @@
+{
+  "conclusion": "failure",
+  "created_at": "2026-07-22T20:33:43Z",
+  "head_sha": "bb8d0e8617ad5599194f681ff9e5d1cbef0fde79",
+  "html_url": "https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29955641195",
+  "run_number": 1,
+  "status": "completed",
+  "updated_at": "2026-07-22T20:34:38Z",
+  "workflow_name": "Liquidity Exhaustion Depth Readiness V2",
+  "workflow_run_id": 29955641195
+}
