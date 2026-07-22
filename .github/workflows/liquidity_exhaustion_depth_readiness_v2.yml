@@ -1,5 +1,6 @@
 name: Liquidity Exhaustion Depth Readiness V2
 
+# Revision 2: inventory invalid quote rows across the complete corpus.
 on:
   push:
     branches:
