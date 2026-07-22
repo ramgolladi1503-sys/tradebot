@@ -1,0 +1,114 @@
+{
+  "claim_boundary": "NO_STRUCTURAL_EDGE_OR_OPTION_PROFITABILITY_PROVEN",
+  "contract_selection": {
+    "absolute_delta_max": 0.7,
+    "absolute_delta_min": 0.55,
+    "bearish_option_type": "PE",
+    "bullish_option_type": "CE",
+    "dte_max": 5,
+    "dte_min": 2,
+    "expiry_day_excluded": true
+  },
+  "development_only": true,
+  "entry_window": {
+    "end": "14:40",
+    "start": "09:35"
+  },
+  "execution_side": "BUY_ONLY",
+  "family": "directional_option_repricing_lag_buy",
+  "hypothesis_id": "DORL_V3",
+  "instrument": "NIFTY",
+  "market_clock": "Asia/Kolkata",
+  "max_variants": 4,
+  "negative_controls": [
+    "entry_delay_1_2_3_5_minutes",
+    "remove_futures_ofi",
+    "replace_ofi_with_raw_volume",
+    "invert_option_trade_imbalance",
+    "randomize_equally_liquid_strike",
+    "enter_after_repricing_residual_closes",
+    "far_otm_contract_control",
+    "midpoint_fill_control",
+    "shuffle_within_time_of_day_and_dte",
+    "expiry_day_control",
+    "reverse_ce_pe_selection"
+  ],
+  "outcome": {
+    "cost_basis": "NET_R_PER_TRADE",
+    "entry_quote_side": "ASK",
+    "exit_quote_side": "BID",
+    "forced_exit": "14:55",
+    "latency": "NEXT_ELIGIBLE_QUOTE",
+    "max_hold_minutes": 20,
+    "structural_stop": "FUTURES_IMPULSE_ORIGIN_OR_POST_IMPULSE_ANCHORED_VWAP"
+  },
+  "required_input_contract": {
+    "backward_only_joins": true,
+    "future_fields_forbidden_in_signal": true,
+    "futures_ticks": [
+      "local_ts",
+      "instrument_token",
+      "last_price",
+      "best_bid",
+      "best_ask",
+      "depth_json",
+      "volume"
+    ],
+    "instrument_master": [
+      "instrument_token",
+      "tradingsymbol",
+      "name",
+      "expiry",
+      "strike",
+      "instrument_type",
+      "segment",
+      "exchange",
+      "lot_size"
+    ],
+    "minimum_expiries_per_session": 2,
+    "minimum_sessions": 30,
+    "option_ticks": [
+      "local_ts",
+      "instrument_token",
+      "last_price",
+      "best_bid",
+      "best_ask",
+      "depth_json",
+      "volume"
+    ]
+  },
+  "schema_version": "1.0",
+  "signal": {
+    "futures_impulse_lookback_minutes": 3,
+    "futures_ofi_z_min": 1.5,
+    "max_chase_ticks": 1,
+    "max_front_iv_shock_z": 1.5,
+    "max_hold_minutes": 20,
+    "max_quote_age_ms": 1000,
+    "minimum_rr": 1.5,
+    "option_book_imbalance_min": 0.1,
+    "option_trade_imbalance_z_min": 1.0,
+    "pricing_model": "BLACK_76_FUTURES",
+    "reference_iv": "next_expiry_same_delta_backward_asof",
+    "risk_free_rate": 0.065,
+    "round_trip_cost_points": 0.1
+  },
+  "variant_grid": [
+    {
+      "futures_return_z_min": 1.5,
+      "repricing_lag_spread_multiple": 1.0
+    },
+    {
+      "futures_return_z_min": 1.5,
+      "repricing_lag_spread_multiple": 1.5
+    },
+    {
+      "futures_return_z_min": 2.0,
+      "repricing_lag_spread_multiple": 1.0
+    },
+    {
+      "futures_return_z_min": 2.0,
+      "repricing_lag_spread_multiple": 1.5
+    }
+  ]
+}
