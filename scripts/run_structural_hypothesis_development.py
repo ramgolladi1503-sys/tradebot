@@ -90,6 +90,7 @@ def main() -> int:
         json.dumps(selected_manifest, sort_keys=True, separators=(",", ":")) + "\n",
         encoding="utf-8",
     )
+    selected_manifest_sha256 = sha256_file(selected_manifest_path)
     verification = verify_selected_record_files(
         project_root, selected_manifest["records"]
     )
@@ -102,15 +103,14 @@ def main() -> int:
         source_bundle.bars,
         specification=specification,
         frozen_spec_sha256=hypothesis.frozen_spec_sha256,
-        source_manifest_sha256=source_identity["manifest_sha256"],
+        source_manifest_sha256=selected_manifest_sha256,
         code_sha=resolve_code_sha(project_root),
         bootstrap_iterations=args.bootstrap_iterations,
         permutation_iterations=args.permutation_iterations,
         seed=args.seed,
     )
-    result["development_source_selection_manifest_sha256"] = sha256_file(
-        selected_manifest_path
-    )
+    result["source_manifest_authority_sha256"] = source_identity["manifest_sha256"]
+    result["development_source_selection_manifest_sha256"] = selected_manifest_sha256
     result["development_source_record_count"] = len(
         selected_manifest["records"]
     )
