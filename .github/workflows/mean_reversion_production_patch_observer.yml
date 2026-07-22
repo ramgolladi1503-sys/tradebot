@@ -1,5 +1,6 @@
 name: Mean Reversion Production Patch Observer
 
+# Revision 2: observe the simplified guarded patch runner.
 on:
   push:
     branches:
