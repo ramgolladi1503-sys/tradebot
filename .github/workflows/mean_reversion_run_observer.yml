@@ -1,6 +1,6 @@
 name: Mean Reversion Research Run Observer
 
-# Revision 5: publish both regeneration and schema-probe workflow states.
+# Revision 6: refresh both workflow states after correcting the schema-probe root.
 on:
   push:
     branches:
