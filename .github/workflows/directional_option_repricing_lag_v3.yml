@@ -1,0 +1,156 @@
+name: Directional Option Repricing Lag V3
+
+on:
+  push:
+    branches:
+      - research/directional-option-repricing-lag-v3
+    paths:
+      - ".github/workflows/directional_option_repricing_lag_v3.yml"
+      - "research/structural_edge_campaign/option_repricing_lag.py"
+      - "research/structural_edge_campaign/option_repricing_lag_math.py"
+      - "research/structural_edge_campaign/option_repricing_lag_data.py"
+      - "research/structural_edge_campaign/specs/dorl_v3.json"
+      - "research/structural_edge_campaign/v1_campaign_contract.json"
+      - "research/structural_edge_campaign/__init__.py"
+      - "scripts/run_directional_option_repricing_lag_development.py"
+      - "tests/test_directional_option_repricing_lag_v3.py"
+      - "docs/agent_reviews/directional_option_repricing_lag_v3.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: directional-option-repricing-lag-v3-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preregister-and-audit-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout stacked research branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow pytest
+
+      - name: Compile DORL implementation
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m py_compile \
+            research/structural_edge_campaign/option_repricing_lag.py \
+            research/structural_edge_campaign/option_repricing_lag_math.py \
+            research/structural_edge_campaign/option_repricing_lag_data.py \
+            scripts/run_directional_option_repricing_lag_development.py \
+            tests/test_directional_option_repricing_lag_v3.py
+
+      - name: Run behavioral and campaign-contract tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_directional_option_repricing_lag_v3.py \
+            tests/test_structural_edge_campaign.py
+
+      - name: Produce two independent readiness audits
+        run: |
+          set -euo pipefail
+          ROOT="${RUNNER_TEMP}/dorl-v3"
+          for run_name in run-a run-b; do
+            PYTHONPATH=. python scripts/run_directional_option_repricing_lag_development.py \
+              --source-project-root "${GITHUB_WORKSPACE}" \
+              --contract research/structural_edge_campaign/v1_campaign_contract.json \
+              --output "${ROOT}/${run_name}/development.json" \
+              --development-only
+          done
+
+      - name: Verify deterministic fail-closed readiness evidence
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "dorl-v3"
+          first = root / "run-a" / "development.json"
+          second = root / "run-b" / "development.json"
+          if first.read_bytes() != second.read_bytes():
+              raise SystemExit("DORL readiness evidence is not byte deterministic")
+
+          for evidence in (first, second):
+              sidecar = evidence.with_name(evidence.name + ".sha256")
+              tokens = sidecar.read_text(encoding="utf-8").strip().split()
+              if len(tokens) != 2 or tokens[1] != evidence.name:
+                  raise SystemExit(f"invalid evidence sidecar: {sidecar}")
+              if hashlib.sha256(evidence.read_bytes()).hexdigest() != tokens[0]:
+                  raise SystemExit(f"evidence digest mismatch: {evidence}")
+
+          payload = json.loads(first.read_text(encoding="utf-8"))
+          expected = {
+              "stage": "development",
+              "hypothesis_id": "DORL_V3",
+              "family": "directional_option_repricing_lag_buy",
+              "verdict": "BLOCKED_NEED_OPTION_MICROSTRUCTURE_DATA",
+              "candidate_count": 0,
+              "candidate_bundle_hash": None,
+              "validation_v1_consumed_loaded": False,
+              "holdout_v1_locked_loaded": False,
+              "fresh_confirmation_loaded": False,
+              "read_only": True,
+              "is_order_action": False,
+              "broker_api_called": False,
+              "allowed_for_live_execution": False,
+          }
+          for field, value in expected.items():
+              if payload.get(field) != value:
+                  raise SystemExit(
+                      f"DORL evidence field mismatch {field}: "
+                      f"expected={value!r} actual={payload.get(field)!r}"
+                  )
+          blockers = set(payload["data_readiness"]["blockers"])
+          required = {
+              "MISSING_FUTURES_TICK_DATASET",
+              "MISSING_OPTION_TICK_DATASET",
+              "MISSING_SAME_DAY_INSTRUMENT_MASTER",
+          }
+          if not required.issubset(blockers):
+              raise SystemExit(f"missing readiness blockers: {sorted(required - blockers)}")
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+      - name: Publish readiness summary
+        if: always()
+        run: |
+          evidence="${RUNNER_TEMP}/dorl-v3/run-a/development.json"
+          if test -f "${evidence}"; then
+            cat "${evidence}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "DORL-V3 readiness evidence was not produced." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload read-only DORL evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: directional-option-repricing-lag-v3-${{ github.sha }}
+          path: ${{ runner.temp }}/dorl-v3
+          if-no-files-found: warn
+          retention-days: 30
