@@ -1,0 +1,25 @@
+{
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "files": {
+    "historical_data_catalog.json": "39f6df561756089fdab5b2b2ba8572b0e15d037ffacebefb1b1284bf249db16a",
+    "phase6_shadow_candidate_report.json": "03d9600eca1f90419ffab0906c4dcba625de5f7da76ba263551b8855c6c47766",
+    "phase_4_10_accounting_audit.json": "63e2c22f2f77747339c24a9fcaccd8181cd1ca30183647ec3487317e83d6dbaf",
+    "phase_4_5_truth_audit.json": "050de2fe0c62a87b7148a9a460ad53f0e46e6ca7c224c77009f6f70fa8e8d2e9",
+    "phase_4_5_truth_audit.md": "53a7d0d4157bfc4c4b3c4b100e09072a6aca8052baa7629d7a38492d63fb64dd",
+    "phase_4_7_integrity_audit.json": "397534eb62d67ee032ffd35cc5c56906c705845f7a8136a913ee20fb525bb89d",
+    "phase_4_7_integrity_audit.md": "8744f9db531cc5c2bbe084d87ef33ef396e038a4f1ea743a56b744eba85e7de4",
+    "phase_4_8_selection_quality_audit.json": "9c3f9ce47a74ef642379b0cc378fca908392015458df4c7d1ba8334433fca51f",
+    "phase_4_candidates.jsonl": "3a778b6b0f15d64850b90ad9845dfbb2cd5ecff3427bb68f0e22e51f339ccff6",
+    "phase_4_pipeline_telemetry.json": "a5596e50375f99268b578674b1b3aa8e0187c74fd1f6976f060b44c7987d569a",
+    "phase_4_report.json": "1c6b545265f87c41f808003c8f84f1c6568516a285e90338318c28514fa9006e",
+    "phase_4_trade_ledger.jsonl": "ced7fce8cdbb9b3ac823beb2e2ba56b9cb9670a21391fee8477b09d1726cf1c8",
+    "phase_4_trade_ledger_audit.json": "b7c9540248a99fd32f7fc9b6c55bdb1c87892b402b6a9d4cad3933f1d99aca21",
+    "phase_4_trade_ledger_audit.md": "fc683df54deb98a1e8045a75b276be8d10479e37dcff54b9fa30d56e9e9fc252",
+    "phase_4_trade_ledger_summary.json": "4ea496afc45996508ee7ba2bfc145036b3f1ecf19bc7a4efb5c20c27bc076762",
+    "phase_4_v2_structural_audit.json": "c8aa4faf72915c131efe88d3d1f73e8e8a62459b6f6d58a57288f6ca3140c32a",
+    "phase_5_wfa_report.json": "79878a61550e2126e9db8653505c971764005eca02aff199e15fa02374be3405",
+    "upstox_candle_file_audit.json": "76f2536b60bcc3ad2856350e7038536be5959b9bda2439058da37686a3cc565e"
+  },
+  "producer_commit": "a64ddee5f68921bffbac684e2ea06de8943b704a",
+  "two_run_semantic_determinism": true
+}

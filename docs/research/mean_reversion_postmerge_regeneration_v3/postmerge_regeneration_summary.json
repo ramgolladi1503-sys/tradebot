@@ -1,0 +1,38 @@
+{
+  "audit_classifications": {
+    "accounting_audit": "PHASE_4_10_ACCOUNTING_FAILED",
+    "integrity_audit": "PHASE_4_7_INTEGRITY_AUDIT_PASSED",
+    "ledger_audit": "TRADE_LEDGER_AUDIT_PASSED",
+    "selection_audit": "PHASE_4_8_SELECTION_QUALITY_PASSED",
+    "structural_audit": "V2_STRUCTURAL_AUDIT_PASSED",
+    "truth_audit": "PHASE_4_5_TRUTH_AUDIT_PASSED"
+  },
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "execution_allowed": false,
+  "historical_outputs_superseded": true,
+  "paper_live_allowed": false,
+  "parameter_discovery_conclusion": "MRE_V1_PARAMETER_SPACE_FAILED",
+  "parameter_grid_size": 486,
+  "phase4_blockers": [
+    "PHASE_4_10_ACCOUNTING_NOT_PASSED:PHASE_4_10_ACCOUNTING_FAILED",
+    "MINIMUM_DIMENSIONAL_EXPECTANCY_NOT_MET",
+    "MINIMUM_EXPECTANCY_NOT_MET"
+  ],
+  "phase4_passed": false,
+  "phase4_two_run_semantic_determinism": true,
+  "phase4_verdict": "FAILED",
+  "producer_commit": "a64ddee5f68921bffbac684e2ea06de8943b704a",
+  "region_stable_count": 0,
+  "result_contract": "REGENERATED_RESEARCH_EVIDENCE_ONLY",
+  "shared_wfa_blockers": [
+    "FINAL_HOLDOUT_PROFIT_FACTOR_NOT_MET",
+    "FINAL_HOLDOUT_EXPECTANCY_NOT_MET",
+    "PARAMETER_STABILITY_NOT_MET",
+    "WALK_FORWARD_FOLD_MAJORITY_NOT_MET"
+  ],
+  "shared_wfa_promoted": false,
+  "shared_wfa_status": "REJECTED",
+  "shared_wfa_two_run_determinism": true,
+  "train_pass_count": 0,
+  "validation_pass_count": 0
+}
