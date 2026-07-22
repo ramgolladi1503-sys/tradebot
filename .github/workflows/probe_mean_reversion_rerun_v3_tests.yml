@@ -1,0 +1,90 @@
+name: Probe Mean Reversion Rerun V3 Test Failure
+
+on:
+  push:
+    branches:
+      - research/postmerge-mean-reversion-rerun-v1
+    paths:
+      - ".github/workflows/probe_mean_reversion_rerun_v3_tests.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_JOB_ID: "88902956114"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/postmerge-mean-reversion-rerun-v1
+          fetch-depth: 1
+
+      - name: Extract pytest failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          work=/tmp/rerun-v3-test-probe
+          target=docs/research/mean_reversion_postmerge_regeneration/rerun_v3_test_failure_extract.txt
+          mkdir -p "${work}" "$(dirname "${target}")"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${SOURCE_JOB_ID}/logs" > "${work}/logs.bin"
+          python - <<'PY'
+          from __future__ import annotations
+
+          import io
+          import re
+          import zipfile
+          from pathlib import Path
+
+          payload = Path('/tmp/rerun-v3-test-probe/logs.bin').read_bytes()
+          if payload.startswith(b'PK'):
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  text = '\n'.join(
+                      archive.read(name).decode('utf-8', errors='replace')
+                      for name in archive.namelist()
+                      if not name.endswith('/')
+                  )
+          else:
+              text = payload.decode('utf-8', errors='replace')
+
+          lines = text.splitlines()
+          markers = (
+              '=== FAILURES ===',
+              'short test summary info',
+              'FAILED ',
+              'ERROR ',
+              'E       ',
+              'AssertionError',
+              'Traceback',
+          )
+          chosen = []
+          for index, line in enumerate(lines):
+              if any(marker.lower() in line.lower() for marker in markers):
+                  start = max(0, index - 8)
+                  end = min(len(lines), index + 35)
+                  chosen.extend(lines[start:end])
+                  chosen.append('---')
+          chosen.extend(['--- FINAL LOG TAIL ---'] + lines[-220:])
+          cleaned = []
+          seen = set()
+          for line in chosen:
+              line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+              if line not in seen or line == '---':
+                  cleaned.append(line)
+                  seen.add(line)
+          Path('docs/research/mean_reversion_postmerge_regeneration/rerun_v3_test_failure_extract.txt').write_text(
+              '\n'.join(cleaned) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit diagnostic extract
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/research/mean_reversion_postmerge_regeneration/rerun_v3_test_failure_extract.txt
+          git commit -m "research: publish rerun-v3 focused test failure"
+          git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
