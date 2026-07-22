@@ -1,0 +1,20 @@
+{
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "corpus_repo": "ramgolladi1503-sys/tradebot-research-corpus",
+  "corpus_tag": "upstox-corpus-v1",
+  "credential_present": true,
+  "execution_allowed": false,
+  "exit_code": 0,
+  "missing_required_assets": [],
+  "paper_live_allowed": false,
+  "producer_commit": "8cf09e1ac07d02e2808ffc0bf8215d922e1481ba",
+  "release_assets": [
+    "ml_v1_evidence_minimal_v1.tar.gz",
+    "ml_v1_evidence_minimal_v1.tar.gz.sha256",
+    "parquet_sha256_manifest.txt",
+    "upstox_candidate_replay_v1.tar.gz",
+    "upstox_candidate_replay_v1.tar.gz.sha256"
+  ],
+  "stage": "CORPUS_RELEASE_ASSETS_VERIFIED",
+  "status": "PASSED"
+}
