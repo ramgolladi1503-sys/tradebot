@@ -41,13 +41,37 @@ jobs:
       - name: Validate installer syntax
         run: bash -n scripts/install_antigravity_mcp.sh
 
-      - name: Generate workspace MCP configuration
+      - name: Generate workspace MCP configuration for separate target
         env:
           TRADEBOT_MCP_VENV: ${{ runner.temp }}/tradebot-mcp-venv
-          TRADEBOT_EVIDENCE_ROOT: ${{ github.workspace }}/runtime
+          TRADEBOT_TARGET_ROOT: ${{ runner.temp }}/tradebot-target
+          TRADEBOT_MCP_CONFIG_ROOT: ${{ runner.temp }}/tradebot-target
+          TRADEBOT_EVIDENCE_ROOTS: ${{ runner.temp }}/tradebot-target/research:${{ github.workspace }}/runtime
           TRADEBOT_DATA_ROOTS: ${{ github.workspace }}/runtime
         run: |
           mkdir -p runtime
+          mkdir -p "$TRADEBOT_TARGET_ROOT/research"
+          git -C "$TRADEBOT_TARGET_ROOT" init
           bash scripts/install_antigravity_mcp.sh
-          test -s .agents/mcp_config.json
-          python -m json.tool .agents/mcp_config.json >/dev/null
+          test -s "$TRADEBOT_TARGET_ROOT/.agents/mcp_config.json"
+          python -m json.tool "$TRADEBOT_TARGET_ROOT/.agents/mcp_config.json" >/dev/null
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config_path = Path(os.environ["TRADEBOT_TARGET_ROOT"]) / ".agents" / "mcp_config.json"
+          payload = json.loads(config_path.read_text(encoding="utf-8"))
+          expected_root = str(Path(os.environ["TRADEBOT_TARGET_ROOT"]).resolve())
+          expected_cwd = str(Path(os.environ["GITHUB_WORKSPACE"]).resolve())
+          assert set(payload["mcpServers"]) == {
+              "tradebot-evidence",
+              "tradebot-data-audit",
+              "tradebot-gates",
+              "tradebot-git-audit",
+          }
+          for server in payload["mcpServers"].values():
+              assert server["env"]["TRADEBOT_ROOT"] == expected_root
+              assert server["cwd"] == expected_cwd
+              assert server["command"].endswith("/bin/python")
+          PY
