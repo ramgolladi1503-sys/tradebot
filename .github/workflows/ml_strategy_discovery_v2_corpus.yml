@@ -71,17 +71,30 @@ jobs:
         run: |
           set -euo pipefail
           ASSETS="${RUNNER_TEMP}/corpus-assets"
+          CORPUS_ROOT="${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay"
+
           echo "${CORPUS_ARCHIVE_SHA256}  ${ASSETS}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
           echo "${V1_EVIDENCE_SHA256}  ${ASSETS}/ml_v1_evidence_minimal_v1.tar.gz" | sha256sum -c -
           test "$(awk '{print $1}' "${ASSETS}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
           test "$(awk '{print $1}' "${ASSETS}/ml_v1_evidence_minimal_v1.tar.gz.sha256")" = "${V1_EVIDENCE_SHA256}"
+
           mkdir -p "${GITHUB_WORKSPACE}/runtime" "${RUNNER_TEMP}/v1-evidence"
           tar -xzf "${ASSETS}/upstox_candidate_replay_v1.tar.gz" -C "${GITHUB_WORKSPACE}/runtime"
           tar -xzf "${ASSETS}/ml_v1_evidence_minimal_v1.tar.gz" -C "${RUNNER_TEMP}/v1-evidence"
-          test -d "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay"
+
+          test -d "${CORPUS_ROOT}"
           test -f "${RUNNER_TEMP}/v1-evidence/nifty-long/evidence_manifest.json"
           test -f "${RUNNER_TEMP}/v1-evidence/nifty-short/evidence_manifest.json"
           test -f "${RUNNER_TEMP}/v1-evidence/audit-v1/final_report.md"
+
+          # macOS tar archives can contain AppleDouble sidecars (._*). The
+          # archive identity is verified above; these are filesystem metadata,
+          # not certified parquet observations, and must never enter inventory
+          # or model loading.
+          apple_double_count="$(find "${CORPUS_ROOT}" -type f -name '._*' | wc -l | tr -d ' ')"
+          find "${CORPUS_ROOT}" -type f -name '._*' -delete
+          test -z "$(find "${CORPUS_ROOT}" -type f -name '._*' -print -quit)"
+          echo "REMOVED_APPLEDOUBLE_METADATA files=${apple_double_count}"
 
       - name: Verify every parquet byte
         run: |
@@ -107,6 +120,7 @@ jobs:
               if relative in expected:
                   raise SystemExit(f"duplicate manifest path: {relative}")
               expected[relative] = digest.lower()
+
           actual = {
               path.relative_to(root).as_posix()
               for path in root.rglob("*.parquet")
@@ -117,6 +131,7 @@ jobs:
                   f"corpus inventory mismatch missing={sorted(set(expected)-actual)[:20]} "
                   f"extra={sorted(actual-set(expected))[:20]}"
               )
+
           for index, relative in enumerate(sorted(expected), start=1):
               digest = hashlib.sha256((root / relative).read_bytes()).hexdigest()
               if digest != expected[relative]:
@@ -135,6 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           EVIDENCE_ROOT="${RUNNER_TEMP}/v2-certified-evidence"
+          mkdir -p "${EVIDENCE_ROOT}"
           for run_name in run-a run-b; do
             for side in LONG SHORT; do
               output_dir="${EVIDENCE_ROOT}/${run_name}/$(echo "${side}" | tr '[:upper:]' '[:lower:]')"
@@ -190,9 +206,10 @@ jobs:
                   raise SystemExit(f"semantic determinism failed side={side}")
               if (first / "final_report.md").read_bytes() != (second / "final_report.md").read_bytes():
                   raise SystemExit(f"report determinism failed side={side}")
-              partition = json.loads((first / "partition_registry.json").read_text())
-              confirmation = json.loads((first / "confirmation_lock.json").read_text())
-              frozen = json.loads((first / "frozen_candidates.json").read_text())
+
+              partition = json.loads((first / "partition_registry.json").read_text(encoding="utf-8"))
+              confirmation = json.loads((first / "confirmation_lock.json").read_text(encoding="utf-8"))
+              frozen = json.loads((first / "frozen_candidates.json").read_text(encoding="utf-8"))
               if partition["loaded_partition"] != "DEVELOPMENT_V1":
                   raise SystemExit(f"unexpected partition side={side}")
               for field in (
@@ -210,7 +227,8 @@ jobs:
                   raise SystemExit(f"frozen registry issued token side={side}")
               if len(frozen["candidates"]) > 1:
                   raise SystemExit(f"more than one candidate frozen side={side}")
-              inventory = json.loads((first / "input_inventory.json").read_text())
+
+              inventory = json.loads((first / "input_inventory.json").read_text(encoding="utf-8"))
               summary["sides"][side.upper()] = {
                   "verdict": frozen["verdict"],
                   "candidate_count": len(frozen["candidates"]),
@@ -221,9 +239,10 @@ jobs:
                   "development_rows": inventory["development_rows"],
                   "development_sessions": inventory["development_sessions"],
               }
+
           output = root / "certification_summary.json"
-          output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-          print(output.read_text())
+          output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
           PY
 
       - name: Publish summary
