@@ -1,0 +1,443 @@
+name: Apply Mean Reversion Corpus Classification Patch
+
+on:
+  push:
+    branches:
+      - fix/mean-reversion-corpus-file-classification-v1
+    paths:
+      - ".github/workflows/apply_mean_reversion_corpus_classification_patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mean-reversion-corpus-file-classification-v1
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow pytest
+
+      - name: Apply guarded production patch
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          integrity_path = Path('core/research_backtest_integrity.py')
+          integrity_path.write_text('''from __future__ import annotations
+
+from collections.abc import Iterable
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+
+RESEARCH_CANDLE = "CANDLE"
+RESEARCH_NON_CANDLE_QUOTE = "NON_CANDLE_QUOTE"
+_REQUIRED_CANDLE_COLUMNS = frozenset({"timestamp", "open", "high", "low", "close"})
+_OHLC_COLUMNS = frozenset({"open", "high", "low", "close"})
+_KNOWN_QUOTE_COLUMNS = frozenset({"ts", "token", "symbol", "ltp", "bid", "ask"})
+
+
+def classify_research_parquet_columns(columns: Iterable[object]) -> str:
+    """Classify a replay parquet without treating quote/depth files as candles.
+
+    The frozen Upstox corpus contains both canonical OHLC candle files and option
+    quote/depth files under date-level ``underlying`` directories. A partial OHLC
+    schema is treated as corruption, while the known quote schema is explicitly
+    non-candle evidence and may be skipped by candle-only research.
+    """
+    names = {str(column) for column in columns}
+    if _REQUIRED_CANDLE_COLUMNS.issubset(names):
+        return RESEARCH_CANDLE
+
+    present_ohlc = sorted(_OHLC_COLUMNS.intersection(names))
+    if present_ohlc:
+        missing = sorted(_REQUIRED_CANDLE_COLUMNS.difference(names))
+        raise ValueError(
+            f"partial candle schema present_ohlc={present_ohlc} missing={missing}"
+        )
+
+    if _KNOWN_QUOTE_COLUMNS.issubset(names):
+        return RESEARCH_NON_CANDLE_QUOTE
+
+    raise ValueError(f"unrecognized research parquet schema: {sorted(names)}")
+
+
+def normalize_research_candle_frame(
+    frame: pd.DataFrame,
+    *,
+    source: str | Path | None = None,
+) -> pd.DataFrame:
+    """Return one deterministic, validated, start-labelled OHLC candle frame."""
+    classification = classify_research_parquet_columns(frame.columns)
+    if classification != RESEARCH_CANDLE:
+        raise ValueError(
+            f"non-candle parquet cannot be normalized as candles: {source or '<memory>'}"
+        )
+    if frame.empty:
+        raise ValueError(f"candle parquet is empty: {source or '<memory>'}")
+
+    normalized = frame.copy()
+    timestamps = pd.to_datetime(normalized["timestamp"], errors="raise")
+    if timestamps.isna().any():
+        raise ValueError(f"candle timestamps contain nulls: {source or '<memory>'}")
+    if timestamps.duplicated().any():
+        raise ValueError(f"candle timestamps contain duplicates: {source or '<memory>'}")
+    normalized["timestamp"] = timestamps
+
+    for column in sorted(_OHLC_COLUMNS):
+        numeric = pd.to_numeric(normalized[column], errors="raise")
+        if not np.isfinite(numeric.to_numpy(dtype=float)).all():
+            raise ValueError(
+                f"candle column {column} contains non-finite values: {source or '<memory>'}"
+            )
+        normalized[column] = numeric.astype(float)
+
+    return normalized.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+
+
+def resolve_research_candle_symbol(
+    frame: pd.DataFrame,
+    *,
+    source: str | Path,
+) -> str:
+    """Resolve one authoritative symbol without truncating symbols containing underscores."""
+    if "symbol" in frame.columns:
+        symbols = sorted(
+            {
+                str(value).strip()
+                for value in frame["symbol"].dropna().tolist()
+                if str(value).strip()
+            }
+        )
+        if len(symbols) == 1:
+            return symbols[0]
+        if len(symbols) > 1:
+            raise ValueError(f"candle parquet contains multiple symbols: {symbols}")
+
+    stem = Path(source).stem
+    if "_" not in stem:
+        raise ValueError(f"cannot resolve symbol from candle filename: {source}")
+    symbol, date_key = stem.rsplit("_", 1)
+    if len(date_key) != 8 or not date_key.isdigit() or not symbol:
+        raise ValueError(f"cannot resolve symbol from candle filename: {source}")
+    return symbol
+
+
+def load_research_candle_parquet(
+    path: str | Path,
+) -> tuple[str, pd.DataFrame | None, str | None]:
+    """Load one replay parquet, returning explicit non-candle classification when safe."""
+    source = Path(path)
+    frame = pd.read_parquet(source)
+    classification = classify_research_parquet_columns(frame.columns)
+    if classification == RESEARCH_NON_CANDLE_QUOTE:
+        return classification, None, None
+    normalized = normalize_research_candle_frame(frame, source=source)
+    symbol = resolve_research_candle_symbol(normalized, source=source)
+    return classification, normalized, symbol
+
+
+def causal_completed_htf_sma(
+    close: pd.Series,
+    *,
+    period_minutes: int,
+    window: int = 15,
+) -> pd.Series:
+    """Map an SMA of completed higher-timeframe closes to intraday rows.
+
+    A row inside the currently-forming HTF bucket may only use HTF buckets that
+    completed before that bucket began. Grouping by the floored bucket and
+    shifting the bucket-level SMA by one enforces that contract for bar-open or
+    bar-close labelled lower-timeframe rows without reading a future close from
+    the same bucket.
+    """
+    if not isinstance(close.index, pd.DatetimeIndex):
+        raise TypeError("close must use a DatetimeIndex")
+    if period_minutes <= 0:
+        raise ValueError("period_minutes must be positive")
+    if window <= 0:
+        raise ValueError("window must be positive")
+
+    frequency = f"{int(period_minutes)}min"
+    bucket_keys = close.index.floor(frequency)
+    htf_close = close.groupby(bucket_keys).last()
+    completed_htf_sma = htf_close.rolling(window, min_periods=window).mean().shift(1)
+    return pd.Series(bucket_keys, index=close.index).map(completed_htf_sma).astype(float)
+
+
+def is_immediate_next_bar(*, signal_bar_index: int, current_bar_index: int) -> bool:
+    """Return whether current_bar_index is the only legal next-bar entry."""
+    return int(current_bar_index) == int(signal_bar_index) + 1
+''', encoding='utf-8')
+
+          generator_path = Path('scripts/generate_mean_reversion_trade_ledger.py')
+          text = generator_path.read_text(encoding='utf-8')
+
+          old_import = '''from core.research_backtest_integrity import (
+    causal_completed_htf_sma,
+    is_immediate_next_bar,
+)
+'''
+          new_import = '''from core.research_backtest_integrity import (
+    RESEARCH_NON_CANDLE_QUOTE,
+    causal_completed_htf_sma,
+    is_immediate_next_bar,
+    load_research_candle_parquet,
+)
+'''
+          if text.count(old_import) != 1:
+              raise SystemExit('guard failed: expected integrity import block exactly once')
+          text = text.replace(old_import, new_import)
+
+          old_counter = '''    quote_truth_propagated = 0
+
+    def record_exit(
+'''
+          new_counter = '''    quote_truth_propagated = 0
+    non_candle_parquet_files_skipped = 0
+    non_candle_schema_distribution: dict[str, int] = {}
+
+    def record_exit(
+'''
+          if text.count(old_counter) != 1:
+              raise SystemExit('guard failed: expected counter insertion point exactly once')
+          text = text.replace(old_counter, new_counter)
+
+          old_loop = '''            for parquet_file in underlying_dir.glob("*.parquet"):
+                parquet_symbol_days += 1
+                symbol = parquet_file.stem.split("_")[0]
+                df = pd.read_parquet(parquet_file)
+                df = df.sort_values("timestamp").reset_index(drop=True)
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                bar_interval = _infer_bar_interval(df["timestamp"])
+'''
+          new_loop = '''            for parquet_file in sorted(underlying_dir.glob("*.parquet")):
+                classification, df, resolved_symbol = load_research_candle_parquet(
+                    parquet_file
+                )
+                if classification == RESEARCH_NON_CANDLE_QUOTE:
+                    non_candle_parquet_files_skipped += 1
+                    non_candle_schema_distribution[classification] = (
+                        non_candle_schema_distribution.get(classification, 0) + 1
+                    )
+                    continue
+                if df is None or resolved_symbol is None:
+                    raise AssertionError("candle classification returned no frame or symbol")
+
+                parquet_symbol_days += 1
+                symbol = resolved_symbol
+                bar_interval = _infer_bar_interval(df["timestamp"])
+'''
+          if text.count(old_loop) != 1:
+              raise SystemExit('guard failed: expected parquet loop exactly once')
+          text = text.replace(old_loop, new_loop)
+
+          old_reconciliation = '''            "parquet_symbol_days": parquet_symbol_days,
+            "candidate_trading_days": total_calendar_days,
+'''
+          new_reconciliation = '''            "parquet_symbol_days": parquet_symbol_days,
+            "non_candle_parquet_files_skipped": non_candle_parquet_files_skipped,
+            "non_candle_schema_distribution": dict(
+                sorted(non_candle_schema_distribution.items())
+            ),
+            "candidate_trading_days": total_calendar_days,
+'''
+          if text.count(old_reconciliation) != 1:
+              raise SystemExit('guard failed: expected reconciliation block exactly once')
+          text = text.replace(old_reconciliation, new_reconciliation)
+          generator_path.write_text(text, encoding='utf-8')
+
+          Path('tests/test_research_candle_contract.py').write_text('''from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from core.research_backtest_integrity import (
+    RESEARCH_CANDLE,
+    RESEARCH_NON_CANDLE_QUOTE,
+    classify_research_parquet_columns,
+    load_research_candle_parquet,
+    normalize_research_candle_frame,
+    resolve_research_candle_symbol,
+)
+
+
+def _candle_frame(symbol: str = "BSE_INDEX|SENSEX") -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "timestamp": ["2026-01-05 09:16:00", "2026-01-05 09:15:00"],
+            "symbol": [symbol, symbol],
+            "open": [101.0, 100.0],
+            "high": [102.0, 101.0],
+            "low": [100.0, 99.0],
+            "close": [101.5, 100.5],
+            "volume": [1000.0, 900.0],
+        }
+    )
+
+
+def test_candle_frame_is_normalized_and_symbol_with_underscores_is_preserved(tmp_path):
+    path = tmp_path / "BSE_INDEX|SENSEX_20260105.parquet"
+    _candle_frame().to_parquet(path)
+
+    classification, frame, symbol = load_research_candle_parquet(path)
+
+    assert classification == RESEARCH_CANDLE
+    assert symbol == "BSE_INDEX|SENSEX"
+    assert frame is not None
+    assert frame["timestamp"].tolist() == [
+        pd.Timestamp("2026-01-05 09:15:00"),
+        pd.Timestamp("2026-01-05 09:16:00"),
+    ]
+
+
+def test_known_quote_depth_parquet_is_explicitly_non_candle(tmp_path):
+    path = tmp_path / "BANKNIFTY 56200 CE 28 JUL 26.parquet"
+    pd.DataFrame(
+        {
+            "ts": [1783578300.0],
+            "token": [12345],
+            "symbol": ["BANKNIFTY 56200 CE 28 JUL 26"],
+            "ltp": [100.0],
+            "bid": [99.5],
+            "ask": [100.5],
+        }
+    ).to_parquet(path)
+
+    classification, frame, symbol = load_research_candle_parquet(path)
+
+    assert classification == RESEARCH_NON_CANDLE_QUOTE
+    assert frame is None
+    assert symbol is None
+
+
+def test_partial_ohlc_schema_fails_closed():
+    with pytest.raises(ValueError, match="partial candle schema"):
+        classify_research_parquet_columns(["timestamp", "open", "high", "close"])
+
+
+def test_unknown_schema_fails_closed():
+    with pytest.raises(ValueError, match="unrecognized research parquet schema"):
+        classify_research_parquet_columns(["ts", "value"])
+
+
+def test_duplicate_candle_timestamps_fail_closed():
+    frame = _candle_frame()
+    frame.loc[1, "timestamp"] = frame.loc[0, "timestamp"]
+    with pytest.raises(ValueError, match="timestamps contain duplicates"):
+        normalize_research_candle_frame(frame, source="duplicate.parquet")
+
+
+def test_filename_fallback_uses_rightmost_date_separator():
+    frame = _candle_frame().drop(columns=["symbol"])
+    assert (
+        resolve_research_candle_symbol(
+            frame,
+            source=Path("BSE_INDEX|SENSEX_20260105.parquet"),
+        )
+        == "BSE_INDEX|SENSEX"
+    )
+''', encoding='utf-8')
+
+          review = Path('docs/agent_reviews/mean_reversion_corpus_file_classification.md')
+          review.parent.mkdir(parents=True, exist_ok=True)
+          review.write_text('''# Mean Reversion Corpus File Classification Review
+
+mode: RESEARCH_BACKTEST_PRODUCTION_REPAIR
+candidate_id: MEAN_REVERSION_CORPUS_FILE_CLASSIFICATION_V1
+decision: DRAFT_REVIEW_REQUIRED
+reason: The immutable corpus census proved that date-level underlying directories contain 1,547 OHLC candle files and 129 option quote/depth parquets; the generator previously attempted to load every parquet as a candle and truncated symbols containing underscores.
+timestamp: 2026-07-22T14:00:00+05:30
+is_order_action: false
+broker_api_called: false
+source: Frozen corpus schema report and post-merge regeneration failures
+
+## Agent Work Contract
+
+Repair only corpus file classification, deterministic candle normalization, and authoritative symbol resolution in the mean-reversion research path. Preserve strategy logic, thresholds, accounting, WFA, broker, feed, risk, dashboard, configuration, and order permissions.
+
+## Scope Guard
+
+In scope: classify canonical OHLC candles, explicitly skip the proven quote/depth schema, reject partial or unknown schemas, reject duplicate timestamps, preserve underscore-containing symbols, expose skipped-file telemetry, and add focused regressions.
+
+Out of scope: changing market data, accepting arbitrary timestamp aliases, converting quote ticks into candles, changing strategy formulas, retuning parameters, or authorizing execution.
+
+## Grill Me Review
+
+1. Can a quote file silently become a candle? No; only the complete timestamp/OHLC schema is accepted.
+2. Can a damaged candle silently be skipped? No; any partial OHLC schema raises an error.
+3. Can an unknown parquet silently disappear? No; only the fully proven quote/depth schema is skippable.
+4. Can duplicate timestamps alter bar ordering? No; duplicates fail closed.
+5. Can BSE_INDEX|SENSEX be truncated to BSE? No; the authoritative symbol column is preferred and the fallback right-splits the date suffix.
+6. Can skipped quote files inflate capacity denominators? No; candle symbol-day counting occurs only after candle classification.
+
+## Hermes Review
+
+The existing generator command and output schema remain compatible. Reconciliation receives additive non-candle counters. Existing canonical candle frames remain timestamp-sorted and retain start-labelled semantics. The helper is shared and independently testable.
+
+## GSD Review
+
+The repair is separated into one shared classification/normalization contract, one guarded generator integration, and focused positive/negative tests. No unrelated refactor is included.
+
+## QA / Safety Review
+
+Tests cover canonical candles, known quote files, partial OHLC corruption, unknown schemas, duplicate timestamps, deterministic sorting, and underscore-preserving symbol resolution. No broker or order path is imported or called.
+
+## Acceptance Proof
+
+Acceptance requires focused tests, neighboring ledger/audit tests, full repository tests, Code Excellence, CodeQL, Portfolio, Forensics, review evidence, and registry verification on one immutable head. A post-merge corpus regeneration must then verify exactly 1,547 candle files and 129 explicitly skipped quote/depth files before Phase 4 evidence is trusted.
+
+## Runtime Proof Required After Merge
+
+Rerun the immutable corpus workflow from its fixed SHA. Confirm archive and parquet hashes, file classification counts, Phase 4 two-run semantic determinism, full-grid output, shared WFA determinism, and read-only evidence publication.
+
+## What This PR Does Not Prove
+
+It does not prove structural edge, profitability, executable option economics, or correctness of unrelated engines. It does not reverse any historical strategy verdict without regeneration.
+
+## Human Approval
+
+Human review is required before merge. The PR must remain draft until all gates pass and the exact corpus-derived classification contract is accepted.
+''', encoding='utf-8')
+
+          Path('.github/workflows/apply_mean_reversion_corpus_classification_patch.yml').unlink()
+          PY
+
+      - name: Run focused production regressions
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_research_candle_contract.py \
+            tests/test_mean_reversion_ledger_integrity.py \
+            tests/test_phase4_audit_fail_closed.py \
+            tests/test_vertical_slice_metrics.py
+          python -m py_compile \
+            core/research_backtest_integrity.py \
+            scripts/generate_mean_reversion_trade_ledger.py
+
+      - name: Commit production repair
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: classify mean-reversion corpus parquets"
+          git push origin HEAD:fix/mean-reversion-corpus-file-classification-v1
