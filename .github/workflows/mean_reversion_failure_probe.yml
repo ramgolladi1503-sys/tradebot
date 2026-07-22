@@ -15,8 +15,8 @@ jobs:
   extract:
     runs-on: ubuntu-latest
     env:
-      SOURCE_RUN_ID: "29902540452"
-      SOURCE_JOB_ID: "88866347730"
+      SOURCE_RUN_ID: "29905088620"
+      SOURCE_JOB_ID: "88874497347"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,13 +53,13 @@ jobs:
 
           lines = text.splitlines()
           pattern = re.compile(
-              r'(traceback|error|failed|failure|exception|assertion|runtimeerror|valueerror|keyerror|typeerror|subprocess|mismatch|duplicate|invalid|missing|systemexit)',
+              r'(traceback|error|failed|failure|exception|assertion|runtimeerror|valueerror|keyerror|typeerror|subprocess|mismatch|duplicate|invalid|missing|systemexit|rejected|non-fast-forward|push)',
               re.IGNORECASE,
           )
           matching = [line for line in lines if pattern.search(line)]
           selected = matching[-220:] + ['--- LOG TAIL ---'] + lines[-320:]
           cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in selected]
-          target = Path('docs/research/mean_reversion_postmerge_regeneration/schema_probe_failure_extract.txt')
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/rerun_v2_prep_failure_extract.txt')
           target.write_text('\n'.join(cleaned) + '\n', encoding='utf-8')
           PY
 
@@ -68,6 +68,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/research/mean_reversion_postmerge_regeneration/schema_probe_failure_extract.txt
-          git commit -m "research: publish schema-probe failure extract"
+          git add docs/research/mean_reversion_postmerge_regeneration/rerun_v2_prep_failure_extract.txt
+          git commit -m "research: publish rerun v2 preparation failure extract"
           git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
