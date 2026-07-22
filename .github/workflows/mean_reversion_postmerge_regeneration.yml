@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: mean-reversion-postmerge-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   regenerate-frozen-evidence:
@@ -29,6 +29,7 @@ jobs:
       CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
       PYTHONHASHSEED: "0"
       EVIDENCE_DIR: ${{ runner.temp }}/postmerge-evidence
+      EVIDENCE_BRANCH: research/postmerge-mean-reversion-rerun-v1
 
     steps:
       - name: Checkout evidence branch
@@ -49,128 +50,61 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install numpy pandas pyarrow pytest pyyaml
 
-      - name: Initialize fail-closed evidence status
-        run: |
-          set -euo pipefail
-          mkdir -p "${EVIDENCE_DIR}"
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          path = Path(os.environ["EVIDENCE_DIR"]) / "run_status.json"
-          path.write_text(json.dumps({
-              "status": "PREFLIGHT",
-              "stage": "CORPUS_ACCESS_PENDING",
-              "producer_commit": os.environ["GITHUB_SHA"],
-              "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
-              "execution_allowed": False,
-              "paper_live_allowed": False,
-          }, indent=2, sort_keys=True) + "\n")
-          PY
-
-      - name: Download immutable private corpus
+      - name: Run frozen post-merge regeneration
         env:
           GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
         run: |
-          set +e
-          credential_present=false
-          if test -n "${GH_TOKEN}"; then credential_present=true; fi
-          if test "${credential_present}" != true; then
-            STAGE=CORPUS_CREDENTIAL_MISSING EXIT_CODE=1 CREDENTIAL_PRESENT=false python - <<'PY'
+          set -Eeuo pipefail
+          mkdir -p "${EVIDENCE_DIR}" "${RUNNER_TEMP}/corpus-assets"
+
+          write_status() {
+            STATUS_VALUE="$1" STAGE_VALUE="$2" EXIT_VALUE="$3" python - <<'PY'
           import json
           import os
           from pathlib import Path
 
           path = Path(os.environ["EVIDENCE_DIR"]) / "run_status.json"
           path.write_text(json.dumps({
-              "status": "FAILED",
-              "stage": os.environ["STAGE"],
-              "exit_code": int(os.environ["EXIT_CODE"]),
-              "credential_present": os.environ["CREDENTIAL_PRESENT"] == "true",
+              "status": os.environ["STATUS_VALUE"],
+              "stage": os.environ["STAGE_VALUE"],
+              "exit_code": int(os.environ["EXIT_VALUE"]),
               "producer_commit": os.environ["GITHUB_SHA"],
               "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
               "execution_allowed": False,
               "paper_live_allowed": False,
           }, indent=2, sort_keys=True) + "\n")
           PY
-            exit 1
-          fi
+          }
 
-          mkdir -p "${RUNNER_TEMP}/corpus-assets"
+          stage="CORPUS_DOWNLOAD"
+          trap 'rc=$?; write_status FAILED "${stage}" "${rc}"; exit "${rc}"' ERR
+          write_status PREFLIGHT CORPUS_ACCESS_PENDING 0
+          test -n "${GH_TOKEN}"
+
           gh release download "${CORPUS_TAG}" \
             --repo "${CORPUS_REPO}" \
             --dir "${RUNNER_TEMP}/corpus-assets" \
             --pattern "upstox_candidate_replay_v1.tar.gz" \
             --pattern "upstox_candidate_replay_v1.tar.gz.sha256" \
             --pattern "parquet_sha256_manifest.txt"
-          rc=$?
-          if test "${rc}" -ne 0; then
-            STAGE=CORPUS_DOWNLOAD_FAILED EXIT_CODE="${rc}" CREDENTIAL_PRESENT=true python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
 
-          path = Path(os.environ["EVIDENCE_DIR"]) / "run_status.json"
-          path.write_text(json.dumps({
-              "status": "FAILED",
-              "stage": os.environ["STAGE"],
-              "exit_code": int(os.environ["EXIT_CODE"]),
-              "credential_present": os.environ["CREDENTIAL_PRESENT"] == "true",
-              "producer_commit": os.environ["GITHUB_SHA"],
-              "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
-              "execution_allowed": False,
-              "paper_live_allowed": False,
-          }, indent=2, sort_keys=True) + "\n")
-          PY
-            exit "${rc}"
-          fi
-          set -e
-
-      - name: Verify and extract frozen corpus
-        run: |
-          set +e
+          stage="CORPUS_VERIFY_OR_EXTRACT"
           assets="${RUNNER_TEMP}/corpus-assets"
-          (
-            set -euo pipefail
-            echo "${CORPUS_ARCHIVE_SHA256}  ${assets}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
-            test "$(awk '{print $1}' "${assets}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
-            mkdir -p runtime
-            tar -xzf "${assets}/upstox_candidate_replay_v1.tar.gz" -C runtime
-            test -d runtime/upstox_candidate_replay
-            test -f "${assets}/parquet_sha256_manifest.txt"
-          )
-          rc=$?
-          if test "${rc}" -ne 0; then
-            STAGE=CORPUS_VERIFY_OR_EXTRACT_FAILED EXIT_CODE="${rc}" python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          echo "${CORPUS_ARCHIVE_SHA256}  ${assets}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
+          test "$(awk '{print $1}' "${assets}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
+          mkdir -p runtime
+          tar -xzf "${assets}/upstox_candidate_replay_v1.tar.gz" -C runtime
+          test -d runtime/upstox_candidate_replay
+          test -f "${assets}/parquet_sha256_manifest.txt"
 
-          path = Path(os.environ["EVIDENCE_DIR"]) / "run_status.json"
-          path.write_text(json.dumps({
-              "status": "FAILED",
-              "stage": os.environ["STAGE"],
-              "exit_code": int(os.environ["EXIT_CODE"]),
-              "producer_commit": os.environ["GITHUB_SHA"],
-              "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
-              "execution_allowed": False,
-              "paper_live_allowed": False,
-          }, indent=2, sort_keys=True) + "\n")
-          PY
-            exit "${rc}"
-          fi
-          set -e
-
-      - name: Run authoritative post-merge regeneration
-        run: |
-          set -euo pipefail
+          stage="AUTHORITATIVE_REGENERATION"
           PYTHONPATH=. python scripts/run_mean_reversion_postmerge_regeneration.py \
             --project-root "${GITHUB_WORKSPACE}" \
             --corpus-root "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay" \
-            --manifest "${RUNNER_TEMP}/corpus-assets/parquet_sha256_manifest.txt" \
+            --manifest "${assets}/parquet_sha256_manifest.txt" \
             --output-dir "${EVIDENCE_DIR}" \
             --producer-commit "${GITHUB_SHA}"
+          trap - ERR
 
       - name: Publish summary
         if: always()
@@ -191,6 +125,11 @@ jobs:
           set -euo pipefail
           source_dir="${EVIDENCE_DIR}"
           target_dir="docs/research/mean_reversion_postmerge_regeneration"
+
+          git fetch origin "${EVIDENCE_BRANCH}"
+          git checkout "${EVIDENCE_BRANCH}"
+          git pull --ff-only origin "${EVIDENCE_BRANCH}"
+
           mkdir -p "${target_dir}"
           for name in \
             run_status.json \
@@ -202,12 +141,13 @@ jobs:
               cp "${source_dir}/${name}" "${target_dir}/${name}"
             fi
           done
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "${target_dir}"
           if ! git diff --cached --quiet; then
             git commit -m "research: publish mean-reversion regeneration index"
-            git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
+            git push origin HEAD:"${EVIDENCE_BRANCH}"
           fi
 
       - name: Upload read-only regeneration evidence
