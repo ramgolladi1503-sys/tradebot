@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import re
 from typing import Sequence
 
 from mcp.server.fastmcp import FastMCP
 
-from tools.tradebot_mcp.core import GitAuditService, Settings
+from tools.tradebot_mcp.core import GitAuditService, SafetyError, Settings
+
+_REF_RE = re.compile(r"^[A-Za-z0-9._/@{}~^:+-]+$")
+
+
+def _safe_ref(value: str) -> str:
+    if value.startswith("-") or not _REF_RE.fullmatch(value):
+        raise SafetyError(f"invalid git ref: {value}")
+    return value
+
 
 mcp = FastMCP(
     "tradebot-git-audit",
@@ -32,13 +42,13 @@ def list_worktrees() -> dict:
 @mcp.tool()
 def get_branch_head(ref: str = "HEAD") -> dict:
     """Resolve one validated Git ref to a commit SHA."""
-    return service.get_branch_head(ref)
+    return service.get_branch_head(_safe_ref(ref))
 
 
 @mcp.tool()
 def get_changed_files(base: str | None = None, head: str = "HEAD") -> dict:
     """List worktree changes or changed paths between validated refs."""
-    return service.get_changed_files(base, head)
+    return service.get_changed_files(_safe_ref(base) if base else None, _safe_ref(head))
 
 
 @mcp.tool()
@@ -48,7 +58,9 @@ def scan_prohibited_paths(
     prohibited_prefixes: Sequence[str] | None = None,
 ) -> dict:
     """Fail when a diff touches configured production or secret-bearing prefixes."""
-    return service.scan_prohibited_paths(base, head, prohibited_prefixes)
+    return service.scan_prohibited_paths(
+        _safe_ref(base), _safe_ref(head), prohibited_prefixes
+    )
 
 
 @mcp.tool()
@@ -59,7 +71,12 @@ def verify_commit_scope(
     prohibited_prefixes: Sequence[str] | None = None,
 ) -> dict:
     """Verify that every changed path is owned by the task and not prohibited."""
-    return service.verify_commit_scope(base, head, allowed_prefixes, prohibited_prefixes)
+    return service.verify_commit_scope(
+        _safe_ref(base),
+        _safe_ref(head),
+        allowed_prefixes,
+        prohibited_prefixes,
+    )
 
 
 @mcp.tool()
