@@ -15,8 +15,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from core.research_backtest_integrity import (
+    RESEARCH_APPLEDOUBLE_METADATA,
+    RESEARCH_CANDLE,
+    RESEARCH_NON_CANDLE_QUOTE,
+    load_research_candle_parquet,
+)
+
 
 STRATEGY_ID = "MEAN_REVERSION_EXTENSION"
+EXPECTED_CANDLE_FILES = 1547
+EXPECTED_QUOTE_DEPTH_FILES = 129
+EXPECTED_APPLEDOUBLE_FILES = 1676
 EXPECTED_CORPUS_SHA256 = (
     "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7"
 )
@@ -104,8 +114,12 @@ def _verify_corpus_and_build_authority(
             raise RuntimeError(f"duplicate manifest path: {relative}")
         expected[relative] = digest.lower()
 
-    actual_files = sorted(path for path in corpus_root.rglob("*.parquet") if path.is_file())
-    actual_rel = {path.relative_to(corpus_root).as_posix() for path in actual_files}
+    manifest_files = sorted(
+        path
+        for path in corpus_root.rglob("*.parquet")
+        if path.is_file() and not path.name.startswith("._")
+    )
+    actual_rel = {path.relative_to(corpus_root).as_posix() for path in manifest_files}
     if actual_rel != set(expected):
         raise RuntimeError(
             "corpus inventory mismatch "
@@ -128,28 +142,48 @@ def _verify_corpus_and_build_authority(
     symbols: set[str] = set()
     row_counts: list[int] = []
     total_rows = 0
-    unsorted_files = 0
-    for path in underlying:
-        date_key = path.parent.parent.name
-        symbol = path.stem.split("_")[0]
-        frame = pd.read_parquet(
-            path, columns=["timestamp", "open", "high", "low", "close"]
-        )
-        if frame.empty:
-            raise RuntimeError(f"empty underlying parquet: {path}")
-        timestamps = pd.to_datetime(frame["timestamp"], errors="raise")
-        if timestamps.isna().any():
-            raise RuntimeError(f"invalid timestamps: {path}")
-        if timestamps.duplicated().any():
-            raise RuntimeError(f"duplicate timestamps: {path}")
-        if not timestamps.is_monotonic_increasing:
-            unsorted_files += 1
-        dates.add(date_key)
+    candle_files = 0
+    quote_depth_files = 0
+    appledouble_files = 0
+    for parquet_path in underlying:
+        classification, frame, symbol = load_research_candle_parquet(parquet_path)
+        if classification == RESEARCH_APPLEDOUBLE_METADATA:
+            appledouble_files += 1
+            continue
+        if classification == RESEARCH_NON_CANDLE_QUOTE:
+            quote_depth_files += 1
+            continue
+        if classification != RESEARCH_CANDLE or frame is None or symbol is None:
+            raise RuntimeError(
+                f"unexpected corpus classification path={parquet_path} "
+                f"classification={classification}"
+            )
+
+        candle_files += 1
+        dates.add(parquet_path.parent.parent.name)
         symbols.add(symbol)
         row_counts.append(len(frame))
         total_rows += len(frame)
 
+    frozen_counts = {
+        "candle_files": candle_files,
+        "quote_depth_files": quote_depth_files,
+        "appledouble_files": appledouble_files,
+    }
+    expected_counts = {
+        "candle_files": EXPECTED_CANDLE_FILES,
+        "quote_depth_files": EXPECTED_QUOTE_DEPTH_FILES,
+        "appledouble_files": EXPECTED_APPLEDOUBLE_FILES,
+    }
+    if frozen_counts != expected_counts:
+        raise RuntimeError(
+            f"frozen corpus classification mismatch expected={expected_counts} "
+            f"actual={frozen_counts}"
+        )
+
     ordered_dates = sorted(dates)
+    if not ordered_dates:
+        raise RuntimeError("frozen corpus contains no valid candle dates")
     uniform_rows = row_counts[0] if len(set(row_counts)) == 1 else None
     base = project_root / "runtime" / "strategy_validation" / STRATEGY_ID
     base.mkdir(parents=True, exist_ok=True)
@@ -159,12 +193,16 @@ def _verify_corpus_and_build_authority(
         "corpus_archive_sha256": EXPECTED_CORPUS_SHA256,
         "manifest_verified": True,
         "parquet_files_verified": len(expected),
-        "underlying_symbol_days": len(underlying),
+        "underlying_parquet_files_classified": len(underlying),
+        "candle_files_verified": candle_files,
+        "quote_depth_files_verified": quote_depth_files,
+        "appledouble_files_verified": appledouble_files,
+        "underlying_symbol_days": candle_files,
         "underlying_rows": total_rows,
         "symbols": sorted(symbols),
         "first_date": ordered_dates[0],
         "last_date": ordered_dates[-1],
-        "source_files_not_monotonic": unsorted_files,
+        "timestamp_order_contract": "NORMALIZED_AND_DUPLICATE_REJECTED",
     }
     catalog = {
         "source": "IMMUTABLE_PRIVATE_RELEASE",
@@ -174,7 +212,9 @@ def _verify_corpus_and_build_authority(
         "trading_days_count": len(ordered_dates),
         "symbols_found": sorted(symbols),
         "rows_per_day": uniform_rows,
-        "underlying_symbol_days": len(underlying),
+        "underlying_symbol_days": candle_files,
+        "quote_depth_files": quote_depth_files,
+        "appledouble_files": appledouble_files,
         "underlying_rows": total_rows,
     }
     _write_json(base / "upstox_candle_file_audit.json", audit)
@@ -214,6 +254,8 @@ def _run_focused_tests(project_root: Path) -> None:
             "tests/test_vertical_slice_metrics.py",
             "tests/test_mean_reversion_ledger_timing.py",
             "tests/test_mean_reversion_ledger_accounting.py",
+            "tests/test_research_candle_contract.py",
+            "tests/test_mean_reversion_corpus_directory_accounting.py",
         ],
         cwd=project_root,
     )
@@ -299,11 +341,16 @@ def _combined_nifty_data(corpus_root: Path) -> pd.DataFrame:
         raise RuntimeError("no frozen NIFTY underlying files found")
     frames: list[pd.DataFrame] = []
     required = ["timestamp", "open", "high", "low", "close", "volume"]
-    for path in files:
-        frame = pd.read_parquet(path)
+    for parquet_path in files:
+        classification, frame, symbol = load_research_candle_parquet(parquet_path)
+        if classification != RESEARCH_CANDLE or frame is None or symbol != "NIFTY":
+            raise RuntimeError(
+                f"unexpected NIFTY WFA input path={parquet_path} "
+                f"classification={classification} symbol={symbol}"
+            )
         missing = [column for column in required if column not in frame.columns]
         if missing:
-            raise RuntimeError(f"{path} missing columns {missing}")
+            raise RuntimeError(f"{parquet_path} missing columns {missing}")
         frames.append(frame[required].copy())
     data = pd.concat(frames, ignore_index=True)
     data["timestamp"] = pd.to_datetime(data["timestamp"], errors="raise")

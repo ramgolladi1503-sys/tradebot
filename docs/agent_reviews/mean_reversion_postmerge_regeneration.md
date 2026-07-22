@@ -1,13 +1,13 @@
 # Mean Reversion Post-Merge Regeneration Review
 
 mode: RESEARCH_EVIDENCE_REGENERATION
-candidate_id: MEAN_REVERSION_POSTMERGE_RERUN_V1
+candidate_id: MEAN_REVERSION_POSTMERGE_RERUN_V3
 decision: DRAFT_REVIEW_REQUIRED
-reason: Regenerate all affected mean-reversion and shared WFA evidence after PRs 689 and 690 repaired causal, accounting, audit, and fold-isolation defects.
+reason: Regenerate all affected mean-reversion and shared WFA evidence after PRs 689, 690, and 693 repaired causal, accounting, audit, fold-isolation, and mixed-corpus classification defects.
 timestamp: 2026-07-22T12:45:00+05:30
 is_order_action: false
 broker_api_called: false
-source: Immutable private release `upstox-corpus-v1` and merged commit `c6d1240ff506210be15f8647bad0ee677b4870a7`
+source: Immutable private release `upstox-corpus-v1` and merged commit `a64ddee5f68921bffbac684e2ea06de8943b704a`
 
 ## Agent Work Contract
 
@@ -18,7 +18,7 @@ Run a read-only research regeneration against the immutable private Upstox corpu
 In scope:
 
 - frozen corpus download and SHA-256 verification;
-- underlying candle inventory and input-authority artifacts;
+- exact 1,547 candle / 129 quote-depth / 1,676 AppleDouble classification census and input-authority artifacts;
 - focused merged regression tests;
 - two independent Phase 4 regenerations;
 - all mandatory Phase 4 audits and vertical-slice reports;
