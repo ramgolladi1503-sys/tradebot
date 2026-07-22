@@ -1,0 +1,106 @@
+[
+  {
+    "best_net_expectancy_bps": -4.129321527751196,
+    "best_profit_factor": 0.5363425655916653,
+    "best_support": 427,
+    "closest_to_passing_variant": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V01",
+    "dominant_failure_classification": "instability",
+    "gates_failed_by_closest_variant": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "placebo_control",
+      "shifted_signal_control",
+      "multiple_testing_correction"
+    ],
+    "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+    "sessions_processed": 491,
+    "signal_frequency_range": [
+      154,
+      427
+    ],
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -4.129321527751196,
+    "best_profit_factor": 0.5363425655916653,
+    "best_support": 427,
+    "closest_to_passing_variant": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V01",
+    "dominant_failure_classification": "instability",
+    "gates_failed_by_closest_variant": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "placebo_control",
+      "shifted_signal_control",
+      "multiple_testing_correction"
+    ],
+    "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+    "sessions_processed": 491,
+    "signal_frequency_range": [
+      154,
+      427
+    ],
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -4.129321527751196,
+    "best_profit_factor": 0.5363425655916653,
+    "best_support": 427,
+    "closest_to_passing_variant": "FAILED_AUCTION_REACCEPTANCE_V01",
+    "dominant_failure_classification": "instability",
+    "gates_failed_by_closest_variant": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "placebo_control",
+      "shifted_signal_control",
+      "multiple_testing_correction"
+    ],
+    "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+    "sessions_processed": 491,
+    "signal_frequency_range": [
+      154,
+      427
+    ],
+    "variant_count": 6
+  },
+  {
+    "best_net_expectancy_bps": -4.129321527751196,
+    "best_profit_factor": 0.5363425655916653,
+    "best_support": 427,
+    "closest_to_passing_variant": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V01",
+    "dominant_failure_classification": "instability",
+    "gates_failed_by_closest_variant": [
+      "net_expectancy_positive",
+      "profit_factor",
+      "bootstrap_lower_bound_positive",
+      "chronological_fold_stability",
+      "leave_one_month_out_stability",
+      "leave_one_regime_out_stability",
+      "parameter_neighbour_stability",
+      "placebo_control",
+      "shifted_signal_control",
+      "multiple_testing_correction"
+    ],
+    "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+    "sessions_processed": 491,
+    "signal_frequency_range": [
+      154,
+      427
+    ],
+    "variant_count": 6
+  }
+]

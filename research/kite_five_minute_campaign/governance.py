@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .common import canonical_hash, write_json_with_sidecar
+from .common import file_sha256, write_json_with_sidecar
 
 CLASSIFICATIONS = {
     "KNOWN_DEVELOPMENT",
@@ -149,7 +149,7 @@ def build_exposure_ledger(repo_root: str | Path, manifest: list[dict[str, Any]],
         encoding="utf-8",
     )
     ledger.with_name(ledger.name + ".sha256").write_text(
-        f"{canonical_hash(entries)}  {ledger.name}\n",
+        f"{file_sha256(ledger)}  {ledger.name}\n",
         encoding="utf-8",
     )
     counts = Counter(entry["classification"] for entry in entries)
@@ -170,7 +170,7 @@ def build_exposure_ledger(repo_root: str | Path, manifest: list[dict[str, Any]],
     lines.extend(f"- {key}: {value}" for key, value in sorted(counts.items()))
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     report.with_name(report.name + ".sha256").write_text(
-        f"{canonical_hash(lines)}  {report.name}\n",
+        f"{file_sha256(report)}  {report.name}\n",
         encoding="utf-8",
     )
     return manifest_payload

@@ -6,9 +6,15 @@ on:
       archive_sha256:
         description: "Expected SHA-256 of the private Kite archive"
         required: true
-      archive_artifact_name:
-        description: "Previously uploaded private archive artifact name"
+      archive_release_tag:
+        description: "Immutable private GitHub release tag containing the archive"
         required: true
+      archive_asset_name:
+        description: "Exact release asset filename"
+        required: true
+      expected_head_sha:
+        description: "Expected branch head SHA; leave empty to skip"
+        required: false
 
 permissions:
   contents: read
@@ -21,6 +27,20 @@ jobs:
         with:
           ref: research/kite-five-minute-governed-discovery-v1
 
+      - name: Refuse unexpected branch or commit
+        run: |
+          test "${GITHUB_REF_NAME}" = "research/kite-five-minute-governed-discovery-v1" || {
+            echo "unexpected branch: ${GITHUB_REF_NAME}" >&2
+            exit 2
+          }
+          if [ -n "${{ inputs.expected_head_sha }}" ]; then
+            test "$(git rev-parse HEAD)" = "${{ inputs.expected_head_sha }}" || {
+              echo "unexpected head: $(git rev-parse HEAD)" >&2
+              exit 2
+            }
+          fi
+          git rev-parse HEAD > research_head_sha.txt
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -30,15 +50,24 @@ jobs:
           python -m pip install --upgrade pip==24.2
           python -m pip install pandas==2.2.2 pyarrow==21.0.0 numpy==1.26.4 pytest==8.2.2
 
-      - name: Download private Kite archive artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.archive_artifact_name }}
-          path: .private_kite_archive
+      - name: Download exact private Kite archive release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .private_kite_archive
+          gh release download "${{ inputs.archive_release_tag }}" \
+            --pattern "${{ inputs.archive_asset_name }}" \
+            --dir .private_kite_archive \
+            --clobber
+          FOUND="$(find .private_kite_archive -type f -name "${{ inputs.archive_asset_name }}" | wc -l | tr -d ' ')"
+          test "$FOUND" = "1" || {
+            echo "expected exactly one archive asset, found $FOUND" >&2
+            exit 2
+          }
 
       - name: Verify archive SHA
         run: |
-          ARCHIVE="$(find .private_kite_archive -type f -name '*.zip' | head -1)"
+          ARCHIVE=".private_kite_archive/${{ inputs.archive_asset_name }}"
           test -n "$ARCHIVE"
           echo "${{ inputs.archive_sha256 }}  $ARCHIVE" | sha256sum -c -
           echo "KITE_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
@@ -52,6 +81,18 @@ jobs:
       - name: Run independent audit
         run: python scripts/audit_kite_five_minute_campaign.py
 
+      - name: Verify JSON sidecars
+        run: |
+          while IFS= read -r sidecar; do
+            json="${sidecar%.sha256}"
+            expected="$(awk '{print $1}' "$sidecar")"
+            actual="$(sha256sum "$json" | awk '{print $1}')"
+            test "$expected" = "$actual" || {
+              echo "sidecar mismatch: $sidecar" >&2
+              exit 2
+            }
+          done < <(find research/kite_five_minute_campaign research/data_governance -name '*.sha256' | sort)
+
       - name: Upload read-only evidence
         uses: actions/upload-artifact@v4
         with:
@@ -64,3 +105,4 @@ jobs:
             research/data_governance/exposure_ledger.jsonl
             research/data_governance/exposure_ledger_manifest.json
             research/data_governance/exposure_report.md
+            research_head_sha.txt

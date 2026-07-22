@@ -2,6 +2,320 @@
   "allowed_for_live_execution": false,
   "broker_api_called": false,
   "campaign_id": "kite-five-minute-governed-discovery-v1",
+  "deterministic_random_seeds": {
+    "bootstrap": 1729,
+    "permutation": 2718
+  },
+  "frozen_variants": [
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 2.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V01"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 4.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V02"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 6.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V03"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 8.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V04"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 10.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V05"
+    },
+    {
+      "mechanism_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 12.0
+      },
+      "variant_id": "CROSS_INDEX_RELATIVE_STRENGTH_DISLOCATION_V06"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 2.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V01"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 4.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V02"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 6.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V03"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 8.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V04"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 10.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V05"
+    },
+    {
+      "mechanism_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 12.0
+      },
+      "variant_id": "VOLATILITY_STATE_TRANSITION_CONTINUATION_V06"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 2.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V01"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 4.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V02"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 6.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V03"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 8.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V04"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 10.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V05"
+    },
+    {
+      "mechanism_id": "FAILED_AUCTION_REACCEPTANCE",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 12.0
+      },
+      "variant_id": "FAILED_AUCTION_REACCEPTANCE_V06"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 2.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V01"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 4.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V02"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 6.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V03"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 8.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V04"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 10.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V05"
+    },
+    {
+      "mechanism_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION",
+      "parameters": {
+        "decision_bar_offset": 3,
+        "direction_semantics": "positive dislocation screens long relative NIFTY; negative dislocation screens short relative NIFTY",
+        "entry_timestamp": "09:30 Asia/Kolkata completed-bar decision",
+        "exit_timestamp": "15:25 Asia/Kolkata completed-bar close",
+        "threshold_bps": 12.0
+      },
+      "variant_id": "OPENING_CONTINUATION_WITH_INDEX_CONFIRMATION_V06"
+    }
+  ],
+  "gates": {
+    "bootstrap_lower_bound_positive": {
+      "method": "deterministic bootstrap seed 1729",
+      "threshold_bps": 0.0
+    },
+    "chronological_fold_stability": {
+      "fold_count": 4,
+      "positive_fold_fraction_threshold": 0.75
+    },
+    "largest_month_contribution": {
+      "maximum_share": 0.35
+    },
+    "largest_session_contribution": {
+      "maximum_share": 0.25
+    },
+    "leave_one_month_out_stability": {
+      "required": true
+    },
+    "leave_one_regime_out_stability": {
+      "required_when_enough_observations": true
+    },
+    "minimum_trade_support": {
+      "threshold": 30
+    },
+    "multiple_testing_correction": {
+      "alpha": 0.05,
+      "method": "Bonferroni over 24 frozen variants"
+    },
+    "net_expectancy_positive": {
+      "threshold_bps": 0.0
+    },
+    "parameter_neighbour_stability": {
+      "required": true
+    },
+    "placebo_control": {
+      "required_result": "FAILS_TO_PASS"
+    },
+    "profit_factor": {
+      "threshold": 1.2
+    },
+    "shifted_signal_control": {
+      "required_result": "FAILS_TO_PASS"
+    }
+  },
   "is_order_action": false,
   "max_total_variants": 24,
   "mechanisms": [
@@ -34,16 +348,21 @@
   "read_only": true,
   "schema_version": "1.0",
   "selection_rule": "select one candidate only if all frozen gates pass; otherwise no edge found",
-  "source_manifest_hash": "717d1fdac5d67dae6151e173ab531896b6054edd288f8fb55b24ffba80ffac55",
+  "source_manifest_hash": "38d66a08f60f8c5e16db109542afd1a80fe52c73536f39d442439bcfe3eb4e7a",
   "stability_gates": [
-    "after_cost_expectancy_positive",
-    "profit_factor_above_threshold",
+    "minimum_trade_support",
+    "net_expectancy_positive",
+    "profit_factor",
     "bootstrap_lower_bound_positive",
     "chronological_fold_stability",
     "leave_one_month_out_stability",
-    "concentration_guard",
-    "placebo_shift_control",
-    "multiple_testing_accounting"
+    "leave_one_regime_out_stability",
+    "largest_session_contribution",
+    "largest_month_contribution",
+    "parameter_neighbour_stability",
+    "placebo_control",
+    "shifted_signal_control",
+    "multiple_testing_correction"
   ],
   "transaction_cost_assumption_bps": 2.0
 }
