@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -88,6 +89,7 @@ class HypothesisContract:
     hypothesis_id: str
     family: str
     frozen_spec_sha256: str
+    spec_path: str
     evidence_dir: str
     max_variants: int
 
@@ -96,6 +98,7 @@ class HypothesisContract:
         hypothesis_id = str(raw.get("hypothesis_id", "")).strip()
         family = str(raw.get("family", "")).strip()
         frozen_spec_sha256 = str(raw.get("frozen_spec_sha256", "")).strip().lower()
+        spec_path = str(raw.get("spec_path", "")).strip()
         evidence_dir = str(raw.get("evidence_dir", "")).strip()
         max_variants = int(raw.get("max_variants", 0))
         if not hypothesis_id:
@@ -106,14 +109,12 @@ class HypothesisContract:
             raise CampaignContractError(
                 f"{hypothesis_id}: frozen_spec_sha256 must be a lowercase SHA-256"
             )
-        if not evidence_dir or Path(evidence_dir).is_absolute():
-            raise CampaignContractError(
-                f"{hypothesis_id}: evidence_dir must be a non-empty relative path"
-            )
-        if ".." in Path(evidence_dir).parts:
-            raise CampaignContractError(
-                f"{hypothesis_id}: evidence_dir may not escape the evidence root"
-            )
+        for field_name, value in (("spec_path", spec_path), ("evidence_dir", evidence_dir)):
+            path = Path(value)
+            if not value or path.is_absolute() or ".." in path.parts:
+                raise CampaignContractError(
+                    f"{hypothesis_id}: {field_name} must be a safe non-empty relative path"
+                )
         if max_variants <= 0:
             raise CampaignContractError(
                 f"{hypothesis_id}: max_variants must be positive"
@@ -122,6 +123,7 @@ class HypothesisContract:
             hypothesis_id=hypothesis_id,
             family=family,
             frozen_spec_sha256=frozen_spec_sha256,
+            spec_path=spec_path,
             evidence_dir=evidence_dir,
             max_variants=max_variants,
         )
@@ -162,6 +164,9 @@ class CampaignContract:
         dirs = [item.evidence_dir for item in hypotheses]
         if len(dirs) != len(set(dirs)):
             raise CampaignContractError("evidence_dir values must be unique")
+        paths = [item.spec_path for item in hypotheses]
+        if len(paths) != len(set(paths)):
+            raise CampaignContractError("spec_path values must be unique")
         if len(hypotheses) > max_total_hypotheses:
             raise CampaignContractError(
                 "hypothesis registry exceeds max_total_hypotheses"
@@ -185,7 +190,40 @@ class CampaignContract:
 
     @classmethod
     def load(cls, path: str | Path) -> "CampaignContract":
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        contract_path = Path(path).expanduser().resolve()
+        payload = json.loads(contract_path.read_text(encoding="utf-8"))
         if not isinstance(payload, Mapping):
             raise CampaignContractError("campaign contract must contain a JSON object")
-        return cls.from_mapping(payload)
+        contract = cls.from_mapping(payload)
+        root = contract_path.parent
+        for hypothesis in contract.hypotheses:
+            spec_path = (root / hypothesis.spec_path).resolve()
+            if root != spec_path and root not in spec_path.parents:
+                raise CampaignContractError(
+                    f"{hypothesis.hypothesis_id}: spec path escapes campaign root"
+                )
+            if not spec_path.is_file():
+                raise CampaignContractError(
+                    f"{hypothesis.hypothesis_id}: frozen spec is missing: {spec_path}"
+                )
+            digest = hashlib.sha256(spec_path.read_bytes()).hexdigest()
+            if digest != hypothesis.frozen_spec_sha256:
+                raise CampaignContractError(
+                    f"{hypothesis.hypothesis_id}: frozen spec SHA-256 mismatch"
+                )
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+            if not isinstance(spec, Mapping):
+                raise CampaignContractError(
+                    f"{hypothesis.hypothesis_id}: frozen spec must be a JSON object"
+                )
+            expected = {
+                "hypothesis_id": hypothesis.hypothesis_id,
+                "family": hypothesis.family,
+                "max_variants": hypothesis.max_variants,
+            }
+            for field, value in expected.items():
+                if spec.get(field) != value:
+                    raise CampaignContractError(
+                        f"{hypothesis.hypothesis_id}: spec {field} mismatch"
+                    )
+        return contract
