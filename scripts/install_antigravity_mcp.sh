@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_DIR="${TRADEBOT_MCP_VENV:-$ROOT/.venv-mcp}"
 CONFIG_DIR="$ROOT/.agents"
@@ -65,13 +67,16 @@ PY
 
 chmod 600 "$CONFIG_PATH"
 
+TRADEBOT_ROOT="$ROOT" \
+TRADEBOT_EVIDENCE_ROOTS="$EVIDENCE_ROOT" \
+TRADEBOT_DATA_ROOTS="$DATA_ROOTS" \
 "$VENV_DIR/bin/python" - <<'PY'
 from tools.tradebot_mcp.core import Settings
 from tools.tradebot_mcp import __version__
 
 settings = Settings.from_env()
 print(f"TradeBot MCP package {__version__} import: OK")
-print(f"Configured default root: {settings.root}")
+print(f"Configured root: {settings.root}")
 PY
 
 cat <<EOF
