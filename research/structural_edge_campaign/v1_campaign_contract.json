@@ -1,0 +1,48 @@
+{
+  "campaign_id": "tradebot_structural_edge_prove_or_kill_v1",
+  "global_holdout_id": "tradebot_global_locked_holdout_v1",
+  "hypotheses": [
+    {
+      "evidence_dir": "ml_v2_long",
+      "family": "causal_ml_rule_discovery_long",
+      "frozen_spec_sha256": "53ef1fdb01e3aeabd553498ccca3c8efee97172b7ba602b33e80157f480ac2d6",
+      "hypothesis_id": "ML_V2_LONG",
+      "max_variants": 10
+    },
+    {
+      "evidence_dir": "ml_v2_short",
+      "family": "causal_ml_rule_discovery_short",
+      "frozen_spec_sha256": "ca36f9e4b436f0592a1cc4ab8e6268b2ce3989a0488df86b40e90b85cf99b607",
+      "hypothesis_id": "ML_V2_SHORT",
+      "max_variants": 10
+    },
+    {
+      "evidence_dir": "him_30",
+      "family": "high_information_closing_momentum",
+      "frozen_spec_sha256": "40f0ba77ff09c4c4a836a158cee0e83088349835aa475dba0cd8a2ba842e4ab5",
+      "hypothesis_id": "HIM_30",
+      "max_variants": 8
+    },
+    {
+      "evidence_dir": "eogf_30",
+      "family": "extreme_overnight_gap_failure",
+      "frozen_spec_sha256": "02c3f1550c21ba9a617f534672270b6f195cce2c9a614be7626cd9defcb65a97",
+      "hypothesis_id": "EOGF_30",
+      "max_variants": 8
+    }
+  ],
+  "max_total_hypotheses": 5,
+  "schema_version": "1.0",
+  "thresholds": {
+    "drawdown_basis": "fraction_initial_capital",
+    "expectancy_basis": "net_r_per_trade",
+    "max_ambiguity_count": 0,
+    "max_contamination_count": 0,
+    "max_drawdown": 0.2,
+    "max_fallback_rows": 0,
+    "min_after_cost_expectancy": 0.05,
+    "min_option_trades": 50,
+    "min_positive_wfa_partition_fraction": 0.8,
+    "min_profit_factor": 1.25
+  }
+}
