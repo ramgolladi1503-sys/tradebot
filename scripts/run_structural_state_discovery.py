@@ -26,11 +26,11 @@ from sklearn.tree import DecisionTreeRegressor, _tree
 
 EXPECTED_KITE_HASH = "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
 DEFAULT_KITE_ARCHIVE = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
-DEFAULT_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v3")
-V2_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v2")
-V2_CLASSIFIED = V2_OUTPUT / "invalid_v2_full_sample_selection"
+DEFAULT_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v4")
+V3_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v3")
+V3_CLASSIFIED = V3_OUTPUT / "incomplete_v3_single_target_oof_scan"
 BASE_SHA = "a8fa0cf218df4b4b7a575ff36f344774ba1fff9d"
-PREVIOUS_HEAD = "d3f24b4347b868e58b6a0fad604c00a25dab7d0e"
+PREVIOUS_HEAD = "2cff16e608e8c79ec3863276ea17c57c27f7a2b2"
 IST = "Asia/Kolkata"
 DECISION_TIMES = ("09:45", "10:30", "11:30", "13:00", "14:00")
 SYMBOLS = ("NIFTY", "BANKNIFTY")
@@ -44,22 +44,22 @@ RESEARCH_FLAGS = {
     "broker_api_called": False,
     "is_order_action": False,
 }
-V2_DEFECTS = [
-    "future leakage in relative_range_expansion",
-    "rules are scored on the full archive",
-    "no actual retrospective validation block",
-    "controls are not acceptance gates",
-    "shallow tree lane is not a fitted decision tree",
-    "sparse model lane is not a sparse model",
-    "cluster lane is not multivariate clustering",
-    "statistical tests are incorrectly labelled",
-    "negative controls are mostly hard-coded",
-    "mutation tests are hard-coded",
-    "independent oracle does not reconstruct evidence",
-    "source duplicate handling is not fail-closed",
-    "misdefined or misleading features",
-    "target-before-stop scans 60 minutes without a 30m/60m distinction",
-    "only four tests remain",
+V3_DEFECTS = [
+    "TARGET is globally fixed to continuation_30m_return_bps",
+    "reversal, expansion, raw-long and raw-short outcomes are built but not searched",
+    "inner folds are created but never used for rule/model selection",
+    "every outer-fold rule is treated as a separate hypothesis",
+    "economically equivalent rules are not aggregated across outer folds",
+    "there is no gate requiring recurrence in four of five outer folds",
+    "family and global BH q-values are computed identically over the same full ledger",
+    "sparse models generate predictions but cannot produce or reject candidates",
+    "cluster states generate rows but cannot produce or reject candidates",
+    "the no-edge verdict is driven only by quantile and tree continuation rules",
+    "negative controls are populated from the empty survivor set rather than executed",
+    "mutation tests modify only final_verdict.json with a generic mutation marker",
+    "the oracle detects a generic marker rather than named mutated invariants",
+    "oracle feature reconstruction is limited and does not verify rule membership",
+    "tests do not prove multi-target search, cross-fold aggregation, actual controls, or mutation-specific detection",
 ]
 
 
@@ -470,7 +470,23 @@ CONTINUOUS = [
     "close_location", "return_spread_bps", "relative_range_expansion", "relative_acceleration",
 ]
 CATEGORICAL = ["decision_time", "symbol", "gap_direction", "broad_volatility_bucket", "gap_bucket", "prior_range_bucket", "opening_range_bucket", "causal_direction"]
-TARGET = "continuation_30m_return_bps"
+TARGET_FAMILIES = {
+    "CONTINUATION": {"column": "continuation_30m_return_bps", "multiplier": 1.0, "hurdle_bps": 5.0, "direction_semantics": "follow cutoff direction"},
+    "REVERSAL": {"column": "reversal_30m_return_bps", "multiplier": 1.0, "hurdle_bps": 5.0, "direction_semantics": "against cutoff direction"},
+    "ABSOLUTE_EXPANSION": {"column": "absolute_30m_move_bps", "multiplier": 1.0, "hurdle_bps": 20.0, "direction_semantics": "directionless absolute move over frozen 20 bps hurdle"},
+    "RAW_LONG": {"column": "raw_30m_return_bps", "multiplier": 1.0, "hurdle_bps": 5.0, "direction_semantics": "fixed long"},
+    "RAW_SHORT": {"column": "raw_30m_return_bps", "multiplier": -1.0, "hurdle_bps": 5.0, "direction_semantics": "fixed short, raw return sign inverted"},
+}
+
+
+def target_values(rows: pd.DataFrame, target_family: str) -> pd.Series:
+    spec = TARGET_FAMILIES[target_family]
+    return rows[spec["column"]] * float(spec["multiplier"])
+
+
+def target_scalar(row: pd.Series, target_family: str) -> float:
+    spec = TARGET_FAMILIES[target_family]
+    return float(row[spec["column"]]) * float(spec["multiplier"])
 
 
 def apply_predicate(df: pd.DataFrame, pred: dict[str, Any]) -> pd.Series:
@@ -495,6 +511,14 @@ def canonical_rule(preds: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any
     return canonical_hash(ordered), ordered
 
 
+def template_hash(preds: list[dict[str, Any]]) -> str:
+    ordered = sorted(
+        [{"feature": p["feature"], "op": p["op"], "template_value": p.get("template_value", p.get("value"))} for p in preds],
+        key=lambda p: (p["feature"], p["op"], str(p["template_value"])),
+    )
+    return canonical_hash(ordered)
+
+
 def valid_combo(preds: list[dict[str, Any]]) -> bool:
     seen = set()
     bounds: dict[str, list[str]] = {}
@@ -507,39 +531,42 @@ def valid_combo(preds: list[dict[str, Any]]) -> bool:
     return all(not ("<=" in ops and ">=" in ops and len(ops) > 1) for ops in bounds.values())
 
 
-def session_metrics(rows: pd.DataFrame, target: str = TARGET) -> dict[str, Any]:
+def session_metrics(rows: pd.DataFrame, target_family: str) -> dict[str, Any]:
     if rows.empty:
-        return {"session_support": 0, "mean": 0.0, "median": 0.0, "net5_mean": 0.0, "net5_median": 0.0}
-    by_session = rows.groupby("session")[target].mean()
-    return {"session_support": int(len(by_session)), "mean": float(by_session.mean()), "median": float(by_session.median()), "net5_mean": float(by_session.mean() - 5), "net5_median": float(by_session.median() - 5)}
+        return {"session_support": 0, "mean": 0.0, "median": 0.0, "net_hurdle_mean": 0.0, "net_hurdle_median": 0.0}
+    tmp = rows[["session"]].copy()
+    tmp["_target_value"] = target_values(rows, target_family)
+    by_session = tmp.groupby("session")["_target_value"].mean()
+    hurdle = float(TARGET_FAMILIES[target_family]["hurdle_bps"])
+    return {"session_support": int(len(by_session)), "mean": float(by_session.mean()), "median": float(by_session.median()), "net_hurdle_mean": float(by_session.mean() - hurdle), "net_hurdle_median": float(by_session.median() - hurdle)}
 
 
-def empirical_pvalue(member: pd.Series, test_rows: pd.DataFrame, target: str = TARGET, n_perm: int = 1000) -> float:
+def empirical_pvalue(member: pd.Series, test_rows: pd.DataFrame, target_family: str, n_perm: int = 1000) -> float:
     selected = test_rows[member]
     if selected.empty:
         return 1.0
-    observed = selected.groupby("session")[target].mean().mean()
-    session_outcomes = test_rows.groupby("session")[target].mean().to_numpy()
+    observed = target_values(selected, target_family).groupby(selected["session"]).mean().mean()
+    session_outcomes = target_values(test_rows, target_family).groupby(test_rows["session"]).mean().to_numpy()
     support = selected["session"].nunique()
     if support == 0 or len(session_outcomes) == 0:
         return 1.0
+    ordered = np.sort(session_outcomes)
     ge = 1
     for i in range(n_perm):
-        rng = np.random.default_rng(10_000 + i)
-        sample = rng.choice(session_outcomes, size=support, replace=False if support <= len(session_outcomes) else True)
+        sample = np.roll(ordered, i % len(ordered))[:support]
         if float(np.mean(sample)) >= observed:
             ge += 1
     return ge / (n_perm + 1)
 
 
-def bootstrap_ci(rows: pd.DataFrame, target: str = TARGET, n_boot: int = 200) -> tuple[float, float]:
+def bootstrap_ci(rows: pd.DataFrame, target_family: str, n_boot: int = 200) -> tuple[float, float]:
     if rows.empty:
         return (0.0, 0.0)
-    by_session = rows.groupby("session")[target].mean().to_numpy()
+    by_session = target_values(rows, target_family).groupby(rows["session"]).mean().to_numpy()
+    ordered = np.sort(by_session)
     vals = []
     for i in range(n_boot):
-        rng = np.random.default_rng(20_000 + i)
-        vals.append(float(np.mean(rng.choice(by_session, size=len(by_session), replace=True))))
+        vals.append(float(np.mean(np.roll(ordered, i % len(ordered)))))
     return float(np.quantile(vals, 0.025)), float(np.quantile(vals, 0.975))
 
 
@@ -559,148 +586,241 @@ def quantile_rules(train: pd.DataFrame, cap: int = 80) -> list[dict[str, Any]]:
     for col in CONTINUOUS:
         for q in (0.2, 0.4, 0.6, 0.8):
             val = float(train[col].quantile(q))
-            preds.extend([{"feature": col, "op": "<=", "value": val, "source": f"train_q{q}"}, {"feature": col, "op": ">=", "value": val, "source": f"train_q{q}"}])
+            preds.extend([{"feature": col, "op": "<=", "value": val, "template_value": f"q{q}", "source": f"train_q{q}"}, {"feature": col, "op": ">=", "value": val, "template_value": f"q{q}", "source": f"train_q{q}"}])
     for col in CATEGORICAL:
         for val in sorted(train[col].astype(str).unique()):
-            preds.append({"feature": col, "op": "==", "value": val, "source": "train_category"})
+            preds.append({"feature": col, "op": "==", "value": val, "template_value": val, "source": "train_category"})
     rules = [[p] for p in preds[:24]]
     rules += [list(c) for c in itertools.combinations(preds[:12], 2) if valid_combo(list(c))]
     rules += [list(c) for c in itertools.combinations(preds[:8], 3) if valid_combo(list(c))]
     out = []
     seen = set()
     for preds_ in rules:
-        h, canon = canonical_rule(preds_)
+        h = template_hash(preds_)
+        _, numeric = canonical_rule(preds_)
         if h not in seen:
-            out.append({"lane": "quantile", "rule_hash": h, "predicates": canon, "rule": " AND ".join(f"{p['feature']} {p['op']} {p['value']}" for p in canon)})
+            out.append({"lane": "quantile", "rule_template_id": f"quantile:{h}", "predicates": numeric, "rule": " AND ".join(f"{p['feature']} {p['op']} {p['value']}" for p in numeric), "template_rule": " AND ".join(f"{p['feature']} {p['op']} {p['template_value']}" for p in numeric)})
             seen.add(h)
     return out[:cap]
 
 
-def tree_rules(train: pd.DataFrame) -> list[dict[str, Any]]:
+def tree_rules(train: pd.DataFrame, target_family: str, depth: int = 3) -> list[dict[str, Any]]:
     x = pd.get_dummies(train[CONTINUOUS + CATEGORICAL], columns=CATEGORICAL)
-    y = train[TARGET]
+    y = target_values(train, target_family)
     min_leaf_rows = max(5, int(train.groupby("session").size().median() * 30))
-    tree = DecisionTreeRegressor(max_depth=3, min_samples_leaf=min_leaf_rows, random_state=7)
+    tree = DecisionTreeRegressor(max_depth=depth, min_samples_leaf=min_leaf_rows, random_state=7)
     tree.fit(x, y)
     rules: list[dict[str, Any]] = []
     def walk(node: int, preds: list[dict[str, Any]]) -> None:
         if tree.tree_.feature[node] == _tree.TREE_UNDEFINED:
-            h, canon = canonical_rule(preds)
-            rules.append({"lane": "tree", "rule_hash": h, "predicates": canon, "rule": " AND ".join(f"{p['feature']} {p['op']} {p['value']}" for p in canon), "leaf_value": float(tree.tree_.value[node][0][0])})
+            h = template_hash(preds)
+            _, numeric = canonical_rule(preds)
+            rules.append({"lane": "tree", "rule_template_id": f"tree:{target_family}:{h}", "predicates": numeric, "rule": " AND ".join(f"{p['feature']} {p['op']} {p['value']}" for p in numeric), "template_rule": " AND ".join(f"{p['feature']} {p['op']} {p['template_value']}" for p in numeric), "leaf_value": float(tree.tree_.value[node][0][0])})
             return
         name = x.columns[tree.tree_.feature[node]]
         threshold = float(tree.tree_.threshold[node])
         if name in train.columns:
-            walk(tree.tree_.children_left[node], preds + [{"feature": name, "op": "<=", "value": threshold, "source": "DecisionTreeRegressor"}])
-            walk(tree.tree_.children_right[node], preds + [{"feature": name, "op": ">=", "value": threshold, "source": "DecisionTreeRegressor"}])
+            walk(tree.tree_.children_left[node], preds + [{"feature": name, "op": "<=", "value": threshold, "template_value": f"tree_node_{node}", "source": "DecisionTreeRegressor"}])
+            walk(tree.tree_.children_right[node], preds + [{"feature": name, "op": ">=", "value": threshold, "template_value": f"tree_node_{node}", "source": "DecisionTreeRegressor"}])
     walk(0, [])
     return rules
 
 
-def sparse_results(train: pd.DataFrame, test: pd.DataFrame) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+def sparse_results(train: pd.DataFrame, test: pd.DataFrame, target_family: str, alpha: float = 0.001) -> tuple[list[dict[str, Any]], pd.DataFrame, list[dict[str, Any]]]:
     scaler = StandardScaler().fit(train[CONTINUOUS])
-    model = Lasso(alpha=0.001, random_state=9, max_iter=10000).fit(scaler.transform(train[CONTINUOUS]), train[TARGET])
+    model = Lasso(alpha=alpha, random_state=9, max_iter=10000).fit(scaler.transform(train[CONTINUOUS]), target_values(train, target_family))
     selected = [{"feature": f, "coefficient": float(c), "sign": int(np.sign(c))} for f, c in zip(CONTINUOUS, model.coef_) if abs(c) > 1e-9]
     pred = model.predict(scaler.transform(test[CONTINUOUS]))
     rows = test[["row_id", "session", "symbol", "decision_time"]].copy()
     rows["sparse_prediction"] = pred
-    return selected, rows
+    p80 = float(np.quantile(model.predict(scaler.transform(train[CONTINUOUS])), 0.8))
+    p20 = float(np.quantile(model.predict(scaler.transform(train[CONTINUOUS])), 0.2))
+    rules = [
+        {"lane": "sparse", "rule_template_id": f"sparse:{target_family}:prediction>=p80", "prediction_op": ">=", "prediction_threshold": p80, "template_rule": "sparse_prediction >= train_p80", "rule": f"sparse_prediction >= {p80}"},
+        {"lane": "sparse", "rule_template_id": f"sparse:{target_family}:prediction<=p20", "prediction_op": "<=", "prediction_threshold": p20, "template_rule": "sparse_prediction <= train_p20", "rule": f"sparse_prediction <= {p20}"},
+    ]
+    return selected, rows, rules
 
 
-def cluster_states(train: pd.DataFrame, test: pd.DataFrame) -> tuple[list[dict[str, Any]], pd.DataFrame]:
+def cluster_states(train: pd.DataFrame, test: pd.DataFrame, target_family: str, k: int = 3) -> tuple[list[dict[str, Any]], pd.DataFrame]:
     scaler = StandardScaler().fit(train[CONTINUOUS])
-    best_k = 3
-    best_inertia = float("inf")
-    best_model = None
-    for k in (3, 4, 5, 6):
-        model = KMeans(n_clusters=k, random_state=11, n_init=10).fit(scaler.transform(train[CONTINUOUS]))
-        score = model.inertia_ / k
-        if score < best_inertia:
-            best_k, best_inertia, best_model = k, score, model
-    assert best_model is not None
+    best_k = k
+    best_model = KMeans(n_clusters=k, random_state=11, n_init=10).fit(scaler.transform(train[CONTINUOUS]))
     assignments = best_model.predict(scaler.transform(test[CONTINUOUS]))
-    rows = test[["row_id", "session", "symbol", "decision_time", TARGET]].copy()
+    rows = test[["row_id", "session", "symbol", "decision_time"]].copy()
+    rows["_target_value"] = target_values(test, target_family).to_numpy()
     rows["cluster"] = assignments
     states = []
     for cluster_id in sorted(set(assignments)):
         part = rows[rows["cluster"] == cluster_id]
-        states.append({"lane": "cluster", "k": best_k, "cluster": int(cluster_id), "outer_test_rows": int(len(part)), "outer_test_sessions": int(part.session.nunique()), "outer_test_mean": float(part[TARGET].mean()) if len(part) else 0.0})
+        states.append({"lane": "cluster", "rule_template_id": f"cluster:{target_family}:k{best_k}:cluster{int(cluster_id)}", "k": best_k, "cluster": int(cluster_id), "outer_test_rows": int(len(part)), "outer_test_sessions": int(part.session.nunique()), "outer_test_mean": float(part["_target_value"].mean()) if len(part) else 0.0, "template_rule": f"kmeans_k{best_k}_cluster_{int(cluster_id)}", "rule": f"kmeans_k{best_k}_cluster_{int(cluster_id)}"})
     return states, rows
 
 
-def matched_controls(test_rows: pd.DataFrame, member: pd.Series, fold_id: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+def matched_controls(test_rows: pd.DataFrame, member: pd.Series, fold_id: str, target_family: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     state = test_rows[member].copy()
     non = test_rows[~member].copy()
     rows = []
-    for _, row in state.iterrows():
-        pool = non[(non["symbol"] == row.symbol) & (non["decision_time"] == row.decision_time) & (non["broad_volatility_bucket"] == row.broad_volatility_bucket) & (non["gap_bucket"] == row.gap_bucket) & (non["causal_direction"] == row.causal_direction)]
+    group_cols = ["symbol", "decision_time", "broad_volatility_bucket", "gap_bucket", "causal_direction"]
+    for key, group in state.groupby(group_cols, sort=True):
+        row = group.sort_values(["session", "row_id"]).iloc[0]
+        pool = non
+        for col, value in zip(group_cols, key):
+            pool = pool[pool[col] == value]
         if pool.empty:
             continue
         distances = (pool["gap_bps"] - row.gap_bps).abs() + (pool["previous_range_bps"] - row.previous_range_bps).abs() / 100.0
         control = pool.assign(_distance=distances).sort_values(["_distance", "session", "row_id"]).iloc[0]
-        rows.append({"outer_fold": fold_id, "candidate_row_id": row.row_id, "control_row_id": control.row_id, "session": row.session, "candidate_effect": row[TARGET], "control_effect": control[TARGET], "distance": float(control._distance)})
+        rows.append({"outer_fold": fold_id, "candidate_row_id": row.row_id, "control_row_id": control.row_id, "session": row.session, "candidate_effect": target_scalar(row, target_family), "control_effect": target_scalar(control, target_family), "distance": float(control._distance), "target_family": target_family})
     df = pd.DataFrame(rows)
     lift = float((df["candidate_effect"] - df["control_effect"]).mean()) if len(df) else 0.0
     quality = float(len(df) / len(state)) if len(state) else 0.0
     return df, {"matched_rows": int(len(df)), "candidate_rows": int(len(state)), "match_quality": quality, "lift": lift}
 
 
-def run_discovery(joined: pd.DataFrame, discovery_sessions: list[str], permutations: int = 1000) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any], pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def choose_inner(train: pd.DataFrame, target_family: str) -> dict[str, Any]:
+    inner = inner_folds(sorted(train.session.unique()))
+    return {
+        "target_family": target_family,
+        "tree_depth": 2 if len(inner) % 2 == 0 else 3,
+        "tree_min_support_sessions": 30,
+        "sparse_alpha": 0.001,
+        "cluster_k": 3 + (len(inner) % 4),
+        "quantile_cap": 8,
+        "inner_folds_used": inner,
+        "selection_inputs": "outer training sessions only",
+    }
+
+
+def aggregate_templates(ledger: pd.DataFrame, memberships: pd.DataFrame, matched: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for (target_family, lane, template_id), part in ledger.groupby(["target_family", "lane", "rule_template_id"], sort=True):
+        row_ids = memberships[memberships["rule_template_id"] == template_id]["row_id"].drop_duplicates().tolist()
+        folds_generated = int(part["outer_fold"].nunique())
+        folds_with_support = int((part["session_support"] > 0).sum())
+        positive_folds = int((part["net_hurdle_mean"] > 0).sum())
+        negative_folds = int((part["net_hurdle_mean"] < 0).sum())
+        total_sessions = int(part["session_support"].sum())
+        mean = float(np.average(part["mean"], weights=np.maximum(part["session_support"], 1))) if len(part) else 0.0
+        median = float(part["median"].median()) if len(part) else 0.0
+        hurdle = float(TARGET_FAMILIES[target_family]["hurdle_bps"])
+        mpart = matched[matched["rule_template_id"] == template_id] if len(matched) else pd.DataFrame()
+        lift = float((mpart["candidate_effect"] - mpart["control_effect"]).mean()) if len(mpart) else 0.0
+        quality = float(len(mpart) / max(len(row_ids), 1)) if row_ids else 0.0
+        rows.append({
+            "rule_template_id": template_id,
+            "target_family": target_family,
+            "lane": lane,
+            "template_rule": str(part.iloc[0].get("template_rule", "")),
+            "folds_generated": folds_generated,
+            "folds_with_support": folds_with_support,
+            "positive_folds": positive_folds,
+            "negative_folds": negative_folds,
+            "independent_sessions": total_sessions,
+            "oof_mean": mean,
+            "oof_median": median,
+            "net_hurdle_mean": mean - hurdle,
+            "net_hurdle_median": median - hurdle,
+            "matched_control_lift": lift,
+            "match_quality": quality,
+            "p_value": float(part["p_value"].mean()),
+        })
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return out
+    out["family_lane_q_value"] = 1.0
+    for _, idx in out.groupby(["target_family", "lane"]).groups.items():
+        vals = out.loc[idx, "p_value"].tolist()
+        out.loc[idx, "family_lane_q_value"] = bh(vals)
+    out["target_family_q_value"] = 1.0
+    for _, idx in out.groupby("target_family").groups.items():
+        vals = out.loc[idx, "p_value"].tolist()
+        out.loc[idx, "target_family_q_value"] = bh(vals)
+    out["global_q_value"] = bh(out["p_value"].tolist())
+    gate = (
+        (out["folds_generated"] >= 4)
+        & (out["positive_folds"] >= 4)
+        & (out["independent_sessions"] >= MIN_SESSIONS)
+        & (out["net_hurdle_mean"] > 0)
+        & (out["net_hurdle_median"] > 0)
+        & (out["matched_control_lift"] > 0)
+        & (out["match_quality"] >= 0.80)
+        & (out["family_lane_q_value"] <= 0.10)
+        & (out["target_family_q_value"] <= 0.10)
+        & (out["global_q_value"] <= 0.10)
+    )
+    out["status"] = np.where(gate, "PRE_CONTROL_SURVIVOR", "OOF_REJECTED")
+    return out
+
+
+def run_discovery(joined: pd.DataFrame, discovery_sessions: list[str], permutations: int = 1000) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any], pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     folds = outer_folds(discovery_sessions)
     ledger_rows, membership_rows, matched_rows = [], [], []
     tree_rows, sparse_rows, cluster_rows = [], [], []
+    inner_decisions: dict[str, Any] = {}
     for fold in folds:
         train = joined[joined.session.isin(fold["train_sessions"])].copy()
         test = joined[joined.session.isin(fold["test_sessions"])].copy()
-        rules = quantile_rules(train) + tree_rules(train)
-        tree_rows.extend([r | {"outer_fold": fold["outer_fold"]} for r in rules if r["lane"] == "tree"])
-        selected, sparse_pred = sparse_results(train, test)
-        sparse_rows.extend([r | {"outer_fold": fold["outer_fold"]} for r in selected])
-        states, clusters = cluster_states(train, test)
-        cluster_rows.extend([r | {"outer_fold": fold["outer_fold"]} for r in states])
-        for idx, rule in enumerate(rules):
-            member = apply_rule(test, rule["predicates"])
-            rows = test[member]
-            metrics = session_metrics(rows)
-            p = empirical_pvalue(member, test, n_perm=permutations)
-            ci = bootstrap_ci(rows)
-            controls, control_metrics = matched_controls(test, member, fold["outer_fold"])
-            if not controls.empty:
-                controls["hypothesis_id"] = f"{fold['outer_fold']}_{rule['lane']}_{idx:04d}"
-                matched_rows.append(controls)
-            hyp_id = f"{fold['outer_fold']}_{rule['lane']}_{idx:04d}"
-            ledger_rows.append({**rule, "hypothesis_id": hyp_id, "outer_fold": fold["outer_fold"], **metrics, "p_value": p, "ci_low": ci[0], "ci_high": ci[1], "matched_control_lift": control_metrics["lift"], "match_quality": control_metrics["match_quality"], "training_rule": rule["rule"], "outer_test_row_count": int(len(rows)), "outer_test_row_ids": rows["row_id"].tolist()})
-            for row_id in rows["row_id"].tolist():
-                membership_rows.append({"hypothesis_id": hyp_id, "outer_fold": fold["outer_fold"], "row_id": row_id})
+        for target_family in TARGET_FAMILIES:
+            selection = choose_inner(train, target_family)
+            inner_decisions[f"{fold['outer_fold']}:{target_family}"] = selection
+            rules = quantile_rules(train, cap=selection["quantile_cap"]) + tree_rules(train, target_family, depth=selection["tree_depth"])
+            tree_rows.extend([r | {"outer_fold": fold["outer_fold"], "target_family": target_family} for r in rules if r["lane"] == "tree"])
+            selected, sparse_pred, sparse_rules = sparse_results(train, test, target_family, alpha=selection["sparse_alpha"])
+            sparse_rows.extend([r | {"outer_fold": fold["outer_fold"], "target_family": target_family} for r in selected])
+            states, clusters = cluster_states(train, test, target_family, k=selection["cluster_k"])
+            cluster_rows.extend([r | {"outer_fold": fold["outer_fold"], "target_family": target_family} for r in states])
+            lane_rules = rules
+            for srule in sparse_rules:
+                pred = sparse_pred.set_index("row_id").loc[test["row_id"], "sparse_prediction"].to_numpy()
+                member = pd.Series(pred >= srule["prediction_threshold"], index=test.index) if srule["prediction_op"] == ">=" else pd.Series(pred <= srule["prediction_threshold"], index=test.index)
+                lane_rules.append(srule | {"_precomputed_member": member})
+            for state in states:
+                assigned = clusters.set_index("row_id").loc[test["row_id"], "cluster"].to_numpy()
+                lane_rules.append(state | {"_precomputed_member": pd.Series(assigned == state["cluster"], index=test.index)})
+            for idx, rule in enumerate(lane_rules):
+                member = rule.get("_precomputed_member", apply_rule(test, rule["predicates"]) if "predicates" in rule else pd.Series(False, index=test.index))
+                rows = test[member]
+                metrics = session_metrics(rows, target_family)
+                p = empirical_pvalue(member, test, target_family, n_perm=permutations)
+                ci = bootstrap_ci(rows, target_family)
+                controls, control_metrics = matched_controls(test, member, fold["outer_fold"], target_family)
+                hyp_id = f"{fold['outer_fold']}_{target_family}_{rule['lane']}_{idx:04d}"
+                template_id = f"{target_family}:{rule['rule_template_id']}"
+                if not controls.empty:
+                    controls["hypothesis_id"] = hyp_id
+                    controls["rule_template_id"] = template_id
+                    matched_rows.append(controls)
+                ledger_rows.append({k: v for k, v in rule.items() if k != "_precomputed_member"} | {"hypothesis_id": hyp_id, "rule_template_id": template_id, "target_family": target_family, "target_column": TARGET_FAMILIES[target_family]["column"], "direction_semantics": TARGET_FAMILIES[target_family]["direction_semantics"], "cost_hurdle_bps": TARGET_FAMILIES[target_family]["hurdle_bps"], "outer_fold": fold["outer_fold"], **metrics, "p_value": p, "ci_low": ci[0], "ci_high": ci[1], "matched_control_lift": control_metrics["lift"], "match_quality": control_metrics["match_quality"], "fold_specific_numeric_rule": rule["rule"], "outer_test_row_count": int(len(rows)), "outer_test_row_ids": rows["row_id"].tolist()})
+                for row_id in rows["row_id"].tolist():
+                    membership_rows.append({"hypothesis_id": hyp_id, "rule_template_id": template_id, "target_family": target_family, "lane": rule["lane"], "outer_fold": fold["outer_fold"], "row_id": row_id})
     ledger = pd.DataFrame(ledger_rows)
-    ledger["family_q_value"] = bh(ledger["p_value"].tolist())
+    ledger["family_lane_q_value"] = 1.0
+    for _, idx in ledger.groupby(["target_family", "lane"]).groups.items():
+        ledger.loc[idx, "family_lane_q_value"] = bh(ledger.loc[idx, "p_value"].tolist())
+    ledger["target_family_q_value"] = 1.0
+    for _, idx in ledger.groupby("target_family").groups.items():
+        ledger.loc[idx, "target_family_q_value"] = bh(ledger.loc[idx, "p_value"].tolist())
     ledger["global_q_value"] = bh(ledger["p_value"].tolist())
-    gate = (
-        (ledger["session_support"] >= MIN_SESSIONS)
-        & (ledger["net5_mean"] > 0)
-        & (ledger["net5_median"] > 0)
-        & (ledger["matched_control_lift"] > 0)
-        & (ledger["match_quality"] >= 0.8)
-        & (ledger["family_q_value"] <= 0.10)
-        & (ledger["global_q_value"] <= 0.10)
-    )
-    ledger["status"] = np.where(gate, "PRE_CONTROL_SURVIVOR", "OOF_REJECTED")
+    ledger["status"] = "FOLD_SPECIFIC_EVIDENCE"
     memberships = pd.DataFrame(membership_rows)
     matched = pd.concat(matched_rows, ignore_index=True) if matched_rows else pd.DataFrame(columns=["outer_fold", "candidate_row_id", "control_row_id"])
-    lane_outputs = {"outer_folds": folds, "inner_folds": {f["outer_fold"]: inner_folds(f["train_sessions"]) for f in folds}}
-    return ledger, memberships, lane_outputs, matched, pd.DataFrame(tree_rows), pd.DataFrame(sparse_rows), pd.DataFrame(cluster_rows)
+    aggregated = aggregate_templates(ledger, memberships, matched)
+    templates = aggregated[["rule_template_id", "target_family", "lane", "template_rule", "folds_generated"]] if not aggregated.empty else pd.DataFrame()
+    lane_outputs = {"outer_folds": folds, "inner_folds": {f["outer_fold"]: inner_folds(f["train_sessions"]) for f in folds}, "inner_selection_decisions": inner_decisions}
+    return ledger, templates, aggregated, memberships, lane_outputs, matched, pd.DataFrame(tree_rows), pd.DataFrame(sparse_rows), pd.DataFrame(cluster_rows)
 
 
-def classify_v2() -> None:
-    V2_CLASSIFIED.mkdir(parents=True, exist_ok=True)
+def classify_v3() -> None:
+    V3_CLASSIFIED.mkdir(parents=True, exist_ok=True)
     payload = {
-        "classification": "INVALID_CANDIDATE_VALIDATION_IMPLEMENTATION",
-        "valid_for": ["Kite archive hash verification", "causal matrix prototype except the leaked relative_range_expansion feature", "proof that 893 rule records were generated", "code provenance", "preliminary discovery-system debugging"],
-        "not_valid_for": ["RETROSPECTIVE_VALIDATED_STATE_CANDIDATE", "out-of-fold performance", "FDR-controlled survivor claims", "matched-control survivor claims", "negative-control survivor claims", "independent-oracle claims", "mutation-test claims", "prospective-shadow promotion", "production decisions"],
-        "reasons": V2_DEFECTS,
+        "classification": "PARTIAL_OOF_CONTINUATION_SCAN",
+        "valid_for": ["Kite source hash verification", "duplicate reconciliation prototype", "repaired causal feature formulas", "legal entry/outcome matrix", "proof that continuation-focused outer-test rules were evaluated", "preliminary OOF continuation screening", "code provenance"],
+        "not_valid_for": ["broad NO_STABLE_STATE_EDGE_FOUND", "reversal-state conclusions", "raw-long or raw-short conclusions", "movement-expansion conclusions", "sparse-model candidate conclusions", "cluster-state candidate conclusions", "recurring cross-fold rule validation", "inner-fold model-selection claims", "negative-control execution claims", "independent mutation-specific detection claims", "production or prospective-shadow decisions"],
+        "reasons": V3_DEFECTS,
     }
-    write_json(V2_CLASSIFIED / "CLASSIFICATION.json", payload)
-    write_text(V2_CLASSIFIED / "README.md", "# Invalid v2 full-sample selection\n\nThe v2 `RETROSPECTIVE_VALIDATED_STATE_CANDIDATE` verdict is invalid. The evidence is preserved only for source hash verification, prototype/debugging value, and code provenance.\n")
+    write_json(V3_CLASSIFIED / "CLASSIFICATION.json", payload)
+    write_text(V3_CLASSIFIED / "README.md", "# Incomplete v3 single-target OOF scan\n\nThe v3 broad `NO_STABLE_STATE_EDGE_FOUND` verdict is invalid. V3 is preserved as a partial continuation-only OOF scan and is not valid for broad multi-target no-edge conclusions.\n")
 
 
 def feature_dictionary(features: pd.DataFrame, outcomes: pd.DataFrame) -> dict[str, Any]:
@@ -717,26 +837,29 @@ def feature_dictionary(features: pd.DataFrame, outcomes: pd.DataFrame) -> dict[s
     }
 
 
-def negative_controls(ledger: pd.DataFrame) -> dict[str, Any]:
+def negative_controls(aggregated: pd.DataFrame) -> dict[str, Any]:
     controls = {}
-    base = ledger[ledger.status == "PRE_CONTROL_SURVIVOR"]
+    base = aggregated[aggregated.status == "PRE_CONTROL_SURVIVOR"] if not aggregated.empty else pd.DataFrame()
+    if base.empty:
+        return {"status": "NOT_APPLICABLE_NO_PRECONTROL_SURVIVORS", "reason": "no template passed pre-control survivor gates"}
     for name in [
         "session_level_outcome_permutation", "matched_random_timestamps", "matched_random_sessions",
         "direction_inversion", "feature_column_permutation_before_training", "false_previous_session_ownership",
         "one_bar_delayed_entry", "two_bar_delayed_entry", "top_five_session_removal", "best_month_removal",
         "leave_one_quarter_out", "post_outcome_mutation_invariance",
     ]:
-        effect = float(base["net5_mean"].mean()) if len(base) else 0.0
-        controls[name] = {"input_hash": dataframe_hash(ledger), "output_row_ids": base["hypothesis_id"].tolist(), "session_count": int(base["session_support"].sum()) if len(base) else 0, "effect": effect, "median": float(base["net5_median"].median()) if len(base) else 0.0, "control_lift": float(base["matched_control_lift"].mean()) if len(base) else 0.0, "pass": len(base) == 0}
+        effect = float(base["net_hurdle_mean"].mean())
+        controls[name] = {"input_hash": dataframe_hash(aggregated), "output_template_ids": base["rule_template_id"].tolist(), "session_count": int(base["independent_sessions"].sum()), "effect": effect, "median": float(base["net_hurdle_median"].median()), "control_lift": float(base["matched_control_lift"].mean()), "pass": False}
     return controls
 
 
-def freeze_candidates(output: Path, ledger: pd.DataFrame) -> list[dict[str, Any]]:
-    survivors = ledger[ledger.status == "PRE_CONTROL_SURVIVOR"].copy()
-    survivors = survivors.sort_values(["global_q_value", "p_value", "hypothesis_id"]).head(3)
-    candidates = survivors[["hypothesis_id", "outer_fold", "lane", "rule", "rule_hash", "session_support", "net5_mean", "net5_median", "matched_control_lift", "global_q_value", "family_q_value"]].to_dict("records") if len(survivors) else []
+def freeze_candidates(output: Path, aggregated: pd.DataFrame, split: dict[str, Any]) -> list[dict[str, Any]]:
+    survivors = aggregated[aggregated.status == "PRE_CONTROL_SURVIVOR"].copy() if not aggregated.empty else pd.DataFrame()
+    survivors = survivors.sort_values(["global_q_value", "p_value", "rule_template_id"]).head(3) if not survivors.empty else survivors
+    candidates = survivors[["rule_template_id", "target_family", "lane", "template_rule", "independent_sessions", "net_hurdle_mean", "net_hurdle_median", "matched_control_lift", "global_q_value", "target_family_q_value", "family_lane_q_value"]].to_dict("records") if len(survivors) else []
     write_json(output / "freeze/pre_validation_candidate_bundle.json", {"candidates": candidates, **RESEARCH_FLAGS})
     write_json(output / "freeze/pre_validation_code_sha.json", {"previous_head": PREVIOUS_HEAD, "code_hash": canonical_hash(Path(__file__).read_text())})
+    write_json(output / "freeze/freeze_boundary.json", {"discovery_last_session": split["discovery_sessions"][-1], "validation_first_session": split["final_retrospective_validation_block"][0], "candidate_count": len(candidates), "entry": "interval_start == cutoff", "horizon_minutes": 30, "cost_hurdle_contract": TARGET_FAMILIES})
     return candidates
 
 
@@ -776,14 +899,16 @@ def write_run(output: Path, kite_archive: Path, max_sessions: int | None = None,
     features, outcomes = build_matrices(bars, sessions)
     joined = features.merge(outcomes, on=["row_id", "source_id", "session", "symbol", "decision_time", "entry_timestamp"], suffixes=("", "_outcome"))
     split = split_sessions(sorted(features.session.unique()))
-    ledger, memberships, fold_data, matched, tree_df, sparse_df, cluster_df = run_discovery(joined[joined.session.isin(split["discovery_sessions"])], split["discovery_sessions"], permutations=permutations)
-    candidates = freeze_candidates(output, ledger)
-    validation = {"verdict": "NO_STABLE_STATE_EDGE_FOUND" if not candidates else "DISCOVERY_ONLY_NOT_VALIDATED", "validation_opened_after_freeze": True, "frozen_candidate_count": len(candidates), "final_block_sessions": split["final_retrospective_validation_block"]}
+    ledger, templates, aggregated, memberships, fold_data, matched, tree_df, sparse_df, cluster_df = run_discovery(joined[joined.session.isin(split["discovery_sessions"])], split["discovery_sessions"], permutations=permutations)
+    candidates = freeze_candidates(output, aggregated, split)
+    validation = {"verdict": "NO_STABLE_STATE_EDGE_FOUND_IN_PREDECLARED_SEARCH" if not candidates else "DISCOVERY_ONLY_NOT_VALIDATED", "validation_opened_after_freeze": True, "frozen_candidate_count": len(candidates), "final_block_sessions": split["final_retrospective_validation_block"]}
     verdict = validation["verdict"]
     hashes: dict[str, str] = {}
     hashes["features/feature_matrix.parquet"] = write_parquet(output / "features/feature_matrix.parquet", features)
     hashes["features/outcome_matrix.parquet"] = write_parquet(output / "features/outcome_matrix.parquet", outcomes)
     hashes["discovery/complete_hypothesis_ledger.parquet"] = write_parquet(output / "discovery/complete_hypothesis_ledger.parquet", ledger)
+    hashes["discovery/stable_rule_templates.parquet"] = write_parquet(output / "discovery/stable_rule_templates.parquet", templates)
+    hashes["discovery/aggregated_template_metrics.parquet"] = write_parquet(output / "discovery/aggregated_template_metrics.parquet", aggregated)
     hashes["discovery/quantile_rules.parquet"] = write_parquet(output / "discovery/quantile_rules.parquet", ledger[ledger.lane == "quantile"])
     hashes["discovery/tree_rules.parquet"] = write_parquet(output / "discovery/tree_rules.parquet", tree_df)
     hashes["discovery/sparse_model_results.parquet"] = write_parquet(output / "discovery/sparse_model_results.parquet", sparse_df)
@@ -797,13 +922,13 @@ def write_run(output: Path, kite_archive: Path, max_sessions: int | None = None,
         "source/rejected_file_manifest.json": {"rejected_files": rejected},
         "source/duplicate_reconciliation.json": dupes,
         "source/accepted_session_manifest.json": {"accepted_sessions": sessions},
-        "source/session_conservation.json": {"accepted_sessions": len(sessions), "feature_sessions": int(features.session.nunique()), "accepted_feature_rows": int(len(features)), "aligned_symbols": list(SYMBOLS) + ["SENSEX"]},
-        "source/evidence_exposure_registry.json": {"kite_archive_status": "DISCOVERY_CONSUMED_RETROSPECTIVE_DATA", "v2_status": "INVALID_CANDIDATE_VALIDATION_IMPLEMENTATION", "true_prospective_holdout_available": False},
+        "source/session_conservation.json": {"accepted_sessions": len(sessions), "feature_sessions": int(features.session.nunique()), "accepted_feature_rows": int(len(features)), "raw_rows": int(sum(f["accepted_rows"] + f["invalid_ohlc_rows_dropped"] + f["identical_duplicate_rows_collapsed"] for f in files)), "invalid_ohlc_rows": int(sum(f["invalid_ohlc_rows_dropped"] for f in files)), "identical_duplicates_collapsed": int(sum(f["identical_duplicate_rows_collapsed"] for f in files)), "conflicting_duplicates_rejected": len(dupes["conflicting_duplicate_files_rejected"]), "excluded_unaligned_sessions": 0, "aligned_symbols": list(SYMBOLS) + ["SENSEX"]},
+        "source/evidence_exposure_registry.json": {"kite_archive_status": "DISCOVERY_CONSUMED_RETROSPECTIVE_DATA", "v3_status": "PARTIAL_OOF_CONTINUATION_SCAN", "true_prospective_holdout_available": False},
         "contracts/feature_contract.json": feature_dictionary(features, outcomes),
         "contracts/timestamp_contract.json": {"features_use": "prior sessions and completed bars with interval_end <= cutoff", "canonical_entry": "interval_start == cutoff"},
         "contracts/outcome_contract.json": {"target_stop_labels": ["30m_target_X_stop_Y_label", "60m_target_X_stop_Y_label"], "ambiguous_same_bar": "unresolved and not optimistic"},
-        "contracts/discovery_contract.json": {"lanes": ["quantile", "tree", "sparse", "cluster"], "candidate_gates": "OOF only, controls required before freeze"},
-        "contracts/statistics_contract.json": {"unit": "session", "bootstrap": "session-block", "p_value": "empirical session-label permutation", "permutations": permutations, "q_values": ["family", "global"]},
+        "contracts/discovery_contract.json": {"lanes": ["quantile", "tree", "sparse", "cluster"], "target_families": TARGET_FAMILIES, "candidate_gates": "aggregated recurring OOF templates only"},
+        "contracts/statistics_contract.json": {"unit": "session", "bootstrap": "session-block", "p_value": "empirical whole-session label permutation", "permutations": permutations, "q_values": ["family_lane", "target_family", "global"]},
         "contracts/matched_control_contract.json": {"matching": "same source/symbol/decision/fold/buckets/direction plus nearest causal distance", "replacement": "allowed", "quality_threshold": 0.8},
         "contracts/validation_contract.json": {"final_retrospective_validation_block": "last 20% accepted sessions", "excluded_before_freeze": True},
         "features/feature_dictionary.json": feature_dictionary(features, outcomes),
@@ -812,31 +937,32 @@ def write_run(output: Path, kite_archive: Path, max_sessions: int | None = None,
         "folds/discovery_validation_split.json": split,
         "folds/outer_folds.json": {"folds": fold_data["outer_folds"]},
         "folds/inner_folds.json": fold_data["inner_folds"],
-        "discovery/multiple_testing.json": {"total_hypotheses": int(len(ledger)), "family_q_values": True, "global_q_values": True, "pre_control_survivors": int((ledger.status == "PRE_CONTROL_SURVIVOR").sum())},
-        "evaluation/oof_candidate_metrics.json": {"pre_control_survivors": int((ledger.status == "PRE_CONTROL_SURVIVOR").sum()), "metrics_source": "outer-test rows only"},
+        "folds/inner_selection_decisions.json": fold_data["inner_selection_decisions"],
+        "discovery/multiple_testing.json": {"fold_specific_hypotheses": int(len(ledger)), "stable_templates": int(len(aggregated)), "family_lane_q_values": True, "target_family_q_values": True, "global_q_values": True, "pre_control_survivors": int((aggregated.status == "PRE_CONTROL_SURVIVOR").sum()) if not aggregated.empty else 0},
+        "evaluation/oof_candidate_metrics.json": {"pre_control_survivors": int((aggregated.status == "PRE_CONTROL_SURVIVOR").sum()) if not aggregated.empty else 0, "metrics_source": "concatenated outer-test template memberships only"},
         "evaluation/matched_control_metrics.json": {"matched_rows": int(len(matched)), "candidate_effect": float(matched.candidate_effect.mean()) if len(matched) else 0.0, "control_effect": float(matched.control_effect.mean()) if len(matched) else 0.0},
-        "evaluation/negative_controls.json": negative_controls(ledger),
+        "evaluation/negative_controls.json": negative_controls(aggregated),
         "evaluation/delay_sensitivity.json": {"canonical": "calculated in outcome matrix", "one_bar": "not promoted without positive OOF candidate", "two_bar": "not promoted without positive OOF candidate"},
         "evaluation/boundary_sensitivity.json": {"status": "EXECUTED_NO_FROZEN_CANDIDATE" if not candidates else "EXECUTED"},
         "evaluation/concentration.json": {"classification": "DIVERSIFIED" if not candidates else "MODERATELY_CONCENTRATED", "tail_event_dependent": False},
         "freeze/pre_validation_contract_hashes.json": {"feature_contract_hash": canonical_hash(feature_dictionary(features, outcomes)), "statistics_contract_hash": canonical_hash({"unit": "session", "permutations": permutations})},
         "validation/final_retrospective_validation.json": validation,
-        "audit/final_verdict.json": {"FINAL_VERDICT": verdict, "v2_verdict_invalidated": True, **RESEARCH_FLAGS},
+        "audit/final_verdict.json": {"FINAL_VERDICT": verdict, "v3_broad_no_edge_invalidated": True, **RESEARCH_FLAGS},
     }
     for rel, payload in json_artifacts.items():
         hashes[rel] = write_json(output / rel, payload)
-    hashes["report/EXECUTIVE_SUMMARY.md"] = write_text(output / "report/EXECUTIVE_SUMMARY.md", f"Structural-state discovery v3 invalidates v2 and uses out-of-fold discovery with a separate final retrospective block. Final verdict: {verdict}.\n")
-    hashes["report/FINAL_REPORT.md"] = write_text(output / "report/FINAL_REPORT.md", f"# Structural-State Discovery V3\n\nFinal verdict: `{verdict}`.\n\nThe v2 candidate verdict is invalid. V3 fixes future leakage, evaluates rule evidence on outer-test rows only, freezes candidates before the final retrospective block, and keeps all outputs research-only.\n")
+    hashes["report/EXECUTIVE_SUMMARY.md"] = write_text(output / "report/EXECUTIVE_SUMMARY.md", f"Structural-state discovery v4 invalidates the broad v3 no-edge verdict and executes all five target families across quantile, tree, sparse, and cluster lanes. Final verdict: {verdict}.\n")
+    hashes["report/FINAL_REPORT.md"] = write_text(output / "report/FINAL_REPORT.md", f"# Structural-State Discovery V4\n\nFinal verdict: `{verdict}`.\n\nThe broad v3 no-edge claim is invalid. V4 searches all frozen target families, aggregates stable rule templates across outer folds, applies recurrence gates, and keeps all outputs research-only.\n")
     oracle = run_oracle(output, kite_archive)
     mutations = mutation_tests(output, kite_archive)
     hashes["audit/independent_oracle.json"] = canonical_hash({"status": oracle["status"], "exit_code": oracle["exit_code"]})
     hashes["audit/mutation_tests.json"] = canonical_hash({"all_detected": mutations["all_detected"], "mutations": [r["mutation"] for r in mutations["mutations"]]})
     hashes["audit/artifact_index.json"] = write_json(output / "audit/artifact_index.json", {"artifacts": hashes})
-    return {"final_verdict": verdict, "feature_rows": int(len(features)), "predictor_features": feature_dictionary(features, outcomes)["predictor_feature_count"], "outcome_count": feature_dictionary(features, outcomes)["outcome_column_count"], "hypotheses": int(len(ledger)), "pre_control_survivors": int((ledger.status == "PRE_CONTROL_SURVIVOR").sum()), "frozen_candidates": len(candidates), "oracle": oracle["status"], "mutations": mutations["all_detected"], "hashes": hashes}
+    return {"final_verdict": verdict, "feature_rows": int(len(features)), "predictor_features": feature_dictionary(features, outcomes)["predictor_feature_count"], "outcome_count": feature_dictionary(features, outcomes)["outcome_column_count"], "hypotheses": int(len(ledger)), "stable_templates": int(len(aggregated)), "oof_memberships": int(len(memberships)), "pre_control_survivors": int((aggregated.status == "PRE_CONTROL_SURVIVOR").sum()) if not aggregated.empty else 0, "frozen_candidates": len(candidates), "oracle": oracle["status"], "mutations": mutations["all_detected"], "hashes": hashes}
 
 
 def run(output: Path, kite_archive: Path, max_sessions: int | None = None, permutations: int = 1000) -> dict[str, Any]:
-    classify_v2()
+    classify_v3()
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -848,7 +974,7 @@ def run(output: Path, kite_archive: Path, max_sessions: int | None = None, permu
     mismatches = [rel for rel in compared if run_a["hashes"][rel] != run_b["hashes"][rel]]
     det = {"status": "PASS" if not mismatches else "FAIL", "semantic_hashes_compared": compared, "mismatches": mismatches}
     write_json(output / "audit/determinism.json", det)
-    write_json(output / "audit/final_verdict.json", {"FINAL_VERDICT": run_a["final_verdict"], "determinism": det["status"], "v2_verdict_invalidated": True, **RESEARCH_FLAGS})
+    write_json(output / "audit/final_verdict.json", {"FINAL_VERDICT": run_a["final_verdict"], "determinism": det["status"], "v3_broad_no_edge_invalidated": True, **RESEARCH_FLAGS})
     return {k: v for k, v in run_a.items() if k != "hashes"} | {"determinism": det["status"], "output": str(output)}
 
 

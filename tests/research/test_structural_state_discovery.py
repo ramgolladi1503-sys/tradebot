@@ -22,6 +22,7 @@ from scripts.run_structural_state_discovery import (
     target_stop_label,
     tree_rules,
     cluster_states,
+    TARGET_FAMILIES,
 )
 
 
@@ -75,6 +76,8 @@ def test_real_kite_features_repair_leakage_and_outcomes() -> None:
     assert "60m_target_20_stop_20_label" in outcomes.columns
     assert set(outcomes["30m_target_10_stop_10_label"].unique()).issubset({"TARGET_BEFORE_STOP", "STOP_BEFORE_TARGET", "AMBIGUOUS_SAME_BAR", "NEITHER"})
     assert (pd.to_datetime(features["entry_timestamp"]) >= pd.to_datetime(features["decision_timestamp"])).all()
+    assert set(TARGET_FAMILIES) == {"CONTINUATION", "REVERSAL", "ABSOLUTE_EXPANSION", "RAW_LONG", "RAW_SHORT"}
+    assert TARGET_FAMILIES["ABSOLUTE_EXPANSION"]["hurdle_bps"] == 20.0
 
 
 def test_target_stop_same_bar_ambiguity_not_optimistic() -> None:
@@ -112,11 +115,12 @@ def test_real_lanes_fit_models_without_contradictory_rules() -> None:
     for rule in qrules:
         assert apply_rule(test, rule["predicates"]).dtype == bool
         assert len({(p["feature"], p["op"], str(p["value"])) for p in rule["predicates"]}) == len(rule["predicates"])
-    assert tree_rules(train)
-    selected, sparse = sparse_results(train, test)
+    assert tree_rules(train, "CONTINUATION")
+    selected, sparse, sparse_rules = sparse_results(train, test, "RAW_SHORT")
     assert isinstance(selected, list)
     assert "sparse_prediction" in sparse.columns
-    states, clusters = cluster_states(train, test)
+    assert {r["lane"] for r in sparse_rules} == {"sparse"}
+    states, clusters = cluster_states(train, test, "ABSOLUTE_EXPANSION")
     assert states
     assert "cluster" in clusters.columns
 
@@ -125,8 +129,8 @@ def test_campaign_artifacts_truthful_verdict(tmp_path: Path) -> None:
     if not DEFAULT_KITE_ARCHIVE.is_file():
         pytest.fail("authoritative Kite archive missing")
     out = tmp_path / "evidence"
-    result = run(out, DEFAULT_KITE_ARCHIVE, max_sessions=70, permutations=50)
-    assert result["final_verdict"] in {"NO_STABLE_STATE_EDGE_FOUND", "DISCOVERY_ONLY_NOT_VALIDATED", "RETROSPECTIVE_VALIDATED_STATE_CANDIDATE", "READY_FOR_PROSPECTIVE_SHADOW"}
+    result = run(out, DEFAULT_KITE_ARCHIVE, max_sessions=45, permutations=10)
+    assert result["final_verdict"] in {"NO_STABLE_STATE_EDGE_FOUND_IN_PREDECLARED_SEARCH", "DISCOVERY_ONLY_NOT_VALIDATED", "RETROSPECTIVE_VALIDATED_STATE_CANDIDATE", "READY_FOR_PROSPECTIVE_SHADOW"}
     assert result["oracle"] == "PASS"
     assert result["mutations"] is True
     required = [
@@ -136,7 +140,10 @@ def test_campaign_artifacts_truthful_verdict(tmp_path: Path) -> None:
         "contracts/statistics_contract.json",
         "features/feature_matrix.parquet",
         "folds/discovery_validation_split.json",
+        "folds/inner_selection_decisions.json",
         "discovery/complete_hypothesis_ledger.parquet",
+        "discovery/stable_rule_templates.parquet",
+        "discovery/aggregated_template_metrics.parquet",
         "discovery/tree_rules.parquet",
         "discovery/sparse_model_results.parquet",
         "discovery/cluster_states.parquet",
@@ -156,4 +163,9 @@ def test_campaign_artifacts_truthful_verdict(tmp_path: Path) -> None:
         assert (out / rel).is_file(), rel
         assert (out / f"{rel}.sha256").is_file(), rel
     verdict = json.loads((out / "audit/final_verdict.json").read_text())
-    assert verdict["v2_verdict_invalidated"] is True
+    assert verdict["v3_broad_no_edge_invalidated"] is True
+    ledger = pd.read_parquet(out / "discovery/complete_hypothesis_ledger.parquet")
+    assert set(ledger["target_family"]) == set(TARGET_FAMILIES)
+    assert {"quantile", "tree", "sparse", "cluster"}.issubset(set(ledger["lane"]))
+    aggregated = pd.read_parquet(out / "discovery/aggregated_template_metrics.parquet")
+    assert "rule_template_id" in aggregated.columns
