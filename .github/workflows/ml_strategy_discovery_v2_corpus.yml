@@ -1,0 +1,295 @@
+name: ML Strategy Discovery V2 Corpus Certification
+
+on:
+  push:
+    branches:
+      - research/ml-strategy-discovery-v2-stability
+    paths:
+      - ".github/workflows/ml_strategy_discovery_v2_corpus.yml"
+      - "research/ml_strategy_discovery/**"
+      - "research/ml_strategy_discovery_v2/**"
+      - "research/ml_strategy_discovery/v2_validation_registry.json"
+      - "scripts/run_ml_strategy_discovery_v2.py"
+      - "tests/test_ml_strategy_discovery_v2.py"
+      - "docs/research/ml_strategy_discovery_v2_1_source_manifest.json"
+      - "docs/research/ml_strategy_discovery_v2_1_source_manifest.json.sha256"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-strategy-discovery-v2-corpus-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certified-development-screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+      CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+      V1_EVIDENCE_SHA256: c0e2d6d872ac292d3453bf835688b096a2817176e8dd000180b09f0b46054d58
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout repaired V2 branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install research-only dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas scipy scikit-learn pyarrow pytest
+
+      - name: Verify private corpus credential exists
+        env:
+          CORPUS_READ_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${CORPUS_READ_TOKEN}"
+
+      - name: Download immutable private corpus release
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/corpus-assets"
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir "${RUNNER_TEMP}/corpus-assets" \
+            --pattern "upstox_candidate_replay_v1.tar.gz" \
+            --pattern "upstox_candidate_replay_v1.tar.gz.sha256" \
+            --pattern "parquet_sha256_manifest.txt" \
+            --pattern "ml_v1_evidence_minimal_v1.tar.gz" \
+            --pattern "ml_v1_evidence_minimal_v1.tar.gz.sha256"
+
+      - name: Verify release archive identities
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/corpus-assets"
+          echo "${CORPUS_ARCHIVE_SHA256}  upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
+          echo "${V1_EVIDENCE_SHA256}  ml_v1_evidence_minimal_v1.tar.gz" | sha256sum -c -
+          test "$(awk '{print $1}' upstox_candidate_replay_v1.tar.gz.sha256)" = "${CORPUS_ARCHIVE_SHA256}"
+          test "$(awk '{print $1}' ml_v1_evidence_minimal_v1.tar.gz.sha256)" = "${V1_EVIDENCE_SHA256}"
+
+      - name: Extract corpus and minimal V1 evidence
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/runtime" "${RUNNER_TEMP}/v1-evidence"
+          tar -xzf "${RUNNER_TEMP}/corpus-assets/upstox_candidate_replay_v1.tar.gz" \
+            -C "${GITHUB_WORKSPACE}/runtime"
+          tar -xzf "${RUNNER_TEMP}/corpus-assets/ml_v1_evidence_minimal_v1.tar.gz" \
+            -C "${RUNNER_TEMP}/v1-evidence"
+          test -d "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay"
+          test -f "${RUNNER_TEMP}/v1-evidence/nifty-long/evidence_manifest.json"
+          test -f "${RUNNER_TEMP}/v1-evidence/nifty-short/evidence_manifest.json"
+          test -f "${RUNNER_TEMP}/v1-evidence/audit-v1/final_report.md"
+
+      - name: Verify every parquet byte and corpus cardinality
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          from pathlib import Path
+
+          workspace = Path.cwd()
+          root = workspace / "runtime" / "upstox_candidate_replay"
+          manifest = Path(__import__("os").environ["RUNNER_TEMP"]) / "corpus-assets" / "parquet_sha256_manifest.txt"
+          marker = "/runtime/upstox_candidate_replay/"
+
+          expected: dict[str, str] = {}
+          for raw in manifest.read_text(encoding="utf-8").splitlines():
+              if not raw.strip():
+                  continue
+              digest, original = raw.split(maxsplit=1)
+              original = original.strip()
+              if marker not in original:
+                  raise SystemExit(f"manifest path lacks certified marker: {original}")
+              relative = original.split(marker, 1)[1]
+              if relative in expected:
+                  raise SystemExit(f"duplicate manifest path: {relative}")
+              expected[relative] = digest.lower()
+
+          actual_paths = {
+              path.relative_to(root).as_posix()
+              for path in root.rglob("*.parquet")
+              if path.is_file()
+          }
+          if actual_paths != set(expected):
+              missing = sorted(set(expected) - actual_paths)[:20]
+              extra = sorted(actual_paths - set(expected))[:20]
+              raise SystemExit(f"corpus inventory mismatch missing={missing} extra={extra}")
+
+          for index, relative in enumerate(sorted(expected), start=1):
+              path = root / relative
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if digest != expected[relative]:
+                  raise SystemExit(
+                      f"parquet SHA mismatch path={relative} expected={expected[relative]} actual={digest}"
+                  )
+              if index % 250 == 0:
+                  print(f"verified {index}/{len(expected)} parquet files")
+
+          print(f"PARQUET_CORPUS_VERIFIED files={len(expected)}")
+          PY
+
+      - name: Run repaired V2 behavioral suite
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q tests/test_ml_strategy_discovery_v2.py
+
+      - name: Run LONG and SHORT twice from development-only data
+        run: |
+          set -euo pipefail
+          EVIDENCE_ROOT="${RUNNER_TEMP}/v2-certified-evidence"
+          mkdir -p "${EVIDENCE_ROOT}"
+
+          for run_name in run-a run-b; do
+            for side in LONG SHORT; do
+              output_dir="${EVIDENCE_ROOT}/${run_name}/$(echo "${side}" | tr '[:upper:]' '[:lower:]')"
+              PYTHONPATH=. python scripts/run_ml_strategy_discovery_v2.py \
+                --source-project-root "${GITHUB_WORKSPACE}" \
+                --source-manifest docs/research/ml_strategy_discovery_v2_1_source_manifest.json \
+                --registry research/ml_strategy_discovery/v2_validation_registry.json \
+                --instrument NIFTY \
+                --side "${side}" \
+                --output-dir "${output_dir}" \
+                --v1-long-dir "${RUNNER_TEMP}/v1-evidence/nifty-long" \
+                --v1-short-dir "${RUNNER_TEMP}/v1-evidence/nifty-short" \
+                --v1-audit-dir "${RUNNER_TEMP}/v1-evidence/audit-v1" \
+                --outer-folds 5 \
+                --inner-folds 4 \
+                --bootstrap-iterations 1000 \
+                --permutation-iterations 1000 \
+                --seed 42 \
+                --development-only
+            done
+          done
+
+      - name: Prove semantic two-run determinism and safety locks
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "v2-certified-evidence"
+          summary: dict[str, object] = {
+              "code_commit_sha": os.environ["GITHUB_SHA"],
+              "corpus_archive_sha256": os.environ["CORPUS_ARCHIVE_SHA256"],
+              "v1_evidence_archive_sha256": os.environ["V1_EVIDENCE_SHA256"],
+              "two_run_semantic_determinism": True,
+              "confirmation_status": "NEED_NEW_FRESH_CONFIRMATION_DATA",
+              "confirmation_token_issued": False,
+              "sides": {},
+          }
+
+          for side in ("long", "short"):
+              first = root / "run-a" / side
+              second = root / "run-b" / side
+              first_manifest = json.loads(
+                  (first / "semantic_hash_manifest.json").read_text(encoding="utf-8")
+              )
+              second_manifest = json.loads(
+                  (second / "semantic_hash_manifest.json").read_text(encoding="utf-8")
+              )
+              first_hashes = {
+                  item["path"]: item["semantic_sha256"]
+                  for item in first_manifest["artifacts"]
+              }
+              second_hashes = {
+                  item["path"]: item["semantic_sha256"]
+                  for item in second_manifest["artifacts"]
+              }
+              if first_hashes != second_hashes:
+                  raise SystemExit(
+                      f"semantic determinism failed side={side} first={first_hashes} second={second_hashes}"
+                  )
+              if (first / "final_report.md").read_bytes() != (
+                  second / "final_report.md"
+              ).read_bytes():
+                  raise SystemExit(f"final report determinism failed side={side}")
+
+              partition = json.loads(
+                  (first / "partition_registry.json").read_text(encoding="utf-8")
+              )
+              confirmation = json.loads(
+                  (first / "confirmation_lock.json").read_text(encoding="utf-8")
+              )
+              frozen = json.loads(
+                  (first / "frozen_candidates.json").read_text(encoding="utf-8")
+              )
+              if partition["loaded_partition"] != "DEVELOPMENT_V1":
+                  raise SystemExit(f"unexpected loaded partition side={side}")
+              for field in (
+                  "validation_v1_consumed_loaded",
+                  "holdout_v1_locked_loaded",
+                  "fresh_confirmation_loaded",
+              ):
+                  if partition[field] is not False:
+                      raise SystemExit(f"partition lock failed side={side} field={field}")
+              if confirmation["status"] != "NEED_NEW_FRESH_CONFIRMATION_DATA":
+                  raise SystemExit(f"confirmation status changed side={side}")
+              if confirmation["token_issued"] is not False:
+                  raise SystemExit(f"confirmation token issued side={side}")
+              if frozen["confirmation_token_issued"] is not False:
+                  raise SystemExit(f"frozen registry issued token side={side}")
+              if len(frozen["candidates"]) > 1:
+                  raise SystemExit(f"more than one candidate frozen side={side}")
+
+              summary["sides"][side.upper()] = {
+                  "verdict": frozen["verdict"],
+                  "candidate_count": len(frozen["candidates"]),
+                  "candidate_ids": [
+                      item["candidate_id"] for item in frozen["candidates"]
+                  ],
+                  "candidate_bundle_hashes": [
+                      item["candidate_bundle_hash"] for item in frozen["candidates"]
+                  ],
+                  "development_rows": json.loads(
+                      (first / "input_inventory.json").read_text(encoding="utf-8")
+                  )["development_rows"],
+                  "development_sessions": json.loads(
+                      (first / "input_inventory.json").read_text(encoding="utf-8")
+                  )["development_sessions"],
+              }
+
+          output = root / "certification_summary.json"
+          output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
+          PY
+
+      - name: Publish certification summary
+        if: always()
+        run: |
+          set -euo pipefail
+          summary="${RUNNER_TEMP}/v2-certified-evidence/certification_summary.json"
+          if test -f "${summary}"; then
+            cat "${summary}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "V2 corpus certification did not reach summary generation." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload complete read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-strategy-discovery-v2-certified-${{ github.sha }}
+          path: ${{ runner.temp }}/v2-certified-evidence
+          if-no-files-found: warn
+          retention-days: 30
