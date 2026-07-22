@@ -1,0 +1,39 @@
+{
+  "bar_interval_minutes": 1,
+  "development_only": true,
+  "direction": "opening_30m_return_sign",
+  "entry_time": "14:55",
+  "exit_time": "15:25",
+  "family": "high_information_closing_momentum",
+  "features": [
+    "opening_move_prior_atr",
+    "opening_directional_efficiency"
+  ],
+  "hypothesis_id": "HIM_30",
+  "instrument": "NIFTY",
+  "max_variants": 8,
+  "outcome": "direction_adjusted_return_bps_entry_to_exit",
+  "schema_version": "1.0",
+  "signal_window": {
+    "end_exclusive": "09:45",
+    "start": "09:15"
+  },
+  "variant_grid": [
+    {
+      "directional_efficiency_min": 0.55,
+      "opening_move_prior_atr_min": 0.3
+    },
+    {
+      "directional_efficiency_min": 0.6,
+      "opening_move_prior_atr_min": 0.4
+    },
+    {
+      "directional_efficiency_min": 0.65,
+      "opening_move_prior_atr_min": 0.5
+    },
+    {
+      "directional_efficiency_min": 0.7,
+      "opening_move_prior_atr_min": 0.6
+    }
+  ]
+}
