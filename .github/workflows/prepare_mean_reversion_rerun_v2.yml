@@ -1,0 +1,60 @@
+name: Prepare Mean Reversion Rerun V2
+
+on:
+  push:
+    branches:
+      - research/postmerge-mean-reversion-rerun-v2
+    paths:
+      - ".github/workflows/prepare_mean_reversion_rerun_v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/postmerge-mean-reversion-rerun-v2
+          fetch-depth: 0
+
+      - name: Import only durable v1 rerun files
+        run: |
+          set -euo pipefail
+          git fetch origin research/postmerge-mean-reversion-rerun-v1
+          git checkout origin/research/postmerge-mean-reversion-rerun-v1 -- \
+            .github/workflows/mean_reversion_postmerge_regeneration.yml \
+            scripts/run_mean_reversion_postmerge_regeneration.py \
+            tests/test_mean_reversion_ledger_timing.py \
+            tests/test_mean_reversion_ledger_accounting.py \
+            docs/agent_reviews/mean_reversion_postmerge_regeneration.md
+
+      - name: Apply guarded v2 preparation
+        run: |
+          set -euo pipefail
+          python tools/prepare_mean_reversion_rerun_v2.py
+
+      - name: Validate imported orchestration
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/run_mean_reversion_postmerge_regeneration.py
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflow = Path('.github/workflows/mean_reversion_postmerge_regeneration.yml')
+          payload = yaml.safe_load(workflow.read_text())
+          assert payload['jobs']['regenerate-frozen-evidence']['runs-on'] == 'ubuntu-latest'
+          assert 'research/postmerge-mean-reversion-rerun-v2' in workflow.read_text()
+          assert 'research/postmerge-mean-reversion-rerun-v1' not in workflow.read_text()
+          PY
+
+      - name: Commit clean rerun branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "research: prepare clean mean-reversion rerun v2"
+          git push origin HEAD:research/postmerge-mean-reversion-rerun-v2
