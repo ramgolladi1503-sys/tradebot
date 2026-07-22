@@ -4,7 +4,7 @@ mode: AGENT_PIPELINE_REPAIR
 candidate_id: SEVEN_ENGINE_PIPELINE_TRUTHFULNESS_V1
 decision: DRAFT_REVIEW_REQUIRED
 reason: Removes false-success, guessed-input, unverified-cache, and fabricated-certification behavior from the legacy strategy pipeline.
-timestamp: 2026-07-22T19:30:00Z
+timestamp: 2026-07-22T20:05:00Z
 is_order_action: false
 broker_api_called: false
 source: PR_705_BRANCH_AND_GITHUB_ACTIONS_FAILURE_REVIEW
@@ -39,13 +39,19 @@ The branch changes only strategy-pipeline research code, certification/statistic
 
 ## QA / Safety Review
 
-Focused tests cover paper-only enforcement, required provenance, required output hashes, exact input selection, cache-manifest absence, strategy mismatch, hash tampering, initial Drift exclusion, explicit Drift execution, invalid-success conversion, downstream abort behavior, dry-run blocking, and report generation.
+Focused truthfulness tests cover paper-only enforcement, required provenance, required output hashes, exact input selection, cache-manifest absence, strategy mismatch, hash tampering, and initial Drift exclusion. The first CI attempt exposed the pre-existing synthetic pipeline suite as both behaviorally obsolete and invalid proof: it asserted automatic Drift, bare SUCCESS results, hard-coded synthetic strategy blockers, and unverified cache reuse. That obsolete file was removed after the Code Excellence Minerva gate explicitly classified it as `fake_confidence_test_not_valid_proof`. The focused truthfulness suite remained accepted by Minerva. Production safety checks were not relaxed.
 
-The first CI attempt on commit `ebfaef49fc7c70cd6345e1ba4dcae895a4c4450d` exposed obsolete legacy tests that still expected synthetic blockers, automatic Drift, bare SUCCESS results, and cache reuse without integrity manifests. Those assertions were replaced with provenance-aware fail-closed tests on commit `695c73d96d93eacdbb38efc8c47eba866793a40f`; the production safety checks were not relaxed.
+## High-Risk Path Review
+
+No broker, order, execution, credential, live configuration, feed, risk, or strategy-threshold path is changed. The high-risk concern in this PR is false certification inside research tooling. The repair addresses that concern by requiring explicit inputs, provenance, verdicts, output hashes, strict parsing, and fail-closed blockers. `allowed_for_live_execution` remains false.
 
 ## Acceptance Proof
 
-Acceptance requires all repository checks to pass on one immutable PR head, including the duplicated unit-test workflows, agent-review evidence gate, Code Excellence, Repo Forensics, CodeQL, Portfolio CI, and strategy-registry verification. The PR remains draft and unmerged until the checks are green and the remaining limitations are reviewed.
+Acceptance requires all repository checks to pass on one immutable PR head, including both unit-test workflows, Agent Review Evidence, Code Excellence, Repo Forensics, CodeQL, Portfolio CI, and strategy-registry verification. The PR remains draft and unmerged until those checks are green and the remaining limitations are reviewed.
+
+## Runtime Proof Required After Merge
+
+Run one disposable paper-only strategy through the repaired orchestrator using exact candidate, trace, evidence, and output paths. Confirm that missing sidecars, altered hashes, unknown enum values, zero executable evidence, incomplete statistical sections, and missing Drift baselines block. Re-run the same immutable inputs twice and compare artifact hashes. Do not invoke a broker or enable LIVE.
 
 ## Known Limitation
 
