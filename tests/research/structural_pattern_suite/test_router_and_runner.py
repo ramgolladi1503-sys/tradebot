@@ -57,7 +57,7 @@ def test_runner_rejects_fake_archive_hash(tmp_path: Path) -> None:
         build_reports(tmp_path / "evidence", kite)
 
 
-def test_runner_emits_v2_required_evidence_and_sidecars(tmp_path: Path) -> None:
+def test_runner_emits_v3_required_evidence_and_sidecars(tmp_path: Path) -> None:
     real_kite = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
     if not real_kite.is_file():
         pytest.skip("real Kite archive not available")
@@ -66,13 +66,29 @@ def test_runner_emits_v2_required_evidence_and_sidecars(tmp_path: Path) -> None:
     assert result["candidate_count"] > 0
     required = [
         "run-a/source/kite_source_authority.json",
+        "run-a/source/aeron7_source_authority.json",
+        "run-a/source/session_conservation.json",
+        "run-a/source/source_file_dispositions.json",
         "run-a/source/accepted_file_manifest.json",
         "run-a/source/evidence_exposure_registry.json",
+        "run-a/contracts/timestamp_contract.json",
+        "run-a/contracts/statistics_contract.json",
+        "run-a/contracts/matched_control_contract.json",
         "run-a/contracts/strategy_contracts.json",
         "run-a/candidates/candidate_manifest.json",
         "run-a/candidates/candidate_manifest.parquet",
+        "run-a/candidates/primary_oracle_candidate_reconciliation.json",
+        "run-a/outcomes/outcome_manifest.json",
+        "run-a/outcomes/outcome_manifest.parquet",
+        "run-a/outcomes/horizon_boundary_samples.json",
         "run-a/evaluation/underlying_wfa.json",
+        "run-a/evaluation/session_equal_metrics.json",
+        "run-a/evaluation/raw_candidate_metrics.json",
         "run-a/evaluation/negative_controls.json",
+        "run-a/evaluation/parameter_neighbourhood.json",
+        "run-a/evaluation/option_source_inventory.json",
+        "run-a/audit/timestamp_semantics_oracle.json",
+        "run-a/audit/candidate_hash_oracle.json",
         "run-a/audit/independent_oracle.json",
         "run-a/audit/mutation_test_results.json",
         "run-a/audit/final_verdict.json",
@@ -85,5 +101,12 @@ def test_runner_emits_v2_required_evidence_and_sidecars(tmp_path: Path) -> None:
     source = json.loads((tmp_path / "evidence" / "run-a/source/kite_source_authority.json").read_text())
     assert source["hash_verified"] is True
     assert source["broker_api_called"] is False
+    timestamp = json.loads((tmp_path / "evidence" / "run-a/contracts/timestamp_contract.json").read_text())
+    assert timestamp["KITE"]["source_timestamp"] == "bar_start"
+    oracle = json.loads((tmp_path / "evidence" / "run-a/audit/independent_oracle.json").read_text())
+    assert oracle["bundle_hash_verified"] is True
+    mutations = json.loads((tmp_path / "evidence" / "run-a/audit/mutation_test_results.json").read_text())
+    assert mutations["entry_changed_to_same_decision_bar"]["detected"] is True
     det = json.loads((tmp_path / "evidence" / "audit/determinism.json").read_text())
     assert det["status"] == "PASS"
+    assert det["semantic_equality"]["artifact_hashes"] is True

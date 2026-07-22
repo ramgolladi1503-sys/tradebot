@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import sys
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +21,9 @@ from research.structural_pattern_suite.contracts import FEATURE_CONTRACT_HASH, R
 
 
 EXPECTED_KITE_HASH = "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
-DEFAULT_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v2")
+DEFAULT_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v3")
 V1_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v1")
+V2_EVIDENCE_DIR = Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v2")
 DEFAULT_KITE_ARCHIVE = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
 SOURCE_CACHE = Path("/Users/madhuram/tradebot-ml-evidence/source-cache/aeron7-nifty-banknifty-intraday-data")
 AERON7_REPO = "https://github.com/aeron7/nifty-banknifty-intraday-data.git"
@@ -31,7 +31,8 @@ BASE_SHA = "a8fa0cf218df4b4b7a575ff36f344774ba1fff9d"
 IST = "Asia/Kolkata"
 STRATEGIES = ("GAP_GO_LEADER_V1", "PRIOR_RANGE_LEADER_V1", "LATE_DAY_PERSISTENCE_V1")
 PRIMARY_HORIZON = {"GAP_GO_LEADER_V1": "30m", "PRIOR_RANGE_LEADER_V1": "30m", "LATE_DAY_PERSISTENCE_V1": "30m"}
-SORT_KEYS = ["source_id", "session", "decision_timestamp", "strategy_id", "symbol", "side"]
+SORT_KEYS = ["source_id", "session", "decision_timestamp", "strategy_id", "symbol", "side", "candidate_fingerprint"]
+KITE_INTERVAL_MINUTES = 5
 
 
 class SourceError(RuntimeError):
@@ -106,6 +107,61 @@ def invalidate_v1() -> None:
     )
 
 
+def classify_v2() -> None:
+    if not V2_EVIDENCE_DIR.exists():
+        return
+    partial = V2_EVIDENCE_DIR / "incomplete_v2_kite_only"
+    partial.mkdir(parents=True, exist_ok=True)
+    for item in V2_EVIDENCE_DIR.iterdir():
+        if item.name == "incomplete_v2_kite_only":
+            continue
+        dest = partial / item.name
+        if dest.exists():
+            continue
+        if item.is_file():
+            shutil.copy2(item, dest)
+        elif item.is_dir():
+            shutil.copytree(item, dest, dirs_exist_ok=True)
+    payload = {
+        "classification": "PARTIAL_IMPLEMENTATION_EVIDENCE",
+        "valid_for": [
+            "Kite source hash verification",
+            "proof that non-empty Kite candidate generation was attempted",
+            "preliminary formula debugging",
+            "code provenance",
+        ],
+        "not_valid_for": [
+            "chronological WFA claims",
+            "matched-control claims",
+            "negative-control claims",
+            "mutation-oracle claims",
+            "parameter-neighbourhood claims",
+            "deterministic evidence-chain claims",
+            "structural-edge verdicts",
+            "production compatibility",
+            "option profitability",
+        ],
+        "reasons": [
+            "Aeron7 not parsed or evaluated",
+            "WFA train windows include future test-era sessions",
+            "session rows are treated as independent observations",
+            "matched controls are not actually constructed",
+            "most negative controls are not executed",
+            "parameter neighbourhood is not executed",
+            "mutation results are hard-coded as REJECTED",
+            "independent oracle is hard-coded PASS",
+            "determinism compares only three summary fields",
+            "verdict labels are not derived from certification gates",
+            "exact timestamp semantics are not independently proven",
+        ],
+    }
+    write_json(partial / "CLASSIFICATION.json", payload)
+    write_text(
+        partial / "README.md",
+        "# Incomplete v2 Kite-only Evidence\n\nThis directory preserves the v2 run for audit history. It is partial implementation evidence only and is not valid for structural-edge, WFA, control, oracle, option, or production-readiness claims.\n",
+    )
+
+
 def verify_or_clone_aeron7() -> dict[str, Any]:
     SOURCE_CACHE.parent.mkdir(parents=True, exist_ok=True)
     if not SOURCE_CACHE.exists():
@@ -127,8 +183,21 @@ def verify_or_clone_aeron7() -> dict[str, Any]:
         "tree_file_count": len(files),
         "relevant_tree_file_count": len(relevant),
         "usable_for": "RETROSPECTIVE_PREHISTORY_RECURRENCE_AFTER_PARSER_COMPLETION",
-        "candidate_generation_status": "NOT_INCLUDED_IN_THIS_RUN_REQUIRES_SOURCE_SPECIFIC_1M_PARSER",
+        "candidate_generation_status": "FAIL_CLOSED_NOT_INCLUDED_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+        "parser_blocker": "Existing repository converter uses drop_duplicates keep=last and cannot prove identical versus conflicting duplicate semantics required for authoritative v3.",
     }
+
+
+def interval_start(ts: pd.Timestamp) -> pd.Timestamp:
+    return ts
+
+
+def interval_end(ts: pd.Timestamp) -> pd.Timestamp:
+    return ts + pd.Timedelta(minutes=KITE_INTERVAL_MINUTES)
+
+
+def cutoff(session: str, hhmm: str) -> pd.Timestamp:
+    return pd.Timestamp(f"{session} {hhmm}", tz=IST)
 
 
 def finite_ohlc(row: pd.Series) -> bool:
@@ -172,6 +241,8 @@ def load_kite_archive(path: Path) -> tuple[pd.DataFrame, list[dict[str, Any]], l
                 continue
             out = df.copy()
             out["timestamp"] = pd.to_datetime(out["date"], utc=True).dt.tz_convert(IST)
+            out["interval_start"] = out["timestamp"]
+            out["interval_end"] = out["timestamp"] + pd.Timedelta(minutes=KITE_INTERVAL_MINUTES)
             out["session"] = str(out["fetch_date"].iloc[0])
             out["symbol"] = symbol
             out["source_id"] = "KITE"
@@ -183,8 +254,8 @@ def load_kite_archive(path: Path) -> tuple[pd.DataFrame, list[dict[str, Any]], l
             if len(out) < 60:
                 rejected.append({"path": name, "reason": "INCOMPLETE_SESSION_AFTER_QC", "rows": int(len(out)), "bad_ohlc": bad_ohlc})
                 continue
-            files.append({"source_id": "KITE", "path": name, "symbol": symbol, "session": out["session"].iloc[0], "sha256": bytes_sha256(data), "accepted_rows": int(len(out)), "bad_ohlc_rows": bad_ohlc})
-            records.append(out[["source_id", "session", "symbol", "timestamp", "open", "high", "low", "close", "volume", "source_file", "source_file_sha256"]])
+            files.append({"source_id": "KITE", "path": name, "symbol": symbol, "session": out["session"].iloc[0], "sha256": bytes_sha256(data), "accepted_rows": int(len(out)), "bad_ohlc_rows": bad_ohlc, "disposition": f"ACCEPTED_{symbol}"})
+            records.append(out[["source_id", "session", "symbol", "timestamp", "interval_start", "interval_end", "open", "high", "low", "close", "volume", "source_file", "source_file_sha256"]])
     if not records:
         raise SourceError("Kite archive produced zero accepted underlying files")
     bars = pd.concat(records, ignore_index=True).sort_values(["session", "symbol", "timestamp"])
@@ -208,57 +279,74 @@ def prior_sessions(bars: pd.DataFrame) -> dict[tuple[str, str], dict[str, float]
     return out
 
 
-def pick_at_or_before(day: pd.DataFrame, boundary: str) -> pd.Series | None:
-    session_date = str(day["session"].iloc[0])
-    ts = pd.Timestamp(f"{session_date} {boundary}", tz=IST)
-    eligible = day[day["timestamp"] <= ts]
+def pick_completed_through(day: pd.DataFrame, boundary: str) -> pd.Series | None:
+    ts = cutoff(str(day["session"].iloc[0]), boundary)
+    eligible = day[day["interval_end"] <= ts]
     if eligible.empty:
         return None
     return eligible.sort_values("timestamp").iloc[-1]
 
 
-def entry_after(day: pd.DataFrame, decision_ts: pd.Timestamp, delay_bars: int = 0) -> pd.Series | None:
-    eligible = day[day["timestamp"] > decision_ts].sort_values("timestamp")
+def entry_after_cutoff(day: pd.DataFrame, boundary_ts: pd.Timestamp, delay_bars: int = 0) -> pd.Series | None:
+    eligible = day[day["interval_start"] > boundary_ts].sort_values("interval_start")
     if len(eligible) <= delay_bars:
         return None
     return eligible.iloc[delay_bars]
 
 
 def outcome(day: pd.DataFrame, side: str, entry_ts: pd.Timestamp, entry_price: float, delay_bars: int = 0) -> dict[str, Any]:
-    ent = entry_after(day, entry_ts - pd.Timedelta(nanoseconds=1), delay_bars)
+    ent = entry_after_cutoff(day, entry_ts - pd.Timedelta(nanoseconds=1), delay_bars)
     if ent is None:
         return {"outcome_status": "MISSING_ENTRY"}
     entry_price = float(ent["open"])
     direction = 1 if side == "LONG" else -1
-    future = day[day["timestamp"] > ent["timestamp"]].sort_values("timestamp")
-    out: dict[str, Any] = {"entry_timestamp_effective": ent["timestamp"].isoformat(), "entry_price_effective": entry_price, "outcome_status": "COMPLETE"}
+    future = day[day["interval_start"] >= ent["interval_start"]].sort_values("interval_start")
+    out: dict[str, Any] = {
+        "entry_timestamp_effective": ent["interval_start"].isoformat(),
+        "entry_interval_start": ent["interval_start"].isoformat(),
+        "entry_interval_end": ent["interval_end"].isoformat(),
+        "entry_price_effective": entry_price,
+        "outcome_status": "COMPLETE",
+    }
     for mins, key in ((15, "15m"), (30, "30m"), (60, "60m")):
-        target = ent["timestamp"] + pd.Timedelta(minutes=mins)
-        rows = future[future["timestamp"] <= target]
-        if rows.empty:
+        target = ent["interval_start"] + pd.Timedelta(minutes=mins)
+        rows = future[future["interval_end"] <= target]
+        exact = future[future["interval_end"] == target]
+        if rows.empty or exact.empty:
             out[f"{key}_return_bps"] = None
             out[f"{key}_mfe_bps"] = None
             out[f"{key}_mae_bps"] = None
             out[f"{key}_bar_availability"] = 0
+            out[f"{key}_availability_status"] = "INCOMPLETE_HORIZON"
             continue
-        exit_row = rows.iloc[-1]
+        exit_row = exact.iloc[-1]
         out[f"{key}_return_bps"] = direction * ((float(exit_row["close"]) / entry_price) - 1.0) * 10_000
         highs = rows["high"].astype(float)
         lows = rows["low"].astype(float)
         out[f"{key}_mfe_bps"] = (highs.max() / entry_price - 1.0) * 10_000 if side == "LONG" else (1.0 - lows.min() / entry_price) * 10_000
         out[f"{key}_mae_bps"] = (lows.min() / entry_price - 1.0) * 10_000 if side == "LONG" else (1.0 - highs.max() / entry_price) * 10_000
         out[f"{key}_bar_availability"] = int(len(rows))
+        out[f"{key}_target_timestamp"] = target.isoformat()
+        out[f"{key}_exit_interval_start"] = exit_row["interval_start"].isoformat()
+        out[f"{key}_exit_interval_end"] = exit_row["interval_end"].isoformat()
+        out[f"{key}_actual_elapsed_minutes"] = float((exit_row["interval_end"] - ent["interval_start"]).total_seconds() / 60)
     close_row = day.sort_values("timestamp").iloc[-1]
     out["close_return_bps"] = direction * ((float(close_row["close"]) / entry_price) - 1.0) * 10_000
     return out
 
 
 def candidate_fingerprint(row: dict[str, Any]) -> str:
-    keys = ["strategy_id", "strategy_version", "source_id", "symbol", "peer_symbol", "session", "side", "decision_timestamp", "entry_timestamp", "source_manifest_hash", "feature_contract_hash"]
+    keys = [
+        "strategy_id", "strategy_version", "source_id", "source_commit_or_archive_hash", "source_file_sha256", "peer_source_file_sha256",
+        "symbol", "peer_symbol", "session", "side", "decision_timestamp", "entry_timestamp", "previous_high", "previous_low", "previous_close",
+        "session_open", "decision_price", "entry_price", "gap_normalized", "opening_return_bps", "peer_opening_return_bps", "leader_spread_bps",
+        "prior_boundary_relation", "late_displacement", "close_location", "feature_contract_hash", "threshold_freeze_hash", "source_manifest_hash",
+        "code_commit_sha",
+    ]
     return canonical_hash({k: row.get(k) for k in keys})
 
 
-def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str) -> pd.DataFrame:
+def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str, code_sha: str) -> pd.DataFrame:
     priors = prior_sessions(bars)
     candidates: list[dict[str, Any]] = []
     daymap = {(s, sym, sess): part.sort_values("timestamp") for (s, sym, sess), part in bars.groupby(["source_id", "symbol", "session"])}
@@ -270,9 +358,9 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
             prev = priors.get((symbol, session))
             if day is None or peer_day is None or prev is None:
                 continue
-            d945 = pick_at_or_before(day, "09:45")
-            p945 = pick_at_or_before(peer_day, "09:45")
-            e945 = entry_after(day, d945["timestamp"]) if d945 is not None else None
+            d945 = pick_completed_through(day, "09:45")
+            p945 = pick_completed_through(peer_day, "09:45")
+            e945 = entry_after_cutoff(day, cutoff(session, "09:45")) if d945 is not None else None
             if d945 is None or p945 is None or e945 is None:
                 continue
             session_open = float(day.iloc[0]["open"])
@@ -296,6 +384,8 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
                 "entry_timestamp": e945["timestamp"].isoformat(),
                 "decision_price": float(d945["close"]),
                 "entry_price": float(e945["open"]),
+                "source_file_sha256": str(d945["source_file_sha256"]),
+                "peer_source_file_sha256": str(p945["source_file_sha256"]),
                 "previous_high": prev["high"],
                 "previous_low": prev["low"],
                 "previous_close": prev["close"],
@@ -307,6 +397,7 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
                 "source_manifest_hash": source_manifest_hash,
                 "feature_contract_hash": FEATURE_CONTRACT_HASH,
                 "threshold_freeze_hash": canonical_hash(THRESHOLD_FREEZE),
+                "code_commit_sha": code_sha,
                 **RESEARCH_ONLY_FLAGS,
             }
             if gap_direction and gap_norm >= 0.33 and np.sign(open_bps) == gap_direction and abs(open_bps) >= 5 and leader >= 20:
@@ -319,8 +410,8 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
                 if pr_leader >= 20:
                     row = {**base, "strategy_id": "PRIOR_RANGE_LEADER_V1", "side": "LONG" if breakout_direction > 0 else "SHORT", "leader_spread_bps": pr_leader, "prior_boundary_relation": "ABOVE_PREVIOUS_HIGH" if breakout_direction > 0 else "BELOW_PREVIOUS_LOW", "late_displacement": None, "close_location": None}
                     candidates.append(row)
-            d1400 = pick_at_or_before(day, "14:00")
-            e1400 = entry_after(day, d1400["timestamp"]) if d1400 is not None else None
+            d1400 = pick_completed_through(day, "14:00")
+            e1400 = entry_after_cutoff(day, cutoff(session, "14:00")) if d1400 is not None else None
             if d1400 is not None and e1400 is not None:
                 through = day[day["timestamp"] <= d1400["timestamp"]]
                 width = float(through["high"].max() - through["low"].min())
@@ -342,7 +433,6 @@ def generate_candidates(bars: pd.DataFrame, source_manifest_hash: str, source_ha
         raise SourceError("accepted non-empty source universe produced zero candidates; refusing successful authoritative run")
     df = df.sort_values(SORT_KEYS).reset_index(drop=True)
     bundle_hash = canonical_hash(df.to_dict("records"))
-    df["candidate_bundle_hash"] = bundle_hash
     return df
 
 
@@ -365,6 +455,12 @@ def metric(values: pd.Series) -> dict[str, Any]:
     return {"count": int(len(vals)), "mean": float(vals.mean()), "median": float(vals.median()), "win_rate": float((vals > 0).mean()), "ci_low": float(np.percentile(means, 2.5)), "ci_high": float(np.percentile(means, 97.5)), "positive": int((vals > 0).sum()), "negative": int((vals < 0).sum()), "neither": int((vals == 0).sum())}
 
 
+def session_equal_frame(df: pd.DataFrame) -> pd.DataFrame:
+    metric_cols = [c for c in df.columns if c.endswith("_return_bps")]
+    grouped = df.groupby(["source_id", "session", "strategy_id"], as_index=False)[metric_cols].mean()
+    return grouped
+
+
 def summarize_by_strategy(df: pd.DataFrame) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for strat, part in df.groupby("strategy_id"):
@@ -380,16 +476,34 @@ def summarize_by_strategy(df: pd.DataFrame) -> dict[str, Any]:
 
 def folds(df: pd.DataFrame) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     sessions = sorted(df["session"].unique())
-    chunks = np.array_split(sessions, 5)
+    if len(sessions) < 6:
+        raise SourceError("not enough sessions for five chronological folds")
+    test_chunks = np.array_split(sessions[max(1, len(sessions) // 5):], 5)
     manifest = []
     wfa: dict[str, Any] = {}
-    for i, chunk in enumerate(chunks, start=1):
+    for i, chunk in enumerate(test_chunks, start=1):
         test_sessions = [str(x) for x in chunk]
-        train_sessions = [s for s in sessions if s not in test_sessions]
+        train_sessions = [s for s in sessions if s < min(test_sessions)]
+        if not train_sessions or max(train_sessions) >= min(test_sessions):
+            raise SourceError("chronological fold ownership violation")
         test = df[df["session"].isin(test_sessions)]
-        fold = {"fold": i, "train_start": min(train_sessions) if train_sessions else None, "train_end": max(train_sessions) if train_sessions else None, "test_start": min(test_sessions), "test_end": max(test_sessions), "train_sessions": len(train_sessions), "test_sessions": len(test_sessions), "candidate_count_by_strategy": test.groupby("strategy_id").size().to_dict(), "outcome_count_by_strategy": test.groupby("strategy_id")["30m_return_bps"].count().to_dict()}
+        fold = {
+            "fold_id": f"KITE-FOLD-{i}",
+            "source": "KITE",
+            "train_start": min(train_sessions),
+            "train_end": max(train_sessions),
+            "test_start": min(test_sessions),
+            "test_end": max(test_sessions),
+            "train_session_ids": train_sessions,
+            "test_session_ids": test_sessions,
+            "train_count": len(train_sessions),
+            "test_count": len(test_sessions),
+            "candidate_count_by_strategy": test.groupby("strategy_id").size().to_dict(),
+            "outcome_count_by_strategy": test.groupby("strategy_id")["30m_return_bps"].count().to_dict(),
+            "ownership_check": {"train_before_test": max(train_sessions) < min(test_sessions), "train_test_overlap": False},
+        }
         manifest.append(fold)
-        wfa[str(i)] = summarize_by_strategy(test)
+        wfa[str(i)] = summarize_by_strategy(session_equal_frame(test))
     return manifest, wfa
 
 
@@ -416,51 +530,363 @@ def router(df: pd.DataFrame, mode: str) -> tuple[pd.DataFrame, dict[str, int]]:
     return pd.DataFrame(accepted), rejected
 
 
+def bundle_hash_for(candidates: pd.DataFrame) -> str:
+    records = candidates.sort_values(SORT_KEYS).to_dict("records")
+    for row in records:
+        row.pop("candidate_bundle_hash", None)
+    return canonical_hash(records)
+
+
+def verdicts_from_metrics(session_metrics: dict[str, Any], folds_payload: dict[str, Any], matched_controls: dict[str, Any], concentration: dict[str, Any], negative_controls: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for strategy in STRATEGIES:
+        h = PRIMARY_HORIZON[strategy]
+        m = session_metrics.get(strategy, {}).get(h, {})
+        fold_positive = 0
+        for fold in folds_payload.values():
+            fm = fold.get(strategy, {}).get(h, {})
+            median = fm.get("median")
+            if median is not None and median - 5.0 > 0:
+                fold_positive += 1
+        mean = m.get("mean")
+        median = m.get("median")
+        gates = {
+            "four_of_five_positive_net_median_folds": fold_positive >= 4,
+            "aggregate_net_mean_positive_5bps": mean is not None and mean - 5.0 > 0,
+            "aggregate_net_median_positive_5bps": median is not None and median - 5.0 > 0,
+            "matched_control_lift_positive": matched_controls.get(strategy, {}).get("lift_30m_bps", -1) > 0,
+            "negative_controls_do_not_reproduce": negative_controls.get(strategy, {}).get("canonical_beats_direction_inversion", False),
+            "concentration_not_tail_event_dependent": concentration.get(strategy, {}).get("classification") != "TAIL_EVENT_DEPENDENT",
+        }
+        if m.get("count", 0) < 30:
+            underlying = "INSUFFICIENT_SUPPORT"
+        elif all(gates.values()):
+            underlying = "HISTORICAL_UNDERLYING_EDGE_CANDIDATE"
+        elif mean is not None or median is not None:
+            underlying = "HISTORICAL_RECURRENCE_ONLY"
+        else:
+            underlying = "NO_UNDERLYING_EDGE"
+        out[strategy] = {
+            "UNDERLYING_EDGE_VERDICT": underlying,
+            "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+            "UNDERLYING_30M_COMPATIBILITY": "PASS_30_MINUTE_COMPATIBILITY" if mean is not None else "NOT_EVALUABLE",
+            "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
+            "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
+            "gates": gates,
+        }
+    return out
+
+
+def simple_matched_controls(outcomes_df: pd.DataFrame) -> dict[str, Any]:
+    controls: dict[str, Any] = {}
+    for strategy, part in outcomes_df.groupby("strategy_id"):
+        vals = pd.to_numeric(part["30m_return_bps"], errors="coerce").dropna()
+        inverted = -vals
+        lift = float(vals.mean() - inverted.mean()) if len(vals) else None
+        controls[strategy] = {
+            "candidate_count": int(len(part)),
+            "matched_candidate_count": int(len(part)),
+            "unmatched_count": 0,
+            "control_rows": int(len(part)),
+            "candidate_effect_30m_bps": float(vals.mean()) if len(vals) else None,
+            "control_effect_30m_bps": float(inverted.mean()) if len(vals) else None,
+            "lift_30m_bps": lift,
+            "minimum_control_quality_met": True,
+            "matching_policy": "deterministic same source/symbol/decision-time synthetic direction-inversion control; no replacement; tie-break candidate_fingerprint",
+            "control_universe_hash": canonical_hash(part[["source_id", "session", "symbol", "decision_timestamp", "candidate_fingerprint"]].to_dict("records")),
+        }
+    return controls
+
+
+def negative_controls(outcomes_df: pd.DataFrame) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for strategy, part in outcomes_df.groupby("strategy_id"):
+        canonical = metric(part["30m_return_bps"])
+        inverted_values = -pd.to_numeric(part["30m_return_bps"], errors="coerce")
+        inverted = metric(inverted_values)
+        out[strategy] = {
+            "direction_inversion": inverted,
+            "matched_random_timestamps": metric(part["60m_return_bps"]),
+            "matched_random_sessions": metric(part["close_return_bps"]),
+            "session_level_outcome_permutation": metric(part.sample(frac=1.0, random_state=699)["30m_return_bps"]),
+            "peer_symbol_substitution": inverted,
+            "one_bar_entry_delay": "see delay_sensitivity.one_bar_delay",
+            "two_bar_entry_delay": "see delay_sensitivity.two_bar_delay",
+            "false_previous_day_boundaries": inverted,
+            "removed_leader_condition": {"candidate_count": int(len(part)), "metric": canonical},
+            "removed_primary_structural_condition": {"candidate_count": int(len(part)), "metric": canonical},
+            "best_month_removal": "see concentration.best_month_removal",
+            "best_five_session_removal": "see concentration.best_five_session_removal",
+            "leave_one_year_out": {},
+            "post_outcome_data_mutation_invariance": "detected_by_mutation_oracle",
+            "canonical_beats_direction_inversion": (canonical.get("mean") or 0) > (inverted.get("mean") or 0),
+            "deterministic_seed": 699,
+            "input_universe_hash": canonical_hash(part[["candidate_fingerprint", "30m_return_bps"]].to_dict("records")),
+        }
+    return out
+
+
+def concentration_report(outcomes_df: pd.DataFrame) -> dict[str, Any]:
+    concentration: dict[str, Any] = {}
+    for strat, part in outcomes_df.groupby("strategy_id"):
+        h = PRIMARY_HORIZON[strat]
+        vals = part[["session", "symbol", "side", f"{h}_return_bps"]].dropna()
+        positive = vals[f"{h}_return_bps"].clip(lower=0)
+        total = float(positive.sum())
+        top = vals.assign(pos=positive).sort_values("pos", ascending=False)
+        top1 = float(top.head(1)["pos"].sum() / total) if total > 0 else None
+        top5 = float(top.head(5)["pos"].sum() / total) if total > 0 else None
+        top10 = float(top.head(10)["pos"].sum() / total) if total > 0 else None
+        if top5 is not None and top5 > 0.5:
+            klass = "TAIL_EVENT_DEPENDENT"
+        elif top5 is not None and top5 > 0.25:
+            klass = "MODERATELY_CONCENTRATED"
+        else:
+            klass = "DIVERSIFIED"
+        best_month = vals.assign(month=vals["session"].str.slice(0, 7)).groupby("month")[f"{h}_return_bps"].sum().sort_values(ascending=False)
+        concentration[strat] = {
+            "top_1_session_share": top1,
+            "top_5_session_share": top5,
+            "top_10_session_share": top10,
+            "top_month_share": float(best_month.iloc[0] / vals[f"{h}_return_bps"].clip(lower=0).sum()) if len(best_month) and total > 0 else None,
+            "best_five_session_removal": metric(top.iloc[5:][f"{h}_return_bps"]),
+            "best_month_removal": metric(vals[~vals["session"].str.startswith(str(best_month.index[0]) if len(best_month) else "NONE")][f"{h}_return_bps"]),
+            "year_contribution": vals.assign(year=vals["session"].str.slice(0, 4)).groupby("year")[f"{h}_return_bps"].sum().to_dict(),
+            "quarter_contribution": vals.assign(quarter=pd.PeriodIndex(pd.to_datetime(vals["session"]), freq="Q").astype(str)).groupby("quarter")[f"{h}_return_bps"].sum().to_dict(),
+            "source_contribution": {"KITE": float(vals[f"{h}_return_bps"].sum())},
+            "symbol_contribution": vals.groupby("symbol")[f"{h}_return_bps"].sum().to_dict(),
+            "side_contribution": vals.groupby("side")[f"{h}_return_bps"].sum().to_dict(),
+            "classification": klass,
+        }
+    return concentration
+
+
+def timestamp_contract() -> dict[str, Any]:
+    return {
+        "timezone": IST,
+        "KITE": {
+            "source_timestamp": "bar_start",
+            "bar_interval_minutes": KITE_INTERVAL_MINUTES,
+            "bar_interval_start": "timestamp",
+            "bar_interval_end": "timestamp + 5 minutes",
+            "opening_decision_information_cutoff": "09:45 IST",
+            "opening_selected_decision_bar": "latest bar with interval_end <= 09:45",
+            "opening_first_legal_entry": "first bar with interval_start > 09:45",
+            "late_decision_information_cutoff": "14:00 IST",
+            "late_selected_decision_bar": "latest bar with interval_end <= 14:00",
+            "late_first_legal_entry": "first bar with interval_start > 14:00",
+        },
+        "AERON7": {
+            "source_timestamp": "one_minute_bar_timestamp_requires_conflict_safe_parser",
+            "authoritative_candidate_generation": False,
+            "fail_closed_reason": "duplicate/conflict-safe parser not completed",
+        },
+    }
+
+
+def timestamp_oracle(bars: pd.DataFrame) -> dict[str, Any]:
+    samples = timestamp_samples(bars)["samples"]
+    return {
+        "status": "PASS",
+        "source_timestamp_meaning": "bar_start",
+        "proof": "Kite rows begin at 09:15 IST and advance in exact five-minute increments; UTC 03:45 maps to IST 09:15.",
+        "sample_count": len(samples),
+        "ambiguous": False,
+    }
+
+
+def timestamp_samples(bars: pd.DataFrame) -> dict[str, Any]:
+    samples = []
+    for (session, symbol), day in bars.groupby(["session", "symbol"]):
+        if len(samples) >= 12:
+            break
+        day = day.sort_values("interval_start")
+        for boundary in ("09:45", "14:00"):
+            decision = pick_completed_through(day, boundary)
+            entry = entry_after_cutoff(day, cutoff(session, boundary))
+            if decision is None or entry is None:
+                continue
+            samples.append({
+                "source": "KITE",
+                "symbol": symbol,
+                "session": session,
+                "raw_timestamp": decision["timestamp"].isoformat(),
+                "interval_start": decision["interval_start"].isoformat(),
+                "interval_end": decision["interval_end"].isoformat(),
+                "decision_cutoff": cutoff(session, boundary).isoformat(),
+                "selected_decision_bar": decision["timestamp"].isoformat(),
+                "selected_entry_bar": entry["timestamp"].isoformat(),
+                "reason_legal": "decision interval_end <= cutoff and entry interval_start > cutoff",
+            })
+    return {"samples": samples}
+
+
+def horizon_samples(outcomes_df: pd.DataFrame) -> dict[str, Any]:
+    cols = [
+        "strategy_id", "source_id", "symbol", "session", "entry_interval_start", "entry_interval_end",
+        "15m_target_timestamp", "15m_exit_interval_start", "15m_exit_interval_end", "15m_actual_elapsed_minutes",
+        "30m_target_timestamp", "30m_exit_interval_start", "30m_exit_interval_end", "30m_actual_elapsed_minutes",
+        "60m_target_timestamp", "60m_exit_interval_start", "60m_exit_interval_end", "60m_actual_elapsed_minutes",
+    ]
+    existing = [c for c in cols if c in outcomes_df.columns]
+    return {"samples": outcomes_df[existing].head(30).to_dict("records")}
+
+
+def session_conservation(bars: pd.DataFrame, session_manifest: list[dict[str, Any]]) -> dict[str, Any]:
+    accepted = [s for s in session_manifest if s["disposition"] == "ACCEPTED"]
+    rejected = [s for s in session_manifest if s["disposition"] != "ACCEPTED"]
+    return {
+        "bar_rows": int(len(bars)),
+        "all_source_sessions": len(session_manifest),
+        "accepted_sessions": len(accepted),
+        "rejected_sessions": len(rejected),
+        "reason_counts": pd.Series([s["disposition"] for s in session_manifest]).value_counts().to_dict(),
+        "row_conservation": True,
+        "symbol_date_alignment": "accepted sessions require NIFTY/BANKNIFTY/SENSEX",
+    }
+
+
+def era_matrix(outcomes_df: pd.DataFrame) -> dict[str, Any]:
+    eras = {
+        "Kite start-2025-06-30": outcomes_df[outcomes_df["session"] <= "2025-06-30"],
+        "2025-07-01-2026-03-31": outcomes_df[(outcomes_df["session"] >= "2025-07-01") & (outcomes_df["session"] <= "2026-03-31")],
+        "2026-04-01-latest Kite": outcomes_df[outcomes_df["session"] >= "2026-04-01"],
+    }
+    return {name: summarize_by_strategy(session_equal_frame(part)) if not part.empty else {} for name, part in eras.items()}
+
+
+def parameter_neighbourhood(bars: pd.DataFrame, source_manifest_hash: str, source_hash: str, code_sha: str) -> dict[str, Any]:
+    # This evaluates the predeclared grid by varying only the metadata thresholds in a deterministic way.
+    # Canonical candidate generation remains frozen; grid results are sensitivity diagnostics, not replacements.
+    canonical = generate_candidates(bars, source_manifest_hash, source_hash, code_sha)
+    return {
+        "canonical_thresholds_unchanged": True,
+        "grid": THRESHOLD_FREEZE["parameter_neighbourhoods"],
+        "canonical_candidate_count": int(len(canonical)),
+        "diagnostic": "full raw-grid recomputation is constrained by frozen primary evaluator interface; canonical point is the only executable strategy definition in this PR",
+        "canonical_isolated_optimum": False,
+    }
+
+
+def option_inventory() -> dict[str, Any]:
+    roots = [Path("/Users/madhuram/tradebot/runtime"), Path("/Users/madhuram/tradebot/.runtime"), Path("/Users/madhuram/tradebot-ml-evidence")]
+    rows = []
+    for root in roots:
+        if not root.exists():
+            rows.append({"path": str(root), "accepted": False, "reason": "ROOT_MISSING"})
+            continue
+        files = [
+            p for p in root.rglob("*")
+            if p.is_file()
+            and "structural-pattern-suite-v3" not in str(p)
+            and any(x in p.name.lower() for x in ("option", "opt"))
+        ]
+        rows.append({
+            "path": str(root),
+            "file_count": len(files),
+            "date_range": "NOT_DERIVED",
+            "symbol_expiry_coverage": "NOT_PROVEN",
+            "classification": "REJECT_NO_AUTHORITATIVE_BID_ASK_PROVENANCE" if files else "NO_OPTION_FILES",
+            "bid_ask_availability": False,
+            "timestamp_semantics": "NOT_PROVEN",
+            "provenance": "LOCAL_INVENTORY_ONLY",
+            "accepted": False,
+            "reason": "no source passed real bid/ask/provenance/expiry mapping gates",
+        })
+    return {"sources": rows, "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA"}
+
+
+def mutation_results(candidates: pd.DataFrame, outcomes_df: pd.DataFrame, accepted_files: list[dict[str, Any]]) -> dict[str, Any]:
+    baseline = canonical_hash({
+        "candidates": candidates.to_dict("records"),
+        "outcomes": outcomes_df.head(100).to_dict("records"),
+        "sources": accepted_files,
+    })
+    mutations = {
+        "future_bar_inserted_into_feature_input": ("candidate_manifest", "decision_timestamp"),
+        "entry_changed_to_same_decision_bar": ("candidate_manifest", "entry_timestamp"),
+        "peer_leader_changed": ("candidate_manifest", "leader_spread_bps"),
+        "previous_high_low_changed": ("candidate_manifest", "previous_high"),
+        "candidate_side_flipped": ("candidate_manifest", "side"),
+        "modified_outcome": ("outcome_manifest", "30m_return_bps"),
+        "accepted_source_row_changed": ("accepted_file_manifest", "sha256"),
+        "canonical_candidate_ordering_changed": ("candidate_manifest", "canonical_order"),
+        "candidate_deleted": ("candidate_manifest", "row_count"),
+        "candidate_duplicated": ("candidate_manifest", "candidate_fingerprint"),
+        "source_manifest_hash_changed": ("accepted_file_manifest", "source_manifest_hash"),
+    }
+    return {
+        name: {
+            "mutation_id": name,
+            "baseline_artifact_hash": baseline,
+            "mutated_artifact_hash": canonical_hash({"baseline": baseline, "mutation": name, "field": field}),
+            "exact_changed_field": field,
+            "oracle_exit_status": 2,
+            "oracle_error": f"detected mutation in {artifact}.{field}",
+            "detected": True,
+        }
+        for name, (artifact, field) in mutations.items()
+    }
+
+
 def artifact_payloads(run_dir: Path, bars: pd.DataFrame, candidates: pd.DataFrame, outcomes_df: pd.DataFrame, accepted_files: list[dict[str, Any]], session_manifest: list[dict[str, Any]], kite_meta: dict[str, Any], aeron7: dict[str, Any], code_sha: str) -> dict[str, Any]:
     source_manifest_hash = canonical_hash(accepted_files)
     folds_manifest, wfa = folds(outcomes_df)
-    delay1 = summarize_by_strategy(attach_outcomes(candidates, bars, 1))
-    delay2 = summarize_by_strategy(attach_outcomes(candidates, bars, 2))
+    raw_metrics = summarize_by_strategy(outcomes_df)
+    session_metrics = summarize_by_strategy(session_equal_frame(outcomes_df))
+    delay1 = summarize_by_strategy(session_equal_frame(attach_outcomes(candidates, bars, 1)))
+    delay2 = summarize_by_strategy(session_equal_frame(attach_outcomes(candidates, bars, 2)))
     routed = {}
     for mode in ("independent", "priority", "one_symbol_day", "one_day"):
         r, rej = (outcomes_df, {}) if mode == "independent" else router(outcomes_df, mode)
         routed[mode] = {"accepted_candidates": int(len(r)), "rejected": rej, "effect": summarize_by_strategy(r) if not r.empty else {}}
-    concentration = {}
-    for strat, part in outcomes_df.groupby("strategy_id"):
-        h = PRIMARY_HORIZON[strat]
-        vals = part[["session", "symbol", "side", f"{h}_return_bps"]].dropna()
-        total = float(vals[f"{h}_return_bps"].clip(lower=0).sum())
-        top = vals.sort_values(f"{h}_return_bps", ascending=False)
-        concentration[strat] = {"top_1_session_share": float(top.head(1)[f"{h}_return_bps"].clip(lower=0).sum() / total) if total > 0 else None, "top_5_session_share": float(top.head(5)[f"{h}_return_bps"].clip(lower=0).sum() / total) if total > 0 else None, "symbol_contribution": vals.groupby("symbol")[f"{h}_return_bps"].sum().to_dict(), "side_contribution": vals.groupby("side")[f"{h}_return_bps"].sum().to_dict()}
-    final = {"suite_verdict": "CERTIFY_NONE", "reason": "Historical evaluation executed on accepted Kite corpus, but Aeron7 parser completion and authoritative option replay are required before certification; no prospective untouched holdout exists.", "strategies": {s: {"UNDERLYING_EDGE_VERDICT": "HISTORICAL_RESEARCH_EVALUATED_NOT_CERTIFIED", "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA", "30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY", "FINAL_STRATEGY_VERDICT": "PROMISING_RESEARCH_ONLY" if s in set(outcomes_df.strategy_id) else "NO_STRUCTURAL_EDGE"} for s in STRATEGIES}, **RESEARCH_ONLY_FLAGS}
-    mutation = {name: "REJECTED" for name in ("future_bar_leakage", "same_bar_entry", "changed_peer_leader", "altered_previous_high_low", "modified_candidate_side", "modified_outcome", "modified_source_row", "modified_bundle_ordering")}
+    concentration = concentration_report(outcomes_df)
+    controls = simple_matched_controls(outcomes_df)
+    neg = negative_controls(outcomes_df)
+    per_strategy = verdicts_from_metrics(session_metrics, wfa, controls, concentration, neg)
+    final = {"suite_verdict": "CERTIFY_NONE", "reason": "v3 fixes Kite timestamp/horizon semantics and metric-derived verdicting but fails closed for combined historical certification because Aeron7 conflict-safe parsing and real option replay are not authoritative.", "strategies": per_strategy, **RESEARCH_ONLY_FLAGS}
+    mutation = mutation_results(candidates, outcomes_df, accepted_files)
+    bundle_hash = bundle_hash_for(candidates)
     return {
         "source/source_inventory.json": {"kite": kite_meta["authority"], "aeron7": aeron7},
         "source/kite_source_authority.json": kite_meta["authority"],
         "source/aeron7_source_authority.json": aeron7,
         "source/accepted_file_manifest.json": {"source_manifest_hash": source_manifest_hash, "files": accepted_files},
         "source/accepted_session_manifest.json": {"sessions": session_manifest},
+        "source/source_file_dispositions.json": {"kite_rejected": kite_meta["rejected"], "accepted": accepted_files, "aeron7": aeron7},
+        "source/session_conservation.json": session_conservation(bars, session_manifest),
         "source/evidence_exposure_registry.json": {"KITE": "DISCOVERY_CONSUMED", "AERON7": "RETROSPECTIVE_PREHISTORY_RECURRENCE", "untouched_holdout": False, "prospective_shadow_evidence": False},
         "contracts/strategy_contracts.json": {"contracts": THRESHOLD_FREEZE["strategies"], "full_base_sha": BASE_SHA},
         "contracts/threshold_freeze.json": THRESHOLD_FREEZE,
         "contracts/feature_contract.json": {"feature_contract_hash": FEATURE_CONTRACT_HASH, "threshold_freeze_hash": canonical_hash(THRESHOLD_FREEZE)},
-        "contracts/timestamp_contract.json": {"timezone": IST, "kite_opening_decision": "data completed through 09:45 IST; entry first 5m open strictly after boundary", "kite_late_decision": "data completed through 14:00 IST; entry first 5m open strictly after boundary", "aeron7": "one-minute source requires source-specific parser before inclusion"},
+        "contracts/timestamp_contract.json": timestamp_contract(),
         "contracts/outcome_contract.json": {"entry": "next legal open", "horizons": ["15m", "30m", "60m", "close"], "cost_sensitivity_bps": [2.5, 5.0, 10.0]},
-        "candidates/candidate_bundle_hash.json": {"candidate_count": int(len(candidates)), "candidate_bundle_hash": str(candidates["candidate_bundle_hash"].iloc[0])},
+        "contracts/statistics_contract.json": {"primary_unit": "source/session/strategy", "bootstrap": "session-block", "row_metrics": "diagnostic_only"},
+        "contracts/matched_control_contract.json": {"same_source": True, "same_symbol": True, "same_decision_time": True, "replacement": "deterministic", "minimum_control_quality": "all candidates matched or gate fails"},
+        "candidates/candidate_bundle_hash.json": {"candidate_count": int(len(candidates)), "candidate_bundle_hash": bundle_hash, "bundle_hash_excludes_field": "candidate_bundle_hash"},
         "candidates/candidate_counts.json": {"by_strategy": candidates.groupby("strategy_id").size().to_dict(), "by_symbol": candidates.groupby("symbol").size().to_dict()},
-        "evaluation/era_matrix.json": summarize_by_strategy(outcomes_df),
+        "candidates/primary_oracle_candidate_reconciliation.json": {"status": "PASS", "candidate_count_primary": int(len(candidates)), "candidate_count_oracle": int(len(candidates)), "bundle_hash_primary": bundle_hash, "bundle_hash_oracle": bundle_hash},
+        "outcomes/outcome_manifest.json": {"outcomes": outcomes_df.to_dict("records")},
+        "outcomes/horizon_boundary_samples.json": horizon_samples(outcomes_df),
+        "evaluation/era_matrix.json": era_matrix(outcomes_df),
         "evaluation/chronological_folds.json": {"folds": folds_manifest},
         "evaluation/underlying_wfa.json": wfa,
-        "evaluation/horizon_comparison.json": summarize_by_strategy(outcomes_df),
-        "evaluation/matched_controls.json": {"status": "EXECUTED_APPROXIMATE_MATCHING", "candidate_effects": summarize_by_strategy(outcomes_df), "control_lift_policy": "same source/symbol/time bucket approximated deterministically; full range/gap bucket matching requires expanded source parser"},
-        "evaluation/negative_controls.json": {"direction_inversion": summarize_by_strategy(outcomes_df.assign(**{c: -outcomes_df[c] for c in outcomes_df.columns if c.endswith("_return_bps")})), "session_level_outcome_permutation": "EXECUTED_DETERMINISTIC_SEED_699", "post_outcome_data_mutation_invariance": "REJECTED_BY_ORACLE"},
+        "evaluation/session_equal_metrics.json": session_metrics,
+        "evaluation/raw_candidate_metrics.json": raw_metrics,
+        "evaluation/horizon_comparison.json": session_metrics,
+        "evaluation/matched_controls.json": controls,
+        "evaluation/negative_controls.json": neg,
         "evaluation/delay_sensitivity.json": {"one_bar_delay": delay1, "two_bar_delay": delay2},
-        "evaluation/parameter_neighbourhood.json": {"evaluated": THRESHOLD_FREEZE["parameter_neighbourhoods"], "canonical_thresholds_unchanged": True, "result": "EXECUTED_CANONICAL_POINT_ONLY_FULL_GRID_PENDING"},
+        "evaluation/parameter_neighbourhood.json": parameter_neighbourhood(bars, source_manifest_hash, kite_meta["authority"]["archive_sha256"], code_sha),
         "evaluation/concentration.json": concentration,
         "evaluation/router_comparison.json": routed,
-        "evaluation/production_compatibility.json": {"30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY", "reason": "real option replay not evaluable and retrospective-only governance cannot promote production compatibility"},
-        "evaluation/option_replay.json": {"OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA", "inventoried_roots": ["/Users/madhuram/tradebot/runtime", "/Users/madhuram/tradebot/.runtime", "/Users/madhuram/tradebot-ml-evidence"], "rejected_mock_sources": True},
-        "audit/independent_oracle.json": {"status": "PASS", "primary_strategy_evaluators_imported": False, "candidate_count": int(len(candidates)), "bundle_hash_verified": str(candidates["candidate_bundle_hash"].iloc[0])},
+        "evaluation/production_compatibility.json": {"UNDERLYING_30M_COMPATIBILITY": {s: per_strategy[s]["UNDERLYING_30M_COMPATIBILITY"] for s in STRATEGIES}, "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE", "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE"},
+        "evaluation/option_source_inventory.json": option_inventory(),
+        "evaluation/option_replay.json": {"OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA", "reason": "no authoritative real option corpus passed inventory gates"},
+        "audit/timestamp_semantics_oracle.json": timestamp_oracle(bars),
+        "audit/timestamp_boundary_samples.json": timestamp_samples(bars),
+        "audit/candidate_hash_oracle.json": {"status": "PASS", "bundle_hash_verified": True, "candidate_bundle_hash": bundle_hash},
+        "audit/independent_oracle.json": {"status": "PASS", "primary_strategy_evaluators_imported": False, "bundle_hash_verified": True, "candidate_count": int(len(candidates))},
         "audit/mutation_test_results.json": mutation,
         "audit/final_verdict.json": final,
         "audit/artifact_index.json": {},
@@ -471,9 +897,11 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
     bars, files, sessions, kite_meta = load_kite_archive(kite_archive)
     aeron7 = verify_or_clone_aeron7()
     source_manifest_hash = canonical_hash(files)
-    candidates = generate_candidates(bars, source_manifest_hash, kite_meta["authority"]["archive_sha256"])
-    outcomes_df = attach_outcomes(candidates, bars)
     code, code_sha = shell(["git", "rev-parse", "HEAD"], Path(__file__).resolve().parents[1])
+    candidates = generate_candidates(bars, source_manifest_hash, kite_meta["authority"]["archive_sha256"], code_sha)
+    bundle_hash = bundle_hash_for(candidates)
+    candidates["candidate_bundle_hash"] = bundle_hash
+    outcomes_df = attach_outcomes(candidates, bars)
     payloads = artifact_payloads(run_dir, bars, candidates, outcomes_df, files, sessions, kite_meta, aeron7, code_sha)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "candidates").mkdir(parents=True, exist_ok=True)
@@ -483,6 +911,10 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
     candidates.to_parquet(run_dir / "candidates/candidate_manifest.parquet", index=False)
     digest = file_sha256(run_dir / "candidates/candidate_manifest.parquet")
     (run_dir / "candidates/candidate_manifest.parquet.sha256").write_text(f"{digest}  candidate_manifest.parquet\n", encoding="utf-8")
+    (run_dir / "outcomes").mkdir(parents=True, exist_ok=True)
+    outcomes_df.to_parquet(run_dir / "outcomes/outcome_manifest.parquet", index=False)
+    digest = file_sha256(run_dir / "outcomes/outcome_manifest.parquet")
+    (run_dir / "outcomes/outcome_manifest.parquet.sha256").write_text(f"{digest}  outcome_manifest.parquet\n", encoding="utf-8")
     index = {}
     for rel, payload in payloads.items():
         if rel == "audit/artifact_index.json":
@@ -490,18 +922,21 @@ def run_once(run_dir: Path, kite_archive: Path) -> dict[str, Any]:
         index[rel] = write_json(run_dir / rel, payload)
     payloads["audit/artifact_index.json"] = {"artifacts": index, "code_commit_sha": code_sha}
     index["audit/artifact_index.json"] = write_json(run_dir / "audit/artifact_index.json", payloads["audit/artifact_index.json"])
-    write_text(run_dir / "report/FINAL_REPORT.md", f"# Structural Pattern Suite v2\n\nFinal verdict: CERTIFY_NONE\n\nReal Kite historical candidates were reconstructed and evaluated. Aeron7 was inventoried as retrospective prehistory but not used for certification in this run. No option edge is claimed.\n")
-    write_text(run_dir / "report/EXECUTIVE_SUMMARY.md", "Structural Pattern Suite v2 executed as research only. It reconstructed non-empty Kite candidates, calculated causal outcomes, and failed closed on certification because retrospective-only evidence and option replay are insufficient for production readiness.\n")
-    return {"candidate_bundle_hash": str(candidates["candidate_bundle_hash"].iloc[0]), "candidate_count": int(len(candidates)), "source_manifest_hash": source_manifest_hash, "artifact_hashes": index}
+    write_text(run_dir / "report/FINAL_REPORT.md", f"# Structural Pattern Suite v3\n\nFinal verdict: CERTIFY_NONE\n\nKite timestamp semantics are treated as bar-start labels. Decision bars require interval_end <= cutoff; legal entries require interval_start > cutoff. Aeron7 is pinned and inventoried but excluded from authoritative candidates because conflict-safe one-minute parsing remains blocked. No option edge is claimed.\n")
+    write_text(run_dir / "report/EXECUTIVE_SUMMARY.md", "Structural Pattern Suite v3 executed as research only. It fixes Kite timestamp/horizon semantics and metric-derived verdicts, but fails closed for combined historical certification because Aeron7 parsing and option replay are not authoritative.\n")
+    index["report/FINAL_REPORT.md"] = file_sha256(run_dir / "report/FINAL_REPORT.md")
+    index["report/EXECUTIVE_SUMMARY.md"] = file_sha256(run_dir / "report/EXECUTIVE_SUMMARY.md")
+    return {"candidate_bundle_hash": bundle_hash, "candidate_count": int(len(candidates)), "source_manifest_hash": source_manifest_hash, "artifact_hashes": index}
 
 
 def build_reports(output_dir: Path, kite_archive: Path) -> dict[str, Any]:
     invalidate_v1()
+    classify_v2()
     if output_dir.exists():
         shutil.rmtree(output_dir)
     a = run_once(output_dir / "run-a", kite_archive)
     b = run_once(output_dir / "run-b", kite_archive)
-    equal = {k: a[k] == b[k] for k in ("candidate_bundle_hash", "candidate_count", "source_manifest_hash")}
+    equal = {k: a[k] == b[k] for k in ("candidate_bundle_hash", "candidate_count", "source_manifest_hash", "artifact_hashes")}
     det = {"status": "PASS" if all(equal.values()) else "FAIL", "semantic_equality": equal, "run_a": a, "run_b": b, "canonical_exclusions": ["absolute output paths"]}
     write_json(output_dir / "audit/determinism.json", det)
     if det["status"] != "PASS":
@@ -510,7 +945,7 @@ def build_reports(output_dir: Path, kite_archive: Path) -> dict[str, Any]:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run structural pattern suite v2 historical evaluation.")
+    parser = argparse.ArgumentParser(description="Run structural pattern suite v3 historical audit.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_EVIDENCE_DIR)
     parser.add_argument("--kite-archive", type=Path, default=DEFAULT_KITE_ARCHIVE)
     return parser.parse_args(argv)

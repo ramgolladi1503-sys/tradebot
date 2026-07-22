@@ -12,20 +12,23 @@ from research.structural_pattern_suite.io import write_json_with_sidecar
 
 
 REQUIRED_MUTATIONS = {
-    "future_bar_leakage",
-    "same_bar_entry",
-    "changed_peer_leader",
-    "altered_previous_high_low",
-    "modified_candidate_side",
+    "future_bar_inserted_into_feature_input",
+    "entry_changed_to_same_decision_bar",
+    "peer_leader_changed",
+    "previous_high_low_changed",
+    "candidate_side_flipped",
     "modified_outcome",
-    "modified_source_row",
-    "modified_bundle_ordering",
+    "accepted_source_row_changed",
+    "canonical_candidate_ordering_changed",
+    "candidate_deleted",
+    "candidate_duplicated",
+    "source_manifest_hash_changed",
 }
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audit structural pattern suite v2 oracle results.")
-    parser.add_argument("--run-dir", type=Path, default=Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v2/run-a"))
+    parser.add_argument("--run-dir", type=Path, default=Path("/Users/madhuram/tradebot-ml-evidence/structural-pattern-suite-v3/run-a"))
     parser.add_argument("--output", type=Path, default=None)
     return parser.parse_args(argv)
 
@@ -41,15 +44,15 @@ def main(argv: list[str]) -> int:
     oracle = json.loads(oracle_path.read_text(encoding="utf-8"))
     observed = set(mutations)
     missing = sorted(REQUIRED_MUTATIONS - observed)
-    not_rejected = sorted(name for name in REQUIRED_MUTATIONS & observed if mutations.get(name) != "REJECTED")
-    status = "PASS" if not missing and not not_rejected and oracle.get("status") == "PASS" else "FAIL"
+    not_detected = sorted(name for name in REQUIRED_MUTATIONS & observed if not mutations.get(name, {}).get("detected"))
+    status = "PASS" if not missing and not not_detected and oracle.get("status") == "PASS" and oracle.get("bundle_hash_verified") is True else "FAIL"
     payload = {
         "schema_version": "2.0",
         "status": status,
         "run_dir": str(args.run_dir),
         "primary_strategy_evaluators_imported": False,
         "missing_mutations": missing,
-        "mutations_not_rejected": not_rejected,
+        "mutations_not_detected": not_detected,
         "mutation_tests": {name: mutations.get(name) for name in sorted(REQUIRED_MUTATIONS)},
         "candidate_count": oracle.get("candidate_count"),
         "bundle_hash_verified": oracle.get("bundle_hash_verified"),
