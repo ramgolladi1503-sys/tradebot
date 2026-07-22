@@ -1,6 +1,6 @@
 name: Mean Reversion Regeneration Run Observer
 
-# Revision 2: refresh the latest push-run identity after workflow validation fixes.
+# Revision 3: publish the latest run identity and a masked failure-log extract.
 on:
   push:
     branches:
@@ -23,15 +23,19 @@ jobs:
           ref: research/postmerge-mean-reversion-rerun-v1
           fetch-depth: 1
 
-      - name: Query latest regeneration run
+      - name: Query latest regeneration run and diagnostics
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/mean-reversion-observer
+          work=/tmp/mean-reversion-observer
+          target=docs/research/mean_reversion_postmerge_regeneration
+          mkdir -p "${work}" "${target}"
+
           gh api \
             "/repos/${GITHUB_REPOSITORY}/actions/workflows/mean_reversion_postmerge_regeneration.yml/runs?branch=research%2Fpostmerge-mean-reversion-rerun-v1&event=push&per_page=10" \
-            > /tmp/mean-reversion-observer/runs.json
+            > "${work}/runs.json"
+
           python - <<'PY'
           import json
           from pathlib import Path
@@ -55,18 +59,72 @@ jobs:
               'html_url': run.get('html_url'),
           }
           target = Path('docs/research/mean_reversion_postmerge_regeneration/workflow_run_status.json')
-          target.parent.mkdir(parents=True, exist_ok=True)
           target.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+          Path('/tmp/mean-reversion-observer/run_id').write_text(str(run.get('id')))
           print(json.dumps(result, indent=2, sort_keys=True))
           PY
 
-      - name: Commit workflow identity
+          run_id="$(cat "${work}/run_id")"
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" > "${work}/jobs.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/mean-reversion-observer/jobs.json').read_text())
+          jobs = payload.get('jobs', [])
+          selected = next((job for job in jobs if job.get('name') == 'regenerate-frozen-evidence'), None)
+          if selected is not None:
+              Path('/tmp/mean-reversion-observer/job_id').write_text(str(selected['id']))
+          PY
+
+          if test -f "${work}/job_id"; then
+            job_id="$(cat "${work}/job_id")"
+            gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs" > "${work}/job_logs.bin" || true
+            python - <<'PY'
+          from __future__ import annotations
+
+          import io
+          import re
+          import zipfile
+          from pathlib import Path
+
+          source = Path('/tmp/mean-reversion-observer/job_logs.bin')
+          target = Path('docs/research/mean_reversion_postmerge_regeneration/workflow_failure_extract.txt')
+          if not source.exists() or source.stat().st_size == 0:
+              target.write_text('No job log bytes were available.\n')
+              raise SystemExit(0)
+
+          payload = source.read_bytes()
+          if payload.startswith(b'PK'):
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  text = '\n'.join(
+                      archive.read(name).decode('utf-8', errors='replace')
+                      for name in archive.namelist()
+                      if not name.endswith('/')
+                  )
+          else:
+              text = payload.decode('utf-8', errors='replace')
+
+          lines = text.splitlines()
+          pattern = re.compile(
+              r'(traceback|error|failed|failure|exception|assertion|runtimeerror|valueerror|keyerror|typeerror|subprocess)',
+              re.IGNORECASE,
+          )
+          matching = [line for line in lines if pattern.search(line)]
+          selected = matching[-160:] + ['--- LOG TAIL ---'] + lines[-260:]
+          # GitHub masks configured secrets before log download. Avoid retaining ANSI noise.
+          cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in selected]
+          target.write_text('\n'.join(cleaned) + '\n', encoding='utf-8')
+          PY
+          fi
+
+      - name: Commit workflow identity and diagnostics
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/research/mean_reversion_postmerge_regeneration/workflow_run_status.json
+          git add docs/research/mean_reversion_postmerge_regeneration/
           if ! git diff --cached --quiet; then
-            git commit -m "research: publish regeneration workflow identity"
+            git commit -m "research: publish regeneration workflow diagnostics"
             git push origin HEAD:research/postmerge-mean-reversion-rerun-v1
           fi
