@@ -1,5 +1,6 @@
 name: Probe PR707 Code Excellence Failure
 
+# Revision 2: start at the actual changed-path command.
 on:
   push:
     branches:
@@ -48,11 +49,10 @@ jobs:
           else:
               text = payload.decode('utf-8', errors='replace')
           lines = text.splitlines()
-          start = 0
+          start = max(0, len(lines) - 240)
           for index, line in enumerate(lines):
-              if 'Collect changed paths' in line or 'CHANGED_FILES=' in line:
+              if 'git fetch origin main --depth=1' in line:
                   start = index
-                  break
           selected = lines[start:]
           cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in selected]
           Path('docs/ops/pr707_code_excellence_failure.txt').write_text(
@@ -66,5 +66,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/ops/pr707_code_excellence_failure.txt
-          git commit -m "ops: publish PR707 code excellence failure"
+          git commit -m "ops: publish narrowed PR707 code excellence failure"
           git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
