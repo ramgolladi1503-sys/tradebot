@@ -24,14 +24,34 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def inspect_file(path: Path) -> dict[str, Any]:
+def load_fetch_manifest(path: Path) -> dict[tuple[str, str, str, str], dict[str, Any]]:
+    rows = json.loads(path.read_text())
+    lookup: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("symbol", "")).upper(),
+            str(row.get("from_date", "")),
+            str(row.get("to_date", "")),
+            str(row.get("stored_file_sha256", "")),
+        )
+        lookup[key] = row
+    return lookup
+
+
+def inspect_file(path: Path, ownership: dict[tuple[str, str, str, str], dict[str, Any]]) -> dict[str, Any]:
     match = FILE_RE.match(path.name)
+    file_hash = sha256(path)
+    filename_symbol = match.group("symbol").upper() if match else None
+    filename_from = match.group("from") if match else None
+    filename_to = match.group("to") if match else None
+    owner = ownership.get((filename_symbol or "", filename_from or "", filename_to or "", file_hash))
     row: dict[str, Any] = {
         "stored_path": str(path),
-        "sha256": sha256(path),
-        "symbol": match.group("symbol").upper() if match else None,
-        "from_date": match.group("from") if match else None,
-        "to_date": match.group("to") if match else None,
+        "sha256": file_hash,
+        "filename_symbol": filename_symbol,
+        "symbol": str(owner.get("symbol", "")).upper() if owner else None,
+        "from_date": str(owner.get("from_date", "")) if owner else filename_from,
+        "to_date": str(owner.get("to_date", "")) if owner else filename_to,
         "response_status": None,
         "candle_count": 0,
         "timestamp_min": None,
@@ -39,10 +59,13 @@ def inspect_file(path: Path) -> dict[str, Any]:
         "instrument_key": None,
         "candle_shape": None,
         "campaign_ownership": "unknown",
+        "ownership_source": "upstox_v3_fetch_manifest" if owner else None,
         "reject_reasons": [],
     }
     if not match:
         row["reject_reasons"].append("filename_not_traceable")
+    if owner is None:
+        row["reject_reasons"].append("missing_authoritative_ownership")
     try:
         with gzip.open(path, "rt") as handle:
             payload = json.load(handle)
@@ -51,7 +74,7 @@ def inspect_file(path: Path) -> dict[str, Any]:
         return row
     row["response_status"] = payload.get("status")
     data = payload.get("data") or {}
-    row["instrument_key"] = payload.get("instrument_key") or data.get("instrument_key")
+    row["instrument_key"] = (owner or {}).get("instrument_key") or payload.get("instrument_key") or data.get("instrument_key")
     candles = data.get("candles")
     if not isinstance(candles, list):
         row["reject_reasons"].append("missing_candles")
@@ -93,16 +116,19 @@ def classify(row: dict[str, Any], start: pd.Timestamp, end: pd.Timestamp) -> boo
     return not reasons
 
 
-def build(raw_dir: Path, output_root: Path, start_date: str, end_date: str) -> dict[str, Any]:
+def build(raw_dir: Path, output_root: Path, start_date: str, end_date: str, fetch_manifest: Path) -> dict[str, Any]:
     manifests = output_root / "manifests"
     manifests.mkdir(parents=True, exist_ok=True)
     start = pd.Timestamp(start_date)
     end = pd.Timestamp(end_date)
-    rows = [inspect_file(path) for path in sorted(raw_dir.glob("*.json.gz"))]
+    ownership = load_fetch_manifest(fetch_manifest)
+    rows = [inspect_file(path, ownership) for path in sorted(raw_dir.glob("*.json.gz"))]
     accepted = [row for row in rows if classify(row, start, end)]
     rejected = [row for row in rows if row["reject_reasons"]]
     summary = {
         "raw_dir": str(raw_dir),
+        "fetch_manifest": str(fetch_manifest),
+        "fetch_manifest_sha256": sha256(fetch_manifest),
         "campaign_root": str(output_root),
         "start_date": start_date,
         "end_date": end_date,
@@ -127,8 +153,9 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--start-date", default="2024-01-01")
     parser.add_argument("--end-date", default="2025-08-29")
+    parser.add_argument("--fetch-manifest", type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(build(args.raw_dir, args.output_root, args.start_date, args.end_date), indent=2, sort_keys=True))
+    print(json.dumps(build(args.raw_dir, args.output_root, args.start_date, args.end_date, args.fetch_manifest), indent=2, sort_keys=True))
     return 0
 
 

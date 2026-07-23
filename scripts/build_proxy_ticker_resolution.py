@@ -12,7 +12,7 @@ import pandas as pd
 
 def load_master(path: Path) -> pd.DataFrame:
     if not path.is_file():
-        return pd.DataFrame()
+        raise FileNotFoundError(f"official instrument master unavailable: {path}")
     if path.suffix == ".gz":
         return pd.read_json(path, compression="gzip")
     if path.suffix == ".json":
@@ -23,6 +23,8 @@ def load_master(path: Path) -> pd.DataFrame:
 def build(accepted_manifest: Path, instrument_master: Path, output_dir: Path) -> dict[str, int]:
     rows = json.loads(accepted_manifest.read_text())
     master = load_master(instrument_master)
+    if master.empty:
+        raise ValueError("official instrument master is empty")
     output_dir.mkdir(parents=True, exist_ok=True)
     records = []
     unresolved = []
@@ -47,9 +49,7 @@ def build(accepted_manifest: Path, instrument_master: Path, output_dir: Path) ->
                 nse_eq = candidates[candidates["segment"].astype(str).eq("NSE_EQ")]
                 if not nse_eq.empty:
                     candidates = nse_eq
-        if master.empty:
-            records.append({"proxy_ticker": symbol, "resolved_trading_symbol": symbol, "instrument_key": row.get("instrument_key") or "", "ISIN": "", "effective_from": row.get("from_date"), "effective_to": row.get("to_date"), "mapping_source": "accepted_raw_manifest", "mapping_reason": "raw file already fetched for symbol; instrument master unavailable", "confidence": "medium"})
-        elif len(candidates) == 1:
+        if len(candidates) == 1:
             c = candidates.iloc[0]
             records.append({"proxy_ticker": symbol, "resolved_trading_symbol": c.get("trading_symbol", c.get("tradingsymbol", symbol)), "instrument_key": c.get("instrument_key", row.get("instrument_key") or ""), "ISIN": c.get("isin", c.get("ISIN", "")), "effective_from": row.get("from_date"), "effective_to": row.get("to_date"), "mapping_source": str(instrument_master), "mapping_reason": "exact trading symbol match", "confidence": "high"})
         elif len(candidates) > 1:
@@ -59,7 +59,17 @@ def build(accepted_manifest: Path, instrument_master: Path, output_dir: Path) ->
     pd.DataFrame(records).drop_duplicates().to_csv(output_dir / "ticker_resolution.csv", index=False)
     pd.DataFrame(unresolved).to_csv(output_dir / "unresolved_tickers.csv", index=False)
     pd.DataFrame(ambiguous).to_csv(output_dir / "ambiguous_tickers.csv", index=False)
-    return {"resolved": len(records), "unresolved": len(unresolved), "ambiguous": len(ambiguous)}
+    resolved_df = pd.DataFrame(records)
+    return {
+        "raw_file_records": len(rows),
+        "resolved_file_records": len(records),
+        "unique_proxy_tickers": int(resolved_df["proxy_ticker"].nunique()) if len(resolved_df) else 0,
+        "unique_resolved_trading_symbols": int(resolved_df["resolved_trading_symbol"].nunique()) if len(resolved_df) else 0,
+        "unique_instrument_keys": int(resolved_df["instrument_key"].nunique()) if len(resolved_df) else 0,
+        "unique_isins": int(resolved_df["ISIN"].replace("", pd.NA).nunique()) if len(resolved_df) else 0,
+        "unresolved_unique_tickers": int(pd.DataFrame(unresolved).get("proxy_ticker", pd.Series(dtype=str)).nunique()) if unresolved else 0,
+        "ambiguous_unique_tickers": int(pd.DataFrame(ambiguous).get("proxy_ticker", pd.Series(dtype=str)).nunique()) if ambiguous else 0,
+    }
 
 
 def main() -> int:

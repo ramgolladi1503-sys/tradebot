@@ -249,8 +249,7 @@ def generate_unweighted_signal_states(
     prior_30m_moves: list[float] = []
     results: list[UnweightedSignalState] = []
 
-    for session in sorted(clean_bars["session"].unique()):
-        day = clean_bars[clean_bars["session"] == session]
+    for session, day in clean_bars.groupby("session", sort=True):
         day_by_symbol = {
             symbol: group.sort_values("timestamp")
             for symbol, group in day.groupby("symbol", sort=False)
