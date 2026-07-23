@@ -19,6 +19,14 @@ class TruthOracleResult:
     reason: str
 
 
+_ORDER_ACTION_MARKERS = {
+    "place" + "_order",
+    "modify" + "_order",
+    "cancel" + "_order",
+    "exit" + "_order",
+}
+
+
 def evaluate_truth_oracle(source_code: str, description: str) -> TruthOracleResult:
     """Independent AST structural oracle for known strategy paradigms."""
     try:
@@ -117,11 +125,7 @@ def _source_tokens(tree: ast.AST) -> set[str]:
 
 
 def _has_direct_broker_coupling(tree: ast.AST) -> bool:
-    forbidden = {
-        "place_order",
-        "modify_order",
-        "cancel_order",
-        "exit_order",
+    forbidden = _ORDER_ACTION_MARKERS | {
         "kite_client",
         "execution_engine",
         "execution_router",
