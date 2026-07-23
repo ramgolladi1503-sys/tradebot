@@ -45,7 +45,9 @@ As a result, the old parser silently persisted missing top-of-book values even w
 ## Agent Work Contract
 
 - Branch: `fix/upstox-v3-depth-capture-v1`
-- Base commit: `db6f384144f3937e96a67bd449f67e5f1b274c65`
+- Current base commit: `2518ed8f03525251b401b2026a97aaab29e66745`
+- Original implementation base: `db6f384144f3937e96a67bd449f67e5f1b274c65`
+- Current-main integration commit: `4b67ef9330d4b7006b95a94983ea725ad7c24b19`
 - Draft PR: `#707`
 - Objective: repair capture and persistence only; do not create or promote a strategy.
 - Allowed files:
@@ -115,14 +117,15 @@ The 50% threshold is a capture-health threshold, not an edge or liquidity thresh
 
 Verdict: PASS
 
-Checked against `main`:
+Checked against current `main` at `2518ed8f03525251b401b2026a97aaab29e66745`:
 
-- only six approved files changed;
-- branch is ahead of and not behind the base used by the repair;
+- the intervening `main` commit changed only Truth-pipeline files and had zero overlap with the six repair files;
+- current `main` was integrated as a real second parent without a force-push;
+- only the six approved repair files differ from current `main`;
 - no strategy, ranking, risk, execution, orchestrator, broker-order, config or dashboard file changed;
 - no historical corpus artifact changed;
 - no credentials or secret values were added;
-- the workflow has read-only repository permissions.
+- the focused workflow has read-only repository permissions.
 
 Blocking issue: no merge until repository CI is green and a human explicitly approves it.
 
@@ -132,7 +135,7 @@ Verdict: PASS_WITH_RUNTIME_GAP
 
 Questions asked:
 
-1. Could the parser still silently treat a REST quote as V3 live depth?
+1. Could the parser silently treat a REST quote as V3 live depth?
    - No. A payload carrying `depth.buy/depth.sell` in the live-feed path raises `UpstoxV3ParseError`.
 2. Could a generic `{price, quantity}` object be assigned to both sides?
    - No. Generic one-sided keys are not accepted as bid or ask authority.
@@ -142,8 +145,10 @@ Questions asked:
    - No. Persistence failures and parsed-versus-written mismatch make finalization invalid.
 5. Could one illiquid contract invalidate an otherwise useful capture?
    - The gate evaluates active F&O instrument coverage and requires at least 50%, while preserving per-instrument counts for stricter downstream filtering.
+6. Could integrating current `main` silently drop either side's changes?
+   - No. The one new `main` commit had no overlap with repair paths, and the combined tree was built from current `main` plus the exact reviewed repair blobs.
 
-Primary residual risk: SDK callback serialization may differ from the documented examples in a real session. Unknown shapes fail closed and require runtime evidence.
+Primary residual risk: SDK callback serialization may differ from documented examples in a real session. Unknown shapes fail closed and require runtime evidence.
 
 ## Hermes Review
 
@@ -155,6 +160,7 @@ Architecture consistency:
 2. The collector owns subscription lifecycle and persistence but delegates message semantics.
 3. Source depth is preserved additively; top-of-book values are derived only from the first explicit two-sided source level.
 4. Session validity is persisted as evidence rather than inferred later from file existence.
+5. The current-main integration preserves the independent Truth-pipeline commit as a separate parent.
 
 Maintainability:
 
@@ -174,6 +180,8 @@ Execution completed:
 4. Added additive nested persistence and quality accounting.
 5. Added a dedicated focused CI workflow.
 6. Opened draft PR #707; no merge performed.
+7. Integrated current `main` after proving zero changed-path overlap.
+8. Updated focused CI to use the current-main base SHA.
 
 Remaining step: obtain repository-wide green CI, then require explicit human merge approval and a separate post-merge market-session canary.
 
@@ -221,14 +229,14 @@ Controls:
 
 ## Acceptance Proof
 
-Focused push workflow:
+Previously completed focused push workflow:
 
 - workflow: `Upstox V3 Depth Capture Contract`
 - run: `29982980435`
 - tested head: `4b5696c34250699fbd7f7f1460d34b0da05121c3`
 - result: all ancestry, strict-scope, dependency, compilation, focused-test and forbidden-surface steps passed.
 
-The final documentation-only head must rerun the same workflow and all PR checks before acceptance.
+The current-main-integrated final head must rerun the same workflow and all PR checks before acceptance.
 
 Expected final result:
 
