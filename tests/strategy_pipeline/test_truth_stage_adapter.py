@@ -218,8 +218,9 @@ def test_truth_stage_mismatch_keeps_verified_diagnostic(monkeypatch, tmp_path):
     result = run_truth_stage(runtime, auditor=auditor)
     assert result.state == PipelineState.BLOCKED
     assert result.verdict == "IMPLEMENTATION_NOT_VERIFIED"
-    assert len(result.artifacts_generated) == 1
     artifact = Path(result.artifacts_generated[0])
+    assert artifact.name == "truth.stage.json"
+    assert artifact.parent == runtime.run_root
     assert result.output_hashes[str(artifact.resolve())] == sha256_file(artifact)
 
 
