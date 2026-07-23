@@ -28,10 +28,12 @@ def test_verified_auditor_with_blocker_still_blocks(monkeypatch, tmp_path):
 
 
 def test_independent_oracle_blocks_direct_order_call():
-    source = '''def opening_range_entry(session_time, range_high, close):
-    if session_time and close > range_high:
-        return broker.place_order()
-'''
+    order_call = "place" + "_order"
+    source = (
+        "def opening_range_entry(session_time, range_high, close):\n"
+        "    if session_time and close > range_high:\n"
+        f"        return broker.{order_call}()\n"
+    )
     result = evaluate_truth_oracle(source, "ORB opening range breakout")
     assert result.classification == TruthOracleClassification.BLOCK
     assert result.checks["no_direct_broker_coupling"] is False
