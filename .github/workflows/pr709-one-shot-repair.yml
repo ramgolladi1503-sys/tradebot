@@ -1,0 +1,72 @@
+name: PR709 One-Shot Certification Repair
+
+on:
+  push:
+    branches:
+      - research/constituent-lead-lag-v1
+    paths:
+      - .github/workflows/pr709-one-shot-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/constituent-lead-lag-v1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused test dependencies
+        run: python -m pip install --upgrade pip pytest pandas numpy pyarrow
+
+      - name: Apply allow-listed repair payload
+        run: python scripts/_apply_pr709_repair_payload.py
+
+      - name: Compile repaired modules
+        run: |
+          python -m compileall -q \
+            research/constituent_lead_lag \
+            scripts/audit_proxy_campaign_bars.py \
+            scripts/audit_reconstructed_proxy_evidence.py \
+            scripts/calculate_proxy_membership_coverage.py \
+            scripts/run_reconstructed_weight_proxy_research.py
+
+      - name: Run complete PR709 focused suite
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest -q \
+            tests/research/test_constituent_data_pipeline.py \
+            tests/research/test_reconstructed_weight_proxy.py \
+            tests/research/test_constituent_lead_lag.py \
+            tests/research/test_unweighted_constituent_breadth.py \
+            tests/research/test_certification_repair.py \
+            tests/research/test_reconstructed_proxy_oracle.py
+
+      - name: Commit repaired source and remove one-shot staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -r scripts/.pr709_payload
+          git rm scripts/_apply_pr709_repair_payload.py
+          git rm .github/workflows/pr709-one-shot-repair.yml
+          git add \
+            research/constituent_lead_lag \
+            scripts/audit_proxy_campaign_bars.py \
+            scripts/audit_reconstructed_proxy_evidence.py \
+            scripts/calculate_proxy_membership_coverage.py \
+            scripts/run_reconstructed_weight_proxy_research.py \
+            tests/research/test_certification_repair.py \
+            tests/research/test_reconstructed_proxy_oracle.py
+          git commit -m "repair PR709 certification contracts"
+          git push origin HEAD:research/constituent-lead-lag-v1
