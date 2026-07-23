@@ -10,6 +10,7 @@ from typing import Any
 class SourceRecord:
     strategy_or_hypothesis_id: str
     source_kind: str
+    source_status: str
     source_path: str
     source_hash: str
     implementation_sha: str
@@ -23,6 +24,7 @@ class SourceRecord:
     paths_searched: tuple[str, ...]
     branches_searched: tuple[str, ...]
     evidence_roots_searched: tuple[str, ...]
+    source_domain: str
 
 
 def current_complete_json_path(repo_root: Path) -> Path:
@@ -66,11 +68,10 @@ def is_historical_authority_candidate(path: Path, repo_root: Path) -> bool:
             obj = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return False
-        return bool(
-            isinstance(obj, list)
-            and obj
-            and any(isinstance(row, dict) and row.get("instrument_key") and row.get("expiry") for row in obj)
-        )
+        if not isinstance(obj, list) or not obj:
+            return False
+        required = {"provider", "capture_or_asof_timestamp", "instrument_key", "trading_symbol", "underlying", "option_right", "strike", "expiry", "source_hash", "valid_at_signal_timestamp"}
+        return any(isinstance(row, dict) and required.issubset(row) for row in obj)
     return False
 
 
@@ -78,6 +79,7 @@ def source_record_payload(record: SourceRecord) -> dict[str, Any]:
     return {
         "strategy_or_hypothesis_id": record.strategy_or_hypothesis_id,
         "source_kind": record.source_kind,
+        "source_status": record.source_status,
         "source_path": record.source_path,
         "source_hash": record.source_hash,
         "implementation_sha": record.implementation_sha,
@@ -91,4 +93,5 @@ def source_record_payload(record: SourceRecord) -> dict[str, Any]:
         "paths_searched": list(record.paths_searched),
         "branches_searched": list(record.branches_searched),
         "evidence_roots_searched": list(record.evidence_roots_searched),
+        "source_domain": record.source_domain,
     }
