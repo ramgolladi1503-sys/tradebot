@@ -54,6 +54,12 @@ def load_sample_bars(archive: Path, session: str, symbol: str) -> pd.DataFrame:
 
 
 def verify(root: Path, archive: Path) -> int:
+    for sidecar in root.rglob("*.sha256"):
+        target = sidecar.with_name(sidecar.name[:-7])
+        if target.is_file():
+            expected = sidecar.read_text().split()[0]
+            if file_sha256(target) != expected:
+                return fail(f"sidecar hash mismatch: {target.relative_to(root)}")
     if file_sha256(archive) != EXPECTED_KITE_HASH:
         return fail("archive hash mismatch")
     source = json.loads((root / "source/source_authority.json").read_text())
@@ -81,6 +87,13 @@ def verify(root: Path, archive: Path) -> int:
             return fail("validation session leaked into discovery fold")
         if not fold["train_end"] < fold["test_start"]:
             return fail("outer fold not chronological")
+    guard = json.loads((root / "folds/validation_access_guard.json").read_text())
+    if guard.get("validation_outcomes_materialized_but_access_blocked_until_freeze") is not True:
+        return fail("validation access guard missing")
+    ledger = pd.read_parquet(root / "discovery/complete_hypothesis_ledger.parquet")
+    required_targets = {"CONTINUATION", "REVERSAL", "ABSOLUTE_EXPANSION", "RAW_LONG", "RAW_SHORT"}
+    if set(ledger["target_family"].unique()) != required_targets:
+        return fail("target family coverage mismatch")
     sample = features.iloc[min(10, len(features) - 1)]
     if pd.Timestamp(sample["entry_timestamp"]) < pd.Timestamp(sample["decision_timestamp"]):
         return fail("entry before decision")

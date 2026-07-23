@@ -141,6 +141,8 @@ def test_campaign_artifacts_truthful_verdict(tmp_path: Path) -> None:
         "features/feature_matrix.parquet",
         "folds/discovery_validation_split.json",
         "folds/inner_selection_decisions.json",
+        "folds/inner_selection_scores.parquet",
+        "folds/validation_access_guard.json",
         "discovery/complete_hypothesis_ledger.parquet",
         "discovery/stable_rule_templates.parquet",
         "discovery/aggregated_template_metrics.parquet",
@@ -163,9 +165,12 @@ def test_campaign_artifacts_truthful_verdict(tmp_path: Path) -> None:
         assert (out / rel).is_file(), rel
         assert (out / f"{rel}.sha256").is_file(), rel
     verdict = json.loads((out / "audit/final_verdict.json").read_text())
-    assert verdict["v3_broad_no_edge_invalidated"] is True
+    assert verdict["v4_final_no_edge_invalidated"] is True
     ledger = pd.read_parquet(out / "discovery/complete_hypothesis_ledger.parquet")
     assert set(ledger["target_family"]) == set(TARGET_FAMILIES)
     assert {"quantile", "tree", "sparse", "cluster"}.issubset(set(ledger["lane"]))
     aggregated = pd.read_parquet(out / "discovery/aggregated_template_metrics.parquet")
     assert "rule_template_id" in aggregated.columns
+    negative = json.loads((out / "evaluation/negative_controls.json").read_text())
+    if result["pre_control_survivors"] == 0:
+        assert negative["status"] == "NOT_APPLICABLE_NO_PRECONTROL_SURVIVORS"

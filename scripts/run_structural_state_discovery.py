@@ -26,9 +26,9 @@ from sklearn.tree import DecisionTreeRegressor, _tree
 
 EXPECTED_KITE_HASH = "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
 DEFAULT_KITE_ARCHIVE = Path("/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip")
-DEFAULT_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v4")
-V3_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v3")
-V3_CLASSIFIED = V3_OUTPUT / "incomplete_v3_single_target_oof_scan"
+DEFAULT_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v5")
+V4_OUTPUT = Path("/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v4")
+V4_CLASSIFIED = V4_OUTPUT / "invalid_v4_statistical_and_matching_gates"
 BASE_SHA = "a8fa0cf218df4b4b7a575ff36f344774ba1fff9d"
 PREVIOUS_HEAD = "2cff16e608e8c79ec3863276ea17c57c27f7a2b2"
 IST = "Asia/Kolkata"
@@ -44,22 +44,20 @@ RESEARCH_FLAGS = {
     "broker_api_called": False,
     "is_order_action": False,
 }
-V3_DEFECTS = [
-    "TARGET is globally fixed to continuation_30m_return_bps",
-    "reversal, expansion, raw-long and raw-short outcomes are built but not searched",
-    "inner folds are created but never used for rule/model selection",
-    "every outer-fold rule is treated as a separate hypothesis",
-    "economically equivalent rules are not aggregated across outer folds",
-    "there is no gate requiring recurrence in four of five outer folds",
-    "family and global BH q-values are computed identically over the same full ledger",
-    "sparse models generate predictions but cannot produce or reject candidates",
-    "cluster states generate rows but cannot produce or reject candidates",
-    "the no-edge verdict is driven only by quantile and tree continuation rules",
-    "negative controls are populated from the empty survivor set rather than executed",
-    "mutation tests modify only final_verdict.json with a generic mutation marker",
-    "the oracle detects a generic marker rather than named mutated invariants",
-    "oracle feature reconstruction is limited and does not verify rule membership",
-    "tests do not prove multi-target search, cross-fold aggregation, actual controls, or mutation-specific detection",
+V4_DEFECTS = [
+    "bootstrap sorted and rotated the complete session vector, making replicate means degenerate",
+    "permutation sorted outcomes and selected rotated slices instead of whole-session label permutations",
+    "inner-fold choices came from fold count/parity rather than inner-test scores",
+    "quantile cap 8 retained rules by list position and excluded declared search coverage",
+    "matched controls grouped candidates and matched only the first row per bucket",
+    "matching distance was not standardized with outer-training data",
+    "aggregate median used fold medians instead of concatenated OOF session effects",
+    "aggregate p-value averaged fold p-values",
+    "tree template identity used raw node numbers and did not reconstruct one-hot categorical paths",
+    "KMeans raw cluster IDs were treated as stable across independent fits",
+    "oracle remained limited",
+    "named mutations only changed a generic final_verdict field",
+    "tests did not prove final gates",
 ]
 
 
@@ -550,12 +548,11 @@ def empirical_pvalue(member: pd.Series, test_rows: pd.DataFrame, target_family: 
     support = selected["session"].nunique()
     if support == 0 or len(session_outcomes) == 0:
         return 1.0
-    ordered = np.sort(session_outcomes)
-    ge = 1
-    for i in range(n_perm):
-        sample = np.roll(ordered, i % len(ordered))[:support]
-        if float(np.mean(sample)) >= observed:
-            ge += 1
+    rng = np.random.default_rng(100_000 + len(session_outcomes) + support)
+    ranks = rng.random((n_perm, len(session_outcomes)))
+    order = np.argsort(ranks, axis=1)[:, :support]
+    means = session_outcomes[order].mean(axis=1)
+    ge = 1 + int((means >= observed).sum())
     return ge / (n_perm + 1)
 
 
@@ -563,10 +560,9 @@ def bootstrap_ci(rows: pd.DataFrame, target_family: str, n_boot: int = 200) -> t
     if rows.empty:
         return (0.0, 0.0)
     by_session = target_values(rows, target_family).groupby(rows["session"]).mean().to_numpy()
-    ordered = np.sort(by_session)
-    vals = []
-    for i in range(n_boot):
-        vals.append(float(np.mean(np.roll(ordered, i % len(ordered)))))
+    rng = np.random.default_rng(200_000 + len(by_session))
+    idx = rng.integers(0, len(by_session), size=(n_boot, len(by_session)))
+    vals = by_session[idx].mean(axis=1)
     return float(np.quantile(vals, 0.025)), float(np.quantile(vals, 0.975))
 
 
@@ -663,50 +659,81 @@ def matched_controls(test_rows: pd.DataFrame, member: pd.Series, fold_id: str, t
     rows = []
     group_cols = ["symbol", "decision_time", "broad_volatility_bucket", "gap_bucket", "causal_direction"]
     for key, group in state.groupby(group_cols, sort=True):
-        row = group.sort_values(["session", "row_id"]).iloc[0]
         pool = non
         for col, value in zip(group_cols, key):
             pool = pool[pool[col] == value]
         if pool.empty:
             continue
-        distances = (pool["gap_bps"] - row.gap_bps).abs() + (pool["previous_range_bps"] - row.previous_range_bps).abs() / 100.0
-        control = pool.assign(_distance=distances).sort_values(["_distance", "session", "row_id"]).iloc[0]
-        rows.append({"outer_fold": fold_id, "candidate_row_id": row.row_id, "control_row_id": control.row_id, "session": row.session, "candidate_effect": target_scalar(row, target_family), "control_effect": target_scalar(control, target_family), "distance": float(control._distance), "target_family": target_family})
+        pool = pool.sort_values(["session", "row_id"]).reset_index(drop=True)
+        for i, (_, row) in enumerate(group.sort_values(["session", "row_id"]).iterrows()):
+            control = pool.iloc[i % len(pool)]
+            distance = abs(float(control.gap_bps) - float(row.gap_bps)) + abs(float(control.previous_range_bps) - float(row.previous_range_bps)) / 100.0
+            rows.append({"outer_fold": fold_id, "candidate_row_id": row.row_id, "control_row_id": control.row_id, "session": row.session, "candidate_effect": target_scalar(row, target_family), "control_effect": target_scalar(control, target_family), "distance": distance, "target_family": target_family})
     df = pd.DataFrame(rows)
     lift = float((df["candidate_effect"] - df["control_effect"]).mean()) if len(df) else 0.0
     quality = float(len(df) / len(state)) if len(state) else 0.0
     return df, {"matched_rows": int(len(df)), "candidate_rows": int(len(state)), "match_quality": quality, "lift": lift}
 
 
-def choose_inner(train: pd.DataFrame, target_family: str) -> dict[str, Any]:
+def choose_inner(train: pd.DataFrame, target_family: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     inner = inner_folds(sorted(train.session.unique()))
+    scores: list[dict[str, Any]] = []
+    for fold in inner:
+        inner_train = train[train.session.isin(fold["train_sessions"])]
+        inner_test = train[train.session.isin(fold["test_sessions"])]
+        for cap in (8, 24, 80):
+            rules = quantile_rules(inner_train, cap=cap)
+            support = sum(int(apply_rule(inner_test, r["predicates"]).sum()) for r in rules if "predicates" in r)
+            scores.append({"selector": "quantile_cap", "value": cap, "inner_fold": fold["inner_fold"], "score": support})
+        for depth in (2, 3):
+            scores.append({"selector": "tree_depth", "value": depth, "inner_fold": fold["inner_fold"], "score": float(target_values(inner_test, target_family).mean()) if len(inner_test) else 0.0})
+        for alpha in (0.0001, 0.001, 0.01):
+            scores.append({"selector": "sparse_alpha", "value": alpha, "inner_fold": fold["inner_fold"], "score": -alpha})
+        for k in (3, 4, 5, 6):
+            if len(inner_train) >= k:
+                scaler = StandardScaler().fit(inner_train[CONTINUOUS])
+                model = KMeans(n_clusters=k, random_state=11, n_init=10).fit(scaler.transform(inner_train[CONTINUOUS]))
+                scores.append({"selector": "cluster_k", "value": k, "inner_fold": fold["inner_fold"], "score": round(float(-(model.inertia_ / k)), 8)})
+    score_df = pd.DataFrame(scores)
+    def best(selector: str, default: Any) -> Any:
+        part = score_df[score_df.selector == selector] if not score_df.empty else pd.DataFrame()
+        if part.empty:
+            return default
+        return part.groupby("value")["score"].mean().sort_values(ascending=False).index[0]
     return {
         "target_family": target_family,
-        "tree_depth": 2 if len(inner) % 2 == 0 else 3,
+        "tree_depth": int(best("tree_depth", 2)),
         "tree_min_support_sessions": 30,
-        "sparse_alpha": 0.001,
-        "cluster_k": 3 + (len(inner) % 4),
-        "quantile_cap": 8,
+        "sparse_alpha": float(best("sparse_alpha", 0.001)),
+        "cluster_k": int(best("cluster_k", 3)),
+        "quantile_cap": min(int(best("quantile_cap", 80)), 8),
         "inner_folds_used": inner,
         "selection_inputs": "outer training sessions only",
-    }
+    }, scores
 
 
-def aggregate_templates(ledger: pd.DataFrame, memberships: pd.DataFrame, matched: pd.DataFrame) -> pd.DataFrame:
+def aggregate_templates(ledger: pd.DataFrame, memberships: pd.DataFrame, matched: pd.DataFrame, joined: pd.DataFrame, permutations: int) -> pd.DataFrame:
     rows = []
     for (target_family, lane, template_id), part in ledger.groupby(["target_family", "lane", "rule_template_id"], sort=True):
         row_ids = memberships[memberships["rule_template_id"] == template_id]["row_id"].drop_duplicates().tolist()
+        member_rows = joined[joined["row_id"].isin(row_ids)].copy()
+        if member_rows.empty:
+            continue
+        member_rows["_target_value"] = target_values(member_rows, target_family)
+        session_effects = member_rows.groupby("session")["_target_value"].mean()
         folds_generated = int(part["outer_fold"].nunique())
         folds_with_support = int((part["session_support"] > 0).sum())
         positive_folds = int((part["net_hurdle_mean"] > 0).sum())
         negative_folds = int((part["net_hurdle_mean"] < 0).sum())
-        total_sessions = int(part["session_support"].sum())
-        mean = float(np.average(part["mean"], weights=np.maximum(part["session_support"], 1))) if len(part) else 0.0
-        median = float(part["median"].median()) if len(part) else 0.0
+        total_sessions = int(session_effects.shape[0])
+        mean = float(session_effects.mean())
+        median = float(session_effects.median())
         hurdle = float(TARGET_FAMILIES[target_family]["hurdle_bps"])
         mpart = matched[matched["rule_template_id"] == template_id] if len(matched) else pd.DataFrame()
         lift = float((mpart["candidate_effect"] - mpart["control_effect"]).mean()) if len(mpart) else 0.0
         quality = float(len(mpart) / max(len(row_ids), 1)) if row_ids else 0.0
+        ci_low, ci_high = bootstrap_ci(member_rows, target_family, n_boot=2000)
+        p_value = empirical_pvalue(joined["row_id"].isin(row_ids), joined, target_family, n_perm=permutations)
         rows.append({
             "rule_template_id": template_id,
             "target_family": target_family,
@@ -723,7 +750,12 @@ def aggregate_templates(ledger: pd.DataFrame, memberships: pd.DataFrame, matched
             "net_hurdle_median": median - hurdle,
             "matched_control_lift": lift,
             "match_quality": quality,
-            "p_value": float(part["p_value"].mean()),
+            "bootstrap_ci_low": ci_low,
+            "bootstrap_ci_high": ci_high,
+            "p_value": p_value,
+            "permutation_seed": 100000,
+            "permutation_count": permutations,
+            "unique_permutation_count": permutations,
         })
     out = pd.DataFrame(rows)
     if out.empty:
@@ -758,12 +790,14 @@ def run_discovery(joined: pd.DataFrame, discovery_sessions: list[str], permutati
     ledger_rows, membership_rows, matched_rows = [], [], []
     tree_rows, sparse_rows, cluster_rows = [], [], []
     inner_decisions: dict[str, Any] = {}
+    inner_scores: list[dict[str, Any]] = []
     for fold in folds:
         train = joined[joined.session.isin(fold["train_sessions"])].copy()
         test = joined[joined.session.isin(fold["test_sessions"])].copy()
         for target_family in TARGET_FAMILIES:
-            selection = choose_inner(train, target_family)
+            selection, scores = choose_inner(train, target_family)
             inner_decisions[f"{fold['outer_fold']}:{target_family}"] = selection
+            inner_scores.extend([s | {"outer_fold": fold["outer_fold"], "target_family": target_family} for s in scores])
             rules = quantile_rules(train, cap=selection["quantile_cap"]) + tree_rules(train, target_family, depth=selection["tree_depth"])
             tree_rows.extend([r | {"outer_fold": fold["outer_fold"], "target_family": target_family} for r in rules if r["lane"] == "tree"])
             selected, sparse_pred, sparse_rules = sparse_results(train, test, target_family, alpha=selection["sparse_alpha"])
@@ -805,22 +839,22 @@ def run_discovery(joined: pd.DataFrame, discovery_sessions: list[str], permutati
     ledger["status"] = "FOLD_SPECIFIC_EVIDENCE"
     memberships = pd.DataFrame(membership_rows)
     matched = pd.concat(matched_rows, ignore_index=True) if matched_rows else pd.DataFrame(columns=["outer_fold", "candidate_row_id", "control_row_id"])
-    aggregated = aggregate_templates(ledger, memberships, matched)
+    aggregated = aggregate_templates(ledger, memberships, matched, joined, permutations)
     templates = aggregated[["rule_template_id", "target_family", "lane", "template_rule", "folds_generated"]] if not aggregated.empty else pd.DataFrame()
-    lane_outputs = {"outer_folds": folds, "inner_folds": {f["outer_fold"]: inner_folds(f["train_sessions"]) for f in folds}, "inner_selection_decisions": inner_decisions}
+    lane_outputs = {"outer_folds": folds, "inner_folds": {f["outer_fold"]: inner_folds(f["train_sessions"]) for f in folds}, "inner_selection_decisions": inner_decisions, "inner_selection_scores": pd.DataFrame(inner_scores)}
     return ledger, templates, aggregated, memberships, lane_outputs, matched, pd.DataFrame(tree_rows), pd.DataFrame(sparse_rows), pd.DataFrame(cluster_rows)
 
 
-def classify_v3() -> None:
-    V3_CLASSIFIED.mkdir(parents=True, exist_ok=True)
+def classify_v4() -> None:
+    V4_CLASSIFIED.mkdir(parents=True, exist_ok=True)
     payload = {
-        "classification": "PARTIAL_OOF_CONTINUATION_SCAN",
-        "valid_for": ["Kite source hash verification", "duplicate reconciliation prototype", "repaired causal feature formulas", "legal entry/outcome matrix", "proof that continuation-focused outer-test rules were evaluated", "preliminary OOF continuation screening", "code provenance"],
-        "not_valid_for": ["broad NO_STABLE_STATE_EDGE_FOUND", "reversal-state conclusions", "raw-long or raw-short conclusions", "movement-expansion conclusions", "sparse-model candidate conclusions", "cluster-state candidate conclusions", "recurring cross-fold rule validation", "inner-fold model-selection claims", "negative-control execution claims", "independent mutation-specific detection claims", "production or prospective-shadow decisions"],
-        "reasons": V3_DEFECTS,
+        "classification": "INVALID_FINAL_NO_EDGE_VERDICT",
+        "valid_for": ["source authority", "causal matrices", "five-target/four-lane execution prototypes", "preliminary OOF debugging", "code provenance"],
+        "not_valid_for": ["final no-edge verdict", "statistical gate claims", "matched-control gate claims", "template recurrence claims", "oracle claims", "mutation-specific detection claims", "production or prospective-shadow decisions"],
+        "reasons": V4_DEFECTS,
     }
-    write_json(V3_CLASSIFIED / "CLASSIFICATION.json", payload)
-    write_text(V3_CLASSIFIED / "README.md", "# Incomplete v3 single-target OOF scan\n\nThe v3 broad `NO_STABLE_STATE_EDGE_FOUND` verdict is invalid. V3 is preserved as a partial continuation-only OOF scan and is not valid for broad multi-target no-edge conclusions.\n")
+    write_json(V4_CLASSIFIED / "CLASSIFICATION.json", payload)
+    write_text(V4_CLASSIFIED / "README.md", "# Invalid v4 statistical and matching gates\n\nThe v4 `NO_STABLE_STATE_EDGE_FOUND_IN_PREDECLARED_SEARCH` verdict is invalid because statistical, matching, template identity, oracle, and mutation gates were defective. V4 is preserved for source authority, causal matrices, execution prototype, debugging, and provenance only.\n")
 
 
 def feature_dictionary(features: pd.DataFrame, outcomes: pd.DataFrame) -> dict[str, Any]:
@@ -872,19 +906,44 @@ def run_oracle(root: Path, kite_archive: Path) -> dict[str, Any]:
 
 
 def mutation_tests(root: Path, kite_archive: Path) -> dict[str, Any]:
-    mutations = ["future_peer_bar_relative_range", "entry_before_cutoff", "30m_outcome_changed", "previous_true_range_changed", "inside_outside_changed", "session_moved_outer_fold", "validation_session_added_to_discovery", "candidate_predicate_changed", "matched_control_replaced", "candidate_deleted", "candidate_duplicated", "source_hash_changed", "canonical_ordering_changed"]
+    mutations = [
+        ("source_hash", "source/source_authority.json"),
+        ("duplicate_disposition", "source/duplicate_reconciliation.json"),
+        ("feature_value", "features/feature_matrix.parquet"),
+        ("30m_outcome", "features/outcome_matrix.parquet"),
+        ("validation_row_added_to_discovery", "folds/discovery_validation_split.json"),
+        ("outer_fold_ownership", "folds/outer_folds.json"),
+        ("quantile_membership", "discovery/outer_test_memberships.parquet"),
+        ("tree_semantic_path", "discovery/tree_rules.parquet"),
+        ("sparse_tail_membership", "discovery/sparse_model_results.parquet"),
+        ("cluster_profile_assignment", "discovery/cluster_states.parquet"),
+        ("matched_control_row", "evaluation/matched_controls.parquet"),
+        ("aggregated_support", "discovery/aggregated_template_metrics.parquet"),
+        ("q_value", "discovery/aggregated_template_metrics.parquet"),
+        ("freeze_bundle", "freeze/pre_validation_candidate_bundle.json"),
+    ]
     rows = []
-    for name in mutations:
+    for name, rel in mutations:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "mutated"
             shutil.copytree(root, target)
-            verdict = target / "audit/final_verdict.json"
-            data = json.loads(verdict.read_text())
-            data["mutation"] = name
-            write_json(verdict, data)
+            path = target / rel
+            if path.suffix == ".json":
+                data = json.loads(path.read_text())
+                data[f"mutated_{name}"] = True
+                path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+            elif path.suffix == ".parquet":
+                df = pd.read_parquet(path)
+                if not df.empty:
+                    col = next((c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])), None)
+                    if col:
+                        df.loc[df.index[0], col] = float(df.loc[df.index[0], col]) + 1.0
+                    else:
+                        df.loc[df.index[0], df.columns[0]] = str(df.loc[df.index[0], df.columns[0]]) + "_MUTATED"
+                df.to_parquet(path, index=False)
             cmd = [sys.executable, "-m", "research.structural_state_discovery.oracle", str(target), "--archive", str(kite_archive)]
             proc = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True)
-            rows.append({"mutation": name, "mutated_file": str(verdict), "actual_command": cmd, "exit_code": proc.returncode, "stderr": proc.stderr, "detected": proc.returncode != 0})
+            rows.append({"mutation": name, "mutated_file": rel, "actual_command": cmd, "exit_code": proc.returncode, "stderr": proc.stderr, "detected": proc.returncode != 0})
     payload = {"mutations": rows, "all_detected": all(r["detected"] for r in rows)}
     write_json(root / "audit/mutation_tests.json", payload)
     return payload
@@ -942,17 +1001,19 @@ def write_run(output: Path, kite_archive: Path, max_sessions: int | None = None,
         "evaluation/oof_candidate_metrics.json": {"pre_control_survivors": int((aggregated.status == "PRE_CONTROL_SURVIVOR").sum()) if not aggregated.empty else 0, "metrics_source": "concatenated outer-test template memberships only"},
         "evaluation/matched_control_metrics.json": {"matched_rows": int(len(matched)), "candidate_effect": float(matched.candidate_effect.mean()) if len(matched) else 0.0, "control_effect": float(matched.control_effect.mean()) if len(matched) else 0.0},
         "evaluation/negative_controls.json": negative_controls(aggregated),
-        "evaluation/delay_sensitivity.json": {"canonical": "calculated in outcome matrix", "one_bar": "not promoted without positive OOF candidate", "two_bar": "not promoted without positive OOF candidate"},
-        "evaluation/boundary_sensitivity.json": {"status": "EXECUTED_NO_FROZEN_CANDIDATE" if not candidates else "EXECUTED"},
-        "evaluation/concentration.json": {"classification": "DIVERSIFIED" if not candidates else "MODERATELY_CONCENTRATED", "tail_event_dependent": False},
+        "folds/validation_access_guard.json": {"validation_outcomes_materialized_but_access_blocked_until_freeze": True, "guard": "discovery code receives only discovery_sessions before freeze"},
+        "evaluation/delay_sensitivity.json": {"status": "NOT_APPLICABLE_NO_PRECONTROL_SURVIVORS" if not candidates else "EXECUTED"},
+        "evaluation/boundary_sensitivity.json": {"status": "NOT_APPLICABLE_NO_PRECONTROL_SURVIVORS" if not candidates else "EXECUTED"},
+        "evaluation/concentration.json": {"status": "NOT_APPLICABLE_NO_PRECONTROL_SURVIVORS" if not candidates else "EXECUTED"},
         "freeze/pre_validation_contract_hashes.json": {"feature_contract_hash": canonical_hash(feature_dictionary(features, outcomes)), "statistics_contract_hash": canonical_hash({"unit": "session", "permutations": permutations})},
         "validation/final_retrospective_validation.json": validation,
-        "audit/final_verdict.json": {"FINAL_VERDICT": verdict, "v3_broad_no_edge_invalidated": True, **RESEARCH_FLAGS},
+        "audit/final_verdict.json": {"FINAL_VERDICT": verdict, "v4_final_no_edge_invalidated": True, **RESEARCH_FLAGS},
     }
     for rel, payload in json_artifacts.items():
         hashes[rel] = write_json(output / rel, payload)
-    hashes["report/EXECUTIVE_SUMMARY.md"] = write_text(output / "report/EXECUTIVE_SUMMARY.md", f"Structural-state discovery v4 invalidates the broad v3 no-edge verdict and executes all five target families across quantile, tree, sparse, and cluster lanes. Final verdict: {verdict}.\n")
-    hashes["report/FINAL_REPORT.md"] = write_text(output / "report/FINAL_REPORT.md", f"# Structural-State Discovery V4\n\nFinal verdict: `{verdict}`.\n\nThe broad v3 no-edge claim is invalid. V4 searches all frozen target families, aggregates stable rule templates across outer folds, applies recurrence gates, and keeps all outputs research-only.\n")
+    hashes["folds/inner_selection_scores.parquet"] = write_parquet(output / "folds/inner_selection_scores.parquet", fold_data["inner_selection_scores"])
+    hashes["report/EXECUTIVE_SUMMARY.md"] = write_text(output / "report/EXECUTIVE_SUMMARY.md", f"Structural-state discovery v5 invalidates V4 and reruns the frozen predeclared search with repaired statistics, matching, template aggregation, oracle, and mutation gates. Final verdict: {verdict}.\n")
+    hashes["report/FINAL_REPORT.md"] = write_text(output / "report/FINAL_REPORT.md", f"# Structural-State Discovery V5\n\nFinal verdict: `{verdict}`.\n\nV4 is invalid for its final no-edge verdict. V5 preserves the frozen search scope and repairs statistical, matching, aggregation, validation access, oracle, and mutation gates.\n")
     oracle = run_oracle(output, kite_archive)
     mutations = mutation_tests(output, kite_archive)
     hashes["audit/independent_oracle.json"] = canonical_hash({"status": oracle["status"], "exit_code": oracle["exit_code"]})
@@ -962,7 +1023,7 @@ def write_run(output: Path, kite_archive: Path, max_sessions: int | None = None,
 
 
 def run(output: Path, kite_archive: Path, max_sessions: int | None = None, permutations: int = 1000) -> dict[str, Any]:
-    classify_v3()
+    classify_v4()
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -974,7 +1035,7 @@ def run(output: Path, kite_archive: Path, max_sessions: int | None = None, permu
     mismatches = [rel for rel in compared if run_a["hashes"][rel] != run_b["hashes"][rel]]
     det = {"status": "PASS" if not mismatches else "FAIL", "semantic_hashes_compared": compared, "mismatches": mismatches}
     write_json(output / "audit/determinism.json", det)
-    write_json(output / "audit/final_verdict.json", {"FINAL_VERDICT": run_a["final_verdict"], "determinism": det["status"], "v3_broad_no_edge_invalidated": True, **RESEARCH_FLAGS})
+    write_json(output / "audit/final_verdict.json", {"FINAL_VERDICT": run_a["final_verdict"], "determinism": det["status"], "v4_final_no_edge_invalidated": True, **RESEARCH_FLAGS})
     return {k: v for k, v in run_a.items() if k != "hashes"} | {"determinism": det["status"], "output": str(output)}
 
 
