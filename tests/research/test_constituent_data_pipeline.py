@@ -80,3 +80,56 @@ def test_stored_file_checksum():
             
             # Verify file exists
             assert (Path(td) / "SYM_2026-01-01_2026-01-31.json.gz.sha256").exists()
+
+import pandas as pd
+from scripts.fetch_nse_index_weight_snapshots import (
+    validate_provenance,
+    validate_weight_sum,
+    check_duplicate_keys,
+    derive_intervals,
+    classify_coverage
+)
+
+def test_reject_arbitrary_csv_without_provenance():
+    with pytest.raises(ValueError, match="Reject arbitrary CSV without provenance"):
+        validate_provenance("path.csv", {"source": "UNKNOWN"})
+
+def test_reject_top_10_holdings():
+    with pytest.raises(ValueError, match="Reject top-10 holdings"):
+        validate_provenance("path.csv", {"source": "NSE", "is_top_10": True})
+
+def test_reject_current_snapshot_backfilled():
+    with pytest.raises(ValueError, match="Reject current snapshot backfilled historically"):
+        validate_provenance("path.csv", {"source": "NSE", "is_current_backfilled": True})
+
+def test_reject_weight_sum_out_of_bounds():
+    df_low = pd.DataFrame({"weight": [0.5, 0.4]})
+    with pytest.raises(ValueError, match="Reject weight sum below 0.98"):
+        validate_weight_sum(df_low)
+        
+    df_high = pd.DataFrame({"weight": [0.5, 0.6]})
+    with pytest.raises(ValueError, match="Reject weight sum above 1.02"):
+        validate_weight_sum(df_high)
+
+def test_reject_duplicate_snapshot_keys():
+    df = pd.DataFrame({
+        "index_symbol": ["NIFTY", "NIFTY"],
+        "constituent_symbol": ["RELIANCE", "RELIANCE"],
+        "effective_from": ["2026-01-01", "2026-01-01"]
+    })
+    with pytest.raises(ValueError, match="Reject duplicate snapshot keys"):
+        check_duplicate_keys(df)
+
+def test_accept_complete_official_fixture():
+    assert validate_provenance("path.csv", {"source": "NSE_INDICES"}) == True
+    df_valid = pd.DataFrame({"weight": [0.5, 0.5]})
+    assert validate_weight_sum(df_valid) == True
+
+def test_derive_non_overlapping_intervals():
+    df = pd.DataFrame({"dummy": [1]})
+    df_out = derive_intervals(df)
+    assert not df_out.empty
+
+def test_classify_coverage():
+    assert classify_coverage(50) == "PAID_NSE_INDEX_DATA_REQUIRED"
+    assert classify_coverage(150) == "PUBLIC_OFFICIAL_WEIGHT_HISTORY_AVAILABLE"
