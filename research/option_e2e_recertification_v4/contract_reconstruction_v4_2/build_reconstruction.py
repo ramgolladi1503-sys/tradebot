@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,31 @@ ROOTS = (
     "tradebot-data",
     "tradebot-ml-evidence",
 )
+
+IDENTITY_COLUMNS = {
+    "instrument_key",
+    "instrument_token",
+    "trading_symbol",
+    "underlying_symbol",
+    "underlying",
+    "option_right",
+    "option_type",
+    "strike",
+    "strike_price",
+    "expiry",
+    "timestamp",
+    "ts",
+    "exchange_timestamp",
+    "bid",
+    "ask",
+    "ltp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "best_bid",
+    "best_ask",
+}
 
 
 @dataclass(frozen=True)
@@ -73,6 +99,7 @@ class ReconstructionRecord:
 def build_reconstruction(repo_root: Path) -> tuple[list[ReconstructionRecord], dict[str, Any]]:
     records: list[ReconstructionRecord] = []
     seen: set[str] = set()
+    mapping_index = _load_mapping_index(repo_root)
     for root in _roots(repo_root):
         if not root.exists():
             continue
@@ -84,10 +111,10 @@ def build_reconstruction(repo_root: Path) -> tuple[list[ReconstructionRecord], d
                 continue
             seen.add(resolved)
             try:
-                df = _read_table(path)
+                payload = _read_evidence(path)
             except Exception:
-                df = pd.DataFrame()
-            rec = _classify_file(repo_root, path, df)
+                payload = {"df": pd.DataFrame(), "manifest": {}}
+            rec = _classify_file(repo_root, path, payload["df"], payload["manifest"], mapping_index)
             records.append(rec)
     summary = _summarize(records)
     return records, summary
@@ -111,7 +138,7 @@ def write_artifacts(records: list[ReconstructionRecord], summary: dict[str, Any]
         path.with_suffix(path.suffix + ".sha256").write_text(f"{digest}  {name}\n", encoding="utf-8")
 
 
-def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame) -> ReconstructionRecord:
+def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame, manifest_obj: dict[str, Any], mapping_index: dict[str, dict[str, str]]) -> ReconstructionRecord:
     try:
         logical_path = str(path.resolve().relative_to(repo_root.resolve()))
     except Exception:
@@ -120,19 +147,20 @@ def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame) -> Reconstruct
     lower_cols = {str(c).lower() for c in df.columns}
     has_ts = bool({"timestamp", "ts", "exchange_timestamp"} & lower_cols)
     has_quote_values = bool({"bid", "ask", "ltp", "open", "high", "low", "close", "best_bid", "best_ask"} & lower_cols)
-    row_identity = has_ts and has_quote_values
-    token_only_identity = has_ts and bool({"instrument_token", "instrument_key"} & lower_cols) and not has_quote_values
-    filename_identity = any(token in path.name.lower() for token in ("nifty", "option", "quote", "depth"))
-    manifest_identity = any(token in path.name.lower() for token in ("manifest", "summary", "proof"))
+    row_identity = has_ts and has_quote_values and _row_has_explicit_contract_fields(df)
+    token_only_identity = has_ts and bool({"instrument_token", "instrument_key"} & lower_cols) and not has_quote_values and not _row_has_explicit_contract_fields(df)
+    filename_identity = _filename_contract_evidence(path.name)
+    manifest_identity = bool(manifest_obj.get("manifest_contract_identity") or manifest_obj.get("dataset_hash") or manifest_obj.get("source_manifest"))
     current_master_enrichment = "complete.json" in path.as_posix() and "upstox_instruments" in path.as_posix()
-    historical_token_mapping_identity = False
+    historical_mapping = _lookup_historical_mapping(df, mapping_index)
+    historical_token_mapping_identity = historical_mapping is not None
     blockers: list[str] = []
-    observed_existence_status = "UNREADABLE"
-    identity_authority_status = "UNREADABLE"
-    universe_completeness_status = "UNREADABLE"
-    lot_size_status = "UNREADABLE"
-    tick_size_status = "UNREADABLE"
-    cost_authority_status = "UNREADABLE"
+    observed_existence_status = "INSUFFICIENT_IDENTITY"
+    identity_authority_status = "INSUFFICIENT_IDENTITY"
+    universe_completeness_status = "INSUFFICIENT_IDENTITY"
+    lot_size_status = "INSUFFICIENT_IDENTITY"
+    tick_size_status = "INSUFFICIENT_IDENTITY"
+    cost_authority_status = "INSUFFICIENT_IDENTITY"
     if current_master_enrichment:
         observed_existence_status = "CURRENT_MASTER_DIAGNOSTIC_ONLY"
         identity_authority_status = "CURRENT_MASTER_DIAGNOSTIC_ONLY"
@@ -141,6 +169,13 @@ def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame) -> Reconstruct
         tick_size_status = "CURRENT_MASTER_DIAGNOSTIC_ONLY"
         cost_authority_status = "CURRENT_MASTER_DIAGNOSTIC_ONLY"
         blockers.append("CURRENT_MASTER_NOT_HISTORICAL_AUTHORITY")
+    elif row_identity and historical_token_mapping_identity:
+        observed_existence_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
+        identity_authority_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
+        universe_completeness_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
+        lot_size_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
+        tick_size_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
+        cost_authority_status = "HISTORICAL_TOKEN_MAPPED_CONTRACT_AUTHORITY"
     elif row_identity and filename_identity:
         observed_existence_status = "SELF_DESCRIBING_QUOTE_AUTHORITY"
         identity_authority_status = "INSUFFICIENT_IDENTITY"
@@ -167,10 +202,19 @@ def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame) -> Reconstruct
         blockers.append("INSUFFICIENT_IDENTITY")
     else:
         blockers.append("INSUFFICIENT_IDENTITY")
-    observed = RowEvidence(row_identity, "", "", "", "", "", "bid" in lower_cols and "ask" in lower_cols, "")
-    filename = FilenameEvidence(filename_identity, "", "", "", "")
-    manifest = ManifestEvidence(manifest_identity, "", "", "")
-    mapping = TokenMappingEvidence(historical_token_mapping_identity, "", "", "", current_master_enrichment, "current_master_fields")
+    observed = RowEvidence(
+        row_identity,
+        str(_first_value(df, "instrument_token", "instrument_key")),
+        str(_first_value(df, "underlying_symbol", "underlying", "symbol")),
+        str(_first_value(df, "option_right", "option_type")),
+        str(_first_value(df, "strike", "strike_price")),
+        str(_first_value(df, "expiry")),
+        "bid" in lower_cols and "ask" in lower_cols,
+        str(_first_value(df, "timestamp", "ts", "exchange_timestamp")),
+    )
+    filename = FilenameEvidence(filename_identity, *_filename_contract_fields(path.name))
+    manifest = ManifestEvidence(manifest_identity, str(manifest_obj.get("capture_ts", "")), str(manifest_obj.get("manifest_contract_identity", "")), str(manifest_obj.get("manifest_hash", "")))
+    mapping = TokenMappingEvidence(historical_token_mapping_identity, str(historical_mapping["source"]) if historical_mapping else "", str(historical_mapping["asof_ts"]) if historical_mapping else "", str(historical_mapping["mapping_hash"]) if historical_mapping else "", current_master_enrichment, "current_master_fields" if current_master_enrichment else "")
     universe = ObservedUniverseResult(observed_existence_status, identity_authority_status, universe_completeness_status, lot_size_status, tick_size_status, cost_authority_status, tuple(blockers))
     return ReconstructionRecord(
         logical_path=logical_path,
@@ -185,8 +229,8 @@ def _classify_file(repo_root: Path, path: Path, df: pd.DataFrame) -> Reconstruct
         current_master_enrichment=mapping.current_master_match,
         observed_symbol="",
         observed_token="",
-        observed_underlying="NIFTY" if row_identity else "",
-        observed_option_right="CE" if row_identity else "",
+        observed_underlying="" if current_master_enrichment else str(_first_value(df, "underlying_symbol", "underlying", "symbol")).upper(),
+        observed_option_right="" if current_master_enrichment else str(_first_value(df, "option_right", "option_type")).upper(),
         observed_strike="",
         observed_expiry="",
         observed_bid_ask=observed.observed_bid_ask,
@@ -254,6 +298,91 @@ def _component_counts(records: list[ReconstructionRecord]) -> dict[str, int]:
 
 def _roots(repo_root: Path) -> tuple[Path, ...]:
     return tuple([repo_root.resolve()] + [(repo_root / root).resolve() if not root.startswith("/") else Path(root) for root in ROOTS])
+
+
+def _read_evidence(path: Path) -> dict[str, Any]:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return {"df": pd.read_csv(path), "manifest": {}}
+    if suffix == ".parquet":
+        return {"df": pd.read_parquet(path), "manifest": {}}
+    if suffix == ".json":
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(obj, list):
+            return {"df": pd.DataFrame(obj), "manifest": {}}
+        if isinstance(obj, dict):
+            if isinstance(obj.get("files"), list):
+                return {"df": pd.DataFrame(obj["files"]), "manifest": obj.get("summary", obj)}
+            if isinstance(obj.get("records"), list):
+                return {"df": pd.DataFrame(obj["records"]), "manifest": obj.get("summary", obj)}
+            if isinstance(obj.get("rows"), list):
+                return {"df": pd.DataFrame(obj["rows"]), "manifest": obj}
+            return {"df": pd.DataFrame([obj]), "manifest": obj}
+    return {"df": pd.DataFrame(), "manifest": {}}
+
+
+def _row_has_explicit_contract_fields(df: pd.DataFrame) -> bool:
+    lower_cols = {str(c).lower() for c in df.columns}
+    return {"underlying_symbol", "option_right", "strike", "expiry"}.issubset(lower_cols)
+
+
+def _filename_contract_evidence(name: str) -> bool:
+    folded = name.lower()
+    return bool(re.search(r"(nifty|banknifty|sensex).*(ce|pe)", folded) or re.search(r"(ce|pe).*(nifty|banknifty|sensex)", folded))
+
+
+def _filename_contract_fields(name: str) -> tuple[str, str, str, str]:
+    folded = name.lower()
+    underlying = "NIFTY" if "nifty" in folded else "BANKNIFTY" if "banknifty" in folded else "SENSEX" if "sensex" in folded else ""
+    option_right = "CE" if "ce" in folded else "PE" if "pe" in folded else ""
+    return underlying, option_right, "", ""
+
+
+def _load_mapping_index(repo_root: Path) -> dict[str, dict[str, str]]:
+    mapping_path = repo_root / "runtime" / "upstox_instruments" / "complete.json"
+    if not mapping_path.exists():
+        return {}
+    try:
+        payload = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    rows = payload if isinstance(payload, list) else payload.get("records", [])
+    index: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        underlying = str(row.get("underlying_symbol") or row.get("asset_symbol") or row.get("name") or "").upper()
+        option_right = str(row.get("instrument_type") or "").upper()
+        if underlying != "NIFTY" or option_right not in {"CE", "PE"}:
+            continue
+        item = {
+            "source": "runtime/upstox_instruments/complete.json",
+            "asof_ts": str(row.get("updated_at") or row.get("asof_ts") or ""),
+            "mapping_hash": str(row.get("sha256") or row.get("hash") or ""),
+        }
+        for key in (row.get("instrument_key"), row.get("instrument_token"), row.get("exchange_token"), row.get("trading_symbol")):
+            if key:
+                index[str(key)] = item
+    return index
+
+
+def _lookup_historical_mapping(df: pd.DataFrame, mapping_index: dict[str, dict[str, str]]) -> dict[str, str] | None:
+    for column in ("instrument_key", "instrument_token", "trading_symbol"):
+        if column not in df.columns:
+            continue
+        for value in df[column].dropna().astype(str):
+            if value in mapping_index:
+                return mapping_index[value]
+    return None
+
+
+def _first_value(df: pd.DataFrame, *columns: str) -> Any:
+    for column in columns:
+        if column in df.columns:
+            values = df[column].dropna()
+            if not values.empty:
+                return values.iloc[0]
+    return ""
 
 
 def _read_table(path: Path) -> pd.DataFrame:

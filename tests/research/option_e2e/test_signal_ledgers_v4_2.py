@@ -6,7 +6,7 @@ from research.option_e2e_recertification_v4.signal_ledgers_v4_2.build_signal_led
 
 
 def test_signal_ledger_marks_all_strategies_and_hypotheses_blocked() -> None:
-    records, summary = build_signal_ledgers(Path("/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/research/option_e2e_recertification_v4/inventory_v4_1/historical_strategy_inventory_v4_1.json"))
+    records, summary = build_signal_ledgers(Path("research/option_e2e_recertification_v4/inventory_v4_1/historical_strategy_inventory_v4_1.json"))
 
     assert summary["status_counts"]["SIGNAL_INPUT_DATA_MISSING"] == len(records)
     assert summary["hypothesis_count"] == len(HISTORICAL_RESEARCH_HYPOTHESES)
