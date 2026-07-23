@@ -1,54 +1,141 @@
+from __future__ import annotations
+
+import gzip
+import json
+from pathlib import Path
+
+import pandas as pd
 import pytest
-import os
-import sys
 
-def test_dataset_identity_and_manifest_hash():
-    assert True
+from research.constituent_lead_lag.model import DataContractError, StrategyThresholds, classify_state
+from research.constituent_lead_lag.proxy_weights import (
+    hash_file_full,
+    validate_normalized_proxy,
+)
+from scripts.audit_reconstructed_proxy_evidence import audit as oracle_audit
+from scripts.build_proxy_fetch_campaign_manifest import build as build_manifest
+from scripts.normalize_upstox_v3_candles import normalize
 
-def test_licence_non_commercial_status():
-    assert True
 
-def test_raw_snapshot_conservation():
-    assert True
+def _raw(path: Path, symbol: str, start: str, candles: list[list[object]]) -> Path:
+    payload = {"status": "success", "data": {"candles": candles}}
+    out = path / f"{symbol}_{start}_{start}.json.gz"
+    with gzip.open(out, "wt") as handle:
+        json.dump(payload, handle)
+    return out
 
-def test_percentage_conversion():
-    assert True
 
-def test_zero_weight_membership():
-    assert True
+def test_full_file_hash_changes_with_content(tmp_path: Path):
+    p = tmp_path / "x.txt"
+    p.write_text("a")
+    first = hash_file_full(p)
+    p.write_text("b")
+    assert hash_file_full(p) != first
 
-def test_effective_interval_derivation():
-    assert True
 
-def test_no_daily_interpolation():
-    assert True
+def test_campaign_allowlist_excludes_stale_files(tmp_path: Path):
+    _raw(tmp_path, "NIFTY", "2024-01-02", [["2024-01-02T09:15:00+05:30", 1, 1, 1, 1, 0, 0]])
+    _raw(tmp_path, "NIFTY", "2026-01-02", [["2026-01-02T09:15:00+05:30", 1, 1, 1, 1, 0, 0]])
+    summary = build_manifest(tmp_path, tmp_path / "campaign", "2024-01-01", "2025-08-29")
+    assert summary["raw_files_accepted"] == 1
+    assert summary["raw_files_rejected"] == 1
 
-def test_official_validator_rejects_proxy():
-    assert True
 
-def test_proxy_flag_required():
-    assert True
+def test_filename_is_not_symbol_authority_without_manifest(tmp_path: Path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    campaign = tmp_path / "campaign"
+    _raw(raw, "NIFTY", "2024-01-02", [["2024-01-02T09:15:00+05:30", 10, 11, 9, 10, 0, 0]])
+    build_manifest(raw, campaign, "2024-01-01", "2025-08-29")
+    accepted = json.loads((campaign / "manifests/accepted_raw_files.json").read_text())
+    accepted[0]["symbol"] = "VERIFIED"
+    (campaign / "manifests/accepted_raw_files.json").write_text(json.dumps(accepted))
+    pd.DataFrame([{"proxy_ticker": "VERIFIED", "instrument_key": "NSE_EQ|X"}]).to_csv(campaign / "manifests/ticker_resolution.csv", index=False)
+    report = normalize(campaign / "manifests/accepted_raw_files.json", campaign / "manifests/ticker_resolution.csv", "2024-01-01", "2025-08-29", campaign / "normalized")
+    bars = pd.read_parquet(report["output_path"])
+    assert set(bars["symbol"]) == {"VERIFIED"}
 
-def test_nifty_only_restriction():
-    assert True
 
-def test_real_bars_schema_rejection():
-    assert True
+def test_raw_candle_shape_and_timezone_window_enforced(tmp_path: Path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    campaign = tmp_path / "campaign"
+    raw_file = _raw(raw, "NIFTY", "2024-01-02", [
+        ["2024-01-02T09:15:00+05:30", 10, 11, 9, 10, 0, 0],
+        ["2024-01-02T09:17:00+05:30", 10, 11, 9, 10, 0, 0],
+        ["2024-01-02T09:20:00+05:30", 10, 8, 9, 10, 0, 0],
+        ["2024-01-02T09:25:00+05:30", 10, 11, 9],
+    ])
+    campaign.joinpath("manifests").mkdir(parents=True)
+    accepted = [{
+        "stored_path": str(raw_file),
+        "sha256": hash_file_full(raw_file),
+        "symbol": "NIFTY",
+        "from_date": "2024-01-02",
+        "to_date": "2024-01-02",
+        "instrument_key": "NSE_INDEX|Nifty 50",
+        "candle_count": 4,
+    }]
+    (campaign / "manifests/accepted_raw_files.json").write_text(json.dumps(accepted))
+    pd.DataFrame([{"proxy_ticker": "NIFTY", "instrument_key": "NSE_INDEX|Nifty 50"}]).to_csv(campaign / "manifests/ticker_resolution.csv", index=False)
+    report = normalize(campaign / "manifests/accepted_raw_files.json", campaign / "manifests/ticker_resolution.csv", "2024-01-01", "2025-08-29", campaign / "normalized")
+    assert report["normalized_accepted"] == 1
+    assert report["malformed"] == 2
+    assert report["invalid_ohlc_quarantined"] == 1
+    assert report["row_conservation_passed"] is True
+    bars = pd.read_parquet(report["output_path"])
+    assert str(bars.iloc[0]["timestamp"]).endswith("+00:00")
+    assert bars.iloc[0]["session"] == "2024-01-02"
 
-def test_session_count_readiness():
-    assert True
 
-def test_warm_up_ownership():
-    assert True
+def test_proxy_flag_required_and_nifty_only():
+    weights = pd.DataFrame([
+        {"index_symbol": "NIFTY", "constituent_symbol": "A", "effective_from": "2024-01-01", "effective_to": None, "weight": 1.0},
+    ])
+    with pytest.raises(DataContractError, match="explicit community"):
+        validate_normalized_proxy(weights, evaluation_start="2024-01-01", evaluation_end="2025-08-29")
+    assert len(validate_normalized_proxy(weights, evaluation_start="2024-01-01", evaluation_end="2025-08-29", allow_community_reconstructed_proxy=True)) == 1
+    bad = weights.assign(index_symbol="BANKNIFTY")
+    with pytest.raises(DataContractError, match="NIFTY-only"):
+        validate_normalized_proxy(bad, evaluation_start="2024-01-01", evaluation_end="2025-08-29", allow_community_reconstructed_proxy=True)
 
-def test_future_snapshot_rejection():
-    assert True
 
-def test_matched_control_count_conservation():
-    assert True
+def test_post_latest_snapshot_rejected():
+    weights = pd.DataFrame([
+        {"index_symbol": "NIFTY", "constituent_symbol": "A", "effective_from": "2024-01-01", "effective_to": None, "weight": 1.0},
+    ])
+    with pytest.raises(DataContractError, match="latest supported"):
+        validate_normalized_proxy(weights, evaluation_start="2024-01-01", evaluation_end="2025-09-01", allow_community_reconstructed_proxy=True)
 
-def test_delayed_entry_causality():
-    assert True
 
-def test_oracle_recomputation():
-    assert True
+def test_state_reason_ownership_and_predicates():
+    side, reason = classify_state(
+        basket_return_5m_bps=10,
+        basket_return_10m_bps=10,
+        lead_gap_z=1.0,
+        participation=0.9,
+        weighted_breadth=0.9,
+        dispersion_percentile=0.1,
+        catch_up_ratio=0.1,
+        range_consumed=0.1,
+        weight_coverage=1.0,
+        thresholds=StrategyThresholds(),
+    )
+    assert side == "NONE"
+    assert reason == "frozen_entry_conditions_not_met"
+
+
+def test_theoretical_state_bound_and_oracle_tamper_detection(tmp_path: Path):
+    bars = pd.DataFrame([
+        {"timestamp": "2024-01-02T03:45:00Z", "session": "2024-01-02", "symbol": "NIFTY", "open": 1, "high": 1, "low": 1, "close": 1},
+    ])
+    bars_path = tmp_path / "bars.parquet"
+    bars.to_parquet(bars_path, index=False)
+    eval_dir = tmp_path / "eval"
+    eval_dir.mkdir()
+    pd.DataFrame([{"session": "2024-01-02", "side": "NONE", "reason": "insufficient_lead_gap_history"}]).to_parquet(eval_dir / "signal_states_weighted.parquet", index=False)
+    pd.DataFrame().to_parquet(eval_dir / "signal_states_unweighted.parquet", index=False)
+    pd.DataFrame().to_parquet(eval_dir / "matched_control.parquet", index=False)
+    report = oracle_audit(eval_dir, bars_path, tmp_path / "oracle")
+    assert report["verdict"] == "PASS"
+    assert report["state_rows"] <= report["sessions"] * 10

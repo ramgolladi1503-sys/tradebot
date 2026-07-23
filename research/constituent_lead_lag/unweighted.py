@@ -251,7 +251,11 @@ def generate_unweighted_signal_states(
 
     for session in sorted(clean_bars["session"].unique()):
         day = clean_bars[clean_bars["session"] == session]
-        index_day = day[day["symbol"] == index_symbol].sort_values("timestamp")
+        day_by_symbol = {
+            symbol: group.sort_values("timestamp")
+            for symbol, group in day.groupby("symbol", sort=False)
+        }
+        index_day = day_by_symbol.get(index_symbol, pd.DataFrame())
         if index_day.empty:
             continue
         snapshot = select_universe_snapshot(clean_universe, index_symbol, session)
@@ -272,10 +276,10 @@ def generate_unweighted_signal_states(
 
             component_returns: list[tuple[float, float]] = []
             for symbol in expected_symbols:
-                component = day[
-                    (day["symbol"] == symbol)
-                    & (day["timestamp"] <= cutoff_local)
-                ].sort_values("timestamp")
+                component = day_by_symbol.get(symbol)
+                if component is None:
+                    continue
+                component = component[component["timestamp"] <= cutoff_local]
                 if len(component) < 3:
                     continue
                 close = component["close"].to_numpy(dtype=float)

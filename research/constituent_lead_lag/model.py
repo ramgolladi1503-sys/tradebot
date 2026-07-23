@@ -264,7 +264,11 @@ def generate_signal_states(
 
     for session in sorted(clean_bars["session"].unique()):
         day = clean_bars[clean_bars["session"] == session]
-        index_day = day[day["symbol"] == index_symbol].sort_values("timestamp")
+        day_by_symbol = {
+            symbol: group.sort_values("timestamp")
+            for symbol, group in day.groupby("symbol", sort=False)
+        }
+        index_day = day_by_symbol.get(index_symbol, pd.DataFrame())
         if index_day.empty:
             continue
         snapshot = select_weight_snapshot(clean_weights, index_symbol, session)
@@ -281,7 +285,9 @@ def generate_signal_states(
 
             component_returns: list[tuple[float, float, float]] = []
             for row in snapshot.itertuples(index=False):
-                component = day[day["symbol"] == row.constituent_symbol].sort_values("timestamp")
+                component = day_by_symbol.get(row.constituent_symbol)
+                if component is None:
+                    continue
                 component = component[component["timestamp"] <= cutoff_local]
                 if len(component) < 3:
                     continue
