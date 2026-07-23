@@ -1,0 +1,17 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "stage": "B_PATTERN_STABILITY_AUDIT",
+  "development_only": true,
+  "horizons_minutes": [5, 15, 30, 60],
+  "primary_horizons_minutes": [15, 30],
+  "minimum_events": 40,
+  "minimum_sessions": 30,
+  "minimum_calendar_periods": 3,
+  "minimum_events_per_calendar_period": 12,
+  "sign_flip_permutations": 2000,
+  "false_discovery_rate": 0.05,
+  "random_seed": 20260723,
+  "candidate_dimensions": ["overall", "symbol", "symbol_side", "symbol_time", "symbol_magnitude", "symbol_volatility"],
+  "entry_modes": ["raw", "confirmed"],
+  "result_boundary": "diagnostic rejection audit only; no strategy or edge claim"
+}
