@@ -237,11 +237,15 @@ def test_statistics_does_not_discover_latest_file(tmp_path):
 
 
 def test_bare_zero_exit_without_manifest_is_blocked(tmp_path):
-    script = tmp_path / "scripts" / "run_research_registry.py"
+    script = tmp_path / "scripts" / "run_strategy_pipeline_research.py"
     script.parent.mkdir(parents=True)
     script.write_text("print('done')\n", encoding="utf-8")
     engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
-    context = PipelineContext(run_id="run12345", force_refresh=True)
+    context = PipelineContext(
+        run_id="run12345",
+        force_refresh=True,
+        engine_args={"RESEARCH": ["--governed-run-dir", str(tmp_path / "governed")]},
+    )
     PipelineValidator().validate_pre_run("s1", context)
 
     completed = type("Completed", (), {"returncode": 0, "stdout": "done", "stderr": ""})()
@@ -252,13 +256,19 @@ def test_bare_zero_exit_without_manifest_is_blocked(tmp_path):
     assert result.verdict == "RESULT_MANIFEST_MISSING"
 
 
-def test_registry_missing_adapter_is_blocked(tmp_path):
+def test_registry_requires_exact_arguments(tmp_path):
     engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
     context = PipelineContext(run_id="run12345", force_refresh=True)
     PipelineValidator().validate_pre_run("s1", context)
-    result = engine._run_engine(EngineType.REGISTRY, "s1", context)
+    result = engine._build_command(
+        EngineType.REGISTRY,
+        "s1",
+        context,
+        "scripts/run_strategy_pipeline_registry.py",
+    )
+    assert isinstance(result, EngineResult)
     assert result.state == PipelineState.BLOCKED
-    assert result.verdict == "ENGINE_ADAPTER_MISSING"
+    assert result.verdict == "ENGINE_ARGUMENTS_MISSING"
 
 
 def test_invalid_mock_success_is_converted_to_failure(tmp_path):
