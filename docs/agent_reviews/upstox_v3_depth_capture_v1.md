@@ -6,6 +6,7 @@
 - candidate_id: upstox-v3-depth-capture-v1
 - decision: REPAIR_AND_FAIL_CLOSED
 - reason: The historical collector requested V3 full mode but parsed a REST-style depth shape, producing unusable empty depth evidence.
+- timestamp: 2026-07-23T06:05:32Z
 - is_order_action: false
 - broker_api_called: false
 - live_order_action: false
@@ -182,6 +183,7 @@ Execution completed:
 6. Opened draft PR #707; no merge performed.
 7. Integrated current `main` after proving zero changed-path overlap.
 8. Updated focused CI to use the current-main base SHA.
+9. Replaced static length-only checks with exact destructuring and behavioral proof for Code Excellence review.
 
 Remaining step: obtain repository-wide green CI, then require explicit human merge approval and a separate post-merge market-session canary.
 
@@ -243,6 +245,7 @@ Expected final result:
 ```text
 Upstox V3 Depth Capture Contract: success
 Agent Review Evidence Gate: success
+Code Excellence Gates: success
 repository PR checks: success
 ```
 
