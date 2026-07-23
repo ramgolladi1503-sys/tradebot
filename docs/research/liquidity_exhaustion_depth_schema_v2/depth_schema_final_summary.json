@@ -1,0 +1,23 @@
+{
+  "all_files_have_one_dominant_signature": true,
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_SCHEMA_V2",
+  "classification": "NESTED_DEPTH_SCHEMA_PROBED_NO_NORMALIZATION_CLAIM",
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "dominant_signature_file_counts": {
+    "map{asks:seq[],bids:seq[]}": 129
+  },
+  "edge_claim_allowed": false,
+  "execution_allowed": false,
+  "normalizer_created": false,
+  "path_file_coverage": {
+    "$.asks|sequence": 129,
+    "$.bids|sequence": 129,
+    "$|mapping": 129
+  },
+  "price_like_key_file_counts": {},
+  "producer_commit": "f6664e9bd9115fe2f52af4457db002c81cdb8ff4",
+  "quote_depth_files": 129,
+  "size_like_key_file_counts": {},
+  "strategy_created": false,
+  "two_run_semantic_determinism": true
+}

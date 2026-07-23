@@ -1,0 +1,7 @@
+{
+  "classification": "TWO_RUN_SEMANTIC_DETERMINISM_PASSED",
+  "files": {
+    "depth_schema_file_results.json": "5d58208e31b7d0984931d47bf210dd64ea8e039bd789a019775b69d1856ad1b0",
+    "depth_schema_summary.json": "57bc0af8c8dc873a8d2edd26aa8264b4e9a173b74851d3b43dd153f6381afcb3"
+  }
+}

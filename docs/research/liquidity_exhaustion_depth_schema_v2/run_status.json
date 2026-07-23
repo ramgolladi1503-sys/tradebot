@@ -1,0 +1,8 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_SCHEMA_V2",
+  "classification": "NESTED_DEPTH_SCHEMA_PROBED_NO_NORMALIZATION_CLAIM",
+  "execution_allowed": false,
+  "producer_commit": "f6664e9bd9115fe2f52af4457db002c81cdb8ff4",
+  "status": "COMPLETE",
+  "two_run_semantic_determinism": true
+}
