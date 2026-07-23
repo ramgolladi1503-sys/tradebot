@@ -2,6 +2,25 @@ from __future__ import annotations
 
 
 def reconcile_decision_counts(counts: dict[str, int]) -> None:
+    required = (
+        "signals",
+        "direction_rejected",
+        "data_blocked",
+        "contracts_unresolved",
+        "liquidity_rejected",
+        "entry_no_fill",
+        "replay_attempted",
+        "exit_no_fill",
+        "ambiguous",
+        "evaluated_trades",
+    )
+    missing = [key for key in required if key not in counts]
+    if missing:
+        raise ValueError("missing_reconciliation_count_keys")
+    for key in required:
+        value = counts[key]
+        if not isinstance(value, int) or value < 0:
+            raise ValueError("invalid_reconciliation_count")
     signals = int(counts.get("signals", 0))
     parts = sum(
         int(counts.get(key, 0))

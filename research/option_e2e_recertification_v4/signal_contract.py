@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from enum import Enum
+import math
+import pandas as pd
 from typing import Any
 
 
@@ -45,8 +47,17 @@ class CanonicalSignal:
         )
         if any(not str(value).strip() for value in required):
             raise ValueError("missing_signal_field")
-        if not (self.feature_cutoff_ts < self.signal_ts < self.earliest_entry_ts):
+        feature_cutoff = pd.Timestamp(self.feature_cutoff_ts)
+        signal = pd.Timestamp(self.signal_ts)
+        earliest_entry = pd.Timestamp(self.earliest_entry_ts)
+        if not (feature_cutoff < signal < earliest_entry):
             raise ValueError("signal_timing_not_strictly_causal")
+        if signal.tzinfo is None:
+            raise ValueError("signal_timestamp_must_be_timezone_aware")
+        if signal.tz_convert("Asia/Kolkata").date().isoformat() != self.session:
+            raise ValueError("signal_session_date_mismatch")
+        if not math.isfinite(float(self.signal_strength)):
+            raise ValueError("non_finite_signal_strength")
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)

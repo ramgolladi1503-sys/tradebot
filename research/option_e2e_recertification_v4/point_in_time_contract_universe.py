@@ -29,12 +29,17 @@ class OptionContractMetadata:
             raise ValueError("unsupported_underlying")
         if self.strike <= 0 or self.tick_size <= 0 or self.lot_size <= 0:
             raise ValueError("invalid_contract_terms")
+        if not self.dataset_hash or not self.metadata_hash:
+            raise ValueError("missing_contract_hash")
         if not self.point_in_time_source:
             raise ValueError("missing_point_in_time_source")
+        if self.expiry not in self.listed_until:
+            raise ValueError("expiry_metadata_mismatch")
         if self.listed_from > decision_ts or self.listed_until <= decision_ts:
             raise ValueError("contract_not_listed_at_decision_ts")
 
 
 def reject_current_master_as_historical_authority(source_kind: str) -> None:
-    if source_kind == "current_instrument_master":
+    normalized = " ".join(str(source_kind).strip().lower().replace("-", "_").split())
+    if normalized in {"current_instrument_master", "current instrument master"}:
         raise ValueError("current_instrument_master_cannot_certify_expired_contract")

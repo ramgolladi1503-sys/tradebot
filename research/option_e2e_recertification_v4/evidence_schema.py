@@ -41,6 +41,26 @@ STAGE_FAILURES = {
     "G15": "G15_EVIDENCE_AUDIT_FAILED",
 }
 
+PASS_REASON_CODES = {
+    "SOURCE_AUTHORITY_FROZEN",
+    "CAUSAL_SIGNAL_VERIFIED",
+    "DIRECTION_MAPPING_VERIFIED",
+    "POINT_IN_TIME_UNIVERSE_VERIFIED",
+    "EXPIRY_RESOLVED",
+    "STRIKE_RESOLVED",
+    "ENTRY_QUOTE_VALID",
+    "GEOMETRY_VALID",
+    "OPTION_REPLAY_VALID",
+    "ECONOMICS_VALID",
+    "RECONCILIATION_VALID",
+    "CONTROLS_COMPLETE",
+    "WFA_COMPLETE",
+    "SELECTION_FROZEN",
+    "HOLDOUT_OPENED_ONCE",
+    "EVIDENCE_AUDIT_PASSED",
+    "FINAL_VERDICT_PUBLISHED",
+}
+
 
 def canonical_json_bytes(payload: Any) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
@@ -106,6 +126,13 @@ class GateRecord:
             raise ValueError("invalid_gate_id")
         if not self.input_manifest_hash or not self.output_artifact_hash:
             raise ValueError("missing_gate_hash")
+        if self.status == GateStatus.PASS:
+            if self.reason_code in STAGE_FAILURES.values() or self.reason_code not in PASS_REASON_CODES:
+                raise ValueError("invalid_pass_reason_code")
+        if self.status == GateStatus.FAIL:
+            expected = STAGE_FAILURES.get(self.gate_id)
+            if self.reason_code != expected:
+                raise ValueError("invalid_fail_reason_code")
         if expected_upstream_hash is not None and self.upstream_output_hash != expected_upstream_hash:
             raise ValueError("upstream_hash_mismatch")
 

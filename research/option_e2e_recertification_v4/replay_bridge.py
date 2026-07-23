@@ -22,10 +22,14 @@ class ExecutableQuote:
             raise ValueError("missing_bid_ask")
         if self.ask < self.bid:
             raise ValueError("crossed_quote")
+        if self.quote_age_seconds < 0:
+            raise ValueError("negative_quote_age")
         if self.quote_age_seconds > max_quote_age_seconds:
             raise ValueError("stale_quote_rejected")
         if (self.ask_qty or 0) <= 0:
             raise ValueError("entry_liquidity_rejected")
+        if (self.bid_qty or 0) <= 0:
+            raise ValueError("exit_side_liquidity_unproven")
 
     def long_entry_fill(self) -> float:
         if self.ask is None:
