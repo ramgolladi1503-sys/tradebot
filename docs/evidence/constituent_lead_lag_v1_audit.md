@@ -1,177 +1,152 @@
-# Constituent Lead-Lag V1 Proxy Campaign Audit
+# Constituent Lead–Lag V1 Certification Repair Audit
 
-## Scope
+## Current status
 
-This audit covers the final research-only reconstructed NIFTY constituent lead-lag proxy campaign repair after head `8ffdc6c5e46366caf4defd70ce4374e9fc8de748`.
+The source-level certification defects identified after commit
+`64294990e4ecda3fa3d345e388faa78f890c5eaf` were repaired in commit
+`08da792fd7a5fd50fd6dfc6589f26caf429c6322`.
 
-- Worktree: `/Users/madhuram/tradebot-constituent-lead-lag-v1`
-- Branch: `research/constituent-lead-lag-v1`
-- Campaign root: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2`
-- Index: `NIFTY`
-- Provider: `Upstox V3`
-- Window: `2024-01-01` through `2025-08-29`
+The earlier v2 certification claim is **not retained**. Classify it as:
 
-This remains research-only: `allowed_for_live_execution=false`, `broker_api_called=false`, `is_order_action=false`, `commercial_use_allowed=false`, and `official_weight_gate_passed=false`.
+`INVALID_INCOMPLETE_CERTIFICATION_CONTRACT`
 
-## Head 8ffdc6c5 Invalidation
+The current evidence gate remains:
 
-The prior `NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT` verdict at `8ffdc6c5` is invalidated as:
+`PROXY_EVALUATION_FAILED_DATA_CONTRACT`
 
-`INVALID_INCOMPLETE_PROXY_CONTRACT`
+until a new v3 campaign is rebuilt from the preserved local Upstox and proxy
+inputs and the repaired independent oracle returns `PASS`.
 
-External invalidation artifact:
+The following v2 claims must not be presented as currently certified evidence:
 
-`/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/invalid_8ff_proxy_contract/INVALIDATION.json`
+- `NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT`;
+- completed/eligible/post-warm-up session counts;
+- count and weight coverage summaries;
+- weighted and unweighted state reasons;
+- weighted or unweighted signal counts;
+- control, delay, concentration or fold results;
+- the previous oracle `PASS`.
 
-## Proxy Provenance
+The v1 and v2 evidence directories should remain preserved as historical,
+invalidated bundles. They must not be overwritten.
 
-- Source manifest: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/download_manifest.json`
-- Source manifest SHA-256: recorded in `pre_fetch/window_freeze.json`
-- Dataset: `Historical Nifty 50 Constituent Weights`
-- DOI: `10.6084/m9.figshare.30217915`
-- License: `CC BY-NC-SA 4.0`
-- Raw weights: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/raw/weights.csv`
-- Raw weights SHA-256: `3a3441a997b64a54363b38ebc02807e82cc0e0affd2efda147d1b7758a0b10cb`
-- Normalized weights: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/point_in_time_weights_proxy.global_intervals.csv`
-- Normalized weights SHA-256: `aa403401627f0fb433026f23531b59d61b07c499b9fe6c9095eb04ca35c2c416`
-- Latest snapshot derived from normalized/source data: `2025-08-31`
+## Repaired code contracts
 
-Membership intervals are derived by global index snapshot. A row from snapshot `D` is active from `D` through one day before the next global NIFTY proxy snapshot, not until that constituent next appears.
+### Exact return-bar ownership
 
-## Campaign Inventory
+Weighted signals, unweighted signals and membership coverage now share one
+exact-bar contract. A return at decision cutoff `T` requires bars at exactly:
 
-- Raw file records discovered: `2,324`
-- Raw file records accepted: `1,640`
-- Raw file records rejected: `684`
-- Original fetch manifest: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/upstox_v3/manifest.json`
-- Original fetch manifest SHA-256: `1c439c6abf492e1951bf3dd583b1ee6e54362c0b0a93901862ed4cbea2b22e8e`
-- Filename-only authority check: `PASS`; files without authoritative ownership are rejected.
-- Unique required tickers: `82`
-- Unique resolved trading symbols: `82`
-- Unique instrument keys: `82`
-- Unique ISINs: `81`
-- Unresolved unique tickers: `0`
-- Ambiguous unique tickers: `0`
-- Fetch requests during this repair: `0`
-- Files fetched during this repair: `0`
+- `T - 10 minutes`;
+- `T - 5 minutes`;
+- `T`.
 
-## Normalization
+Stale or merely earlier bars no longer count as valid availability. Missing
+required index bars fail closed. Missing constituent timestamps reduce the same
+constituent set used by both the signal calculation and coverage calculation.
 
-- Raw candle rows: `2,532,075`
-- Normalized accepted rows: `2,532,066`
-- Invalid OHLC quarantined: `9`
-- Malformed rows: `0`
-- Out-of-window rows: `0`
-- Identical duplicates collapsed: `0`
-- Conflicting duplicates rejected: `0`
-- Row conservation: `PASS`
-- Normalized bars path: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet`
-- Normalized bars SHA-256: `ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0`
-- Normalized date range: `2024-01-01` through `2025-08-29`
-- Unique symbols: `82`
+### Coverage identity
 
-## Session Grid
+State-level coverage now records and reconciles:
 
-Session completion requires the full regular NIFTY 5-minute grid from `09:15` through `15:25` Asia/Kolkata and all frozen decision cutoffs.
+- active point-in-time constituents;
+- resolved active constituents;
+- constituents with the exact required bars;
+- count coverage;
+- active and available snapshot weight;
+- weight coverage;
+- missing constituents and exact missing timestamps.
 
-- NIFTY sessions present: `414`
-- Completed sessions: `411`
-- Rejected partial sessions: `3`
-- Rejected partial session dates: `2024-03-02`, `2024-05-18`, `2024-11-01`
-- Eligible sessions: `411`
-- Post-warm-up sessions: `391`
-- Theoretical max state rows: `4,110`
-- Actual weighted state rows: `4,110`
-- Missing state explanation: `0` missing after completed-session filtering; the prior unfiltered runner produced `4,130` states, while v2 removes `20` states attributable to the three rejected partial sessions before evaluation.
+The oracle compares coverage row identities and numeric coverage values against
+weighted state rows. Comparing only row counts is no longer sufficient.
 
-## Coverage
+### Session policy
 
-- Count coverage min: `0.94`
-- Count coverage median: `0.96`
-- Weight coverage min: `0.9632108`
-- Weight coverage median: `0.9712971`
-- Low count-coverage states: `0`
-- Low weight-coverage states: `0`
-- Both-gates pass rate: `1.0`
+The session audit now distinguishes:
 
-## Weighted Lane
+- `REGULAR_SESSION_COMPLETE`;
+- `REGULAR_SESSION_PARTIAL`;
+- `SPECIAL_SESSION_OUT_OF_FROZEN_CONTRACT`;
+- `MISSING_REQUIRED_INDEX_GRID`.
 
-State reason counts:
+Special sessions are explicit frozen-contract exclusions rather than silently
+being called corrupt or partial regular sessions.
 
-```json
-{
-  "dispersion_too_high": 651,
-  "frozen_entry_conditions_not_met": 8,
-  "index_already_caught_up": 3153,
-  "index_range_already_consumed": 98,
-  "insufficient_lead_gap_history": 200
-}
-```
+### Controls and sensitivities
 
-- Weighted signals: `0`
-- Weighted evaluable signals: `0`
-- Control result: `NOT_APPLICABLE_ZERO_SIGNALS`
-- Delay result: `NOT_APPLICABLE_ZERO_SIGNALS`
-- Concentration result: `NOT_APPLICABLE_ZERO_SIGNALS`
-- Chronological folds: no weighted folds because weighted signals are zero.
+For non-zero fixtures:
 
-## Unweighted Lane
+- the matched no-lead control selects unique non-signal state identities and
+  preserves side and decision-time distributions;
+- delayed-entry analysis performs a real additional one-bar delay and emits
+  numeric outcomes and exclusions;
+- concentration analysis emits numeric monthly, session, top-five-session,
+  decision-time and side concentration measures.
 
-State reason counts:
+For a genuinely zero-signal weighted campaign these lanes report
+`NOT_APPLICABLE_ZERO_SIGNALS`.
 
-```json
-{
-  "dispersion_too_high": 642,
-  "frozen_unweighted_entry_conditions_not_met": 48,
-  "index_already_caught_up": 2632,
-  "index_range_already_consumed": 587,
-  "insufficient_lead_gap_history": 200,
-  "unweighted_constituents_lead_index_down": 1
-}
-```
+### Independent oracle
 
-- Unweighted state rows: `4,110`
-- Unweighted signals: `1`
-- Unweighted evaluable signals: `1`
-- Unweighted net mean bps: `2.5000000000013944`
+The v3 oracle imports no strategy implementation. It independently verifies:
 
-The unweighted lane is reported for completeness. The final taxonomy below is based on the weighted proxy contract specified for the zero-signal verdict.
+- mandatory frozen file ownership and SHA-256 hashes;
+- the pre-outcome freeze hash;
+- required artifact presence and hashes;
+- campaign window and decision times;
+- completed-session and theoretical-state arithmetic;
+- weighted and unweighted row/reason/signal reconciliation;
+- coverage row identity and count/weight reconciliation;
+- control, delay and concentration summaries;
+- every prerequisite for the final zero-signal taxonomy.
 
-## Oracle
+Legacy call compatibility remains fail closed as
+`LEGACY_BUNDLE_NOT_CERTIFIABLE`; it cannot produce a v3 `PASS`.
 
-Independent oracle verdict: `PASS`
+## Validation completed
 
-Oracle checks:
-
-- bars/hash/summary reconciliation: `PASS`
-- reason-count sum: `PASS`
-- weighted signal count: `PASS`
-- unweighted signal count: `PASS`
-- coverage row count and gate pass rate: `PASS`
-- state-count bound: `PASS`
-
-## Final Decision
-
-`NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT`
-
-This is a valid weighted zero-signal proxy-contract result. It is not positive PnL evidence and not negative PnL evidence. It does not support `PROXY_DOES_NOT_SUPPORT_PURCHASING_AUTHORITATIVE_DATA`, because there are no weighted signals for OOF/control/delay/concentration economic testing.
-
-## Evidence Paths
-
-- Invalidation: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/invalid_8ff_proxy_contract/INVALIDATION.json`
-- Freeze: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/pre_fetch/window_freeze.json`
-- Campaign summary: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/campaign_summary.json`
-- Ticker resolution: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/ticker_resolution.csv`
-- Normalization report: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/normalization_report.json`
-- Session grid: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/reports/session_grid.parquet`
-- Coverage summary: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/reports/membership_coverage_summary.json`
-- Evaluation summary: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/evaluation/summary.json`
-- Oracle report: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/oracle/oracle_report.json`
-
-## Tests
+The GitHub runner successfully applied the allow-listed repair payload,
+compiled the repaired modules and passed the complete focused command covering:
 
 ```bash
-pytest -q tests/research/test_reconstructed_weight_proxy.py tests/research/test_constituent_lead_lag.py tests/research/test_unweighted_constituent_breadth.py
+pytest -q \
+  tests/research/test_constituent_data_pipeline.py \
+  tests/research/test_reconstructed_weight_proxy.py \
+  tests/research/test_constituent_lead_lag.py \
+  tests/research/test_unweighted_constituent_breadth.py \
+  tests/research/test_certification_repair.py \
+  tests/research/test_reconstructed_proxy_oracle.py
 ```
 
-Latest result: `22 passed`.
+The command collected 48 tests. The first integration run exposed one backward-
+compatibility failure (`47 passed, 1 failed`); that defect was repaired without
+weakening the oracle, and the identical six-module command then passed.
+
+Synthetic certification tests include a complete valid fixture that first
+returns oracle `PASS`, followed by independent artifact tampering that forces
+`FAIL`.
+
+## Required v3 evidence run
+
+Build new evidence under:
+
+`/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3`
+
+Before running outcomes, create the external invalidation artifact:
+
+`/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/invalid_64294990_certification_contract/INVALIDATION.json`
+
+with classification:
+
+`INVALID_INCOMPLETE_CERTIFICATION_CONTRACT`
+
+The v3 run must use the preserved local raw files, perform no full redownload,
+freeze every required input/source/specification before outcomes, and persist a
+new artifact manifest. A final strategy taxonomy may be issued only after the
+repaired oracle passes against that v3 bundle.
+
+## Safety
+
+Research only. PR #709 must remain draft and unmerged. No broker calls, order
+actions, production strategy registration, execution/risk/feed changes,
+dashboard changes, threshold tuning or commercial use are authorized.
