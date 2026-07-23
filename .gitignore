@@ -96,5 +96,6 @@ runtime/upstox_candidate_replay/
 runtime/strategy_validation/*.json
 runtime/strategy_validation/*.md
 *.parquet
-runtime/
+runtime/constituent_lead_lag/
+docs/evidence/*.pdf
 docs/evidence/*.pdf
