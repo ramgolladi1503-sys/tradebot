@@ -12,12 +12,14 @@ The earlier v2 certification claim is **not retained**. Classify it as:
 
 `INVALID_INCOMPLETE_CERTIFICATION_CONTRACT`
 
-The current evidence gate remains:
+The v3 real-data campaign has now been rebuilt from the preserved local Upstox
+and proxy inputs under:
 
-`PROXY_EVALUATION_FAILED_DATA_CONTRACT`
+`/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3`
 
-until a new v3 campaign is rebuilt from the preserved local Upstox and proxy
-inputs and the repaired independent oracle returns `PASS`.
+The repaired independent oracle returned `PASS`, so the final frozen taxonomy is:
+
+`NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT`
 
 The following v2 claims must not be presented as currently certified evidence:
 
@@ -133,13 +135,13 @@ Synthetic certification tests include a complete valid fixture that first
 returns oracle `PASS`, followed by independent artifact tampering that forces
 `FAIL`.
 
-## Required v3 evidence run
+## Completed v3 evidence run
 
-Build new evidence under:
+Evidence was built under:
 
 `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3`
 
-Before running outcomes, create the external invalidation artifact:
+The v2 invalidation artifact was created before current certification:
 
 `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/invalid_64294990_certification_contract/INVALIDATION.json`
 
@@ -147,10 +149,28 @@ with classification:
 
 `INVALID_INCOMPLETE_CERTIFICATION_CONTRACT`
 
-The v3 run must use the preserved local raw files, perform no full redownload,
-freeze every required input/source/specification before outcomes, and persist a
-new artifact manifest. A final strategy taxonomy may be issued only after the
-repaired oracle passes against that v3 bundle.
+Final v3 facts:
+
+- normalized bars SHA-256: `ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0`;
+- session policy SHA-256: `c53a016f5da7791944241efafbe64d945ace83c80297996948f1062aeef59765`;
+- session grid SHA-256: `b6916ead1bd4e38596abb6d5081b184a0f0af04eb508abb8c8a47d9318314a37`;
+- completed regular sessions: `409`;
+- special sessions excluded: `5`;
+- post-warm-up sessions: `389`;
+- theoretical weighted and unweighted state rows: `4,090`;
+- actual weighted and unweighted state rows: `4,090`;
+- weighted signals: `0`;
+- unweighted signals: `1`;
+- coverage gate pass rate: `1.0`;
+- control, delay and concentration: `NOT_APPLICABLE_ZERO_SIGNALS`;
+- oracle report: `/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3/oracle/oracle_report.json`.
+
+Tamper proof was run against copied fixtures only. The baseline copy returned
+`PASS`; mutating the persisted coverage summary and mutating the persisted
+summary weighted-signal prerequisite each forced oracle `FAIL`. The tampered
+copies were removed, and the proof is recorded at:
+
+`/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3/tamper/tamper_proof_report.json`
 
 ## Safety
 

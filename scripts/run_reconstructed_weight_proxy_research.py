@@ -165,11 +165,11 @@ def main() -> int:
     if session_grid["session_classification"].eq("MISSING_REQUIRED_INDEX_GRID").any():
         raise SystemExit("FAIL_CLOSED_DATA_CONTRACT: session policy missing sessions")
     bars = bars[bars["session"].astype(str).isin(completed_sessions)].copy()
-    weights = validate_normalized_proxy(
+    all_weights = validate_normalized_proxy(
         read_table(args.proxy_weights), evaluation_start=args.start_date, evaluation_end=args.end_date,
         allow_community_reconstructed_proxy=True,
     )
-    weights = weights[weights["effective_from"] <= pd.Timestamp(args.end_date).date()]
+    weights = all_weights[all_weights["effective_from"] <= pd.Timestamp(args.end_date).date()]
     audit_proxy_dataset(args.proxy_weights, evaluation_end=args.end_date,
                         source_manifest_path=args.proxy_source_manifest, raw_weights_path=args.raw_weights)
 
@@ -202,7 +202,7 @@ def main() -> int:
     folds = chronological_fold_summary(trades, folds=5)
 
     resolution = read_table(args.ticker_resolution)
-    coverage, coverage_summary = calculate_frame(weighted_states, bars, weights, resolution, args.start_date, args.end_date)
+    coverage, coverage_summary = calculate_frame(weighted_states, bars, all_weights, resolution, args.start_date, args.end_date)
     coverage_path = reports_dir / "membership_coverage.parquet"
     coverage.to_parquet(coverage_path, index=False)
     write_json(reports_dir / "membership_coverage_summary.json", coverage_summary)
