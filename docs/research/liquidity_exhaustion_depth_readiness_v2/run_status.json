@@ -2,7 +2,7 @@
   "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_READINESS_V2",
   "classification": "DEPTH_DATA_NOT_READY_FOR_EXHAUSTION_DISCOVERY",
   "execution_allowed": false,
-  "producer_commit": "66b5342345b70cb439352b35a6d65581ba495a5c",
+  "producer_commit": "233b895d0a13752aac8c995c4129e98bbf6cb9e2",
   "status": "COMPLETE",
   "two_run_semantic_determinism": true
 }

@@ -34,7 +34,7 @@
   "future_holdout_sessions_required": 20,
   "invalid_price_row_rate": 0.9424198518281794,
   "invalid_price_rows": 2618670,
-  "producer_commit": "66b5342345b70cb439352b35a6d65581ba495a5c",
+  "producer_commit": "233b895d0a13752aac8c995c4129e98bbf6cb9e2",
   "quote_dates_with_candle_authority": [
     "20260709"
   ],
