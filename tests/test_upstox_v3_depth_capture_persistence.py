@@ -74,7 +74,7 @@ def test_one_sided_generic_price_quantity_depth_is_rejected() -> None:
         },
     }
 
-    record = parse_upstox_v3_message(message)[0]
+    [record] = parse_upstox_v3_message(message)
     assert record["depth"] == []
     assert record["depth_valid"] is False
     assert record["bid_price"] is None
@@ -94,17 +94,15 @@ def test_collector_round_trips_full_depth_and_marks_session_valid(
     assert collector.valid_depth_counts_by_instrument["NSE_FO|45450"] == 1
     assert collector.finalize() is True
 
-    parquet_paths = sorted(collector.out_dir.glob("ticks_*.parquet"))
-    assert len(parquet_paths) == 1
-    rows = pq.read_table(parquet_paths[0]).to_pylist()
-    assert len(rows) == 1
-    assert rows[0]["bid_price"] == pytest.approx(219.2)
-    assert rows[0]["ask_price"] == pytest.approx(219.4)
-    assert rows[0]["bid_quantity"] == 75
-    assert rows[0]["ask_quantity"] == 150
-    assert rows[0]["depth_level_count"] == 2
-    assert rows[0]["depth_valid"] is True
-    assert rows[0]["depth"][1] == {
+    [parquet_path] = sorted(collector.out_dir.glob("ticks_*.parquet"))
+    [row] = pq.read_table(parquet_path).to_pylist()
+    assert row["bid_price"] == pytest.approx(219.2)
+    assert row["ask_price"] == pytest.approx(219.4)
+    assert row["bid_quantity"] == 75
+    assert row["ask_quantity"] == 150
+    assert row["depth_level_count"] == 2
+    assert row["depth_valid"] is True
+    assert row["depth"][1] == {
         "bid_price": 219.1,
         "bid_quantity": 225,
         "ask_price": 219.5,
