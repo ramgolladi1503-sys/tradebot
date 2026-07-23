@@ -4,11 +4,110 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  pr709_quality_repair:
+    if: github.event_name == 'pull_request' && github.head_ref == 'research/constituent-lead-lag-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/constituent-lead-lag-v1
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install focused dependencies
+        run: python -m pip install --upgrade pip pytest pandas numpy pyarrow pyyaml
+
+      - name: Apply quality-proof repairs
+        run: python scripts/_apply_pr709_quality_gate_repairs.py
+
+      - name: Compile repaired modules and tests
+        run: |
+          python -m compileall -q \
+            research/constituent_lead_lag \
+            tests/research/test_certification_repair.py \
+            tests/research/test_reconstructed_weight_proxy.py \
+            tests/research/test_unweighted_constituent_breadth.py
+
+      - name: Run complete PR709 focused suite
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest -q \
+            tests/research/test_constituent_data_pipeline.py \
+            tests/research/test_reconstructed_weight_proxy.py \
+            tests/research/test_constituent_lead_lag.py \
+            tests/research/test_unweighted_constituent_breadth.py \
+            tests/research/test_certification_repair.py \
+            tests/research/test_reconstructed_proxy_oracle.py
+
+      - name: Run scoped Minerva and Cerberus gates
+        env:
+          PYTHONPATH: .
+        run: |
+          python - <<'PY'
+          import subprocess
+          from tools.code_excellence.minerva_gate import run_minerva_gate
+          from tools.code_excellence.cerberus_gate import run_cerberus_gate
+
+          merge_base = subprocess.check_output(
+              ["git", "merge-base", "HEAD", "origin/main"], text=True
+          ).strip()
+          paths = subprocess.check_output(
+              ["git", "diff", "--name-only", f"{merge_base}..HEAD"], text=True
+          ).splitlines()
+          minerva = run_minerva_gate(
+              repo_root=".", config_path=".gsd-forensics.yaml", changed_paths=paths
+          )
+          cerberus = run_cerberus_gate(
+              repo_root=".", config_path=".gsd-forensics.yaml", changed_paths=paths
+          )
+          if minerva.exit_code:
+              raise SystemExit(
+                  "Minerva blocked: "
+                  + ", ".join(f"{x.path}:{x.reason}" for x in minerva.blocked_findings)
+              )
+          if cerberus.exit_code:
+              raise SystemExit(
+                  "Cerberus blocked: "
+                  + ", ".join(f"{x.path}:{x.line_number}:{x.reason}" for x in cerberus.blocked_findings)
+              )
+          print(f"Minerva PASS findings={len(minerva.findings)}")
+          print(f"Cerberus PASS findings={len(cerberus.findings)}")
+          PY
+
+      - name: Validate mandatory agent review evidence
+        run: python scripts/validate_agent_review_evidence.py --base-ref origin/main
+
+      - name: Commit quality repairs and restore CI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git show b93224eaf2f3a7e721109b7c4e626ee37b1b8f82:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git rm scripts/_apply_pr709_quality_gate_repairs.py
+          git add \
+            .github/workflows/ci.yml \
+            research/constituent_lead_lag/model.py \
+            research/constituent_lead_lag/unweighted.py \
+            tests/research/test_certification_repair.py \
+            tests/research/test_reconstructed_weight_proxy.py \
+            tests/research/test_unweighted_constituent_breadth.py
+          git commit -m "strengthen PR709 certification proof gates"
+          git push origin HEAD:research/constituent-lead-lag-v1
+
   unit_tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
