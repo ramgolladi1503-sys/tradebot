@@ -54,10 +54,8 @@ def test_parse_official_full_market_feed_with_five_level_depth() -> None:
         },
     }
 
-    records = parse_upstox_v3_message(message, received_ts_epoch=123.5)
+    [record] = parse_upstox_v3_message(message, received_ts_epoch=123.5)
 
-    assert len(records) == 1
-    record = records[0]
     assert record["instrument_key"] == "NSE_FO|45450"
     assert record["feed_kind"] == "MARKET_FF"
     assert record["source_ts_epoch_ms"] == 1740729566039
@@ -109,7 +107,7 @@ def test_parse_official_first_level_with_greeks() -> None:
         },
     }
 
-    record = parse_upstox_v3_message(message, received_ts_epoch=100.0)[0]
+    [record] = parse_upstox_v3_message(message, received_ts_epoch=100.0)
 
     assert record["feed_kind"] == "FIRST_LEVEL_WITH_GREEKS"
     assert record["source_ts_epoch_ms"] == 1740729368660
@@ -135,7 +133,7 @@ def test_parse_index_full_feed_without_inventing_depth() -> None:
         },
     }
 
-    record = parse_upstox_v3_message(message)[0]
+    [record] = parse_upstox_v3_message(message)
 
     assert record["feed_kind"] == "INDEX_FF"
     assert record["ltp"] == pytest.approx(24936.4)
@@ -161,7 +159,7 @@ def test_parse_legacy_sdk_aliases_without_rest_depth_shape() -> None:
         }
     }
 
-    record = parse_upstox_v3_message(message)[0]
+    [record] = parse_upstox_v3_message(message)
 
     assert record["feed_kind"] == "MARKET_FF"
     assert record["depth_valid"] is True
