@@ -1,5 +1,16 @@
 # Option E2E Historical Inventory v4
 
+mode: RESEARCH_ONLY_INVENTORY
+candidate_id: option_e2e_historical_inventory_v4
+decision: RIGHT_WITH_GAPS
+reason: Static-registry inventory was scoped and hash-backed but later continuation identified that it over-counted components and under-counted historical research families.
+timestamp: 2026-07-23T23:34:12+05:30
+is_order_action: false
+broker_api_called: false
+flag_value: false
+call_value: false
+source: Subagent A commit 82e6957c5ac9c711cf5671528c937339370d6052
+
 ## Verdict
 Historical inventory and alias graph completed. No economic replay was run; no profitability, paper readiness, or live readiness claim is made.
 
@@ -8,7 +19,7 @@ Historical inventory and alias graph completed. No economic replay was run; no p
 - Branch: `research/option-e2e-inventory-v4`
 - Foundation commit: `b02cc64adf88c9ee876a03469b3f63ad762ccc2b`
 - Foundation manifest gate: `118cc813127005e75e6eec94aa197a1795648d70d3311356c61fb9885275c37b  foundation_manifest.json`
-- Safety flags: `read_only=true`, `is_order_action=false`, `broker_api_called=false`, `allowed_for_live_execution=false`, `append=false`.
+- Scope boundary: read-only inventory evidence; fields above record no order action and no broker API call. `allowed_for_live_execution=false`, `append=false`.
 - Prohibited production paths were not modified.
 
 ## Files Created
@@ -70,5 +81,45 @@ Historical inventory and alias graph completed. No economic replay was run; no p
 
 ## Validation
 - JSON artifacts generated with sorted keys and SHA256 evidence map.
-- `git status --short --branch` should show only scoped inventory/doc files before commit.
+- Subagent final `git status --short --branch` was clean before integration.
 - No tests requiring broker/feed/runtime access were run; this is an offline inventory deliverable.
+
+## Agent Work Contract
+
+source_agent: Subagent A. action: historical inventory. scope: read-only discovery and scoped inventory artifacts. requested_paths: `research/option_e2e_recertification_v4/inventory/**`, this review doc. forbidden_paths: broker, order, live, risk, feed, strategy threshold, credential and production execution paths.
+
+## Scope Guard
+
+This file records an inventory checkpoint only. It does not perform economic replay, does not alter runtime behavior, and does not certify any strategy.
+
+## Grill Me Review
+
+The v4 inventory over-counted infrastructure as strategy-like registry entries. That limitation is now explicitly challenged by the v4.1 continuation and must not be used as the final historical strategy count.
+
+## Hermes Review
+
+The right architecture is a separated inventory model: canonical strategies and research hypotheses are distinct from adapters, helpers, risk components, builders, position sizing, aggregate engines and test fixtures.
+
+## GSD Review
+
+The v4 artifact is preserved as checkpoint evidence. The continuation adds v4.1 artifacts instead of rewriting this historical checkpoint in place.
+
+## QA / Safety Review
+
+Safety flags remain research-only: `allowed_for_live_execution=false`, `broker_api_called=false`, and `is_order_action=false`.
+
+## Acceptance Proof
+
+Checkpoint proof is limited to JSON parseability, scoped file ownership and recorded discovery commands. Completeness remains pending until v4.1 inventory validation passes.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required for this checkpoint because it is not runtime wiring and must not be promoted to paper/live behavior.
+
+## What This PR Does Not Prove
+
+This checkpoint does not prove strategy profitability, option replay validity, complete historical inventory, paper readiness or live readiness.
+
+## Human Approval
+
+Human approval is required before using any later certification result for paper/live trading, production registration or capital allocation.

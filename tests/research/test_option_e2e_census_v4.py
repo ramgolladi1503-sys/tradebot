@@ -27,10 +27,18 @@ def test_census_classifies_executable_option_quote_and_authority(tmp_path) -> No
     assert by_name["nifty_option_quotes.csv"].classification == "option_quote"
     assert by_name["nifty_option_quotes.csv"].has_bid_ask is True
     assert by_name["nifty_option_quotes.csv"].usable_for_option_e2e is True
+    assert by_name["nifty_option_quotes.csv"].has_expiry is True
+    assert by_name["nifty_option_quotes.csv"].has_strike is True
+    assert by_name["nifty_option_quotes.csv"].has_quote_time is True
+    assert by_name["nifty_option_quotes.csv"].row_count == 1
     assert by_name["historical_instrument_master_20260701.csv"].classification == "instrument_master"
     assert by_name["historical_instrument_master_20260701.csv"].point_in_time_status == "POINT_IN_TIME_AUTHORITY_CANDIDATE"
+    assert by_name["historical_instrument_master_20260701.csv"].has_lot_size is True
+    assert by_name["historical_instrument_master_20260701.csv"].authority_role == "expiry|strike|lot_size"
     assert summary.executable_quote_files == 1
     assert summary.point_in_time_authority_files == 1
+    assert summary.files_classified == 2
+    assert summary.census_sha256
 
 
 def test_census_rejects_current_master_as_point_in_time_authority(tmp_path) -> None:
@@ -54,11 +62,13 @@ def test_census_rejects_current_master_as_point_in_time_authority(tmp_path) -> N
 
     files, summary = build_census((tmp_path,), repo_root=tmp_path)
 
-    assert len(files) == 1
+    assert [item.logical_path for item in files] == ["runtime/upstox_instruments/complete.json"]
     assert files[0].classification == "instrument_master"
     assert files[0].point_in_time_status == "CURRENT_MASTER_NOT_POINT_IN_TIME"
     assert files[0].usable_for_option_e2e is False
+    assert files[0].blocker == "CURRENT_MASTER_NOT_POINT_IN_TIME"
     assert summary.point_in_time_authority_files == 0
+    assert summary.blocked_files == 1
 
 
 def test_census_skips_secret_named_files(tmp_path) -> None:
@@ -81,3 +91,5 @@ def test_census_skips_secret_named_files(tmp_path) -> None:
     files, _summary = build_census((tmp_path,), repo_root=tmp_path)
 
     assert [item.logical_path for item in files] == ["quotes.csv"]
+    assert files[0].sha256
+    assert files[0].absolute_path.endswith("quotes.csv")

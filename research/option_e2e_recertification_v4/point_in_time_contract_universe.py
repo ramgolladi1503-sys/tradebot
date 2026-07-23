@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .signal_contract import OptionRight
+from .time_utils import expiry_cutoff_ts, parse_ts
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class OptionContractMetadata:
     metadata_hash: str
     point_in_time_source: str
 
-    def validate_at(self, decision_ts: str) -> None:
+    def validate_at(self, decision_ts: str, *, expiry_cutoff: str = "15:30:00") -> None:
         if not self.trading_symbol or not self.instrument_token:
             raise ValueError("missing_contract_identity")
         if self.underlying != "NIFTY":
@@ -33,9 +34,13 @@ class OptionContractMetadata:
             raise ValueError("missing_contract_hash")
         if not self.point_in_time_source:
             raise ValueError("missing_point_in_time_source")
-        if self.expiry not in self.listed_until:
+        decision = parse_ts(decision_ts)
+        listed_from = parse_ts(self.listed_from)
+        listed_until = parse_ts(self.listed_until)
+        cutoff = expiry_cutoff_ts(self.expiry, cutoff=expiry_cutoff)
+        if listed_until.date() != cutoff.date() or listed_until > cutoff:
             raise ValueError("expiry_metadata_mismatch")
-        if self.listed_from > decision_ts or self.listed_until <= decision_ts:
+        if decision < listed_from or decision >= listed_until or decision >= cutoff:
             raise ValueError("contract_not_listed_at_decision_ts")
 
 

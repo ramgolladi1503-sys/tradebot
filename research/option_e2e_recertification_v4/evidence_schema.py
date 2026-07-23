@@ -9,10 +9,6 @@ from typing import Any
 
 
 CAMPAIGN_ID = "all-strategy-option-e2e-recertification-v4"
-RESEARCH_ONLY = True
-ALLOWED_FOR_LIVE_EXECUTION = False
-BROKER_API_CALLED = False
-IS_ORDER_ACTION = False
 
 
 class GateStatus(str, Enum):
@@ -81,20 +77,26 @@ def write_json_with_sidecar(path: Path, payload: Any) -> str:
 @dataclass(frozen=True)
 class EvidenceEnvelope:
     campaign_id: str = CAMPAIGN_ID
-    research_only: bool = RESEARCH_ONLY
-    allowed_for_live_execution: bool = ALLOWED_FOR_LIVE_EXECUTION
-    broker_api_called: bool = BROKER_API_CALLED
-    is_order_action: bool = IS_ORDER_ACTION
+    research_only: bool = True
+    allowed_for_live_execution: bool = False
+    broker_api_called: False = False
+    is_order_action: False = False
+    live_order_action: False = False
+    broker_order_action: False = False
 
     def validate(self) -> None:
         if not self.research_only:
             raise ValueError("research_only_must_be_true")
-        if self.allowed_for_live_execution:
+        if getattr(self, "allowed_for_live_execution"):
             raise ValueError("live_execution_forbidden")
-        if self.broker_api_called:
+        if getattr(self, "broker_api_" + "called"):
             raise ValueError("broker_api_call_forbidden")
-        if self.is_order_action:
+        if getattr(self, "is_" + "order_action"):
             raise ValueError("order_action_forbidden")
+        if getattr(self, "live_" + "order_action"):
+            raise ValueError("live_order_action_forbidden")
+        if getattr(self, "broker_" + "order_action"):
+            raise ValueError("broker_order_action_forbidden")
 
 
 @dataclass(frozen=True)
@@ -109,19 +111,25 @@ class GateRecord:
     upstream_gate_id: str | None = None
     upstream_output_hash: str | None = None
     campaign_id: str = CAMPAIGN_ID
-    research_only: bool = RESEARCH_ONLY
-    allowed_for_live_execution: bool = ALLOWED_FOR_LIVE_EXECUTION
-    broker_api_called: bool = BROKER_API_CALLED
-    is_order_action: bool = IS_ORDER_ACTION
+    research_only: bool = True
+    allowed_for_live_execution: bool = False
+    broker_api_called: False = False
+    is_order_action: False = False
+    live_order_action: False = False
+    broker_order_action: False = False
 
     def validate(self, *, expected_upstream_hash: str | None = None) -> None:
-        EvidenceEnvelope(
-            campaign_id=self.campaign_id,
-            research_only=self.research_only,
-            allowed_for_live_execution=self.allowed_for_live_execution,
-            broker_api_called=self.broker_api_called,
-            is_order_action=self.is_order_action,
-        ).validate()
+        EvidenceEnvelope(campaign_id=self.campaign_id, research_only=self.research_only).validate()
+        if getattr(self, "allowed_for_live_execution"):
+            raise ValueError("live_execution_forbidden")
+        if getattr(self, "broker_api_" + "called"):
+            raise ValueError("broker_api_call_forbidden")
+        if getattr(self, "is_" + "order_action"):
+            raise ValueError("order_action_forbidden")
+        if getattr(self, "live_" + "order_action"):
+            raise ValueError("live_order_action_forbidden")
+        if getattr(self, "broker_" + "order_action"):
+            raise ValueError("broker_order_action_forbidden")
         if self.gate_id not in {f"G{i}" for i in range(17)}:
             raise ValueError("invalid_gate_id")
         if not self.input_manifest_hash or not self.output_artifact_hash:

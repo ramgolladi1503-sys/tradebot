@@ -5,6 +5,7 @@ from math import nan
 import pytest
 
 from research.option_e2e_recertification_v4.evidence_schema import GateRecord, GateStatus
+from research.option_e2e_recertification_v4.expiry_resolver import ExpiryChoice
 from research.option_e2e_recertification_v4.option_candidate_builder import build_long_option_candidate
 from research.option_e2e_recertification_v4.point_in_time_contract_universe import (
     OptionContractMetadata,
@@ -362,3 +363,42 @@ def test_signal_rejects_non_finite_strength_and_session_mismatch() -> None:
 def test_current_master_helper_normalizes_source_kind() -> None:
     with pytest.raises(ValueError, match="current_instrument_master_cannot_certify_expired_contract"):
         reject_current_master_as_historical_authority(" Current Instrument Master ")
+
+
+def test_expiry_resolver_allows_valid_expiry_day_before_cutoff_and_rejects_after_cutoff() -> None:
+    choice = ExpiryChoice(
+        signal_id="s1",
+        selected_expiry="2024-01-25",
+        min_time_to_expiry_minutes=1,
+        available_expiries=("2024-01-25", "2024-02-01"),
+        rejection_reasons={},
+        resolver_hash="r",
+    )
+    choice.validate("2024-01-25T09:30:00+05:30")
+    with pytest.raises(ValueError, match="expiry_not_valid_after_cutoff"):
+        choice.validate("2024-01-25T15:31:00+05:30")
+
+
+def test_contract_validation_uses_normalized_timestamps_not_substrings() -> None:
+    contract = OptionContractMetadata(
+        trading_symbol="NIFTY24JAN22000CE",
+        instrument_token="123",
+        underlying="NIFTY",
+        option_right=OptionRight.CE,
+        strike=22000,
+        expiry="2024-01-25",
+        tick_size=0.05,
+        lot_size=50,
+        listed_from="2024-01-20T09:15:00+05:30",
+        listed_until="2024-01-25T15:30:00+05:30",
+        provider="fixture",
+        dataset_hash="hash",
+        metadata_hash="meta",
+        point_in_time_source="historical_master_2024-01-20",
+    )
+    contract.validate_at("2024-01-25T04:30:00Z")
+    with pytest.raises(ValueError, match="contract_not_listed_at_decision_ts"):
+        contract.validate_at("2024-01-25T10:01:00Z")
+    invalid = OptionContractMetadata(**{**contract.__dict__, "listed_until": "2024-01-25T15:31:00+05:30"})
+    with pytest.raises(ValueError, match="expiry_metadata_mismatch"):
+        invalid.validate_at("2024-01-25T09:30:00+05:30")

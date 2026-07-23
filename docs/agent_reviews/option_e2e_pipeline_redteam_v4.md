@@ -1,5 +1,14 @@
 # Option E2E Pipeline Red-Team Review v4
 
+mode: RESEARCH_ONLY_REDTEAM_AUDIT
+candidate_id: option_e2e_pipeline_redteam_v4
+decision: RIGHT_WITH_GAPS
+reason: Red-team findings identified false-certification risks and primary follow-up repaired the high-confidence foundation contract gaps.
+timestamp: 2026-07-23T23:36:16+05:30
+flag_value: false
+call_value: false
+source: Subagent C commit 8abfc895710a5780f04e2100122375fa00d9b8e6
+
 Subagent: C
 Worktree: `/Users/madhuram/tradebot-option-e2e-pipeline-redteam-v4`
 Branch: `audit/option-e2e-pipeline-redteam-v4`
@@ -103,3 +112,43 @@ git status --short
 ## Rollout
 
 No rollout. This is audit-only documentation and must remain disconnected from runtime, broker, paper, live, and strategy-selection paths.
+
+## Agent Work Contract
+
+source_agent: Subagent C. action: read-only red-team audit. scope: `research/option_e2e_recertification_v4/redteam/**` and this review doc. forbidden_paths: `core/**`, `strategies/**`, shared schemas, runtime wiring, broker adapters, tests and final verdict artifacts.
+
+## Scope Guard
+
+This review identifies risks and reproduction proposals. It does not implement fixes, does not produce strategy verdicts and does not certify option replay.
+
+## Grill Me Review
+
+The main criticism is false-certification risk: structured artifacts can look complete while still missing causality, execution, reconciliation, provenance or holdout proof.
+
+## Hermes Review
+
+The red-team findings should feed primary-owned contract hardening and independent oracle design, not ad hoc strategy-specific bypasses.
+
+## GSD Review
+
+Primary reproduced and repaired the high-confidence foundation issues in follow-up commits; this original red-team document is preserved as audit evidence.
+
+## QA / Safety Review
+
+The audit is read-only and records `allowed_for_live_execution=false`, `broker_api_called=false`, and `is_order_action=false`.
+
+## Acceptance Proof
+
+Acceptance for this audit is scoped-file ownership, foundation hash verification, recorded reproduction proposals and clean worktree status from the subagent.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is applicable for this audit-only artifact. It must not be deployed or connected to execution.
+
+## What This PR Does Not Prove
+
+This audit does not prove option profitability, complete contract authority, final WFA, holdout pass, independent oracle pass, paper readiness or live readiness.
+
+## Human Approval
+
+Human approval is required before treating any repaired finding as sufficient for paper/live certification or production use.
