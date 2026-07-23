@@ -1,5 +1,7 @@
-from enum import Enum
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Dict, List, Optional
 
 
@@ -10,7 +12,6 @@ class PipelineState(Enum):
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
     DEGRADED = "DEGRADED"
-    SKIPPED = "SKIPPED"
 
 
 class EngineType(Enum):
@@ -34,20 +35,22 @@ class EngineMetrics:
 class EngineResult:
     engine: EngineType
     state: PipelineState
-    artifacts_generated: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    cached: bool = False
-    created_timestamp: Optional[str] = None
-    metrics: EngineMetrics = field(default_factory=EngineMetrics)
     run_id: Optional[str] = None
     strategy_id: Optional[str] = None
-    verdict: Optional[str] = None
-    command: List[str] = field(default_factory=list)
-    exit_code: Optional[int] = None
+    artifacts_generated: List[str] = field(default_factory=list)
     input_hashes: Dict[str, str] = field(default_factory=dict)
     output_hashes: Dict[str, str] = field(default_factory=dict)
+    errors: List[str] = field(default_factory=list)
     blockers: List[str] = field(default_factory=list)
     limitations: List[str] = field(default_factory=list)
+    command: List[str] = field(default_factory=list)
+    exit_code: Optional[int] = None
+    verdict: Optional[str] = None
+    manifest_path: Optional[str] = None
+    cached: bool = False
+    verified: bool = False
+    created_timestamp: Optional[str] = None
+    metrics: EngineMetrics = field(default_factory=EngineMetrics)
 
 
 @dataclass

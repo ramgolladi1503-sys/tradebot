@@ -1,88 +1,163 @@
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
-from typing import Iterable, Optional
+import os
+from pathlib import Path, PurePosixPath
+import re
+from typing import Iterable
 
 from core.strategy_pipeline.pipeline_context import PipelineContext
-from core.strategy_pipeline.pipeline_models import EngineResult, PipelineState
+from core.strategy_pipeline.pipeline_models import EngineResult, EngineType, PipelineState
+from core.strategy_pipeline.pipeline_state import PipelineStateTracker
+from core.strategy_pipeline.result_manifest import sha256_file
 
 
-class PipelineValidationError(RuntimeError):
-    """Raised when a strategy-pipeline safety or integrity rule fails."""
+class PipelineValidationError(ValueError):
+    """Raised when pipeline execution or evidence violates a fail-closed contract."""
 
 
 class PipelineValidator:
-    """Fail-closed safety and artifact-integrity validation."""
+    """Validates research-only execution and machine-verifiable engine evidence."""
 
-    FORBIDDEN_PATH_TOKENS = (
-        "broker",
-        "orders",
-        "execution",
-        "credentials",
-        "access_token",
-        "live_config",
-    )
+    _SAFE_MODES = {"RESEARCH", "PAPER"}
+    _ID_RE = re.compile(r"^[A-Za-z0-9_.-]{2,100}$")
+    _RUN_RE = re.compile(r"^[A-Za-z0-9_.-]{8,128}$")
+    _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
     @staticmethod
-    def sha256(path: str | Path) -> str:
-        candidate = Path(path)
-        if not candidate.is_file():
-            raise PipelineValidationError(f"Artifact missing: {candidate}")
-        digest = hashlib.sha256()
-        with candidate.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
+    def _safe_relative_path(value: str) -> str:
+        text = str(value or "").strip().replace("\\", "/")
+        path = PurePosixPath(text)
+        if not text or path.is_absolute() or ".." in path.parts:
+            raise PipelineValidationError(f"unsafe_relative_path:{text or 'missing'}")
+        return path.as_posix()
 
-    @classmethod
-    def validate_pre_run(
-        cls,
-        context: Optional[PipelineContext] = None,
-        changed_paths: Optional[Iterable[str]] = None,
+    def validate_pre_run(self, strategy_id: str, context: PipelineContext) -> None:
+        if not self._ID_RE.fullmatch(str(strategy_id or "")):
+            raise PipelineValidationError("invalid_strategy_id")
+        if not self._RUN_RE.fullmatch(str(context.run_id or "")):
+            raise PipelineValidationError("invalid_run_id")
+
+        mode = str(context.execution_mode or "").upper()
+        if mode not in self._SAFE_MODES:
+            raise PipelineValidationError(f"unsafe_execution_mode:{mode or 'missing'}")
+        for variable in ("EXECUTION_MODE", "TRADING_MODE"):
+            if os.environ.get(variable, "").strip().upper() == "LIVE":
+                raise PipelineValidationError(f"live_environment_forbidden:{variable}")
+
+        self._safe_relative_path(context.reports_dir)
+        if not context.allowed_output_roots:
+            raise PipelineValidationError("allowed_output_roots_required")
+        for root in context.allowed_output_roots:
+            self._safe_relative_path(root)
+
+        normalized_inputs: dict[str, dict[str, str]] = {}
+        for engine_name, raw_paths in context.engine_inputs.items():
+            try:
+                engine = EngineType(str(engine_name).upper())
+            except ValueError as exc:
+                raise PipelineValidationError(f"unknown_engine_input:{engine_name}") from exc
+            hashes: dict[str, str] = {}
+            for raw_path in raw_paths:
+                path = Path(raw_path).expanduser().resolve()
+                if not path.is_file():
+                    raise PipelineValidationError(
+                        f"engine_input_missing:{engine.value}:{raw_path}"
+                    )
+                hashes[str(path)] = sha256_file(path)
+            normalized_inputs[engine.value] = hashes
+        context.engine_input_hashes = normalized_inputs
+        context.strategy_id = strategy_id
+
+    def validate_engine_result(
+        self,
+        result: EngineResult,
+        engine: EngineType,
+        strategy_id: str,
+        context: PipelineContext,
+        *,
+        base_dir: str | Path,
     ) -> None:
-        # Backward-compatible no-argument call remains valid for legacy tests.
-        if context is None:
-            return
-        if not context.paper_only:
-            raise PipelineValidationError("Strategy research pipeline is paper-only")
-        if not context.strategy_id or not context.strategy_id.strip():
-            raise PipelineValidationError("strategy_id is required")
-        if not context.run_id or not context.run_id.strip():
-            raise PipelineValidationError("run_id is required")
-        for path in changed_paths or ():
-            lowered = str(path).lower()
-            if any(token in lowered for token in cls.FORBIDDEN_PATH_TOKENS):
-                raise PipelineValidationError(f"Forbidden runtime path in research scope: {path}")
+        if result.engine != engine:
+            raise PipelineValidationError("engine_result_engine_mismatch")
+        if result.strategy_id != strategy_id:
+            raise PipelineValidationError("engine_result_strategy_mismatch")
+        if result.run_id != context.run_id:
+            raise PipelineValidationError("engine_result_run_mismatch")
 
-    @classmethod
-    def validate_input_file(cls, path: str | Path, expected_sha256: Optional[str] = None) -> str:
-        actual = cls.sha256(path)
-        if expected_sha256 and actual != expected_sha256:
-            raise PipelineValidationError(
-                f"Artifact hash mismatch for {path}: expected {expected_sha256}, found {actual}"
-            )
-        return actual
+        expected_inputs = context.engine_input_hashes.get(engine.value, {})
+        if result.input_hashes != expected_inputs:
+            raise PipelineValidationError("engine_result_input_hash_mismatch")
 
-    @classmethod
-    def validate_engine_result(cls, result: EngineResult) -> None:
         if result.state == PipelineState.SUCCESS:
-            if not result.run_id or not result.strategy_id:
-                raise PipelineValidationError(f"{result.engine.value} success lacks run provenance")
-            if result.exit_code not in (None, 0):
-                raise PipelineValidationError(f"{result.engine.value} success has non-zero exit code")
-            if not result.verdict:
-                raise PipelineValidationError(f"{result.engine.value} success lacks a verdict")
-            if result.engine.value != "REGISTRY" and not result.output_hashes:
-                raise PipelineValidationError(f"{result.engine.value} success lacks verified outputs")
-        if result.state in (PipelineState.BLOCKED, PipelineState.FAILED) and not (
-            result.errors or result.blockers
-        ):
-            raise PipelineValidationError(f"{result.engine.value} failure lacks reason")
+            if context.require_verified_results and not result.verified:
+                raise PipelineValidationError("success_result_not_verified")
+            if not str(result.verdict or "").strip():
+                raise PipelineValidationError("success_result_verdict_required")
+            if result.exit_code not in (0, None if result.cached else 0):
+                raise PipelineValidationError("success_result_exit_code_invalid")
+            if not result.artifacts_generated:
+                raise PipelineValidationError("success_result_artifacts_required")
+            self._verify_output_artifacts(result, context, base_dir=base_dir)
+        elif result.state in (PipelineState.BLOCKED, PipelineState.FAILED, PipelineState.DEGRADED):
+            if not (result.errors or result.blockers or str(result.verdict or "").strip()):
+                raise PipelineValidationError("non_success_result_reason_required")
+            if result.artifacts_generated or result.output_hashes:
+                if not result.artifacts_generated:
+                    raise PipelineValidationError("non_success_artifact_paths_required")
+                self._verify_output_artifacts(result, context, base_dir=base_dir)
 
-    @classmethod
-    def validate_post_run(cls, results: Optional[Iterable[EngineResult]] = None) -> None:
-        if results is None:
-            return
-        for result in results:
-            cls.validate_engine_result(result)
+    def _verify_output_artifacts(
+        self,
+        result: EngineResult,
+        context: PipelineContext,
+        *,
+        base_dir: str | Path,
+    ) -> None:
+        root = Path(base_dir).resolve()
+        allowed = [(root / self._safe_relative_path(item)).resolve() for item in context.allowed_output_roots]
+        artifact_paths: list[Path] = []
+        for raw in result.artifacts_generated:
+            candidate = Path(raw)
+            path = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+            if not path.is_file():
+                raise PipelineValidationError(f"result_artifact_missing:{raw}")
+            if not any(path == allowed_root or allowed_root in path.parents for allowed_root in allowed):
+                raise PipelineValidationError(f"result_artifact_outside_allowed_roots:{raw}")
+            artifact_paths.append(path)
+
+        normalized_hashes = {str(path): sha256_file(path) for path in artifact_paths}
+        supplied_hashes: dict[str, str] = {}
+        for raw, digest in result.output_hashes.items():
+            candidate = Path(raw)
+            path = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+            if not self._SHA_RE.fullmatch(str(digest or "")):
+                raise PipelineValidationError(f"result_artifact_hash_invalid:{raw}")
+            supplied_hashes[str(path)] = digest
+        if normalized_hashes != supplied_hashes:
+            raise PipelineValidationError("result_artifact_hash_mismatch")
+
+    def validate_post_run(
+        self,
+        tracker: PipelineStateTracker,
+        context: PipelineContext,
+        required_engines: Iterable[EngineType],
+        *,
+        base_dir: str | Path,
+    ) -> None:
+        if tracker.strategy_id != context.strategy_id:
+            raise PipelineValidationError("tracker_strategy_mismatch")
+        for engine, result in tracker.engine_results.items():
+            self.validate_engine_result(
+                result,
+                engine,
+                tracker.strategy_id,
+                context,
+                base_dir=base_dir,
+            )
+
+        required = tuple(required_engines)
+        if tracker.global_state == PipelineState.SUCCESS:
+            if not required or any(
+                tracker.get_engine_state(engine) != PipelineState.SUCCESS for engine in required
+            ):
+                raise PipelineValidationError("pipeline_success_without_all_required_engines")
