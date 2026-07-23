@@ -1,0 +1,38 @@
+{
+  "allowed_for_live_execution": false,
+  "authority_tier": "CURRENT_MASTER_DIAGNOSTIC_ONLY",
+  "blocker_code": "MANIFEST_CONTRACT_IDENTITY_INCOMPLETE",
+  "broker_api_called": false,
+  "capture_or_asof_ts": "2026-07-14T15:35:00.659041",
+  "current_master_used": false,
+  "is_order_action": false,
+  "manifest_path": "runtime/market_data/upstox/20260714/manifest.json",
+  "manifest_sha256": "a199299bd88cdaff261570148a263f7472dca309b3422efdd367505fbb50467d",
+  "missing_contract_identity_fields": [
+    "asof_not_after_event",
+    "capture_or_asof_timestamp",
+    "contract_source_relationship",
+    "expiry",
+    "immutable_content_hash",
+    "instrument_token",
+    "option_right",
+    "provider",
+    "source_data_file",
+    "source_data_hash",
+    "strike",
+    "trading_symbol",
+    "underlying"
+  ],
+  "observed_contract_identity_fields": [],
+  "oracle_failures": [],
+  "oracle_verdict": "REAL_MANIFEST_AUDIT_ORACLE_PASSED",
+  "parse_status": "PARSE_OK",
+  "provider": "",
+  "referenced_source_files": [
+    ""
+  ],
+  "referenced_source_hashes": [
+    ""
+  ],
+  "research_only": true
+}

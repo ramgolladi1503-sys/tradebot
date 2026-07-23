@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4`
 - config_path: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/.gsd-forensics.yaml`
-- changed_paths: `116`
-- total_findings: `112`
+- changed_paths: `131`
+- total_findings: `126`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,8 +20,8 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `10` | `0` |  |
-| `cerberus` | `PASS` | `0` | `93` | `0` |  |
+| `minerva` | `PASS` | `0` | `11` | `0` |  |
+| `cerberus` | `PASS` | `0` | `106` | `0` |  |
 | `evidence` | `PASS` | `0` | `9` | `0` |  |
 
 ## Changed Paths
@@ -121,6 +121,20 @@
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json.sha256`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers_summary.json`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/adapter_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/audit_real_manifest_evidence.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/coverage_report.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit.json`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit_oracle.json`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit_oracle.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit_summary.md`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/ledger_builder.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/ledger_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/real_manifest_audit_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_registry.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_resolver.py`
 - `research/option_e2e_recertification_v4/strike_resolver.py`
 - `research/option_e2e_recertification_v4/time_utils.py`
 - `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py`
@@ -140,6 +154,7 @@
 - `tests/research/option_e2e/test_foundation_contracts.py`
 - `tests/research/option_e2e/test_inventory_v4_1.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_2.py`
+- `tests/research/option_e2e/test_signal_ledgers_v4_4.py`
 - `tests/research/test_option_e2e_census_v4.py`
 - `tests/research/test_option_e2e_census_v4_1.py`
 
@@ -155,6 +170,7 @@
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `test_reality_accepted` |
 
@@ -236,6 +252,18 @@
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/adapter_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/audit_real_manifest_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/coverage_report.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit_oracle.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/evidence/real_manifest_audit_summary.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/ledger_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/ledger_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/real_manifest_audit_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_registry.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/strike_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/time_utils.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -253,6 +281,7 @@
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
