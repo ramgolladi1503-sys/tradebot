@@ -1,0 +1,145 @@
+name: Residual Mean Reversion Stability Audit V2
+
+on:
+  push:
+    branches:
+      - research/residual-liquidity-exhaustion-mr-v2-stage-b
+    paths:
+      - ".github/workflows/residual_mean_reversion_stability_audit.yml"
+      - "research/residual_liquidity_exhaustion_mr_v2/stability_audit.py"
+      - "research/residual_liquidity_exhaustion_mr_v2/stability_audit_contract.json"
+      - "scripts/audit_residual_mean_reversion_pattern_stability.py"
+      - "tests/test_residual_mean_reversion_stability_audit.py"
+      - "docs/agent_reviews/residual_liquidity_exhaustion_mr_v2_stage_b.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: residual-mean-reversion-stability-audit-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit-pattern-stability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+      CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+      STAGE_A_BASE_SHA: 11e3241d1f78305726e4a9c35c8c23b059f6132b
+      EVIDENCE_DIR: /tmp/residual-mr-v2-stage-b
+      EVIDENCE_BRANCH: research/residual-liquidity-exhaustion-mr-v2-stage-b
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout isolated Stage B branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/residual-liquidity-exhaustion-mr-v2-stage-b
+          fetch-depth: 0
+
+      - name: Verify Stage A ancestry and Stage B-only scope
+        run: |
+          set -euo pipefail
+          git cat-file -e "${STAGE_A_BASE_SHA}^{commit}"
+          git merge-base --is-ancestor "${STAGE_A_BASE_SHA}" HEAD
+          git diff --name-only "${STAGE_A_BASE_SHA}..HEAD" > /tmp/changed.txt
+          if grep -Ev '^(research/residual_liquidity_exhaustion_mr_v2/stability_audit.py$|research/residual_liquidity_exhaustion_mr_v2/stability_audit_contract.json$|scripts/audit_residual_mean_reversion_pattern_stability.py$|tests/test_residual_mean_reversion_stability_audit.py$|docs/agent_reviews/residual_liquidity_exhaustion_mr_v2_stage_b.md$|.github/workflows/residual_mean_reversion_stability_audit.yml$|docs/research/residual_liquidity_exhaustion_mr_v2_stage_b/)' /tmp/changed.txt; then
+            echo "Forbidden production or unrelated file in Stage B diff" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow pytest
+
+      - name: Run Stage A and Stage B contract tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_residual_mean_reversion_pattern_atlas.py \
+            tests/test_residual_mean_reversion_stability_audit.py
+
+      - name: Download and verify immutable development corpus
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN}"
+          mkdir -p "${RUNNER_TEMP}/corpus-assets" runtime
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir "${RUNNER_TEMP}/corpus-assets" \
+            --pattern "upstox_candidate_replay_v1.tar.gz" \
+            --pattern "upstox_candidate_replay_v1.tar.gz.sha256" \
+            --pattern "parquet_sha256_manifest.txt"
+          assets="${RUNNER_TEMP}/corpus-assets"
+          echo "${CORPUS_ARCHIVE_SHA256}  ${assets}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
+          test "$(awk '{print $1}' "${assets}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
+          tar -xzf "${assets}/upstox_candidate_replay_v1.tar.gz" -C runtime
+          test -d runtime/upstox_candidate_replay
+
+      - name: Rebuild deterministic Stage A event ledgers
+        run: |
+          set -euo pipefail
+          assets="${RUNNER_TEMP}/corpus-assets"
+          PYTHONPATH=. python scripts/run_residual_mean_reversion_pattern_atlas.py \
+            --project-root "${GITHUB_WORKSPACE}" \
+            --corpus-root "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay" \
+            --manifest "${assets}/parquet_sha256_manifest.txt" \
+            --output-dir "${EVIDENCE_DIR}/stage-a" \
+            --producer-commit "${GITHUB_SHA}"
+
+      - name: Run frozen Stage B stability audit
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python scripts/audit_residual_mean_reversion_pattern_stability.py \
+            --project-root "${GITHUB_WORKSPACE}" \
+            --event-ledger-a "${EVIDENCE_DIR}/stage-a/run-a/residual_event_ledger.parquet" \
+            --event-ledger-b "${EVIDENCE_DIR}/stage-a/run-b/residual_event_ledger.parquet" \
+            --output-dir "${EVIDENCE_DIR}/stage-b" \
+            --producer-commit "${GITHUB_SHA}"
+
+      - name: Publish compact Stage B evidence index
+        if: always()
+        run: |
+          set -euo pipefail
+          source="${EVIDENCE_DIR}/stage-b"
+          target="docs/research/residual_liquidity_exhaustion_mr_v2_stage_b"
+          git fetch origin "${EVIDENCE_BRANCH}"
+          git checkout "${EVIDENCE_BRANCH}"
+          git pull --ff-only origin "${EVIDENCE_BRANCH}"
+          mkdir -p "${target}"
+          for name in \
+            run_status.json \
+            stability_audit_final_summary.json \
+            semantic_determinism_manifest.json; do
+            if test -f "${source}/${name}"; then
+              cp "${source}/${name}" "${target}/${name}"
+            fi
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${target}"
+          if ! git diff --cached --quiet; then
+            git commit -m "research: publish residual mean-reversion Stage B evidence"
+            git push origin HEAD:"${EVIDENCE_BRANCH}"
+          fi
+
+      - name: Upload read-only Stage B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: residual-mean-reversion-stability-audit-v2-${{ github.sha }}
+          path: /tmp/residual-mr-v2-stage-b
+          if-no-files-found: warn
+          retention-days: 30
