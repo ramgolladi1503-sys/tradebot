@@ -1,5 +1,16 @@
 # PR #709 Constituent Lead–Lag Certification Repair Review
 
+## Evidence Contract
+
+- mode: RESEARCH
+- candidate_id: PR709-CONSTITUENT-LEAD-LAG-CERTIFICATION-REPAIR
+- decision: SOURCE_CERTIFICATION_CONTRACTS_REPAIRED_V3_EVIDENCE_REQUIRED
+- reason: The prior v2 certification machinery did not independently prove exact bars, coverage, controls, sensitivities or final-verdict prerequisites.
+- timestamp: 2026-07-23T13:24:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: GitHub PR #709 repair commits and GitHub Actions focused validation
+
 ## Agent Work Contract
 
 Repair only the research and evidence-certification contracts for Constituent
