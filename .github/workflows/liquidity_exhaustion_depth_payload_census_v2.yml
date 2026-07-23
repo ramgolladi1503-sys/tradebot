@@ -1,0 +1,135 @@
+name: Liquidity Exhaustion Depth Payload Census V2
+
+on:
+  push:
+    branches:
+      - research/liquidity-exhaustion-depth-schema-v2
+    paths:
+      - ".github/workflows/liquidity_exhaustion_depth_payload_census_v2.yml"
+      - "research/liquidity_exhaustion_depth_schema_v2/payload_census.py"
+      - "scripts/census_liquidity_exhaustion_depth_payload.py"
+      - "tests/test_liquidity_exhaustion_depth_payload_census.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: liquidity-exhaustion-depth-payload-census-v2-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  census-depth-payload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CORPUS_REPO: ramgolladi1503-sys/tradebot-research-corpus
+      CORPUS_TAG: upstox-corpus-v1
+      CORPUS_ARCHIVE_SHA256: 8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7
+      PARENT_READINESS_SHA: 233b895d0a13752aac8c995c4129e98bbf6cb9e2
+      EVIDENCE_DIR: /tmp/liquidity-exhaustion-depth-payload-census-v2
+      EVIDENCE_BRANCH: research/liquidity-exhaustion-depth-schema-v2
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout isolated schema branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/liquidity-exhaustion-depth-schema-v2
+          fetch-depth: 0
+
+      - name: Verify ancestry and research-only scope
+        run: |
+          set -euo pipefail
+          git cat-file -e "${PARENT_READINESS_SHA}^{commit}"
+          git merge-base --is-ancestor "${PARENT_READINESS_SHA}" HEAD
+          git diff --name-only "${PARENT_READINESS_SHA}..HEAD" > /tmp/changed.txt
+          forbidden="$(grep -Ev '^(research/liquidity_exhaustion_depth_schema_v2/|scripts/(probe_liquidity_exhaustion_depth_schema|census_liquidity_exhaustion_depth_payload).py$|tests/test_liquidity_exhaustion_depth_(schema|payload_census).py$|docs/agent_reviews/liquidity_exhaustion_depth_schema_v2.md$|docs/research/liquidity_exhaustion_depth_schema_v2/|docs/research/liquidity_exhaustion_depth_payload_census_v2/|.github/workflows/liquidity_exhaustion_depth_(schema|payload_census)_v2.yml$)' /tmp/changed.txt || true)"
+          if test -n "${forbidden}"; then
+            printf '%s\n' "${forbidden}" >&2
+            echo "Forbidden file in depth-payload census diff" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install numpy pandas pyarrow pytest
+
+      - name: Run exact-census tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_liquidity_exhaustion_depth_schema.py \
+            tests/test_liquidity_exhaustion_depth_payload_census.py \
+            tests/test_research_candle_contract.py
+
+      - name: Download and verify immutable corpus
+        env:
+          GH_TOKEN: ${{ secrets.CORPUS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN}"
+          mkdir -p "${RUNNER_TEMP}/corpus-assets" runtime
+          gh release download "${CORPUS_TAG}" \
+            --repo "${CORPUS_REPO}" \
+            --dir "${RUNNER_TEMP}/corpus-assets" \
+            --pattern "upstox_candidate_replay_v1.tar.gz" \
+            --pattern "upstox_candidate_replay_v1.tar.gz.sha256"
+          assets="${RUNNER_TEMP}/corpus-assets"
+          echo "${CORPUS_ARCHIVE_SHA256}  ${assets}/upstox_candidate_replay_v1.tar.gz" | sha256sum -c -
+          test "$(awk '{print $1}' "${assets}/upstox_candidate_replay_v1.tar.gz.sha256")" = "${CORPUS_ARCHIVE_SHA256}"
+          tar -xzf "${assets}/upstox_candidate_replay_v1.tar.gz" -C runtime
+          test -d runtime/upstox_candidate_replay
+
+      - name: Run exact full-row depth payload census twice
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python scripts/census_liquidity_exhaustion_depth_payload.py \
+            --corpus-root "${GITHUB_WORKSPACE}/runtime/upstox_candidate_replay" \
+            --output-dir "${EVIDENCE_DIR}" \
+            --producer-commit "${GITHUB_SHA}"
+
+      - name: Publish compact census evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          source_dir="${EVIDENCE_DIR}"
+          target="docs/research/liquidity_exhaustion_depth_payload_census_v2"
+          git fetch origin "${EVIDENCE_BRANCH}"
+          git checkout "${EVIDENCE_BRANCH}"
+          git pull --ff-only origin "${EVIDENCE_BRANCH}"
+          mkdir -p "${target}"
+          for name in \
+            run_status.json \
+            depth_payload_census_final_summary.json \
+            semantic_determinism_manifest.json; do
+            if test -f "${source_dir}/${name}"; then
+              cp "${source_dir}/${name}" "${target}/${name}"
+            fi
+          done
+          if test -f "${source_dir}/run-a/depth_payload_file_census.json"; then
+            cp "${source_dir}/run-a/depth_payload_file_census.json" "${target}/depth_payload_file_census.json"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${target}"
+          if ! git diff --cached --quiet; then
+            git commit -m "research: publish exact depth payload census v2"
+            git push origin HEAD:"${EVIDENCE_BRANCH}"
+          fi
+
+      - name: Upload full read-only census evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquidity-exhaustion-depth-payload-census-v2-${{ github.sha }}
+          path: /tmp/liquidity-exhaustion-depth-payload-census-v2
+          if-no-files-found: warn
+          retention-days: 30
