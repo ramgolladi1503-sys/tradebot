@@ -1,0 +1,12 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "classification": "TWO_LEDGER_SEMANTIC_DETERMINISM_PASSED",
+  "files": {
+    "frozen_stability_audit_contract.json": "546eea56faf536c7a71d23c10fcadf498828647b5a2dfcfd7e3286663b4aaf1d",
+    "stability_audit_final_summary.json": "d2ef13ef356ad06454350cb6c1529dfdfb22bc5cef035669c02203d7168b5eed",
+    "stability_screen.csv": "d9bdc2b6f4d48c09d5a291a2a0951e61891c96cfc04f80fc32ef640fba313b94",
+    "stability_screen.json": "c5b6426fd46981067180ca4341f9da16e731c8b2476a1948e6e5b12dbe21dee1"
+  },
+  "producer_commit": "fdf837c06a89b4bd6589e7d76472fbf699b107d3",
+  "stage": "B_PATTERN_STABILITY_AUDIT"
+}

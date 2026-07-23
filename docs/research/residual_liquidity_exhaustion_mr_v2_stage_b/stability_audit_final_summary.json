@@ -1,0 +1,20 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "candidate_count_tested": 78,
+  "classification": "NO_STABLE_RESIDUAL_MEAN_REVERSION_SEGMENT_FOUND",
+  "event_count": 491,
+  "event_ledger_a_sha256": "b43b983020747924e32ff7c7b45e0ba4202cd44c2a4302fc3fe8d2e4e4463c8c",
+  "event_ledger_b_sha256": "b43b983020747924e32ff7c7b45e0ba4202cd44c2a4302fc3fe8d2e4e4463c8c",
+  "event_ledger_sha256": "b43b983020747924e32ff7c7b45e0ba4202cd44c2a4302fc3fe8d2e4e4463c8c",
+  "execution_allowed": false,
+  "next_gate": "CLOSE_CANDLE_RESIDUAL_FORMULATION_AND_CONTINUE_DEPTH_DATA_ACQUISITION",
+  "paper_live_allowed": false,
+  "producer_commit": "fdf837c06a89b4bd6589e7d76472fbf699b107d3",
+  "profitability_claim_allowed": false,
+  "stable_candidate_count": 0,
+  "stable_candidate_keys": [],
+  "stage": "B_PATTERN_STABILITY_AUDIT",
+  "strategy_created": false,
+  "structural_edge_claim_allowed": false,
+  "two_ledger_semantic_determinism": true
+}

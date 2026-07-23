@@ -1,0 +1,10 @@
+{
+  "campaign_id": "RESIDUAL_LIQUIDITY_EXHAUSTION_MR_V2",
+  "classification": "NO_STABLE_RESIDUAL_MEAN_REVERSION_SEGMENT_FOUND",
+  "execution_allowed": false,
+  "producer_commit": "fdf837c06a89b4bd6589e7d76472fbf699b107d3",
+  "stable_candidate_count": 0,
+  "stage": "B_PATTERN_STABILITY_AUDIT",
+  "status": "COMPLETE",
+  "two_ledger_semantic_determinism": true
+}
