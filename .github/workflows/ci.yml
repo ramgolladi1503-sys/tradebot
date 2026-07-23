@@ -47,13 +47,24 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
+          set -o pipefail
           pytest -q \
             tests/research/test_constituent_data_pipeline.py \
             tests/research/test_reconstructed_weight_proxy.py \
             tests/research/test_constituent_lead_lag.py \
             tests/research/test_unweighted_constituent_breadth.py \
             tests/research/test_certification_repair.py \
-            tests/research/test_reconstructed_proxy_oracle.py
+            tests/research/test_reconstructed_proxy_oracle.py \
+            2>&1 | tee /tmp/pr709-focused-pytest.log
+
+      - name: Upload focused failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr709-focused-pytest-failure
+          path: /tmp/pr709-focused-pytest.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Commit repair and restore workflows
         run: |
