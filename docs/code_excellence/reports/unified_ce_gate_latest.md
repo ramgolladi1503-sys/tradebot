@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4`
 - config_path: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/.gsd-forensics.yaml`
-- changed_paths: `145`
-- total_findings: `141`
+- changed_paths: `157`
+- total_findings: `154`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,8 +20,8 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `12` | `0` |  |
-| `cerberus` | `PASS` | `0` | `119` | `0` |  |
+| `minerva` | `PASS` | `0` | `13` | `0` |  |
+| `cerberus` | `PASS` | `0` | `131` | `0` |  |
 | `evidence` | `PASS` | `0` | `10` | `0` |  |
 
 ## Changed Paths
@@ -146,6 +146,17 @@
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_7/signal_artifact_loader.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_7/source_contract.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_7/strategy_source_registry.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/determinism.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/deterministic_adapter.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/historical_source_discovery.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/lane_status.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/ledger_builder.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/ledger_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/repo_inventory.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/signal_artifact_loader.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/source_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_8/strategy_source_registry.py`
 - `research/option_e2e_recertification_v4/strike_resolver.py`
 - `research/option_e2e_recertification_v4/time_utils.py`
 - `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py`
@@ -169,6 +180,7 @@
 - `tests/research/option_e2e/test_signal_ledgers_v4_2.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_4.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_7.py`
+- `tests/research/option_e2e/test_signal_ledgers_v4_8.py`
 - `tests/research/test_option_e2e_census_v4.py`
 - `tests/research/test_option_e2e_census_v4_1.py`
 
@@ -186,6 +198,7 @@
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_8.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `test_reality_accepted` |
 
@@ -290,6 +303,17 @@
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_7/signal_artifact_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_7/source_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_7/strategy_source_registry.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/determinism.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/deterministic_adapter.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/historical_source_discovery.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/lane_status.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/ledger_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/ledger_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/repo_inventory.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/signal_artifact_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/source_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_8/strategy_source_registry.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/strike_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/time_utils.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -310,6 +334,7 @@
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_8.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
