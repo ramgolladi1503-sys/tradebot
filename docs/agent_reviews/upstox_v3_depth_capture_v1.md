@@ -1,17 +1,30 @@
 # Upstox V3 Depth Capture Repair V1
 
-implementation_direction: RIGHT_WITH_GAPS  
-branch: fix/upstox-v3-depth-capture-v1  
-mode: PRODUCTION_DATA_CAPTURE_REPAIR  
-strategy_logic_changed: false  
-execution_logic_changed: false  
-paper_live_permission_changed: false
+## Evidence Contract Fields
+
+- mode: PRODUCTION_DATA_CAPTURE_REPAIR
+- candidate_id: upstox-v3-depth-capture-v1
+- decision: REPAIR_AND_FAIL_CLOSED
+- reason: The historical collector requested V3 full mode but parsed a REST-style depth shape, producing unusable empty depth evidence.
+- is_order_action: false
+- broker_api_called: false
+- live_order_action: false
+- broker_order_action: false
+- strategy_logic_changed: false
+- execution_logic_changed: false
+- paper_live_permission_changed: false
+- source: docs/agent_reviews/upstox_v3_depth_capture_v1.md
+
+## Review Type
+
+- [x] Pre-merge review
+- [ ] Retrospective review
 
 ## Objective
 
 Repair future Upstox MarketDataStreamerV3 capture so full-feed order-book levels are persisted from the authoritative V3 message path, and fail closed when a session does not contain trustworthy F&O depth.
 
-## Evidence that required the repair
+## Evidence That Required the Repair
 
 The immutable replay corpus was audited before implementation:
 
@@ -23,13 +36,49 @@ The immutable replay corpus was audited before implementation:
 
 The historical corpus is not rewritten or upgraded. It remains ineligible for liquidity-exhaustion discovery.
 
-## Root cause
+## Root Cause
 
 The previous collector treated an Upstox V3 WebSocket callback as a REST quote payload. It read `depth.buy` and `depth.sell` directly from each top-level dictionary item. In V3 full mode, live instrument data is carried under a top-level `feeds` mapping and market depth is carried under `fullFeed.marketFF.marketLevel.bidAskQuote`. First-level mode uses `firstLevelWithGreeks.firstDepth`.
 
 As a result, the old parser silently persisted missing top-of-book values even when the subscription requested full mode.
 
-## Implemented boundaries
+## Agent Work Contract
+
+- Branch: `fix/upstox-v3-depth-capture-v1`
+- Base commit: `db6f384144f3937e96a67bd449f67e5f1b274c65`
+- Draft PR: `#707`
+- Objective: repair capture and persistence only; do not create or promote a strategy.
+- Allowed files:
+  - `core/upstox_v3_feed_parser.py`
+  - `scripts/capture_upstox_market_daily.py`
+  - `tests/test_upstox_v3_feed_parser.py`
+  - `tests/test_upstox_v3_depth_capture_persistence.py`
+  - `docs/agent_reviews/upstox_v3_depth_capture_v1.md`
+  - `.github/workflows/upstox_v3_depth_capture_contract.yml`
+- Forbidden files:
+  - `strategies/`
+  - strategy registry files
+  - ranking and candidate-pool owners
+  - risk and execution owners
+  - broker-order routers
+  - production configuration
+  - dashboard files
+- Forbidden behaviors:
+  - no inferred or fallback bid/ask values;
+  - no rewriting the historical frozen corpus;
+  - no edge, profitability, paper/live or execution claim;
+  - no live broker action;
+  - no merge without explicit human approval.
+- Acceptance tests:
+  - official full-feed and first-level message shapes parse causally;
+  - index and LTPC messages do not invent depth;
+  - REST-style and ambiguous depth shapes fail closed;
+  - nested depth and quantity fields round-trip through Parquet;
+  - empty-depth F&O sessions are marked invalid and quarantined;
+  - strategy, risk, execution, orchestrator and config surfaces remain unchanged.
+- Runtime proof required: one future market-session capture after merge, reviewed separately.
+
+## Implemented Boundaries
 
 `core/upstox_v3_feed_parser.py` now:
 
@@ -51,7 +100,7 @@ As a result, the old parser silently persisted missing top-of-book values even w
 - writes `INVALID_DEPTH_CAPTURE.json` for invalid sessions;
 - exits nonzero for invalid finalized captures.
 
-## Frozen quality gate
+## Frozen Quality Gate
 
 A session is research-depth eligible only when:
 
@@ -62,9 +111,77 @@ A session is research-depth eligible only when:
 
 The 50% threshold is a capture-health threshold, not an edge or liquidity threshold. Instrument-level research selection must apply stricter downstream quality controls.
 
-## Focused evidence
+## Scope Guard
 
-Tests cover:
+Verdict: PASS
+
+Checked against `main`:
+
+- only six approved files changed;
+- branch is ahead of and not behind the base used by the repair;
+- no strategy, ranking, risk, execution, orchestrator, broker-order, config or dashboard file changed;
+- no historical corpus artifact changed;
+- no credentials or secret values were added;
+- the workflow has read-only repository permissions.
+
+Blocking issue: no merge until repository CI is green and a human explicitly approves it.
+
+## Grill Me Review
+
+Verdict: PASS_WITH_RUNTIME_GAP
+
+Questions asked:
+
+1. Could the parser still silently treat a REST quote as V3 live depth?
+   - No. A payload carrying `depth.buy/depth.sell` in the live-feed path raises `UpstoxV3ParseError`.
+2. Could a generic `{price, quantity}` object be assigned to both sides?
+   - No. Generic one-sided keys are not accepted as bid or ask authority.
+3. Could an index feed be marked as valid depth?
+   - No. Index/LTPC records persist no invented levels and `depth_valid=false`.
+4. Could a flush failure still produce a valid manifest?
+   - No. Persistence failures and parsed-versus-written mismatch make finalization invalid.
+5. Could one illiquid contract invalidate an otherwise useful capture?
+   - The gate evaluates active F&O instrument coverage and requires at least 50%, while preserving per-instrument counts for stricter downstream filtering.
+
+Primary residual risk: SDK callback serialization may differ from the documented examples in a real session. Unknown shapes fail closed and require runtime evidence.
+
+## Hermes Review
+
+Verdict: PASS
+
+Architecture consistency:
+
+1. Decoding and quality classification are isolated in a network-free core parser.
+2. The collector owns subscription lifecycle and persistence but delegates message semantics.
+3. Source depth is preserved additively; top-of-book values are derived only from the first explicit two-sided source level.
+4. Session validity is persisted as evidence rather than inferred later from file existence.
+
+Maintainability:
+
+1. Official camelCase fields and explicit snake_case aliases are centralized.
+2. The Parquet schema is explicit and versioned by the manifest.
+3. Unknown shapes raise typed errors instead of disappearing inside a broad exception.
+
+## GSD Review
+
+Verdict: PASS
+
+Execution completed:
+
+1. Proved the frozen historical depth payload is empty across all 2,778,666 rows.
+2. Identified the REST-versus-V3 shape mismatch in the collector.
+3. Added an official-shape parser and negative controls.
+4. Added additive nested persistence and quality accounting.
+5. Added a dedicated focused CI workflow.
+6. Opened draft PR #707; no merge performed.
+
+Remaining step: obtain repository-wide green CI, then require explicit human merge approval and a separate post-merge market-session canary.
+
+## QA / Safety Review
+
+Verdict: PASS_WITH_RUNTIME_GAP
+
+Focused tests cover:
 
 - official full-feed multi-level depth;
 - first-level-with-Greeks depth;
@@ -78,14 +195,78 @@ Tests cover:
 - full nested PyArrow/Parquet round-trip;
 - invalid-session quarantine artifact.
 
-## Remaining gate
+Safety checks:
 
-This repair cannot prove live capture correctness without a future market-session canary. The first real capture after deployment must be reviewed for:
+- no network or broker API is used by tests;
+- no order path is imported or changed;
+- invalid capture exits nonzero;
+- the historical corpus remains untrusted for depth research;
+- execution and strategy promotion remain prohibited.
 
-- nonzero F&O depth coverage;
-- realistic spreads and quantities;
-- source timestamp cadence;
-- parsed/persisted reconciliation;
-- no invalid-session marker.
+## High-Risk Path Review
 
-Until that evidence exists, no new liquidity-exhaustion strategy, structural-edge claim, paper promotion or execution use is permitted.
+Verdict: PASS_WITH_RUNTIME_GAP
+
+The changed collector is an operational data-ingestion path, so the repair is treated as high risk even though it cannot place orders.
+
+Controls:
+
+- typed fail-closed parser errors;
+- strict input-shape tests;
+- additive schema with source timestamp and full levels;
+- parser, persistence and reconciliation accounting;
+- invalid-session marker and nonzero exit;
+- focused CI plus repository-wide PR CI;
+- mandatory post-merge real-session canary.
+
+## Acceptance Proof
+
+Focused push workflow:
+
+- workflow: `Upstox V3 Depth Capture Contract`
+- run: `29982980435`
+- tested head: `4b5696c34250699fbd7f7f1460d34b0da05121c3`
+- result: all ancestry, strict-scope, dependency, compilation, focused-test and forbidden-surface steps passed.
+
+The final documentation-only head must rerun the same workflow and all PR checks before acceptance.
+
+Expected final result:
+
+```text
+Upstox V3 Depth Capture Contract: success
+Agent Review Evidence Gate: success
+repository PR checks: success
+```
+
+## Runtime Proof Required After Merge
+
+A later market-session canary must publish and independently review:
+
+1. manifest classification `UPSTOX_V3_DEPTH_CAPTURE_VALID`;
+2. nonzero parsed and persisted records with exact reconciliation;
+3. nonzero valid-depth records for active F&O instruments;
+4. at least 50% active F&O instrument depth coverage;
+5. realistic bid/ask ordering, spreads, quantities and level counts;
+6. source timestamp cadence and freshness;
+7. zero parser and persistence failures;
+8. absence of `INVALID_DEPTH_CAPTURE.json`.
+
+Failure of any item keeps the session research-ineligible and requires another repair; it must not be relabeled valid manually.
+
+## What This PR Does Not Prove
+
+1. It does not repair or validate the historical 20260709 depth corpus.
+2. It does not prove a liquidity-exhaustion or mean-reversion edge.
+3. It does not prove that a future live callback will exactly match documentation.
+4. It does not prove every subscribed option has continuously populated depth.
+5. It does not authorize paper trading, live trading, strategy promotion or broker execution.
+6. It does not address candidate ranking, fallback rows or UI opportunity selection.
+7. It does not replace the required 60 development and 20 future holdout sessions for later microstructure research.
+
+## Human Approval
+
+Status: PENDING
+
+- Draft PR #707 remains unmerged.
+- Human approver must explicitly review green CI and authorize merge.
+- After merge, runtime canary evidence requires a separate review and cannot be assumed from CI.
