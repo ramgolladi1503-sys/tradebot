@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 import core.orchestrator as orch_mod
 from config import config as cfg
 from core.time_utils import now_ist
@@ -23,8 +21,26 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     monkeypatch.setattr("core.recovery_state_machine.evaluate_feed_state", lambda _: RecoveryState.HEALTHY, raising=False)
     monkeypatch.setattr(orch_mod, "_feed_truth_cycle_gate", lambda x: {"skip": False}, raising=False)
     monkeypatch.setattr(orch_mod, "evaluate_slo_status", lambda **kwargs: {"status": "OK"}, raising=False)
+    monkeypatch.setattr(
+        orch_mod,
+        "fetch_live_market_data",
+        lambda: [
+            {
+                "instrument": "OPT",
+                "symbol": "TEST_OPT",
+                "market_open": True,
+                "ltp": 123.45,
+                "option_ltp": 123.45,
+            }
+        ],
+        raising=False,
+    )
+    called = {"evaluate_suggestions": False}
+
     def raise_err(*args, **kwargs):
+        called["evaluate_suggestions"] = True
         raise RuntimeError("forced_cycle_error")
+
     monkeypatch.setattr(orch_mod.Orchestrator, "_evaluate_suggestions", raise_err)
     monkeypatch.setattr(orch_mod.RunLock, "acquire", lambda self: (True, "ok"))
     monkeypatch.setattr(orch_mod.RunLock, "release", lambda self: None)
@@ -57,4 +73,6 @@ def test_cycle_exception_still_writes_reports(monkeypatch, tmp_path):
     assert exec_doc.get("reason")
     assert suggestions_status["status"] == "error"
     assert engine_cycle_status["cycle_ok"] is False
+    assert called["evaluate_suggestions"] is True
     assert "forced_cycle_error" in engine_cycle_status["last_error"]
+    assert "[AUTH] missing_kite_access_token" not in engine_cycle_status["last_error"]

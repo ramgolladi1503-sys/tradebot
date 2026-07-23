@@ -203,21 +203,41 @@ def _scan_evidence_file(
                     risks=("traceability_gap",),
                 )
             )
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        lowered = line.lower()
-        for pattern in weak_patterns:
-            if _pattern_matches(lowered, pattern):
-                findings.append(
-                    EvidenceGateFinding(
-                        path=relative,
-                        verdict="BLOCK",
-                        reason="weak_evidence_pattern_found",
-                        field=pattern,
-                        line_number=line_number,
-                        evidence=line.strip(),
-                        risks=("weak_evidence",),
-                    )
-                )
+    if file_path.suffix == ".json":
+        findings.extend(
+            _scan_weak_patterns(
+                relative=relative,
+                fragments=_json_text_fragments(_load_json_object(text, file_path)),
+                weak_patterns=weak_patterns,
+            )
+        )
+    elif file_path.suffix == ".jsonl":
+        fragments: list[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                payload = _load_json_object(stripped, file_path)
+            except EvidenceGateError:
+                fragments.append(stripped)
+                continue
+            fragments.extend(_json_text_fragments(payload))
+        findings.extend(
+            _scan_weak_patterns(
+                relative=relative,
+                fragments=tuple(fragments),
+                weak_patterns=weak_patterns,
+            )
+        )
+    else:
+        findings.extend(
+            _scan_weak_patterns(
+                relative=relative,
+                fragments=tuple(text.splitlines()),
+                weak_patterns=weak_patterns,
+            )
+        )
     if not findings:
         return (
             EvidenceGateFinding(
@@ -265,6 +285,48 @@ def _extract_text_fields(text: str) -> dict[str, str]:
         if key:
             values[key] = value
     return values
+
+
+def _scan_weak_patterns(
+    *,
+    relative: str,
+    fragments: tuple[str, ...],
+    weak_patterns: tuple[str, ...],
+) -> list[EvidenceGateFinding]:
+    findings: list[EvidenceGateFinding] = []
+    for line_number, fragment in enumerate(fragments, start=1):
+        lowered = fragment.lower()
+        for pattern in weak_patterns:
+            if _pattern_matches(lowered, pattern):
+                findings.append(
+                    EvidenceGateFinding(
+                        path=relative,
+                        verdict="BLOCK",
+                        reason="weak_evidence_pattern_found",
+                        field=pattern,
+                        line_number=line_number,
+                        evidence=fragment.strip(),
+                        risks=("weak_evidence",),
+                    )
+                )
+    return findings
+
+
+def _json_text_fragments(payload: Any) -> tuple[str, ...]:
+    fragments: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, str):
+            fragments.append(value)
+        elif isinstance(value, Mapping):
+            for nested in value.values():
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(payload)
+    return tuple(fragments)
 
 
 def _load_json_object(text: str, path: Path) -> Mapping[str, Any]:

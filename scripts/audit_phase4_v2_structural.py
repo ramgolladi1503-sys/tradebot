@@ -1,135 +1,174 @@
 #!/usr/bin/env python3
-import json
-import argparse
-from pathlib import Path
+from __future__ import annotations
 
-def main():
+import argparse
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+
+PASSED_STATUS = "PASSED"
+REJECTED_STATUS = "REJECTED"
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def audit_v2_structure(
+    trades: list[dict[str, Any]],
+    candidates: list[dict[str, Any]],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    blockers: set[str] = set()
+
+    if not candidates:
+        blockers.add("CANDIDATE_LEDGER_MISSING_OR_EMPTY")
+    else:
+        base_required = {
+            "signal_time",
+            "symbol",
+            "setup_type",
+            "wick_ratio",
+            "or_high",
+            "or_low",
+            "signal_close",
+            "status",
+        }
+        next_open_required = {
+            "entry_eval_time",
+            "entry_open",
+            "stop_loss",
+            "target",
+            "planned_target_distance",
+            "proxy_option_expected_move",
+            "cost_hurdle_margin",
+        }
+        for candidate in candidates:
+            if not base_required.issubset(candidate):
+                blockers.add("CANDIDATE_LEDGER_FIELDS_MISSING")
+                continue
+            status = str(candidate.get("status") or "").upper()
+            if status == REJECTED_STATUS:
+                if not candidate.get("reject_reason"):
+                    blockers.add("REJECTED_CANDIDATE_REASON_MISSING")
+            elif status == PASSED_STATUS:
+                if not next_open_required.issubset(candidate):
+                    blockers.add("PASSED_CANDIDATE_NEXT_OPEN_FIELDS_MISSING")
+            else:
+                blockers.add("CANDIDATE_STATUS_INVALID")
+            if candidate.get("reject_reason") != "WICK_TOO_WEAK" and (
+                "htf_regime" not in candidate
+            ):
+                blockers.add("CANDIDATE_HTF_REGIME_MISSING")
+
+    if not trades:
+        blockers.add("V2_LEDGER_MISSING_OR_EMPTY")
+    for trade in trades:
+        required_trade_fields = {
+            "v2_signal_version",
+            "setup_type",
+            "failed_level",
+            "rejection_quality",
+            "htf_regime",
+            "signal_time",
+            "entry_time",
+            "entry_delay_bars",
+            "next_open_recalculated",
+            "planned_target_distance",
+            "entry_price",
+            "stop_loss",
+            "target",
+            "cost_hurdle_margin",
+            "pnl_model",
+        }
+        if not required_trade_fields.issubset(trade):
+            blockers.add("LEDGER_SCHEMA_REQUIRED_FIELD_MISSING")
+            continue
+        if trade["v2_signal_version"] != "1.0":
+            blockers.add("V2_NOT_STRUCTURAL_REDESIGN_FAILED")
+        signal_time = _parse_timestamp(trade["signal_time"])
+        entry_time = _parse_timestamp(trade["entry_time"])
+        if signal_time is None or entry_time is None or signal_time >= entry_time:
+            blockers.add("SAME_CANDLE_ENTRY_RISK")
+        if int(trade["entry_delay_bars"]) != 1:
+            blockers.add("NEXT_OPEN_ENTRY_DELAY_MISMATCH")
+        if not bool(trade["next_open_recalculated"]):
+            blockers.add("NEXT_OPEN_COST_HURDLE_NOT_RECALCULATED")
+        if float(trade["planned_target_distance"]) <= 0:
+            blockers.add("COST_HURDLE_TARGET_MISMATCH")
+        entry = float(trade["entry_price"])
+        stop = float(trade["stop_loss"])
+        target = float(trade["target"])
+        if entry == stop:
+            blockers.add("ZERO_RISK_DISTANCE")
+        else:
+            realized_geometry_rr = abs(target - entry) / abs(stop - entry)
+            if realized_geometry_rr < 1.4:
+                blockers.add("NEXT_OPEN_RR_MISMATCH")
+        if float(trade["cost_hurdle_margin"]) <= 0:
+            blockers.add("COST_HURDLE_FILTER_FAILED")
+
+    if not summary:
+        blockers.add("TRADE_LEDGER_SUMMARY_MISSING")
+    else:
+        zero_trade_symbol_days = int(
+            summary.get("zero_trade_metrics", {}).get(
+                "zero_trade_symbol_days", 0
+            )
+        )
+        if zero_trade_symbol_days == 0:
+            blockers.add("ZERO_TRADE_SYMBOL_DAY_MISSING")
+        cap_saturation = float(summary.get("cap_saturation_ratio", 1.0))
+        if cap_saturation > 0.70:
+            blockers.add("V2_CAP_SATURATION_FAILED")
+
+    ordered = sorted(blockers)
+    return {
+        "classification": (
+            "V2_STRUCTURAL_AUDIT_FAILED"
+            if ordered
+            else "V2_STRUCTURAL_AUDIT_PASSED"
+        ),
+        "blockers": ordered,
+        "trade_count": len(trades),
+        "candidate_count": len(candidates),
+    }
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", type=str, default="MEAN_REVERSION_EXTENSION")
     args = parser.parse_args()
-    
+
     base_dir = Path(f"runtime/strategy_validation/{args.strategy}")
     ledger_path = base_dir / "phase_4_trade_ledger.jsonl"
     candidates_path = base_dir / "phase_4_candidates.jsonl"
-    
-    blockers = []
-    
-    if not ledger_path.exists():
-        blockers.append("V2_LEDGER_MISSING")
-        report(base_dir, blockers)
-        return
-        
-    if not candidates_path.exists():
-        blockers.append("CANDIDATE_LEDGER_MISSING")
-    else:
-        # Check candidate fields comprehensively
-        base_reqs = ["signal_time", "symbol", "setup_type", "reject_reason", "wick_ratio", "or_high", "or_low", "signal_close"]
-        next_open_reqs = ["entry_open", "stop_loss", "target", "planned_target_distance", "proxy_option_expected_move", "cost_hurdle_margin"]
-        
-        observed_reasons = set()
-        
-        with open(candidates_path, "r") as f:
-            for line in f:
-                if not line.strip(): continue
-                c = json.loads(line)
-                
-                reason = c.get("reject_reason", "UNKNOWN")
-                observed_reasons.add(reason)
-                
-                missing = False
-                for req in base_reqs:
-                    if req not in c:
-                        missing = True
-                        break
-                        
-                if reason not in ["WICK_TOO_WEAK"]:
-                    if "htf_regime" not in c: missing = True
-                    
-                if reason in ["SELECTED", "NEXT_OPEN_COST_HURDLE_FAILED"]:
-                    for req in next_open_reqs:
-                        if req not in c:
-                            missing = True
-                            break
-                            
-                if missing:
-                    if "CANDIDATE_LEDGER_FIELDS_MISSING" not in blockers:
-                        blockers.append("CANDIDATE_LEDGER_FIELDS_MISSING")
-                
-    trades = []
-    with open(ledger_path, "r") as f:
-        for line in f:
-            if line.strip():
-                trades.append(json.loads(line))
-                
     summary_path = base_dir / "phase_4_trade_ledger_summary.json"
-    if summary_path.exists():
-        with open(summary_path, "r") as f:
-            summary = json.load(f)
-            zts = summary.get("zero_trade_metrics", {}).get("zero_trade_symbol_days", 0)
-            if zts == 0:
-                blockers.append("ZERO_TRADE_SYMBOL_DAY_MISSING")
-                
-            cap = summary.get("cap_saturation_ratio", 1.0)
-            if cap > 0.70:
-                blockers.append("V2_CAP_SATURATION_FAILED")
-                
-    if len(trades) == 0:
-        report(base_dir, blockers)
-        return
-        
-    for t in trades:
-        if t.get("v2_signal_version") != "1.0":
-            if "V2_NOT_STRUCTURAL_REDESIGN_FAILED" not in blockers:
-                blockers.append("V2_NOT_STRUCTURAL_REDESIGN_FAILED")
-                
-        if "setup_type" not in t or "failed_level" not in t or "rejection_quality" not in t:
-            if "FAILED_BREAKOUT_CONFIRMATION_MISSING" not in blockers:
-                blockers.append("FAILED_BREAKOUT_CONFIRMATION_MISSING")
-                
-        if "htf_regime" not in t:
-            if "HTF_REGIME_FILTER_MISSING" not in blockers:
-                blockers.append("HTF_REGIME_FILTER_MISSING")
-                
-        signal_time = t.get("signal_time")
-        entry_time = t.get("entry_time")
-        if not signal_time or not entry_time or signal_time == entry_time:
-            if "SAME_CANDLE_ENTRY_RISK" not in blockers:
-                blockers.append("SAME_CANDLE_ENTRY_RISK")
-                
-        if not t.get("next_open_recalculated"):
-            if "NEXT_OPEN_COST_HURDLE_NOT_RECALCULATED" not in blockers:
-                blockers.append("NEXT_OPEN_COST_HURDLE_NOT_RECALCULATED")
-                
-        target_dist = t.get("planned_target_distance")
-        if target_dist is None or target_dist <= 0:
-            if "COST_HURDLE_TARGET_MISMATCH" not in blockers:
-                blockers.append("COST_HURDLE_TARGET_MISMATCH")
-                
-        entry = t.get("entry_price")
-        stop = t.get("stop_loss")
-        tgt = t.get("target")
-        if entry and stop and tgt and entry != stop:
-            rr = abs(tgt - entry) / abs(stop - entry)
-            if rr < 1.4: 
-                if "NEXT_OPEN_RR_MISMATCH" not in blockers:
-                    blockers.append("NEXT_OPEN_RR_MISMATCH")
-                
-        if "cost_hurdle_margin" not in t:
-            if "COST_HURDLE_FILTER_MISSING" not in blockers:
-                blockers.append("COST_HURDLE_FILTER_MISSING")
-        elif t["cost_hurdle_margin"] <= 0:
-            if "COST_HURDLE_FILTER_FAILED" not in blockers:
-                blockers.append("COST_HURDLE_FILTER_FAILED")
-                
-    report(base_dir, blockers)
 
-def report(base_dir, blockers):
-    out = {
-        "classification": "V2_STRUCTURAL_AUDIT_PASSED" if not blockers else "V2_STRUCTURAL_AUDIT_FAILED",
-        "blockers": blockers
-    }
-    with open(base_dir / "phase_4_v2_structural_audit.json", "w") as f:
-        json.dump(out, f, indent=2)
+    def load_jsonl(path: Path) -> list[dict[str, Any]]:
+        if not path.exists():
+            return []
+        return [
+            json.loads(line)
+            for line in path.read_text().splitlines()
+            if line.strip()
+        ]
+
+    trades = load_jsonl(ledger_path)
+    candidates = load_jsonl(candidates_path)
+    summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    report = audit_v2_structure(trades, candidates, summary)
+    base_dir.mkdir(parents=True, exist_ok=True)
+    (base_dir / "phase_4_v2_structural_audit.json").write_text(
+        json.dumps(report, indent=2)
+    )
+    print(f"Phase 4 V2 structural audit result: {report['classification']}")
+
 
 if __name__ == "__main__":
     main()

@@ -4,11 +4,21 @@ from core.movement_contract import StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement.opening_drive import generate_opening_drive_candidates
 from strategies.movement.vwap_reclaim import generate_vwap_reclaim_rejection_candidates
+from tests.vwap_reclaim_test_support import EVALUATION_CUTOFF, bullish_history
 
 
-def dummy_context(symbol="TEST", fallback=False, spot_ltp=100.5, vwap=100.0) -> StrategyContext:
+def dummy_context(
+    symbol="TEST",
+    fallback=False,
+    spot_ltp=100.5,
+    vwap=100.0,
+    *,
+    history=None,
+    ts_epoch=None,
+) -> StrategyContext:
     return StrategyContext(
         symbol=symbol,
+        ts_epoch=ts_epoch,
         minutes_since_open=15,
         minutes_to_close=360,
         spot_ltp=spot_ltp,
@@ -28,6 +38,7 @@ def dummy_context(symbol="TEST", fallback=False, spot_ltp=100.5, vwap=100.0) -> 
         volume_z=1.5,
         quote_source="realtime",
         fallback_used=fallback,
+        completed_bar_history=history,
         metadata={"vwap_reclaim_up_confirmed": True}
     )
 
@@ -69,7 +80,13 @@ def test_opening_drive_generator_lineage():
 
 
 def test_vwap_reclaim_generator_lineage():
-    ctx = dummy_context(spot_ltp=100.1, vwap=100.0)
+    ctx = dummy_context(
+        symbol="NIFTY",
+        spot_ltp=22610.0,
+        vwap=22540.0,
+        history=bullish_history(),
+        ts_epoch=EVALUATION_CUTOFF,
+    )
     regime = dummy_regime()
     candidates = generate_vwap_reclaim_rejection_candidates(ctx, regime)
     
