@@ -1,0 +1,70 @@
+name: Probe PR707 Code Excellence Failure
+
+on:
+  push:
+    branches:
+      - ops/observe-liquidity-exhaustion-depth-readiness-v2
+    paths:
+      - ".github/workflows/probe_pr707_code_excellence_failure.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_JOB_ID: "89130042268"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/observe-liquidity-exhaustion-depth-readiness-v2
+          fetch-depth: 1
+
+      - name: Extract changed-path failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/probe docs/ops
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${SOURCE_JOB_ID}/logs" > /tmp/probe/logs.bin
+          python - <<'PY'
+          from __future__ import annotations
+
+          import io
+          import re
+          import zipfile
+          from pathlib import Path
+
+          payload = Path('/tmp/probe/logs.bin').read_bytes()
+          if payload.startswith(b'PK'):
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  text = '\n'.join(
+                      archive.read(name).decode('utf-8', errors='replace')
+                      for name in archive.namelist()
+                      if not name.endswith('/')
+                  )
+          else:
+              text = payload.decode('utf-8', errors='replace')
+          lines = text.splitlines()
+          start = 0
+          for index, line in enumerate(lines):
+              if 'Collect changed paths' in line or 'CHANGED_FILES=' in line:
+                  start = index
+                  break
+          selected = lines[start:]
+          cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in selected]
+          Path('docs/ops/pr707_code_excellence_failure.txt').write_text(
+              '\n'.join(cleaned) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit extract
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ops/pr707_code_excellence_failure.txt
+          git commit -m "ops: publish PR707 code excellence failure"
+          git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
