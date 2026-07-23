@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      BASE_SHA: db6f384144f3937e96a67bd449f67e5f1b274c65
+      BASE_SHA: 2518ed8f03525251b401b2026a97aaab29e66745
       PYTHONHASHSEED: "0"
 
     steps:
