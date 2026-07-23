@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tradebot.local/schemas/agentic-qa-audit-report-v1.json",
+  "title": "TradeBot Agentic QA Audit Report",
+  "type": "object",
+  "required": ["schema_version", "run_id", "trace_id", "policy_version", "repository_commit", "bundle_digest", "verdict", "deterministic_score", "summary", "controls"],
+  "properties": {
+    "verdict": {
+      "enum": ["CONTROL_PLANE_CERTIFIED", "CONDITIONALLY_CERTIFIED", "INSUFFICIENT_EVIDENCE", "REJECTED", "AUDITOR_ERROR"]
+    },
+    "deterministic_score": {"type": "number", "minimum": 0, "maximum": 10},
+    "controls": {"type": "array", "minItems": 1, "maxItems": 70}
+  },
+  "additionalProperties": true
+}
