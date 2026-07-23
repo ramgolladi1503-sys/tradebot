@@ -1,0 +1,72 @@
+name: Probe PR707 Agent Evidence Failure
+
+on:
+  push:
+    branches:
+      - ops/observe-liquidity-exhaustion-depth-readiness-v2
+    paths:
+      - ".github/workflows/probe_pr707_agent_evidence_failure.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_JOB_ID: "89129181918"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/observe-liquidity-exhaustion-depth-readiness-v2
+          fetch-depth: 1
+
+      - name: Extract validation failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/probe docs/ops
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/jobs/${SOURCE_JOB_ID}/logs" > /tmp/probe/logs.bin
+          python - <<'PY'
+          from __future__ import annotations
+
+          import io
+          import re
+          import zipfile
+          from pathlib import Path
+
+          payload = Path('/tmp/probe/logs.bin').read_bytes()
+          if payload.startswith(b'PK'):
+              with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                  text = '\n'.join(
+                      archive.read(name).decode('utf-8', errors='replace')
+                      for name in archive.namelist()
+                      if not name.endswith('/')
+                  )
+          else:
+              text = payload.decode('utf-8', errors='replace')
+          lines = text.splitlines()
+          markers = ('error', 'missing', 'required', 'invalid', 'failed', 'evidence')
+          selected = []
+          for index, line in enumerate(lines):
+              lower = line.lower()
+              if any(marker in lower for marker in markers):
+                  selected.extend(lines[max(0, index - 6):min(len(lines), index + 20)])
+                  selected.append('---')
+          selected.extend(['--- FINAL LOG TAIL ---'] + lines[-180:])
+          cleaned = [re.sub(r'\x1b\[[0-9;]*m', '', line) for line in selected]
+          Path('docs/ops/pr707_agent_evidence_failure.txt').write_text(
+              '\n'.join(cleaned) + '\n', encoding='utf-8'
+          )
+          PY
+
+      - name: Commit extract
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ops/pr707_agent_evidence_failure.txt
+          git commit -m "ops: publish PR707 agent evidence failure"
+          git push origin HEAD:ops/observe-liquidity-exhaustion-depth-readiness-v2
