@@ -1,8 +1,4 @@
-"""Community proxy-weight validation for constituent lead-lag research.
-
-The community Figshare dataset is non-commercial proxy evidence. This module
-keeps it outside official-weight acceptance and makes date ownership explicit.
-"""
+"""Community proxy-weight validation for constituent lead-lag research."""
 
 from __future__ import annotations
 
@@ -28,11 +24,7 @@ def hash_file_full(path: Path | str) -> str:
     return digest.hexdigest()
 
 
-def load_and_validate_source_manifest(
-    path: Path | str,
-    *,
-    raw_weights_path: Path | str | None = None,
-) -> dict[str, Any]:
+def load_and_validate_source_manifest(path: Path | str, *, raw_weights_path: Path | str | None = None) -> dict[str, Any]:
     manifest_path = Path(path)
     payload = json.loads(manifest_path.read_text())
     dataset_name = str(payload.get("dataset_name") or payload.get("name") or "")
@@ -64,26 +56,17 @@ def load_and_validate_source_manifest(
     return payload
 
 
-def audit_proxy_dataset(
-    weights_path: Path | str,
-    *,
-    evaluation_end: str,
-    source_manifest_path: Path | str,
-    raw_weights_path: Path | str,
-) -> dict[str, Any]:
+def audit_proxy_dataset(weights_path: Path | str, *, evaluation_end: str,
+                        source_manifest_path: Path | str, raw_weights_path: Path | str) -> dict[str, Any]:
     weights = normalize_proxy_weights(pd.read_csv(weights_path))
     latest_snapshot = derive_latest_snapshot(weights)
     end = pd.Timestamp(evaluation_end).date()
     if end > latest_snapshot:
         raise DataContractError("evaluation end exceeds latest supported proxy snapshot")
-    weights_hash = hash_file_full(weights_path)
-    manifest = load_and_validate_source_manifest(
-        source_manifest_path,
-        raw_weights_path=raw_weights_path,
-    )
+    manifest = load_and_validate_source_manifest(source_manifest_path, raw_weights_path=raw_weights_path)
     return {
         "weights_path": str(weights_path),
-        "weights_sha256": weights_hash,
+        "weights_sha256": hash_file_full(weights_path),
         "raw_weights_path": str(raw_weights_path),
         "raw_weights_sha256": hash_file_full(raw_weights_path),
         "latest_raw_snapshot": latest_snapshot.isoformat(),
@@ -125,9 +108,8 @@ def normalize_proxy_weights(raw: pd.DataFrame) -> pd.DataFrame:
     return frame.sort_values(["index_symbol", "effective_from", "constituent_symbol"]).reset_index(drop=True)
 
 
-def derive_latest_snapshot(weights: pd.DataFrame) -> pd.Timestamp.date:
-    frame = normalize_proxy_weights(weights)
-    return frame["effective_from"].max()
+def derive_latest_snapshot(weights: pd.DataFrame):
+    return normalize_proxy_weights(weights)["effective_from"].max()
 
 
 def derive_effective_intervals(weights: pd.DataFrame) -> pd.DataFrame:
@@ -136,29 +118,19 @@ def derive_effective_intervals(weights: pd.DataFrame) -> pd.DataFrame:
     for _, group in frame.groupby("index_symbol", sort=False):
         ordered = group.sort_values(["effective_from", "constituent_symbol"]).copy()
         snapshot_dates = sorted(ordered["effective_from"].unique())
-        effective_to_by_snapshot: dict[object, object] = {}
-        for index, snapshot_date in enumerate(snapshot_dates):
-            if index + 1 < len(snapshot_dates):
-                effective_to_by_snapshot[snapshot_date] = (
-                    pd.Timestamp(snapshot_dates[index + 1]) - pd.Timedelta(days=1)
-                ).date()
-            else:
-                effective_to_by_snapshot[snapshot_date] = None
+        effective_to_by_snapshot = {
+            snapshot_date: ((pd.Timestamp(snapshot_dates[index + 1]) - pd.Timedelta(days=1)).date()
+                            if index + 1 < len(snapshot_dates) else None)
+            for index, snapshot_date in enumerate(snapshot_dates)
+        }
         ordered["effective_to"] = ordered["effective_from"].map(effective_to_by_snapshot)
         rows.append(ordered)
     out = pd.concat(rows, ignore_index=True) if rows else frame
-    max_start = out["effective_from"].max()
-    out.loc[out["effective_from"] == max_start, "effective_to"] = None
     return out.sort_values(["index_symbol", "effective_from", "constituent_symbol"]).reset_index(drop=True)
 
 
-def validate_normalized_proxy(
-    weights: pd.DataFrame,
-    *,
-    evaluation_start: str,
-    evaluation_end: str,
-    allow_community_reconstructed_proxy: bool = False,
-) -> pd.DataFrame:
+def validate_normalized_proxy(weights: pd.DataFrame, *, evaluation_start: str, evaluation_end: str,
+                              allow_community_reconstructed_proxy: bool = False) -> pd.DataFrame:
     if not allow_community_reconstructed_proxy:
         raise DataContractError("explicit community reconstructed proxy flag is required")
     start = pd.Timestamp(evaluation_start).date()
@@ -169,16 +141,10 @@ def validate_normalized_proxy(
     frame = derive_effective_intervals(weights)
     if (frame["index_symbol"] != "NIFTY").any():
         raise DataContractError("community reconstructed proxy is NIFTY-only")
-    latest = frame["effective_from"].max()
-    latest_to = frame.loc[frame["effective_from"] == latest, "effective_to"]
-    if latest_to.notna().any():
-        raise DataContractError("final proxy effective_to must be null")
-    effective_to = pd.to_datetime(frame["effective_to"], errors="coerce")
-    effective_to_ok = effective_to.isna() | pd.Series(
-        [value.date() >= start if pd.notna(value) else False for value in effective_to],
-        index=frame.index,
+    active_to = frame["effective_to"].apply(
+        lambda value: pd.isna(value) or pd.Timestamp(value).date() >= start
     )
-    active = frame[(frame["effective_from"] <= end) & effective_to_ok]
+    active = frame[(frame["effective_from"] <= end) & active_to]
     if active.empty:
         raise DataContractError("proxy has no active rows for evaluation window")
     return frame
