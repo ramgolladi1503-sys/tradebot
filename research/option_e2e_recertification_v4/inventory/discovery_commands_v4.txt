@@ -1,0 +1,9 @@
+git -C /Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4 worktree add -b research/option-e2e-inventory-v4 /Users/madhuram/tradebot-option-e2e-inventory-v4 b02cc64a
+cat research/option_e2e_recertification_v4/foundation_manifest.json.sha256
+git status --short --branch
+sed -n 1,260p strategies/strategy_registry.py
+sed -n 1,260p core/strategy_truth/registry_bridge.py
+find strategies -maxdepth 3 -type f | sort
+git log --all --date=short --pretty=format:'%H%x09%ad%x09%s' -- strategies docs tests scripts research | rg -i 'option|strategy|alias|verdict|e2e|recert|claim|registry'
+gh pr list --state all --limit 200 --json number,title,headRefName,baseRefName,mergedAt,closedAt,url
+python - <<PY # generated inventory artifacts, no economic replay

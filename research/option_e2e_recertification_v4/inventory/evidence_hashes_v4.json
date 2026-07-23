@@ -1,0 +1,200 @@
+{
+  "hashes": [
+    {
+      "path": "core/strategy_truth/registry_bridge.py",
+      "sha256": "b4ca8d636b259a1317a96f0dfbe96af1a40b2f3b7c5be3859e0865da574a4b5c"
+    },
+    {
+      "path": "docs/agent_reviews/all_strategy_available_data_backtest_20260629.md",
+      "sha256": "56fbc7c4b40609be3ddbcd9e288f1d671e56c84e1ff393a717141e2a3172a290"
+    },
+    {
+      "path": "docs/agent_reviews/edge_73_vwap_strategy_rebuild.md",
+      "sha256": "4b583ea7e53189809c2e885d3fc3fdf6afa80686c86411578b2ec2fdfd24ac97"
+    },
+    {
+      "path": "docs/agent_reviews/edge_74_mean_reversion_strategy_rebuild.md",
+      "sha256": "c525a98662f5120ba97ee448da6032e6bd4daae311a7fc6d4868303838ad0b80"
+    },
+    {
+      "path": "docs/agent_reviews/edge_75_zero_hero_expiry_strategy_rebuild.md",
+      "sha256": "0a85e191f533f761ed2e273d51b44a0801fedaed36c673bcc1ae8c6c42b1aa10"
+    },
+    {
+      "path": "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+      "sha256": "8b7df7e030306b9699347f9b3ed1c421fd8dfc302c7902a178e8111cb177d8c2"
+    },
+    {
+      "path": "docs/agent_reviews/four_strategy_dataset_manifest_v3.json",
+      "sha256": "cdba301fa89cfe428d4fd143dda99595e7f8044e681b393731c0e10e0ae18a88"
+    },
+    {
+      "path": "docs/agent_reviews/ml_strategy_discovery_real_run_audit_v1.md",
+      "sha256": "8fef28cb5133be722b71544d66f665cf7aa0ce65016646b1fc2eef2435b559bf"
+    },
+    {
+      "path": "docs/agent_reviews/opening_range_retest_causal_replay_summary_v2.json",
+      "sha256": "b0df46946df273fa428ae3b3b67de826a4872b033736123a5fe9b751d0e5e830"
+    },
+    {
+      "path": "docs/agent_reviews/opening_range_retest_outcome_certification_v2.md",
+      "sha256": "ca6adb16a36430899808a5bf0df95ce7e50f7eba885b133f6f55d979cd9f64b2"
+    },
+    {
+      "path": "docs/agent_reviews/opening_range_retest_outcome_summary_v2.json",
+      "sha256": "bdf02a79fb15979667b0c786255f282724230657c5814819c2c37598edf866f8"
+    },
+    {
+      "path": "docs/agent_reviews/opening_range_retest_phase1_v2_certification.md",
+      "sha256": "d6129a10270c448357229c1ae7981ff3bb86103d3a1b51489c826e583ad629d3"
+    },
+    {
+      "path": "docs/agent_reviews/provenance_safe_resumable_strategy_edge_audit.md",
+      "sha256": "128aa50c91f1f076efcbe535178bc7d60e61f487e09fcfa95cf817d85d6b98e5"
+    },
+    {
+      "path": "research/option_e2e_recertification_v4/foundation_manifest.json",
+      "sha256": "118cc813127005e75e6eec94aa197a1795648d70d3311356c61fb9885275c37b"
+    },
+    {
+      "path": "research/option_e2e_recertification_v4/foundation_manifest.json.sha256",
+      "sha256": "22829c0a1f69e7f249da523df6a9f382e2b8e0e391336940e2a7f4ffeb78250e"
+    },
+    {
+      "path": "strategies/banknifty_intraday.py",
+      "sha256": "945f53c68ab33933f21ef692a335581e78df2f12f9433edcc7515597b5fd252b"
+    },
+    {
+      "path": "strategies/ensemble.py",
+      "sha256": "1b333724385cdedbe50144cdf40a778b13f66b9f061565e5b6b99905ec4adc1e"
+    },
+    {
+      "path": "strategies/movement/compression_breakout.py",
+      "sha256": "c32ef22b278ad883e577ab90aac2f6e84b546eefda0f43e56e55ef0ccb00b0e7"
+    },
+    {
+      "path": "strategies/movement/event_volatility_expansion.py",
+      "sha256": "530a270aab16fe9155ccb0fb1ce48cf13cb5b58ef3dec33010f3c6fbcad2f159"
+    },
+    {
+      "path": "strategies/movement/exhaustion_reversal.py",
+      "sha256": "c11d74395e48fa0f00786d5d3ddeb1c5ea480d2dd4c82ccdb04df62fde3a2312"
+    },
+    {
+      "path": "strategies/movement/failed_breakout_trap.py",
+      "sha256": "353ec47ad43e16ea54aa6a3fbeb0c81a24dcb8fdc0d75dab9c165fc6fee9d427"
+    },
+    {
+      "path": "strategies/movement/late_day_momentum.py",
+      "sha256": "792d03df8df539f3484b1f0e5e0d4f501e34873c7958afc23281b1e6b0c539ef"
+    },
+    {
+      "path": "strategies/movement/mean_reversion_extension.py",
+      "sha256": "d61e3e68ea550e0facdaee5438bf2deea749c9d15f26a4bbdff3c52124d49b4b"
+    },
+    {
+      "path": "strategies/movement/no_trade_chop.py",
+      "sha256": "29c914466488eb38b95dcf980c010419b4abad0917fbdb6b36f47adf0ed9d52e"
+    },
+    {
+      "path": "strategies/movement/opening_drive.py",
+      "sha256": "e0dcac5aeba30696dbdb734a2ffc7e78efe0c59e4c3ebf2bb5997774b3797632"
+    },
+    {
+      "path": "strategies/movement/opening_range_breakout.py",
+      "sha256": "06be67cf8bac5b4d4901929b77e638c726a6b4910f646d20780e584327144b2e"
+    },
+    {
+      "path": "strategies/movement/option_pressure.py",
+      "sha256": "408bf0e7bd6fa4baa842cded3e4427fd05196bedb7154adbeb3283f15dc25f85"
+    },
+    {
+      "path": "strategies/movement/trend_pullback.py",
+      "sha256": "36a86be053398daaf72b885a9d214f3545df97d5a25d2ca3b3dd7a5aad8b51e1"
+    },
+    {
+      "path": "strategies/movement/vwap_reclaim.py",
+      "sha256": "7a30df420d2b70b4533c96e07bcccf784fbfe9e28e504cc2af7ff0aaa89566fc"
+    },
+    {
+      "path": "strategies/nifty_intraday.py",
+      "sha256": "86f0aff6e0e893cb6e39886502a74c7abb23796264a52da01e134abdac11a31e"
+    },
+    {
+      "path": "strategies/pairs_arbitrage.py",
+      "sha256": "454af4eac37766666f5354c275c6c2255e713e5726fe32a1146d51195ec1600d"
+    },
+    {
+      "path": "strategies/position_sizer.py",
+      "sha256": "a3d49538f326e1c70dc20018c6bdb91e7890d36f367954532c13ca3deaaadd18"
+    },
+    {
+      "path": "strategies/pro_layer/pro_decision_adapter.py",
+      "sha256": "28ecba1172eb2abf9613db600e5da5c3575953e0941307bb2f408bc77cf00118"
+    },
+    {
+      "path": "strategies/pro_layer/pro_strategy_engine.py",
+      "sha256": "66b3e499f605edcb83e0eb4616f86643c0430bf95a0c910b70c9e5d0698e8eb0"
+    },
+    {
+      "path": "strategies/risk_manager.py",
+      "sha256": "7c006ad0e8a35b384c4694bf0e3a375ee2d21c5fabeaa1b3161bb25143f18294"
+    },
+    {
+      "path": "strategies/sensex_intraday.py",
+      "sha256": "188152c9990675d0cb9d2ae712096a276df4786f06ef1db386bbee4bac4a69d0"
+    },
+    {
+      "path": "strategies/simple_orb.py",
+      "sha256": "89feacc9f28c8614ee3c102fea6399628a40fecc7ab9e4b14b81c415c12ee1f5"
+    },
+    {
+      "path": "strategies/soft_signal.py",
+      "sha256": "9b10b8b247bcbf4bc3f7d86e65f2482645edd061fa4c71cefae4b3f4a92c3411"
+    },
+    {
+      "path": "strategies/strategy_registry.py",
+      "sha256": "6cf25db0fb7fb4156570751bfbc7edcf20ecfca154414c08c2473864d86e1323"
+    },
+    {
+      "path": "strategies/trade_builder.py",
+      "sha256": "aba803f6ca5954e63342c218682694f0efe70f6c140e029b6c3d23521b042e3a"
+    },
+    {
+      "path": "strategies/volatility_trend.py",
+      "sha256": "d2de9d9e2efd71cbad9cd4d485e13c2300ef7ba4304ab8324f428ad5d30fb3bd"
+    },
+    {
+      "path": "strategies/vwap_orb.py",
+      "sha256": "69e6c6a28e88e910093b50cecc2f92dc53bc123c7230f957fd10165bd542738b"
+    },
+    {
+      "path": "strategies/zero_hero.py",
+      "sha256": "38d8101ab60bbda56501f8ce9db12bf43b71afb2818e71dea7bee4e52be703f4"
+    }
+  ],
+  "metadata": {
+    "branch": "research/option-e2e-inventory-v4",
+    "foundation_commit": "b02cc64adf88c9ee876a03469b3f63ad762ccc2b",
+    "foundation_manifest_sha256_file_content": "118cc813127005e75e6eec94aa197a1795648d70d3311356c61fb9885275c37b  foundation_manifest.json",
+    "foundation_manifest_sha256_file_hash": "22829c0a1f69e7f249da523df6a9f382e2b8e0e391336940e2a7f4ffeb78250e",
+    "generated_paths": [
+      "research/option_e2e_recertification_v4/inventory/canonical_strategy_registry_v4.json",
+      "research/option_e2e_recertification_v4/inventory/alias_graph_v4.json",
+      "research/option_e2e_recertification_v4/inventory/historical_claim_map_v4.json",
+      "research/option_e2e_recertification_v4/inventory/evidence_hashes_v4.json",
+      "research/option_e2e_recertification_v4/inventory/discovery_commands_v4.txt",
+      "docs/agent_reviews/option_e2e_historical_inventory_v4.md"
+    ],
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "scope": "historical inventory and alias graph only; no economic replay",
+    "source_agent": "Subagent A",
+    "worktree": "/Users/madhuram/tradebot-option-e2e-inventory-v4"
+  }
+}

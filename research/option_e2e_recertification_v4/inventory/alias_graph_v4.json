@@ -1,0 +1,88 @@
+{
+  "edges": [
+    {
+      "alias": "opening_range_retest_v1",
+      "canonical_strategy_id": "OPENING_RANGE_BREAKOUT",
+      "confidence": "HIGH",
+      "evidence": "compatibility_alias in tests/test_four_strategy_contract_freeze.py: opening_range_retest_v1->opening_range_breakout_v1"
+    },
+    {
+      "alias": "opening_range_retest",
+      "canonical_strategy_id": "OPENING_RANGE_BREAKOUT",
+      "confidence": "HIGH",
+      "evidence": "test_movement_registry_expansion expects opening_range_retest while static registry uses OPENING_RANGE_BREAKOUT"
+    },
+    {
+      "alias": "vwap_reclaim_rejection_v1",
+      "canonical_strategy_id": "VWAP_RECLAIM",
+      "confidence": "HIGH",
+      "evidence": "research/strategy_validation maps vwap_reclaim_rejection_v1 to vwap_reclaim source"
+    },
+    {
+      "alias": "trend_pullback_v1",
+      "canonical_strategy_id": "TREND_PULLBACK",
+      "confidence": "HIGH",
+      "evidence": "research/strategy_validation canonical strategy id variant"
+    },
+    {
+      "alias": "compression_breakout_v1",
+      "canonical_strategy_id": "COMPRESSION_BREAKOUT",
+      "confidence": "HIGH",
+      "evidence": "research/strategy_validation canonical strategy id variant"
+    },
+    {
+      "alias": "mean_reversion",
+      "canonical_strategy_id": "MEAN_REVERSION_EXTENSION",
+      "confidence": "HIGH",
+      "evidence": "docs/tests use mean_reversion family for mean reversion extension evidence"
+    },
+    {
+      "alias": "opening_drive",
+      "canonical_strategy_id": "OPENING_DRIVE",
+      "confidence": "HIGH",
+      "evidence": "lowercase family/runtime alias"
+    },
+    {
+      "alias": "zero_hero",
+      "canonical_strategy_id": "ZERO_HERO",
+      "confidence": "HIGH",
+      "evidence": "lowercase family/runtime alias"
+    },
+    {
+      "alias": "simple_orb",
+      "canonical_strategy_id": "SIMPLE_ORB",
+      "confidence": "HIGH",
+      "evidence": "lowercase runtime alias"
+    },
+    {
+      "alias": "htf_opening_drive_cont",
+      "canonical_strategy_id": "HTF_OPENING_DRIVE_CONT",
+      "confidence": "HIGH",
+      "evidence": "lowercase runtime alias"
+    }
+  ],
+  "metadata": {
+    "branch": "research/option-e2e-inventory-v4",
+    "foundation_commit": "b02cc64adf88c9ee876a03469b3f63ad762ccc2b",
+    "foundation_manifest_sha256_file_content": "118cc813127005e75e6eec94aa197a1795648d70d3311356c61fb9885275c37b  foundation_manifest.json",
+    "foundation_manifest_sha256_file_hash": "22829c0a1f69e7f249da523df6a9f382e2b8e0e391336940e2a7f4ffeb78250e",
+    "generated_paths": [
+      "research/option_e2e_recertification_v4/inventory/canonical_strategy_registry_v4.json",
+      "research/option_e2e_recertification_v4/inventory/alias_graph_v4.json",
+      "research/option_e2e_recertification_v4/inventory/historical_claim_map_v4.json",
+      "research/option_e2e_recertification_v4/inventory/evidence_hashes_v4.json",
+      "research/option_e2e_recertification_v4/inventory/discovery_commands_v4.txt",
+      "docs/agent_reviews/option_e2e_historical_inventory_v4.md"
+    ],
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "scope": "historical inventory and alias graph only; no economic replay",
+    "source_agent": "Subagent A",
+    "worktree": "/Users/madhuram/tradebot-option-e2e-inventory-v4"
+  }
+}

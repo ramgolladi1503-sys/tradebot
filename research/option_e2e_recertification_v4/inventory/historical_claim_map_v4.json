@@ -1,0 +1,937 @@
+{
+  "claims": [
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/opening_range_retest_causal_replay_summary_v2.json",
+      "sha256": "b0df46946df273fa428ae3b3b67de826a4872b033736123a5fe9b751d0e5e830",
+      "strategy_mentions": [
+        "opening_range_retest"
+      ],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/opening_range_retest_outcome_summary_v2.json",
+      "sha256": "bdf02a79fb15979667b0c786255f282724230657c5814819c2c37598edf866f8",
+      "strategy_mentions": [
+        "opening_range_retest"
+      ],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT"
+    },
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/opening_range_retest_phase1_v2_certification.md",
+      "sha256": "d6129a10270c448357229c1ae7981ff3bb86103d3a1b51489c826e583ad629d3",
+      "strategy_mentions": [
+        "opening_range_retest"
+      ],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT_WITH_BLOCKERS_OR_LIMITS"
+    },
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/opening_range_retest_outcome_certification_v2.md",
+      "sha256": "ca6adb16a36430899808a5bf0df95ce7e50f7eba885b133f6f55d979cd9f64b2",
+      "strategy_mentions": [
+        "opening_range_retest"
+      ],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT_WITH_BLOCKERS_OR_LIMITS"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+      "sha256": "8b7df7e030306b9699347f9b3ed1c421fd8dfc302c7902a178e8111cb177d8c2",
+      "strategy_mentions": [
+        "COMPRESSION_BREAKOUT",
+        "OPENING_RANGE_BREAKOUT",
+        "TREND_PULLBACK",
+        "VWAP_RECLAIM",
+        "compression_breakout_v1",
+        "opening_range_retest",
+        "opening_range_retest_v1",
+        "trend_pullback_v1",
+        "vwap_reclaim_rejection_v1"
+      ],
+      "verdict_label_from_text": "BLOCKED_OR_LIMITED_CLAIM_PRESENT"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/four_strategy_dataset_manifest_v3.json",
+      "sha256": "cdba301fa89cfe428d4fd143dda99595e7f8044e681b393731c0e10e0ae18a88",
+      "strategy_mentions": [
+        "opening_range_retest",
+        "opening_range_retest_v1"
+      ],
+      "verdict_label_from_text": "UNKNOWN"
+    },
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/all_strategy_available_data_backtest_20260629.md",
+      "sha256": "56fbc7c4b40609be3ddbcd9e288f1d671e56c84e1ff393a717141e2a3172a290",
+      "strategy_mentions": [],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT_WITH_BLOCKERS_OR_LIMITS"
+    },
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/provenance_safe_resumable_strategy_edge_audit.md",
+      "sha256": "128aa50c91f1f076efcbe535178bc7d60e61f487e09fcfa95cf817d85d6b98e5",
+      "strategy_mentions": [],
+      "verdict_label_from_text": "UNKNOWN"
+    },
+    {
+      "claim_class": "PARTIALLY PROVEN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/ml_strategy_discovery_real_run_audit_v1.md",
+      "sha256": "8fef28cb5133be722b71544d66f665cf7aa0ce65016646b1fc2eef2435b559bf",
+      "strategy_mentions": [
+        "opening_range_retest"
+      ],
+      "verdict_label_from_text": "ARTIFACT_CERTIFICATION_CLAIM_PRESENT_WITH_BLOCKERS_OR_LIMITS"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/edge_75_zero_hero_expiry_strategy_rebuild.md",
+      "sha256": "0a85e191f533f761ed2e273d51b44a0801fedaed36c673bcc1ae8c6c42b1aa10",
+      "strategy_mentions": [
+        "ZERO_HERO",
+        "zero_hero"
+      ],
+      "verdict_label_from_text": "BLOCKED_OR_LIMITED_CLAIM_PRESENT"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/edge_74_mean_reversion_strategy_rebuild.md",
+      "sha256": "c525a98662f5120ba97ee448da6032e6bd4daae311a7fc6d4868303838ad0b80",
+      "strategy_mentions": [
+        "mean_reversion"
+      ],
+      "verdict_label_from_text": "BLOCKED_OR_LIMITED_CLAIM_PRESENT"
+    },
+    {
+      "claim_class": "UNKNOWN",
+      "notes": "Inventory extraction only; no economic replay performed.",
+      "path": "docs/agent_reviews/edge_73_vwap_strategy_rebuild.md",
+      "sha256": "4b583ea7e53189809c2e885d3fc3fdf6afa80686c86411578b2ec2fdfd24ac97",
+      "strategy_mentions": [],
+      "verdict_label_from_text": "BLOCKED_OR_LIMITED_CLAIM_PRESENT"
+    }
+  ],
+  "git_history_hits": [
+    "5b6379ba746012455cbbd10452462b85a7eb8838\t2026-07-23\trepair option replay entry quote causality",
+    "b02cc64adf88c9ee876a03469b3f63ad762ccc2b\t2026-07-23\tfreeze option e2e recertification v4 foundation",
+    "d35e028ce9f0b17fd83458c66d3c47453a6b30bf\t2026-07-23\tMerge remote-tracking branch 'origin/main' into agent/strategy-pipeline-outcomes-v1",
+    "fb4bacd8efe8aec6133134fadfcfbdb5dbb42fb6\t2026-07-23\tresearch: publish residual mean-reversion Stage B evidence",
+    "ef93c99f1d139fc6aa700f6eaae3548f8d72f705\t2026-07-23\tdocs: define residual Stage B claim boundary",
+    "199ae72c8ccaa76d3de54647fb6feaa0e66dda3f\t2026-07-23\tresearch: add residual mean-reversion Stage B stability audit",
+    "233b895d0a13752aac8c995c4129e98bbf6cb9e2\t2026-07-23\tdocs: record completed depth-readiness verdict",
+    "6bf559bf46ceb29df09902c9392a86b485dffb9f\t2026-07-23\trebase PR 701 Research and Registry adapter tests onto merged foundation",
+    "71bd17ed31d536a32b81ce6b5cdcfc88773904f7\t2026-07-23\talign PR 701 foundation tests with activated Research and Registry adapters",
+    "a84ef580078a05d0c625e8e42f12b8f454b995a0\t2026-07-23\trebase PR 701 registry CLI onto merged foundation",
+    "e8bd514efb8fd7b8dfcd606f64b8f11a4bd69827\t2026-07-23\tresearch: freeze daily depth universe and development holdout registry",
+    "11e3241d1f78305726e4a9c35c8c23b059f6132b\t2026-07-22\tresearch: publish residual mean-reversion pattern atlas v2 index",
+    "c862b058d96ceeeae7fbf5ed6901374bda22d2d0\t2026-07-23\tdocs: define residual mean-reversion v2 research boundary",
+    "d1da799954e296f4672d51d2c6801d9b08f44cb4\t2026-07-23\tresearch: implement causal residual mean-reversion pattern atlas",
+    "6d98f3ddcf564b46e4bf7a479f964a17dc2fb6d7\t2026-07-23\tresearch: add residual mean-reversion atlas package",
+    "128ee309968489c51170fe0ad459ba89788bbeef\t2026-07-23\tresearch: freeze residual mean-reversion v2 Stage A contract",
+    "ebfaef49fc7c70cd6345e1ba4dcae895a4c4450d\t2026-07-23\ttest(strategy-pipeline): prove fail-closed orchestration",
+    "eff09c7523545dae54645ed3008de65781471f94\t2026-07-22\tdocs: update Research and Registry validation to 30 tests",
+    "144371aa0989aa41cad019c41526340f0edfd1b3\t2026-07-22\tdocs: add Research and Registry adapter review evidence",
+    "3d9f888a2a824e86ef4f9b94d08206ebd0c7ba05\t2026-07-22\ttest: remove filesystem dependency from Registry argument test",
+    "36603367b4717ee926d45c17f057138a93bd5a77\t2026-07-22\ttest: prove governed Research and exact Registry adapters",
+    "85e0b6bd7e116bcf63f6bd6289020541be2d8eb5\t2026-07-22\tfeat: add exact Registry pipeline command",
+    "5807b6ff0cf42120e52a7ce1a6b9a354e73c88dd\t2026-07-22\tdocs: add strategy pipeline truthfulness review evidence",
+    "e3aa9855b3ad1257b2f09c151042d26722d75b96\t2026-07-22\tresearch: publish mean-reversion regeneration v3 index",
+    "7da8c83bb68b4abe860b0e8e6fdb16cd87e41d28\t2026-07-22\tresearch: publish mean-reversion regeneration v3 index",
+    "4140a71eba6a218e8e975d4ac8a0d0e6fdc9ae8a\t2026-07-22\tresearch: publish mean-reversion regeneration v3 index",
+    "d7892544bdd019fcbee2acb4d6d195b70ad7dd6d\t2026-07-22\tresearch: publish mean-reversion regeneration v3 index",
+    "64fdfb6ac9edb25367e6297fdc47faac037a4b72\t2026-07-22\tresearch: prepare merged mean-reversion rerun v3",
+    "5b2a08dd155fa7beb854597f76a31f880dc10ddb\t2026-07-22\tresearch: seed post-merge mean-reversion rerun v3",
+    "3ac87c79fc0bbf193de0f61b130c9a442c50ed4a\t2026-07-22\tresearch: freeze structural edge campaign registry",
+    "b83334aa780fd575087ed369f1f1533fb850c624\t2026-07-22\tfix: classify mean-reversion corpus parquets",
+    "20a8991c565026df3d2fe2ed516b5b7c79dc080f\t2026-07-22\tresearch: publish post-cleanup failure extract",
+    "0bb71e0847c21d874b7f0cab95fec3a0cd005f44\t2026-07-22\tresearch: publish mean-reversion regeneration index",
+    "58e1f723e624c7a85667c6577c3cc64d4eb3098e\t2026-07-22\tresearch: publish mean-reversion regeneration index",
+    "4e5e18b485cfa8e3d813f8f0afa62ef9babef2eb\t2026-07-22\ttest: prove mean-reversion accounting lanes",
+    "23b4ab7dbdf3caa9a390b01c53a795f6b443d10b\t2026-07-22\ttest: prove mean-reversion ledger timing contracts",
+    "074ac4d75a4aa0a1cf2f5c1b475e62e17fa31631\t2026-07-22\tMerge branch 'main' into research/ml-strategy-discovery-v2-stability",
+    "5ed1eb00d269cb36d8a649591caee65ae8ab4100\t2026-07-22\ttest(mcp): reject option-like git refs",
+    "1ab3f96e389c1acc2f027a744d71b7c6ee0e3999\t2026-07-22\tchore: reconstruct consumed evidence registry",
+    "cb2f946dcc21313a445f402c058b79ab556e600f\t2026-07-22\tfeat: freeze first strategy hypothesis",
+    "e04c7526777c37a21e4ac705062e34ac1791a50b\t2026-07-22\tmake ledger audit strategy addressable",
+    "d1ae2ea072a4367cbcb2a73c898019751282efd9\t2026-07-22\ttest(backtest): prove complete Phase 4 audit gate",
+    "0d863909a57722a6f8e55b2925f4b2d9fccd6237\t2026-07-22\tfeat: complete ML strategy discovery v2 with strict gates and negative controls",
+    "99e107b06ac98b75e6a35a271395b16c07296f00\t2026-07-21\tMerge branch 'main' into research/ml-strategy-discovery-core",
+    "b1bdb86b988d35789cfbb3d4b43ca6c521b8982a\t2026-07-21\tresearch: permanently close RSI2 mean-reversion research",
+    "a71c545911d499e8f729e285f7db4a50a388ed08\t2026-07-21\tresearch: repair RSI2 independent publication verdict",
+    "ee5508839f06ff860046c72838cad6b6f3053016\t2026-07-21\tresearch: evaluate ORB Volatility Regime edge",
+    "98c8f13fe7e23ef8c5ec6159ea93af4beebaf47c\t2026-07-21\tresearch: close RSI2 mean reversion evidence audit",
+    "8e2e6577420f1c423cc99d963ddc8a1de83510a1\t2026-07-21\tdocs: remove weak-evidence false positives from ML discovery review",
+    "c4b277f5f1ee4384558825e09e4da3e7099aad34\t2026-07-21\tdocs: add ML strategy discovery usage",
+    "ba5440ffe80ff3b567426d39b3af9379ee12d00a\t2026-07-21\ttest: cover ML strategy discovery core",
+    "6d52cef2bdb55d02516b70fb455796b93e6ef9b4\t2026-07-21\tresearch: add strategy discovery runner",
+    "c3e16d5eb8cd56e3ea950b4935036dfc83260593\t2026-07-21\tresearch: add ML strategy discovery package",
+    "4731eba678a67607f8d267b2bf968e442abb8f9f\t2026-07-21\tresearch: add fail-closed candidate registry",
+    "188db50e1f4ab0c896aff5c4ade951e106fa9d37\t2026-07-21\tfix: propagate cycle cutoff into ORB context",
+    "2f2f19b8a58089079df818d60e10ff8d9380b8b9\t2026-07-21\tarchive worktree: /Users/madhuram/tradebot-strategy-phase3b-integrated",
+    "9b3fa9d8abf0f65ce92766b1381188a5278b40ea\t2026-07-21\tarchive worktree: /Users/madhuram/tradebot-strategy-phase3b",
+    "c9d89fe804e86a78499532eaf8d4afbb290e96e1\t2026-07-21\tarchive worktree: /Users/madhuram/tradebot-strategy-atr-contract",
+    "89f0034ea0607d46dfc941ba7664478d1630e406\t2026-07-21\tresearch: audit ORB strategy fidelity",
+    "78da75f7a663ab6772c2a453f7bed7ce25abdbc8\t2026-07-21\tresearch: evaluate corrected ORB underlying edge",
+    "162ae124bd1886e9e780f48e4a3ab743ec8a11e0\t2026-07-21\tresearch: screen ORB option data recoverability",
+    "292508ecf9d61afdb883c0540c72802427e88b49\t2026-07-21\tresearch: harden ORB evidence semantics",
+    "e223ce6e9dd56c6b0470c82b0027b0fef4d20421\t2026-07-21\tresearch: preserve corrected ORB score evaluation",
+    "cf1b63908c779db844ef3534804142a8af26cbac\t2026-07-21\ttest: update ORB score expectation for retest source repair",
+    "0be327bd48687d83ea9900b7456ff492229b70e2\t2026-07-20\tfix(strategies): apply verified ORB and VWAP math repairs",
+    "02ed107c14617f6f31c39e832553895ce07dce24\t2026-07-20\tfix(vwap): align labels with reclaim-hold predicate",
+    "0b352bb26ab33bae1b6bf90c4093e2bd911a8228\t2026-07-20\tfix(orb): score retest distance from retest bar",
+    "1e39022558d5c2ed6d864d37a94db4b04236f7cc\t2026-07-20\tfix(vwap): align labels with reclaim-hold predicate",
+    "b2439e50565406bbf9910897294d23e67e7c307a\t2026-07-20\tfix(orb): score retest distance from retest bar",
+    "c86d87f3b21c7a1026edafedf37dbf6c326a8c00\t2026-07-20\tdocs: republish deterministic ORB edge evidence",
+    "83f92b8318859c1c05a13246c29427d4a9403979\t2026-07-20\tresearch: freeze deterministic ORB edge audit hashing",
+    "c494c729cd6b068233873d9feac4e525b4e00902\t2026-07-20\tdocs: republish repaired ORB edge evidence",
+    "e13dd2145fcde0f476f032350a19048a2262d7fb\t2026-07-20\tresearch: freeze repaired ORB edge screen implementation",
+    "44934612c925d1499540eba25bb9452a55cc09ac\t2026-07-20\tresearch: repair ORB edge verdict contract",
+    "5fd9806cf69444b0a02a92fd101f71cee51add60\t2026-07-20\ttest: remove ORB edge shape-only assertions",
+    "17e5c55b70aa53085e35412762bf82892b930a6e\t2026-07-20\ttest: strengthen ORB edge screen proof checks",
+    "bd533026f8490056694ff051afcbff336bd304be\t2026-07-20\tdocs: publish ORB edge screen evidence v1",
+    "5ff349e38753d82f00e38fa035130e6f312d160b\t2026-07-20\tresearch: include ORB edge review evidence sections",
+    "55045c43f955d4ed2e8e4012dcc2cf17c6a5ddc8\t2026-07-20\tresearch: add ORB edge evidence metadata",
+    "78365c319a99385980e47cf3edba0e169e7eaecd\t2026-07-20\tresearch: certify ORB edge screen audit sequencing",
+    "906fa02431d4caf968eedbe9c9a7c5e0690fbd35\t2026-07-20\tresearch: freeze ORB edge screen entrypoints",
+    "245d79fe17d2b3234cde739afbfa800bfe51f917\t2026-07-20\tresearch: implement ORB edge screen v1",
+    "262d7cb9b0cab14ae3a2dbfd2c2c7226ae2b160f\t2026-07-20\tresearch: freeze ORB edge screen contract v1",
+    "0e1d37f1a3679c175a1a04f77225325ec91bbd28\t2026-07-20\tresearch: recertify generic ORB outcome path evidence",
+    "9e4798d48a39f414c88095a1d1a70d055dda98a8\t2026-07-20\tresearch: reject generic absolute paths in ORB outcome projection",
+    "218f0b88fdefac5a476ebc2668c0e0158e1e3071\t2026-07-20\tdocs: satisfy ORB portable sidecar review evidence gate",
+    "59214f3efdcf422d1d25ca51724ce59875108e78\t2026-07-20\tresearch: recertify portable ORB outcome evidence",
+    "035702df97dccea07f54d2d3d2d7d22747b42324\t2026-07-20\tresearch: exclude diagnostic paths from ORB outcome projection",
+    "159d5fec34b57f964cfb43ecad3922ae5aa316ce\t2026-07-20\tresearch: make ORB outcome sidecar identity portable",
+    "799935bc5fdea958e5568e22387650267617c31f\t2026-07-20\tresearch: record certified ORB clean-history evidence",
+    "21895142892a71d95aea6f7d904d4ea7cd58fcfc\t2026-07-20\tresearch: restore ORB outcome oracle equivalence",
+    "b38e047aa0d873e2e1ff3db431b455cb14aedccc\t2026-07-20\tresearch: speed ORB outcome audit recompute",
+    "2bf79e53ea3c2a3f0087542ff64372c48174ea04\t2026-07-20\tresearch: certify ORB outcome measurement on clean history",
+    "8b61a304d7fa92838be963195ec91a8ac288f9c4\t2026-07-20\tdocs: refresh ORB outcomes v2 authoritative controls evidence",
+    "cc91aac4a73cde587155179293d333ce30676a98\t2026-07-20\ttest: make ORB controls category authoritative",
+    "f8123a15c80ecb663228b446e532c920fde38bce\t2026-07-20\tdocs: refresh ORB evidence after assertion hardening",
+    "33243dc1a96aa8ddb1058ce88536a1488e63bbd6\t2026-07-20\ttest: strengthen ORB subagent control assertions",
+    "cd719e54a695e494a61b7543ae68d2389d7e68ba\t2026-07-20\tdocs: refresh ORB outcome exact-control evidence",
+    "f4e0a9987739fea6d48ede0d77326bb0cc1912b7\t2026-07-20\ttest: add ORB control report safety fields",
+    "4f1cc72316a5acc67ff48e78b8b57aaadd1746fd\t2026-07-20\ttest: stabilize ORB control evidence durations",
+    "15e51d495cd06896ef59b62794d4ad17684715b9\t2026-07-20\ttest: clean ORB oracle static imports",
+    "02a07c0370c66f7fb2bf618dfc99f5cccde7aff6\t2026-07-20\ttest: bind ORB control suites to contract",
+    "dcbb4331a7f774ae2d67105528d4a35481c1cf50\t2026-07-20\ttest: add ORB S6 summary overlap controls",
+    "928c3e90026705356835c721f4b499b6b5cf2023\t2026-07-20\ttest: add ORB S5 math identity controls",
+    "e6afd7eadadb7b99bdd90528d9730971c590f09f\t2026-07-20\ttest: add ORB source join controls",
+    "1b625e654628bc0fee317025a0996fb2bbc768d1\t2026-07-20\ttest: add ORB input certification controls",
+    "58bcc3462f4f511561f56699d71202109cb32639\t2026-07-20\ttest: add ORB lineage exact controls",
+    "dce6cec35906a2ffebbe76ff0e9a850871ea8fa6\t2026-07-20\ttest: enforce exact ORB control failures",
+    "f5edfe4b9cca3aa7a7bc8f91cb34ec0d90ca84fd\t2026-07-20\ttest: add ORB S6 summary overlap controls",
+    "fe2b289ca88f40c329f9355409e27525d74f562c\t2026-07-20\ttest: add ORB input certification controls",
+    "cfceaaf3c984016ce706ed99a52cf46ff1dd5918\t2026-07-20\ttest: add ORB S5 math identity controls",
+    "e8890a2214a26f59b25db8ba3a437b5cb8a89099\t2026-07-20\ttest: add ORB source join controls",
+    "515e3a602cc39256b709614c53bdb6e214990704\t2026-07-20\ttest: add ORB lineage exact controls",
+    "661721315d7f606cac99e4517075622c33c1472e\t2026-07-20\ttest: add ORB control protocol",
+    "1d013219b07e971e52dcd6caa80038d9c09a96ed\t2026-07-20\tdocs: refresh ORB gitleaks-safe evidence",
+    "b3b3b64da8221e8f73437c32a89e2a97b330f035\t2026-07-20\tfix: avoid ORB control gitleaks false positive",
+    "4349638af6b4ca80b894ed69fe9872c09c3485cb\t2026-07-20\tdocs: refresh ORB final real-control evidence",
+    "2e2a5311145bbe8c3cb1606926b0ba50f2d74e14\t2026-07-20\tfix: encode ORB control missing codes",
+    "b8dd42578b5dece12a7b6957057659cb590bf679\t2026-07-20\tdocs: refresh ORB real-control evidence",
+    "6c6eb3387cea0b22046e392dfe55cbf5daeb1f87\t2026-07-20\tfix: stabilize ORB control fingerprints",
+    "f2fab47707bf55ce140c1a9d0a6be57382368a72\t2026-07-20\ttest: harden ORB real negative controls",
+    "5018edafafc77217d6e8a8eda790b32f7692926c\t2026-07-20\tdocs: refresh ORB executable control evidence",
+    "b8093bd5229768282b7b5f57c25a8a78ec7b8a95\t2026-07-20\tfix: encode ORB control failure evidence safely",
+    "aa235abc81c6d069a58058436ae1cc89a0d675bb\t2026-07-20\tdocs: bind ORB controls to executable evidence",
+    "3ca912477f90815c6d281b4f076a808e619744af\t2026-07-20\ttest: execute ORB outcome negative controls",
+    "cfd60924509d4a19d6d65dd059981e24d189b7fb\t2026-07-19\tdocs: certify ORB outcome evidence closure",
+    "c5bcbe9e368ae4671608bba0cacda81c30418dc1\t2026-07-19\tfix: align ORB outcome lineage oracle hash",
+    "ba4256e9cdb5d96d2ef524bbe12a1f3307f6320f\t2026-07-19\ttest: close ORB outcome certification gaps",
+    "5b83b89403e7e862ba4b383280ae6ade702f9340\t2026-07-19\tdocs: regenerate certified ORB outcome evidence",
+    "7aa8c18bfa3f93d5c1729aa86a62a9094864b894\t2026-07-19\ttest: strengthen ORB outcome horizon assertions",
+    "1277f997871f6da03353b227d27a3e05c64f222f\t2026-07-19\tresearch: stabilize ORB oracle evidence audit",
+    "1e455a8e8e8737221a9bdf3f4a76a449b455fa3f\t2026-07-19\tresearch: validate full ORB source schema",
+    "224565e8e9944ecf227fdd5d266ed1592a211f65\t2026-07-19\tresearch: expose ORB oracle conservation verdict",
+    "a6a515b04021b684a737bd2adf8972835045a98d\t2026-07-19\tresearch: accept certified ORB v2 reconciliation input",
+    "c68a738e2cc470aa4ed696d9f1fc0d33b23a37ed\t2026-07-19\tresearch: harden ORB outcome oracle lineage",
+    "bc4c1b3dbd090b8cb172d358a00b8a77b019ade4\t2026-07-19\tdocs: add structured ORB outcome evidence fields",
+    "ea9febcbde772fa091bd46d24abd0f2cad67eed5\t2026-07-19\tdocs: satisfy ORB outcome evidence gate",
+    "30c0b023aaf0084de6d856837ad86e26068f403e\t2026-07-19\tresearch: measure certified ORB underlying outcomes v2",
+    "2250d6a65b6dd05bfd51d63ce05592d0eb7765f3\t2026-07-19\tresearch: close ORB observed metadata oracle",
+    "c6575ebab8f9e92e841d2d4d54942c0d6cfb9a24\t2026-07-19\tresearch: certify ORB v2 source authority",
+    "4ee8f0c6d6fda6ec85297134aed26b06c82346cb\t2026-07-19\tresearch: repair ORB phase 1 v2 certification gates",
+    "df653532c9168d6e5bddf575ce6e70117482c629\t2026-07-19\tchore: clean ORB v2 file endings",
+    "097ea0e11e448eb489b94522504b8bda50484d73\t2026-07-19\tdocs: satisfy ORB v2 evidence source field",
+    "dd42d936ff9dd98a43009bf7c666b51a1c447f60\t2026-07-19\tdocs: align ORB v2 evidence wording with gate",
+    "cf9327b31ae2aafe4a758e50344dabc28a7630c8\t2026-07-19\tdocs: add ORB phase 1 v2 recertification evidence",
+    "5ec48be57f7a5120c57e78db8741bfb86b7c978d\t2026-07-19\tfix: close ORB source provenance semantics",
+    "dd4860b0feaa7f5ad28962986fcf3f6c93e60272\t2026-07-19\tfix: harden ORB source provenance audit",
+    "a7f301dadb4960ec6123a017367e8ce974f30a82\t2026-07-19\tfix: audit ORB source provenance",
+    "da5f5a03123eddd621b02dcde2ce059e077d7078\t2026-07-19\tresearch: fail closed ORB outcome certification",
+    "730bda88eb5b731925a6fc043fb600f2365751f1\t2026-07-19\tdocs: withdraw challenged ORB outcome certification",
+    "d2f45158fb7581f5d8b36e48b242eecc38970508\t2026-07-19\tdocs: complete ORB outcome JSON evidence contract",
+    "38bccd1de4a52d694e2da0608bb62675966a75a8\t2026-07-19\tdocs: satisfy ORB outcome evidence gate",
+    "cd1c3cc1072e12728fa7cb7ff6f027b6e227f5df\t2026-07-19\tdocs: publish ORB outcome evidence",
+    "648da6914959925ca1d10775aad3ce3f5c269f93\t2026-07-19\tresearch: complete ORB outcome measurement",
+    "543dc7faaa645dd63c6492bfc6a481e4f27ad405\t2026-07-19\tMerge remote-tracking branch 'origin/main' into research/strategy-outcomes-foundation",
+    "4d4cf0a8ca11665e61e06fff88e6786ec3577762\t2026-07-19\tdocs: classify Trend and Compression replay provenance (#673)",
+    "2219b0a6aa7294e2ff4124a80b5c7b182bd220ca\t2026-07-19\tresearch: measure certified ORB underlying outcomes",
+    "c9c653110d6558f750914914b566f3f4928ed2a9\t2026-07-19\tMerge branch 'main' into docs/trend-pullback-provenance-boundary",
+    "123b862e0060c133d160a768904662d1ddb8ff9c\t2026-07-19\tdocs: classify Trend and Compression replay provenance",
+    "c83c87e3ea22bc8cb172254c483773d96b400260\t2026-07-19\tdocs: verify ORB replay after merged partition fix (#672)"
+  ],
+  "metadata": {
+    "branch": "research/option-e2e-inventory-v4",
+    "foundation_commit": "b02cc64adf88c9ee876a03469b3f63ad762ccc2b",
+    "foundation_manifest_sha256_file_content": "118cc813127005e75e6eec94aa197a1795648d70d3311356c61fb9885275c37b  foundation_manifest.json",
+    "foundation_manifest_sha256_file_hash": "22829c0a1f69e7f249da523df6a9f382e2b8e0e391336940e2a7f4ffeb78250e",
+    "generated_paths": [
+      "research/option_e2e_recertification_v4/inventory/canonical_strategy_registry_v4.json",
+      "research/option_e2e_recertification_v4/inventory/alias_graph_v4.json",
+      "research/option_e2e_recertification_v4/inventory/historical_claim_map_v4.json",
+      "research/option_e2e_recertification_v4/inventory/evidence_hashes_v4.json",
+      "research/option_e2e_recertification_v4/inventory/discovery_commands_v4.txt",
+      "docs/agent_reviews/option_e2e_historical_inventory_v4.md"
+    ],
+    "safety_flags": {
+      "allowed_for_live_execution": false,
+      "append": false,
+      "broker_api_called": false,
+      "is_order_action": false,
+      "read_only": true
+    },
+    "scope": "historical inventory and alias graph only; no economic replay",
+    "source_agent": "Subagent A",
+    "worktree": "/Users/madhuram/tradebot-option-e2e-inventory-v4"
+  },
+  "pr_metadata_hits": [
+    {
+      "baseRefName": "research/residual-liquidity-exhaustion-mr-v2",
+      "closedAt": null,
+      "headRefName": "research/residual-liquidity-exhaustion-mr-v2-stage-b",
+      "mergedAt": null,
+      "number": 708,
+      "title": "research: close unstable residual mean-reversion Stage B",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/708"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T03:54:56Z",
+      "headRefName": "fix/seven-engine-pipeline-truthfulness-v1",
+      "mergedAt": "2026-07-23T03:54:56Z",
+      "number": 705,
+      "title": "fix: make seven-engine strategy pipeline fail closed",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/705"
+    },
+    {
+      "baseRefName": "agent/strategy-pipeline-outcomes-v1",
+      "closedAt": null,
+      "headRefName": "agent/strategy-pipeline-statistics-v1",
+      "mergedAt": null,
+      "number": 704,
+      "title": "feat: implement deterministic Statistics pipeline stage",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/704"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "agent/strategy-pipeline-outcomes-v1",
+      "mergedAt": null,
+      "number": 703,
+      "title": "feat: implement strict causal Outcomes pipeline stage",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/703"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T05:55:02Z",
+      "headRefName": "agent/strategy-pipeline-truth-v1",
+      "mergedAt": "2026-07-23T05:55:02Z",
+      "number": 702,
+      "title": "feat: implement exact fail-closed Truth pipeline stage",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/702"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T05:11:39Z",
+      "headRefName": "agent/strategy-pipeline-research-registry-v1",
+      "mergedAt": "2026-07-23T05:11:39Z",
+      "number": 701,
+      "title": "feat: implement governed Research and exact Registry pipeline stages",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/701"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T04:45:02Z",
+      "headRefName": "agent/strategy-pipeline-truthfulness-v1",
+      "mergedAt": "2026-07-23T04:45:02Z",
+      "number": 700,
+      "title": "fix: make strategy pipeline results truthful and fail closed",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/700"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T17:16:32Z",
+      "headRefName": "agent/governed-codex-antigravity-research-v1",
+      "mergedAt": "2026-07-22T17:16:32Z",
+      "number": 697,
+      "title": "feat: add governed Codex-Antigravity strategy research control plane",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/697"
+    },
+    {
+      "baseRefName": "research/structural-edge-prove-or-kill-v1",
+      "closedAt": null,
+      "headRefName": "research/directional-option-repricing-lag-v3",
+      "mergedAt": null,
+      "number": 695,
+      "title": "research: preregister buy-only option repricing-lag V3",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/695"
+    },
+    {
+      "baseRefName": "research/ml-strategy-discovery-v2-stability",
+      "closedAt": null,
+      "headRefName": "research/structural-edge-prove-or-kill-v1",
+      "mergedAt": null,
+      "number": 694,
+      "title": "research: add structural edge prove-or-kill campaign",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/694"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T10:45:23Z",
+      "headRefName": "fix/mean-reversion-corpus-file-classification-v1",
+      "mergedAt": "2026-07-22T10:45:23Z",
+      "number": 693,
+      "title": "fix(backtest): classify mixed replay corpus before mean-reversion research",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/693"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "research/postmerge-mean-reversion-rerun-v1",
+      "mergedAt": null,
+      "number": 692,
+      "title": "research: regenerate mean-reversion evidence after backtest fixes",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/692"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "research/ml-strategy-discovery-v2-stability",
+      "mergedAt": null,
+      "number": 688,
+      "title": "research: certify ML strategy discovery V2 on immutable corpus",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/688"
+    },
+    {
+      "baseRefName": "research/ml-strategy-discovery-core",
+      "closedAt": "2026-07-21T14:58:00Z",
+      "headRefName": "audit/ml-strategy-discovery-real-run-v1",
+      "mergedAt": "2026-07-21T14:58:00Z",
+      "number": 687,
+      "title": "Independent Audit of Real NIFTY ML Discovery Runs",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/687"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-21T15:15:10Z",
+      "headRefName": "research/ml-strategy-discovery-core",
+      "mergedAt": "2026-07-21T15:15:10Z",
+      "number": 686,
+      "title": "research: add causal ML discovery with certified Upstox source adapter",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/686"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-21T12:59:44Z",
+      "headRefName": "research/ml-strategy-discovery-foundation-v1",
+      "mergedAt": null,
+      "number": 685,
+      "title": "research: add ML strategy discovery foundation v1",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/685"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "fix/orb-cycle-cutoff-main-v2",
+      "mergedAt": null,
+      "number": 683,
+      "title": "fix: propagate frozen cycle cutoff to ORB context",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/683"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "fix/four-strategy-objective-math-repairs-v3",
+      "mergedAt": null,
+      "number": 682,
+      "title": "fix: certify four-strategy objective math repairs",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/682"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "research/orb-structural-edge-screen-v1",
+      "mergedAt": null,
+      "number": 681,
+      "title": "research: screen certified ORB outcomes for structural edge",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/681"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-20T12:04:04Z",
+      "headRefName": "fix/orb-outcomes-v2-portable-sidecars",
+      "mergedAt": "2026-07-20T12:04:04Z",
+      "number": 680,
+      "title": "research: make ORB outcome evidence portable across worktrees",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/680"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-20T09:12:01Z",
+      "headRefName": "research/orb-outcomes-v2-clean-history",
+      "mergedAt": "2026-07-20T09:12:01Z",
+      "number": 678,
+      "title": "research: certify ORB underlying outcomes v2 on clean history",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/678"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-20T09:01:23Z",
+      "headRefName": "research/orb-outcomes-v2-certified",
+      "mergedAt": null,
+      "number": 677,
+      "title": "research: measure certified ORB underlying outcomes v2",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/677"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-19T14:02:17Z",
+      "headRefName": "research/orb-phase1-v2-recertification",
+      "mergedAt": "2026-07-19T14:02:17Z",
+      "number": 676,
+      "title": "research: repair ORB Phase 1 v2 certification gates",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/676"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-19T07:39:29Z",
+      "headRefName": "fix/orb-source-provenance-repair",
+      "mergedAt": "2026-07-19T07:39:29Z",
+      "number": 675,
+      "title": "fix: invalidate ORB Phase 1 source provenance",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/675"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "research/strategy-outcomes-foundation",
+      "mergedAt": null,
+      "number": 674,
+      "title": "research: measure certified ORB underlying outcomes",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/674"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T20:50:47Z",
+      "headRefName": "docs/trend-pullback-provenance-boundary",
+      "mergedAt": "2026-07-18T20:50:47Z",
+      "number": 673,
+      "title": "docs: classify Trend and Compression replay provenance",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/673"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T20:17:41Z",
+      "headRefName": "docs/orb-postmerge-final-verification",
+      "mergedAt": "2026-07-18T20:17:41Z",
+      "number": 672,
+      "title": "docs: verify ORB replay after merged partition fix",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/672"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T18:55:26Z",
+      "headRefName": "fix/orb-merged-partition-assignments",
+      "mergedAt": "2026-07-18T18:55:26Z",
+      "number": 671,
+      "title": "fix: preserve ORB merged partition assignments",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/671"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T18:39:40Z",
+      "headRefName": "research/strategy-replay-foundation",
+      "mergedAt": "2026-07-18T18:39:39Z",
+      "number": 670,
+      "title": "research: add strategy replay foundation",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/670"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T17:37:05Z",
+      "headRefName": "fix/orb-postmerge-audit-metadata",
+      "mergedAt": "2026-07-18T17:37:05Z",
+      "number": 669,
+      "title": "fix: align ORB replay shard metadata audit",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/669"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T16:29:04Z",
+      "headRefName": "research/opening-range-retest-causal-replay",
+      "mergedAt": "2026-07-18T16:29:04Z",
+      "number": 668,
+      "title": "Complete ORB causal replay with deterministic sharding",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/668"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-18T08:42:45Z",
+      "headRefName": "integration/four-strategy-data-suitability-main",
+      "mergedAt": "2026-07-18T08:42:45Z",
+      "number": 666,
+      "title": "Integrate four-strategy data suitability onto main",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/666"
+    },
+    {
+      "baseRefName": "feature/agentic-gemini-edge-evidence",
+      "closedAt": "2026-07-17T19:53:49Z",
+      "headRefName": "research/trend-pullback-horizon-sweep",
+      "mergedAt": null,
+      "number": 662,
+      "title": "research: distinguish stop, target, and timeout across 15\u201360 minutes",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/662"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "fix/orb-context-cycle-cutoff",
+      "mergedAt": null,
+      "number": 659,
+      "title": "fix: propagate cycle cutoff to ORB context",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/659"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-16T17:04:28Z",
+      "headRefName": "fix/canonical-strategy-input-truth",
+      "mergedAt": "2026-07-16T17:04:28Z",
+      "number": 657,
+      "title": "fix: enforce canonical completed strategy-input bars",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/657"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-14T06:39:31Z",
+      "headRefName": "agent/codex-orb-candle-validation",
+      "mergedAt": "2026-07-14T06:39:31Z",
+      "number": 652,
+      "title": "[codex] align ORB negative result conclusions",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/652"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-08T14:19:17Z",
+      "headRefName": "audit-strategy-structural",
+      "mergedAt": "2026-07-08T14:19:17Z",
+      "number": 639,
+      "title": "test(strategy): Implement structural audits for Opening Drive and Mean Reversion",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/639"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-06T17:01:06Z",
+      "headRefName": "ram/preserve-dirty-option-truth-to-ranking",
+      "mergedAt": "2026-07-06T17:01:06Z",
+      "number": 637,
+      "title": "Preserve dirty option-chain/trade-builder signals into canonical ranking",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/637"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-01T08:13:41Z",
+      "headRefName": "refactor/movement-strategy-profiles-wfa-safe",
+      "mergedAt": "2026-07-01T08:13:40Z",
+      "number": 630,
+      "title": "Refactor movement strategies for WFA-safe parameter profiles",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/630"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-30T12:35:01Z",
+      "headRefName": "qa/edge-proof-minimum-loop",
+      "mergedAt": "2026-06-30T12:35:01Z",
+      "number": 628,
+      "title": "Fix: Entropy gating and strategy lifecycle safety",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/628"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-29T19:47:53Z",
+      "headRefName": "qa/all-available-data-strategy-edge-audit",
+      "mergedAt": "2026-06-29T19:47:53Z",
+      "number": 626,
+      "title": "Add provenance-safe resumable strategy edge audit",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/626"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-29T15:16:08Z",
+      "headRefName": "qa/all-strategy-available-data-backtest-20260629",
+      "mergedAt": "2026-06-29T15:16:08Z",
+      "number": 625,
+      "title": "Add offline all-strategy available-data backtest",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/625"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-29T14:16:52Z",
+      "headRefName": "feature/live-soak-strategy-regime-evidence-validation",
+      "mergedAt": "2026-06-29T14:16:52Z",
+      "number": 624,
+      "title": "fix: restore feed reconnect safety logic",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/624"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-29T13:42:38Z",
+      "headRefName": "feature/live-soak-strategy-regime-evidence-validation",
+      "mergedAt": "2026-06-29T13:42:38Z",
+      "number": 623,
+      "title": "feat: Live Soak Strategy Regime Evidence Validation & Feed Stability Fix",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/623"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-27T17:21:45Z",
+      "headRefName": "feature/certification-persistence",
+      "mergedAt": "2026-06-27T17:21:45Z",
+      "number": 619,
+      "title": "PR-10: Strategy Certification Persistence",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/619"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-27T17:11:51Z",
+      "headRefName": "feature/research-registry-persistence",
+      "mergedAt": "2026-06-27T17:11:51Z",
+      "number": 618,
+      "title": "PR-9: Research Registry Persistence",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/618"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-27T16:20:47Z",
+      "headRefName": "feature/strategy-evaluation-orchestrator",
+      "mergedAt": "2026-06-27T16:20:47Z",
+      "number": 617,
+      "title": "PR-8: Strategy Evaluation Orchestrator (Hardened)",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/617"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-27T07:25:03Z",
+      "headRefName": "feature/research-experiment-registry",
+      "mergedAt": "2026-06-27T07:25:03Z",
+      "number": 615,
+      "title": "PR-6 \u2014 Research & Experiment Registry",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/615"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-27T06:46:52Z",
+      "headRefName": "feature/strategy-certification-engine",
+      "mergedAt": "2026-06-27T06:46:52Z",
+      "number": 614,
+      "title": "feat: Add Strategy Certification Engine (PR-5)",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/614"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-26T19:15:24Z",
+      "headRefName": "feature/strategy-truth-engine",
+      "mergedAt": "2026-06-26T19:15:24Z",
+      "number": 611,
+      "title": "feat: Strategy Truth Engine (PR-2 & PR-2A)",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/611"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-26T16:43:20Z",
+      "headRefName": "feature/strategy-registry",
+      "mergedAt": "2026-06-26T16:43:20Z",
+      "number": 610,
+      "title": "feature/strategy registry",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/610"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-26T14:47:37Z",
+      "headRefName": "fix/feed-index-aliases-resolution",
+      "mergedAt": "2026-06-26T14:47:37Z",
+      "number": 607,
+      "title": "Fix canonical index aliases mapping for NIFTY/BANKNIFTY feed",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/607"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-21T13:09:14Z",
+      "headRefName": "qa/full-implemented-strategy-truth-audit-after-fixes",
+      "mergedAt": "2026-06-21T13:09:14Z",
+      "number": 602,
+      "title": "qa: add full implemented strategy truth audit",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/602"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-21T10:51:17Z",
+      "headRefName": "fix/vwap-mean-reversion-intent",
+      "mergedAt": "2026-06-21T10:51:17Z",
+      "number": 601,
+      "title": "fix: VWAP_MEAN_REVERSION intent logic and NaN bypass",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/601"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-16T21:13:01Z",
+      "headRefName": "feat/kite-intraday-history",
+      "mergedAt": "2026-06-16T21:13:01Z",
+      "number": 593,
+      "title": "Expand strategy taxonomy contracts",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/593"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-16T12:10:26Z",
+      "headRefName": "fix/live-feed-stability-and-dynamic-regimes",
+      "mergedAt": "2026-06-16T12:10:26Z",
+      "number": 591,
+      "title": "Dynamic Strategy Regimes & Feed Stability",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/591"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-14T12:50:36Z",
+      "headRefName": "feat/elite-regime-router-phase1",
+      "mergedAt": "2026-06-14T12:50:36Z",
+      "number": 573,
+      "title": "feat: Elite Regime Router Phase 1 - Strategy Hardening",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/573"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-14T07:34:59Z",
+      "headRefName": "feat/real-option-data-backtest-runner",
+      "mergedAt": "2026-06-14T07:34:59Z",
+      "number": 571,
+      "title": "feat: Complete Profitability System Hardening",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/571"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-14T05:29:00Z",
+      "headRefName": "ag/fix-lot-sizes-20260613",
+      "mergedAt": "2026-06-14T05:29:00Z",
+      "number": 565,
+      "title": "fix: update index option lot sizes",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/565"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-13T11:28:39Z",
+      "headRefName": "ag/paper-soak-feed-ranking-executable-candidates-20260612",
+      "mergedAt": "2026-06-13T11:28:39Z",
+      "number": 564,
+      "title": "fix: relax latency guards and boost mean reversion confidence",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/564"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-11T18:47:07Z",
+      "headRefName": "fix/backtest-runtime-replay-readiness-verdict",
+      "mergedAt": "2026-06-11T18:47:07Z",
+      "number": 558,
+      "title": "fix: classify runtime-replay-only backtest readiness separately",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/558"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-11T13:36:26Z",
+      "headRefName": "qa/eight-year-backtest-strategy-edge",
+      "mergedAt": "2026-06-11T13:36:26Z",
+      "number": 557,
+      "title": "feat: add historical data readiness for eight-year backtesting",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/557"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-10T22:21:32Z",
+      "headRefName": "feat/reset-option-verification-on-resubscribe",
+      "mergedAt": "2026-06-10T22:21:32Z",
+      "number": 551,
+      "title": "feat(feed): reset option verification on resubscribe",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/551"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-10T21:51:43Z",
+      "headRefName": "feat/option-verification-market-open-timeout",
+      "mergedAt": "2026-06-10T21:51:43Z",
+      "number": 549,
+      "title": "feat: dynamically extend option verification timeout at market open",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/549"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-17T20:08:12Z",
+      "headRefName": "qa/edge-first-behavior-strategy",
+      "mergedAt": null,
+      "number": 543,
+      "title": "QA Gate Foundation + Fallback Executable Firewall",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/543"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-09T11:40:57Z",
+      "headRefName": "qa/edge-first-behavior-strategy",
+      "mergedAt": "2026-06-09T11:40:57Z",
+      "number": 542,
+      "title": "QA Gate Foundation + Fallback Executable Firewall",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/542"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-09T03:50:30Z",
+      "headRefName": "ram/feed-stab-05-exact-option-token-freshness-gate",
+      "mergedAt": "2026-06-09T03:50:30Z",
+      "number": 537,
+      "title": "FEED-STAB-05: Exact option token freshness gate",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/537"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-08T08:04:03Z",
+      "headRefName": "ram/pr523-live-option-feed-truth-after-subscribe-ws1006",
+      "mergedAt": "2026-06-08T08:04:03Z",
+      "number": 523,
+      "title": "PR #523 \u2014 Live Option Feed Truth After Subscribe and WS1006 Recovery",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/523"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-06-07T19:16:12Z",
+      "headRefName": "ram/edge-next-04-strategy-baseline-comparison",
+      "mergedAt": "2026-06-07T19:16:12Z",
+      "number": 517,
+      "title": "EDGE-NEXT-04: Strategy edge baseline comparison",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/517"
+    }
+  ]
+}
