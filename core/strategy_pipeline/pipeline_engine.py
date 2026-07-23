@@ -37,8 +37,8 @@ class StrategyPipelineEngine:
     """
 
     _SCRIPT_MAP = {
-        EngineType.RESEARCH: "scripts/run_research_registry.py",
-        EngineType.REGISTRY: None,
+        EngineType.RESEARCH: "scripts/run_strategy_pipeline_research.py",
+        EngineType.REGISTRY: "scripts/run_strategy_pipeline_registry.py",
         EngineType.TRUTH: "scripts/run_strategy_truth_audit.py",
         EngineType.OUTCOMES: "scripts/run_outcome_evidence_replay.py",
         EngineType.STATISTICS: "scripts/run_statistical_validation.py",
@@ -316,7 +316,12 @@ class StrategyPipelineEngine:
     ) -> list[str] | EngineResult:
         command = [sys.executable, script_path]
         explicit_args = context.engine_args.get(engine.value)
-        if engine in (EngineType.OUTCOMES, EngineType.STATISTICS):
+        if engine in (
+            EngineType.RESEARCH,
+            EngineType.REGISTRY,
+            EngineType.OUTCOMES,
+            EngineType.STATISTICS,
+        ):
             if not explicit_args:
                 return self._blocked_result(
                     engine,
@@ -324,13 +329,12 @@ class StrategyPipelineEngine:
                     context,
                     verdict="ENGINE_ARGUMENTS_MISSING",
                     blockers=[
-                        f"Exact {engine.value} input arguments are required; latest-file discovery is forbidden"
+                        f"Exact {engine.value} input arguments are required; artifact discovery is forbidden"
                     ],
                 )
+            if engine == EngineType.REGISTRY:
+                command.extend(["--strategy", strategy_id])
             command.extend(explicit_args)
-        elif engine == EngineType.RESEARCH:
-            if explicit_args:
-                command.extend(explicit_args)
         else:
             command.extend(["--strategy", strategy_id])
             if explicit_args:
