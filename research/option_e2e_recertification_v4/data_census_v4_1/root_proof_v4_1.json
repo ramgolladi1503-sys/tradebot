@@ -1,0 +1,82 @@
+[
+  {
+    "byte_count": 209762281,
+    "exists": true,
+    "file_count": 70,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/.runtime/market_data",
+    "sha256": "e2ef69c31850d16fcd9fb7d7299a1b1986d9326a2349934df2169be5cb3c9499"
+  },
+  {
+    "byte_count": 8196,
+    "exists": true,
+    "file_count": 1,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/runtime/market_data",
+    "sha256": "5cdb31e3da4c43bcf29dd495e6309fa671e6be96095271b9ae83bec8587224db"
+  },
+  {
+    "byte_count": 71469705,
+    "exists": true,
+    "file_count": 3019,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+    "sha256": "e54523f01617a878287fd4453f5a9d7eccd90fa28128c204f30cb2e173d60c46"
+  },
+  {
+    "byte_count": 15889907,
+    "exists": true,
+    "file_count": 1509,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/runtime/kite_candidate_replay",
+    "sha256": "514464a6e254e4bcb4f230d142758a6392480a8c61ffdeafcaf93740b372893b"
+  },
+  {
+    "byte_count": 71646801,
+    "exists": true,
+    "file_count": 2,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/runtime/upstox_instruments",
+    "sha256": "758957b9d8ae48f73560e6b0c21eda98db3bd368ea0d582672900e0278f25fea"
+  },
+  {
+    "byte_count": 446812899,
+    "exists": true,
+    "file_count": 235,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot/runtime/strategy_validation",
+    "sha256": "235224386f70eab6b734ce4b625873f469f0d53438d452547d9bbd8e7991756b"
+  },
+  {
+    "byte_count": 70877422,
+    "exists": true,
+    "file_count": 2310,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot-data",
+    "sha256": "f49fc748206814910622a3666c95bda368994d42f50f0bfa8207ca761b468485"
+  },
+  {
+    "byte_count": 509534326,
+    "exists": true,
+    "file_count": 7269,
+    "is_dir": true,
+    "is_file": false,
+    "proof_error": "",
+    "root": "/Users/madhuram/tradebot-ml-evidence",
+    "sha256": "598739eca5a229d4331d79b9ebb871411785c3b08ceb33db6c9f3329efe60550"
+  }
+]
