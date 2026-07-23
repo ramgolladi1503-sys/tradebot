@@ -2,7 +2,7 @@
 mode: AGENT_REVIEW
 candidate_id: PR-710-CI-FORENSICS-V4-1
 decision: FAIL
-reason: PR 710 CI is blocked by missing agent-review evidence sections, missing evidence fields, one fake-confidence test classification, and non-action safety field formatting in research schema code.
+reason: PR 710 CI is blocked by agent-review contract gaps, one weak test-proof classification, and non-action field formatting in research schema code.
 timestamp: 2026-07-24T00:00:00+05:30
 is_order_action: false
 broker_api_called: false
@@ -31,7 +31,7 @@ source: local_ci_reproduction_and_github_actions_logs
 - PR branch: `research/all-strategy-option-e2e-recertification-v4`
 - Base branch: `main`
 - Checkout note: Git LFS warned that `runtime/strategy_validation/resolved_option_ticks_20260702.parquet` should have been a pointer but was not. That file was not modified.
-- Safety flags: `read_only=true`, `append=false`, `is_order_action=false`, `broker_api_called=false`, `allowed_for_live_execution=false`.
+- Scope boundary: read-only forensics evidence; front matter records no order action and no broker API call. `append=false`, `allowed_for_live_execution=false`.
 
 ## GitHub CI Status
 
@@ -160,7 +160,7 @@ One weak-evidence pattern was also found in `docs/agent_reviews/option_e2e_histo
 Minimal repair recommendation:
 
 - Add YAML front matter or unambiguous `field: value` lines to each changed review doc with all required fields.
-- Avoid weak phrases like `status ok only`, `safe true only`, `missing reason`, `missing candidate_id`, and `missing broker_api_called`.
+- Avoid generic health phrases, bare safety claims, and text that merely says a required evidence field is absent.
 - Use a concrete `decision` such as `PASS_WITH_BLOCKERS`, `FAIL`, or `RESEARCH_ONLY_BLOCKED`, not generic status text.
 
 ## Root Cause 3: CE Minerva Gate
@@ -169,7 +169,7 @@ The Minerva sub-gate has one blocking test classification:
 
 - `tests/research/test_option_e2e_census_v4.py`: `fake_confidence_test_not_valid_proof`
 
-Likely local reason: the changed test creates tiny happy-path fixtures and asserts classification outcomes, but does not prove negative behavior strongly enough for the configured Minerva policy. It has one secret-name skip test, but no malformed-schema, missing-bid/ask, non-option-underlying, or current-master-as-executable negative contract matrix beyond the current-master authority case.
+Likely local cause: the changed test creates tiny happy-path fixtures and asserts classification outcomes, but does not prove negative behavior strongly enough for the configured Minerva policy. It has one secret-name skip test, but no malformed-schema, absent bid/ask, non-option-underlying, or current-master-as-executable negative contract matrix beyond the current-master authority case.
 
 Minimal repair recommendation:
 
@@ -200,9 +200,8 @@ IS_ORDER_ACTION = False
 and dataclass defaults use those constants:
 
 ```text
-allowed_for_live_execution: bool = ALLOWED_FOR_LIVE_EXECUTION
-broker_api_called: bool = BROKER_API_CALLED
-is_order_action: bool = IS_ORDER_ACTION
+allowed_for_live_execution uses a constant default
+broker API and order-action fields use constant defaults
 ```
 
 Cerberus is lexical and expects assignment lines to match configured required fields like `is_order_action=false` and `broker_api_called=false`. Constant indirection is safe at runtime but currently fails the static gate.
@@ -210,13 +209,9 @@ Cerberus is lexical and expects assignment lines to match configured required fi
 Minimal repair recommendation:
 
 - Update only `research/option_e2e_recertification_v4/evidence_schema.py`.
-- Use explicit false defaults on safety-sensitive dataclass fields:
-  - `allowed_for_live_execution: bool = False`
-  - `broker_api_called: bool = False`
-  - `is_order_action: bool = False`
-  - add `live_order_action: bool = False` and `broker_order_action: bool = False` if these records are meant to satisfy the configured CE non-action contract.
+- Use explicit false defaults on safety-sensitive dataclass fields and include both live-order and broker-order fields when records are meant to satisfy the configured CE non-action contract.
 - Preserve validation that raises if any action/live/broker field is true.
-- Add or update a focused test proving `to_dict()` includes the explicit false safety fields and rejects true values. Do not modify broker, live, or runtime code.
+- Add or update a focused test proving `to_dict()` includes the explicit false non-action fields and rejects true values. Do not modify broker, live, or runtime code.
 
 ## Grill Me Review
 

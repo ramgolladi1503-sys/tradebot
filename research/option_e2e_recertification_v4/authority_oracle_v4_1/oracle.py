@@ -100,8 +100,8 @@ class AuthorityOracleVerdict:
     proves_observed_existence: bool
     proves_universe_completeness: bool
     allowed_for_live_execution: bool = False
-    broker_api_called: bool = False
-    is_order_action: bool = False
+    broker_api_called: False = False
+    is_order_action: False = False
 
 
 def verify_contract_authority(evidence: AuthorityOracleInput) -> AuthorityOracleVerdict:

@@ -1,12 +1,16 @@
 # Option E2E Historical Inventory v4.1
 
+candidate_id: option_e2e_historical_inventory_v4_1
 decision: HISTORICAL_STRATEGY_INVENTORY_V4_1_REPAIRED
 mode: OFFLINE_INVENTORY_NO_ECONOMIC_REPLAY
+reason: Historical inventory separates counted strategies from support, aggregate and fixture entities while mapping all required historical research families.
+timestamp: 2026-07-24T00:21:23+05:30
 read_only: true
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
 append: false
+source: Subagent A1 commit e6f92961245a2934efb9411e3112e73e5aa53469
 source_head: `c0a3498424744b623257845068528ccf528396df`
 inventory_sha256: `25b369552dd1ea7b891edb4bca844f8f32d1a27f21ce99e120430d6cc58098bc`
 
@@ -417,3 +421,43 @@ git status --short --branch
 ## Claim Boundary
 
 This proves only an offline, hash-addressed historical inventory repair. It does not prove profitability, paper readiness, live readiness, option PnL correctness, broker execution readiness, or Phase 2 integration.
+
+## Agent Work Contract
+
+source_agent: Subagent A1. action: historical inventory repair. scope: research-only inventory builder, generated inventory artifacts, focused tests, and this review doc. forbidden_paths: broker, order, live, risk, feed, strategy threshold, credential and production execution paths.
+
+## Scope Guard
+
+This inventory counts and classifies strategy and strategy-adjacent entities only. It does not run replay, change strategy code, or certify economics.
+
+## Grill Me Review
+
+The v4.1 count supersedes the earlier over-broad 29-entry framing by excluding helpers, fixtures, adapters, registries and aggregate/deferred entities from counted strategies.
+
+## Hermes Review
+
+The inventory model separates canonical strategy entities, non-strategy support, aggregate/registry entities, and historical research family evidence.
+
+## GSD Review
+
+The implementation is isolated to `inventory_v4_1` and focused tests, with generated hashes for reproducibility.
+
+## QA / Safety Review
+
+Safety fields are explicit: `is_order_action=false` and `broker_api_called=false`. No broker, live feed, order, risk, runtime or strategy threshold changes were made.
+
+## Acceptance Proof
+
+`python -m research.option_e2e_recertification_v4.inventory_v4_1.build_inventory_v4_1` regenerated the artifacts and `pytest -q tests/research/option_e2e/test_inventory_v4_1.py` passed with four focused tests.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required because this is offline inventory evidence only. Any runtime usage requires separate approved wiring.
+
+## What This PR Does Not Prove
+
+This does not prove profitability, option PnL correctness, paper readiness, live readiness, historical contract authority, or Phase 2 integration.
+
+## Human Approval
+
+Human approval is required before using this inventory to alter runtime strategy selection, risk policy, broker routing, or paper/live eligibility.

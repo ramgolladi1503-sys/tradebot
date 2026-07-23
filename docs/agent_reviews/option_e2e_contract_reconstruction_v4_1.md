@@ -1,12 +1,21 @@
 # Option E2E Contract Reconstruction v4.1
 
+mode: RESEARCH_ONLY_CONTRACT_RECONSTRUCTION
+candidate_id: option_e2e_contract_reconstruction_v4_1
+decision: RIGHT_WITH_GAPS
+reason: Quote/depth rows reconstruct many NIFTY option identities diagnostically, but no point-in-time instrument authority proves historical contract existence.
+timestamp: 2026-07-24T00:24:25+05:30
+is_order_action: false
+broker_api_called: false
+source: Subagent B2 commit b2612776a67487c2dc7066906699031f031ac5dc
+
 ## Verdict
 
 PARTIALLY PROVEN for observed quote-file tokens only. NOT PROVEN for historical contract existence.
 
 The local corpus contains contemporaneous quote/depth rows with immutable file hashes and quote values, and 1,262 of the 1,325 census-known quote files can be joined to NIFTY CE/PE strike/expiry identity through `runtime/upstox_instruments/complete.json`. That join is not a point-in-time authority: it is a current local Upstox instrument snapshot with no capture timestamp, no provider manifest timestamp, and no proof it was valid when the quote rows were captured. Therefore these files do not prove observed historical contract existence under the requested standard.
 
-Safety flags: `read_only=true`, `is_order_action=false`, `broker_api_called=false`, `allowed_for_live_execution=false`, `append=false`.
+Scope boundary: read-only reconstruction evidence; fields above record no order action and no broker API call. `allowed_for_live_execution=false`, `append=false`.
 
 ## Scope
 
@@ -111,3 +120,43 @@ pytest -q tests/research/option_e2e/test_contract_reconstruction_v4_1.py
 No runtime migration. No config keys added. No production wiring.
 
 To upgrade this from PARTIALLY PROVEN to PROVEN, add a dated, immutable provider instrument master or contract-chain snapshot captured at or before each quote file timestamp, with its own SHA256 and provider/capture manifest. Do not promote current `complete.json` to historical authority without that provenance.
+
+## Agent Work Contract
+
+source_agent: Subagent B2. action: quote/depth reconstruction study. scope: research-only reconstruction artifacts, focused tests, and this review doc. forbidden_paths: shared resolver code, broker, order, live, risk, feed, strategy threshold, credential and production execution paths.
+
+## Scope Guard
+
+This study reconstructs identities for diagnosis only. It does not certify historical contract existence because the local master source is not point-in-time authority.
+
+## Grill Me Review
+
+The result deliberately rejects the tempting shortcut of treating `runtime/upstox_instruments/complete.json` as historical truth.
+
+## Hermes Review
+
+The correct architecture is a two-step bridge: observed quote identity may support existence diagnostics, while point-in-time instrument authority remains a separate required evidence source.
+
+## GSD Review
+
+The implementation is isolated under `contract_reconstruction_v4_1` with focused tests and generated hashes.
+
+## QA / Safety Review
+
+Safety fields are explicit: `is_order_action=false` and `broker_api_called=false`. No broker, live feed, order, risk, strategy or config behavior was changed.
+
+## Acceptance Proof
+
+`pytest -q tests/research/option_e2e/test_contract_reconstruction_v4_1.py` passed with tests proving diagnostic reconstruction and fail-closed rejection without point-in-time authority.
+
+## Runtime Proof Required After Merge
+
+No runtime proof is required because this is offline research evidence only. Runtime adoption requires a separate approved PR with real authority data.
+
+## What This PR Does Not Prove
+
+This does not prove historical contract existence, strategy eligibility, option replay validity, PnL correctness, paper readiness, live readiness, profitability, or Phase 2 integration.
+
+## Human Approval
+
+Human approval is required before using reconstruction outputs in runtime selection, strategy evaluation, broker routing, paper eligibility, or live eligibility.

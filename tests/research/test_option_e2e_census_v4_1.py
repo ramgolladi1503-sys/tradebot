@@ -26,7 +26,7 @@ def test_v4_1_records_root_proof_and_parse_status(tmp_path) -> None:
 
     files, summary, root_proofs = build_census((tmp_path,), repo_root=tmp_path)
 
-    assert len(files) == 1
+    assert [item.logical_path for item in files] == ["nifty_option_quotes.csv"]
     assert files[0].parse_status == "parsed"
     assert files[0].parse_error == ""
     assert files[0].root == str(tmp_path)
