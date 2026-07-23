@@ -1,0 +1,22 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_PAYLOAD_CENSUS_V2",
+  "classification": "NESTED_DEPTH_PAYLOAD_EMPTY_ACROSS_COMPLETE_CORPUS",
+  "corpus_archive_sha256": "8c5fd5cded6475347c94f073b3411d6636c34dcc256243270e23ec8daf6b35f7",
+  "edge_claim_allowed": false,
+  "execution_allowed": false,
+  "files_with_nonempty_depth": 0,
+  "malformed_rows": 0,
+  "mapping_rows": 2778666,
+  "normalizer_created": false,
+  "null_rows": 0,
+  "producer_commit": "85cde62ca27d72aa2209731a2174ab934380e507",
+  "quote_depth_files": 129,
+  "quote_rows": 2778666,
+  "rows_with_both_sides": 0,
+  "rows_with_nonempty_asks": 0,
+  "rows_with_nonempty_bids": 0,
+  "strategy_created": false,
+  "total_ask_entries": 0,
+  "total_bid_entries": 0,
+  "two_run_semantic_determinism": true
+}

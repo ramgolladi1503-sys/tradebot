@@ -1,0 +1,8 @@
+{
+  "campaign_id": "LIQUIDITY_EXHAUSTION_DEPTH_PAYLOAD_CENSUS_V2",
+  "classification": "NESTED_DEPTH_PAYLOAD_EMPTY_ACROSS_COMPLETE_CORPUS",
+  "execution_allowed": false,
+  "producer_commit": "85cde62ca27d72aa2209731a2174ab934380e507",
+  "status": "COMPLETE",
+  "two_run_semantic_determinism": true
+}
