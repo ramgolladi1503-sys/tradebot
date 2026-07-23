@@ -44,7 +44,8 @@ def fetch_chunk(instrument_key, symbol, from_date, to_date, token, out_dir):
     headers = {
         "Accept": "application/json",
         "Api-Version": "3.0",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "curl/8.4.0"
     }
     
     req = urllib.request.Request(url, headers=headers)
@@ -122,7 +123,10 @@ def get_monthly_chunks(start_date, end_date):
         
         if month_end >= end:
             break
-        curr = datetime(curr.year, curr.month + 1, 1)
+        if curr.month == 12:
+            curr = datetime(curr.year + 1, 1, 1)
+        else:
+            curr = datetime(curr.year, curr.month + 1, 1)
         
     return chunks
 
@@ -164,8 +168,8 @@ def main():
         import pandas as pd
         weights_df = pd.read_csv(args.weights)
         symbols = weights_df["constituent_symbol"].unique().tolist()
-        symbols.append("NIFTY 50")
-        symbols.append("NIFTY BANK")
+        symbols.append("NIFTY")
+        symbols.append("BANKNIFTY")
     except Exception:
         # If weights file is missing/invalid, fail closed
         print("Valid weights file not found, failing closed.")
