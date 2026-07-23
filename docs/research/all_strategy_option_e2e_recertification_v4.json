@@ -1,0 +1,24 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_id": "all-strategy-option-e2e-recertification-v4",
+  "canonical_strategy_count": 29,
+  "final_status": "BLOCKED",
+  "is_order_action": false,
+  "option_data_census": {
+    "blocked_files": 3451,
+    "census_sha256": "5dc807a26cdc682e42d21e6892efbb2271f650c03ba1f7ddfbaf579811daf384",
+    "executable_quote_files": 1325,
+    "files_classified": 4775,
+    "instrument_master_files": 1,
+    "option_quote_files": 1325,
+    "point_in_time_authority_files": 0
+  },
+  "primary_blocker": "INSUFFICIENT_OPTION_DATA_COVERAGE_POINT_IN_TIME_CONTRACT_AUTHORITY_MISSING",
+  "research_only": true,
+  "strategy_option_certified_count": 0,
+  "tests": {
+    "command": "PYTHONPATH=. pytest -q tests/research/test_option_e2e_census_v4.py tests/research/option_e2e/test_foundation_contracts.py tests/option_backtest/test_engine.py tests/option_backtest/test_loader.py tests/option_backtest/test_wfa.py",
+    "result": "63 passed in 6.29s"
+  }
+}

@@ -145,7 +145,7 @@ def write_census_artifacts(files: list[CensusFile], summary: CensusSummary, outp
     )
     fieldnames = list(records[0].keys()) if records else list(CensusFile.__dataclass_fields__)
     with (output_dir / "option_data_census.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(records)
     (output_dir / "option_data_census_summary.json").write_text(
