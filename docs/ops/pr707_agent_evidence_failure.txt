@@ -1,0 +1,1366 @@
+2026-07-23T05:48:19.3319742Z Contents: read
+2026-07-23T05:48:19.3320671Z Metadata: read
+2026-07-23T05:48:19.3321595Z PullRequests: read
+2026-07-23T05:48:19.3322472Z ##[endgroup]
+2026-07-23T05:48:19.3325389Z Secret source: Actions
+2026-07-23T05:48:19.3326542Z Prepare workflow directory
+2026-07-23T05:48:19.3794616Z Prepare all required actions
+2026-07-23T05:48:19.3849570Z Getting action download info
+2026-07-23T05:48:19.5619991Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-07-23T05:48:19.9271558Z Complete job name: agent-review-evidence
+2026-07-23T05:48:20.0021516Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:20.0030563Z ##[group]Run actions/checkout@v4
+2026-07-23T05:48:20.0031276Z with:
+2026-07-23T05:48:20.0031704Z   fetch-depth: 0
+2026-07-23T05:48:20.0032184Z   repository: ramgolladi1503-sys/tradebot
+2026-07-23T05:48:20.0035978Z   token: ***
+2026-07-23T05:48:20.0036414Z   ssh-strict: true
+2026-07-23T05:48:20.0036946Z   ssh-user: git
+2026-07-23T05:48:20.0037606Z   persist-credentials: true
+2026-07-23T05:48:20.0038101Z   clean: true
+2026-07-23T05:48:20.0038551Z   sparse-checkout-cone-mode: true
+2026-07-23T05:48:20.0039074Z   fetch-tags: false
+2026-07-23T05:48:20.0039527Z   show-progress: true
+2026-07-23T05:48:20.0039975Z   lfs: false
+2026-07-23T05:48:20.0040440Z   submodules: false
+2026-07-23T05:48:20.0040899Z   set-safe-directory: true
+---
+2026-07-23T05:48:19.3322472Z ##[endgroup]
+2026-07-23T05:48:19.3325389Z Secret source: Actions
+2026-07-23T05:48:19.3326542Z Prepare workflow directory
+2026-07-23T05:48:19.3794616Z Prepare all required actions
+2026-07-23T05:48:19.3849570Z Getting action download info
+2026-07-23T05:48:19.5619991Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-07-23T05:48:19.9271558Z Complete job name: agent-review-evidence
+2026-07-23T05:48:20.0021516Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:20.0030563Z ##[group]Run actions/checkout@v4
+2026-07-23T05:48:20.0031276Z with:
+2026-07-23T05:48:20.0031704Z   fetch-depth: 0
+2026-07-23T05:48:20.0032184Z   repository: ramgolladi1503-sys/tradebot
+2026-07-23T05:48:20.0035978Z   token: ***
+2026-07-23T05:48:20.0036414Z   ssh-strict: true
+2026-07-23T05:48:20.0036946Z   ssh-user: git
+2026-07-23T05:48:20.0037606Z   persist-credentials: true
+2026-07-23T05:48:20.0038101Z   clean: true
+2026-07-23T05:48:20.0038551Z   sparse-checkout-cone-mode: true
+2026-07-23T05:48:20.0039074Z   fetch-tags: false
+2026-07-23T05:48:20.0039527Z   show-progress: true
+2026-07-23T05:48:20.0039975Z   lfs: false
+2026-07-23T05:48:20.0040440Z   submodules: false
+2026-07-23T05:48:20.0040899Z   set-safe-directory: true
+2026-07-23T05:48:20.0041413Z   allow-unsafe-pr-checkout: false
+2026-07-23T05:48:20.0042153Z ##[endgroup]
+2026-07-23T05:48:20.1097127Z Syncing repository: ramgolladi1503-sys/tradebot
+---
+2026-07-23T05:48:26.0875787Z  * [new branch]        ag/profit-filters-20260613               -> origin/ag/profit-filters-20260613
+2026-07-23T05:48:26.0877030Z  * [new branch]        agent-elite-01-atlas-dotted-runtime-resolver -> origin/agent-elite-01-atlas-dotted-runtime-resolver
+2026-07-23T05:48:26.0878680Z  * [new branch]        agent-elite-02-candidate-lifecycle-trace -> origin/agent-elite-02-candidate-lifecycle-trace
+2026-07-23T05:48:26.0880376Z  * [new branch]        agent-elite-03-minerva-test-strength-scoring -> origin/agent-elite-03-minerva-test-strength-scoring
+2026-07-23T05:48:26.0882199Z  * [new branch]        agent-elite-04-critical-negative-test-matrix -> origin/agent-elite-04-critical-negative-test-matrix
+2026-07-23T05:48:26.0883816Z  * [new branch]        agent-elite-05-cerberus-call-graph-guard -> origin/agent-elite-05-cerberus-call-graph-guard
+2026-07-23T05:48:26.0885792Z  * [new branch]        agent-elite-06-cerberus-non-action-evidence-gate -> origin/agent-elite-06-cerberus-non-action-evidence-gate
+2026-07-23T05:48:26.0887957Z  * [new branch]        agent-elite-07-candidate-evidence-trace-score -> origin/agent-elite-07-candidate-evidence-trace-score
+2026-07-23T05:48:26.0890051Z  * [new branch]        agent-elite-08-evidence-artifact-freshness-guard -> origin/agent-elite-08-evidence-artifact-freshness-guard
+2026-07-23T05:48:26.0891646Z  * [new branch]        agent-elite-09-ariadne-ci-test-failure-clusterer -> origin/agent-elite-09-ariadne-ci-test-failure-clusterer
+2026-07-23T05:48:26.0892808Z  * [new branch]        agent-elite-10-ariadne-blast-radius-mapper -> origin/agent-elite-10-ariadne-blast-radius-mapper
+2026-07-23T05:48:26.0893912Z  * [new branch]        agent-elite-11-daedalus-fix-contract-generator -> origin/agent-elite-11-daedalus-fix-contract-generator
+2026-07-23T05:48:26.0895304Z  * [new branch]        agent-elite-12-daedalus-anti-pr-loop-detector -> origin/agent-elite-12-daedalus-anti-pr-loop-detector
+2026-07-23T05:48:26.0896359Z  * [new branch]        agent-elite-13-vulcan-hardening-score    -> origin/agent-elite-13-vulcan-hardening-score
+2026-07-23T05:48:26.0897654Z  * [new branch]        agent-elite-14-vulcan-regression-shield  -> origin/agent-elite-14-vulcan-regression-shield
+2026-07-23T05:48:26.0898720Z  * [new branch]        agent-elite-15-unified-agent-elite-report -> origin/agent-elite-15-unified-agent-elite-report
+2026-07-23T05:48:26.0899647Z  * [new branch]        agent-elite-16-ci-required-gate          -> origin/agent-elite-16-ci-required-gate
+2026-07-23T05:48:26.0900503Z  * [new branch]        agent-review-enforcement-gate            -> origin/agent-review-enforcement-gate
+2026-07-23T05:48:26.0901469Z  * [new branch]        agent/antigravity-feed-reconnect-resource-soak -> origin/agent/antigravity-feed-reconnect-resource-soak
+2026-07-23T05:48:26.0902523Z  * [new branch]        agent/antigravity-feed-websocket-reconnect -> origin/agent/antigravity-feed-websocket-reconnect
+2026-07-23T05:48:26.0903619Z  * [new branch]        agent/antigravity-upstox-feed-integration-audit -> origin/agent/antigravity-upstox-feed-integration-audit
+2026-07-23T05:48:26.0904738Z  * [new branch]        agent/codex-orb-candle-validation        -> origin/agent/codex-orb-candle-validation
+2026-07-23T05:48:26.0905777Z  * [new branch]        agent/governed-codex-antigravity-research-v1 -> origin/agent/governed-codex-antigravity-research-v1
+2026-07-23T05:48:26.0906796Z  * [new branch]        agent/strategy-pipeline-outcomes-v1      -> origin/agent/strategy-pipeline-outcomes-v1
+2026-07-23T05:48:26.0908227Z  * [new branch]        agent/strategy-pipeline-research-registry-v1 -> origin/agent/strategy-pipeline-research-registry-v1
+2026-07-23T05:48:26.0909222Z  * [new branch]        agent/strategy-pipeline-statistics-v1    -> origin/agent/strategy-pipeline-statistics-v1
+---
+2026-07-23T05:48:26.0877030Z  * [new branch]        agent-elite-01-atlas-dotted-runtime-resolver -> origin/agent-elite-01-atlas-dotted-runtime-resolver
+2026-07-23T05:48:26.0878680Z  * [new branch]        agent-elite-02-candidate-lifecycle-trace -> origin/agent-elite-02-candidate-lifecycle-trace
+2026-07-23T05:48:26.0880376Z  * [new branch]        agent-elite-03-minerva-test-strength-scoring -> origin/agent-elite-03-minerva-test-strength-scoring
+2026-07-23T05:48:26.0882199Z  * [new branch]        agent-elite-04-critical-negative-test-matrix -> origin/agent-elite-04-critical-negative-test-matrix
+2026-07-23T05:48:26.0883816Z  * [new branch]        agent-elite-05-cerberus-call-graph-guard -> origin/agent-elite-05-cerberus-call-graph-guard
+2026-07-23T05:48:26.0885792Z  * [new branch]        agent-elite-06-cerberus-non-action-evidence-gate -> origin/agent-elite-06-cerberus-non-action-evidence-gate
+2026-07-23T05:48:26.0887957Z  * [new branch]        agent-elite-07-candidate-evidence-trace-score -> origin/agent-elite-07-candidate-evidence-trace-score
+2026-07-23T05:48:26.0890051Z  * [new branch]        agent-elite-08-evidence-artifact-freshness-guard -> origin/agent-elite-08-evidence-artifact-freshness-guard
+2026-07-23T05:48:26.0891646Z  * [new branch]        agent-elite-09-ariadne-ci-test-failure-clusterer -> origin/agent-elite-09-ariadne-ci-test-failure-clusterer
+2026-07-23T05:48:26.0892808Z  * [new branch]        agent-elite-10-ariadne-blast-radius-mapper -> origin/agent-elite-10-ariadne-blast-radius-mapper
+2026-07-23T05:48:26.0893912Z  * [new branch]        agent-elite-11-daedalus-fix-contract-generator -> origin/agent-elite-11-daedalus-fix-contract-generator
+2026-07-23T05:48:26.0895304Z  * [new branch]        agent-elite-12-daedalus-anti-pr-loop-detector -> origin/agent-elite-12-daedalus-anti-pr-loop-detector
+2026-07-23T05:48:26.0896359Z  * [new branch]        agent-elite-13-vulcan-hardening-score    -> origin/agent-elite-13-vulcan-hardening-score
+2026-07-23T05:48:26.0897654Z  * [new branch]        agent-elite-14-vulcan-regression-shield  -> origin/agent-elite-14-vulcan-regression-shield
+2026-07-23T05:48:26.0898720Z  * [new branch]        agent-elite-15-unified-agent-elite-report -> origin/agent-elite-15-unified-agent-elite-report
+2026-07-23T05:48:26.0899647Z  * [new branch]        agent-elite-16-ci-required-gate          -> origin/agent-elite-16-ci-required-gate
+2026-07-23T05:48:26.0900503Z  * [new branch]        agent-review-enforcement-gate            -> origin/agent-review-enforcement-gate
+2026-07-23T05:48:26.0901469Z  * [new branch]        agent/antigravity-feed-reconnect-resource-soak -> origin/agent/antigravity-feed-reconnect-resource-soak
+2026-07-23T05:48:26.0902523Z  * [new branch]        agent/antigravity-feed-websocket-reconnect -> origin/agent/antigravity-feed-websocket-reconnect
+2026-07-23T05:48:26.0903619Z  * [new branch]        agent/antigravity-upstox-feed-integration-audit -> origin/agent/antigravity-upstox-feed-integration-audit
+2026-07-23T05:48:26.0904738Z  * [new branch]        agent/codex-orb-candle-validation        -> origin/agent/codex-orb-candle-validation
+2026-07-23T05:48:26.0905777Z  * [new branch]        agent/governed-codex-antigravity-research-v1 -> origin/agent/governed-codex-antigravity-research-v1
+2026-07-23T05:48:26.0906796Z  * [new branch]        agent/strategy-pipeline-outcomes-v1      -> origin/agent/strategy-pipeline-outcomes-v1
+2026-07-23T05:48:26.0908227Z  * [new branch]        agent/strategy-pipeline-research-registry-v1 -> origin/agent/strategy-pipeline-research-registry-v1
+2026-07-23T05:48:26.0909222Z  * [new branch]        agent/strategy-pipeline-statistics-v1    -> origin/agent/strategy-pipeline-statistics-v1
+2026-07-23T05:48:26.0910120Z  * [new branch]        agent/strategy-pipeline-truth-v1         -> origin/agent/strategy-pipeline-truth-v1
+---
+2026-07-23T05:48:26.0878680Z  * [new branch]        agent-elite-02-candidate-lifecycle-trace -> origin/agent-elite-02-candidate-lifecycle-trace
+2026-07-23T05:48:26.0880376Z  * [new branch]        agent-elite-03-minerva-test-strength-scoring -> origin/agent-elite-03-minerva-test-strength-scoring
+2026-07-23T05:48:26.0882199Z  * [new branch]        agent-elite-04-critical-negative-test-matrix -> origin/agent-elite-04-critical-negative-test-matrix
+2026-07-23T05:48:26.0883816Z  * [new branch]        agent-elite-05-cerberus-call-graph-guard -> origin/agent-elite-05-cerberus-call-graph-guard
+2026-07-23T05:48:26.0885792Z  * [new branch]        agent-elite-06-cerberus-non-action-evidence-gate -> origin/agent-elite-06-cerberus-non-action-evidence-gate
+2026-07-23T05:48:26.0887957Z  * [new branch]        agent-elite-07-candidate-evidence-trace-score -> origin/agent-elite-07-candidate-evidence-trace-score
+2026-07-23T05:48:26.0890051Z  * [new branch]        agent-elite-08-evidence-artifact-freshness-guard -> origin/agent-elite-08-evidence-artifact-freshness-guard
+2026-07-23T05:48:26.0891646Z  * [new branch]        agent-elite-09-ariadne-ci-test-failure-clusterer -> origin/agent-elite-09-ariadne-ci-test-failure-clusterer
+2026-07-23T05:48:26.0892808Z  * [new branch]        agent-elite-10-ariadne-blast-radius-mapper -> origin/agent-elite-10-ariadne-blast-radius-mapper
+2026-07-23T05:48:26.0893912Z  * [new branch]        agent-elite-11-daedalus-fix-contract-generator -> origin/agent-elite-11-daedalus-fix-contract-generator
+2026-07-23T05:48:26.0895304Z  * [new branch]        agent-elite-12-daedalus-anti-pr-loop-detector -> origin/agent-elite-12-daedalus-anti-pr-loop-detector
+2026-07-23T05:48:26.0896359Z  * [new branch]        agent-elite-13-vulcan-hardening-score    -> origin/agent-elite-13-vulcan-hardening-score
+2026-07-23T05:48:26.0897654Z  * [new branch]        agent-elite-14-vulcan-regression-shield  -> origin/agent-elite-14-vulcan-regression-shield
+2026-07-23T05:48:26.0898720Z  * [new branch]        agent-elite-15-unified-agent-elite-report -> origin/agent-elite-15-unified-agent-elite-report
+2026-07-23T05:48:26.0899647Z  * [new branch]        agent-elite-16-ci-required-gate          -> origin/agent-elite-16-ci-required-gate
+2026-07-23T05:48:26.0900503Z  * [new branch]        agent-review-enforcement-gate            -> origin/agent-review-enforcement-gate
+2026-07-23T05:48:26.0901469Z  * [new branch]        agent/antigravity-feed-reconnect-resource-soak -> origin/agent/antigravity-feed-reconnect-resource-soak
+2026-07-23T05:48:26.0902523Z  * [new branch]        agent/antigravity-feed-websocket-reconnect -> origin/agent/antigravity-feed-websocket-reconnect
+2026-07-23T05:48:26.0903619Z  * [new branch]        agent/antigravity-upstox-feed-integration-audit -> origin/agent/antigravity-upstox-feed-integration-audit
+2026-07-23T05:48:26.0904738Z  * [new branch]        agent/codex-orb-candle-validation        -> origin/agent/codex-orb-candle-validation
+2026-07-23T05:48:26.0905777Z  * [new branch]        agent/governed-codex-antigravity-research-v1 -> origin/agent/governed-codex-antigravity-research-v1
+2026-07-23T05:48:26.0906796Z  * [new branch]        agent/strategy-pipeline-outcomes-v1      -> origin/agent/strategy-pipeline-outcomes-v1
+2026-07-23T05:48:26.0908227Z  * [new branch]        agent/strategy-pipeline-research-registry-v1 -> origin/agent/strategy-pipeline-research-registry-v1
+2026-07-23T05:48:26.0909222Z  * [new branch]        agent/strategy-pipeline-statistics-v1    -> origin/agent/strategy-pipeline-statistics-v1
+2026-07-23T05:48:26.0910120Z  * [new branch]        agent/strategy-pipeline-truth-v1         -> origin/agent/strategy-pipeline-truth-v1
+2026-07-23T05:48:26.0911044Z  * [new branch]        agent/strategy-pipeline-truthfulness-v1  -> origin/agent/strategy-pipeline-truthfulness-v1
+---
+2026-07-23T05:48:26.0892808Z  * [new branch]        agent-elite-10-ariadne-blast-radius-mapper -> origin/agent-elite-10-ariadne-blast-radius-mapper
+2026-07-23T05:48:26.0893912Z  * [new branch]        agent-elite-11-daedalus-fix-contract-generator -> origin/agent-elite-11-daedalus-fix-contract-generator
+2026-07-23T05:48:26.0895304Z  * [new branch]        agent-elite-12-daedalus-anti-pr-loop-detector -> origin/agent-elite-12-daedalus-anti-pr-loop-detector
+2026-07-23T05:48:26.0896359Z  * [new branch]        agent-elite-13-vulcan-hardening-score    -> origin/agent-elite-13-vulcan-hardening-score
+2026-07-23T05:48:26.0897654Z  * [new branch]        agent-elite-14-vulcan-regression-shield  -> origin/agent-elite-14-vulcan-regression-shield
+2026-07-23T05:48:26.0898720Z  * [new branch]        agent-elite-15-unified-agent-elite-report -> origin/agent-elite-15-unified-agent-elite-report
+2026-07-23T05:48:26.0899647Z  * [new branch]        agent-elite-16-ci-required-gate          -> origin/agent-elite-16-ci-required-gate
+2026-07-23T05:48:26.0900503Z  * [new branch]        agent-review-enforcement-gate            -> origin/agent-review-enforcement-gate
+2026-07-23T05:48:26.0901469Z  * [new branch]        agent/antigravity-feed-reconnect-resource-soak -> origin/agent/antigravity-feed-reconnect-resource-soak
+2026-07-23T05:48:26.0902523Z  * [new branch]        agent/antigravity-feed-websocket-reconnect -> origin/agent/antigravity-feed-websocket-reconnect
+2026-07-23T05:48:26.0903619Z  * [new branch]        agent/antigravity-upstox-feed-integration-audit -> origin/agent/antigravity-upstox-feed-integration-audit
+2026-07-23T05:48:26.0904738Z  * [new branch]        agent/codex-orb-candle-validation        -> origin/agent/codex-orb-candle-validation
+2026-07-23T05:48:26.0905777Z  * [new branch]        agent/governed-codex-antigravity-research-v1 -> origin/agent/governed-codex-antigravity-research-v1
+2026-07-23T05:48:26.0906796Z  * [new branch]        agent/strategy-pipeline-outcomes-v1      -> origin/agent/strategy-pipeline-outcomes-v1
+2026-07-23T05:48:26.0908227Z  * [new branch]        agent/strategy-pipeline-research-registry-v1 -> origin/agent/strategy-pipeline-research-registry-v1
+2026-07-23T05:48:26.0909222Z  * [new branch]        agent/strategy-pipeline-statistics-v1    -> origin/agent/strategy-pipeline-statistics-v1
+2026-07-23T05:48:26.0910120Z  * [new branch]        agent/strategy-pipeline-truth-v1         -> origin/agent/strategy-pipeline-truth-v1
+2026-07-23T05:48:26.0911044Z  * [new branch]        agent/strategy-pipeline-truthfulness-v1  -> origin/agent/strategy-pipeline-truthfulness-v1
+2026-07-23T05:48:26.0912005Z  * [new branch]        agent/tradebot-agentic-qa-70-controls-v1 -> origin/agent/tradebot-agentic-qa-70-controls-v1
+2026-07-23T05:48:26.0913071Z  * [new branch]        agent/tradebot-worktree-supervisor       -> origin/agent/tradebot-worktree-supervisor
+2026-07-23T05:48:26.0913963Z  * [new branch]        analysis/latency-investigation-2026-04-23 -> origin/analysis/latency-investigation-2026-04-23
+2026-07-23T05:48:26.0915204Z  * [new branch]        archive/worktree/tradebot-opening-state-momentum-research-20260721-114241 -> origin/archive/worktree/tradebot-opening-state-momentum-research-20260721-114241
+2026-07-23T05:48:26.0916607Z  * [new branch]        archive/worktree/tradebot-restart-persistence-20260721-114241 -> origin/archive/worktree/tradebot-restart-persistence-20260721-114241
+2026-07-23T05:48:26.0918135Z  * [new branch]        archive/worktree/tradebot-strategy-atr-contract-20260721-114423 -> origin/archive/worktree/tradebot-strategy-atr-contract-20260721-114423
+2026-07-23T05:48:26.0919455Z  * [new branch]        archive/worktree/tradebot-strategy-phase3b-20260721-114600 -> origin/archive/worktree/tradebot-strategy-phase3b-20260721-114600
+2026-07-23T05:48:26.0920837Z  * [new branch]        archive/worktree/tradebot-strategy-phase3b-integrated-20260721-114600 -> origin/archive/worktree/tradebot-strategy-phase3b-integrated-20260721-114600
+---
+2026-07-23T05:48:26.0915204Z  * [new branch]        archive/worktree/tradebot-opening-state-momentum-research-20260721-114241 -> origin/archive/worktree/tradebot-opening-state-momentum-research-20260721-114241
+2026-07-23T05:48:26.0916607Z  * [new branch]        archive/worktree/tradebot-restart-persistence-20260721-114241 -> origin/archive/worktree/tradebot-restart-persistence-20260721-114241
+2026-07-23T05:48:26.0918135Z  * [new branch]        archive/worktree/tradebot-strategy-atr-contract-20260721-114423 -> origin/archive/worktree/tradebot-strategy-atr-contract-20260721-114423
+2026-07-23T05:48:26.0919455Z  * [new branch]        archive/worktree/tradebot-strategy-phase3b-20260721-114600 -> origin/archive/worktree/tradebot-strategy-phase3b-20260721-114600
+2026-07-23T05:48:26.0920837Z  * [new branch]        archive/worktree/tradebot-strategy-phase3b-integrated-20260721-114600 -> origin/archive/worktree/tradebot-strategy-phase3b-integrated-20260721-114600
+2026-07-23T05:48:26.0921966Z  * [new branch]        audit-pipeline-contracts                 -> origin/audit-pipeline-contracts
+2026-07-23T05:48:26.0922724Z  * [new branch]        audit-regime-evidence                    -> origin/audit-regime-evidence
+2026-07-23T05:48:26.0923479Z  * [new branch]        audit-strategy-structural                -> origin/audit-strategy-structural
+2026-07-23T05:48:26.0924495Z  * [new branch]        audit/ml-strategy-discovery-real-run-v1  -> origin/audit/ml-strategy-discovery-real-run-v1
+2026-07-23T05:48:26.0925421Z  * [new branch]        audit/opening-range-retest-temporal      -> origin/audit/opening-range-retest-temporal
+2026-07-23T05:48:26.0926413Z  * [new branch]        audit/upstream-backtest-integrity-antigravity -> origin/audit/upstream-backtest-integrity-antigravity
+2026-07-23T05:48:26.0927844Z  * [new branch]        audit/upstream-backtest-integrity-codex-validation -> origin/audit/upstream-backtest-integrity-codex-validation
+2026-07-23T05:48:26.0928851Z  * [new branch]        backup/main-clean-snapshot               -> origin/backup/main-clean-snapshot
+2026-07-23T05:48:26.0929701Z  * [new branch]        cleanup/delete-generic-pytest-shim       -> origin/cleanup/delete-generic-pytest-shim
+2026-07-23T05:48:26.0930656Z  * [new branch]        cleanup/depth-subscription-real-contracts -> origin/cleanup/depth-subscription-real-contracts
+2026-07-23T05:48:26.0931549Z  * [new branch]        cleanup/full-pytest-shims                -> origin/cleanup/full-pytest-shims
+2026-07-23T05:48:26.0932351Z  * [new branch]        cleanup/market-data-warmup               -> origin/cleanup/market-data-warmup
+2026-07-23T05:48:26.0933201Z  * [new branch]        cleanup/phase2-adapter-real-contracts    -> origin/cleanup/phase2-adapter-real-contracts
+2026-07-23T05:48:26.0934127Z  * [new branch]        cleanup/remove-ci-compat-hook-debt       -> origin/cleanup/remove-ci-compat-hook-debt
+2026-07-23T05:48:26.0934994Z  * [new branch]        cleanup/remove-depth-hook-debt           -> origin/cleanup/remove-depth-hook-debt
+2026-07-23T05:48:26.0935820Z  * [new branch]        cleanup/review-queue-contract            -> origin/cleanup/review-queue-contract
+2026-07-23T05:48:26.0936655Z  * [new branch]        cleanup/torture-longrun-contract         -> origin/cleanup/torture-longrun-contract
+2026-07-23T05:48:26.0937805Z  * [new branch]        codex/feed-latency-candidate-stability-lab -> origin/codex/feed-latency-candidate-stability-lab
+2026-07-23T05:48:26.0938754Z  * [new branch]        codex/high-quality-trades-e2e-fix        -> origin/codex/high-quality-trades-e2e-fix
+2026-07-23T05:48:26.0939594Z  * [new branch]        data/combined-upstox-20260714            -> origin/data/combined-upstox-20260714
+2026-07-23T05:48:26.0940568Z  * [new branch]        data/combined-upstox-20260715            -> origin/data/combined-upstox-20260715
+---
+2026-07-23T05:48:26.0977390Z  * [new branch]        edge30-deferred-work-ledger              -> origin/edge30-deferred-work-ledger
+2026-07-23T05:48:26.0978388Z  * [new branch]        edge31-executable-trade-truth-firebreak  -> origin/edge31-executable-trade-truth-firebreak
+2026-07-23T05:48:26.0979350Z  * [new branch]        edge32-candidate-quote-freshness-contract -> origin/edge32-candidate-quote-freshness-contract
+2026-07-23T05:48:26.0980310Z  * [new branch]        edge33-option-bid-ask-spread-truth-gate  -> origin/edge33-option-bid-ask-spread-truth-gate
+2026-07-23T05:48:26.0981225Z  * [new branch]        edge34-execution-first-scoring-reweight  -> origin/edge34-execution-first-scoring-reweight
+2026-07-23T05:48:26.0982135Z  * [new branch]        edge35-strategy-signal-quality-contract  -> origin/edge35-strategy-signal-quality-contract
+2026-07-23T05:48:26.0982993Z  * [new branch]        edge36-feed-recovery-evidence            -> origin/edge36-feed-recovery-evidence
+2026-07-23T05:48:26.0984034Z  * [new branch]        feat-pr1-pr2-logging-fallback-contract-6572871801744978796 -> origin/feat-pr1-pr2-logging-fallback-contract-6572871801744978796
+2026-07-23T05:48:26.0985093Z  * [new branch]        feat/audit-only-live-supervisor          -> origin/feat/audit-only-live-supervisor
+2026-07-23T05:48:26.0985944Z  * [new branch]        feat/continuous-architecture-phase3      -> origin/feat/continuous-architecture-phase3
+2026-07-23T05:48:26.0986787Z  * [new branch]        feat/elite-regime-router-phase1          -> origin/feat/elite-regime-router-phase1
+2026-07-23T05:48:26.0987745Z  * [new branch]        feat/elite-regime-router-phase2          -> origin/feat/elite-regime-router-phase2
+2026-07-23T05:48:26.0988530Z  * [new branch]        feat/kite-intraday-history               -> origin/feat/kite-intraday-history
+2026-07-23T05:48:26.0989271Z  * [new branch]        feat/kite-ws-subprocess                  -> origin/feat/kite-ws-subprocess
+2026-07-23T05:48:26.0989985Z  * [new branch]        feat/ml-acceptance-gate                  -> origin/feat/ml-acceptance-gate
+2026-07-23T05:48:26.0990693Z  * [new branch]        feat/quant-master-build                  -> origin/feat/quant-master-build
+2026-07-23T05:48:26.0991496Z  * [new branch]        feat/stock-options-subsystem-v1          -> origin/feat/stock-options-subsystem-v1
+2026-07-23T05:48:26.0992402Z  * [new branch]        feat/strict-research-boundaries-enforcement -> origin/feat/strict-research-boundaries-enforcement
+2026-07-23T05:48:26.0993481Z  * [new branch]        feat/worktree-supervisor-main-v2         -> origin/feat/worktree-supervisor-main-v2
+2026-07-23T05:48:26.0994455Z  * [new branch]        feature/adaptive-position-sizing-drawdown-control -> origin/feature/adaptive-position-sizing-drawdown-control
+2026-07-23T05:48:26.0995467Z  * [new branch]        feature/agentic-gemini-edge-evidence     -> origin/feature/agentic-gemini-edge-evidence
+2026-07-23T05:48:26.0996363Z  * [new branch]        feature/agentic-research-integration-v1  -> origin/feature/agentic-research-integration-v1
+2026-07-23T05:48:26.0997384Z  * [new branch]        feature/agentic-strategy-research-killer -> origin/feature/agentic-strategy-research-killer
+2026-07-23T05:48:26.0998455Z  * [new branch]        feature/agentic-strategy-research-mvp    -> origin/feature/agentic-strategy-research-mvp
+2026-07-23T05:48:26.0999318Z  * [new branch]        feature/ai-cert-mcp-contracts-v2         -> origin/feature/ai-cert-mcp-contracts-v2
+2026-07-23T05:48:26.1000149Z  * [new branch]        feature/ai-cert-rag-governance-v2        -> origin/feature/ai-cert-rag-governance-v2
+---
+2026-07-23T05:48:26.0989985Z  * [new branch]        feat/ml-acceptance-gate                  -> origin/feat/ml-acceptance-gate
+2026-07-23T05:48:26.0990693Z  * [new branch]        feat/quant-master-build                  -> origin/feat/quant-master-build
+2026-07-23T05:48:26.0991496Z  * [new branch]        feat/stock-options-subsystem-v1          -> origin/feat/stock-options-subsystem-v1
+2026-07-23T05:48:26.0992402Z  * [new branch]        feat/strict-research-boundaries-enforcement -> origin/feat/strict-research-boundaries-enforcement
+2026-07-23T05:48:26.0993481Z  * [new branch]        feat/worktree-supervisor-main-v2         -> origin/feat/worktree-supervisor-main-v2
+2026-07-23T05:48:26.0994455Z  * [new branch]        feature/adaptive-position-sizing-drawdown-control -> origin/feature/adaptive-position-sizing-drawdown-control
+2026-07-23T05:48:26.0995467Z  * [new branch]        feature/agentic-gemini-edge-evidence     -> origin/feature/agentic-gemini-edge-evidence
+2026-07-23T05:48:26.0996363Z  * [new branch]        feature/agentic-research-integration-v1  -> origin/feature/agentic-research-integration-v1
+2026-07-23T05:48:26.0997384Z  * [new branch]        feature/agentic-strategy-research-killer -> origin/feature/agentic-strategy-research-killer
+2026-07-23T05:48:26.0998455Z  * [new branch]        feature/agentic-strategy-research-mvp    -> origin/feature/agentic-strategy-research-mvp
+2026-07-23T05:48:26.0999318Z  * [new branch]        feature/ai-cert-mcp-contracts-v2         -> origin/feature/ai-cert-mcp-contracts-v2
+2026-07-23T05:48:26.1000149Z  * [new branch]        feature/ai-cert-rag-governance-v2        -> origin/feature/ai-cert-rag-governance-v2
+2026-07-23T05:48:26.1001004Z  * [new branch]        feature/ai-qa-certification-agent-mvp    -> origin/feature/ai-qa-certification-agent-mvp
+2026-07-23T05:48:26.1001865Z  * [new branch]        feature/axiom-ui-migration-phase1        -> origin/feature/axiom-ui-migration-phase1
+2026-07-23T05:48:26.1002749Z  * [new branch]        feature/ce-01-code-excellence-contract   -> origin/feature/ce-01-code-excellence-contract
+2026-07-23T05:48:26.1003611Z  * [new branch]        feature/ce-02-ariadne-rca-contract       -> origin/feature/ce-02-ariadne-rca-contract
+2026-07-23T05:48:26.1004652Z  * [new branch]        feature/ce-03-finding-normalization      -> origin/feature/ce-03-finding-normalization
+2026-07-23T05:48:26.1005492Z  * [new branch]        feature/ce-04-ariadne-clustering         -> origin/feature/ce-04-ariadne-clustering
+2026-07-23T05:48:26.1006305Z  * [new branch]        feature/ce-05-daedalus-contract          -> origin/feature/ce-05-daedalus-contract
+2026-07-23T05:48:26.1007146Z  * [new branch]        feature/ce-05b-agent-parameter-bridge    -> origin/feature/ce-05b-agent-parameter-bridge
+2026-07-23T05:48:26.1008147Z  * [new branch]        feature/ce-06-remediation-planner        -> origin/feature/ce-06-remediation-planner
+2026-07-23T05:48:26.1009021Z  * [new branch]        feature/ce-07-vulcan-hardening-template  -> origin/feature/ce-07-vulcan-hardening-template
+2026-07-23T05:48:26.1009920Z  * [new branch]        feature/ce-08-minerva-test-reality-gate  -> origin/feature/ce-08-minerva-test-reality-gate
+2026-07-23T05:48:26.1010880Z  * [new branch]        feature/ce-09-cerberus-safety-regression-gate -> origin/feature/ce-09-cerberus-safety-regression-gate
+2026-07-23T05:48:26.1011835Z  * [new branch]        feature/ce-10-evidence-contract-gate     -> origin/feature/ce-10-evidence-contract-gate
+2026-07-23T05:48:26.1012691Z  * [new branch]        feature/ce-11-unified-ce-gate-runner     -> origin/feature/ce-11-unified-ce-gate-runner
+---
+2026-07-23T05:48:26.1006305Z  * [new branch]        feature/ce-05-daedalus-contract          -> origin/feature/ce-05-daedalus-contract
+2026-07-23T05:48:26.1007146Z  * [new branch]        feature/ce-05b-agent-parameter-bridge    -> origin/feature/ce-05b-agent-parameter-bridge
+2026-07-23T05:48:26.1008147Z  * [new branch]        feature/ce-06-remediation-planner        -> origin/feature/ce-06-remediation-planner
+2026-07-23T05:48:26.1009021Z  * [new branch]        feature/ce-07-vulcan-hardening-template  -> origin/feature/ce-07-vulcan-hardening-template
+2026-07-23T05:48:26.1009920Z  * [new branch]        feature/ce-08-minerva-test-reality-gate  -> origin/feature/ce-08-minerva-test-reality-gate
+2026-07-23T05:48:26.1010880Z  * [new branch]        feature/ce-09-cerberus-safety-regression-gate -> origin/feature/ce-09-cerberus-safety-regression-gate
+2026-07-23T05:48:26.1011835Z  * [new branch]        feature/ce-10-evidence-contract-gate     -> origin/feature/ce-10-evidence-contract-gate
+2026-07-23T05:48:26.1012691Z  * [new branch]        feature/ce-11-unified-ce-gate-runner     -> origin/feature/ce-11-unified-ce-gate-runner
+2026-07-23T05:48:26.1013581Z  * [new branch]        feature/ce-12-pr-evidence-pack-generator -> origin/feature/ce-12-pr-evidence-pack-generator
+2026-07-23T05:48:26.1014432Z  * [new branch]        feature/ce-13-ci-wiring-clean            -> origin/feature/ce-13-ci-wiring-clean
+2026-07-23T05:48:26.1015156Z  * [new branch]        feature/ce14-pilot                       -> origin/feature/ce14-pilot
+2026-07-23T05:48:26.1015915Z  * [new branch]        feature/certification-persistence        -> origin/feature/certification-persistence
+2026-07-23T05:48:26.1016759Z  * [new branch]        feature/daily-ml-updates-2026-06-17      -> origin/feature/daily-ml-updates-2026-06-17
+2026-07-23T05:48:26.1017709Z  * [new branch]        feature/edge-01-baseline-audit           -> origin/feature/edge-01-baseline-audit
+2026-07-23T05:48:26.1018632Z  * [new branch]        feature/edge-02-paper-outcome-journal-contract -> origin/feature/edge-02-paper-outcome-journal-contract
+2026-07-23T05:48:26.1019809Z  * [new branch]        feature/edge-03-terminal-paper-outcome-wiring -> origin/feature/edge-03-terminal-paper-outcome-wiring
+2026-07-23T05:48:26.1020810Z  * [new branch]        feature/edge-04-runtime-terminal-outcome-hook -> origin/feature/edge-04-runtime-terminal-outcome-hook
+2026-07-23T05:48:26.1021821Z  * [new branch]        feature/edge-05-execution-router-outcome-hook -> origin/feature/edge-05-execution-router-outcome-hook
+2026-07-23T05:48:26.1022788Z  * [new branch]        feature/edge-06-paper-exit-outcome-truth -> origin/feature/edge-06-paper-exit-outcome-truth
+2026-07-23T05:48:26.1023701Z  * [new branch]        feature/edge-07-setup-hypothesis-identity -> origin/feature/edge-07-setup-hypothesis-identity
+2026-07-23T05:48:26.1024766Z  * [new branch]        feature/edge-08-adopt-setup-identity-in-paper-outcomes -> origin/feature/edge-08-adopt-setup-identity-in-paper-outcomes
+2026-07-23T05:48:26.1025872Z  * [new branch]        feature/edge-09-runtime-setup-identity-adoption -> origin/feature/edge-09-runtime-setup-identity-adoption
+2026-07-23T05:48:26.1026967Z  * [new branch]        feature/edge-09b-execution-router-setup-identity-hook -> origin/feature/edge-09b-execution-router-setup-identity-hook
+2026-07-23T05:48:26.1028197Z  * [new branch]        feature/edge-10-runtime-readiness-failure-snapshot -> origin/feature/edge-10-runtime-readiness-failure-snapshot
+2026-07-23T05:48:26.1029200Z  * [new branch]        feature/edge-11-runtime-truth-breakdown  -> origin/feature/edge-11-runtime-truth-breakdown
+2026-07-23T05:48:26.1030085Z  * [new branch]        feature/edge-12-feed-startup-root-cause  -> origin/feature/edge-12-feed-startup-root-cause
+---
+2026-07-23T05:48:26.1008147Z  * [new branch]        feature/ce-06-remediation-planner        -> origin/feature/ce-06-remediation-planner
+2026-07-23T05:48:26.1009021Z  * [new branch]        feature/ce-07-vulcan-hardening-template  -> origin/feature/ce-07-vulcan-hardening-template
+2026-07-23T05:48:26.1009920Z  * [new branch]        feature/ce-08-minerva-test-reality-gate  -> origin/feature/ce-08-minerva-test-reality-gate
+2026-07-23T05:48:26.1010880Z  * [new branch]        feature/ce-09-cerberus-safety-regression-gate -> origin/feature/ce-09-cerberus-safety-regression-gate
+2026-07-23T05:48:26.1011835Z  * [new branch]        feature/ce-10-evidence-contract-gate     -> origin/feature/ce-10-evidence-contract-gate
+2026-07-23T05:48:26.1012691Z  * [new branch]        feature/ce-11-unified-ce-gate-runner     -> origin/feature/ce-11-unified-ce-gate-runner
+2026-07-23T05:48:26.1013581Z  * [new branch]        feature/ce-12-pr-evidence-pack-generator -> origin/feature/ce-12-pr-evidence-pack-generator
+2026-07-23T05:48:26.1014432Z  * [new branch]        feature/ce-13-ci-wiring-clean            -> origin/feature/ce-13-ci-wiring-clean
+2026-07-23T05:48:26.1015156Z  * [new branch]        feature/ce14-pilot                       -> origin/feature/ce14-pilot
+2026-07-23T05:48:26.1015915Z  * [new branch]        feature/certification-persistence        -> origin/feature/certification-persistence
+2026-07-23T05:48:26.1016759Z  * [new branch]        feature/daily-ml-updates-2026-06-17      -> origin/feature/daily-ml-updates-2026-06-17
+2026-07-23T05:48:26.1017709Z  * [new branch]        feature/edge-01-baseline-audit           -> origin/feature/edge-01-baseline-audit
+2026-07-23T05:48:26.1018632Z  * [new branch]        feature/edge-02-paper-outcome-journal-contract -> origin/feature/edge-02-paper-outcome-journal-contract
+2026-07-23T05:48:26.1019809Z  * [new branch]        feature/edge-03-terminal-paper-outcome-wiring -> origin/feature/edge-03-terminal-paper-outcome-wiring
+2026-07-23T05:48:26.1020810Z  * [new branch]        feature/edge-04-runtime-terminal-outcome-hook -> origin/feature/edge-04-runtime-terminal-outcome-hook
+2026-07-23T05:48:26.1021821Z  * [new branch]        feature/edge-05-execution-router-outcome-hook -> origin/feature/edge-05-execution-router-outcome-hook
+2026-07-23T05:48:26.1022788Z  * [new branch]        feature/edge-06-paper-exit-outcome-truth -> origin/feature/edge-06-paper-exit-outcome-truth
+2026-07-23T05:48:26.1023701Z  * [new branch]        feature/edge-07-setup-hypothesis-identity -> origin/feature/edge-07-setup-hypothesis-identity
+2026-07-23T05:48:26.1024766Z  * [new branch]        feature/edge-08-adopt-setup-identity-in-paper-outcomes -> origin/feature/edge-08-adopt-setup-identity-in-paper-outcomes
+2026-07-23T05:48:26.1025872Z  * [new branch]        feature/edge-09-runtime-setup-identity-adoption -> origin/feature/edge-09-runtime-setup-identity-adoption
+2026-07-23T05:48:26.1026967Z  * [new branch]        feature/edge-09b-execution-router-setup-identity-hook -> origin/feature/edge-09b-execution-router-setup-identity-hook
+2026-07-23T05:48:26.1028197Z  * [new branch]        feature/edge-10-runtime-readiness-failure-snapshot -> origin/feature/edge-10-runtime-readiness-failure-snapshot
+2026-07-23T05:48:26.1029200Z  * [new branch]        feature/edge-11-runtime-truth-breakdown  -> origin/feature/edge-11-runtime-truth-breakdown
+2026-07-23T05:48:26.1030085Z  * [new branch]        feature/edge-12-feed-startup-root-cause  -> origin/feature/edge-12-feed-startup-root-cause
+2026-07-23T05:48:26.1031153Z  * [new branch]        feature/edge-13-ws-handshake-proof-contract -> origin/feature/edge-13-ws-handshake-proof-contract
+2026-07-23T05:48:26.1032172Z  * [new branch]        feature/edge-13-ws-handshake-proof-contract-clean -> origin/feature/edge-13-ws-handshake-proof-contract-clean
+---
+2026-07-23T05:48:26.1031153Z  * [new branch]        feature/edge-13-ws-handshake-proof-contract -> origin/feature/edge-13-ws-handshake-proof-contract
+2026-07-23T05:48:26.1032172Z  * [new branch]        feature/edge-13-ws-handshake-proof-contract-clean -> origin/feature/edge-13-ws-handshake-proof-contract-clean
+2026-07-23T05:48:26.1033179Z  * [new branch]        feature/edge-13b-wire-ws-handshake-proof -> origin/feature/edge-13b-wire-ws-handshake-proof
+2026-07-23T05:48:26.1034037Z  * [new branch]        feature/edge-14-status-provenance        -> origin/feature/edge-14-status-provenance
+2026-07-23T05:48:26.1034887Z  * [new branch]        feature/edge-15-status-freshness-guard   -> origin/feature/edge-15-status-freshness-guard
+2026-07-23T05:48:26.1035767Z  * [new branch]        feature/edge-16-boot-status-versioning   -> origin/feature/edge-16-boot-status-versioning
+2026-07-23T05:48:26.1036732Z  * [new branch]        feature/edge-38-runtime-evidence-capture-guard -> origin/feature/edge-38-runtime-evidence-capture-guard
+2026-07-23T05:48:26.1037988Z  * [new branch]        feature/edge-41-fallback-execution-firewall -> origin/feature/edge-41-fallback-execution-firewall
+2026-07-23T05:48:26.1038966Z  * [new branch]        feature/edge-42-quote-truth-single-source -> origin/feature/edge-42-quote-truth-single-source
+2026-07-23T05:48:26.1039945Z  * [new branch]        feature/edge-43-feed-health-split-brain-fix -> origin/feature/edge-43-feed-health-split-brain-fix
+2026-07-23T05:48:26.1040965Z  * [new branch]        feature/edge-44-feed-recovery-runtime-wiring -> origin/feature/edge-44-feed-recovery-runtime-wiring
+2026-07-23T05:48:26.1042043Z  * [new branch]        feature/edge-45-symbol-level-execution-safety-gate -> origin/feature/edge-45-symbol-level-execution-safety-gate
+2026-07-23T05:48:26.1043092Z  * [new branch]        feature/edge-46-soft-reject-separation   -> origin/feature/edge-46-soft-reject-separation
+2026-07-23T05:48:26.1044112Z  * [new branch]        feature/edge-47-candidate-status-contract-cleanup -> origin/feature/edge-47-candidate-status-contract-cleanup
+2026-07-23T05:48:26.1045144Z  * [new branch]        feature/edge-48-scoring-truth-hardening  -> origin/feature/edge-48-scoring-truth-hardening
+2026-07-23T05:48:26.1046209Z  * [new branch]        feature/edge-49-opportunity-selector-evidence-upgrade -> origin/feature/edge-49-opportunity-selector-evidence-upgrade
+2026-07-23T05:48:26.1047617Z  * [new branch]        feature/edge-50-latest-artifact-freshness-guard -> origin/feature/edge-50-latest-artifact-freshness-guard
+2026-07-23T05:48:26.1048788Z  * [new branch]        feature/edge-51-latest-artifact-freshness-runtime-wiring -> origin/feature/edge-51-latest-artifact-freshness-runtime-wiring
+2026-07-23T05:48:26.1049943Z  * [new branch]        feature/edge-52-dashboard-freshness-visibility -> origin/feature/edge-52-dashboard-freshness-visibility
+2026-07-23T05:48:26.1051055Z  * [new branch]        feature/edge-53-streamlit-freshness-panel-rendering -> origin/feature/edge-53-streamlit-freshness-panel-rendering
+2026-07-23T05:48:26.1052213Z  * [new branch]        feature/edge-54-home-page-freshness-panel-placement -> origin/feature/edge-54-home-page-freshness-panel-placement
+2026-07-23T05:48:26.1053125Z  * [new branch]        feature/edge-55                          -> origin/feature/edge-55
+2026-07-23T05:48:26.1053800Z  * [new branch]        feature/edge-56                          -> origin/feature/edge-56
+2026-07-23T05:48:26.1054472Z  * [new branch]        feature/edge-57                          -> origin/feature/edge-57
+2026-07-23T05:48:26.1055358Z  * [new branch]        feature/edge-58-top-opportunity-executable-truth -> origin/feature/edge-58-top-opportunity-executable-truth
+2026-07-23T05:48:26.1056481Z  * [new branch]        feature/edge-59-top-opportunity-truth-reader-wiring -> origin/feature/edge-59-top-opportunity-truth-reader-wiring
+---
+2026-07-23T05:48:26.1039945Z  * [new branch]        feature/edge-43-feed-health-split-brain-fix -> origin/feature/edge-43-feed-health-split-brain-fix
+2026-07-23T05:48:26.1040965Z  * [new branch]        feature/edge-44-feed-recovery-runtime-wiring -> origin/feature/edge-44-feed-recovery-runtime-wiring
+2026-07-23T05:48:26.1042043Z  * [new branch]        feature/edge-45-symbol-level-execution-safety-gate -> origin/feature/edge-45-symbol-level-execution-safety-gate
+2026-07-23T05:48:26.1043092Z  * [new branch]        feature/edge-46-soft-reject-separation   -> origin/feature/edge-46-soft-reject-separation
+2026-07-23T05:48:26.1044112Z  * [new branch]        feature/edge-47-candidate-status-contract-cleanup -> origin/feature/edge-47-candidate-status-contract-cleanup
+2026-07-23T05:48:26.1045144Z  * [new branch]        feature/edge-48-scoring-truth-hardening  -> origin/feature/edge-48-scoring-truth-hardening
+2026-07-23T05:48:26.1046209Z  * [new branch]        feature/edge-49-opportunity-selector-evidence-upgrade -> origin/feature/edge-49-opportunity-selector-evidence-upgrade
+2026-07-23T05:48:26.1047617Z  * [new branch]        feature/edge-50-latest-artifact-freshness-guard -> origin/feature/edge-50-latest-artifact-freshness-guard
+2026-07-23T05:48:26.1048788Z  * [new branch]        feature/edge-51-latest-artifact-freshness-runtime-wiring -> origin/feature/edge-51-latest-artifact-freshness-runtime-wiring
+2026-07-23T05:48:26.1049943Z  * [new branch]        feature/edge-52-dashboard-freshness-visibility -> origin/feature/edge-52-dashboard-freshness-visibility
+2026-07-23T05:48:26.1051055Z  * [new branch]        feature/edge-53-streamlit-freshness-panel-rendering -> origin/feature/edge-53-streamlit-freshness-panel-rendering
+2026-07-23T05:48:26.1052213Z  * [new branch]        feature/edge-54-home-page-freshness-panel-placement -> origin/feature/edge-54-home-page-freshness-panel-placement
+2026-07-23T05:48:26.1053125Z  * [new branch]        feature/edge-55                          -> origin/feature/edge-55
+2026-07-23T05:48:26.1053800Z  * [new branch]        feature/edge-56                          -> origin/feature/edge-56
+2026-07-23T05:48:26.1054472Z  * [new branch]        feature/edge-57                          -> origin/feature/edge-57
+2026-07-23T05:48:26.1055358Z  * [new branch]        feature/edge-58-top-opportunity-executable-truth -> origin/feature/edge-58-top-opportunity-executable-truth
+2026-07-23T05:48:26.1056481Z  * [new branch]        feature/edge-59-top-opportunity-truth-reader-wiring -> origin/feature/edge-59-top-opportunity-truth-reader-wiring
+2026-07-23T05:48:26.1057639Z  * [new branch]        feature/edge-60-directional-bias-audit   -> origin/feature/edge-60-directional-bias-audit
+2026-07-23T05:48:26.1058816Z  * [new branch]        feature/edge-61-capital-selection-policy-contract -> origin/feature/edge-61-capital-selection-policy-contract
+2026-07-23T05:48:26.1059839Z  * [new branch]        feature/edge-63-market-state-model       -> origin/feature/edge-63-market-state-model
+2026-07-23T05:48:26.1060726Z  * [new branch]        feature/edge-64-regime-state-machine     -> origin/feature/edge-64-regime-state-machine
+2026-07-23T05:48:26.1061642Z  * [new branch]        feature/edge-65-strategy-spec-registry   -> origin/feature/edge-65-strategy-spec-registry
+2026-07-23T05:48:26.1062545Z  * [new branch]        feature/edge-66-strategy-quality-audit   -> origin/feature/edge-66-strategy-quality-audit
+2026-07-23T05:48:26.1063557Z  * [new branch]        feature/edge-67-strategy-hypothesis-contracts -> origin/feature/edge-67-strategy-hypothesis-contracts
+2026-07-23T05:48:26.1064710Z  * [new branch]        feature/edge-68-replace-hardcoded-strategy-eligibility -> origin/feature/edge-68-replace-hardcoded-strategy-eligibility
+2026-07-23T05:48:26.1065834Z  * [new branch]        feature/edge-69-candidate-intent-contract -> origin/feature/edge-69-candidate-intent-contract
+---
+2026-07-23T05:48:26.1077572Z  * [new branch]        feature/edge-74-opportunity-score-contract -> origin/feature/edge-74-opportunity-score-contract
+2026-07-23T05:48:26.1078698Z  * [new branch]        feature/edge-75-zero-hero-expiry-strategy-rebuild -> origin/feature/edge-75-zero-hero-expiry-strategy-rebuild
+2026-07-23T05:48:26.1079799Z  * [new branch]        feature/edge-76-option-chain-confirmation-layer -> origin/feature/edge-76-option-chain-confirmation-layer
+2026-07-23T05:48:26.1080881Z  * [new branch]        feature/edge-77-strategy-specific-exit-models -> origin/feature/edge-77-strategy-specific-exit-models
+2026-07-23T05:48:26.1081991Z  * [new branch]        feature/edge-78-strategy-parameter-robustness-tests -> origin/feature/edge-78-strategy-parameter-robustness-tests
+2026-07-23T05:48:26.1083152Z  * [new branch]        feature/edge-79-strategy-conflict-consensus-engine -> origin/feature/edge-79-strategy-conflict-consensus-engine
+2026-07-23T05:48:26.1084341Z  * [new branch]        feature/edge-79a-r-runtime-indicator-readiness-evidence -> origin/feature/edge-79a-r-runtime-indicator-readiness-evidence
+2026-07-23T05:48:26.1085565Z  * [new branch]        feature/edge-79a-s-runtime-candidate-handoff-evidence -> origin/feature/edge-79a-s-runtime-candidate-handoff-evidence
+2026-07-23T05:48:26.1086591Z  * [new branch]        feature/edge-80-no-trade-oracle          -> origin/feature/edge-80-no-trade-oracle
+2026-07-23T05:48:26.1087785Z  * [new branch]        feature/edge-81-no-trade-evidence-review-ui -> origin/feature/edge-81-no-trade-evidence-review-ui
+2026-07-23T05:48:26.1088807Z  * [new branch]        feature/edge-82-final-executable-quality-gate -> origin/feature/edge-82-final-executable-quality-gate
+2026-07-23T05:48:26.1089781Z  * [new branch]        feature/edge-83-paper-truth-journal      -> origin/feature/edge-83-paper-truth-journal
+2026-07-23T05:48:26.1090637Z  * [new branch]        feature/edge-84-outcome-reducer          -> origin/feature/edge-84-outcome-reducer
+2026-07-23T05:48:26.1091571Z  * [new branch]        feature/edge-85-strategy-expectancy-by-regime -> origin/feature/edge-85-strategy-expectancy-by-regime
+2026-07-23T05:48:26.1092527Z  * [new branch]        feature/edge-86-slippage-cost-truth      -> origin/feature/edge-86-slippage-cost-truth
+2026-07-23T05:48:26.1093510Z  * [new branch]        feature/edge-87-strategy-family-kill-keep-report -> origin/feature/edge-87-strategy-family-kill-keep-report
+2026-07-23T05:48:26.1094555Z  * [new branch]        feature/edge-88-strategy-lifecycle-states -> origin/feature/edge-88-strategy-lifecycle-states
+2026-07-23T05:48:26.1095509Z  * [new branch]        feature/edge-89-promotion-gate-evidence  -> origin/feature/edge-89-promotion-gate-evidence
+2026-07-23T05:48:26.1096460Z  * [new branch]        feature/edge-89-strategy-promotion-gate  -> origin/feature/edge-89-strategy-promotion-gate
+2026-07-23T05:48:26.1097557Z  * [new branch]        feature/edge-90-suspension-retirement-rules -> origin/feature/edge-90-suspension-retirement-rules
+2026-07-23T05:48:26.1098528Z  * [new branch]        feature/edge-91-regime-replay-scenarios  -> origin/feature/edge-91-regime-replay-scenarios
+2026-07-23T05:48:26.1099531Z  * [new branch]        feature/edge-91a-session-path-replay-analytics -> origin/feature/edge-91a-session-path-replay-analytics
+2026-07-23T05:48:26.1100561Z  * [new branch]        feature/edge-92-feed-fault-replay-scenarios -> origin/feature/edge-92-feed-fault-replay-scenarios
+2026-07-23T05:48:26.1101576Z  * [new branch]        feature/edge-93-strategy-replay-proof-pack -> origin/feature/edge-93-strategy-replay-proof-pack
+2026-07-23T05:48:26.1102561Z  * [new branch]        feature/edge-98-historical-dataset-contract -> origin/feature/edge-98-historical-dataset-contract
+2026-07-23T05:48:26.1103751Z  * [new branch]        feature/edge-99-replay-clock-no-future-leak-guard -> origin/feature/edge-99-replay-clock-no-future-leak-guard
+---
+2026-07-23T05:48:26.1078698Z  * [new branch]        feature/edge-75-zero-hero-expiry-strategy-rebuild -> origin/feature/edge-75-zero-hero-expiry-strategy-rebuild
+2026-07-23T05:48:26.1079799Z  * [new branch]        feature/edge-76-option-chain-confirmation-layer -> origin/feature/edge-76-option-chain-confirmation-layer
+2026-07-23T05:48:26.1080881Z  * [new branch]        feature/edge-77-strategy-specific-exit-models -> origin/feature/edge-77-strategy-specific-exit-models
+2026-07-23T05:48:26.1081991Z  * [new branch]        feature/edge-78-strategy-parameter-robustness-tests -> origin/feature/edge-78-strategy-parameter-robustness-tests
+2026-07-23T05:48:26.1083152Z  * [new branch]        feature/edge-79-strategy-conflict-consensus-engine -> origin/feature/edge-79-strategy-conflict-consensus-engine
+2026-07-23T05:48:26.1084341Z  * [new branch]        feature/edge-79a-r-runtime-indicator-readiness-evidence -> origin/feature/edge-79a-r-runtime-indicator-readiness-evidence
+2026-07-23T05:48:26.1085565Z  * [new branch]        feature/edge-79a-s-runtime-candidate-handoff-evidence -> origin/feature/edge-79a-s-runtime-candidate-handoff-evidence
+2026-07-23T05:48:26.1086591Z  * [new branch]        feature/edge-80-no-trade-oracle          -> origin/feature/edge-80-no-trade-oracle
+2026-07-23T05:48:26.1087785Z  * [new branch]        feature/edge-81-no-trade-evidence-review-ui -> origin/feature/edge-81-no-trade-evidence-review-ui
+2026-07-23T05:48:26.1088807Z  * [new branch]        feature/edge-82-final-executable-quality-gate -> origin/feature/edge-82-final-executable-quality-gate
+2026-07-23T05:48:26.1089781Z  * [new branch]        feature/edge-83-paper-truth-journal      -> origin/feature/edge-83-paper-truth-journal
+2026-07-23T05:48:26.1090637Z  * [new branch]        feature/edge-84-outcome-reducer          -> origin/feature/edge-84-outcome-reducer
+2026-07-23T05:48:26.1091571Z  * [new branch]        feature/edge-85-strategy-expectancy-by-regime -> origin/feature/edge-85-strategy-expectancy-by-regime
+2026-07-23T05:48:26.1092527Z  * [new branch]        feature/edge-86-slippage-cost-truth      -> origin/feature/edge-86-slippage-cost-truth
+2026-07-23T05:48:26.1093510Z  * [new branch]        feature/edge-87-strategy-family-kill-keep-report -> origin/feature/edge-87-strategy-family-kill-keep-report
+2026-07-23T05:48:26.1094555Z  * [new branch]        feature/edge-88-strategy-lifecycle-states -> origin/feature/edge-88-strategy-lifecycle-states
+2026-07-23T05:48:26.1095509Z  * [new branch]        feature/edge-89-promotion-gate-evidence  -> origin/feature/edge-89-promotion-gate-evidence
+2026-07-23T05:48:26.1096460Z  * [new branch]        feature/edge-89-strategy-promotion-gate  -> origin/feature/edge-89-strategy-promotion-gate
+2026-07-23T05:48:26.1097557Z  * [new branch]        feature/edge-90-suspension-retirement-rules -> origin/feature/edge-90-suspension-retirement-rules
+2026-07-23T05:48:26.1098528Z  * [new branch]        feature/edge-91-regime-replay-scenarios  -> origin/feature/edge-91-regime-replay-scenarios
+2026-07-23T05:48:26.1099531Z  * [new branch]        feature/edge-91a-session-path-replay-analytics -> origin/feature/edge-91a-session-path-replay-analytics
+2026-07-23T05:48:26.1100561Z  * [new branch]        feature/edge-92-feed-fault-replay-scenarios -> origin/feature/edge-92-feed-fault-replay-scenarios
+2026-07-23T05:48:26.1101576Z  * [new branch]        feature/edge-93-strategy-replay-proof-pack -> origin/feature/edge-93-strategy-replay-proof-pack
+2026-07-23T05:48:26.1102561Z  * [new branch]        feature/edge-98-historical-dataset-contract -> origin/feature/edge-98-historical-dataset-contract
+2026-07-23T05:48:26.1103751Z  * [new branch]        feature/edge-99-replay-clock-no-future-leak-guard -> origin/feature/edge-99-replay-clock-no-future-leak-guard
+2026-07-23T05:48:26.1104790Z  * [new branch]        feature/edge37-evidence-replay-report    -> origin/feature/edge37-evidence-replay-report
+---
+2026-07-23T05:48:26.1080881Z  * [new branch]        feature/edge-77-strategy-specific-exit-models -> origin/feature/edge-77-strategy-specific-exit-models
+2026-07-23T05:48:26.1081991Z  * [new branch]        feature/edge-78-strategy-parameter-robustness-tests -> origin/feature/edge-78-strategy-parameter-robustness-tests
+2026-07-23T05:48:26.1083152Z  * [new branch]        feature/edge-79-strategy-conflict-consensus-engine -> origin/feature/edge-79-strategy-conflict-consensus-engine
+2026-07-23T05:48:26.1084341Z  * [new branch]        feature/edge-79a-r-runtime-indicator-readiness-evidence -> origin/feature/edge-79a-r-runtime-indicator-readiness-evidence
+2026-07-23T05:48:26.1085565Z  * [new branch]        feature/edge-79a-s-runtime-candidate-handoff-evidence -> origin/feature/edge-79a-s-runtime-candidate-handoff-evidence
+2026-07-23T05:48:26.1086591Z  * [new branch]        feature/edge-80-no-trade-oracle          -> origin/feature/edge-80-no-trade-oracle
+2026-07-23T05:48:26.1087785Z  * [new branch]        feature/edge-81-no-trade-evidence-review-ui -> origin/feature/edge-81-no-trade-evidence-review-ui
+2026-07-23T05:48:26.1088807Z  * [new branch]        feature/edge-82-final-executable-quality-gate -> origin/feature/edge-82-final-executable-quality-gate
+2026-07-23T05:48:26.1089781Z  * [new branch]        feature/edge-83-paper-truth-journal      -> origin/feature/edge-83-paper-truth-journal
+2026-07-23T05:48:26.1090637Z  * [new branch]        feature/edge-84-outcome-reducer          -> origin/feature/edge-84-outcome-reducer
+2026-07-23T05:48:26.1091571Z  * [new branch]        feature/edge-85-strategy-expectancy-by-regime -> origin/feature/edge-85-strategy-expectancy-by-regime
+2026-07-23T05:48:26.1092527Z  * [new branch]        feature/edge-86-slippage-cost-truth      -> origin/feature/edge-86-slippage-cost-truth
+2026-07-23T05:48:26.1093510Z  * [new branch]        feature/edge-87-strategy-family-kill-keep-report -> origin/feature/edge-87-strategy-family-kill-keep-report
+2026-07-23T05:48:26.1094555Z  * [new branch]        feature/edge-88-strategy-lifecycle-states -> origin/feature/edge-88-strategy-lifecycle-states
+2026-07-23T05:48:26.1095509Z  * [new branch]        feature/edge-89-promotion-gate-evidence  -> origin/feature/edge-89-promotion-gate-evidence
+2026-07-23T05:48:26.1096460Z  * [new branch]        feature/edge-89-strategy-promotion-gate  -> origin/feature/edge-89-strategy-promotion-gate
+2026-07-23T05:48:26.1097557Z  * [new branch]        feature/edge-90-suspension-retirement-rules -> origin/feature/edge-90-suspension-retirement-rules
+2026-07-23T05:48:26.1098528Z  * [new branch]        feature/edge-91-regime-replay-scenarios  -> origin/feature/edge-91-regime-replay-scenarios
+2026-07-23T05:48:26.1099531Z  * [new branch]        feature/edge-91a-session-path-replay-analytics -> origin/feature/edge-91a-session-path-replay-analytics
+2026-07-23T05:48:26.1100561Z  * [new branch]        feature/edge-92-feed-fault-replay-scenarios -> origin/feature/edge-92-feed-fault-replay-scenarios
+2026-07-23T05:48:26.1101576Z  * [new branch]        feature/edge-93-strategy-replay-proof-pack -> origin/feature/edge-93-strategy-replay-proof-pack
+2026-07-23T05:48:26.1102561Z  * [new branch]        feature/edge-98-historical-dataset-contract -> origin/feature/edge-98-historical-dataset-contract
+2026-07-23T05:48:26.1103751Z  * [new branch]        feature/edge-99-replay-clock-no-future-leak-guard -> origin/feature/edge-99-replay-clock-no-future-leak-guard
+2026-07-23T05:48:26.1104790Z  * [new branch]        feature/edge37-evidence-replay-report    -> origin/feature/edge37-evidence-replay-report
+2026-07-23T05:48:26.1179548Z  * [new branch]        feature/edge39-expired-contract-token-resolution-guard -> origin/feature/edge39-expired-contract-token-resolution-guard
+2026-07-23T05:48:26.1180984Z  * [new branch]        feature/edge40-quote-timestamp-age-consistency-guard -> origin/feature/edge40-quote-timestamp-age-consistency-guard
+---
+2026-07-23T05:48:26.1089781Z  * [new branch]        feature/edge-83-paper-truth-journal      -> origin/feature/edge-83-paper-truth-journal
+2026-07-23T05:48:26.1090637Z  * [new branch]        feature/edge-84-outcome-reducer          -> origin/feature/edge-84-outcome-reducer
+2026-07-23T05:48:26.1091571Z  * [new branch]        feature/edge-85-strategy-expectancy-by-regime -> origin/feature/edge-85-strategy-expectancy-by-regime
+2026-07-23T05:48:26.1092527Z  * [new branch]        feature/edge-86-slippage-cost-truth      -> origin/feature/edge-86-slippage-cost-truth
+2026-07-23T05:48:26.1093510Z  * [new branch]        feature/edge-87-strategy-family-kill-keep-report -> origin/feature/edge-87-strategy-family-kill-keep-report
+2026-07-23T05:48:26.1094555Z  * [new branch]        feature/edge-88-strategy-lifecycle-states -> origin/feature/edge-88-strategy-lifecycle-states
+2026-07-23T05:48:26.1095509Z  * [new branch]        feature/edge-89-promotion-gate-evidence  -> origin/feature/edge-89-promotion-gate-evidence
+2026-07-23T05:48:26.1096460Z  * [new branch]        feature/edge-89-strategy-promotion-gate  -> origin/feature/edge-89-strategy-promotion-gate
+2026-07-23T05:48:26.1097557Z  * [new branch]        feature/edge-90-suspension-retirement-rules -> origin/feature/edge-90-suspension-retirement-rules
+2026-07-23T05:48:26.1098528Z  * [new branch]        feature/edge-91-regime-replay-scenarios  -> origin/feature/edge-91-regime-replay-scenarios
+2026-07-23T05:48:26.1099531Z  * [new branch]        feature/edge-91a-session-path-replay-analytics -> origin/feature/edge-91a-session-path-replay-analytics
+2026-07-23T05:48:26.1100561Z  * [new branch]        feature/edge-92-feed-fault-replay-scenarios -> origin/feature/edge-92-feed-fault-replay-scenarios
+2026-07-23T05:48:26.1101576Z  * [new branch]        feature/edge-93-strategy-replay-proof-pack -> origin/feature/edge-93-strategy-replay-proof-pack
+2026-07-23T05:48:26.1102561Z  * [new branch]        feature/edge-98-historical-dataset-contract -> origin/feature/edge-98-historical-dataset-contract
+2026-07-23T05:48:26.1103751Z  * [new branch]        feature/edge-99-replay-clock-no-future-leak-guard -> origin/feature/edge-99-replay-clock-no-future-leak-guard
+2026-07-23T05:48:26.1104790Z  * [new branch]        feature/edge37-evidence-replay-report    -> origin/feature/edge37-evidence-replay-report
+2026-07-23T05:48:26.1179548Z  * [new branch]        feature/edge39-expired-contract-token-resolution-guard -> origin/feature/edge39-expired-contract-token-resolution-guard
+2026-07-23T05:48:26.1180984Z  * [new branch]        feature/edge40-quote-timestamp-age-consistency-guard -> origin/feature/edge40-quote-timestamp-age-consistency-guard
+2026-07-23T05:48:26.1182177Z  * [new branch]        feature/elite-opportunity-engine-bible   -> origin/feature/elite-opportunity-engine-bible
+2026-07-23T05:48:26.1183201Z  * [new branch]        feature/execution-dominance-main-base    -> origin/feature/execution-dominance-main-base
+2026-07-23T05:48:26.1184119Z  * [new branch]        feature/feed-freshness-hardening         -> origin/feature/feed-freshness-hardening
+2026-07-23T05:48:26.1185071Z  * [new branch]        feature/feed-ws-safe-helper-extraction   -> origin/feature/feed-ws-safe-helper-extraction
+2026-07-23T05:48:26.1185973Z  * [new branch]        feature/forensics-ci-gate                -> origin/feature/forensics-ci-gate
+2026-07-23T05:48:26.1186838Z  * [new branch]        feature/forensics-pr-gate                -> origin/feature/forensics-pr-gate
+2026-07-23T05:48:26.1187825Z  * [new branch]        feature/gsd-for-02-tradebot-profile      -> origin/feature/gsd-for-02-tradebot-profile
+2026-07-23T05:48:26.1188762Z  * [new branch]        feature/gsd-for-03-repo-cartographer     -> origin/feature/gsd-for-03-repo-cartographer
+---
+2026-07-23T05:48:26.1098528Z  * [new branch]        feature/edge-91-regime-replay-scenarios  -> origin/feature/edge-91-regime-replay-scenarios
+2026-07-23T05:48:26.1099531Z  * [new branch]        feature/edge-91a-session-path-replay-analytics -> origin/feature/edge-91a-session-path-replay-analytics
+2026-07-23T05:48:26.1100561Z  * [new branch]        feature/edge-92-feed-fault-replay-scenarios -> origin/feature/edge-92-feed-fault-replay-scenarios
+2026-07-23T05:48:26.1101576Z  * [new branch]        feature/edge-93-strategy-replay-proof-pack -> origin/feature/edge-93-strategy-replay-proof-pack
+2026-07-23T05:48:26.1102561Z  * [new branch]        feature/edge-98-historical-dataset-contract -> origin/feature/edge-98-historical-dataset-contract
+2026-07-23T05:48:26.1103751Z  * [new branch]        feature/edge-99-replay-clock-no-future-leak-guard -> origin/feature/edge-99-replay-clock-no-future-leak-guard
+2026-07-23T05:48:26.1104790Z  * [new branch]        feature/edge37-evidence-replay-report    -> origin/feature/edge37-evidence-replay-report
+2026-07-23T05:48:26.1179548Z  * [new branch]        feature/edge39-expired-contract-token-resolution-guard -> origin/feature/edge39-expired-contract-token-resolution-guard
+2026-07-23T05:48:26.1180984Z  * [new branch]        feature/edge40-quote-timestamp-age-consistency-guard -> origin/feature/edge40-quote-timestamp-age-consistency-guard
+2026-07-23T05:48:26.1182177Z  * [new branch]        feature/elite-opportunity-engine-bible   -> origin/feature/elite-opportunity-engine-bible
+2026-07-23T05:48:26.1183201Z  * [new branch]        feature/execution-dominance-main-base    -> origin/feature/execution-dominance-main-base
+2026-07-23T05:48:26.1184119Z  * [new branch]        feature/feed-freshness-hardening         -> origin/feature/feed-freshness-hardening
+2026-07-23T05:48:26.1185071Z  * [new branch]        feature/feed-ws-safe-helper-extraction   -> origin/feature/feed-ws-safe-helper-extraction
+2026-07-23T05:48:26.1185973Z  * [new branch]        feature/forensics-ci-gate                -> origin/feature/forensics-ci-gate
+2026-07-23T05:48:26.1186838Z  * [new branch]        feature/forensics-pr-gate                -> origin/feature/forensics-pr-gate
+2026-07-23T05:48:26.1187825Z  * [new branch]        feature/gsd-for-02-tradebot-profile      -> origin/feature/gsd-for-02-tradebot-profile
+2026-07-23T05:48:26.1188762Z  * [new branch]        feature/gsd-for-03-repo-cartographer     -> origin/feature/gsd-for-03-repo-cartographer
+2026-07-23T05:48:26.1189928Z  * [new branch]        feature/gsd-for-04-runtime-wiring        -> origin/feature/gsd-for-04-runtime-wiring
+2026-07-23T05:48:26.1190921Z  * [new branch]        feature/gsd-for-05-critical-module-caller -> origin/feature/gsd-for-05-critical-module-caller
+2026-07-23T05:48:26.1191943Z  * [new branch]        feature/gsd-for-06-test-reality-classifier -> origin/feature/gsd-for-06-test-reality-classifier
+2026-07-23T05:48:26.1192945Z  * [new branch]        feature/gsd-for-07-safety-boundary-auditor -> origin/feature/gsd-for-07-safety-boundary-auditor
+2026-07-23T05:48:26.1193900Z  * [new branch]        feature/gsd-for-08-evidence-auditor      -> origin/feature/gsd-for-08-evidence-auditor
+2026-07-23T05:48:26.1194807Z  * [new branch]        feature/gsd-for-09-architecture-drift    -> origin/feature/gsd-for-09-architecture-drift
+2026-07-23T05:48:26.1195655Z  * [new branch]        feature/gsd-for-10-runner                -> origin/feature/gsd-for-10-runner
+2026-07-23T05:48:26.1196491Z  * [new branch]        feature/gsd-for-11-agent-evidence        -> origin/feature/gsd-for-11-agent-evidence
+2026-07-23T05:48:26.1197469Z  * [new branch]        feature/gsd-for-12-baseline-audit        -> origin/feature/gsd-for-12-baseline-audit
+---
+2026-07-23T05:48:26.1187825Z  * [new branch]        feature/gsd-for-02-tradebot-profile      -> origin/feature/gsd-for-02-tradebot-profile
+2026-07-23T05:48:26.1188762Z  * [new branch]        feature/gsd-for-03-repo-cartographer     -> origin/feature/gsd-for-03-repo-cartographer
+2026-07-23T05:48:26.1189928Z  * [new branch]        feature/gsd-for-04-runtime-wiring        -> origin/feature/gsd-for-04-runtime-wiring
+2026-07-23T05:48:26.1190921Z  * [new branch]        feature/gsd-for-05-critical-module-caller -> origin/feature/gsd-for-05-critical-module-caller
+2026-07-23T05:48:26.1191943Z  * [new branch]        feature/gsd-for-06-test-reality-classifier -> origin/feature/gsd-for-06-test-reality-classifier
+2026-07-23T05:48:26.1192945Z  * [new branch]        feature/gsd-for-07-safety-boundary-auditor -> origin/feature/gsd-for-07-safety-boundary-auditor
+2026-07-23T05:48:26.1193900Z  * [new branch]        feature/gsd-for-08-evidence-auditor      -> origin/feature/gsd-for-08-evidence-auditor
+2026-07-23T05:48:26.1194807Z  * [new branch]        feature/gsd-for-09-architecture-drift    -> origin/feature/gsd-for-09-architecture-drift
+2026-07-23T05:48:26.1195655Z  * [new branch]        feature/gsd-for-10-runner                -> origin/feature/gsd-for-10-runner
+2026-07-23T05:48:26.1196491Z  * [new branch]        feature/gsd-for-11-agent-evidence        -> origin/feature/gsd-for-11-agent-evidence
+2026-07-23T05:48:26.1197469Z  * [new branch]        feature/gsd-for-12-baseline-audit        -> origin/feature/gsd-for-12-baseline-audit
+2026-07-23T05:48:26.1198654Z  * [new branch]        feature/gsd-for-12b-baseline-artifacts   -> origin/feature/gsd-for-12b-baseline-artifacts
+2026-07-23T05:48:26.1199786Z  * [new branch]        feature/hotfix-edge-79a-live-indicator-readiness-clean -> origin/feature/hotfix-edge-79a-live-indicator-readiness-clean
+2026-07-23T05:48:26.1201103Z  * [new branch]        feature/hotfix-edge-79a-live-indicator-readiness-diagnostics -> origin/feature/hotfix-edge-79a-live-indicator-readiness-diagnostics
+2026-07-23T05:48:26.1202440Z  * [new branch]        feature/hotfix-edge-79b-market-close-feed-state-classifier -> origin/feature/hotfix-edge-79b-market-close-feed-state-classifier
+2026-07-23T05:48:26.1203602Z  * [new branch]        feature/htf-opening-drive-paper-telemetry -> origin/feature/htf-opening-drive-paper-telemetry
+2026-07-23T05:48:26.1204556Z  * [new branch]        feature/htf_real_paper_validation        -> origin/feature/htf_real_paper_validation
+2026-07-23T05:48:26.1205457Z  * [new branch]        feature/institutional-paper-trading      -> origin/feature/institutional-paper-trading
+2026-07-23T05:48:26.1206540Z  * [new branch]        feature/integration-useful-branches      -> origin/feature/integration-useful-branches
+2026-07-23T05:48:26.1207720Z  * [new branch]        feature/live-soak-strategy-regime-evidence-validation -> origin/feature/live-soak-strategy-regime-evidence-validation
+2026-07-23T05:48:26.1209033Z  * [new branch]        feature/live-truth-01-top-opportunities-executable-alignment -> origin/feature/live-truth-01-top-opportunities-executable-alignment
+2026-07-23T05:48:26.1210388Z  * [new branch]        feature/live-truth-02-latest-artifact-non-empty-preservation -> origin/feature/live-truth-02-latest-artifact-non-empty-preservation
+2026-07-23T05:48:26.1211689Z  * [new branch]        feature/live-truth-03-runtime-snapshot-freshness-guard -> origin/feature/live-truth-03-runtime-snapshot-freshness-guard
+2026-07-23T05:48:26.1212864Z  * [new branch]        feature/live-truth-04-feed-runtime-writer-liveness -> origin/feature/live-truth-04-feed-runtime-writer-liveness
+2026-07-23T05:48:26.1214034Z  * [new branch]        feature/live-truth-05-market-close-state-consistency -> origin/feature/live-truth-05-market-close-state-consistency
+2026-07-23T05:48:26.1215147Z  * [new branch]        feature/live-truth-06-stale-candidate-hygiene -> origin/feature/live-truth-06-stale-candidate-hygiene
+---
+2026-07-23T05:48:26.1190921Z  * [new branch]        feature/gsd-for-05-critical-module-caller -> origin/feature/gsd-for-05-critical-module-caller
+2026-07-23T05:48:26.1191943Z  * [new branch]        feature/gsd-for-06-test-reality-classifier -> origin/feature/gsd-for-06-test-reality-classifier
+2026-07-23T05:48:26.1192945Z  * [new branch]        feature/gsd-for-07-safety-boundary-auditor -> origin/feature/gsd-for-07-safety-boundary-auditor
+2026-07-23T05:48:26.1193900Z  * [new branch]        feature/gsd-for-08-evidence-auditor      -> origin/feature/gsd-for-08-evidence-auditor
+2026-07-23T05:48:26.1194807Z  * [new branch]        feature/gsd-for-09-architecture-drift    -> origin/feature/gsd-for-09-architecture-drift
+2026-07-23T05:48:26.1195655Z  * [new branch]        feature/gsd-for-10-runner                -> origin/feature/gsd-for-10-runner
+2026-07-23T05:48:26.1196491Z  * [new branch]        feature/gsd-for-11-agent-evidence        -> origin/feature/gsd-for-11-agent-evidence
+2026-07-23T05:48:26.1197469Z  * [new branch]        feature/gsd-for-12-baseline-audit        -> origin/feature/gsd-for-12-baseline-audit
+2026-07-23T05:48:26.1198654Z  * [new branch]        feature/gsd-for-12b-baseline-artifacts   -> origin/feature/gsd-for-12b-baseline-artifacts
+2026-07-23T05:48:26.1199786Z  * [new branch]        feature/hotfix-edge-79a-live-indicator-readiness-clean -> origin/feature/hotfix-edge-79a-live-indicator-readiness-clean
+2026-07-23T05:48:26.1201103Z  * [new branch]        feature/hotfix-edge-79a-live-indicator-readiness-diagnostics -> origin/feature/hotfix-edge-79a-live-indicator-readiness-diagnostics
+2026-07-23T05:48:26.1202440Z  * [new branch]        feature/hotfix-edge-79b-market-close-feed-state-classifier -> origin/feature/hotfix-edge-79b-market-close-feed-state-classifier
+2026-07-23T05:48:26.1203602Z  * [new branch]        feature/htf-opening-drive-paper-telemetry -> origin/feature/htf-opening-drive-paper-telemetry
+2026-07-23T05:48:26.1204556Z  * [new branch]        feature/htf_real_paper_validation        -> origin/feature/htf_real_paper_validation
+2026-07-23T05:48:26.1205457Z  * [new branch]        feature/institutional-paper-trading      -> origin/feature/institutional-paper-trading
+2026-07-23T05:48:26.1206540Z  * [new branch]        feature/integration-useful-branches      -> origin/feature/integration-useful-branches
+2026-07-23T05:48:26.1207720Z  * [new branch]        feature/live-soak-strategy-regime-evidence-validation -> origin/feature/live-soak-strategy-regime-evidence-validation
+2026-07-23T05:48:26.1209033Z  * [new branch]        feature/live-truth-01-top-opportunities-executable-alignment -> origin/feature/live-truth-01-top-opportunities-executable-alignment
+2026-07-23T05:48:26.1210388Z  * [new branch]        feature/live-truth-02-latest-artifact-non-empty-preservation -> origin/feature/live-truth-02-latest-artifact-non-empty-preservation
+2026-07-23T05:48:26.1211689Z  * [new branch]        feature/live-truth-03-runtime-snapshot-freshness-guard -> origin/feature/live-truth-03-runtime-snapshot-freshness-guard
+2026-07-23T05:48:26.1212864Z  * [new branch]        feature/live-truth-04-feed-runtime-writer-liveness -> origin/feature/live-truth-04-feed-runtime-writer-liveness
+2026-07-23T05:48:26.1214034Z  * [new branch]        feature/live-truth-05-market-close-state-consistency -> origin/feature/live-truth-05-market-close-state-consistency
+2026-07-23T05:48:26.1215147Z  * [new branch]        feature/live-truth-06-stale-candidate-hygiene -> origin/feature/live-truth-06-stale-candidate-hygiene
+2026-07-23T05:48:26.1216273Z  * [new branch]        feature/live-truth-07-latency-slo-oscillation-evidence -> origin/feature/live-truth-07-latency-slo-oscillation-evidence
+2026-07-23T05:48:26.1217747Z  * [new branch]        feature/live-truth-08-sensex-reject-calibration-evidence -> origin/feature/live-truth-08-sensex-reject-calibration-evidence
+2026-07-23T05:48:26.1219193Z  * [new branch]        feature/live-truth-09-runtime-health-artifact-consistency -> origin/feature/live-truth-09-runtime-health-artifact-consistency
+---
+2026-07-23T05:48:26.1201103Z  * [new branch]        feature/hotfix-edge-79a-live-indicator-readiness-diagnostics -> origin/feature/hotfix-edge-79a-live-indicator-readiness-diagnostics
+2026-07-23T05:48:26.1202440Z  * [new branch]        feature/hotfix-edge-79b-market-close-feed-state-classifier -> origin/feature/hotfix-edge-79b-market-close-feed-state-classifier
+2026-07-23T05:48:26.1203602Z  * [new branch]        feature/htf-opening-drive-paper-telemetry -> origin/feature/htf-opening-drive-paper-telemetry
+2026-07-23T05:48:26.1204556Z  * [new branch]        feature/htf_real_paper_validation        -> origin/feature/htf_real_paper_validation
+2026-07-23T05:48:26.1205457Z  * [new branch]        feature/institutional-paper-trading      -> origin/feature/institutional-paper-trading
+2026-07-23T05:48:26.1206540Z  * [new branch]        feature/integration-useful-branches      -> origin/feature/integration-useful-branches
+2026-07-23T05:48:26.1207720Z  * [new branch]        feature/live-soak-strategy-regime-evidence-validation -> origin/feature/live-soak-strategy-regime-evidence-validation
+2026-07-23T05:48:26.1209033Z  * [new branch]        feature/live-truth-01-top-opportunities-executable-alignment -> origin/feature/live-truth-01-top-opportunities-executable-alignment
+2026-07-23T05:48:26.1210388Z  * [new branch]        feature/live-truth-02-latest-artifact-non-empty-preservation -> origin/feature/live-truth-02-latest-artifact-non-empty-preservation
+2026-07-23T05:48:26.1211689Z  * [new branch]        feature/live-truth-03-runtime-snapshot-freshness-guard -> origin/feature/live-truth-03-runtime-snapshot-freshness-guard
+2026-07-23T05:48:26.1212864Z  * [new branch]        feature/live-truth-04-feed-runtime-writer-liveness -> origin/feature/live-truth-04-feed-runtime-writer-liveness
+2026-07-23T05:48:26.1214034Z  * [new branch]        feature/live-truth-05-market-close-state-consistency -> origin/feature/live-truth-05-market-close-state-consistency
+2026-07-23T05:48:26.1215147Z  * [new branch]        feature/live-truth-06-stale-candidate-hygiene -> origin/feature/live-truth-06-stale-candidate-hygiene
+2026-07-23T05:48:26.1216273Z  * [new branch]        feature/live-truth-07-latency-slo-oscillation-evidence -> origin/feature/live-truth-07-latency-slo-oscillation-evidence
+2026-07-23T05:48:26.1217747Z  * [new branch]        feature/live-truth-08-sensex-reject-calibration-evidence -> origin/feature/live-truth-08-sensex-reject-calibration-evidence
+2026-07-23T05:48:26.1219193Z  * [new branch]        feature/live-truth-09-runtime-health-artifact-consistency -> origin/feature/live-truth-09-runtime-health-artifact-consistency
+2026-07-23T05:48:26.1220325Z  * [new branch]        feature/live-truth-10-feed-zombie-recovery -> origin/feature/live-truth-10-feed-zombie-recovery
+2026-07-23T05:48:26.1221405Z  * [new branch]        feature/live-truth-10-strategy-perf-shadow-fallback -> origin/feature/live-truth-10-strategy-perf-shadow-fallback
+2026-07-23T05:48:26.1222623Z  * [new branch]        feature/live-truth-11-indicator-readiness-decision-reject -> origin/feature/live-truth-11-indicator-readiness-decision-reject
+2026-07-23T05:48:26.1223796Z  * [new branch]        feature/live-truth-12-latency-hotpath-evidence -> origin/feature/live-truth-12-latency-hotpath-evidence
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+---
+2026-07-23T05:48:26.1209033Z  * [new branch]        feature/live-truth-01-top-opportunities-executable-alignment -> origin/feature/live-truth-01-top-opportunities-executable-alignment
+2026-07-23T05:48:26.1210388Z  * [new branch]        feature/live-truth-02-latest-artifact-non-empty-preservation -> origin/feature/live-truth-02-latest-artifact-non-empty-preservation
+2026-07-23T05:48:26.1211689Z  * [new branch]        feature/live-truth-03-runtime-snapshot-freshness-guard -> origin/feature/live-truth-03-runtime-snapshot-freshness-guard
+2026-07-23T05:48:26.1212864Z  * [new branch]        feature/live-truth-04-feed-runtime-writer-liveness -> origin/feature/live-truth-04-feed-runtime-writer-liveness
+2026-07-23T05:48:26.1214034Z  * [new branch]        feature/live-truth-05-market-close-state-consistency -> origin/feature/live-truth-05-market-close-state-consistency
+2026-07-23T05:48:26.1215147Z  * [new branch]        feature/live-truth-06-stale-candidate-hygiene -> origin/feature/live-truth-06-stale-candidate-hygiene
+2026-07-23T05:48:26.1216273Z  * [new branch]        feature/live-truth-07-latency-slo-oscillation-evidence -> origin/feature/live-truth-07-latency-slo-oscillation-evidence
+2026-07-23T05:48:26.1217747Z  * [new branch]        feature/live-truth-08-sensex-reject-calibration-evidence -> origin/feature/live-truth-08-sensex-reject-calibration-evidence
+2026-07-23T05:48:26.1219193Z  * [new branch]        feature/live-truth-09-runtime-health-artifact-consistency -> origin/feature/live-truth-09-runtime-health-artifact-consistency
+2026-07-23T05:48:26.1220325Z  * [new branch]        feature/live-truth-10-feed-zombie-recovery -> origin/feature/live-truth-10-feed-zombie-recovery
+2026-07-23T05:48:26.1221405Z  * [new branch]        feature/live-truth-10-strategy-perf-shadow-fallback -> origin/feature/live-truth-10-strategy-perf-shadow-fallback
+2026-07-23T05:48:26.1222623Z  * [new branch]        feature/live-truth-11-indicator-readiness-decision-reject -> origin/feature/live-truth-11-indicator-readiness-decision-reject
+2026-07-23T05:48:26.1223796Z  * [new branch]        feature/live-truth-12-latency-hotpath-evidence -> origin/feature/live-truth-12-latency-hotpath-evidence
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+2026-07-23T05:48:26.1230754Z  * [new branch]        feature/outcome-evidence-engine          -> origin/feature/outcome-evidence-engine
+2026-07-23T05:48:26.1231695Z  * [new branch]        feature/phase2-decision-engine-integration -> origin/feature/phase2-decision-engine-integration
+2026-07-23T05:48:26.1232801Z  * [new branch]        feature/phase2-decision-engine-profile-integration -> origin/feature/phase2-decision-engine-profile-integration
+2026-07-23T05:48:26.1233908Z  * [new branch]        feature/phase2-playbook-selector         -> origin/feature/phase2-playbook-selector
+2026-07-23T05:48:26.1234815Z  * [new branch]        feature/phase2-playbooks-exec-exit       -> origin/feature/phase2-playbooks-exec-exit
+2026-07-23T05:48:26.1235927Z  * [new branch]        feature/pr-feed-02r-canonical-feed-health -> origin/feature/pr-feed-02r-canonical-feed-health
+2026-07-23T05:48:26.1236855Z  * [new branch]        feature/pr-feed-03-feed-hold-gate        -> origin/feature/pr-feed-03-feed-hold-gate
+---
+2026-07-23T05:48:26.1210388Z  * [new branch]        feature/live-truth-02-latest-artifact-non-empty-preservation -> origin/feature/live-truth-02-latest-artifact-non-empty-preservation
+2026-07-23T05:48:26.1211689Z  * [new branch]        feature/live-truth-03-runtime-snapshot-freshness-guard -> origin/feature/live-truth-03-runtime-snapshot-freshness-guard
+2026-07-23T05:48:26.1212864Z  * [new branch]        feature/live-truth-04-feed-runtime-writer-liveness -> origin/feature/live-truth-04-feed-runtime-writer-liveness
+2026-07-23T05:48:26.1214034Z  * [new branch]        feature/live-truth-05-market-close-state-consistency -> origin/feature/live-truth-05-market-close-state-consistency
+2026-07-23T05:48:26.1215147Z  * [new branch]        feature/live-truth-06-stale-candidate-hygiene -> origin/feature/live-truth-06-stale-candidate-hygiene
+2026-07-23T05:48:26.1216273Z  * [new branch]        feature/live-truth-07-latency-slo-oscillation-evidence -> origin/feature/live-truth-07-latency-slo-oscillation-evidence
+2026-07-23T05:48:26.1217747Z  * [new branch]        feature/live-truth-08-sensex-reject-calibration-evidence -> origin/feature/live-truth-08-sensex-reject-calibration-evidence
+2026-07-23T05:48:26.1219193Z  * [new branch]        feature/live-truth-09-runtime-health-artifact-consistency -> origin/feature/live-truth-09-runtime-health-artifact-consistency
+2026-07-23T05:48:26.1220325Z  * [new branch]        feature/live-truth-10-feed-zombie-recovery -> origin/feature/live-truth-10-feed-zombie-recovery
+2026-07-23T05:48:26.1221405Z  * [new branch]        feature/live-truth-10-strategy-perf-shadow-fallback -> origin/feature/live-truth-10-strategy-perf-shadow-fallback
+2026-07-23T05:48:26.1222623Z  * [new branch]        feature/live-truth-11-indicator-readiness-decision-reject -> origin/feature/live-truth-11-indicator-readiness-decision-reject
+2026-07-23T05:48:26.1223796Z  * [new branch]        feature/live-truth-12-latency-hotpath-evidence -> origin/feature/live-truth-12-latency-hotpath-evidence
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+2026-07-23T05:48:26.1230754Z  * [new branch]        feature/outcome-evidence-engine          -> origin/feature/outcome-evidence-engine
+2026-07-23T05:48:26.1231695Z  * [new branch]        feature/phase2-decision-engine-integration -> origin/feature/phase2-decision-engine-integration
+2026-07-23T05:48:26.1232801Z  * [new branch]        feature/phase2-decision-engine-profile-integration -> origin/feature/phase2-decision-engine-profile-integration
+2026-07-23T05:48:26.1233908Z  * [new branch]        feature/phase2-playbook-selector         -> origin/feature/phase2-playbook-selector
+2026-07-23T05:48:26.1234815Z  * [new branch]        feature/phase2-playbooks-exec-exit       -> origin/feature/phase2-playbooks-exec-exit
+2026-07-23T05:48:26.1235927Z  * [new branch]        feature/pr-feed-02r-canonical-feed-health -> origin/feature/pr-feed-02r-canonical-feed-health
+2026-07-23T05:48:26.1236855Z  * [new branch]        feature/pr-feed-03-feed-hold-gate        -> origin/feature/pr-feed-03-feed-hold-gate
+2026-07-23T05:48:26.1238097Z  * [new branch]        feature/pr-feed-04-feed-recovery-warmup-gate -> origin/feature/pr-feed-04-feed-recovery-warmup-gate
+---
+2026-07-23T05:48:26.1216273Z  * [new branch]        feature/live-truth-07-latency-slo-oscillation-evidence -> origin/feature/live-truth-07-latency-slo-oscillation-evidence
+2026-07-23T05:48:26.1217747Z  * [new branch]        feature/live-truth-08-sensex-reject-calibration-evidence -> origin/feature/live-truth-08-sensex-reject-calibration-evidence
+2026-07-23T05:48:26.1219193Z  * [new branch]        feature/live-truth-09-runtime-health-artifact-consistency -> origin/feature/live-truth-09-runtime-health-artifact-consistency
+2026-07-23T05:48:26.1220325Z  * [new branch]        feature/live-truth-10-feed-zombie-recovery -> origin/feature/live-truth-10-feed-zombie-recovery
+2026-07-23T05:48:26.1221405Z  * [new branch]        feature/live-truth-10-strategy-perf-shadow-fallback -> origin/feature/live-truth-10-strategy-perf-shadow-fallback
+2026-07-23T05:48:26.1222623Z  * [new branch]        feature/live-truth-11-indicator-readiness-decision-reject -> origin/feature/live-truth-11-indicator-readiness-decision-reject
+2026-07-23T05:48:26.1223796Z  * [new branch]        feature/live-truth-12-latency-hotpath-evidence -> origin/feature/live-truth-12-latency-hotpath-evidence
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+2026-07-23T05:48:26.1230754Z  * [new branch]        feature/outcome-evidence-engine          -> origin/feature/outcome-evidence-engine
+2026-07-23T05:48:26.1231695Z  * [new branch]        feature/phase2-decision-engine-integration -> origin/feature/phase2-decision-engine-integration
+2026-07-23T05:48:26.1232801Z  * [new branch]        feature/phase2-decision-engine-profile-integration -> origin/feature/phase2-decision-engine-profile-integration
+2026-07-23T05:48:26.1233908Z  * [new branch]        feature/phase2-playbook-selector         -> origin/feature/phase2-playbook-selector
+2026-07-23T05:48:26.1234815Z  * [new branch]        feature/phase2-playbooks-exec-exit       -> origin/feature/phase2-playbooks-exec-exit
+2026-07-23T05:48:26.1235927Z  * [new branch]        feature/pr-feed-02r-canonical-feed-health -> origin/feature/pr-feed-02r-canonical-feed-health
+2026-07-23T05:48:26.1236855Z  * [new branch]        feature/pr-feed-03-feed-hold-gate        -> origin/feature/pr-feed-03-feed-hold-gate
+2026-07-23T05:48:26.1238097Z  * [new branch]        feature/pr-feed-04-feed-recovery-warmup-gate -> origin/feature/pr-feed-04-feed-recovery-warmup-gate
+2026-07-23T05:48:26.1239224Z  * [new branch]        feature/pr-feed-05-exact-option-token-freshness-gate -> origin/feature/pr-feed-05-exact-option-token-freshness-gate
+2026-07-23T05:48:26.1240333Z  * [new branch]        feature/pr-feed-08-pure-tick-utility-helpers -> origin/feature/pr-feed-08-pure-tick-utility-helpers
+2026-07-23T05:48:26.1241373Z  * [new branch]        feature/pr-feed-09-reconnect-decision-policy -> origin/feature/pr-feed-09-reconnect-decision-policy
+2026-07-23T05:48:26.1242416Z  * [new branch]        feature/pr-feed-10-subscription-budget-policy -> origin/feature/pr-feed-10-subscription-budget-policy
+2026-07-23T05:48:26.1243474Z  * [new branch]        feature/pr-feed-11-runtime-snapshot-builder -> origin/feature/pr-feed-11-runtime-snapshot-builder
+---
+2026-07-23T05:48:26.1220325Z  * [new branch]        feature/live-truth-10-feed-zombie-recovery -> origin/feature/live-truth-10-feed-zombie-recovery
+2026-07-23T05:48:26.1221405Z  * [new branch]        feature/live-truth-10-strategy-perf-shadow-fallback -> origin/feature/live-truth-10-strategy-perf-shadow-fallback
+2026-07-23T05:48:26.1222623Z  * [new branch]        feature/live-truth-11-indicator-readiness-decision-reject -> origin/feature/live-truth-11-indicator-readiness-decision-reject
+2026-07-23T05:48:26.1223796Z  * [new branch]        feature/live-truth-12-latency-hotpath-evidence -> origin/feature/live-truth-12-latency-hotpath-evidence
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+2026-07-23T05:48:26.1230754Z  * [new branch]        feature/outcome-evidence-engine          -> origin/feature/outcome-evidence-engine
+2026-07-23T05:48:26.1231695Z  * [new branch]        feature/phase2-decision-engine-integration -> origin/feature/phase2-decision-engine-integration
+2026-07-23T05:48:26.1232801Z  * [new branch]        feature/phase2-decision-engine-profile-integration -> origin/feature/phase2-decision-engine-profile-integration
+2026-07-23T05:48:26.1233908Z  * [new branch]        feature/phase2-playbook-selector         -> origin/feature/phase2-playbook-selector
+2026-07-23T05:48:26.1234815Z  * [new branch]        feature/phase2-playbooks-exec-exit       -> origin/feature/phase2-playbooks-exec-exit
+2026-07-23T05:48:26.1235927Z  * [new branch]        feature/pr-feed-02r-canonical-feed-health -> origin/feature/pr-feed-02r-canonical-feed-health
+2026-07-23T05:48:26.1236855Z  * [new branch]        feature/pr-feed-03-feed-hold-gate        -> origin/feature/pr-feed-03-feed-hold-gate
+2026-07-23T05:48:26.1238097Z  * [new branch]        feature/pr-feed-04-feed-recovery-warmup-gate -> origin/feature/pr-feed-04-feed-recovery-warmup-gate
+2026-07-23T05:48:26.1239224Z  * [new branch]        feature/pr-feed-05-exact-option-token-freshness-gate -> origin/feature/pr-feed-05-exact-option-token-freshness-gate
+2026-07-23T05:48:26.1240333Z  * [new branch]        feature/pr-feed-08-pure-tick-utility-helpers -> origin/feature/pr-feed-08-pure-tick-utility-helpers
+2026-07-23T05:48:26.1241373Z  * [new branch]        feature/pr-feed-09-reconnect-decision-policy -> origin/feature/pr-feed-09-reconnect-decision-policy
+2026-07-23T05:48:26.1242416Z  * [new branch]        feature/pr-feed-10-subscription-budget-policy -> origin/feature/pr-feed-10-subscription-budget-policy
+2026-07-23T05:48:26.1243474Z  * [new branch]        feature/pr-feed-11-runtime-snapshot-builder -> origin/feature/pr-feed-11-runtime-snapshot-builder
+2026-07-23T05:48:26.1244541Z  * [new branch]        feature/pr-feed-12-runtime-snapshot-feed-decision -> origin/feature/pr-feed-12-runtime-snapshot-feed-decision
+2026-07-23T05:48:26.1245566Z  * [new branch]        feature/pr-feed-13-pipeline-feed-hold    -> origin/feature/pr-feed-13-pipeline-feed-hold
+2026-07-23T05:48:26.1246621Z  * [new branch]        feature/pr-feed-13a-review-queue-nonblocking-quote -> origin/feature/pr-feed-13a-review-queue-nonblocking-quote
+---
+2026-07-23T05:48:26.1224856Z  * [new branch]        feature/live-truth-13-verified-feed-restart -> origin/feature/live-truth-13-verified-feed-restart
+2026-07-23T05:48:26.1225806Z  * [new branch]        feature/mip-operational-excellence       -> origin/feature/mip-operational-excellence
+2026-07-23T05:48:26.1226711Z  * [new branch]        feature/obs-legacy-evidence-import       -> origin/feature/obs-legacy-evidence-import
+2026-07-23T05:48:26.1227781Z  * [new branch]        feature/obs-trace-replay-cli             -> origin/feature/obs-trace-replay-cli
+2026-07-23T05:48:26.1228631Z  * [new branch]        feature/openalgo-integration             -> origin/feature/openalgo-integration
+2026-07-23T05:48:26.1229686Z  * [new branch]        feature/opening-drive-validation-and-ranking-foundation -> origin/feature/opening-drive-validation-and-ranking-foundation
+2026-07-23T05:48:26.1230754Z  * [new branch]        feature/outcome-evidence-engine          -> origin/feature/outcome-evidence-engine
+2026-07-23T05:48:26.1231695Z  * [new branch]        feature/phase2-decision-engine-integration -> origin/feature/phase2-decision-engine-integration
+2026-07-23T05:48:26.1232801Z  * [new branch]        feature/phase2-decision-engine-profile-integration -> origin/feature/phase2-decision-engine-profile-integration
+2026-07-23T05:48:26.1233908Z  * [new branch]        feature/phase2-playbook-selector         -> origin/feature/phase2-playbook-selector
+2026-07-23T05:48:26.1234815Z  * [new branch]        feature/phase2-playbooks-exec-exit       -> origin/feature/phase2-playbooks-exec-exit
+2026-07-23T05:48:26.1235927Z  * [new branch]        feature/pr-feed-02r-canonical-feed-health -> origin/feature/pr-feed-02r-canonical-feed-health
+2026-07-23T05:48:26.1236855Z  * [new branch]        feature/pr-feed-03-feed-hold-gate        -> origin/feature/pr-feed-03-feed-hold-gate
+2026-07-23T05:48:26.1238097Z  * [new branch]        feature/pr-feed-04-feed-recovery-warmup-gate -> origin/feature/pr-feed-04-feed-recovery-warmup-gate
+2026-07-23T05:48:26.1239224Z  * [new branch]        feature/pr-feed-05-exact-option-token-freshness-gate -> origin/feature/pr-feed-05-exact-option-token-freshness-gate
+2026-07-23T05:48:26.1240333Z  * [new branch]        feature/pr-feed-08-pure-tick-utility-helpers -> origin/feature/pr-feed-08-pure-tick-utility-helpers
+2026-07-23T05:48:26.1241373Z  * [new branch]        feature/pr-feed-09-reconnect-decision-policy -> origin/feature/pr-feed-09-reconnect-decision-policy
+2026-07-23T05:48:26.1242416Z  * [new branch]        feature/pr-feed-10-subscription-budget-policy -> origin/feature/pr-feed-10-subscription-budget-policy
+2026-07-23T05:48:26.1243474Z  * [new branch]        feature/pr-feed-11-runtime-snapshot-builder -> origin/feature/pr-feed-11-runtime-snapshot-builder
+2026-07-23T05:48:26.1244541Z  * [new branch]        feature/pr-feed-12-runtime-snapshot-feed-decision -> origin/feature/pr-feed-12-runtime-snapshot-feed-decision
+2026-07-23T05:48:26.1245566Z  * [new branch]        feature/pr-feed-13-pipeline-feed-hold    -> origin/feature/pr-feed-13-pipeline-feed-hold
+2026-07-23T05:48:26.1246621Z  * [new branch]        feature/pr-feed-13a-review-queue-nonblocking-quote -> origin/feature/pr-feed-13a-review-queue-nonblocking-quote
+2026-07-23T05:48:26.1248036Z  * [new branch]        feature/pr-feed-14-ranking-suppression-feed-risk -> origin/feature/pr-feed-14-ranking-suppression-feed-risk
+2026-07-23T05:48:26.1249109Z  * [new branch]        feature/pr-feed-15-live-paper-feed-policy -> origin/feature/pr-feed-15-live-paper-feed-policy
+2026-07-23T05:48:26.1250088Z  * [new branch]        feature/pr-feed-16-feed-config-hardening -> origin/feature/pr-feed-16-feed-config-hardening
+2026-07-23T05:48:26.1251049Z  * [new branch]        feature/pr-feed-17-resolution-read-model -> origin/feature/pr-feed-17-resolution-read-model
+---
+2026-07-23T05:48:26.1248036Z  * [new branch]        feature/pr-feed-14-ranking-suppression-feed-risk -> origin/feature/pr-feed-14-ranking-suppression-feed-risk
+2026-07-23T05:48:26.1249109Z  * [new branch]        feature/pr-feed-15-live-paper-feed-policy -> origin/feature/pr-feed-15-live-paper-feed-policy
+2026-07-23T05:48:26.1250088Z  * [new branch]        feature/pr-feed-16-feed-config-hardening -> origin/feature/pr-feed-16-feed-config-hardening
+2026-07-23T05:48:26.1251049Z  * [new branch]        feature/pr-feed-17-resolution-read-model -> origin/feature/pr-feed-17-resolution-read-model
+2026-07-23T05:48:26.1251989Z  * [new branch]        feature/pr-feed-18-ws-lifecycle-shell    -> origin/feature/pr-feed-18-ws-lifecycle-shell
+2026-07-23T05:48:26.1252931Z  * [new branch]        feature/pr-feed-19-callback-thin-wiring  -> origin/feature/pr-feed-19-callback-thin-wiring
+2026-07-23T05:48:26.1253951Z  * [new branch]        feature/pr-feed-20-feed-runtime-evidence-bundle -> origin/feature/pr-feed-20-feed-runtime-evidence-bundle
+2026-07-23T05:48:26.1255020Z  * [new branch]        feature/pr-feed-20r-feed-fault-replay-tests -> origin/feature/pr-feed-20r-feed-fault-replay-tests
+2026-07-23T05:48:26.1255998Z  * [new branch]        feature/pr-obs-01-observability-identity -> origin/feature/pr-obs-01-observability-identity
+2026-07-23T05:48:26.1256942Z  * [new branch]        feature/pr-obs-02-decision-event-schema  -> origin/feature/pr-obs-02-decision-event-schema
+2026-07-23T05:48:26.1258118Z  * [new branch]        feature/pr-obs-03-json-logging-adapter   -> origin/feature/pr-obs-03-json-logging-adapter
+2026-07-23T05:48:26.1259151Z  * [new branch]        feature/pr100-live-observation-evidence-hardening -> origin/feature/pr100-live-observation-evidence-hardening
+2026-07-23T05:48:26.1260283Z  * [new branch]        feature/pr101-fallback-contract-execution-firewall -> origin/feature/pr101-fallback-contract-execution-firewall
+2026-07-23T05:48:26.1261530Z  * [new branch]        feature/pr102-contract-resolution-fallback-propagation-gate -> origin/feature/pr102-contract-resolution-fallback-propagation-gate
+2026-07-23T05:48:26.1262862Z  * [new branch]        feature/pr103-runtime-truth-consistency-regime-diagnostics -> origin/feature/pr103-runtime-truth-consistency-regime-diagnostics
+2026-07-23T05:48:26.1264041Z  * [new branch]        feature/pr104-final-emit-truth-contract  -> origin/feature/pr104-final-emit-truth-contract
+2026-07-23T05:48:26.1265354Z  * [new branch]        feature/pr105-blocked-candidate-lifecycle-schema-consistency -> origin/feature/pr105-blocked-candidate-lifecycle-schema-consistency
+2026-07-23T05:48:26.1266489Z  * [new branch]        feature/pr206-observability-events       -> origin/feature/pr206-observability-events
+2026-07-23T05:48:26.1267482Z  * [new branch]        feature/pr207-observability-tracing      -> origin/feature/pr207-observability-tracing
+2026-07-23T05:48:26.1268384Z  * [new branch]        feature/pr208-observability-metrics      -> origin/feature/pr208-observability-metrics
+2026-07-23T05:48:26.1269152Z  * [new branch]        feature/pr209                            -> origin/feature/pr209
+2026-07-23T05:48:26.1269818Z  * [new branch]        feature/pr210                            -> origin/feature/pr210
+2026-07-23T05:48:26.1270452Z  * [new branch]        feature/pr211                            -> origin/feature/pr211
+2026-07-23T05:48:26.1271088Z  * [new branch]        feature/pr212                            -> origin/feature/pr212
+2026-07-23T05:48:26.1271994Z  * [new branch]        feature/pr246-advisory-entry-source-normalization -> origin/feature/pr246-advisory-entry-source-normalization
+2026-07-23T05:48:26.1273086Z  * [new branch]        feature/pr55-ranking-opportunity-diagnostics -> origin/feature/pr55-ranking-opportunity-diagnostics
+---
+2026-07-23T05:48:26.1252931Z  * [new branch]        feature/pr-feed-19-callback-thin-wiring  -> origin/feature/pr-feed-19-callback-thin-wiring
+2026-07-23T05:48:26.1253951Z  * [new branch]        feature/pr-feed-20-feed-runtime-evidence-bundle -> origin/feature/pr-feed-20-feed-runtime-evidence-bundle
+2026-07-23T05:48:26.1255020Z  * [new branch]        feature/pr-feed-20r-feed-fault-replay-tests -> origin/feature/pr-feed-20r-feed-fault-replay-tests
+2026-07-23T05:48:26.1255998Z  * [new branch]        feature/pr-obs-01-observability-identity -> origin/feature/pr-obs-01-observability-identity
+2026-07-23T05:48:26.1256942Z  * [new branch]        feature/pr-obs-02-decision-event-schema  -> origin/feature/pr-obs-02-decision-event-schema
+2026-07-23T05:48:26.1258118Z  * [new branch]        feature/pr-obs-03-json-logging-adapter   -> origin/feature/pr-obs-03-json-logging-adapter
+2026-07-23T05:48:26.1259151Z  * [new branch]        feature/pr100-live-observation-evidence-hardening -> origin/feature/pr100-live-observation-evidence-hardening
+2026-07-23T05:48:26.1260283Z  * [new branch]        feature/pr101-fallback-contract-execution-firewall -> origin/feature/pr101-fallback-contract-execution-firewall
+2026-07-23T05:48:26.1261530Z  * [new branch]        feature/pr102-contract-resolution-fallback-propagation-gate -> origin/feature/pr102-contract-resolution-fallback-propagation-gate
+2026-07-23T05:48:26.1262862Z  * [new branch]        feature/pr103-runtime-truth-consistency-regime-diagnostics -> origin/feature/pr103-runtime-truth-consistency-regime-diagnostics
+2026-07-23T05:48:26.1264041Z  * [new branch]        feature/pr104-final-emit-truth-contract  -> origin/feature/pr104-final-emit-truth-contract
+2026-07-23T05:48:26.1265354Z  * [new branch]        feature/pr105-blocked-candidate-lifecycle-schema-consistency -> origin/feature/pr105-blocked-candidate-lifecycle-schema-consistency
+2026-07-23T05:48:26.1266489Z  * [new branch]        feature/pr206-observability-events       -> origin/feature/pr206-observability-events
+2026-07-23T05:48:26.1267482Z  * [new branch]        feature/pr207-observability-tracing      -> origin/feature/pr207-observability-tracing
+2026-07-23T05:48:26.1268384Z  * [new branch]        feature/pr208-observability-metrics      -> origin/feature/pr208-observability-metrics
+2026-07-23T05:48:26.1269152Z  * [new branch]        feature/pr209                            -> origin/feature/pr209
+2026-07-23T05:48:26.1269818Z  * [new branch]        feature/pr210                            -> origin/feature/pr210
+2026-07-23T05:48:26.1270452Z  * [new branch]        feature/pr211                            -> origin/feature/pr211
+2026-07-23T05:48:26.1271088Z  * [new branch]        feature/pr212                            -> origin/feature/pr212
+2026-07-23T05:48:26.1271994Z  * [new branch]        feature/pr246-advisory-entry-source-normalization -> origin/feature/pr246-advisory-entry-source-normalization
+2026-07-23T05:48:26.1273086Z  * [new branch]        feature/pr55-ranking-opportunity-diagnostics -> origin/feature/pr55-ranking-opportunity-diagnostics
+2026-07-23T05:48:26.1274141Z  * [new branch]        feature/pr56-opportunity-diagnostics-evidence -> origin/feature/pr56-opportunity-diagnostics-evidence
+2026-07-23T05:48:26.1275163Z  * [new branch]        feature/pr58-movement-candidate-contract -> origin/feature/pr58-movement-candidate-contract
+2026-07-23T05:48:26.1276254Z  * [new branch]        feature/pr59-movement-regime-classifier  -> origin/feature/pr59-movement-regime-classifier
+2026-07-23T05:48:26.1277239Z  * [new branch]        feature/pr60-strategy-registry-candidate-pool -> origin/feature/pr60-strategy-registry-candidate-pool
+2026-07-23T05:48:26.1278476Z  * [new branch]        feature/pr61-opening-drive-orb-retest    -> origin/feature/pr61-opening-drive-orb-retest
+---
+2026-07-23T05:48:26.1269152Z  * [new branch]        feature/pr209                            -> origin/feature/pr209
+2026-07-23T05:48:26.1269818Z  * [new branch]        feature/pr210                            -> origin/feature/pr210
+2026-07-23T05:48:26.1270452Z  * [new branch]        feature/pr211                            -> origin/feature/pr211
+2026-07-23T05:48:26.1271088Z  * [new branch]        feature/pr212                            -> origin/feature/pr212
+2026-07-23T05:48:26.1271994Z  * [new branch]        feature/pr246-advisory-entry-source-normalization -> origin/feature/pr246-advisory-entry-source-normalization
+2026-07-23T05:48:26.1273086Z  * [new branch]        feature/pr55-ranking-opportunity-diagnostics -> origin/feature/pr55-ranking-opportunity-diagnostics
+2026-07-23T05:48:26.1274141Z  * [new branch]        feature/pr56-opportunity-diagnostics-evidence -> origin/feature/pr56-opportunity-diagnostics-evidence
+2026-07-23T05:48:26.1275163Z  * [new branch]        feature/pr58-movement-candidate-contract -> origin/feature/pr58-movement-candidate-contract
+2026-07-23T05:48:26.1276254Z  * [new branch]        feature/pr59-movement-regime-classifier  -> origin/feature/pr59-movement-regime-classifier
+2026-07-23T05:48:26.1277239Z  * [new branch]        feature/pr60-strategy-registry-candidate-pool -> origin/feature/pr60-strategy-registry-candidate-pool
+2026-07-23T05:48:26.1278476Z  * [new branch]        feature/pr61-opening-drive-orb-retest    -> origin/feature/pr61-opening-drive-orb-retest
+2026-07-23T05:48:26.1279425Z  * [new branch]        feature/pr62-compression-trend-pullback  -> origin/feature/pr62-compression-trend-pullback
+2026-07-23T05:48:26.1280337Z  * [new branch]        feature/pr63-vwap-trap-strategies        -> origin/feature/pr63-vwap-trap-strategies
+2026-07-23T05:48:26.1281234Z  * [new branch]        feature/pr64-exhaustion-mean-reversion   -> origin/feature/pr64-exhaustion-mean-reversion
+2026-07-23T05:48:26.1282146Z  * [new branch]        feature/pr65-event-volatility-late-day   -> origin/feature/pr65-event-volatility-late-day
+2026-07-23T05:48:26.1283023Z  * [new branch]        feature/pr66-option-confirmation         -> origin/feature/pr66-option-confirmation
+2026-07-23T05:48:26.1283866Z  * [new branch]        feature/pr67-no-trade-engine             -> origin/feature/pr67-no-trade-engine
+2026-07-23T05:48:26.1284745Z  * [new branch]        feature/pr68-candidate-pool-orchestrator -> origin/feature/pr68-candidate-pool-orchestrator
+2026-07-23T05:48:26.1285762Z  * [new branch]        feature/pr69-candidate-pool-contract-snapshots -> origin/feature/pr69-candidate-pool-contract-snapshots
+2026-07-23T05:48:26.1286780Z  * [new branch]        feature/pr70-candidate-normalization-dedup -> origin/feature/pr70-candidate-normalization-dedup
+2026-07-23T05:48:26.1288003Z  * [new branch]        feature/pr71-candidate-classification-layer -> origin/feature/pr71-candidate-classification-layer
+2026-07-23T05:48:26.1288954Z  * [new branch]        feature/pr72-hard-downgrade-engine       -> origin/feature/pr72-hard-downgrade-engine
+2026-07-23T05:48:26.1289826Z  * [new branch]        feature/pr73-opportunity-score-v1        -> origin/feature/pr73-opportunity-score-v1
+2026-07-23T05:48:26.1290756Z  * [new branch]        feature/pr73-opportunity-score-v1-roadmap -> origin/feature/pr73-opportunity-score-v1-roadmap
+2026-07-23T05:48:26.1291736Z  * [new branch]        feature/pr74-regime-aware-scoring-profiles -> origin/feature/pr74-regime-aware-scoring-profiles
+2026-07-23T05:48:26.1292870Z  * [new branch]        feature/pr75-directional-balance-fix     -> origin/feature/pr75-directional-balance-fix
+---
+2026-07-23T05:48:26.1296704Z  * [new branch]        feature/pr79-ranked-pipeline-contract-snapshots -> origin/feature/pr79-ranked-pipeline-contract-snapshots
+2026-07-23T05:48:26.1297947Z  * [new branch]        feature/pr80-option-resolver-fail-closed -> origin/feature/pr80-option-resolver-fail-closed
+2026-07-23T05:48:26.1298963Z  * [new branch]        feature/pr81-execution-grade-candidate-firewall -> origin/feature/pr81-execution-grade-candidate-firewall
+2026-07-23T05:48:26.1300026Z  * [new branch]        feature/pr82-feed-freshness-fail-closed-gate -> origin/feature/pr82-feed-freshness-fail-closed-gate
+2026-07-23T05:48:26.1300984Z  * [new branch]        feature/pr83-runtime-safety-boot-guard   -> origin/feature/pr83-runtime-safety-boot-guard
+2026-07-23T05:48:26.1301942Z  * [new branch]        feature/pr84-single-opportunity-truth-path -> origin/feature/pr84-single-opportunity-truth-path
+2026-07-23T05:48:26.1303020Z  * [new branch]        feature/pr85-ranked-pipeline-runtime-evidence-writer -> origin/feature/pr85-ranked-pipeline-runtime-evidence-writer
+2026-07-23T05:48:26.1304061Z  * [new branch]        feature/pr86-selection-policy-report     -> origin/feature/pr86-selection-policy-report
+2026-07-23T05:48:26.1305095Z  * [new branch]        feature/pr87-paper-intent-contract       -> origin/feature/pr87-paper-intent-contract
+2026-07-23T05:48:26.1305937Z  * [new branch]        feature/pr88-risk-decision-v1            -> origin/feature/pr88-risk-decision-v1
+2026-07-23T05:48:26.1306754Z  * [new branch]        feature/pr89-agent-repo-rules            -> origin/feature/pr89-agent-repo-rules
+2026-07-23T05:48:26.1307841Z  * [new branch]        feature/pr89-paper-decision-orchestrator -> origin/feature/pr89-paper-decision-orchestrator
+2026-07-23T05:48:26.1308842Z  * [new branch]        feature/pr89-paper-decision-orchestrator-main -> origin/feature/pr89-paper-decision-orchestrator-main
+2026-07-23T05:48:26.1309784Z  * [new branch]        feature/pr90-agent-work-contract         -> origin/feature/pr90-agent-work-contract
+2026-07-23T05:48:26.1310738Z  * [new branch]        feature/pr90-paper-decision-contract-snapshots -> origin/feature/pr90-paper-decision-contract-snapshots
+2026-07-23T05:48:26.1311693Z  * [new branch]        feature/pr91-agent-scope-guard           -> origin/feature/pr91-agent-scope-guard
+2026-07-23T05:48:26.1312621Z  * [new branch]        feature/pr91-strict-paper-order-state-machine -> origin/feature/pr91-strict-paper-order-state-machine
+2026-07-23T05:48:26.1313600Z  * [new branch]        feature/pr92-agent-approval-evidence     -> origin/feature/pr92-agent-approval-evidence
+2026-07-23T05:48:26.1314604Z  * [new branch]        feature/pr92-realistic-option-fill-slippage-model -> origin/feature/pr92-realistic-option-fill-slippage-model
+2026-07-23T05:48:26.1315573Z  * [new branch]        feature/pr93-paper-risk-ledger           -> origin/feature/pr93-paper-risk-ledger
+2026-07-23T05:48:26.1316496Z  * [new branch]        feature/pr94-full-session-paper-trading-gate -> origin/feature/pr94-full-session-paper-trading-gate
+2026-07-23T05:48:26.1317518Z  * [new branch]        feature/pr94-local-agent-work-cli        -> origin/feature/pr94-local-agent-work-cli
+2026-07-23T05:48:26.1318425Z  * [new branch]        feature/pr95-agent-review-orchestrator   -> origin/feature/pr95-agent-review-orchestrator
+2026-07-23T05:48:26.1319319Z  * [new branch]        feature/pr95-agent-webhook-contract      -> origin/feature/pr95-agent-webhook-contract
+2026-07-23T05:48:26.1320476Z  * [new branch]        feature/pr95-paper-session-gate-contract-snapshots -> origin/feature/pr95-paper-session-gate-contract-snapshots
+2026-07-23T05:48:26.1321532Z  * [new branch]        feature/pr95-paper-trading-runbook-command -> origin/feature/pr95-paper-trading-runbook-command
+---
+2026-07-23T05:48:26.1307841Z  * [new branch]        feature/pr89-paper-decision-orchestrator -> origin/feature/pr89-paper-decision-orchestrator
+2026-07-23T05:48:26.1308842Z  * [new branch]        feature/pr89-paper-decision-orchestrator-main -> origin/feature/pr89-paper-decision-orchestrator-main
+2026-07-23T05:48:26.1309784Z  * [new branch]        feature/pr90-agent-work-contract         -> origin/feature/pr90-agent-work-contract
+2026-07-23T05:48:26.1310738Z  * [new branch]        feature/pr90-paper-decision-contract-snapshots -> origin/feature/pr90-paper-decision-contract-snapshots
+2026-07-23T05:48:26.1311693Z  * [new branch]        feature/pr91-agent-scope-guard           -> origin/feature/pr91-agent-scope-guard
+2026-07-23T05:48:26.1312621Z  * [new branch]        feature/pr91-strict-paper-order-state-machine -> origin/feature/pr91-strict-paper-order-state-machine
+2026-07-23T05:48:26.1313600Z  * [new branch]        feature/pr92-agent-approval-evidence     -> origin/feature/pr92-agent-approval-evidence
+2026-07-23T05:48:26.1314604Z  * [new branch]        feature/pr92-realistic-option-fill-slippage-model -> origin/feature/pr92-realistic-option-fill-slippage-model
+2026-07-23T05:48:26.1315573Z  * [new branch]        feature/pr93-paper-risk-ledger           -> origin/feature/pr93-paper-risk-ledger
+2026-07-23T05:48:26.1316496Z  * [new branch]        feature/pr94-full-session-paper-trading-gate -> origin/feature/pr94-full-session-paper-trading-gate
+2026-07-23T05:48:26.1317518Z  * [new branch]        feature/pr94-local-agent-work-cli        -> origin/feature/pr94-local-agent-work-cli
+2026-07-23T05:48:26.1318425Z  * [new branch]        feature/pr95-agent-review-orchestrator   -> origin/feature/pr95-agent-review-orchestrator
+2026-07-23T05:48:26.1319319Z  * [new branch]        feature/pr95-agent-webhook-contract      -> origin/feature/pr95-agent-webhook-contract
+2026-07-23T05:48:26.1320476Z  * [new branch]        feature/pr95-paper-session-gate-contract-snapshots -> origin/feature/pr95-paper-session-gate-contract-snapshots
+2026-07-23T05:48:26.1321532Z  * [new branch]        feature/pr95-paper-trading-runbook-command -> origin/feature/pr95-paper-trading-runbook-command
+2026-07-23T05:48:26.1322541Z  * [new branch]        feature/pr96-agent-review-evidence-integration -> origin/feature/pr96-agent-review-evidence-integration
+2026-07-23T05:48:26.1323586Z  * [new branch]        feature/pr96-live-dry-run-broker-payload-gate -> origin/feature/pr96-live-dry-run-broker-payload-gate
+2026-07-23T05:48:26.1324578Z  * [new branch]        feature/pr96-paper-session-evidence-pack -> origin/feature/pr96-paper-session-evidence-pack
+2026-07-23T05:48:26.1325609Z  * [new branch]        feature/pr97-broker-reconciliation-dry-run-proof -> origin/feature/pr97-broker-reconciliation-dry-run-proof
+2026-07-23T05:48:26.1326708Z  * [new branch]        feature/pr98-kill-switch-risk-halt-dry-run-proof -> origin/feature/pr98-kill-switch-risk-halt-dry-run-proof
+2026-07-23T05:48:26.1328066Z  * [new branch]        feature/pr99-live-observation-runtime-safety-flags -> origin/feature/pr99-live-observation-runtime-safety-flags
+2026-07-23T05:48:26.1329077Z  * [new branch]        feature/pro-edge-truth-audit-replay      -> origin/feature/pro-edge-truth-audit-replay
+2026-07-23T05:48:26.1329908Z  * [new branch]        feature/pro-strategy-layer               -> origin/feature/pro-strategy-layer
+2026-07-23T05:48:26.1330702Z  * [new branch]        feature/product-reality-audit            -> origin/feature/product-reality-audit
+2026-07-23T05:48:26.1331542Z  * [new branch]        feature/profile-rejection-playbook       -> origin/feature/profile-rejection-playbook
+2026-07-23T05:48:26.1332577Z  * [new branch]        feature/research-experiment-registry     -> origin/feature/research-experiment-registry
+---
+2026-07-23T05:48:26.1316496Z  * [new branch]        feature/pr94-full-session-paper-trading-gate -> origin/feature/pr94-full-session-paper-trading-gate
+2026-07-23T05:48:26.1317518Z  * [new branch]        feature/pr94-local-agent-work-cli        -> origin/feature/pr94-local-agent-work-cli
+2026-07-23T05:48:26.1318425Z  * [new branch]        feature/pr95-agent-review-orchestrator   -> origin/feature/pr95-agent-review-orchestrator
+2026-07-23T05:48:26.1319319Z  * [new branch]        feature/pr95-agent-webhook-contract      -> origin/feature/pr95-agent-webhook-contract
+2026-07-23T05:48:26.1320476Z  * [new branch]        feature/pr95-paper-session-gate-contract-snapshots -> origin/feature/pr95-paper-session-gate-contract-snapshots
+2026-07-23T05:48:26.1321532Z  * [new branch]        feature/pr95-paper-trading-runbook-command -> origin/feature/pr95-paper-trading-runbook-command
+2026-07-23T05:48:26.1322541Z  * [new branch]        feature/pr96-agent-review-evidence-integration -> origin/feature/pr96-agent-review-evidence-integration
+2026-07-23T05:48:26.1323586Z  * [new branch]        feature/pr96-live-dry-run-broker-payload-gate -> origin/feature/pr96-live-dry-run-broker-payload-gate
+2026-07-23T05:48:26.1324578Z  * [new branch]        feature/pr96-paper-session-evidence-pack -> origin/feature/pr96-paper-session-evidence-pack
+2026-07-23T05:48:26.1325609Z  * [new branch]        feature/pr97-broker-reconciliation-dry-run-proof -> origin/feature/pr97-broker-reconciliation-dry-run-proof
+2026-07-23T05:48:26.1326708Z  * [new branch]        feature/pr98-kill-switch-risk-halt-dry-run-proof -> origin/feature/pr98-kill-switch-risk-halt-dry-run-proof
+2026-07-23T05:48:26.1328066Z  * [new branch]        feature/pr99-live-observation-runtime-safety-flags -> origin/feature/pr99-live-observation-runtime-safety-flags
+2026-07-23T05:48:26.1329077Z  * [new branch]        feature/pro-edge-truth-audit-replay      -> origin/feature/pro-edge-truth-audit-replay
+2026-07-23T05:48:26.1329908Z  * [new branch]        feature/pro-strategy-layer               -> origin/feature/pro-strategy-layer
+2026-07-23T05:48:26.1330702Z  * [new branch]        feature/product-reality-audit            -> origin/feature/product-reality-audit
+2026-07-23T05:48:26.1331542Z  * [new branch]        feature/profile-rejection-playbook       -> origin/feature/profile-rejection-playbook
+2026-07-23T05:48:26.1332577Z  * [new branch]        feature/research-experiment-registry     -> origin/feature/research-experiment-registry
+2026-07-23T05:48:26.1333493Z  * [new branch]        feature/research-registry-persistence    -> origin/feature/research-registry-persistence
+2026-07-23T05:48:26.1334399Z  * [new branch]        feature/runtime-token-scan-cache         -> origin/feature/runtime-token-scan-cache
+2026-07-23T05:48:26.1335251Z  * [new branch]        feature/score-cap-helper-dropin          -> origin/feature/score-cap-helper-dropin
+2026-07-23T05:48:26.1336103Z  * [new branch]        feature/stock-options-liquid-engine      -> origin/feature/stock-options-liquid-engine
+2026-07-23T05:48:26.1336966Z  * [new branch]        feature/strategy-bucket-expansion        -> origin/feature/strategy-bucket-expansion
+2026-07-23T05:48:26.1338059Z  * [new branch]        feature/strategy-certification-engine    -> origin/feature/strategy-certification-engine
+2026-07-23T05:48:26.1338904Z  * [new branch]        feature/strategy-registry                -> origin/feature/strategy-registry
+2026-07-23T05:48:26.1339814Z  * [new branch]        feature/symbol-clustering-portfolio-selection -> origin/feature/symbol-clustering-portfolio-selection
+2026-07-23T05:48:26.1340776Z  * [new branch]        feature/tradebot-antigravity-mcp-v1      -> origin/feature/tradebot-antigravity-mcp-v1
+---
+2026-07-23T05:48:26.1318425Z  * [new branch]        feature/pr95-agent-review-orchestrator   -> origin/feature/pr95-agent-review-orchestrator
+2026-07-23T05:48:26.1319319Z  * [new branch]        feature/pr95-agent-webhook-contract      -> origin/feature/pr95-agent-webhook-contract
+2026-07-23T05:48:26.1320476Z  * [new branch]        feature/pr95-paper-session-gate-contract-snapshots -> origin/feature/pr95-paper-session-gate-contract-snapshots
+2026-07-23T05:48:26.1321532Z  * [new branch]        feature/pr95-paper-trading-runbook-command -> origin/feature/pr95-paper-trading-runbook-command
+2026-07-23T05:48:26.1322541Z  * [new branch]        feature/pr96-agent-review-evidence-integration -> origin/feature/pr96-agent-review-evidence-integration
+2026-07-23T05:48:26.1323586Z  * [new branch]        feature/pr96-live-dry-run-broker-payload-gate -> origin/feature/pr96-live-dry-run-broker-payload-gate
+2026-07-23T05:48:26.1324578Z  * [new branch]        feature/pr96-paper-session-evidence-pack -> origin/feature/pr96-paper-session-evidence-pack
+2026-07-23T05:48:26.1325609Z  * [new branch]        feature/pr97-broker-reconciliation-dry-run-proof -> origin/feature/pr97-broker-reconciliation-dry-run-proof
+2026-07-23T05:48:26.1326708Z  * [new branch]        feature/pr98-kill-switch-risk-halt-dry-run-proof -> origin/feature/pr98-kill-switch-risk-halt-dry-run-proof
+2026-07-23T05:48:26.1328066Z  * [new branch]        feature/pr99-live-observation-runtime-safety-flags -> origin/feature/pr99-live-observation-runtime-safety-flags
+2026-07-23T05:48:26.1329077Z  * [new branch]        feature/pro-edge-truth-audit-replay      -> origin/feature/pro-edge-truth-audit-replay
+2026-07-23T05:48:26.1329908Z  * [new branch]        feature/pro-strategy-layer               -> origin/feature/pro-strategy-layer
+2026-07-23T05:48:26.1330702Z  * [new branch]        feature/product-reality-audit            -> origin/feature/product-reality-audit
+2026-07-23T05:48:26.1331542Z  * [new branch]        feature/profile-rejection-playbook       -> origin/feature/profile-rejection-playbook
+2026-07-23T05:48:26.1332577Z  * [new branch]        feature/research-experiment-registry     -> origin/feature/research-experiment-registry
+2026-07-23T05:48:26.1333493Z  * [new branch]        feature/research-registry-persistence    -> origin/feature/research-registry-persistence
+2026-07-23T05:48:26.1334399Z  * [new branch]        feature/runtime-token-scan-cache         -> origin/feature/runtime-token-scan-cache
+2026-07-23T05:48:26.1335251Z  * [new branch]        feature/score-cap-helper-dropin          -> origin/feature/score-cap-helper-dropin
+2026-07-23T05:48:26.1336103Z  * [new branch]        feature/stock-options-liquid-engine      -> origin/feature/stock-options-liquid-engine
+2026-07-23T05:48:26.1336966Z  * [new branch]        feature/strategy-bucket-expansion        -> origin/feature/strategy-bucket-expansion
+2026-07-23T05:48:26.1338059Z  * [new branch]        feature/strategy-certification-engine    -> origin/feature/strategy-certification-engine
+2026-07-23T05:48:26.1338904Z  * [new branch]        feature/strategy-registry                -> origin/feature/strategy-registry
+2026-07-23T05:48:26.1339814Z  * [new branch]        feature/symbol-clustering-portfolio-selection -> origin/feature/symbol-clustering-portfolio-selection
+2026-07-23T05:48:26.1340776Z  * [new branch]        feature/tradebot-antigravity-mcp-v1      -> origin/feature/tradebot-antigravity-mcp-v1
+2026-07-23T05:48:26.1341616Z  * [new branch]        feature/upstox-daily-capture             -> origin/feature/upstox-daily-capture
+2026-07-23T05:48:26.1342378Z  * [new branch]        feature/wfa-backtest                     -> origin/feature/wfa-backtest
+---
+2026-07-23T05:48:26.1433183Z  * [new branch]        qa/full-implemented-strategy-truth-audit-after-fixes -> origin/qa/full-implemented-strategy-truth-audit-after-fixes
+2026-07-23T05:48:26.1434135Z  * [new branch]        rag/roadmap-prod-rag                     -> origin/rag/roadmap-prod-rag
+2026-07-23T05:48:26.1434953Z  * [new branch]        rag/roadmap-prod-rag-7334660385321954389 -> origin/rag/roadmap-prod-rag-7334660385321954389
+2026-07-23T05:48:26.1435796Z  * [new branch]        rag/roadmap-prod-rag-v2                  -> origin/rag/roadmap-prod-rag-v2
+2026-07-23T05:48:26.1436624Z  * [new branch]        ram/agent-command-center-live-sidecar    -> origin/ram/agent-command-center-live-sidecar
+2026-07-23T05:48:26.1437597Z  * [new branch]        ram/backtest-trust-integration           -> origin/ram/backtest-trust-integration
+2026-07-23T05:48:26.1438601Z  * [new branch]        ram/candidate-executability-blocker-evidence-pack -> origin/ram/candidate-executability-blocker-evidence-pack
+2026-07-23T05:48:26.1439613Z  * [new branch]        ram/candidate-outcome-fixture-loader     -> origin/ram/candidate-outcome-fixture-loader
+2026-07-23T05:48:26.1440497Z  * [new branch]        ram/candidate-outcome-report-writer      -> origin/ram/candidate-outcome-report-writer
+2026-07-23T05:48:26.1441377Z  * [new branch]        ram/candidate-outcome-truth-contract     -> origin/ram/candidate-outcome-truth-contract
+2026-07-23T05:48:26.1442309Z  * [new branch]        ram/canonical-feed-runtime-snapshot-truth -> origin/ram/canonical-feed-runtime-snapshot-truth
+2026-07-23T05:48:26.1443640Z  * [new branch]        ram/disable-kiteticker-internal-autoretry-after-terminal-ws1006 -> origin/ram/disable-kiteticker-internal-autoretry-after-terminal-ws1006
+2026-07-23T05:48:26.1444862Z  * [new branch]        ram/edge-next-01-score-separation-audit-fix -> origin/ram/edge-next-01-score-separation-audit-fix
+2026-07-23T05:48:26.1445882Z  * [new branch]        ram/edge-next-02-regime-aware-ranking-weights -> origin/ram/edge-next-02-regime-aware-ranking-weights
+2026-07-23T05:48:26.1446905Z  * [new branch]        ram/edge-next-04-strategy-baseline-comparison -> origin/ram/edge-next-04-strategy-baseline-comparison
+2026-07-23T05:48:26.1448194Z  * [new branch]        ram/edge-next-05-offline-replay-topn-quality-test -> origin/ram/edge-next-05-offline-replay-topn-quality-test
+2026-07-23T05:48:26.1449396Z  * [new branch]        ram/edge-next-06-bearish-range-no-trade-coverage-hardening -> origin/ram/edge-next-06-bearish-range-no-trade-coverage-hardening
+2026-07-23T05:48:26.1450779Z  * [new branch]        ram/execution-truth-normalization-before-candidate-classification -> origin/ram/execution-truth-normalization-before-candidate-classification
+2026-07-23T05:48:26.1451881Z  * [new branch]        ram/feed-latency-gates                   -> origin/ram/feed-latency-gates
+2026-07-23T05:48:26.1452833Z  * [new branch]        ram/feed-stab-05-exact-option-token-freshness-gate -> origin/ram/feed-stab-05-exact-option-token-freshness-gate
+2026-07-23T05:48:26.1453825Z  * [new branch]        ram/feed-stab-07-feed-event-journal      -> origin/ram/feed-stab-07-feed-event-journal
+2026-07-23T05:48:26.1454849Z  * [new branch]        ram/feed-stab-09-recovery-proof-terminal-reactor-gate -> origin/ram/feed-stab-09-recovery-proof-terminal-reactor-gate
+2026-07-23T05:48:26.1456063Z  * [new branch]        ram/fix-executable-truth-normalization-under-stale-feed -> origin/ram/fix-executable-truth-normalization-under-stale-feed
+2026-07-23T05:48:26.1457181Z  * [new branch]        ram/fix-regime-session-context-propagation -> origin/ram/fix-regime-session-context-propagation
+2026-07-23T05:48:26.1458373Z  * [new branch]        ram/fresh-feedtruth-audit-proof-pack     -> origin/ram/fresh-feedtruth-audit-proof-pack
+2026-07-23T05:48:26.1459386Z  * [new branch]        ram/live-rca-auth-tightening             -> origin/ram/live-rca-auth-tightening
+---
+2026-07-23T05:48:26.1457181Z  * [new branch]        ram/fix-regime-session-context-propagation -> origin/ram/fix-regime-session-context-propagation
+2026-07-23T05:48:26.1458373Z  * [new branch]        ram/fresh-feedtruth-audit-proof-pack     -> origin/ram/fresh-feedtruth-audit-proof-pack
+2026-07-23T05:48:26.1459386Z  * [new branch]        ram/live-rca-auth-tightening             -> origin/ram/live-rca-auth-tightening
+2026-07-23T05:48:26.1460182Z  * [new branch]        ram/ml-admission-hardening               -> origin/ram/ml-admission-hardening
+2026-07-23T05:48:26.1460929Z  * [new branch]        ram/next-isolated-work                   -> origin/ram/next-isolated-work
+2026-07-23T05:48:26.1461797Z  * [new branch]        ram/offline-feed-candidate-truth-proof-pack -> origin/ram/offline-feed-candidate-truth-proof-pack
+2026-07-23T05:48:26.1462751Z  * [new branch]        ram/phase2-hard-execution-evidence       -> origin/ram/phase2-hard-execution-evidence
+2026-07-23T05:48:26.1463645Z  * [new branch]        ram/pr-candidate-phase2-truth            -> origin/ram/pr-candidate-phase2-truth
+2026-07-23T05:48:26.1464540Z  * [new branch]        ram/pr-edge-01-runtime-candidate-journal -> origin/ram/pr-edge-01-runtime-candidate-journal
+2026-07-23T05:48:26.1465470Z  * [new branch]        ram/pr-execution-feed-truth-hardening    -> origin/ram/pr-execution-feed-truth-hardening
+2026-07-23T05:48:26.1466374Z  * [new branch]        ram/pr1-candidate-flow-diagnostics       -> origin/ram/pr1-candidate-flow-diagnostics
+2026-07-23T05:48:26.1467237Z  * [new branch]        ram/pr3-score-separation-mainline        -> origin/ram/pr3-score-separation-mainline
+2026-07-23T05:48:26.1468296Z  * [new branch]        ram/pr4-selector-fallback-contract       -> origin/ram/pr4-selector-fallback-contract
+2026-07-23T05:48:26.1469231Z  * [new branch]        ram/pr502-command-center-session-scoped-rca -> origin/ram/pr502-command-center-session-scoped-rca
+2026-07-23T05:48:26.1470222Z  * [new branch]        ram/pr521-candidate-supply-zero-attribution -> origin/ram/pr521-candidate-supply-zero-attribution
+2026-07-23T05:48:26.1471481Z  * [new branch]        ram/pr522-current-session-feed-lifecycle-stabilization -> origin/ram/pr522-current-session-feed-lifecycle-stabilization
+2026-07-23T05:48:26.1472693Z  * [new branch]        ram/pr523-live-option-feed-truth-after-subscribe-ws1006 -> origin/ram/pr523-live-option-feed-truth-after-subscribe-ws1006
+2026-07-23T05:48:26.1473771Z  * [new branch]        ram/pr525-ws1006-feed-survival-recovery  -> origin/ram/pr525-ws1006-feed-survival-recovery
+2026-07-23T05:48:26.1474710Z  * [new branch]        ram/pr526-single-feed-recovery-coordinator -> origin/ram/pr526-single-feed-recovery-coordinator
+2026-07-23T05:48:26.1475662Z  * [new branch]        ram/pr527-candidate-lifecycle-snapshot   -> origin/ram/pr527-candidate-lifecycle-snapshot
+2026-07-23T05:48:26.1476544Z  * [new branch]        ram/pr528-phase2-boundary-cleanup        -> origin/ram/pr528-phase2-boundary-cleanup
+2026-07-23T05:48:26.1477612Z  * [new branch]        ram/pr529-regime-aware-dynamic-scoring-profiles -> origin/ram/pr529-regime-aware-dynamic-scoring-profiles
+2026-07-23T05:48:26.1478747Z  * [new branch]        ram/pr530-regime-profile-opportunity-scoring-opt-in -> origin/ram/pr530-regime-profile-opportunity-scoring-opt-in
+2026-07-23T05:48:26.1479857Z  * [new branch]        ram/pr531-ranking-profile-metadata-propagation -> origin/ram/pr531-ranking-profile-metadata-propagation
+2026-07-23T05:48:26.1480855Z  * [new branch]        ram/pr532-advanced-score-delta-evidence  -> origin/ram/pr532-advanced-score-delta-evidence
+2026-07-23T05:48:26.1481646Z  * [new branch]        ram/prod-fixes                           -> origin/ram/prod-fixes
+---
+2026-07-23T05:48:26.1474710Z  * [new branch]        ram/pr526-single-feed-recovery-coordinator -> origin/ram/pr526-single-feed-recovery-coordinator
+2026-07-23T05:48:26.1475662Z  * [new branch]        ram/pr527-candidate-lifecycle-snapshot   -> origin/ram/pr527-candidate-lifecycle-snapshot
+2026-07-23T05:48:26.1476544Z  * [new branch]        ram/pr528-phase2-boundary-cleanup        -> origin/ram/pr528-phase2-boundary-cleanup
+2026-07-23T05:48:26.1477612Z  * [new branch]        ram/pr529-regime-aware-dynamic-scoring-profiles -> origin/ram/pr529-regime-aware-dynamic-scoring-profiles
+2026-07-23T05:48:26.1478747Z  * [new branch]        ram/pr530-regime-profile-opportunity-scoring-opt-in -> origin/ram/pr530-regime-profile-opportunity-scoring-opt-in
+2026-07-23T05:48:26.1479857Z  * [new branch]        ram/pr531-ranking-profile-metadata-propagation -> origin/ram/pr531-ranking-profile-metadata-propagation
+2026-07-23T05:48:26.1480855Z  * [new branch]        ram/pr532-advanced-score-delta-evidence  -> origin/ram/pr532-advanced-score-delta-evidence
+2026-07-23T05:48:26.1481646Z  * [new branch]        ram/prod-fixes                           -> origin/ram/prod-fixes
+2026-07-23T05:48:26.1482453Z  * [new branch]        ram/ranking-snapshot-truth-label-contract -> origin/ram/ranking-snapshot-truth-label-contract
+2026-07-23T05:48:26.1483382Z  * [new branch]        ram/real-candidate-supply-contract       -> origin/ram/real-candidate-supply-contract
+2026-07-23T05:48:26.1484199Z  * [new branch]        ram/replay-context-proof                 -> origin/ram/replay-context-proof
+2026-07-23T05:48:26.1485083Z  * [new branch]        ram/stale-option-mutation-guard-tightening -> origin/ram/stale-option-mutation-guard-tightening
+2026-07-23T05:48:26.1486065Z  * [new branch]        ram/stale-option-refresh-churn-guard     -> origin/ram/stale-option-refresh-churn-guard
+2026-07-23T05:48:26.1487047Z  * [new branch]        ram/trade-quality-truth-audit            -> origin/ram/trade-quality-truth-audit
+2026-07-23T05:48:26.1488086Z  * [new branch]        ram/tradebot-agent-command-center        -> origin/ram/tradebot-agent-command-center
+2026-07-23T05:48:26.1489077Z  * [new branch]        ram/ws1006-reactor-restart-suppression-regression -> origin/ram/ws1006-reactor-restart-suppression-regression
+2026-07-23T05:48:26.1490094Z  * [new branch]        ram/ws1006-reactor-terminal-state-guard  -> origin/ram/ws1006-reactor-terminal-state-guard
+2026-07-23T05:48:26.1491059Z  * [new branch]        rebuild/opportunity-engine-v2-product-bible -> origin/rebuild/opportunity-engine-v2-product-bible
+2026-07-23T05:48:26.1491996Z  * [new branch]        research/aeron7-pattern-matrix-v1        -> origin/research/aeron7-pattern-matrix-v1
+2026-07-23T05:48:26.1493037Z  * [new branch]        research/chatgpt-opening-dislocation-failure-reclaim-v1 -> origin/research/chatgpt-opening-dislocation-failure-reclaim-v1
+2026-07-23T05:48:26.1494170Z  * [new branch]        research/directional-option-repricing-lag-v3 -> origin/research/directional-option-repricing-lag-v3
+2026-07-23T05:48:26.1495218Z  * [new branch]        research/four-strategy-data-suitability-v2-clean -> origin/research/four-strategy-data-suitability-v2-clean
+2026-07-23T05:48:26.1496215Z  * [new branch]        research/htf-cost-adjusted-edge-retest   -> origin/research/htf-cost-adjusted-edge-retest
+2026-07-23T05:48:26.1497212Z  * [new branch]        research/independent-underlying-confirmation-v3 -> origin/research/independent-underlying-confirmation-v3
+2026-07-23T05:48:26.1498616Z  * [new branch]        research/independent-underlying-evaluation-v3 -> origin/research/independent-underlying-evaluation-v3
+2026-07-23T05:48:26.1499665Z  * [new branch]        research/kite-five-minute-governed-discovery-v1 -> origin/research/kite-five-minute-governed-discovery-v1
+---
+2026-07-23T05:48:26.1544300Z  * [new branch]        trace/latency-guard-degrade-exit-only-prebuild-skip-rca -> origin/trace/latency-guard-degrade-exit-only-prebuild-skip-rca
+2026-07-23T05:48:26.1545492Z  * [new branch]        trace/phase2-candidate-starvation-after-indicators -> origin/trace/phase2-candidate-starvation-after-indicators
+2026-07-23T05:48:26.1546751Z  * [new branch]        trace/regime-unstable-candidate-starvation-under-healthy-feed -> origin/trace/regime-unstable-candidate-starvation-under-healthy-feed
+2026-07-23T05:48:26.1548070Z  * [new branch]        trace/strategy-no-qualified-reasons      -> origin/trace/strategy-no-qualified-reasons
+2026-07-23T05:48:26.1549054Z  * [new branch]        trace/strategy-qualification-predicate-reasons -> origin/trace/strategy-qualification-predicate-reasons
+2026-07-23T05:48:26.1549902Z  * [new branch]        update-scripts                           -> origin/update-scripts
+2026-07-23T05:48:26.1550662Z  * [new branch]        validation/live-evidence-pack-v2         -> origin/validation/live-evidence-pack-v2
+2026-07-23T05:48:26.1551523Z  * [new branch]        validation/live-market-evidence-pack     -> origin/validation/live-market-evidence-pack
+2026-07-23T05:48:26.1552341Z  * [new tag]           kite-five-minute-corpus-v1               -> kite-five-minute-corpus-v1
+2026-07-23T05:48:26.1553112Z  * [new tag]           phase1_candidate_shadow_stable_2026_03_24 -> phase1_candidate_shadow_stable_2026_03_24
+2026-07-23T05:48:26.1553964Z  * [new ref]           44df60c14f53280ee6b4f5f2552e2754ff191284 -> pull/707/merge
+2026-07-23T05:48:26.1618330Z ##[endgroup]
+2026-07-23T05:48:26.1619282Z ##[group]Determining the checkout info
+2026-07-23T05:48:26.1620258Z ##[endgroup]
+2026-07-23T05:48:26.1621474Z [command]/usr/bin/git sparse-checkout disable
+2026-07-23T05:48:26.1679927Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-23T05:48:26.1718213Z ##[group]Checking out the ref
+2026-07-23T05:48:26.1723160Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/707/merge
+2026-07-23T05:48:27.1902446Z Updating files:  47% (2556/5429)
+2026-07-23T05:48:27.2009060Z Updating files:  48% (2606/5429)
+2026-07-23T05:48:27.2105718Z Updating files:  49% (2661/5429)
+2026-07-23T05:48:27.2205787Z Updating files:  50% (2715/5429)
+2026-07-23T05:48:27.2313934Z Updating files:  51% (2769/5429)
+2026-07-23T05:48:27.2404353Z Updating files:  52% (2824/5429)
+2026-07-23T05:48:27.2501263Z Updating files:  53% (2878/5429)
+2026-07-23T05:48:27.2590267Z Updating files:  54% (2932/5429)
+---
+2026-07-23T05:48:26.1545492Z  * [new branch]        trace/phase2-candidate-starvation-after-indicators -> origin/trace/phase2-candidate-starvation-after-indicators
+2026-07-23T05:48:26.1546751Z  * [new branch]        trace/regime-unstable-candidate-starvation-under-healthy-feed -> origin/trace/regime-unstable-candidate-starvation-under-healthy-feed
+2026-07-23T05:48:26.1548070Z  * [new branch]        trace/strategy-no-qualified-reasons      -> origin/trace/strategy-no-qualified-reasons
+2026-07-23T05:48:26.1549054Z  * [new branch]        trace/strategy-qualification-predicate-reasons -> origin/trace/strategy-qualification-predicate-reasons
+2026-07-23T05:48:26.1549902Z  * [new branch]        update-scripts                           -> origin/update-scripts
+2026-07-23T05:48:26.1550662Z  * [new branch]        validation/live-evidence-pack-v2         -> origin/validation/live-evidence-pack-v2
+2026-07-23T05:48:26.1551523Z  * [new branch]        validation/live-market-evidence-pack     -> origin/validation/live-market-evidence-pack
+2026-07-23T05:48:26.1552341Z  * [new tag]           kite-five-minute-corpus-v1               -> kite-five-minute-corpus-v1
+2026-07-23T05:48:26.1553112Z  * [new tag]           phase1_candidate_shadow_stable_2026_03_24 -> phase1_candidate_shadow_stable_2026_03_24
+2026-07-23T05:48:26.1553964Z  * [new ref]           44df60c14f53280ee6b4f5f2552e2754ff191284 -> pull/707/merge
+2026-07-23T05:48:26.1618330Z ##[endgroup]
+2026-07-23T05:48:26.1619282Z ##[group]Determining the checkout info
+2026-07-23T05:48:26.1620258Z ##[endgroup]
+2026-07-23T05:48:26.1621474Z [command]/usr/bin/git sparse-checkout disable
+2026-07-23T05:48:26.1679927Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-23T05:48:26.1718213Z ##[group]Checking out the ref
+2026-07-23T05:48:26.1723160Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/707/merge
+2026-07-23T05:48:27.1902446Z Updating files:  47% (2556/5429)
+2026-07-23T05:48:27.2009060Z Updating files:  48% (2606/5429)
+2026-07-23T05:48:27.2105718Z Updating files:  49% (2661/5429)
+2026-07-23T05:48:27.2205787Z Updating files:  50% (2715/5429)
+2026-07-23T05:48:27.2313934Z Updating files:  51% (2769/5429)
+2026-07-23T05:48:27.2404353Z Updating files:  52% (2824/5429)
+2026-07-23T05:48:27.2501263Z Updating files:  53% (2878/5429)
+2026-07-23T05:48:27.2590267Z Updating files:  54% (2932/5429)
+2026-07-23T05:48:27.2678283Z Updating files:  55% (2986/5429)
+---
+2026-07-23T05:48:28.7349308Z ##[group]Run git fetch origin "main" --depth=1
+2026-07-23T05:48:28.7349759Z git fetch origin "main" --depth=1
+2026-07-23T05:48:28.7402497Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:28.7402786Z ##[endgroup]
+2026-07-23T05:48:29.0678009Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-23T05:48:29.0678679Z  * branch              main       -> FETCH_HEAD
+2026-07-23T05:48:29.0762471Z ##[group]Run python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0763017Z python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0812072Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:29.0812330Z env:
+2026-07-23T05:48:29.0812544Z   AGENT_REVIEW_BASE_REF: origin/main
+2026-07-23T05:48:29.0813025Z ##[endgroup]
+2026-07-23T05:48:29.1264464Z AGENT REVIEW EVIDENCE GATE: FAILED
+2026-07-23T05:48:29.1264943Z Changed files:
+2026-07-23T05:48:29.1265397Z   - .github/workflows/upstox_v3_depth_capture_contract.yml
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+---
+2026-07-23T05:48:28.7349759Z git fetch origin "main" --depth=1
+2026-07-23T05:48:28.7402497Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:28.7402786Z ##[endgroup]
+2026-07-23T05:48:29.0678009Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-23T05:48:29.0678679Z  * branch              main       -> FETCH_HEAD
+2026-07-23T05:48:29.0762471Z ##[group]Run python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0763017Z python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0812072Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:29.0812330Z env:
+2026-07-23T05:48:29.0812544Z   AGENT_REVIEW_BASE_REF: origin/main
+2026-07-23T05:48:29.0813025Z ##[endgroup]
+2026-07-23T05:48:29.1264464Z AGENT REVIEW EVIDENCE GATE: FAILED
+2026-07-23T05:48:29.1264943Z Changed files:
+2026-07-23T05:48:29.1265397Z   - .github/workflows/upstox_v3_depth_capture_contract.yml
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+---
+2026-07-23T05:48:29.0762471Z ##[group]Run python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0763017Z python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0812072Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:29.0812330Z env:
+2026-07-23T05:48:29.0812544Z   AGENT_REVIEW_BASE_REF: origin/main
+2026-07-23T05:48:29.0813025Z ##[endgroup]
+2026-07-23T05:48:29.1264464Z AGENT REVIEW EVIDENCE GATE: FAILED
+2026-07-23T05:48:29.1264943Z Changed files:
+2026-07-23T05:48:29.1265397Z   - .github/workflows/upstox_v3_depth_capture_contract.yml
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+2026-07-23T05:48:29.2494621Z Temporarily overriding HOME='/home/runner/work/_temp/27e50385-930d-4b86-96a4-0e4d8aaafc85' before making global git config changes
+2026-07-23T05:48:29.2496116Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-23T05:48:29.2500540Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-23T05:48:29.2545829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-23T05:48:29.2585953Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+---
+2026-07-23T05:48:29.1265397Z   - .github/workflows/upstox_v3_depth_capture_contract.yml
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+2026-07-23T05:48:29.2494621Z Temporarily overriding HOME='/home/runner/work/_temp/27e50385-930d-4b86-96a4-0e4d8aaafc85' before making global git config changes
+2026-07-23T05:48:29.2496116Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-23T05:48:29.2500540Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-23T05:48:29.2545829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-23T05:48:29.2585953Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-23T05:48:29.2867000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-23T05:48:29.2899491Z http.https://github.com/.extraheader
+2026-07-23T05:48:29.2911616Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-23T05:48:29.2948994Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-23T05:48:29.3266981Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-23T05:48:29.3355871Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-23T05:48:29.3815939Z Cleaning up orphan processes
+2026-07-23T05:48:29.4053126Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+---
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+2026-07-23T05:48:29.2494621Z Temporarily overriding HOME='/home/runner/work/_temp/27e50385-930d-4b86-96a4-0e4d8aaafc85' before making global git config changes
+2026-07-23T05:48:29.2496116Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-23T05:48:29.2500540Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-23T05:48:29.2545829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-23T05:48:29.2585953Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-23T05:48:29.2867000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-23T05:48:29.2899491Z http.https://github.com/.extraheader
+2026-07-23T05:48:29.2911616Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-23T05:48:29.2948994Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-23T05:48:29.3266981Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-23T05:48:29.3355871Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-23T05:48:29.3815939Z Cleaning up orphan processes
+2026-07-23T05:48:29.4053126Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+---
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+2026-07-23T05:48:29.2494621Z Temporarily overriding HOME='/home/runner/work/_temp/27e50385-930d-4b86-96a4-0e4d8aaafc85' before making global git config changes
+2026-07-23T05:48:29.2496116Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-23T05:48:29.2500540Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-23T05:48:29.2545829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-23T05:48:29.2585953Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-23T05:48:29.2867000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-23T05:48:29.2899491Z http.https://github.com/.extraheader
+2026-07-23T05:48:29.2911616Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-23T05:48:29.2948994Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-23T05:48:29.3266981Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-23T05:48:29.3355871Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-23T05:48:29.3815939Z Cleaning up orphan processes
+2026-07-23T05:48:29.4053126Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+---
+--- FINAL LOG TAIL ---
+2026-07-23T05:48:26.1502761Z  * [new branch]        research/ml-strategy-discovery-core      -> origin/research/ml-strategy-discovery-core
+2026-07-23T05:48:26.1503705Z  * [new branch]        research/ml-strategy-discovery-foundation-v1 -> origin/research/ml-strategy-discovery-foundation-v1
+2026-07-23T05:48:26.1504699Z  * [new branch]        research/ml-strategy-discovery-v2-stability -> origin/research/ml-strategy-discovery-v2-stability
+2026-07-23T05:48:26.1505665Z  * [new branch]        research/opening-dislocation-reversal-v1 -> origin/research/opening-dislocation-reversal-v1
+2026-07-23T05:48:26.1506633Z  * [new branch]        research/opening-range-retest-causal-replay -> origin/research/opening-range-retest-causal-replay
+2026-07-23T05:48:26.1507738Z  * [new branch]        research/orb-corrected-score-edge-cf1b639 -> origin/research/orb-corrected-score-edge-cf1b639
+2026-07-23T05:48:26.1508648Z  * [new branch]        research/orb-fidelity-audit-cf1b639      -> origin/research/orb-fidelity-audit-cf1b639
+2026-07-23T05:48:26.1509608Z  * [new branch]        research/orb-option-data-recoverability-cf1b639 -> origin/research/orb-option-data-recoverability-cf1b639
+2026-07-23T05:48:26.1510559Z  * [new branch]        research/orb-outcomes-v2-certified       -> origin/research/orb-outcomes-v2-certified
+2026-07-23T05:48:26.1511448Z  * [new branch]        research/orb-outcomes-v2-clean-history   -> origin/research/orb-outcomes-v2-clean-history
+2026-07-23T05:48:26.1512397Z  * [new branch]        research/orb-phase1-v2-recertification   -> origin/research/orb-phase1-v2-recertification
+2026-07-23T05:48:26.1513306Z  * [new branch]        research/orb-structural-edge-screen-v1   -> origin/research/orb-structural-edge-screen-v1
+2026-07-23T05:48:26.1514199Z  * [new branch]        research/orb-underlying-edge-cf1b639     -> origin/research/orb-underlying-edge-cf1b639
+2026-07-23T05:48:26.1515348Z  * [new branch]        research/postmerge-mean-reversion-rerun-v1 -> origin/research/postmerge-mean-reversion-rerun-v1
+2026-07-23T05:48:26.1516340Z  * [new branch]        research/postmerge-mean-reversion-rerun-v2 -> origin/research/postmerge-mean-reversion-rerun-v2
+2026-07-23T05:48:26.1517397Z  * [new branch]        research/postmerge-mean-reversion-rerun-v3 -> origin/research/postmerge-mean-reversion-rerun-v3
+2026-07-23T05:48:26.1518424Z  * [new branch]        research/postmerge-mean-reversion-rerun-v3-patch -> origin/research/postmerge-mean-reversion-rerun-v3-patch
+2026-07-23T05:48:26.1519512Z  * [new branch]        research/postmerge-mean-reversion-rerun-v3-prep -> origin/research/postmerge-mean-reversion-rerun-v3-prep
+2026-07-23T05:48:26.1520571Z  * [new branch]        research/postmerge-mean-reversion-rerun-v3-work -> origin/research/postmerge-mean-reversion-rerun-v3-work
+2026-07-23T05:48:26.1521711Z  * [new branch]        research/prospective-structural-edge-fresh-lockbox-v2 -> origin/research/prospective-structural-edge-fresh-lockbox-v2
+2026-07-23T05:48:26.1522817Z  * [new branch]        research/residual-liquidity-exhaustion-mr-v2 -> origin/research/residual-liquidity-exhaustion-mr-v2
+2026-07-23T05:48:26.1523746Z  * [new branch]        research/rsi2-mean-reversion-edge        -> origin/research/rsi2-mean-reversion-edge
+2026-07-23T05:48:26.1524615Z  * [new branch]        research/strategy-outcomes-foundation    -> origin/research/strategy-outcomes-foundation
+2026-07-23T05:48:26.1525515Z  * [new branch]        research/strategy-replay-foundation      -> origin/research/strategy-replay-foundation
+2026-07-23T05:48:26.1526561Z  * [new branch]        research/structural-edge-prove-or-kill-v1 -> origin/research/structural-edge-prove-or-kill-v1
+2026-07-23T05:48:26.1527669Z  * [new branch]        research/structural-pattern-suite-v1     -> origin/research/structural-pattern-suite-v1
+2026-07-23T05:48:26.1528613Z  * [new branch]        research/structural-state-discovery-v1   -> origin/research/structural-state-discovery-v1
+2026-07-23T05:48:26.1529626Z  * [new branch]        research/three-year-structural-edge-treasure-hunt -> origin/research/three-year-structural-edge-treasure-hunt
+2026-07-23T05:48:26.1530627Z  * [new branch]        research/trend-pullback-horizon-sweep    -> origin/research/trend-pullback-horizon-sweep
+2026-07-23T05:48:26.1531544Z  * [new branch]        research/upstox-depth-shadow-capture-v2  -> origin/research/upstox-depth-shadow-capture-v2
+2026-07-23T05:48:26.1532448Z  * [new branch]        research/vibe-trading-sidecar-pilot      -> origin/research/vibe-trading-sidecar-pilot
+2026-07-23T05:48:26.1533326Z  * [new branch]        rewrite/depth-subscription-engine        -> origin/rewrite/depth-subscription-engine
+2026-07-23T05:48:26.1534209Z  * [new branch]        stabilization/tb-edge-candidate-unblock  -> origin/stabilization/tb-edge-candidate-unblock
+2026-07-23T05:48:26.1535167Z  * [new branch]        tb-edge-01-kill-fallback-execution-in-live -> origin/tb-edge-01-kill-fallback-execution-in-live
+2026-07-23T05:48:26.1536124Z  * [new branch]        tb-edge-01-kill-fallback-execution-live  -> origin/tb-edge-01-kill-fallback-execution-live
+2026-07-23T05:48:26.1536999Z  * [new branch]        test-stab-01-restore-main-suite          -> origin/test-stab-01-restore-main-suite
+2026-07-23T05:48:26.1538099Z  * [new branch]        test-stab-02-depth-subscription-pruning  -> origin/test-stab-02-depth-subscription-pruning
+2026-07-23T05:48:26.1539005Z  * [new branch]        test-stab-04a-websocket-compat-code      -> origin/test-stab-04a-websocket-compat-code
+2026-07-23T05:48:26.1539847Z  * [new branch]        test/ai-cert-agent-evals-v2              -> origin/test/ai-cert-agent-evals-v2
+2026-07-23T05:48:26.1540663Z  * [new branch]        test/ai-cert-agent-evals-v2-main         -> origin/test/ai-cert-agent-evals-v2-main
+2026-07-23T05:48:26.1541588Z  * [new branch]        test/opening-range-retest-temporal-fixtures -> origin/test/opening-range-retest-temporal-fixtures
+2026-07-23T05:48:26.1542643Z  * [new branch]        tmp-test-should-not-exist                -> origin/tmp-test-should-not-exist
+2026-07-23T05:48:26.1543354Z  * [new branch]        tmp-tree-test                            -> origin/tmp-tree-test
+2026-07-23T05:48:26.1544300Z  * [new branch]        trace/latency-guard-degrade-exit-only-prebuild-skip-rca -> origin/trace/latency-guard-degrade-exit-only-prebuild-skip-rca
+2026-07-23T05:48:26.1545492Z  * [new branch]        trace/phase2-candidate-starvation-after-indicators -> origin/trace/phase2-candidate-starvation-after-indicators
+2026-07-23T05:48:26.1546751Z  * [new branch]        trace/regime-unstable-candidate-starvation-under-healthy-feed -> origin/trace/regime-unstable-candidate-starvation-under-healthy-feed
+2026-07-23T05:48:26.1548070Z  * [new branch]        trace/strategy-no-qualified-reasons      -> origin/trace/strategy-no-qualified-reasons
+2026-07-23T05:48:26.1549054Z  * [new branch]        trace/strategy-qualification-predicate-reasons -> origin/trace/strategy-qualification-predicate-reasons
+2026-07-23T05:48:26.1549902Z  * [new branch]        update-scripts                           -> origin/update-scripts
+2026-07-23T05:48:26.1550662Z  * [new branch]        validation/live-evidence-pack-v2         -> origin/validation/live-evidence-pack-v2
+2026-07-23T05:48:26.1551523Z  * [new branch]        validation/live-market-evidence-pack     -> origin/validation/live-market-evidence-pack
+2026-07-23T05:48:26.1552341Z  * [new tag]           kite-five-minute-corpus-v1               -> kite-five-minute-corpus-v1
+2026-07-23T05:48:26.1553112Z  * [new tag]           phase1_candidate_shadow_stable_2026_03_24 -> phase1_candidate_shadow_stable_2026_03_24
+2026-07-23T05:48:26.1553964Z  * [new ref]           44df60c14f53280ee6b4f5f2552e2754ff191284 -> pull/707/merge
+2026-07-23T05:48:26.1618330Z ##[endgroup]
+2026-07-23T05:48:26.1619282Z ##[group]Determining the checkout info
+2026-07-23T05:48:26.1620258Z ##[endgroup]
+2026-07-23T05:48:26.1621474Z [command]/usr/bin/git sparse-checkout disable
+2026-07-23T05:48:26.1679927Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-23T05:48:26.1718213Z ##[group]Checking out the ref
+2026-07-23T05:48:26.1723160Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/707/merge
+2026-07-23T05:48:27.1902446Z Updating files:  47% (2556/5429)
+2026-07-23T05:48:27.2009060Z Updating files:  48% (2606/5429)
+2026-07-23T05:48:27.2105718Z Updating files:  49% (2661/5429)
+2026-07-23T05:48:27.2205787Z Updating files:  50% (2715/5429)
+2026-07-23T05:48:27.2313934Z Updating files:  51% (2769/5429)
+2026-07-23T05:48:27.2404353Z Updating files:  52% (2824/5429)
+2026-07-23T05:48:27.2501263Z Updating files:  53% (2878/5429)
+2026-07-23T05:48:27.2590267Z Updating files:  54% (2932/5429)
+2026-07-23T05:48:27.2678283Z Updating files:  55% (2986/5429)
+2026-07-23T05:48:27.2772078Z Updating files:  56% (3041/5429)
+2026-07-23T05:48:27.2867964Z Updating files:  57% (3095/5429)
+2026-07-23T05:48:27.2962873Z Updating files:  58% (3149/5429)
+2026-07-23T05:48:27.3058992Z Updating files:  59% (3204/5429)
+2026-07-23T05:48:27.3164514Z Updating files:  60% (3258/5429)
+2026-07-23T05:48:27.3268930Z Updating files:  61% (3312/5429)
+2026-07-23T05:48:27.3379032Z Updating files:  62% (3366/5429)
+2026-07-23T05:48:27.3469144Z Updating files:  63% (3421/5429)
+2026-07-23T05:48:27.3561883Z Updating files:  64% (3475/5429)
+2026-07-23T05:48:27.4116001Z Updating files:  65% (3529/5429)
+2026-07-23T05:48:27.4152004Z Updating files:  66% (3584/5429)
+2026-07-23T05:48:27.4509756Z Updating files:  67% (3638/5429)
+2026-07-23T05:48:27.4547240Z Updating files:  68% (3692/5429)
+2026-07-23T05:48:28.3422280Z Updating files:  69% (3747/5429)
+2026-07-23T05:48:28.5500083Z Updating files:  69% (3765/5429)
+2026-07-23T05:48:28.5531911Z Updating files:  70% (3801/5429)
+2026-07-23T05:48:28.5562036Z Updating files:  71% (3855/5429)
+2026-07-23T05:48:28.5593408Z Updating files:  72% (3909/5429)
+2026-07-23T05:48:28.5623659Z Updating files:  73% (3964/5429)
+2026-07-23T05:48:28.5662395Z Updating files:  74% (4018/5429)
+2026-07-23T05:48:28.5691216Z Updating files:  75% (4072/5429)
+2026-07-23T05:48:28.5723940Z Updating files:  76% (4127/5429)
+2026-07-23T05:48:28.5777218Z Updating files:  77% (4181/5429)
+2026-07-23T05:48:28.5809069Z Updating files:  78% (4235/5429)
+2026-07-23T05:48:28.5837432Z Updating files:  79% (4289/5429)
+2026-07-23T05:48:28.5871235Z Updating files:  80% (4344/5429)
+2026-07-23T05:48:28.5902706Z Updating files:  81% (4398/5429)
+2026-07-23T05:48:28.5936331Z Updating files:  82% (4452/5429)
+2026-07-23T05:48:28.5966504Z Updating files:  83% (4507/5429)
+2026-07-23T05:48:28.5997123Z Updating files:  84% (4561/5429)
+2026-07-23T05:48:28.6029882Z Updating files:  85% (4615/5429)
+2026-07-23T05:48:28.6066309Z Updating files:  86% (4669/5429)
+2026-07-23T05:48:28.6097664Z Updating files:  87% (4724/5429)
+2026-07-23T05:48:28.6133207Z Updating files:  88% (4778/5429)
+2026-07-23T05:48:28.6164592Z Updating files:  89% (4832/5429)
+2026-07-23T05:48:28.6198059Z Updating files:  90% (4887/5429)
+2026-07-23T05:48:28.6231810Z Updating files:  91% (4941/5429)
+2026-07-23T05:48:28.6262781Z Updating files:  92% (4995/5429)
+2026-07-23T05:48:28.6294481Z Updating files:  93% (5049/5429)
+2026-07-23T05:48:28.6325980Z Updating files:  94% (5104/5429)
+2026-07-23T05:48:28.6353076Z Updating files:  95% (5158/5429)
+2026-07-23T05:48:28.6381975Z Updating files:  96% (5212/5429)
+2026-07-23T05:48:28.6415920Z Updating files:  97% (5267/5429)
+2026-07-23T05:48:28.6443160Z Updating files:  98% (5321/5429)
+2026-07-23T05:48:28.6478091Z Updating files:  99% (5375/5429)
+2026-07-23T05:48:28.6478637Z Updating files: 100% (5429/5429)
+2026-07-23T05:48:28.6479027Z Updating files: 100% (5429/5429), done.
+2026-07-23T05:48:28.6537499Z Note: switching to 'refs/remotes/pull/707/merge'.
+2026-07-23T05:48:28.6538035Z 
+2026-07-23T05:48:28.6538389Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-07-23T05:48:28.6539046Z changes and commit them, and you can discard any commits you make in this
+2026-07-23T05:48:28.6539574Z state without impacting any branches by switching back to a branch.
+2026-07-23T05:48:28.6539856Z 
+2026-07-23T05:48:28.6540040Z If you want to create a new branch to retain commits you create, you may
+2026-07-23T05:48:28.6540511Z do so (now or later) by using -c with the switch command. Example:
+2026-07-23T05:48:28.6540776Z 
+2026-07-23T05:48:28.6540889Z   git switch -c <new-branch-name>
+2026-07-23T05:48:28.6541077Z 
+2026-07-23T05:48:28.6541186Z Or undo this operation with:
+2026-07-23T05:48:28.6541343Z 
+2026-07-23T05:48:28.6541441Z   git switch -
+2026-07-23T05:48:28.6541566Z 
+2026-07-23T05:48:28.6541790Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-07-23T05:48:28.6542095Z 
+2026-07-23T05:48:28.6542455Z HEAD is now at 44df60c1 Merge 4b5696c34250699fbd7f7f1460d34b0da05121c3 into db6f384144f3937e96a67bd449f67e5f1b274c65
+2026-07-23T05:48:28.6926648Z Encountered 1 file that should have been a pointer, but wasn't:
+2026-07-23T05:48:28.6927561Z 	runtime/strategy_validation/resolved_option_ticks_20260702.parquet
+2026-07-23T05:48:28.7011314Z ##[endgroup]
+2026-07-23T05:48:28.7066203Z [command]/usr/bin/git log -1 --format=%H
+2026-07-23T05:48:28.7105644Z 44df60c14f53280ee6b4f5f2552e2754ff191284
+2026-07-23T05:48:28.7349308Z ##[group]Run git fetch origin "main" --depth=1
+2026-07-23T05:48:28.7349759Z git fetch origin "main" --depth=1
+2026-07-23T05:48:28.7402497Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:28.7402786Z ##[endgroup]
+2026-07-23T05:48:29.0678009Z From https://github.com/ramgolladi1503-sys/tradebot
+2026-07-23T05:48:29.0678679Z  * branch              main       -> FETCH_HEAD
+2026-07-23T05:48:29.0762471Z ##[group]Run python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0763017Z python scripts/validate_agent_review_evidence.py
+2026-07-23T05:48:29.0812072Z shell: /usr/bin/bash -e {0}
+2026-07-23T05:48:29.0812330Z env:
+2026-07-23T05:48:29.0812544Z   AGENT_REVIEW_BASE_REF: origin/main
+2026-07-23T05:48:29.0813025Z ##[endgroup]
+2026-07-23T05:48:29.1264464Z AGENT REVIEW EVIDENCE GATE: FAILED
+2026-07-23T05:48:29.1264943Z Changed files:
+2026-07-23T05:48:29.1265397Z   - .github/workflows/upstox_v3_depth_capture_contract.yml
+2026-07-23T05:48:29.1265979Z   - core/upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1266454Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md
+2026-07-23T05:48:29.1266942Z   - scripts/capture_upstox_market_daily.py
+2026-07-23T05:48:29.1267666Z   - tests/test_upstox_v3_depth_capture_persistence.py
+2026-07-23T05:48:29.1268138Z   - tests/test_upstox_v3_feed_parser.py
+2026-07-23T05:48:29.1268518Z Errors:
+2026-07-23T05:48:29.1270126Z   - docs/agent_reviews/upstox_v3_depth_capture_v1.md: missing required sections: Agent Work Contract, Scope Guard, Grill Me Review, Hermes Review, GSD Review, QA / Safety Review, Acceptance Proof, Runtime Proof Required After Merge, What This PR Does Not Prove, Human Approval
+2026-07-23T05:48:29.1333786Z ##[error]Process completed with exit code 1.
+2026-07-23T05:48:29.1543734Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-23T05:48:29.1545652Z Post job cleanup.
+2026-07-23T05:48:29.2410080Z [command]/usr/bin/git version
+2026-07-23T05:48:29.2455041Z git version 2.54.0
+2026-07-23T05:48:29.2494621Z Temporarily overriding HOME='/home/runner/work/_temp/27e50385-930d-4b86-96a4-0e4d8aaafc85' before making global git config changes
+2026-07-23T05:48:29.2496116Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-23T05:48:29.2500540Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tradebot/tradebot
+2026-07-23T05:48:29.2545829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-23T05:48:29.2585953Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-23T05:48:29.2867000Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-23T05:48:29.2899491Z http.https://github.com/.extraheader
+2026-07-23T05:48:29.2911616Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-07-23T05:48:29.2948994Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-23T05:48:29.3266981Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-23T05:48:29.3355871Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-23T05:48:29.3815939Z Cleaning up orphan processes
+2026-07-23T05:48:29.4053126Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
