@@ -83,14 +83,19 @@ def _epoch_ms(value: Any) -> int | None:
 
 
 def _normalize_depth_levels(raw_quotes: Any) -> list[dict[str, Any]]:
+    """Normalize only explicit two-sided V3 depth fields; never infer a side."""
     if raw_quotes is None:
         return []
     if isinstance(raw_quotes, Mapping):
         quotes: Sequence[Any] = [raw_quotes]
-    elif isinstance(raw_quotes, Sequence) and not isinstance(raw_quotes, (str, bytes, bytearray)):
+    elif isinstance(raw_quotes, Sequence) and not isinstance(
+        raw_quotes, (str, bytes, bytearray)
+    ):
         quotes = raw_quotes
     else:
-        raise UpstoxV3ParseError("market depth quote container is not a mapping or sequence")
+        raise UpstoxV3ParseError(
+            "market depth quote container is not a mapping or sequence"
+        )
 
     levels: list[dict[str, Any]] = []
     for raw in quotes:
@@ -98,19 +103,28 @@ def _normalize_depth_levels(raw_quotes: Any) -> list[dict[str, Any]]:
         if quote is None:
             raise UpstoxV3ParseError("market depth level is not a mapping")
         bid_price = _finite_float(
-            _first(quote, "bidP", "bp", "bid_p", "bidPrice", "bid_price", "price")
+            _first(quote, "bidP", "bp", "bid_p", "bidPrice", "bid_price")
         )
         ask_price = _finite_float(
             _first(quote, "askP", "ap", "ask_p", "askPrice", "ask_price")
         )
         bid_quantity = _nonnegative_int(
-            _first(quote, "bidQ", "bq", "bid_q", "bidQuantity", "bid_quantity", "quantity")
+            _first(quote, "bidQ", "bq", "bid_q", "bidQuantity", "bid_quantity")
         )
         ask_quantity = _nonnegative_int(
             _first(quote, "askQ", "aq", "ask_q", "askQuantity", "ask_quantity")
         )
-        if bid_price is None and ask_price is None and bid_quantity is None and ask_quantity is None:
+        if (
+            bid_price is None
+            and ask_price is None
+            and bid_quantity is None
+            and ask_quantity is None
+        ):
             continue
+        if bid_price is None or ask_price is None:
+            raise UpstoxV3ParseError(
+                "market depth level does not contain explicit bid and ask prices"
+            )
         levels.append(
             {
                 "bid_price": bid_price,
@@ -122,7 +136,9 @@ def _normalize_depth_levels(raw_quotes: Any) -> list[dict[str, Any]]:
     return levels
 
 
-def _extract_full_feed(payload: Mapping[str, Any]) -> tuple[Mapping[str, Any] | None, str | None]:
+def _extract_full_feed(
+    payload: Mapping[str, Any],
+) -> tuple[Mapping[str, Any] | None, str | None]:
     full_feed = _mapping(_first(payload, "fullFeed", "full_feed", "ff"))
     if full_feed is None:
         return None, None
@@ -175,6 +191,10 @@ def _parse_instrument_feed(
         oi = _finite_float(_first(first_level, "oi"))
         iv = _finite_float(_first(first_level, "iv"))
     else:
+        if "depth" in payload:
+            raise UpstoxV3ParseError(
+                "REST-style depth.buy/depth.sell payload is not a valid V3 live-feed shape"
+            )
         ltpc = _mapping(_first(payload, "ltpc"))
         if ltpc is not None:
             feed_kind = "LTPC"
@@ -266,7 +286,9 @@ def parse_upstox_v3_message(
             return []
         raise UpstoxV3ParseError("live-feed message contains no instrument feeds")
 
-    received = float(received_ts_epoch if received_ts_epoch is not None else time.time())
+    received = float(
+        received_ts_epoch if received_ts_epoch is not None else time.time()
+    )
     source_ts = _epoch_ms(_first(root, "currentTs", "current_ts"))
     records: list[dict[str, Any]] = []
     for instrument_key in sorted(feeds):
@@ -296,12 +318,18 @@ def assess_capture_quality(
     minimum_valid_depth_records_per_instrument: int = 1,
 ) -> CaptureQuality:
     if not 0.0 <= float(minimum_active_fo_depth_coverage_ratio) <= 1.0:
-        raise ValueError("minimum_active_fo_depth_coverage_ratio must be between 0 and 1")
+        raise ValueError(
+            "minimum_active_fo_depth_coverage_ratio must be between 0 and 1"
+        )
     if int(minimum_valid_depth_records_per_instrument) <= 0:
-        raise ValueError("minimum_valid_depth_records_per_instrument must be positive")
+        raise ValueError(
+            "minimum_valid_depth_records_per_instrument must be positive"
+        )
 
     subscribed = sorted({str(key) for key in subscribed_instrument_keys})
-    with_records = {key for key in subscribed if int(record_counts.get(key, 0)) > 0}
+    with_records = {
+        key for key in subscribed if int(record_counts.get(key, 0)) > 0
+    }
     active_fo = {
         key
         for key in with_records
@@ -314,7 +342,9 @@ def assess_capture_quality(
         >= int(minimum_valid_depth_records_per_instrument)
     }
     coverage = float(len(fo_with_depth) / len(active_fo)) if active_fo else 0.0
-    total_valid_depth_records = sum(max(0, int(value)) for value in valid_depth_counts.values())
+    total_valid_depth_records = sum(
+        max(0, int(value)) for value in valid_depth_counts.values()
+    )
 
     reasons: list[str] = []
     if not with_records:
