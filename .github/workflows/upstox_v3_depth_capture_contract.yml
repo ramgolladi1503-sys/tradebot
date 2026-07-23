@@ -1,0 +1,90 @@
+name: Upstox V3 Depth Capture Contract
+
+on:
+  push:
+    branches:
+      - fix/upstox-v3-depth-capture-v1
+    paths:
+      - ".github/workflows/upstox_v3_depth_capture_contract.yml"
+      - "core/upstox_v3_feed_parser.py"
+      - "scripts/capture_upstox_market_daily.py"
+      - "tests/test_upstox_v3_feed_parser.py"
+      - "tests/test_upstox_v3_depth_capture_persistence.py"
+      - "docs/agent_reviews/upstox_v3_depth_capture_v1.md"
+  pull_request:
+    paths:
+      - "core/upstox_v3_feed_parser.py"
+      - "scripts/capture_upstox_market_daily.py"
+      - "tests/test_upstox_v3_feed_parser.py"
+      - "tests/test_upstox_v3_depth_capture_persistence.py"
+      - "docs/agent_reviews/upstox_v3_depth_capture_v1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstox-v3-depth-capture-contract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  focused-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE_SHA: db6f384144f3937e96a67bd449f67e5f1b274c65
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify production ancestry and strict scope
+        run: |
+          set -euo pipefail
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git merge-base --is-ancestor "${BASE_SHA}" HEAD
+          git diff --name-only "${BASE_SHA}..HEAD" > /tmp/changed.txt
+          forbidden="$(grep -Ev '^(core/upstox_v3_feed_parser.py$|scripts/capture_upstox_market_daily.py$|tests/test_upstox_v3_feed_parser.py$|tests/test_upstox_v3_depth_capture_persistence.py$|docs/agent_reviews/upstox_v3_depth_capture_v1.md$|.github/workflows/upstox_v3_depth_capture_contract.yml$)' /tmp/changed.txt || true)"
+          if test -n "${forbidden}"; then
+            printf '%s\n' "${forbidden}" >&2
+            echo "Forbidden unrelated file in Upstox V3 depth repair" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow pytest requests
+
+      - name: Compile production and test modules
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            core/upstox_v3_feed_parser.py \
+            scripts/capture_upstox_market_daily.py \
+            tests/test_upstox_v3_feed_parser.py \
+            tests/test_upstox_v3_depth_capture_persistence.py
+
+      - name: Run focused deterministic tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_upstox_v3_feed_parser.py \
+            tests/test_upstox_v3_depth_capture_persistence.py
+
+      - name: Prove no strategy or execution surface changed
+        run: |
+          set -euo pipefail
+          if git diff --name-only "${BASE_SHA}..HEAD" | grep -E '^(strategies/|core/(orchestrator|risk|execution|trade_builder|candidate_pool)|config/)'; then
+            echo "Strategy, risk, execution, orchestrator or config surface changed" >&2
+            exit 1
+          fi
