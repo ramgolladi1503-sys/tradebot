@@ -143,13 +143,29 @@ class PipelineAdapterRuntime:
         result.manifest_path = str(self.result_manifest)
         return result
 
-    def write_blocked(self, *, verdict: str, blockers: list[str]) -> EngineResult:
+    def write_blocked(
+        self,
+        *,
+        verdict: str,
+        blockers: list[str],
+        artifact: str | Path | None = None,
+    ) -> EngineResult:
+        artifacts: list[str] = []
+        output_hashes: dict[str, str] = {}
+        if artifact is not None:
+            path = Path(artifact).resolve()
+            if not path.is_file() or path.parent != self.run_root:
+                raise AdapterRuntimeError("adapter_blocked_artifact_invalid")
+            artifacts = [str(path)]
+            output_hashes = {str(path): sha256_file(path)}
         result = EngineResult(
             engine=self.engine,
             state=PipelineState.BLOCKED,
             run_id=self.run_id,
             strategy_id=self.strategy_id,
+            artifacts_generated=artifacts,
             input_hashes=dict(self.input_hashes),
+            output_hashes=output_hashes,
             blockers=list(blockers),
             verdict=str(verdict or "").strip(),
             exit_code=0,
