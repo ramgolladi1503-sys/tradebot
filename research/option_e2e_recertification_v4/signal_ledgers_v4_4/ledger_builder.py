@@ -17,34 +17,12 @@ def build_signal_ledgers(repo_root: Path, inventory_path: Path) -> tuple[list[Si
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
     implementation_sha = _sha256_file(Path(__file__).resolve())
     source_records: list[SourceRecord] = []
-    ledgers: list[SignalLedgerContract] = []
     for entity in inventory.get("entities", []):
         if not entity.get("counted_as_strategy"):
             continue
         record = resolve_source(repo_root, str(entity["id"]), implementation_sha)
         source_records.append(record)
-        if record.resolution_status == "SIGNAL_SOURCE_RESOLVED" and record.source_kind == "STRATEGY_SIGNAL_SOURCE_CANDIDATE":
-            ledgers.append(
-                SignalLedgerContract(
-                    strategy_or_hypothesis_id=str(entity["id"]),
-                    canonical_alias_group=str(entity.get("v4_certification_track") or entity.get("entity_type") or ""),
-                    signal_id=f"{entity['id']}:{record.resolution_status}",
-                    session="frozen",
-                    feature_cutoff_ts="",
-                    signal_ts="",
-                    earliest_entry_ts="",
-                    direction="UNKNOWN",
-                    signal_strength="0",
-                    params_hash="",
-                    source_artifact_hash=record.source_hash,
-                    implementation_sha=implementation_sha,
-                    dataset_hash=record.dataset_hash,
-                    fold_id="",
-                    is_holdout=False,
-                    source_kind=record.source_kind,
-                    oracle_status=record.resolution_status,
-                )
-            )
+    ledgers: list[SignalLedgerContract] = []
     oracle = certify_ledger(ledgers)
     coverage = build_coverage_report(source_records)
     summary = {

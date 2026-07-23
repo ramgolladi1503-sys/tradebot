@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4`
 - config_path: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/.gsd-forensics.yaml`
-- changed_paths: `131`
-- total_findings: `126`
+- changed_paths: `145`
+- total_findings: `141`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,9 +20,9 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `11` | `0` |  |
-| `cerberus` | `PASS` | `0` | `106` | `0` |  |
-| `evidence` | `PASS` | `0` | `9` | `0` |  |
+| `minerva` | `PASS` | `0` | `12` | `0` |  |
+| `cerberus` | `PASS` | `0` | `119` | `0` |  |
+| `evidence` | `PASS` | `0` | `10` | `0` |  |
 
 ## Changed Paths
 
@@ -36,6 +36,7 @@
 - `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md`
 - `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md`
 - `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md`
+- `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md`
 - `docs/code_excellence/reports/changed_paths.txt`
 - `docs/code_excellence/reports/unified_ce_gate_latest.md`
 - `docs/research/all_strategy_option_e2e_recertification_v4.json`
@@ -135,6 +136,16 @@
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_4/real_manifest_audit_oracle.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_registry.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_resolver.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/determinism.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/deterministic_adapter.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/historical_source_discovery.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/lane_status.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/ledger_builder.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/ledger_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/signal_artifact_loader.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/source_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_7/strategy_source_registry.py`
 - `research/option_e2e_recertification_v4/strike_resolver.py`
 - `research/option_e2e_recertification_v4/time_utils.py`
 - `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py`
@@ -143,6 +154,8 @@
 - `research/option_e2e_recertification_v4/v4_3_supersession/__init__.py`
 - `research/option_e2e_recertification_v4/v4_3_supersession/v4_2_evidence_implementation_invalidation.json`
 - `research/option_e2e_recertification_v4/v4_3_supersession/v4_2_evidence_implementation_invalidation.json.sha256`
+- `research/option_e2e_recertification_v4/v4_7_supersession/v4_6_dormant_source_confusion_invalidation.json`
+- `research/option_e2e_recertification_v4/v4_7_supersession/v4_6_dormant_source_confusion_invalidation.json.sha256`
 - `research/option_e2e_recertification_v4/wfa.py`
 - `scripts/research/option_e2e_census_build.py`
 - `scripts/research/option_e2e_census_v4_1_build.py`
@@ -155,6 +168,7 @@
 - `tests/research/option_e2e/test_inventory_v4_1.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_2.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_4.py`
+- `tests/research/option_e2e/test_signal_ledgers_v4_7.py`
 - `tests/research/test_option_e2e_census_v4.py`
 - `tests/research/test_option_e2e_census_v4_1.py`
 
@@ -171,6 +185,7 @@
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `test_reality_accepted` |
 
@@ -188,6 +203,7 @@
 | `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/code_excellence/reports/changed_paths.txt` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/code_excellence/reports/unified_ce_gate_latest.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/research/all_strategy_option_e2e_recertification_v4.json` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -264,12 +280,23 @@
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_4/real_manifest_audit_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_registry.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_4/source_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/determinism.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/deterministic_adapter.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/historical_source_discovery.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/lane_status.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/ledger_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/ledger_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/signal_artifact_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/source_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_7/strategy_source_registry.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/strike_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/time_utils.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/v4_1_authority_verdict_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_3_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_3_supersession/v4_2_evidence_implementation_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/v4_7_supersession/v4_6_dormant_source_confusion_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/wfa.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `scripts/research/option_e2e_census_build.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `scripts/research/option_e2e_census_v4_1_build.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -282,6 +309,7 @@
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/test_option_e2e_census_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
@@ -298,3 +326,4 @@
 | `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
