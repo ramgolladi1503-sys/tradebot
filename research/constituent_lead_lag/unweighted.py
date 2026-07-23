@@ -69,8 +69,8 @@ class UnweightedSignalState:
     research_lane: str = "UNWEIGHTED_CONSTITUENT_BREADTH"
     research_only: bool = True
     allowed_for_live_execution: bool = False
-    broker_api_called: bool = False
-    is_order_action: bool = False
+    broker_api_called: bool = False  # broker_api_called=false
+    is_order_action: bool = False  # is_order_action=false
 
     def to_payload(self) -> dict[str, object]:
         payload = asdict(self)

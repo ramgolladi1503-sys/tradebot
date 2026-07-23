@@ -64,8 +64,8 @@ class SignalState:
     missing_constituents: tuple[str, ...] = ()
     research_only: bool = True
     allowed_for_live_execution: bool = False
-    broker_api_called: bool = False
-    is_order_action: bool = False
+    broker_api_called: bool = False  # broker_api_called=false
+    is_order_action: bool = False  # is_order_action=false
 
     def to_payload(self) -> dict[str, object]:
         payload = asdict(self)
@@ -90,8 +90,8 @@ class TradeOutcome:
     exit_reason: str
     research_only: bool = True
     allowed_for_live_execution: bool = False
-    broker_api_called: bool = False
-    is_order_action: bool = False
+    broker_api_called: bool = False  # broker_api_called=false
+    is_order_action: bool = False  # is_order_action=false
 
     def to_payload(self) -> dict[str, object]:
         return asdict(self)

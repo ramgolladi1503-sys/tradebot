@@ -62,7 +62,7 @@ def _exact_fixture(missing_symbol_time: tuple[str, str] | None = None) -> tuple[
 def test_weighted_exact_grid_excludes_non_contiguous_constituent():
     bars, weights = _exact_fixture(("E", "09:55"))
     states = generate_signal_states(bars, weights, "NIFTY", decision_times=["10:00"])
-    assert len(states) == 1
+    assert [state.decision_time for state in states] == ["10:00"]
     assert states[0].constituents_expected == 5
     assert states[0].constituents_available == 4
     assert states[0].count_coverage == pytest.approx(0.8)
@@ -86,7 +86,7 @@ def test_unweighted_uses_same_exact_grid_contract():
         decision_times=["10:00"],
         thresholds=UnweightedThresholds(minimum_constituent_count=5),
     )
-    assert len(states) == 1
+    assert [state.decision_time for state in states] == ["10:00"]
     assert states[0].constituents_available == 4
     assert states[0].constituent_coverage == pytest.approx(0.8)
     assert states[0].missing_constituents == ("D",)
@@ -103,7 +103,7 @@ def test_real_matched_control_does_not_copy_signal_rows():
     ])
     control, summary = build_matched_no_lead_control(states)
     assert summary["result"] == "MATCHED_CONTROL_CONSTRUCTED"
-    assert len(control) == 2
+    assert control["control_side"].tolist() == ["LONG", "SHORT"]
     assert set(control["control_original_side"]) == {"NONE"}
     assert Counter(control["control_side"]) == Counter({"LONG": 1, "SHORT": 1})
     assert not (control["matched_signal_decision_timestamp"] == control["control_decision_timestamp"]).any()
@@ -153,7 +153,7 @@ def test_delay_is_numeric_and_uses_second_bar_after_decision():
         })
     outcomes, summary = delayed_entry_summary([_signal_state()], pd.DataFrame(rows), StrategyThresholds())
     assert summary["result"] == "COMPUTED"
-    assert len(outcomes) == 1
+    assert [outcome.side for outcome in outcomes] == ["LONG"]
     assert outcomes[0].entry_timestamp == pd.Timestamp(f"{session} 10:10", tz="Asia/Kolkata").tz_convert("UTC").isoformat()
     assert isinstance(summary["net_mean_bps"], float)
 

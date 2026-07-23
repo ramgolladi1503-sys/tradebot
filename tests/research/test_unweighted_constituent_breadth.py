@@ -27,7 +27,7 @@ def test_current_snapshot_cannot_backfill_older_sessions():
     )
     with pytest.raises(DataContractError, match="no point-in-time"):
         select_universe_snapshot(universe, "NIFTY", "2026-07-22")
-    assert len(select_universe_snapshot(universe, "NIFTY", "2026-07-23")) == 5
+    assert set(select_universe_snapshot(universe, "NIFTY", "2026-07-23")["constituent_symbol"]) == {"A", "B", "C", "D", "E"}
 
 
 def test_unweighted_long_and_short_contract_is_symmetric():
@@ -131,7 +131,7 @@ def test_twenty_session_warmup_then_unweighted_signal_can_activate():
             dispersion_percentile_max=1.0,
         ),
     )
-    assert len(states) == 21
+    assert [state.session for state in states] == [day.strftime("%Y-%m-%d") for day in dates]
     assert all(s.reason == "insufficient_lead_gap_history" for s in states[:20])
     assert states[-1].side == "LONG"
     assert states[-1].constituent_coverage == 1.0
@@ -157,6 +157,6 @@ def test_chronological_fold_summary_uses_session_order():
         for day in range(1, 11)
     ]
     summary = chronological_fold_summary(outcomes, folds=5)
-    assert len(summary["folds"]) == 5
+    assert [row["fold"] for row in summary["folds"]] == [1, 2, 3, 4, 5]
     assert summary["folds"][0]["session_start"] == "2026-01-01"
     assert summary["positive_mean_folds"] == 5

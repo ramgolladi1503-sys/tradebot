@@ -113,7 +113,7 @@ def test_proxy_flag_required_and_nifty_only():
     with pytest.raises(DataContractError, match="explicit community"):
         validate_normalized_proxy(weights, evaluation_start="2024-01-01", evaluation_end="2025-08-29")
     validated = validate_normalized_proxy(weights, evaluation_start="2024-01-01", evaluation_end="2025-08-29", allow_community_reconstructed_proxy=True)
-    assert len(validated) == 2
+    assert validated["effective_from"].astype(str).tolist() == ["2024-01-01", "2025-08-31"]
     assert pd.isna(validated.iloc[-1]["effective_to"])
     bad = weights.assign(index_symbol="BANKNIFTY")
     with pytest.raises(DataContractError, match="NIFTY-only"):
