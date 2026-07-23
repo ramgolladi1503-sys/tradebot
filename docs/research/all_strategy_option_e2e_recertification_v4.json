@@ -2,304 +2,94 @@
   "allowed_for_live_execution": false,
   "broker_api_called": false,
   "campaign_id": "all-strategy-option-e2e-recertification-v4",
-  "composite_authority_policy": {
-    "current_master_policy": "CURRENT_MASTER_NOT_POINT_IN_TIME",
-    "quote_rows_can_prove": [
-      "observed_token_quote_presence",
-      "diagnostic_observed_contract_existence_when_full_identity_is_present"
-    ],
-    "quote_rows_cannot_prove": [
-      "point_in_time_contract_master_authority",
-      "universe_completeness",
-      "lot_size_authority",
-      "tick_size_authority"
-    ],
-    "rerun_decision": "NO_STRATEGY_RERUN_PERFORMED_AUTHORITY_GATE_BLOCKED"
-  },
-  "contract_reconstruction_v4_1": {
-    "blocked_by_no_point_in_time_authority": 1336,
-    "coverage_sha256": "120c91acc412557c88baa1d8183275be8b25f080b4b6efdf28002c59901172a7",
-    "depth_files": 1,
-    "files_discovered": 1336,
-    "files_proving_historical_contract_existence": 0,
-    "files_with_reconstructed_identity": 1264,
-    "quote_files": 1327,
-    "repo_root": "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4",
-    "roots": [
-      "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/runtime/market_data/upstox",
-      "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/runtime/strategy_validation",
-      "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/configs/backtest_data_schema_examples",
-      "/Users/madhuram/tradebot-data",
-      "/Users/madhuram/tradebot-ml-evidence"
-    ],
-    "version": "option_e2e_contract_reconstruction_v4_1"
-  },
-  "data_census_v4_1": {
-    "archive_files": 2,
-    "archive_members_scanned": 2343,
-    "blocked_files": 12078,
-    "census_sha256": "55e353652e182dec615db61e157ad2919b7940aed4c70266cf089485d7cc9528",
-    "executable_quote_files": 1,
-    "files_classified": 12078,
-    "files_scanned": 12078,
-    "instrument_master_files": 1,
-    "option_quote_files": 1,
-    "parse_error_files": 13,
-    "point_in_time_authority_files": 0,
-    "root_proof_sha256": "0cc7e6a48eb6a555111ae97d5fad345ba0332e9284f0a8644347791ab7af417f",
-    "roots_existing": [
-      "/Users/madhuram/tradebot/.runtime/market_data",
-      "/Users/madhuram/tradebot/runtime/market_data",
-      "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
-      "/Users/madhuram/tradebot/runtime/kite_candidate_replay",
-      "/Users/madhuram/tradebot/runtime/upstox_instruments",
-      "/Users/madhuram/tradebot/runtime/strategy_validation",
-      "/Users/madhuram/tradebot-data",
-      "/Users/madhuram/tradebot-ml-evidence"
-    ],
-    "roots_requested": [
-      "/Users/madhuram/tradebot/.runtime/market_data",
-      "/Users/madhuram/tradebot/runtime/market_data",
-      "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
-      "/Users/madhuram/tradebot/runtime/kite_candidate_replay",
-      "/Users/madhuram/tradebot/runtime/upstox_instruments",
-      "/Users/madhuram/tradebot/runtime/strategy_validation",
-      "/Users/madhuram/tradebot-data",
-      "/Users/madhuram/tradebot-ml-evidence"
-    ],
-    "version": "option_e2e_data_census_v4_1"
-  },
-  "final_status": "BLOCKED_AFTER_EXHAUSTIVE_V4_1_SECOND_PASS",
-  "gates": {
-    "agent_review_evidence": "PASSED",
-    "code_excellence": "PASSED total_blocks=0"
-  },
-  "inventory_v4_1": {
-    "aggregate_or_registry_count": 3,
-    "durable_verdict_labels": 154,
-    "entities_total": 33,
-    "families_with_evidence": 16,
-    "inventory_sha256": "25b369552dd1ea7b891edb4bca844f8f32d1a27f21ce99e120430d6cc58098bc",
-    "manifest_sha256": "458cd9f60397986cdcbcab5b20a0ff67d5aa5a7d087a6a26bc54f02c00b27218",
-    "non_strategy_support_count": 12,
-    "strategies_counted": 18
-  },
-  "is_order_action": false,
-  "per_strategy_status": [
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "COMPRESSION",
-        "ORB_RETEST_DRIVE",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "COMPRESSION_BREAKOUT",
-      "strategy_path": "strategies/movement/compression_breakout.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "EVENT_VOLATILITY_EXPANSION",
-      "strategy_path": "strategies/movement/event_volatility_expansion.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "EXHAUSTION",
-        "TREND",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "EXHAUSTION_REVERSAL",
-      "strategy_path": "strategies/movement/exhaustion_reversal.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "ORB_RETEST_DRIVE",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "FAILED_BREAKOUT_TRAP",
-      "strategy_path": "strategies/movement/failed_breakout_trap.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "HTF"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "HTF_OPENING_DRIVE_CONT",
-      "strategy_path": "strategies/htf_opening_drive_cont.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "TREND",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "LATE_DAY_MOMENTUM",
-      "strategy_path": "strategies/movement/late_day_momentum.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "MRE",
-        "TREND",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "MEAN_REVERSION_EXTENSION",
-      "strategy_path": "strategies/movement/mean_reversion_extension.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "NO_TRADE_CHOP",
-      "strategy_path": "strategies/movement/no_trade_chop.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "ORB_RETEST_DRIVE",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "OPENING_DRIVE",
-      "strategy_path": "strategies/movement/opening_drive.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "ORB_RETEST_DRIVE",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "OPENING_RANGE_BREAKOUT",
-      "strategy_path": "strategies/movement/opening_range_breakout.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "OPTION_PRESSURE",
-      "strategy_path": "strategies/movement/option_pressure.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "PAIRS_ARBITRAGE",
-      "strategy_path": "strategies/pairs_arbitrage.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "ORB_RETEST_DRIVE"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "SIMPLE_ORB",
-      "strategy_path": "strategies/simple_orb.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "TREND",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "TREND_PULLBACK",
-      "strategy_path": "strategies/movement/trend_pullback.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "TREND",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "VOLATILITY_TREND",
-      "strategy_path": "strategies/volatility_trend.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "ORB_RETEST_DRIVE",
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "VWAP_ORB",
-      "strategy_path": "strategies/vwap_orb.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "VWAP_VARIANTS"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "VWAP_RECLAIM",
-      "strategy_path": "strategies/movement/vwap_reclaim.py"
-    },
-    {
-      "blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
-      "e2e_certification_status": "NOT_CERTIFIED",
-      "families": [
-        "TREND",
-        "VWAP_VARIANTS",
-        "ZERO_HERO"
-      ],
-      "option_coverage_status": "BLOCKED_NO_POINT_IN_TIME_CONTRACT_AUTHORITY",
-      "signal_status": "INVENTORIED_SIGNAL_SOURCE_ONLY",
-      "strategy_id": "ZERO_HERO",
-      "strategy_path": "strategies/zero_hero.py"
-    }
+  "final_status": "BLOCKED_AFTER_NON_TAUTOLOGICAL_SIGNAL_DATE_EVIDENCE",
+  "historical_research_hypotheses": [
+    "Residual Mean Reversion",
+    "Opening-State Momentum",
+    "Constituent Lead-Lag weighted",
+    "Constituent Breadth unweighted",
+    "RSI2 research",
+    "ML-discovered campaigns"
   ],
-  "primary_blocker": "NO_POINT_IN_TIME_INSTRUMENT_AUTHORITY",
+  "implemented_strategies": [
+    "COMPRESSION_BREAKOUT",
+    "EVENT_VOLATILITY_EXPANSION",
+    "EXHAUSTION_REVERSAL",
+    "FAILED_BREAKOUT_TRAP",
+    "LATE_DAY_MOMENTUM",
+    "MEAN_REVERSION_EXTENSION",
+    "NO_TRADE_CHOP",
+    "OPENING_DRIVE",
+    "OPENING_RANGE_BREAKOUT",
+    "OPTION_PRESSURE",
+    "TREND_PULLBACK",
+    "VWAP_RECLAIM",
+    "PAIRS_ARBITRAGE",
+    "SIMPLE_ORB",
+    "VOLATILITY_TREND",
+    "VWAP_ORB",
+    "ZERO_HERO",
+    "HTF_OPENING_DRIVE_CONT"
+  ],
+  "is_order_action": false,
+  "out_of_scope_components": [
+    "live order paths",
+    "broker calls",
+    "credentials",
+    "risk gates",
+    "feed gates",
+    "dashboard",
+    "strategy thresholds",
+    "production execution"
+  ],
+  "previous_status": "BLOCKED_AFTER_EXHAUSTIVE_V4_1_SECOND_PASS",
+  "quote_depth_files_analyzed": {
+    "composite_historical_authority_files": 0,
+    "current_master_diagnostic_matches": 1,
+    "filename_describing_files": 22,
+    "files_proving_historical_identity": 0,
+    "files_proving_observed_contract_existence": 2,
+    "files_proving_observed_dataset_universe": 28,
+    "files_read_failed": 6,
+    "files_read_success": 1653,
+    "files_total": 1659,
+    "files_with_lot_size_authority": 0,
+    "files_with_tick_size_authority": 0,
+    "identity_conflict_files": 0,
+    "manifest_describing_files": 28,
+    "post_expiry_files": 0,
+    "self_describing_quote_files": 2,
+    "token_only_quote_files": 1,
+    "version": "option_e2e_contract_reconstruction_v4_2"
+  },
   "research_only": true,
-  "schema_version": "all_strategy_option_e2e_recertification_v4_1_continuation",
-  "strategy_option_certified_count": 0,
-  "tests": {
-    "command": "PYTHONPATH=. pytest -q tests/research/test_option_e2e_census_v4.py tests/research/test_option_e2e_census_v4_1.py tests/research/option_e2e/test_foundation_contracts.py tests/research/option_e2e/test_composite_contract_authority.py tests/research/option_e2e/test_inventory_v4_1.py tests/research/option_e2e/test_contract_reconstruction_v4_1.py tests/research/option_e2e/test_authority_oracle_v4_1.py tests/option_backtest/test_engine.py tests/option_backtest/test_loader.py tests/option_backtest/test_wfa.py",
-    "result": "89 passed in 5.94s"
+  "signal_ledger_results": {
+    "blocked_eligibility": 24,
+    "hypothesis_count": 6,
+    "status_counts": {
+      "SIGNAL_INPUT_DATA_MISSING": 24
+    },
+    "strategy_count": 18
+  },
+  "v4_1_authority_verdict": "INVALID_EVIDENCE_IMPLEMENTATION_TAUTOLOGICAL_AUTHORITY_GATE",
+  "v4_2_invalidated_claim": "v4.1 global no-authority conclusion was implementation-tautological",
+  "v4_2_reconstruction": {
+    "composite_historical_authority_files": 0,
+    "current_master_diagnostic_matches": 1,
+    "filename_describing_files": 22,
+    "files_proving_historical_identity": 0,
+    "files_proving_observed_contract_existence": 2,
+    "files_proving_observed_dataset_universe": 28,
+    "files_read_failed": 6,
+    "files_read_success": 1653,
+    "files_total": 1659,
+    "files_with_lot_size_authority": 0,
+    "files_with_tick_size_authority": 0,
+    "identity_conflict_files": 0,
+    "manifest_describing_files": 28,
+    "post_expiry_files": 0,
+    "self_describing_quote_files": 2,
+    "token_only_quote_files": 1,
+    "version": "option_e2e_contract_reconstruction_v4_2"
   }
 }

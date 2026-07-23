@@ -1,0 +1,8 @@
+{
+  "blocked_eligibility": 24,
+  "hypothesis_count": 6,
+  "status_counts": {
+    "SIGNAL_INPUT_DATA_MISSING": 24
+  },
+  "strategy_count": 18
+}

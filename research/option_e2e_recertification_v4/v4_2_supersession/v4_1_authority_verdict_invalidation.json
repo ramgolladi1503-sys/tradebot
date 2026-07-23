@@ -1,0 +1,25 @@
+{
+  "campaign_id": "all-strategy-option-e2e-recertification-v4",
+  "current_head": "5c1553e928316a56a3dcbbb5464a46318fb94e2d",
+  "decision": "INVALID_EVIDENCE_IMPLEMENTATION_TAUTOLOGICAL_AUTHORITY_GATE",
+  "previous_head": "5c1553e928316a56a3dcbbb5464a46318fb94e2d",
+  "reason": "The v4.1 reconstruction implementation hard-coded point_in_time_authority=false for every file, so files_proving_historical_contract_existence=0 was predetermined by construction. That invalidates the empirical strength of the global no-authority conclusion, but does not prove historical authority exists.",
+  "scope": [
+    "research/option_e2e_recertification_v4/contract_reconstruction_v4_1/analyze_contract_reconstruction.py",
+    "tests/research/option_e2e/test_contract_reconstruction_v4_1.py",
+    "docs/research/all_strategy_option_e2e_recertification_v4.md",
+    "docs/research/all_strategy_option_e2e_recertification_v4.json"
+  ],
+  "still_valid": [
+    "v4.1 inventory counts",
+    "v4.1 archive and root counts",
+    "v4.1 diagnostic token matches",
+    "v4.1 CI repairs",
+    "v4.1 timestamp repairs"
+  ],
+  "invalid": [
+    "claim that zero proving files was empirical evidence",
+    "blanket no-rerun conclusion",
+    "EXHAUSTIVE as a proof of absence"
+  ]
+}
