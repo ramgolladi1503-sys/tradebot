@@ -4,7 +4,9 @@
 
 The source-level certification defects identified after commit
 `64294990e4ecda3fa3d345e388faa78f890c5eaf` were repaired in commit
-`08da792fd7a5fd50fd6dfc6589f26caf429c6322`.
+`08da792fd7a5fd50fd6dfc6589f26caf429c6322`. The repository quality-proof
+repairs were completed in commit
+`e48f10fc03ef1cdca6b350d9b873c5804e512faf`.
 
 The earlier v2 certification claim is **not retained**. Classify it as:
 
@@ -121,6 +123,11 @@ pytest -q \
 The command collected 48 tests. The first integration run exposed one backward-
 compatibility failure (`47 passed, 1 failed`); that defect was repaired without
 weakening the oracle, and the identical six-module command then passed.
+
+After strengthening weak assertion patterns and making the research non-action
+defaults statically unambiguous, the same 48-test command passed again. The
+scoped Minerva test-reality gate, Cerberus safety gate and mandatory agent-review
+evidence validator also passed before the quality-repair commit was pushed.
 
 Synthetic certification tests include a complete valid fixture that first
 returns oracle `PASS`, followed by independent artifact tampering that forces
