@@ -28,17 +28,7 @@ def _append_jsonl(handle, payload: dict[str, object]) -> None:
     handle.flush()
 
 
-def _lead_resolved(
-    accepted: list[dict[str, object]],
-    unresolved: list[dict[str, object]],
-    git_searches: list[dict[str, object]],
-) -> bool:
-    candidate_paths = [
-        str(candidate.get("relative_path", "")).lower()
-        for candidate in [*accepted, *unresolved]
-    ]
-    if any("aeron7" in path or "nifty_f1" in path for path in candidate_paths):
-        return True
+def _git_lead_resolved(git_searches: list[dict[str, object]]) -> bool:
     for search in git_searches:
         command = [str(item) for item in search.get("command", [])]
         if ("Aeron7" in command or "NIFTY_F1" in command) and search.get("stdout_lines"):
@@ -60,25 +50,20 @@ def generate(
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
     run_status_path = output_dir / "run_status.json"
+    candidate_path = output_dir / "candidate_inventory.jsonl"
+    candidate_path.touch()
     _write_json(
         run_status_path,
         {
             "status": "RUNNING",
             "repo_root": str(repo_root),
             "output_dir": str(output_dir),
-            "started_monotonic": time.monotonic(),
         },
     )
 
-    root_inventory, diagnostics = discover_root_inventory(repo_root)
-    _write_json(output_dir / "root_inventory.json", root_inventory)
-    _write_json(output_dir / "local_diagnostics.json", diagnostics)
-
-    git_searches = build_git_search_manifest(repo_root)
-    _write_json(output_dir / "git_search_manifest.json", git_searches)
-
-    root_paths = dict(diagnostics.get("root_paths", {}))
-    candidate_path = output_dir / "candidate_inventory.jsonl"
+    root_inventory: list[dict[str, object]] = []
+    diagnostics: dict[str, object] = {}
+    git_searches: list[dict[str, object]] = []
     root_summaries: list[dict[str, object]] = []
     accepted_candidates: list[dict[str, object]] = []
     unresolved_candidates: list[dict[str, object]] = []
@@ -88,14 +73,24 @@ def generate(
     unresolved_count = 0
     timed_out_root_count = 0
     truncated = False
+    lead_seen = False
 
     try:
+        root_inventory, diagnostics = discover_root_inventory(repo_root)
+        _write_json(output_dir / "root_inventory.json", root_inventory)
+        _write_json(output_dir / "local_diagnostics.json", diagnostics)
+
+        git_searches = build_git_search_manifest(repo_root)
+        _write_json(output_dir / "git_search_manifest.json", git_searches)
+
+        root_paths = dict(diagnostics.get("root_paths", {}))
         with candidate_path.open("w", encoding="utf-8") as candidate_handle:
             for root_record in root_inventory:
                 root_id = str(root_record["root_id"])
                 root_class = str(root_record["root_class"])
                 root_path = Path(str(root_paths.get(root_id, "")))
                 root_started = time.monotonic()
+                yielded_path_count = 0
                 root_candidate_count = 0
                 root_accepted_count = 0
                 root_unresolved_count = 0
@@ -124,6 +119,10 @@ def generate(
                         max_seconds=max_seconds_per_root,
                         excluded_paths=(output_dir.parent,),
                     ):
+                        yielded_path_count += 1
+                        relative_lower = path.relative_to(root_path).as_posix().lower()
+                        if "aeron7" in relative_lower or "nifty_f1" in relative_lower:
+                            lead_seen = True
                         resolved_path = path.resolve()
                         if resolved_path in seen_physical_paths:
                             continue
@@ -135,7 +134,7 @@ def generate(
                                 path,
                                 max_hash_bytes=max_hash_bytes,
                             )
-                        except Exception as exc:  # fail closed but preserve the run
+                        except Exception as exc:
                             candidate = {
                                 "root_id": root_id,
                                 "relative_path": path.relative_to(root_path).as_posix(),
@@ -155,18 +154,19 @@ def generate(
                             unresolved_count += 1
                             root_unresolved_count += 1
                             unresolved_candidates.append(candidate)
-                except Exception as exc:  # preserve root-level partial evidence
+                except Exception as exc:
                     root_errors.append(f"ROOT_SCAN_FAILED:{type(exc).__name__}:{exc}")
 
                 elapsed = time.monotonic() - root_started
                 root_timed_out = elapsed >= max_seconds_per_root
-                root_truncated = root_candidate_count >= max_candidates_per_root
+                root_truncated = yielded_path_count >= max_candidates_per_root
                 if root_timed_out:
                     timed_out_root_count += 1
                 truncated = truncated or root_truncated
                 summary = {
                     "root_id": root_id,
                     "status": "COMPLETE" if not root_errors and not root_timed_out and not root_truncated else "INCOMPLETE",
+                    "yielded_path_count": yielded_path_count,
                     "candidate_count": root_candidate_count,
                     "accepted_candidate_count": root_accepted_count,
                     "unresolved_candidate_count": root_unresolved_count,
@@ -188,7 +188,7 @@ def generate(
                     },
                 )
 
-        lead_resolved = _lead_resolved(accepted_candidates, unresolved_candidates, git_searches)
+        lead_resolved = lead_seen or _git_lead_resolved(git_searches)
         conclusion, reason_codes = compute_source_verdict(
             root_inventory=root_inventory,
             git_searches=git_searches,
