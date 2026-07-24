@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4`
 - config_path: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/.gsd-forensics.yaml`
-- changed_paths: `176`
-- total_findings: `174`
+- changed_paths: `226`
+- total_findings: `220`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,13 +20,14 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `14` | `0` |  |
-| `cerberus` | `PASS` | `0` | `149` | `0` |  |
-| `evidence` | `PASS` | `0` | `11` | `0` |  |
+| `minerva` | `PASS` | `0` | `17` | `0` |  |
+| `cerberus` | `PASS` | `0` | `190` | `0` |  |
+| `evidence` | `PASS` | `0` | `13` | `0` |  |
 
 ## Changed Paths
 
 - `core/option_backtest/engine.py`
+- `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md`
 - `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md`
 - `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md`
 - `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md`
@@ -34,6 +35,7 @@
 - `docs/agent_reviews/option_e2e_historical_inventory_v4_1.md`
 - `docs/agent_reviews/option_e2e_pipeline_audit_v4.md`
 - `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md`
+- `docs/agent_reviews/option_e2e_v4_10_1_option_replay_blocker_invalidation.md`
 - `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md`
 - `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md`
 - `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md`
@@ -45,6 +47,22 @@
 - `docs/research/all_strategy_option_e2e_recertification_v4.md`
 - `docs/research/all_strategy_option_e2e_recertification_v4.md.sha256`
 - `research/option_e2e_recertification_v4/__init__.py`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/__init__.py`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census.py`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census_summary.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census_summary.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_family_summary.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_family_summary.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_version_summary.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_version_summary.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/execution_readiness_summary.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/execution_readiness_summary.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/external_evidence_manifest.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/external_evidence_manifest.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/schema.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/schema.json.sha256`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/signal_ledger_summary.json`
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/signal_ledger_summary.json.sha256`
 - `research/option_e2e_recertification_v4/authority_oracle_v4_1/__init__.py`
 - `research/option_e2e_recertification_v4/authority_oracle_v4_1/oracle.py`
 - `research/option_e2e_recertification_v4/ci_forensics_v4_1/agent_review_evidence_gate.exit`
@@ -118,6 +136,29 @@
 - `research/option_e2e_recertification_v4/redteam/pipeline_defect_ledger.md`
 - `research/option_e2e_recertification_v4/replay_bridge.py`
 - `research/option_e2e_recertification_v4/signal_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/git_discovery.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_executor.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_reconciliation.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/ledger_builder.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/ledger_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/repository_inventory.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/signal_artifact_loader.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10/source_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/artifact_parser.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/determinism.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/execution_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/generate_source_evidence.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/lane_executor.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/ledger_builder.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/ledger_oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/reconciliation.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/signal_schema.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/source_discovery.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/source_search_manifest.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/tamper.py`
+- `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/vwap_adapter.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/__init__.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json`
@@ -175,6 +216,12 @@
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_9/source_contract.py`
 - `research/option_e2e_recertification_v4/strike_resolver.py`
 - `research/option_e2e_recertification_v4/time_utils.py`
+- `research/option_e2e_recertification_v4/v4_10_2_supersession/__init__.py`
+- `research/option_e2e_recertification_v4/v4_10_2_supersession/v4_10_1_option_replay_blocker_invalidation.json`
+- `research/option_e2e_recertification_v4/v4_10_2_supersession/v4_10_1_option_replay_blocker_invalidation.json.sha256`
+- `research/option_e2e_recertification_v4/v4_10_3_supersession/__init__.py`
+- `research/option_e2e_recertification_v4/v4_10_3_supersession/v4_10_2_placeholder_execution_context_invalidation.json`
+- `research/option_e2e_recertification_v4/v4_10_3_supersession/v4_10_2_placeholder_execution_context_invalidation.json.sha256`
 - `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py`
 - `research/option_e2e_recertification_v4/v4_2_supersession/v4_1_authority_verdict_invalidation.json`
 - `research/option_e2e_recertification_v4/v4_2_supersession/v4_1_authority_verdict_invalidation.json.sha256`
@@ -189,12 +236,15 @@
 - `scripts/research/option_e2e_census_build.py`
 - `scripts/research/option_e2e_census_v4_1_build.py`
 - `tests/option_backtest/test_engine.py`
+- `tests/research/option_e2e/test_all_strategy_source_census_v1.py`
 - `tests/research/option_e2e/test_authority_oracle_v4_1.py`
 - `tests/research/option_e2e/test_composite_contract_authority.py`
 - `tests/research/option_e2e/test_contract_reconstruction_v4_1.py`
 - `tests/research/option_e2e/test_contract_reconstruction_v4_2.py`
 - `tests/research/option_e2e/test_foundation_contracts.py`
 - `tests/research/option_e2e/test_inventory_v4_1.py`
+- `tests/research/option_e2e/test_signal_ledgers_v4_10.py`
+- `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_2.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_4.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_7.py`
@@ -208,12 +258,15 @@
 | Path | Verdict | Reason |
 |---|---|---|
 | `tests/option_backtest/test_engine.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_all_strategy_source_census_v1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_authority_oracle_v4_1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_composite_contract_authority.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_contract_reconstruction_v4_1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_contract_reconstruction_v4_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_10.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `test_reality_accepted` |
@@ -227,6 +280,7 @@
 | Path | Verdict | Reason |
 |---|---|---|
 | `core/option_backtest/engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -234,6 +288,7 @@
 | `docs/agent_reviews/option_e2e_historical_inventory_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_pipeline_audit_v4.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/option_e2e_v4_10_1_option_replay_blocker_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -243,6 +298,15 @@
 | `docs/research/all_strategy_option_e2e_recertification_v4.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/research/all_strategy_option_e2e_recertification_v4.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_family_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_version_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/execution_readiness_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/external_evidence_manifest.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/schema.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/all_strategy_source_census_v1/signal_ledger_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/authority_oracle_v4_1/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/authority_oracle_v4_1/oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/ci_forensics_v4_1/changed_paths.txt` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -298,6 +362,29 @@
 | `research/option_e2e_recertification_v4/redteam/pipeline_defect_ledger.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/replay_bridge.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/git_discovery.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_executor.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_reconciliation.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/ledger_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/ledger_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/repository_inventory.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/signal_artifact_loader.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10/source_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/artifact_parser.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/determinism.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/execution_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/generate_source_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/lane_executor.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/ledger_builder.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/ledger_oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/reconciliation.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/signal_schema.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/source_discovery.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/source_search_manifest.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/tamper.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledgers_v4_10_2/vwap_adapter.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -352,6 +439,10 @@
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_9/source_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/strike_resolver.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/time_utils.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/v4_10_2_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/v4_10_2_supersession/v4_10_1_option_replay_blocker_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/v4_10_3_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/v4_10_3_supersession/v4_10_2_placeholder_execution_context_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_2_supersession/v4_1_authority_verdict_invalidation.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/v4_3_supersession/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -362,12 +453,15 @@
 | `scripts/research/option_e2e_census_build.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `scripts/research/option_e2e_census_v4_1_build.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/option_backtest/test_engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_all_strategy_source_census_v1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_authority_oracle_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_composite_contract_authority.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_contract_reconstruction_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_contract_reconstruction_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_10.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_4.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_7.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -380,6 +474,7 @@
 
 | Path | Verdict | Reason |
 |---|---|---|
+| `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
@@ -387,6 +482,7 @@
 | `docs/agent_reviews/option_e2e_historical_inventory_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_pipeline_audit_v4.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_pipeline_redteam_v4.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/option_e2e_v4_10_1_option_replay_blocker_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_v4_1_authority_verdict_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_v4_2_evidence_implementation_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_v4_6_dormant_source_confusion_invalidation.md` | `PASS` | `evidence_contract_satisfied` |
