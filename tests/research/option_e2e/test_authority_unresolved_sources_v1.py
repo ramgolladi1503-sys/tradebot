@@ -64,7 +64,11 @@ def test_hash_mutation_changes_source_identity_and_disposition() -> None:
 
     groups = group_unresolved_candidates(rows)
 
-    assert len(groups) == 3
+    assert tuple(group.source_id for group in groups) == (
+        "candidate:MAIN_TRADEBOT:.runtime/logs/trace.jsonl",
+        f"sha256:{ZIP_HASH}",
+        f"sha256:{'5' * 64}",
+    )
     assert {group.disposition for group in groups} == {
         UniqueSourceDisposition.UNIQUE_HASHED_SOURCE,
         UniqueSourceDisposition.UNIQUE_UNHASHED_SOURCE,

@@ -6,6 +6,12 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
 
+from .blockers_priority import blocker_records_as_dicts, build_authority_blockers_priority
+from .compact_publication import build_authority_compact_publication
+from .signal_authority import assess_signal_ledger_authority
+from .strategy_matrix import build_authority_strategy_matrix
+from .unresolved_sources import group_unresolved_candidates, reconcile_candidate_membership
+
 
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -362,6 +368,20 @@ def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[
 def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
     audit = snapshot.canonical_signal_ledger_audit[0] if snapshot.canonical_signal_ledger_audit else {}
     registry = snapshot.canonical_signal_ledger_registry[0] if snapshot.canonical_signal_ledger_registry else {}
+    evidence = {
+        **registry,
+        **audit,
+        "implementation_hash": audit.get("implementation_commit"),
+        "dataset_hash": audit.get("dataset_source_hash"),
+        "dataset_authority": "UNPROVEN",
+        "split_identity": None,
+        "outcome_or_pnl_contamination": None,
+        "option_price_contamination": None,
+        "tuned_after_outcome": None,
+        "holdout_contamination": audit.get("is_holdout"),
+        "historically_invalidated": None,
+    }
+    assessment = assess_signal_ledger_authority(evidence)
     return {
         "signal_ledger_id": registry.get("canonical_signal_ledger_id"),
         "candidate_id": audit.get("canonical_signal_ledger_id"),
@@ -394,18 +414,44 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "outcome_or_pnl_contamination": "UNRESOLVED",
         "option_price_contamination": "UNRESOLVED",
         "historical_invalidation_status": registry.get("status"),
-        "authority_conclusion": "INSUFFICIENT_PROVENANCE" if registry.get("status") == "INSUFFICIENT_PROVENANCE" else "INVALID_SIGNAL_LEDGER",
-        "authority_reason_codes": ["no_signal_ledger_has_canonical_provenance"],
+        "authority_conclusion": assessment["authority_conclusion"],
+        "field_authority": assessment["field_authority"],
+        "authority_reason_codes": assessment["authority_reason_codes"],
         "supporting_evidence": {"registry": registry, "audit": audit},
         "canonical_signal_ledger_count": snapshot.signal_ledger_summary["canonical_signal_ledger_count"],
         "insufficient_provenance_ledgers": snapshot.signal_ledger_summary["insufficient_provenance_ledgers"],
         "valid_signal_ledger_with_limitations_count": snapshot.signal_ledger_summary["valid_signal_ledger_with_limitations_count"],
         "canonical_signal_ledger_registry": snapshot.canonical_signal_ledger_registry,
         "canonical_signal_ledger_audit": snapshot.canonical_signal_ledger_audit,
+        "research_only": True,
+        "read_only": True,
+        "allowed_for_live_execution": False,
+        "broker_api_called": False,
+        "is_order_action": False,
     }
 
 
 def _unresolved_source_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
+    resolution_items = [
+        dict(item)
+        for record in snapshot.unresolved_candidate_resolution
+        for item in record.get("items", [])
+    ]
+    physical_by_id = _index_by(snapshot.physical_candidate_registry, "candidate_id")
+    candidates = []
+    for item in resolution_items:
+        physical = physical_by_id.get(str(item.get("candidate_id")), {})
+        normalized = dict(item)
+        if not normalized.get("root_id") or not normalized.get("relative_path"):
+            original_id = str(normalized.get("candidate_id") or "unknown")
+            normalized.update(
+                root_id="FIXTURE",
+                relative_path=original_id,
+                candidate_id=f"FIXTURE:{original_id}",
+            )
+        candidates.append({**normalized, "sha256": physical.get("physical_sha256") or physical.get("sha256")})
+    groups = group_unresolved_candidates(candidates)
+    reconciliation = reconcile_candidate_membership(candidates, groups)
     return {
         "authority_status": "BLOCKED",
         "unresolved_candidate_count": snapshot.input_bundle["unresolved_candidate_count"],
@@ -415,6 +461,23 @@ def _unresolved_source_review(snapshot: AuthorityClosureSnapshot) -> dict[str, A
         "reason": "candidate_search_remains_truncated_and_unresolved",
         "provenance_status": "UNKNOWN",
         "remaining_blockers": ["SOURCE_SEARCH_INCOMPLETE", "DECLARED_BLIND_SPOT"],
+        "raw_candidate_count": len(reconciliation.input_candidate_ids),
+        "unique_source_count": reconciliation.source_count,
+        "duplicate_candidate_count": len(reconciliation.input_candidate_ids) - reconciliation.source_count,
+        "source_groups": [
+            {
+                "source_id": group.source_id,
+                "disposition": group.disposition.value,
+                "sha256": group.sha256,
+                "candidate_ids": list(group.candidate_ids),
+            }
+            for group in groups
+        ],
+        "research_only": True,
+        "read_only": True,
+        "allowed_for_live_execution": False,
+        "broker_api_called": False,
+        "is_order_action": False,
     }
 
 
@@ -507,17 +570,95 @@ def _strategy_prioritization(snapshot: AuthorityClosureSnapshot) -> list[dict[st
 def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, output_dir: Path) -> AuthorityClosureBuildResult:
     families = _dataset_family_reviews(snapshot)
     versions = _dataset_version_decisions(snapshot)
-    matrix = _authority_matrix(snapshot, families, versions)
+    version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
+    signal_review = _signal_ledger_review(snapshot)
+    unresolved_review = _unresolved_source_review(snapshot)
+    matrix = build_authority_strategy_matrix(
+        strategy_implementation_inventory=snapshot.strategy_implementation_inventory,
+        strategy_alias_registry=snapshot.strategy_alias_registry,
+        all_strategy_execution_readiness=snapshot.all_strategy_execution_readiness,
+    )
+    for row in matrix:
+        selected_version = row.get("selected_canonical_dataset")
+        version = version_by_id.get(str(selected_version), {})
+        blocker = str(row.get("remaining_blocker") or "AUTHORITY_EVIDENCE_INCOMPLETE")
+        row.update(
+            {
+                "strategy_vs_hypothesis_vs_filter": "FILTER" if row["lane_kind"] == "NO_TRADE_FILTER" else "STRATEGY",
+                "parameter_hash": _semantic_digest(row.get("resolved_required_parameters", [])),
+                "temporal_contract_authority": "PROVEN" if row.get("temporal_contract") == "CAUSAL_ONLY" else "UNRESOLVED",
+                "required_dataset_family_ids": [version["dataset_family_id"]] if version.get("dataset_family_id") else [],
+                "required_dataset_version_ids": [selected_version] if selected_version else [],
+                "dataset_authority": version.get("status", "UNRESOLVED"),
+                "signal_ledger_ids": [row["selected_canonical_signal_ledger"]] if row.get("selected_canonical_signal_ledger") else [],
+                "signal_authority": signal_review["authority_conclusion"],
+                "split_fold_identity": {
+                    "development_session_count": row.get("development_session_count"),
+                    "holdout_session_count": row.get("holdout_session_count"),
+                },
+                "instrument_identity_authority": "PROVEN_WITH_LIMITATIONS" if selected_version else "UNRESOLVED",
+                "option_data_dependency": row.get("option_data_requirements"),
+                "multi_asset_dependency": row["lane_kind"] == "MULTI_ASSET_STRATEGY",
+                "current_blocker_classes": [blocker],
+                "overall_authority_status": row.get("authority_status"),
+                "next_minimum_evidence_action": row.get("recommended_next_action"),
+                "supporting_evidence": {
+                    "inventory_status": row.get("inventory_status"),
+                    "selected_dataset": selected_version,
+                    "selected_signal_ledger": row.get("selected_canonical_signal_ledger"),
+                },
+            }
+        )
+    blocker_input = [
+        {
+            "authority_target": row["canonical_strategy_id"],
+            "authority_kind": "strategy_hypothesis",
+            "authority_status": str(row["authority_status"]),
+            "blocker": str(row["remaining_blocker"] or "AUTHORITY_EVIDENCE_INCOMPLETE"),
+        }
+        for row in matrix
+    ]
+    blocker_result = build_authority_blockers_priority(blocker_input)
+    blocker_rows = blocker_records_as_dicts(blocker_result)
+    blocker_id_by_target = {
+        reference.authority_target: reference.blocker_id for reference in blocker_result.references
+    }
+    priority_by_blocker = {row["blocker_id"]: row["completeness_class"] for row in blocker_rows}
+    priorities = [
+        {
+            "canonical_strategy_id": row["canonical_strategy_id"],
+            "priority": priority_by_blocker[blocker_id_by_target[row["canonical_strategy_id"]]],
+            "blocker_ids": [blocker_id_by_target[row["canonical_strategy_id"]]],
+            "authority_status": row["authority_status"],
+            "remaining_blocker": row["remaining_blocker"],
+            "next_minimum_evidence_action": row["next_minimum_evidence_action"],
+        }
+        for row in matrix
+    ]
+    priorities.sort(key=lambda row: (row["priority"], row["canonical_strategy_id"]))
+    integrity = {
+        **snapshot.input_bundle,
+        "authority_status": "AUTHORITY_CLOSURE_BLOCKED_WITH_DECLARED_GAPS",
+        "dataset_families": len(families),
+        "dataset_versions": len(versions),
+        "canonical_signal_ledgers": snapshot.census_summary.get("canonical_signal_ledger_count", 0),
+        "strategy_lanes": len(matrix),
+        "research_only": True,
+        "read_only": True,
+        "allowed_for_live_execution": False,
+        "broker_api_called": False,
+        "is_order_action": False,
+    }
     payloads = {
-        "input_census_integrity.json": dict(snapshot.input_bundle),
+        "input_census_integrity.json": integrity,
         "dataset_family_authority_reviews.json": families,
         "dataset_version_authority_decisions.json": versions,
         "aeron7_nifty_f1_authority_review.json": _aeron7_review(snapshot),
-        "unresolved_source_authority_review.json": _unresolved_source_review(snapshot),
-        "signal_ledger_authority_review.json": _signal_ledger_review(snapshot),
+        "unresolved_source_authority_review.json": unresolved_review,
+        "signal_ledger_authority_review.json": signal_review,
         "all_strategy_authority_matrix.json": matrix,
-        "authority_blocker_ledger.json": _blocker_ledger(snapshot),
-        "strategy_authority_prioritization.json": _strategy_prioritization(snapshot),
+        "authority_blocker_ledger.json": blocker_rows,
+        "strategy_authority_prioritization.json": priorities,
     }
     alias_payloads = {
         "authority_closure_input_integrity.json": payloads["input_census_integrity.json"],
@@ -541,6 +682,10 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
             "allowed_for_live_execution": False,
             "broker_api_called": False,
             "is_order_action": False,
+        },
+        "determinism.json": {
+            "schema_version": "all_strategy_authority_closure_v1",
+            "semantic_hashes": {name: _semantic_digest(payload) for name, payload in sorted(payloads.items())},
         },
     }
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -167,25 +167,43 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         inputs.get("canonical_signal_ledgers"),
         "canonical_signal_ledgers",
     )
-    family_matrix = [row for row in matrix if row.get("authority_kind") == "dataset_family"]
-    _assert_count(len(family_matrix), len(families), "matrix_dataset_families")
-    if _status_index(families, "dataset_family_id", "dataset_families") != _status_index(
-        family_matrix, "authority_target", "matrix_dataset_families"
-    ):
-        raise CompactReconciliationError("status_reconciliation_failed field=dataset_families")
+    legacy_matrix = bool(matrix and "authority_target" in matrix[0])
+    if legacy_matrix:
+        family_matrix = [row for row in matrix if row.get("authority_kind") == "dataset_family"]
+        _assert_count(len(family_matrix), len(families), "matrix_dataset_families")
+        if _status_index(families, "dataset_family_id", "dataset_families") != _status_index(
+            family_matrix, "authority_target", "matrix_dataset_families"
+        ):
+            raise CompactReconciliationError("status_reconciliation_failed field=dataset_families")
+    else:
+        _assert_count(len(matrix), inputs.get("strategy_lanes"), "strategy_lanes")
 
     blocker_counts = {
-        str(row.get("blocker_class") or "UNKNOWN"): row.get("blocked_lane_count") for row in blockers
+        str(row.get("blocker_code") or row.get("blocker_class") or "UNKNOWN"):
+        len(row.get("authority_targets", [])) if "authority_targets" in row else row.get("blocked_lane_count")
+        for row in blockers
     }
-    blocked_lane_count = _sum_counts(blocker_counts, "blocked_lane_count_by_class")
-    strategy_rows = [row for row in matrix if row.get("authority_kind") == "strategy_hypothesis"]
+    blocked_lane_count = len({target for row in blockers for target in row.get("authority_targets", [])})
+    if not blocked_lane_count:
+        blocked_lane_count = _sum_counts(blocker_counts, "blocked_lane_count_by_class")
+    strategy_rows = (
+        [row for row in matrix if row.get("authority_kind") == "strategy_hypothesis"]
+        if legacy_matrix
+        else matrix
+    )
     priority_ids = [str(row.get("canonical_strategy_id") or "") for row in priorities]
     if len(priority_ids) != len(set(priority_ids)) or any(not value for value in priority_ids):
         raise CompactReconciliationError("priority_strategy_ids_not_unique")
     if strategy_rows:
-        if _status_index(priorities, "canonical_strategy_id", "priorities") != _status_index(
-            strategy_rows, "authority_target", "matrix_strategies"
-        ):
+        matrix_statuses = (
+            _status_index(strategy_rows, "authority_target", "matrix_strategies")
+            if legacy_matrix
+            else {
+                str(row.get("canonical_strategy_id")): str(row.get("authority_status"))
+                for row in strategy_rows
+            }
+        )
+        if _status_index(priorities, "canonical_strategy_id", "priorities") != matrix_statuses:
             raise CompactReconciliationError("status_reconciliation_failed field=strategies")
 
     links = {key: _source_link(FULL_ARTIFACTS[key], full_payloads[key]) for key in FULL_ARTIFACTS}
@@ -228,7 +246,7 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
     payloads["priority_summary.json"] = _summary("strategy_priority", {
         "prioritized_strategy_count": len(priorities), "priority_counts": _counts(priorities, "priority"),
         "ordered_strategy_ids": [row["canonical_strategy_id"] for row in sorted(
-            priorities, key=lambda row: (int(row.get("priority", 0)), str(row.get("canonical_strategy_id", "")))
+            priorities, key=lambda row: (str(row.get("priority", "")), str(row.get("canonical_strategy_id", "")))
         )], "source": links["priorities"],
     })
     payloads["authority_closure_summary.json"] = _summary("authority_closure", {

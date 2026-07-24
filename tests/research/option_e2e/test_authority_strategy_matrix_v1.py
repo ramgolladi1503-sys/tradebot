@@ -97,7 +97,7 @@ def test_alias_ids_collapse_to_one_canonical_lane_and_mutation_changes_join() ->
         strategy_alias_registry=aliases,
         all_strategy_execution_readiness=readiness,
     )
-    assert len(matrix) == 1
+    assert tuple(row["canonical_strategy_id"] for row in matrix) == ("ALPHA",)
     assert matrix[0]["canonical_strategy_id"] == "ALPHA"
     assert matrix[0]["aliases"] == ["ALPHA", "alpha", "alpha legacy"]
 
@@ -189,7 +189,14 @@ def test_multi_asset_lane_rejects_generic_single_dataset_authority() -> None:
 
 def test_real_census_registry_defines_exactly_sixteen_fixture_general_lanes() -> None:
     specs = _strategy_specs()
-    assert len(specs) == 16
+    expected_ids = (
+        "VWAP_RECLAIM", "OPENING_RANGE_BREAKOUT", "OPENING_RANGE_RETEST", "TREND_PULLBACK",
+        "COMPRESSION_BREAKOUT", "NO_TRADE_CHOP", "OPENING_STATE_MOMENTUM", "RSI2_MEAN_REVERSION",
+        "RESIDUAL_MEAN_REVERSION", "CONSTITUENT_LEAD_LAG", "CONSTITUENT_BREADTH",
+        "STRUCTURAL_PATTERN_SUITE", "STRUCTURAL_STATE_DISCOVERY", "ML_STRATEGY_DISCOVERY",
+        "FIVE_MINUTE_GOVERNED_DISCOVERY", "CONTINUOUS_STRUCTURAL_EDGE_DISCOVERY",
+    )
+    assert tuple(str(spec["canonical_strategy_id"]) for spec in specs) == expected_ids
     inventory, aliases, readiness = _registries(
         tuple(str(spec["canonical_strategy_id"]) for spec in specs)
     )
@@ -205,7 +212,7 @@ def test_real_census_registry_defines_exactly_sixteen_fixture_general_lanes() ->
         all_strategy_execution_readiness=readiness,
     )
 
-    assert len(matrix) == len(specs) == 16
+    assert tuple(row["canonical_strategy_id"] for row in matrix) == tuple(sorted(expected_ids))
     assert {row["canonical_strategy_id"] for row in matrix} == {
         spec["canonical_strategy_id"] for spec in specs
     }

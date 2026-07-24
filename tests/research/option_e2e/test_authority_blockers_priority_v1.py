@@ -33,7 +33,7 @@ def test_shared_blockers_are_deduplicated_with_traceable_stable_references() -> 
 
     assert first == second
     assert stable_result_digest(first) == stable_result_digest(second)
-    assert len(first.blockers) == 1
+    assert tuple(item.blocker_code for item in first.blockers) == ("INSUFFICIENT_PROVENANCE",)
     blocker = first.blockers[0]
     assert blocker.blocker_code == "INSUFFICIENT_PROVENANCE"
     assert blocker.authority_targets == ("ORB", "VWAP_RECLAIM")

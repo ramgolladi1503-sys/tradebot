@@ -1,0 +1,1 @@
+{"authority_decision_counts":{"DOWNGRADE_TO_UNRESOLVED":961,"KEEP_USABLE_WITH_LIMITATIONS":25},"dataset_version_count":986,"schema_version":"authority_compact_publication_v1","source":{"artifact":"dataset_version_authority_decisions.json","semantic_sha256":"2a7b781bccf11fa6b581298d218675258fa78bbc1ce6e79604dfa5d1ec0ecc7f"},"summary_kind":"dataset_version_authority"}

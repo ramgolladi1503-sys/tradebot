@@ -8,6 +8,7 @@ from .closure import (
     load_all_strategy_authority_closure,
     load_authority_closure_inputs,
 )
+from .compact_publication import build_authority_compact_publication
 
 __all__ = [
     "AuthorityClosureBuildResult",
@@ -18,4 +19,5 @@ __all__ = [
     "build_all_strategy_authority_closure",
     "load_all_strategy_authority_closure",
     "load_authority_closure_inputs",
+    "build_authority_compact_publication",
 ]

@@ -15,6 +15,9 @@ if __package__ in {None, ""}:
         build_all_strategy_authority_closure,
         load_authority_closure_inputs,
     )
+    from research.option_e2e_recertification_v4.all_strategy_authority_closure_v1.compact_publication import (  # type: ignore
+        build_authority_compact_publication,
+    )
 else:
     from .closure import (
         AuthorityClosureDeterminismError,
@@ -23,6 +26,7 @@ else:
         build_all_strategy_authority_closure,
         load_authority_closure_inputs,
     )
+    from .compact_publication import build_authority_compact_publication
 
 
 def _parse_args() -> argparse.Namespace:
@@ -31,6 +35,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--run-b", required=True, type=Path)
     parser.add_argument("--compact-census-dir", type=Path, default=None)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--compact-output-dir", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -43,6 +48,11 @@ def main() -> int:
             compact_census_dir=args.compact_census_dir,
         )
         build_all_strategy_authority_closure(snapshot=snapshot, output_dir=args.output_dir)
+        if args.compact_output_dir is not None:
+            build_authority_compact_publication(
+                full_authority_dir=args.output_dir,
+                output_dir=args.compact_output_dir,
+            )
     except (AuthorityClosureInputError, AuthorityClosureDeterminismError, AuthorityClosureReconciliationError, OSError) as exc:
         print("AUTHORITY_CLOSURE_INPUT_INTEGRITY_FAILED")
         print(str(exc))

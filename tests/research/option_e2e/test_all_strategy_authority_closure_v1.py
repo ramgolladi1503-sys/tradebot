@@ -90,7 +90,10 @@ def _snapshot() -> AuthorityClosureSnapshot:
             {"canonical_strategy_id": "VWAP_RECLAIM"},
             {"canonical_strategy_id": "NO_TRADE_CHOP"},
         ],
-        strategy_alias_registry=[{"canonical_strategy_id": "VWAP_RECLAIM", "aliases": ["VWAP_RECLAIM"]}],
+        strategy_alias_registry=[
+            {"canonical_strategy_id": "VWAP_RECLAIM", "aliases": ["VWAP_RECLAIM"]},
+            {"canonical_strategy_id": "NO_TRADE_CHOP", "aliases": ["NO_TRADE_CHOP"]},
+        ],
         all_strategy_execution_readiness=readiness,
         census_summary={"raw_candidates": 3, "physical_accepted_file_count": 2, "raw_unresolved": 1, "material_truncated_roots": 1, "dataset_version_count": 2, "logical_dataset_family_count": 2, "blocked_lanes": 2, "ready_for_causal_execution_lanes": 0, "valid_precomputed_signals_lanes": 0},
         dataset_family_summary={"logical_dataset_family_count": 2},
@@ -136,7 +139,7 @@ def test_closure_builds_real_records_from_snapshot(tmp_path: Path) -> None:
     assert families[0]["dataset_family_id"] == "FAMILY:BANKNIFTY:spot:NSE:unknown"
     assert families[1]["authority_status"] == "FAMILY_USABLE_WITH_LIMITATIONS"
     assert versions[0]["dataset_version_id"] == "VERSION:1"
-    assert matrix[-1]["authority_target"] == "strategy_execution"
+    assert tuple(row["canonical_strategy_id"] for row in matrix) == ("NO_TRADE_CHOP", "VWAP_RECLAIM")
     assert signal["canonical_signal_ledger_count"] == 0
 
 
