@@ -55,40 +55,103 @@ class AuthorityClosureSnapshot:
     determinism: dict[str, Any]
 
 
-FULL_RUN_A = Path("/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/all_strategy_source_census_v1/20260724-133422_family_model")
-FULL_RUN_B = Path("/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/all_strategy_source_census_v1/20260724-133424_family_model_rerun")
+@dataclass(frozen=True)
+class AuthorityClosureBuildResult:
+    authority_status: str
+    input_census_integrity: dict[str, Any]
+    dataset_family_count: int
+    dataset_version_count: int
+    matrix_count: int
+    blocked_lane_count: int
+    ready_for_causal_execution_lanes: int
+    valid_precomputed_signals_lanes: int
 
 
 def _compact_dir(repo_root: Path) -> Path:
     return repo_root / "research" / "option_e2e_recertification_v4" / "all_strategy_source_census_v1"
 
 
-def _full_run_paths() -> tuple[Path, Path]:
-    return FULL_RUN_A, FULL_RUN_B
+class AuthorityClosureError(RuntimeError):
+    pass
+
+
+class AuthorityClosureInputError(AuthorityClosureError):
+    pass
+
+
+class AuthorityClosureDeterminismError(AuthorityClosureError):
+    pass
+
+
+class AuthorityClosureReconciliationError(AuthorityClosureError):
+    pass
 
 
 def _semantic_digest(payload: Any) -> str:
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
+def _read_payload_for_digest(path: Path) -> Any:
+    if path.suffix == ".jsonl":
+        return _read_jsonl_records(path)
+    return _read_json(path)
+
+
+def _read_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        payload = json.loads(text)
+        if not isinstance(payload, list):
+            raise AuthorityClosureInputError(f"json_array_not_list path={path}")
+        records: list[dict[str, Any]] = []
+        for index, item in enumerate(payload, start=1):
+            if not isinstance(item, dict):
+                raise AuthorityClosureInputError(f"json_array_record_not_object path={path} index={index}")
+            records.append(item)
+        return records
+    records = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            entry = line.strip()
+            if not entry:
+                continue
+            try:
+                payload = json.loads(entry)
+            except json.JSONDecodeError as exc:
+                raise AuthorityClosureInputError(f"invalid_jsonl path={path} line={line_no}") from exc
+            if not isinstance(payload, dict):
+                raise AuthorityClosureInputError(f"jsonl_record_not_object path={path} line={line_no}")
+            records.append(payload)
+    return records
+
+
+def _read_json_array_or_object(path: Path) -> Any:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload
+
+
 def _load_run(run_dir: Path) -> AuthorityClosureSnapshot:
+    if not run_dir.exists():
+        raise AuthorityClosureInputError(f"missing_full_run_dir path={run_dir}")
     return AuthorityClosureSnapshot(
         input_bundle=dict(_read_json(run_dir / "input_bundle_integrity_independent.json")),
-        physical_candidate_registry=list(_read_json(run_dir / "physical_candidate_registry.jsonl")),
-        exact_content_blob_registry=list(_read_json(run_dir / "exact_content_blob_registry.jsonl")),
-        exact_duplicate_groups=list(_read_json(run_dir / "exact_duplicate_groups.jsonl")),
-        dataset_partition_registry=list(_read_json(run_dir / "dataset_partition_registry.jsonl")),
-        logical_dataset_family_registry=list(_read_json(run_dir / "logical_dataset_family_registry.json")),
-        dataset_version_registry=list(_read_json(run_dir / "dataset_version_registry.json")),
-        semantic_duplicate_groups=list(_read_json(run_dir / "semantic_duplicate_groups.jsonl")),
-        canonical_signal_ledger_registry=list(_read_json(run_dir / "canonical_signal_ledger_registry.json")),
-        canonical_signal_ledger_audit=list(_read_json(run_dir / "canonical_signal_ledger_audit.json")),
-        aeron7_nifty_f1_dataset_family=list(_read_json(run_dir / "aeron7_nifty_f1_dataset_family.json")),
-        unresolved_candidate_resolution=list(_read_json(run_dir / "unresolved_candidate_resolution.json")),
-        truncation_review=list(_read_json(run_dir / "truncation_review.json")),
-        strategy_implementation_inventory=list(_read_json(run_dir / "strategy_implementation_inventory.json")),
-        strategy_alias_registry=list(_read_json(run_dir / "strategy_alias_registry.json")),
-        all_strategy_execution_readiness=list(_read_json(run_dir / "all_strategy_execution_readiness.json")),
+        physical_candidate_registry=_read_jsonl_records(run_dir / "physical_candidate_registry.jsonl"),
+        exact_content_blob_registry=_read_jsonl_records(run_dir / "exact_content_blob_registry.jsonl"),
+        exact_duplicate_groups=_read_jsonl_records(run_dir / "exact_duplicate_groups.jsonl"),
+        dataset_partition_registry=_read_jsonl_records(run_dir / "dataset_partition_registry.jsonl"),
+        logical_dataset_family_registry=list(_read_json_array_or_object(run_dir / "logical_dataset_family_registry.json")),
+        dataset_version_registry=list(_read_json_array_or_object(run_dir / "dataset_version_registry.json")),
+        semantic_duplicate_groups=_read_jsonl_records(run_dir / "semantic_duplicate_groups.jsonl"),
+        canonical_signal_ledger_registry=list(_read_json_array_or_object(run_dir / "canonical_signal_ledger_registry.json")),
+        canonical_signal_ledger_audit=list(_read_json_array_or_object(run_dir / "canonical_signal_ledger_audit.json")),
+        aeron7_nifty_f1_dataset_family=list(_read_json_array_or_object(run_dir / "aeron7_nifty_f1_dataset_family.json")),
+        unresolved_candidate_resolution=list(_read_json_array_or_object(run_dir / "unresolved_candidate_resolution.json")),
+        truncation_review=list(_read_json_array_or_object(run_dir / "truncation_review.json")),
+        strategy_implementation_inventory=list(_read_json_array_or_object(run_dir / "strategy_implementation_inventory.json")),
+        strategy_alias_registry=list(_read_json_array_or_object(run_dir / "strategy_alias_registry.json")),
+        all_strategy_execution_readiness=list(_read_json_array_or_object(run_dir / "all_strategy_execution_readiness.json")),
         determinism=dict(_read_json(run_dir / "determinism.json")),
         current_986_breakdown=dict(_read_json(run_dir / "current_986_breakdown.json")),
         census_summary=dict(_read_json(run_dir / "census_summary.json")),
@@ -99,12 +162,9 @@ def _load_run(run_dir: Path) -> AuthorityClosureSnapshot:
     )
 
 
-def _verify_full_run_pair() -> tuple[AuthorityClosureSnapshot, AuthorityClosureSnapshot]:
-    run_a, run_b = _full_run_paths()
-    if not run_a.exists() or not run_b.exists():
-        raise FileNotFoundError("AUTHORITY_CLOSURE_INPUT_INCOMPLETE")
-    first = _load_run(run_a)
-    second = _load_run(run_b)
+def load_authority_closure_inputs(*, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
+    first = _load_run(full_run_a)
+    second = _load_run(full_run_b)
     required_names = (
         "input_bundle_integrity_independent.json",
         "current_986_breakdown.json",
@@ -127,29 +187,22 @@ def _verify_full_run_pair() -> tuple[AuthorityClosureSnapshot, AuthorityClosureS
         "determinism.json",
     )
     for name in required_names:
-        assert _semantic_digest(_read_json(run_a / name)) == _semantic_digest(_read_json(run_b / name))
-    return first, second
-
-
-def _family_authority_status(row: dict[str, Any]) -> tuple[str, str]:
-    if row.get("identity_status") == "IDENTITY_INCOMPLETE":
-        return "BLOCKED_WITH_LIMITATIONS", "identity_status_is_incomplete"
-    if row.get("dataset_family_id") == "FAMILY:NIFTY_F1:futures:NSE:1m":
-        return "BLOCKED_WITH_LIMITATIONS", "derived_source_requires_authority_closure"
-    return "BLOCKED_WITH_LIMITATIONS", "no_canonical_family_authority"
-
-
-def load_all_strategy_authority_closure(repo_root: Path) -> AuthorityClosureSnapshot:
-    first, second = _verify_full_run_pair()
-    # keep compact census as an anchor but do not rely on it as the primary truth source
-    compact = _compact_dir(repo_root)
-    census_summary = dict(_read_json(compact / "census_summary.json"))
-    dataset_family_summary = dict(_read_json(compact / "dataset_family_summary.json"))
-    dataset_version_summary = dict(_read_json(compact / "dataset_version_summary.json"))
-    signal_ledger_summary = dict(_read_json(compact / "signal_ledger_summary.json"))
-    execution_readiness_summary = dict(_read_json(compact / "execution_readiness_summary.json"))
-    assert _semantic_digest(first.census_summary) == _semantic_digest(second.census_summary)
-    assert census_summary["raw_candidates"] == first.census_summary["raw_candidates"]
+        if _semantic_digest(_read_payload_for_digest(full_run_a / name)) != _semantic_digest(_read_payload_for_digest(full_run_b / name)):
+            raise AuthorityClosureDeterminismError(f"semantic_mismatch path={name}")
+    if compact_census_dir is not None:
+        census_summary = dict(_read_json(compact_census_dir / "census_summary.json"))
+        if "raw_candidates" in census_summary and "raw_candidates" in first.census_summary and census_summary["raw_candidates"] != first.census_summary["raw_candidates"]:
+            raise AuthorityClosureReconciliationError("compact_census_reconciliation_failed")
+        dataset_family_summary = dict(_read_json(compact_census_dir / "dataset_family_summary.json"))
+        dataset_version_summary = dict(_read_json(compact_census_dir / "dataset_version_summary.json"))
+        signal_ledger_summary = dict(_read_json(compact_census_dir / "signal_ledger_summary.json"))
+        execution_readiness_summary = dict(_read_json(compact_census_dir / "execution_readiness_summary.json"))
+    else:
+        census_summary = dict(first.census_summary)
+        dataset_family_summary = {}
+        dataset_version_summary = {}
+        signal_ledger_summary = {}
+        execution_readiness_summary = {}
     return AuthorityClosureSnapshot(
         input_bundle=first.input_bundle,
         physical_candidate_registry=first.physical_candidate_registry,
@@ -175,6 +228,19 @@ def load_all_strategy_authority_closure(repo_root: Path) -> AuthorityClosureSnap
         determinism=first.determinism,
         current_986_breakdown=first.current_986_breakdown,
     )
+
+
+def _family_authority_status(row: dict[str, Any]) -> tuple[str, str]:
+    if row.get("identity_status") == "IDENTITY_INCOMPLETE":
+        return "BLOCKED_WITH_LIMITATIONS", "identity_status_is_incomplete"
+    if row.get("dataset_family_id") == "FAMILY:NIFTY_F1:futures:NSE:1m":
+        return "BLOCKED_WITH_LIMITATIONS", "derived_source_requires_authority_closure"
+    return "BLOCKED_WITH_LIMITATIONS", "no_canonical_family_authority"
+
+
+def load_all_strategy_authority_closure(repo_root: Path, *, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
+    del repo_root
+    return load_authority_closure_inputs(full_run_a=full_run_a, full_run_b=full_run_b, compact_census_dir=compact_census_dir)
 
 
 def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
@@ -329,8 +395,7 @@ def _strategy_prioritization(snapshot: AuthorityClosureSnapshot) -> list[dict[st
     return sorted(ranking, key=lambda row: (row["priority"], row["canonical_strategy_id"]))
 
 
-def build_all_strategy_authority_closure(repo_root: Path, output_dir: Path) -> dict[str, Any]:
-    snapshot = load_all_strategy_authority_closure(repo_root)
+def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, output_dir: Path) -> AuthorityClosureBuildResult:
     families = _dataset_family_reviews(snapshot)
     versions = _dataset_version_decisions(snapshot)
     matrix = _authority_matrix(snapshot, families, versions)
@@ -345,16 +410,42 @@ def build_all_strategy_authority_closure(repo_root: Path, output_dir: Path) -> d
         "authority_blocker_ledger.json": _blocker_ledger(snapshot),
         "strategy_authority_prioritization.json": _strategy_prioritization(snapshot),
     }
+    alias_payloads = {
+        "authority_closure_input_integrity.json": payloads["input_census_integrity.json"],
+        "strategy_authority_blocker_ledger.json": payloads["authority_blocker_ledger.json"],
+        "authority_closure_priority.json": payloads["strategy_authority_prioritization.json"],
+        "authority_closure_summary.json": {
+            "authority_status": "BLOCKED_WITH_DECLARED_GAPS",
+            "dataset_family_count": len(families),
+            "dataset_version_count": len(versions),
+            "blocked_lane_count": snapshot.census_summary["blocked_lanes"],
+            "ready_for_causal_execution_lanes": snapshot.census_summary["ready_for_causal_execution_lanes"],
+            "valid_precomputed_signals_lanes": snapshot.census_summary["valid_precomputed_signals_lanes"],
+        },
+        "external_evidence_manifest.json": {
+            "input_census_integrity": payloads["input_census_integrity.json"],
+            "dataset_family_count": len(families),
+            "dataset_version_count": len(versions),
+            "authority_status": "BLOCKED_WITH_DECLARED_GAPS",
+            "research_only": True,
+            "read_only": True,
+            "allowed_for_live_execution": False,
+            "broker_api_called": False,
+            "is_order_action": False,
+        },
+    }
     output_dir.mkdir(parents=True, exist_ok=True)
     for filename, payload in payloads.items():
         _write_json_with_sidecar(output_dir / filename, payload)
-    return {
-        "authority_status": "BLOCKED_WITH_DECLARED_GAPS",
-        "input_census_integrity": payloads["input_census_integrity.json"],
-        "dataset_family_count": len(families),
-        "dataset_version_count": len(versions),
-        "matrix_count": len(matrix),
-        "blocked_lane_count": snapshot.census_summary["blocked_lanes"],
-        "ready_for_causal_execution_lanes": snapshot.census_summary["ready_for_causal_execution_lanes"],
-        "valid_precomputed_signals_lanes": snapshot.census_summary["valid_precomputed_signals_lanes"],
-    }
+    for filename, payload in alias_payloads.items():
+        _write_json_with_sidecar(output_dir / filename, payload)
+    return AuthorityClosureBuildResult(
+        authority_status="BLOCKED_WITH_DECLARED_GAPS",
+        input_census_integrity=payloads["input_census_integrity.json"],
+        dataset_family_count=len(families),
+        dataset_version_count=len(versions),
+        matrix_count=len(matrix),
+        blocked_lane_count=snapshot.census_summary["blocked_lanes"],
+        ready_for_causal_execution_lanes=snapshot.census_summary["ready_for_causal_execution_lanes"],
+        valid_precomputed_signals_lanes=snapshot.census_summary["valid_precomputed_signals_lanes"],
+    )
