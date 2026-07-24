@@ -124,7 +124,16 @@ Local publication evidence reported before commit:
 - two fresh external family-model runs matched semantically;
 - compact JSON files have matching `.sha256` sidecars.
 
-Remote CI is authoritative after push. A remote failure must be repaired before the PR can be considered publication-complete.
+Verified remote publication evidence on final head `e9d13dd8aef12384824fac74c31af08a192215a1`:
+
+- Agent Review Evidence Gate: success;
+- Portfolio CI: success;
+- Repo Forensics PR Gate: success;
+- CodeQL Advanced: success;
+- Verify Strategy Registry: success;
+- Code Excellence Gates: success;
+- `ci`: success;
+- `tests`: success.
 
 ## Runtime Proof Required After Merge
 
