@@ -96,6 +96,20 @@ def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any
         _value(evidence, "historically_invalidated", "historical_invalidation")
     )
 
+    invalid_reasons: list[str] = []
+    dataset_family_id = _value(evidence, "dataset_family_id")
+    dataset_version_id = _value(evidence, "dataset_version_id")
+    if dataset_family_id is not None and (
+        not isinstance(dataset_family_id, str)
+        or not dataset_family_id.startswith("FAMILY:")
+        or dataset_family_id.startswith("VERSION:")
+    ):
+        invalid_reasons.append("dataset_family_id_invalid")
+    if dataset_version_id is not None and (
+        not isinstance(dataset_version_id, str) or not dataset_version_id.startswith("VERSION:")
+    ):
+        invalid_reasons.append("dataset_version_id_invalid")
+
     fields = {
         "implementation_hash": "PROVEN" if _sha256(implementation_hash) else "MISSING_OR_INVALID",
         "parameter_hash": "PROVEN" if _sha256(parameter_hash) else "MISSING_OR_INVALID",
@@ -124,7 +138,6 @@ def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any
         "historical_invalidation": _bool_status(historically_invalidated),
     }
 
-    invalid_reasons: list[str] = []
     if fields["causal_timestamps"] == "INVALID":
         invalid_reasons.append("causal_timestamp_order_invalid")
     if freeze_ts and outcome_available_ts and freeze_ts >= outcome_available_ts:

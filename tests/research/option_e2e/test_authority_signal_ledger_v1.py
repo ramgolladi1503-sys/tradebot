@@ -18,6 +18,8 @@ HASH_D = "d" * 64
 
 def _canonical() -> dict[str, object]:
     return {
+        "dataset_family_id": "FAMILY:NIFTY_SPOT:spot:NSE:5m",
+        "dataset_version_id": "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:0123456789abcdef",
         "implementation_hash": HASH_A,
         "parameter_hash": HASH_B,
         "dataset_hash": HASH_C,
@@ -144,3 +146,22 @@ def test_malformed_contamination_value_fails_closed_without_raising() -> None:
 
     assert result["authority_conclusion"] == "INSUFFICIENT_PROVENANCE"
     assert "option_price_contamination_unproven" in result["authority_reason_codes"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("dataset_family_id", "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:0123456789abcdef", "dataset_family_id_invalid"),
+        ("dataset_version_id", "FAMILY:NIFTY_SPOT:spot:NSE:5m", "dataset_version_id_invalid"),
+    ],
+)
+def test_dataset_authority_identifiers_are_typed_and_cannot_be_interchanged(
+    field: str, value: str, reason: str
+) -> None:
+    evidence = _canonical()
+    evidence[field] = value
+
+    result = assess_signal_ledger_authority(evidence)
+
+    assert result["authority_conclusion"] == "INVALID_SIGNAL_LEDGER"
+    assert reason in result["authority_reason_codes"]

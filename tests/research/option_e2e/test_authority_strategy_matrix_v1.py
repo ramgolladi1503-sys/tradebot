@@ -187,6 +187,131 @@ def test_multi_asset_lane_rejects_generic_single_dataset_authority() -> None:
     assert row["execution_eligible"] is False
 
 
+def test_signal_authority_is_inherited_only_by_the_exact_linked_lane() -> None:
+    inventory, aliases, readiness = _registries()
+    for row in inventory:
+        row["temporal_contract"] = "PRECOMPUTED_SIGNAL_LEDGER_REQUIRED"
+    readiness[0]["selected_canonical_signal_ledger"] = "LEDGER:ALPHA"
+    readiness[1]["selected_canonical_signal_ledger"] = "LEDGER:BETA"
+    readiness[0]["status"] = "VALID_PRECOMPUTED_SIGNALS"
+
+    matrix = build_authority_strategy_matrix(
+        strategy_implementation_inventory=inventory,
+        strategy_alias_registry=aliases,
+        all_strategy_execution_readiness=readiness,
+        signal_ledger_assessments=[
+            {
+                "canonical_strategy_id": "ALPHA",
+                "canonical_signal_ledger_id": "LEDGER:ALPHA",
+                "authority_conclusion": "INSUFFICIENT_PROVENANCE",
+            }
+        ],
+    )
+    authority_by_lane = {
+        row["canonical_strategy_id"]: (
+            row["signal_ledger_status"],
+            row["signal_authority"],
+        )
+        for row in matrix
+    }
+    assert authority_by_lane == {
+        "ALPHA": ("LINKED", "INSUFFICIENT_PROVENANCE"),
+        "BETA": ("NO_SIGNAL_LEDGER", "UNRESOLVED"),
+    }
+    assert matrix[0]["execution_eligible"] is False
+
+    mutated = deepcopy(readiness)
+    mutated[0]["selected_canonical_signal_ledger"] = "LEDGER:BETA"
+    mutated_matrix = build_authority_strategy_matrix(
+        strategy_implementation_inventory=inventory,
+        strategy_alias_registry=aliases,
+        all_strategy_execution_readiness=mutated,
+        signal_ledger_assessments=[
+            {
+                "canonical_strategy_id": "ALPHA",
+                "canonical_signal_ledger_id": "LEDGER:ALPHA",
+                "authority_conclusion": "INSUFFICIENT_PROVENANCE",
+            }
+        ],
+    )
+    assert mutated_matrix[0]["signal_authority"] != matrix[0]["signal_authority"]
+    assert mutated_matrix[0]["signal_ledger_status"] == "NO_SIGNAL_LEDGER"
+
+
+def test_causal_and_no_trade_lanes_have_not_applicable_signal_authority() -> None:
+    inventory, aliases, readiness = _registries(("ALPHA", "NO_TRADE_CHOP"))
+    readiness[0]["selected_canonical_signal_ledger"] = "UNLINKED:STALE"
+    readiness[1]["status"] = "NO_TRADE_FILTER"
+    readiness[1]["remaining_blocker"] = "NO_TRADE_FILTER"
+
+    matrix = build_authority_strategy_matrix(
+        strategy_implementation_inventory=inventory,
+        strategy_alias_registry=aliases,
+        all_strategy_execution_readiness=readiness,
+    )
+    signal_semantics = {
+        row["canonical_strategy_id"]: (
+            row["signal_ledger_status"],
+            row["signal_authority"],
+            row["execution_eligible"],
+        )
+        for row in matrix
+    }
+    assert signal_semantics == {
+        "ALPHA": ("NOT_APPLICABLE", "NOT_APPLICABLE", False),
+        "NO_TRADE_CHOP": ("NOT_APPLICABLE", "NOT_APPLICABLE", False),
+    }
+
+
+def test_signal_assessment_cannot_cross_link_by_ledger_id_alone() -> None:
+    inventory, aliases, readiness = _registries()
+    for row in inventory:
+        row["temporal_contract"] = "PRECOMPUTED_SIGNAL_LEDGER_REQUIRED"
+    for row in readiness:
+        row["selected_canonical_signal_ledger"] = "LEDGER:SHARED"
+
+    matrix = build_authority_strategy_matrix(
+        strategy_implementation_inventory=inventory,
+        strategy_alias_registry=aliases,
+        all_strategy_execution_readiness=readiness,
+        signal_ledger_assessments=[
+            {
+                "canonical_strategy_id": "BETA",
+                "signal_ledger_id": "LEDGER:SHARED",
+                "authority_conclusion": "CANONICAL_PRE_OUTCOME_SIGNAL_LEDGER",
+            }
+        ],
+    )
+    assert tuple(
+        (row["canonical_strategy_id"], row["signal_authority"])
+        for row in matrix
+    ) == (
+        ("ALPHA", "UNRESOLVED"),
+        ("BETA", "CANONICAL_PRE_OUTCOME_SIGNAL_LEDGER"),
+    )
+
+
+def test_unknown_signal_conclusion_fails_closed() -> None:
+    inventory, aliases, readiness = _registries(("ALPHA",))
+    readiness[0]["selected_canonical_signal_ledger"] = "LEDGER:ALPHA"
+    with pytest.raises(
+        AuthorityStrategyRegistryError,
+        match="invalid_signal_authority_conclusion",
+    ):
+        build_authority_strategy_matrix(
+            strategy_implementation_inventory=inventory,
+            strategy_alias_registry=aliases,
+            all_strategy_execution_readiness=readiness,
+            signal_ledger_assessments=[
+                {
+                    "canonical_strategy_id": "ALPHA",
+                    "signal_ledger_id": "LEDGER:ALPHA",
+                    "authority_conclusion": "APPROVED_BY_ASSERTION",
+                }
+            ],
+        )
+
+
 def test_real_census_registry_defines_exactly_sixteen_fixture_general_lanes() -> None:
     specs = _strategy_specs()
     expected_ids = (

@@ -24,6 +24,25 @@ class AuthorityStrategyReconciliationError(AuthorityStrategyMatrixError):
 _NO_TRADE_STATUS = "NO_TRADE_FILTER"
 _MULTI_ASSET_CATEGORIES = frozenset({"cross_asset", "multi_asset"})
 _MULTI_ASSET_LANES = frozenset({"CONSTITUENT_LEAD_LAG", "CONSTITUENT_BREADTH"})
+_CAUSAL_ONLY = "CAUSAL_ONLY"
+_SIGNAL_AUTHORITY_CONCLUSIONS = frozenset(
+    {
+        "CANONICAL_PRE_OUTCOME_SIGNAL_LEDGER",
+        "VALID_PRECOMPUTED_SIGNALS_WITH_LIMITATIONS",
+        "INSUFFICIENT_PROVENANCE",
+        "POST_OUTCOME_OR_TUNED",
+        "HOLDOUT_CONTAMINATED",
+        "INVALIDATED_HISTORICAL_EVIDENCE",
+        "INVALID_SIGNAL_LEDGER",
+    }
+)
+_EXECUTABLE_SIGNAL_AUTHORITIES = frozenset(
+    {
+        "CANONICAL_PRE_OUTCOME_SIGNAL_LEDGER",
+        "VALID_PRECOMPUTED_SIGNALS_WITH_LIMITATIONS",
+        "NOT_APPLICABLE",
+    }
+)
 
 
 def _require_rows(name: str, rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -128,6 +147,42 @@ def _reconcile_exact_lanes(
             )
 
 
+def _index_signal_assessments(
+    rows: list[dict[str, Any]],
+    *,
+    alias_to_canonical: Mapping[str, str],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    indexed: dict[tuple[str, str], dict[str, Any]] = {}
+    for index, row in enumerate(rows):
+        supplied_id = _require_id(row, registry="signal_ledger_assessments", index=index)
+        canonical = alias_to_canonical.get(_alias_key(supplied_id))
+        if canonical is None:
+            raise AuthorityStrategyReconciliationError(
+                f"unknown_strategy_lane registry=signal_ledger_assessments lane={supplied_id}"
+            )
+        ledger_id = row.get("canonical_signal_ledger_id", row.get("signal_ledger_id"))
+        conclusion = row.get("authority_conclusion")
+        if not isinstance(ledger_id, str) or not ledger_id.strip():
+            raise AuthorityStrategyRegistryError(
+                f"missing_signal_ledger_id canonical_strategy_id={canonical} index={index}"
+            )
+        if conclusion not in _SIGNAL_AUTHORITY_CONCLUSIONS:
+            raise AuthorityStrategyRegistryError(
+                f"invalid_signal_authority_conclusion canonical_strategy_id={canonical} index={index} conclusion={conclusion}"
+            )
+        key = (canonical, ledger_id.strip())
+        normalized = dict(row)
+        normalized["canonical_strategy_id"] = canonical
+        normalized["canonical_signal_ledger_id"] = ledger_id.strip()
+        existing = indexed.get(key)
+        if existing is not None and existing != normalized:
+            raise AuthorityStrategyRegistryError(
+                f"conflicting_signal_assessments canonical_strategy_id={canonical} ledger_id={ledger_id.strip()}"
+            )
+        indexed[key] = normalized
+    return indexed
+
+
 def _is_multi_asset(canonical: str, inventory: Mapping[str, Any]) -> bool:
     return canonical in _MULTI_ASSET_LANES or str(inventory.get("category", "")).lower() in _MULTI_ASSET_CATEGORIES
 
@@ -138,11 +193,13 @@ def _build_lane(
     aliases: tuple[str, ...],
     inventory: Mapping[str, Any],
     readiness: Mapping[str, Any],
+    signal_assessments: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[str, Any]:
     status = readiness.get("status")
     blocker = readiness.get("remaining_blocker")
     is_no_trade = status == _NO_TRADE_STATUS or canonical == "NO_TRADE_CHOP"
     is_multi_asset = _is_multi_asset(canonical, inventory)
+    temporal_contract = inventory.get("temporal_contract")
 
     if is_no_trade:
         if status != _NO_TRADE_STATUS or blocker != _NO_TRADE_STATUS:
@@ -152,11 +209,19 @@ def _build_lane(
         lane_kind = "NO_TRADE_FILTER"
         dataset_selection: Any = None
         signal_selection: Any = None
+        signal_ledger_status = "NOT_APPLICABLE"
+        signal_authority = "NOT_APPLICABLE"
         execution_eligible = False
     elif is_multi_asset:
         lane_kind = "MULTI_ASSET_STRATEGY"
         dataset_selection = None
         signal_selection = None
+        if temporal_contract == _CAUSAL_ONLY:
+            signal_ledger_status = "NOT_APPLICABLE"
+            signal_authority = "NOT_APPLICABLE"
+        else:
+            signal_ledger_status = "NO_SIGNAL_LEDGER"
+            signal_authority = "UNRESOLVED"
         execution_eligible = False
         if not blocker:
             blocker = "MULTI_ASSET_DATASET_AUTHORITY_REQUIRED"
@@ -166,10 +231,27 @@ def _build_lane(
         lane_kind = "SINGLE_ASSET_STRATEGY"
         dataset_selection = readiness.get("selected_canonical_dataset")
         signal_selection = readiness.get("selected_canonical_signal_ledger")
-        execution_eligible = status in {
-            "READY_FOR_CAUSAL_EXECUTION",
-            "VALID_PRECOMPUTED_SIGNALS",
-        }
+        assessment = None
+        if isinstance(signal_selection, str) and signal_selection.strip():
+            signal_selection = signal_selection.strip()
+            assessment = signal_assessments.get((canonical, signal_selection.strip()))
+        if assessment is not None:
+            signal_ledger_status = "LINKED"
+            signal_authority = assessment["authority_conclusion"]
+        elif temporal_contract == _CAUSAL_ONLY:
+            signal_ledger_status = "NOT_APPLICABLE"
+            signal_authority = "NOT_APPLICABLE"
+        elif signal_selection:
+            signal_ledger_status = "NO_SIGNAL_LEDGER"
+            signal_authority = "UNRESOLVED"
+        else:
+            signal_selection = None
+            signal_ledger_status = "NO_SIGNAL_LEDGER"
+            signal_authority = "UNRESOLVED"
+        execution_eligible = (
+            status in {"READY_FOR_CAUSAL_EXECUTION", "VALID_PRECOMPUTED_SIGNALS"}
+            and signal_authority in _EXECUTABLE_SIGNAL_AUTHORITIES
+        )
 
     return {
         "canonical_strategy_id": canonical,
@@ -196,6 +278,8 @@ def _build_lane(
         "option_coverage_readiness": readiness.get("option_coverage_readiness"),
         "selected_canonical_dataset": dataset_selection,
         "selected_canonical_signal_ledger": signal_selection,
+        "signal_ledger_status": signal_ledger_status,
+        "signal_authority": signal_authority,
         "remaining_blocker": blocker,
         "recommended_next_action": readiness.get("recommended_next_action"),
         "inventory_status": inventory.get("current_status"),
@@ -213,6 +297,7 @@ def build_authority_strategy_matrix(
     strategy_implementation_inventory: Iterable[Mapping[str, Any]],
     strategy_alias_registry: Iterable[Mapping[str, Any]],
     all_strategy_execution_readiness: Iterable[Mapping[str, Any]],
+    signal_ledger_assessments: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Build one authority row per exact canonical strategy lane."""
 
@@ -223,7 +308,14 @@ def build_authority_strategy_matrix(
     readiness_rows = _require_rows(
         "all_strategy_execution_readiness", all_strategy_execution_readiness
     )
+    signal_assessment_rows = _require_rows(
+        "signal_ledger_assessments", signal_ledger_assessments
+    )
     alias_to_canonical, aliases_by_canonical, canonical_ids = _build_alias_authority(alias_rows)
+    signal_assessments = _index_signal_assessments(
+        signal_assessment_rows,
+        alias_to_canonical=alias_to_canonical,
+    )
     inventory = _collapse_registry(
         registry="strategy_implementation_inventory",
         rows=inventory_rows,
@@ -245,6 +337,7 @@ def build_authority_strategy_matrix(
             aliases=aliases_by_canonical[canonical],
             inventory=inventory[canonical],
             readiness=readiness[canonical],
+            signal_assessments=signal_assessments,
         )
         for canonical in sorted(canonical_ids)
     ]

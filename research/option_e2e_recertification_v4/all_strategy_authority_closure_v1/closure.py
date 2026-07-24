@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .blockers_priority import blocker_records_as_dicts, build_authority_blockers_priority
-from .compact_publication import build_authority_compact_publication
 from .signal_authority import assess_signal_ledger_authority
 from .strategy_matrix import build_authority_strategy_matrix
 from .unresolved_sources import group_unresolved_candidates, reconcile_candidate_membership
@@ -190,7 +189,7 @@ def _load_run(run_dir: Path) -> AuthorityClosureSnapshot:
 
 def load_authority_closure_inputs(*, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
     first = _load_run(full_run_a)
-    second = _load_run(full_run_b)
+    _load_run(full_run_b)
     required_names = (
         "input_bundle_integrity_independent.json",
         "current_986_breakdown.json",
@@ -278,8 +277,66 @@ def load_all_strategy_authority_closure(repo_root: Path, *, full_run_a: Path, fu
 
 def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
     family_by_id = _index_by(snapshot.logical_dataset_family_registry, "dataset_family_id")
+    partitions_by_family: dict[str, list[dict[str, Any]]] = {}
+    for partition in snapshot.dataset_partition_registry:
+        partitions_by_family.setdefault(str(partition.get("dataset_family_id", "")), []).append(partition)
+    versions_by_family: dict[str, list[dict[str, Any]]] = {}
+    for version in snapshot.dataset_version_registry:
+        versions_by_family.setdefault(str(version.get("dataset_family_id", "")), []).append(version)
+    candidates_by_id = _index_by(snapshot.physical_candidate_registry, "candidate_id")
+    blobs_by_hash: dict[str, list[dict[str, Any]]] = {}
+    for blob in snapshot.exact_content_blob_registry:
+        physical_hash = str(blob.get("physical_sha256", ""))
+        if physical_hash:
+            blobs_by_hash.setdefault(physical_hash, []).append(blob)
+    duplicate_groups_by_hash: dict[str, list[dict[str, Any]]] = {}
+    for group in snapshot.exact_duplicate_groups:
+        content_hash = str(group.get("physical_sha256") or group.get("sha256") or "")
+        if content_hash:
+            duplicate_groups_by_hash.setdefault(content_hash, []).append(group)
     families = []
     for family_id, row in family_by_id.items():
+        partitions = sorted(partitions_by_family.get(family_id, []), key=lambda item: str(item.get("partition_id", "")))
+        versions = sorted(versions_by_family.get(family_id, []), key=lambda item: str(item.get("dataset_version_id", "")))
+        physical_hashes = sorted({str(item.get("blob_id")) for item in partitions if item.get("blob_id")})
+        blobs = sorted(
+            (blob for physical_hash in physical_hashes for blob in blobs_by_hash.get(physical_hash, [])),
+            key=lambda item: str(item.get("blob_id", "")),
+        )
+        candidate_ids = sorted(
+            {
+                str(candidate_id)
+                for blob in blobs
+                for candidate_id in blob.get("candidate_ids", [])
+                if str(candidate_id) in candidates_by_id
+            }
+        )
+        partition_ids = sorted({str(item["partition_id"]) for item in partitions})
+        version_ids = sorted({str(item["dataset_version_id"]) for item in versions})
+        blob_ids = sorted({str(item["blob_id"]) for item in blobs})
+        duplicate_content_hashes = sorted(
+            physical_hash for physical_hash in physical_hashes if duplicate_groups_by_hash.get(physical_hash)
+        )
+        first_values = sorted(str(item["first_timestamp"]) for item in partitions if item.get("first_timestamp"))
+        last_values = sorted(str(item["last_timestamp"]) for item in partitions if item.get("last_timestamp"))
+        session_hashes = sorted({str(item["session_set_hash"]) for item in partitions if item.get("session_set_hash")})
+        limitations = {
+            str(limitation)
+            for version in versions
+            for limitation in version.get("limitations", [])
+        }
+        limitations.update(
+            str(limitation)
+            for partition in partitions
+            for limitation in partition.get("quality_limitations", [])
+        )
+        limitations.update(
+            str(limitation)
+            for candidate_id in candidate_ids
+            for limitation in candidates_by_id[candidate_id].get("quality_limitations", [])
+        )
+        if str(row.get("identity_status")) != "CANONICAL":
+            limitations.add("family_identity_not_canonical")
         authority_status, authority_reason = _family_authority_status(row)
         families.append(
             {
@@ -293,30 +350,33 @@ def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str
                 "source_owner": row.get("source_owner"),
                 "generation_method": row.get("generation_method"),
                 "identity_status": row.get("identity_status"),
-                "partition_ids": list(row.get("partition_ids", [])),
-                "version_ids": list(row.get("versions", [])),
-                "partition_count": row.get("partition_count"),
-                "version_count": len(row.get("versions", [])),
-                "physical_candidate_ids": [],
-                "physical_file_count": row.get("physical_file_count"),
-                "exact_blob_ids": [],
-                "exact_copy_count": row.get("exact_copy_count"),
-                "first_timestamp": row.get("first_timestamp"),
-                "last_timestamp": row.get("last_timestamp"),
-                "date_range": [row.get("first_timestamp"), row.get("last_timestamp")],
-                "session_count": row.get("session_count"),
-                "session_set_hash": row.get("session_set_hash"),
+                "partition_ids": partition_ids,
+                "version_ids": version_ids,
+                "partition_count": len(partition_ids),
+                "version_count": len(version_ids),
+                "physical_candidate_ids": candidate_ids,
+                "physical_file_count": len(candidate_ids),
+                "exact_blob_ids": blob_ids,
+                "exact_copy_count": sum(int(item.get("copy_count", 0)) for item in blobs),
+                "first_timestamp": first_values[0] if first_values else None,
+                "last_timestamp": last_values[-1] if last_values else None,
+                "date_range": [first_values[0] if first_values else None, last_values[-1] if last_values else None],
+                "session_count": len(session_hashes) if session_hashes else None,
+                "session_set_hash": _semantic_digest(session_hashes) if session_hashes else None,
                 "provenance_status": "PROVEN" if row.get("identity_status") == "PROVISIONAL" else "PARTIALLY_PROVEN",
                 "temporal_semantics_status": "UNKNOWN" if row.get("bar_interval") == "unknown" else "PROVEN",
                 "roll_methodology_status": "NOT_APPLICABLE" if row.get("instrument_type") == "spot" else "UNRESOLVED",
                 "volume_semantics_status": "UNRESOLVED",
                 "authority_status": authority_status,
                 "authority_reason_codes": [authority_reason],
-                "quality_limitations": [],
+                "quality_limitations": sorted(limitations),
                 "supporting_evidence": {
-                    "partition_count": row.get("partition_count"),
-                    "physical_file_count": row.get("physical_file_count"),
-                    "exact_copy_count": row.get("exact_copy_count"),
+                    "partition_ids": partition_ids,
+                    "version_ids": version_ids,
+                    "physical_candidate_ids": candidate_ids,
+                    "physical_hashes": physical_hashes,
+                    "exact_blob_ids": blob_ids,
+                    "exact_duplicate_content_hashes": duplicate_content_hashes,
                     "identity_status": row.get("identity_status"),
                     "generation_method": row.get("generation_method"),
                 },
@@ -330,18 +390,31 @@ def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[
     version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
     for version_id, row in version_by_id.items():
         status = str(row.get("status", ""))
-        if status == "CANONICAL_DATASET_VERSION":
-            authority_decision = "PROMOTE_TO_CANONICAL_DATASET_VERSION"
-        elif status == "USABLE_WITH_LIMITATIONS":
-            authority_decision = "KEEP_USABLE_WITH_LIMITATIONS"
-        elif status == "EXPLORATORY_ONLY":
-            authority_decision = "DOWNGRADE_TO_EXPLORATORY_ONLY"
-        elif status == "UNRESOLVED_DATASET_VERSION":
-            authority_decision = "DOWNGRADE_TO_UNRESOLVED"
-        elif status == "INVALIDATED":
-            authority_decision = "INVALIDATE_DATASET_VERSION"
-        else:
-            authority_decision = "DERIVED_DUPLICATE"
+        evidence_fields = {
+            "dataset_family_id": row.get("dataset_family_id"),
+            "partition_ids": sorted(str(item) for item in row.get("partition_ids", [])),
+            "partition_manifest_hash": row.get("partition_manifest_hash"),
+            "schema_hash": row.get("schema_hash"),
+            "session_set_hash": row.get("session_set_hash"),
+            "source_provenance": row.get("source_provenance"),
+            "creation_method": row.get("creation_method"),
+            "quality_metrics": row.get("quality_metrics"),
+            "limitations": sorted(str(item) for item in row.get("limitations", [])),
+        }
+        reasons = []
+        for field in ("dataset_family_id", "partition_manifest_hash", "schema_hash", "session_set_hash", "source_provenance"):
+            if not evidence_fields[field]:
+                reasons.append(f"{field}_missing")
+        if not evidence_fields["partition_ids"]:
+            reasons.append("partition_ids_missing")
+        reasons.extend(f"quality_limitation_{item}" for item in evidence_fields["limitations"])
+        if status != "USABLE_WITH_LIMITATIONS":
+            reasons.append(f"original_census_status_{status.lower() or 'unknown'}")
+        authority_decision = (
+            "KEEP_USABLE_WITH_LIMITATIONS"
+            if status == "USABLE_WITH_LIMITATIONS" and not any(item.endswith("_missing") for item in reasons)
+            else "DOWNGRADE_TO_UNRESOLVED"
+        )
         decisions.append(
             {
                 "dataset_version_id": version_id,
@@ -355,9 +428,11 @@ def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[
                 "quality_metrics": row.get("quality_metrics"),
                 "limitations": list(row.get("limitations", [])),
                 "source_record_hash": hashlib.sha256(_canonical_json(row).encode("utf-8")).hexdigest(),
+                "original_census_status": status,
                 "authority_decision": authority_decision,
-                "authority_reason_codes": [f"dataset_version_status_{status.lower() or 'unknown'}"],
-                "supporting_evidence": row,
+                "authority_reason_codes": sorted(reasons),
+                "evaluated_evidence_fields": evidence_fields,
+                "supporting_evidence": {"dataset_version_id": version_id, "status": status, **evidence_fields},
                 "allowed_strategy_categories": ["research_only"],
                 "prohibited_strategy_categories": ["live", "paper", "execution"],
             }
@@ -368,11 +443,34 @@ def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[
 def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
     audit = snapshot.canonical_signal_ledger_audit[0] if snapshot.canonical_signal_ledger_audit else {}
     registry = snapshot.canonical_signal_ledger_registry[0] if snapshot.canonical_signal_ledger_registry else {}
+    audit_strategy_id = audit.get("strategy_or_hypothesis_id") or audit.get("canonical_strategy_id")
+    alias_to_canonical = {
+        str(alias): str(row.get("canonical_strategy_id"))
+        for row in snapshot.strategy_alias_registry
+        for alias in [row.get("canonical_strategy_id"), *row.get("aliases", [])]
+        if alias
+    }
+    canonical_strategy_id = alias_to_canonical.get(str(audit_strategy_id)) if audit_strategy_id else None
+    inventory_by_id = _index_by(snapshot.strategy_implementation_inventory, "canonical_strategy_id")
+    readiness_by_id = _index_by(snapshot.all_strategy_execution_readiness, "canonical_strategy_id")
+    inventory = inventory_by_id.get(str(canonical_strategy_id), {})
+    readiness = readiness_by_id.get(str(canonical_strategy_id), {})
+    selected_version_id = readiness.get("selected_canonical_dataset") if canonical_strategy_id else None
+    version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
+    selected_version = version_by_id.get(str(selected_version_id), {}) if selected_version_id else {}
+    asserted_family_id = audit.get("dataset_family_id")
+    asserted_version_id = audit.get("dataset_version_id")
+    if asserted_family_id and str(asserted_family_id).startswith("VERSION:"):
+        raise AuthorityClosureReconciliationError("dataset_family_id_contains_version_identifier")
+    if asserted_version_id and not str(asserted_version_id).startswith("VERSION:"):
+        raise AuthorityClosureReconciliationError("dataset_version_id_is_not_version_identifier")
+    ledger_implementation_hash = audit.get("implementation_commit")
+    ledger_dataset_hash = audit.get("dataset_source_hash")
     evidence = {
         **registry,
         **audit,
-        "implementation_hash": audit.get("implementation_commit"),
-        "dataset_hash": audit.get("dataset_source_hash"),
+        "implementation_hash": ledger_implementation_hash,
+        "dataset_hash": ledger_dataset_hash,
         "dataset_authority": "UNPROVEN",
         "split_identity": None,
         "outcome_or_pnl_contamination": None,
@@ -387,8 +485,9 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "candidate_id": audit.get("canonical_signal_ledger_id"),
         "path": audit.get("exact_path"),
         "physical_hash": audit.get("physical_sha256"),
-        "canonical_strategy_id": snapshot.strategy_implementation_inventory[0]["canonical_strategy_id"] if snapshot.strategy_implementation_inventory else None,
-        "aliases": snapshot.strategy_alias_registry[0]["aliases"] if snapshot.strategy_alias_registry else [],
+        "canonical_strategy_id": canonical_strategy_id,
+        "strategy_authority": "PROVEN" if canonical_strategy_id else "UNRESOLVED",
+        "aliases": inventory.get("aliases", []),
         "row_count": audit.get("row_count"),
         "session_count": audit.get("session_count"),
         "signal_id_uniqueness": audit.get("signal_id_unique"),
@@ -396,15 +495,19 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "signal_timestamp_status": "UNRESOLVED" if audit.get("signal_ts") is None else "PROVEN",
         "earliest_legal_entry_timestamp_status": "UNRESOLVED" if audit.get("earliest_entry_ts") is None else "PROVEN",
         "causal_ordering_status": "UNRESOLVED",
-        "implementation_path": snapshot.strategy_implementation_inventory[0].get("implementation_path") if snapshot.strategy_implementation_inventory else None,
-        "implementation_hash": snapshot.strategy_implementation_inventory[0].get("implementation_blob_hash") if snapshot.strategy_implementation_inventory else None,
+        "implementation_path": inventory.get("implementation_path"),
+        "candidate_implementation_hash": inventory.get("implementation_blob_hash"),
+        "ledger_proven_implementation_hash": ledger_implementation_hash,
+        "implementation_hash": ledger_implementation_hash,
         "implementation_authority": "UNRESOLVED",
-        "parameter_owner": snapshot.strategy_implementation_inventory[0].get("parameter_owner") if snapshot.strategy_implementation_inventory else None,
+        "parameter_owner": inventory.get("parameter_owner"),
         "parameter_hash": audit.get("parameter_hash"),
         "parameter_authority": "UNRESOLVED",
-        "dataset_family_id": snapshot.all_strategy_execution_readiness[0].get("selected_canonical_dataset") if snapshot.all_strategy_execution_readiness else None,
-        "dataset_version_id": snapshot.all_strategy_execution_readiness[0].get("selected_canonical_dataset") if snapshot.all_strategy_execution_readiness else None,
-        "dataset_hash": snapshot.census_summary.get("input_bundle", {}).get("candidate_inventory_sha256"),
+        "dataset_family_id": selected_version.get("dataset_family_id"),
+        "dataset_version_id": selected_version_id,
+        "candidate_dataset_hash": selected_version.get("partition_manifest_hash"),
+        "ledger_proven_dataset_hash": ledger_dataset_hash,
+        "dataset_hash": ledger_dataset_hash,
         "dataset_authority": "BLOCKED",
         "fold_identity": audit.get("fold_identity"),
         "development_validation_holdout_identity": audit.get("is_holdout"),
@@ -417,7 +520,13 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "authority_conclusion": assessment["authority_conclusion"],
         "field_authority": assessment["field_authority"],
         "authority_reason_codes": assessment["authority_reason_codes"],
-        "supporting_evidence": {"registry": registry, "audit": audit},
+        "assessed_evidence": evidence,
+        "supporting_evidence": {
+            "registry": registry,
+            "audit": audit,
+            "strategy_ownership_evidence": audit_strategy_id,
+            "selected_version": selected_version,
+        },
         "canonical_signal_ledger_count": snapshot.signal_ledger_summary["canonical_signal_ledger_count"],
         "insufficient_provenance_ledgers": snapshot.signal_ledger_summary["insufficient_provenance_ledgers"],
         "valid_signal_ledger_with_limitations_count": snapshot.signal_ledger_summary["valid_signal_ledger_with_limitations_count"],
@@ -493,90 +602,26 @@ def _aeron7_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
     }
 
 
-def _authority_matrix(snapshot: AuthorityClosureSnapshot, families: list[dict[str, Any]], versions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    rows = []
-    for family in families:
-        rows.append(
-            {
-                "authority_target": family["dataset_family_id"],
-                "authority_kind": "dataset_family",
-                "authority_status": family["authority_status"],
-                "blocker": family["authority_reason_codes"][0],
-            }
-        )
-    for row in snapshot.strategy_implementation_inventory:
-        readiness = next(item for item in snapshot.all_strategy_execution_readiness if item["canonical_strategy_id"] == row["canonical_strategy_id"])
-        rows.append(
-            {
-                "authority_target": row["canonical_strategy_id"],
-                "authority_kind": "strategy_hypothesis",
-                "authority_status": readiness["status"],
-                "blocker": readiness["remaining_blocker"],
-            }
-        )
-    rows.append(
-        {
-            "authority_target": "canonical_signal_ledgers",
-            "authority_kind": "signal_ledger",
-            "authority_status": snapshot.signal_ledger_summary["canonical_signal_ledger_count"] and "PROVEN" or "BLOCKED",
-            "blocker": "insufficient_provenance",
-        }
-    )
-    rows.append(
-        {
-            "authority_target": "unresolved_sources",
-            "authority_kind": "source_search",
-            "authority_status": "BLOCKED",
-            "blocker": "truncated_search_bundle",
-        }
-    )
-    rows.append(
-        {
-            "authority_target": "strategy_execution",
-            "authority_kind": "execution_readiness",
-            "authority_status": "BLOCKED",
-            "blocker": "no_ready_for_causal_execution_lanes",
-        }
-    )
-    assert versions
-    return rows
-
-
-def _blocker_ledger(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
-    blockers = snapshot.execution_readiness_summary["blocked_lanes_by_blocker_class"]
-    return [
-        {"blocker_class": name, "blocked_lane_count": count, "authority_status": "BLOCKED"}
-        for name, count in sorted(blockers.items())
-    ]
-
-
-def _strategy_prioritization(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
-    ranking = []
-    for item in snapshot.all_strategy_execution_readiness:
-        priority = 1 if item["remaining_blocker"] == "INSUFFICIENT_SIGNAL_PROVENANCE" else 2 if item["remaining_blocker"] == "SOURCE_SEARCH_INCOMPLETE" else 3
-        ranking.append(
-            {
-                "canonical_strategy_id": item["canonical_strategy_id"],
-                "priority": priority,
-                "authority_status": item["status"],
-                "remaining_blocker": item["remaining_blocker"],
-                "selected_canonical_dataset": item["selected_canonical_dataset"],
-                "selected_canonical_signal_ledger": item["selected_canonical_signal_ledger"],
-            }
-        )
-    return sorted(ranking, key=lambda row: (row["priority"], row["canonical_strategy_id"]))
-
-
 def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, output_dir: Path) -> AuthorityClosureBuildResult:
     families = _dataset_family_reviews(snapshot)
     versions = _dataset_version_decisions(snapshot)
     version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
     signal_review = _signal_ledger_review(snapshot)
     unresolved_review = _unresolved_source_review(snapshot)
+    signal_assessments = []
+    if signal_review.get("canonical_strategy_id") and signal_review.get("signal_ledger_id"):
+        signal_assessments.append(
+            {
+                "canonical_strategy_id": signal_review["canonical_strategy_id"],
+                "canonical_signal_ledger_id": signal_review["signal_ledger_id"],
+                "authority_conclusion": signal_review["authority_conclusion"],
+            }
+        )
     matrix = build_authority_strategy_matrix(
         strategy_implementation_inventory=snapshot.strategy_implementation_inventory,
         strategy_alias_registry=snapshot.strategy_alias_registry,
         all_strategy_execution_readiness=snapshot.all_strategy_execution_readiness,
+        signal_ledger_assessments=signal_assessments,
     )
     for row in matrix:
         selected_version = row.get("selected_canonical_dataset")
@@ -588,10 +633,9 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
                 "parameter_hash": _semantic_digest(row.get("resolved_required_parameters", [])),
                 "temporal_contract_authority": "PROVEN" if row.get("temporal_contract") == "CAUSAL_ONLY" else "UNRESOLVED",
                 "required_dataset_family_ids": [version["dataset_family_id"]] if version.get("dataset_family_id") else [],
-                "required_dataset_version_ids": [selected_version] if selected_version else [],
+                "required_dataset_version_ids": [selected_version] if selected_version and version else [],
                 "dataset_authority": version.get("status", "UNRESOLVED"),
                 "signal_ledger_ids": [row["selected_canonical_signal_ledger"]] if row.get("selected_canonical_signal_ledger") else [],
-                "signal_authority": signal_review["authority_conclusion"],
                 "split_fold_identity": {
                     "development_session_count": row.get("development_session_count"),
                     "holdout_session_count": row.get("holdout_session_count"),
@@ -599,6 +643,9 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
                 "instrument_identity_authority": "PROVEN_WITH_LIMITATIONS" if selected_version else "UNRESOLVED",
                 "option_data_dependency": row.get("option_data_requirements"),
                 "multi_asset_dependency": row["lane_kind"] == "MULTI_ASSET_STRATEGY",
+                "multi_asset_dependency_authority": "UNRESOLVED" if row["lane_kind"] == "MULTI_ASSET_STRATEGY" else "NOT_APPLICABLE",
+                "source_search_authority": "UNRESOLVED" if unresolved_review["unresolved_candidate_count"] else "PROVEN",
+                "historical_invalidation": bool(row.get("invalidated_evidence")),
                 "current_blocker_classes": [blocker],
                 "overall_authority_status": row.get("authority_status"),
                 "next_minimum_evidence_action": row.get("recommended_next_action"),
@@ -609,31 +656,32 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
                 },
             }
         )
-    blocker_input = [
-        {
-            "authority_target": row["canonical_strategy_id"],
-            "authority_kind": "strategy_hypothesis",
-            "authority_status": str(row["authority_status"]),
-            "blocker": str(row["remaining_blocker"] or "AUTHORITY_EVIDENCE_INCOMPLETE"),
-        }
-        for row in matrix
-    ]
-    blocker_result = build_authority_blockers_priority(blocker_input)
+    blocker_result = build_authority_blockers_priority(
+        matrix,
+        known_family_ids=(row["dataset_family_id"] for row in families),
+        known_version_ids=(row["dataset_version_id"] for row in versions),
+        known_signal_ledger_ids=(
+            str(row["canonical_signal_ledger_id"])
+            for row in snapshot.canonical_signal_ledger_registry
+            if row.get("canonical_signal_ledger_id")
+        ),
+    )
     blocker_rows = blocker_records_as_dicts(blocker_result)
-    blocker_id_by_target = {
-        reference.authority_target: reference.blocker_id for reference in blocker_result.references
-    }
-    priority_by_blocker = {row["blocker_id"]: row["completeness_class"] for row in blocker_rows}
     priorities = [
         {
-            "canonical_strategy_id": row["canonical_strategy_id"],
-            "priority": priority_by_blocker[blocker_id_by_target[row["canonical_strategy_id"]]],
-            "blocker_ids": [blocker_id_by_target[row["canonical_strategy_id"]]],
-            "authority_status": row["authority_status"],
-            "remaining_blocker": row["remaining_blocker"],
-            "next_minimum_evidence_action": row["next_minimum_evidence_action"],
+            "canonical_strategy_id": priority.canonical_strategy_id,
+            "priority": priority.priority_class,
+            "priority_class": priority.priority_class,
+            "component_completeness": dict(priority.component_completeness),
+            "priority_reason_codes": list(priority.priority_reason_codes),
+            "blocker_ids": list(priority.remaining_blocker_ids),
+            "remaining_blocker_ids": list(priority.remaining_blocker_ids),
+            "authority_status": next(row["authority_status"] for row in matrix if row["canonical_strategy_id"] == priority.canonical_strategy_id),
+            "remaining_blocker": next(row["remaining_blocker"] for row in matrix if row["canonical_strategy_id"] == priority.canonical_strategy_id),
+            "next_minimum_evidence_action": priority.next_minimum_action,
+            "next_minimum_action": priority.next_minimum_action,
         }
-        for row in matrix
+        for priority in blocker_result.priorities
     ]
     priorities.sort(key=lambda row: (row["priority"], row["canonical_strategy_id"]))
     integrity = {

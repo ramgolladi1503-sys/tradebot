@@ -104,6 +104,101 @@ def _snapshot() -> AuthorityClosureSnapshot:
     )
 
 
+def _cross_record_snapshot() -> AuthorityClosureSnapshot:
+    snapshot = _snapshot()
+    family_a = "FAMILY:BANKNIFTY:spot:NSE:unknown"
+    family_b = "FAMILY:NIFTY_SPOT:spot:NSE:5m"
+    version_a = "VERSION:FAMILY:BANKNIFTY:spot:NSE:unknown:aaaaaaaaaaaaaaaa"
+    version_b = "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:bbbbbbbbbbbbbbbb"
+    candidate_a = {
+        "candidate_id": "candidate-a",
+        "relative_path": "family-a.parquet",
+        "sha256": "a" * 64,
+        "physical_sha256": "a" * 64,
+        "classification": "UNDERLYING_CANDLE_DATASET",
+        "accepted": True,
+        "quality_limitations": ["timezone_incomplete"],
+    }
+    candidate_b = {
+        "candidate_id": "candidate-b",
+        "relative_path": "family-b.parquet",
+        "sha256": "b" * 64,
+        "physical_sha256": "b" * 64,
+        "classification": "UNDERLYING_CANDLE_DATASET",
+        "accepted": True,
+        "quality_limitations": ["session_gaps"],
+    }
+    partitions = [
+        {
+            "partition_id": "PART:aaaaaaaaaaaaaaaa",
+            "blob_id": "a" * 64,
+            "dataset_family_id": family_a,
+            "dataset_version_id": version_a,
+            "first_timestamp": "2026-01-05T09:15:00+05:30",
+            "last_timestamp": "2026-01-05T15:30:00+05:30",
+            "session_set_hash": "1" * 64,
+            "quality_limitations": ["timezone_incomplete"],
+        },
+        {
+            "partition_id": "PART:bbbbbbbbbbbbbbbb",
+            "blob_id": "b" * 64,
+            "dataset_family_id": family_b,
+            "dataset_version_id": version_b,
+            "first_timestamp": "2026-01-06T09:15:00+05:30",
+            "last_timestamp": "2026-01-06T15:30:00+05:30",
+            "session_set_hash": "2" * 64,
+            "quality_limitations": ["session_gaps"],
+        },
+    ]
+    families = [
+        dict(snapshot.logical_dataset_family_registry[0], dataset_family_id=family_a, partition_ids=["PART:aaaaaaaaaaaaaaaa"], versions=[version_a]),
+        dict(snapshot.logical_dataset_family_registry[1], dataset_family_id=family_b, partition_ids=["PART:bbbbbbbbbbbbbbbb"], versions=[version_b]),
+    ]
+    versions = [
+        {
+            "dataset_version_id": version_a,
+            "dataset_family_id": family_a,
+            "status": "USABLE_WITH_LIMITATIONS",
+            "partition_ids": ["PART:aaaaaaaaaaaaaaaa"],
+            "partition_manifest_hash": "3" * 64,
+            "schema_hash": "4" * 64,
+            "session_set_hash": "1" * 64,
+            "source_provenance": "ROOT_A",
+            "creation_method": "source",
+            "quality_metrics": {"invalid_rows": 0},
+            "limitations": ["timezone_incomplete"],
+        },
+        {
+            "dataset_version_id": version_b,
+            "dataset_family_id": family_b,
+            "status": "USABLE_WITH_LIMITATIONS",
+            "partition_ids": ["PART:bbbbbbbbbbbbbbbb"],
+            "partition_manifest_hash": "5" * 64,
+            "schema_hash": "6" * 64,
+            "session_set_hash": "2" * 64,
+            "source_provenance": "ROOT_B",
+            "creation_method": "source",
+            "quality_metrics": {"invalid_rows": 0},
+            "limitations": ["session_gaps"],
+        },
+    ]
+    return replace(
+        snapshot,
+        physical_candidate_registry=[candidate_a, candidate_b],
+        exact_content_blob_registry=[
+            {"blob_id": "a" * 64, "physical_sha256": "a" * 64, "candidate_ids": ["candidate-a"]},
+            {"blob_id": "b" * 64, "physical_sha256": "b" * 64, "candidate_ids": ["candidate-b"]},
+        ],
+        exact_duplicate_groups=[
+            {"physical_sha256": "a" * 64, "candidate_ids": ["candidate-a"]},
+            {"physical_sha256": "b" * 64, "candidate_ids": ["candidate-b"]},
+        ],
+        dataset_partition_registry=partitions,
+        logical_dataset_family_registry=families,
+        dataset_version_registry=versions,
+    )
+
+
 def test_loader_reconciles_semantically_identical_runs(tmp_path: Path) -> None:
     run_a = tmp_path / "run_a"
     run_b = tmp_path / "run_b"
@@ -187,7 +282,7 @@ def test_duplicate_family_and_version_ids_fail_closed(tmp_path: Path) -> None:
         )
 
 
-def test_version_decision_changes_when_status_evidence_is_mutated(tmp_path: Path) -> None:
+def test_version_status_mutation_cannot_promote_missing_evidence(tmp_path: Path) -> None:
     snapshot = _snapshot()
     baseline_dir = tmp_path / "baseline"
     mutated_dir = tmp_path / "mutated"
@@ -204,6 +299,119 @@ def test_version_decision_changes_when_status_evidence_is_mutated(tmp_path: Path
     baseline_decisions = {row["dataset_version_id"]: row["authority_decision"] for row in baseline}
     mutated_decisions = {row["dataset_version_id"]: row["authority_decision"] for row in mutated}
 
-    assert baseline_decisions["VERSION:2"] == "KEEP_USABLE_WITH_LIMITATIONS"
-    assert mutated_decisions["VERSION:2"] == "DOWNGRADE_TO_EXPLORATORY_ONLY"
-    assert baseline_decisions != mutated_decisions
+    assert baseline_decisions["VERSION:2"] == "DOWNGRADE_TO_UNRESOLVED"
+    assert mutated_decisions["VERSION:2"] == "DOWNGRADE_TO_UNRESOLVED"
+
+
+def test_family_reviews_join_only_their_own_cross_record_evidence(tmp_path: Path) -> None:
+    output = tmp_path / "closure"
+    build_all_strategy_authority_closure(snapshot=_cross_record_snapshot(), output_dir=output)
+
+    reviews = json.loads((output / "dataset_family_authority_reviews.json").read_text(encoding="utf-8"))
+    by_family = {row["dataset_family_id"]: row for row in reviews}
+    banknifty = by_family["FAMILY:BANKNIFTY:spot:NSE:unknown"]
+
+    assert banknifty["partition_ids"] == ["PART:aaaaaaaaaaaaaaaa"]
+    assert banknifty["version_ids"] == ["VERSION:FAMILY:BANKNIFTY:spot:NSE:unknown:aaaaaaaaaaaaaaaa"]
+    assert banknifty["physical_candidate_ids"] == ["candidate-a"]
+    assert banknifty["exact_blob_ids"] == ["a" * 64]
+    assert banknifty["quality_limitations"] == ["family_identity_not_canonical", "timezone_incomplete"]
+    assert banknifty["first_timestamp"] == "2026-01-05T09:15:00+05:30"
+    assert banknifty["last_timestamp"] == "2026-01-05T15:30:00+05:30"
+    assert "candidate-b" not in banknifty["physical_candidate_ids"]
+    assert "b" * 64 not in banknifty["exact_blob_ids"]
+
+
+def test_version_decision_uses_evidence_when_declared_status_is_unchanged(tmp_path: Path) -> None:
+    snapshot = _cross_record_snapshot()
+    baseline_dir = tmp_path / "baseline"
+    mutated_dir = tmp_path / "mutated"
+    build_all_strategy_authority_closure(snapshot=snapshot, output_dir=baseline_dir)
+    mutated_versions = [dict(row) for row in snapshot.dataset_version_registry]
+    mutated_versions[0]["source_provenance"] = None
+    build_all_strategy_authority_closure(
+        snapshot=replace(snapshot, dataset_version_registry=mutated_versions),
+        output_dir=mutated_dir,
+    )
+
+    baseline = json.loads((baseline_dir / "dataset_version_authority_decisions.json").read_text(encoding="utf-8"))
+    mutated = json.loads((mutated_dir / "dataset_version_authority_decisions.json").read_text(encoding="utf-8"))
+    baseline_a = {row["dataset_version_id"]: row for row in baseline}["VERSION:FAMILY:BANKNIFTY:spot:NSE:unknown:aaaaaaaaaaaaaaaa"]
+    mutated_a = {row["dataset_version_id"]: row for row in mutated}["VERSION:FAMILY:BANKNIFTY:spot:NSE:unknown:aaaaaaaaaaaaaaaa"]
+
+    assert baseline_a["original_census_status"] == "USABLE_WITH_LIMITATIONS"
+    assert mutated_a["original_census_status"] == "USABLE_WITH_LIMITATIONS"
+    assert baseline_a["authority_decision"] != mutated_a["authority_decision"]
+    assert baseline_a["authority_reason_codes"] != mutated_a["authority_reason_codes"]
+
+
+def test_signal_review_joins_typed_ids_and_uses_the_assessed_hashes(tmp_path: Path) -> None:
+    snapshot = _cross_record_snapshot()
+    family_id = "FAMILY:NIFTY_SPOT:spot:NSE:5m"
+    version_id = "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:bbbbbbbbbbbbbbbb"
+    ledger_id = "LEDGER:VWAP_RECLAIM:001"
+    audit = {
+        "canonical_signal_ledger_id": ledger_id,
+        "strategy_or_hypothesis_id": "VWAP_RECLAIM",
+        "implementation_commit": "c" * 64,
+        "dataset_source_hash": "d" * 64,
+        "dataset_family_id": family_id,
+        "dataset_version_id": version_id,
+        "row_count": 12,
+    }
+    registry = {"canonical_signal_ledger_id": ledger_id, "canonical_strategy_id": "VWAP_RECLAIM", "status": "INSUFFICIENT_PROVENANCE"}
+    inventory = [
+        {"canonical_strategy_id": "NO_TRADE_CHOP", "implementation_blob_hash": "e" * 64, "aliases": ["NO_TRADE_CHOP"]},
+        {"canonical_strategy_id": "VWAP_RECLAIM", "implementation_blob_hash": "f" * 64, "aliases": ["VWAP_RECLAIM"]},
+    ]
+    readiness = [
+        dict(snapshot.all_strategy_execution_readiness[1]),
+        dict(snapshot.all_strategy_execution_readiness[0], selected_canonical_dataset=version_id, selected_canonical_signal_ledger=ledger_id),
+    ]
+    build_all_strategy_authority_closure(
+        snapshot=replace(snapshot, canonical_signal_ledger_registry=[registry], canonical_signal_ledger_audit=[audit], strategy_implementation_inventory=inventory, all_strategy_execution_readiness=readiness),
+        output_dir=tmp_path / "closure",
+    )
+
+    review = json.loads((tmp_path / "closure" / "signal_ledger_authority_review.json").read_text(encoding="utf-8"))
+    assert review["canonical_strategy_id"] == "VWAP_RECLAIM"
+    assert review["dataset_family_id"] == family_id
+    assert review["dataset_version_id"] == version_id
+    assert review["implementation_hash"] == "c" * 64
+    assert review["dataset_hash"] == "d" * 64
+    assert not review["dataset_family_id"].startswith("VERSION:")
+
+
+def test_signal_review_does_not_fall_back_to_first_lane_when_ownership_is_unknown(tmp_path: Path) -> None:
+    snapshot = _cross_record_snapshot()
+    audit = {"canonical_signal_ledger_id": "LEDGER:UNKNOWN:001", "strategy_or_hypothesis_id": "UNKNOWN_OWNER", "implementation_commit": "c" * 64, "dataset_source_hash": "d" * 64}
+    registry = {"canonical_signal_ledger_id": "LEDGER:UNKNOWN:001", "status": "INSUFFICIENT_PROVENANCE"}
+    build_all_strategy_authority_closure(
+        snapshot=replace(snapshot, canonical_signal_ledger_registry=[registry], canonical_signal_ledger_audit=[audit]),
+        output_dir=tmp_path / "closure",
+    )
+
+    review = json.loads((tmp_path / "closure" / "signal_ledger_authority_review.json").read_text(encoding="utf-8"))
+    assert review["canonical_strategy_id"] is None
+    assert review["aliases"] == []
+    assert review["implementation_path"] is None
+    assert review["parameter_owner"] is None
+    assert review["authority_conclusion"] == "INSUFFICIENT_PROVENANCE"
+
+
+def test_signal_review_rejects_version_identifier_as_dataset_family(tmp_path: Path) -> None:
+    snapshot = _cross_record_snapshot()
+    ledger_id = "LEDGER:VWAP_RECLAIM:BAD_FAMILY"
+    version_id = "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:bbbbbbbbbbbbbbbb"
+    audit = {
+        "canonical_signal_ledger_id": ledger_id,
+        "strategy_or_hypothesis_id": "VWAP_RECLAIM",
+        "dataset_family_id": version_id,
+        "dataset_version_id": version_id,
+    }
+
+    with pytest.raises(AuthorityClosureReconciliationError, match="dataset_family_id"):
+        build_all_strategy_authority_closure(
+            snapshot=replace(snapshot, canonical_signal_ledger_registry=[{"canonical_signal_ledger_id": ledger_id, "canonical_strategy_id": "VWAP_RECLAIM"}], canonical_signal_ledger_audit=[audit]),
+            output_dir=tmp_path / "closure",
+        )
