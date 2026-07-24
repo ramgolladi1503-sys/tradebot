@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from research.option_e2e_recertification_v4.all_strategy_authority_closure_v1 import (
     AuthorityClosureSnapshot,
+    AuthorityClosureReconciliationError,
     build_all_strategy_authority_closure,
     load_authority_closure_inputs,
 )
@@ -130,7 +134,7 @@ def test_closure_builds_real_records_from_snapshot(tmp_path: Path) -> None:
     assert result.dataset_family_count == 2
     assert result.dataset_version_count == 2
     assert families[0]["dataset_family_id"] == "FAMILY:BANKNIFTY:spot:NSE:unknown"
-    assert families[1]["authority_status"] == "BLOCKED_WITH_LIMITATIONS"
+    assert families[1]["authority_status"] == "FAMILY_USABLE_WITH_LIMITATIONS"
     assert versions[0]["dataset_version_id"] == "VERSION:1"
     assert matrix[-1]["authority_target"] == "strategy_execution"
     assert signal["canonical_signal_ledger_count"] == 0
@@ -145,3 +149,58 @@ def test_sidecars_are_written(tmp_path: Path) -> None:
     assert payload.exists()
     assert sidecar.exists()
     assert sidecar.read_text(encoding="utf-8").split()[0] == hashlib.sha256(payload.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+
+def test_family_and_version_authority_preserves_ids_and_accounts_once(tmp_path: Path) -> None:
+    output = tmp_path / "closure"
+    build_all_strategy_authority_closure(snapshot=_snapshot(), output_dir=output)
+
+    families = json.loads((output / "dataset_family_authority_reviews.json").read_text(encoding="utf-8"))
+    versions = json.loads((output / "dataset_version_authority_decisions.json").read_text(encoding="utf-8"))
+    family_ids = tuple(row["dataset_family_id"] for row in families)
+    version_ids = tuple(row["dataset_version_id"] for row in versions)
+    statuses = {row["dataset_family_id"]: row["authority_status"] for row in families}
+
+    assert family_ids == ("FAMILY:BANKNIFTY:spot:NSE:unknown", "FAMILY:NIFTY_SPOT:spot:NSE:5m")
+    assert version_ids == ("VERSION:1", "VERSION:2")
+    assert statuses["FAMILY:BANKNIFTY:spot:NSE:unknown"] == "FAMILY_IDENTITY_INCOMPLETE"
+    assert statuses["FAMILY:NIFTY_SPOT:spot:NSE:5m"] == "FAMILY_USABLE_WITH_LIMITATIONS"
+
+
+def test_duplicate_family_and_version_ids_fail_closed(tmp_path: Path) -> None:
+    snapshot = _snapshot()
+    conflicting_family = dict(snapshot.logical_dataset_family_registry[0], identity_status="PROVISIONAL")
+    with pytest.raises(AuthorityClosureReconciliationError, match="duplicate_key_conflict key=dataset_family_id"):
+        build_all_strategy_authority_closure(
+            snapshot=replace(snapshot, logical_dataset_family_registry=[*snapshot.logical_dataset_family_registry, conflicting_family]),
+            output_dir=tmp_path / "family",
+        )
+
+    conflicting_version = dict(snapshot.dataset_version_registry[0], status="USABLE_WITH_LIMITATIONS")
+    with pytest.raises(AuthorityClosureReconciliationError, match="duplicate_key_conflict key=dataset_version_id"):
+        build_all_strategy_authority_closure(
+            snapshot=replace(snapshot, dataset_version_registry=[*snapshot.dataset_version_registry, conflicting_version]),
+            output_dir=tmp_path / "version",
+        )
+
+
+def test_version_decision_changes_when_status_evidence_is_mutated(tmp_path: Path) -> None:
+    snapshot = _snapshot()
+    baseline_dir = tmp_path / "baseline"
+    mutated_dir = tmp_path / "mutated"
+    build_all_strategy_authority_closure(snapshot=snapshot, output_dir=baseline_dir)
+    mutated_versions = [dict(row) for row in snapshot.dataset_version_registry]
+    mutated_versions[1]["status"] = "EXPLORATORY_ONLY"
+    build_all_strategy_authority_closure(
+        snapshot=replace(snapshot, dataset_version_registry=mutated_versions),
+        output_dir=mutated_dir,
+    )
+
+    baseline = json.loads((baseline_dir / "dataset_version_authority_decisions.json").read_text(encoding="utf-8"))
+    mutated = json.loads((mutated_dir / "dataset_version_authority_decisions.json").read_text(encoding="utf-8"))
+    baseline_decisions = {row["dataset_version_id"]: row["authority_decision"] for row in baseline}
+    mutated_decisions = {row["dataset_version_id"]: row["authority_decision"] for row in mutated}
+
+    assert baseline_decisions["VERSION:2"] == "KEEP_USABLE_WITH_LIMITATIONS"
+    assert mutated_decisions["VERSION:2"] == "DOWNGRADE_TO_EXPLORATORY_ONLY"
+    assert baseline_decisions != mutated_decisions

@@ -67,6 +67,26 @@ class AuthorityClosureBuildResult:
     valid_precomputed_signals_lanes: int
 
 
+def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, ""))
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _index_by(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        row_id = str(row.get(key, ""))
+        if not row_id:
+            continue
+        if row_id in index and index[row_id] != row:
+            raise AuthorityClosureReconciliationError(f"duplicate_key_conflict key={key} value={row_id}")
+        index[row_id] = row
+    return dict(sorted(index.items()))
+
+
 def _compact_dir(repo_root: Path) -> Path:
     return repo_root / "research" / "option_e2e_recertification_v4" / "all_strategy_source_census_v1"
 
@@ -231,11 +251,18 @@ def load_authority_closure_inputs(*, full_run_a: Path, full_run_b: Path, compact
 
 
 def _family_authority_status(row: dict[str, Any]) -> tuple[str, str]:
-    if row.get("identity_status") == "IDENTITY_INCOMPLETE":
-        return "BLOCKED_WITH_LIMITATIONS", "identity_status_is_incomplete"
-    if row.get("dataset_family_id") == "FAMILY:NIFTY_F1:futures:NSE:1m":
-        return "BLOCKED_WITH_LIMITATIONS", "derived_source_requires_authority_closure"
-    return "BLOCKED_WITH_LIMITATIONS", "no_canonical_family_authority"
+    identity = str(row.get("identity_status", ""))
+    if identity == "CANONICAL":
+        return "CANONICAL_FAMILY_AUTHORITY_PROVEN", "canonical_family_authority_proven"
+    if identity == "PROVISIONAL":
+        return "FAMILY_USABLE_WITH_LIMITATIONS", "provisional_family_usable_with_limitations"
+    if identity == "IDENTITY_INCOMPLETE":
+        return "FAMILY_IDENTITY_INCOMPLETE", "identity_status_is_incomplete"
+    if not row.get("session_set_hash"):
+        return "FAMILY_SOURCE_PROVENANCE_INCOMPLETE", "session_set_hash_missing"
+    if str(row.get("dataset_family_id", "")).startswith("FAMILY:NIFTY_F1"):
+        return "FAMILY_REQUIRES_TARGETED_INSPECTION", "nifty_f1_requires_targeted_inspection"
+    return "FAMILY_USABLE_WITH_LIMITATIONS", "no_canonical_family_authority"
 
 
 def load_all_strategy_authority_closure(repo_root: Path, *, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
@@ -244,16 +271,43 @@ def load_all_strategy_authority_closure(repo_root: Path, *, full_run_a: Path, fu
 
 
 def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
+    family_by_id = _index_by(snapshot.logical_dataset_family_registry, "dataset_family_id")
     families = []
-    for row in snapshot.logical_dataset_family_registry:
+    for family_id, row in family_by_id.items():
         authority_status, authority_reason = _family_authority_status(row)
         families.append(
             {
-                "dataset_family_id": row["dataset_family_id"],
-                "authority_status": authority_status,
-                "authority_reason": authority_reason,
+                "dataset_family_id": family_id,
+                "source_record_hash": hashlib.sha256(_canonical_json(row).encode("utf-8")).hexdigest(),
+                "instrument": row.get("instrument"),
+                "instrument_type": row.get("instrument_type"),
+                "venue": row.get("market"),
+                "bar_interval": row.get("bar_interval"),
+                "timezone": row.get("timezone"),
+                "source_owner": row.get("source_owner"),
+                "generation_method": row.get("generation_method"),
+                "identity_status": row.get("identity_status"),
+                "partition_ids": list(row.get("partition_ids", [])),
+                "version_ids": list(row.get("versions", [])),
+                "partition_count": row.get("partition_count"),
+                "version_count": len(row.get("versions", [])),
+                "physical_candidate_ids": [],
+                "physical_file_count": row.get("physical_file_count"),
+                "exact_blob_ids": [],
+                "exact_copy_count": row.get("exact_copy_count"),
+                "first_timestamp": row.get("first_timestamp"),
+                "last_timestamp": row.get("last_timestamp"),
+                "date_range": [row.get("first_timestamp"), row.get("last_timestamp")],
+                "session_count": row.get("session_count"),
+                "session_set_hash": row.get("session_set_hash"),
                 "provenance_status": "PROVEN" if row.get("identity_status") == "PROVISIONAL" else "PARTIALLY_PROVEN",
-                "evidence": {
+                "temporal_semantics_status": "UNKNOWN" if row.get("bar_interval") == "unknown" else "PROVEN",
+                "roll_methodology_status": "NOT_APPLICABLE" if row.get("instrument_type") == "spot" else "UNRESOLVED",
+                "volume_semantics_status": "UNRESOLVED",
+                "authority_status": authority_status,
+                "authority_reason_codes": [authority_reason],
+                "quality_limitations": [],
+                "supporting_evidence": {
                     "partition_count": row.get("partition_count"),
                     "physical_file_count": row.get("physical_file_count"),
                     "exact_copy_count": row.get("exact_copy_count"),
@@ -267,32 +321,87 @@ def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str
 
 def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
     decisions = []
-    for row in snapshot.dataset_version_registry:
+    version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
+    for version_id, row in version_by_id.items():
+        status = str(row.get("status", ""))
+        if status == "CANONICAL_DATASET_VERSION":
+            authority_decision = "PROMOTE_TO_CANONICAL_DATASET_VERSION"
+        elif status == "USABLE_WITH_LIMITATIONS":
+            authority_decision = "KEEP_USABLE_WITH_LIMITATIONS"
+        elif status == "EXPLORATORY_ONLY":
+            authority_decision = "DOWNGRADE_TO_EXPLORATORY_ONLY"
+        elif status == "UNRESOLVED_DATASET_VERSION":
+            authority_decision = "DOWNGRADE_TO_UNRESOLVED"
+        elif status == "INVALIDATED":
+            authority_decision = "INVALIDATE_DATASET_VERSION"
+        else:
+            authority_decision = "DERIVED_DUPLICATE"
         decisions.append(
             {
-                "dataset_version_id": row["dataset_version_id"],
+                "dataset_version_id": version_id,
                 "dataset_family_id": row["dataset_family_id"],
-                "authority_status": row["status"],
-                "authority_reason": "provenance_not_canonical" if row["status"] == "USABLE_WITH_LIMITATIONS" else "no_canonical_point_in_time_provenance",
-                "provenance_status": "PROVEN" if row["status"] == "CANONICAL_DATASET_VERSION" else "PARTIALLY_PROVEN",
-                "limitations": list(row.get("limitations", [])),
                 "partition_ids": list(row.get("partition_ids", [])),
+                "partition_manifest_hash": row.get("partition_manifest_hash"),
+                "schema_hash": row.get("schema_hash"),
+                "session_set_hash": row.get("session_set_hash"),
                 "source_provenance": row.get("source_provenance"),
+                "creation_method": row.get("creation_method"),
+                "quality_metrics": row.get("quality_metrics"),
+                "limitations": list(row.get("limitations", [])),
+                "source_record_hash": hashlib.sha256(_canonical_json(row).encode("utf-8")).hexdigest(),
+                "authority_decision": authority_decision,
+                "authority_reason_codes": [f"dataset_version_status_{status.lower() or 'unknown'}"],
+                "supporting_evidence": row,
+                "allowed_strategy_categories": ["research_only"],
+                "prohibited_strategy_categories": ["live", "paper", "execution"],
             }
         )
     return decisions
 
 
 def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
+    audit = snapshot.canonical_signal_ledger_audit[0] if snapshot.canonical_signal_ledger_audit else {}
+    registry = snapshot.canonical_signal_ledger_registry[0] if snapshot.canonical_signal_ledger_registry else {}
     return {
-        "authority_status": "BLOCKED",
+        "signal_ledger_id": registry.get("canonical_signal_ledger_id"),
+        "candidate_id": audit.get("canonical_signal_ledger_id"),
+        "path": audit.get("exact_path"),
+        "physical_hash": audit.get("physical_sha256"),
+        "canonical_strategy_id": snapshot.strategy_implementation_inventory[0]["canonical_strategy_id"] if snapshot.strategy_implementation_inventory else None,
+        "aliases": snapshot.strategy_alias_registry[0]["aliases"] if snapshot.strategy_alias_registry else [],
+        "row_count": audit.get("row_count"),
+        "session_count": audit.get("session_count"),
+        "signal_id_uniqueness": audit.get("signal_id_unique"),
+        "feature_cutoff_timestamp_status": "UNRESOLVED" if audit.get("feature_cutoff_ts") is None else "PROVEN",
+        "signal_timestamp_status": "UNRESOLVED" if audit.get("signal_ts") is None else "PROVEN",
+        "earliest_legal_entry_timestamp_status": "UNRESOLVED" if audit.get("earliest_entry_ts") is None else "PROVEN",
+        "causal_ordering_status": "UNRESOLVED",
+        "implementation_path": snapshot.strategy_implementation_inventory[0].get("implementation_path") if snapshot.strategy_implementation_inventory else None,
+        "implementation_hash": snapshot.strategy_implementation_inventory[0].get("implementation_blob_hash") if snapshot.strategy_implementation_inventory else None,
+        "implementation_authority": "UNRESOLVED",
+        "parameter_owner": snapshot.strategy_implementation_inventory[0].get("parameter_owner") if snapshot.strategy_implementation_inventory else None,
+        "parameter_hash": audit.get("parameter_hash"),
+        "parameter_authority": "UNRESOLVED",
+        "dataset_family_id": snapshot.all_strategy_execution_readiness[0].get("selected_canonical_dataset") if snapshot.all_strategy_execution_readiness else None,
+        "dataset_version_id": snapshot.all_strategy_execution_readiness[0].get("selected_canonical_dataset") if snapshot.all_strategy_execution_readiness else None,
+        "dataset_hash": snapshot.census_summary.get("input_bundle", {}).get("candidate_inventory_sha256"),
+        "dataset_authority": "BLOCKED",
+        "fold_identity": audit.get("fold_identity"),
+        "development_validation_holdout_identity": audit.get("is_holdout"),
+        "split_authority": "UNRESOLVED",
+        "pre_outcome_freeze_provenance": audit.get("pre_outcome_freeze_provenance"),
+        "generation_command": "loaded from canonical signal ledger registry",
+        "outcome_or_pnl_contamination": "UNRESOLVED",
+        "option_price_contamination": "UNRESOLVED",
+        "historical_invalidation_status": registry.get("status"),
+        "authority_conclusion": "INSUFFICIENT_PROVENANCE" if registry.get("status") == "INSUFFICIENT_PROVENANCE" else "INVALID_SIGNAL_LEDGER",
+        "authority_reason_codes": ["no_signal_ledger_has_canonical_provenance"],
+        "supporting_evidence": {"registry": registry, "audit": audit},
         "canonical_signal_ledger_count": snapshot.signal_ledger_summary["canonical_signal_ledger_count"],
         "insufficient_provenance_ledgers": snapshot.signal_ledger_summary["insufficient_provenance_ledgers"],
         "valid_signal_ledger_with_limitations_count": snapshot.signal_ledger_summary["valid_signal_ledger_with_limitations_count"],
         "canonical_signal_ledger_registry": snapshot.canonical_signal_ledger_registry,
         "canonical_signal_ledger_audit": snapshot.canonical_signal_ledger_audit,
-        "reason": "no_signal_ledger_has_canonical_provenance",
-        "provenance_status": "UNKNOWN",
     }
 
 
@@ -329,7 +438,7 @@ def _authority_matrix(snapshot: AuthorityClosureSnapshot, families: list[dict[st
                 "authority_target": family["dataset_family_id"],
                 "authority_kind": "dataset_family",
                 "authority_status": family["authority_status"],
-                "blocker": family["authority_reason"],
+                "blocker": family["authority_reason_codes"][0],
             }
         )
     for row in snapshot.strategy_implementation_inventory:
