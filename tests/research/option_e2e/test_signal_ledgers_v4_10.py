@@ -18,7 +18,10 @@ def test_v4_10_vertical_slice_reports_exact_blockers() -> None:
     assert detail["reconciliation"]["exact_blockers"]
     assert "DATA_BLOCKED_REAL_OPTION_LTP_MISSING" in detail["reconciliation"]["exact_blockers"]
     assert "DATA_BLOCKED_STRESS_REPLAY_UNSUPPORTED_BY_DATA_CAPABILITY" in detail["reconciliation"]["exact_blockers"]
-    assert "NO_SIGNAL_LEDGER_SOURCE" in detail["reconciliation"]["exact_blockers"]
+    assert detail["reconciliation"]["blocker_domains"] == [
+        "SIGNAL_EXECUTION_BLOCKER",
+        "SIGNAL_SOURCE_BLOCKER",
+    ]
     assert {item["strategy_id"] for item in detail["lane_reports"]} == {"VWAP_RECLAIM", "OPENING_RANGE_BREAKOUT", "OPENING_STATE_MOMENTUM"}
     assert all(record["status"] == "SOURCE_BLOCKED" for record in detail["lane_reports"])
     assert all(record["read_only"] is True for record in detail["lane_reports"])
