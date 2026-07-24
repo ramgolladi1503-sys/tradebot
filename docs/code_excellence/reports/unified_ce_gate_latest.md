@@ -11,8 +11,8 @@
 
 - repo_root: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4`
 - config_path: `/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/.gsd-forensics.yaml`
-- changed_paths: `21`
-- total_findings: `13`
+- changed_paths: `24`
+- total_findings: `17`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,13 +20,15 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `0` | `0` |  |
-| `cerberus` | `PASS` | `0` | `12` | `0` |  |
+| `minerva` | `PASS` | `0` | `1` | `0` |  |
+| `cerberus` | `PASS` | `0` | `15` | `0` |  |
 | `evidence` | `PASS` | `0` | `1` | `0` |  |
 
 ## Changed Paths
 
 - `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md`
+- `docs/code_excellence/reports/changed_paths.txt`
+- `docs/code_excellence/reports/unified_ce_gate_latest.md`
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/__init__.py`
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/aeron7_nifty_f1_authority_review.json`
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/aeron7_nifty_f1_authority_review.json.sha256`
@@ -47,16 +49,21 @@
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/strategy_authority_prioritization.json.sha256`
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/unresolved_source_authority_review.json`
 - `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/unresolved_source_authority_review.json.sha256`
+- `tests/research/option_e2e/test_all_strategy_authority_closure_v1.py`
 
 ## Minerva Findings
 
-- No findings.
+| Path | Verdict | Reason |
+|---|---|---|
+| `tests/research/option_e2e/test_all_strategy_authority_closure_v1.py` | `PASS` | `test_reality_accepted` |
 
 ## Cerberus Findings
 
 | Path | Verdict | Reason |
 |---|---|---|
 | `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/code_excellence/reports/changed_paths.txt` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/code_excellence/reports/unified_ce_gate_latest.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/aeron7_nifty_f1_authority_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/all_strategy_authority_matrix.json` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -68,6 +75,7 @@
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/signal_ledger_authority_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/strategy_authority_prioritization.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/unresolved_source_authority_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_all_strategy_authority_closure_v1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 
 ## Evidence Findings
 

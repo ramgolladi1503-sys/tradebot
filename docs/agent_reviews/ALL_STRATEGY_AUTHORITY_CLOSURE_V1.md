@@ -3,7 +3,7 @@
 mode: RESEARCH_ONLY_AUTHORITY_CLOSURE
 candidate_id: all_strategy_authority_closure_v1
 decision: BLOCKED_WITH_DECLARED_GAPS
-reason: The published census is internally consistent, but it still leaves unresolved sources, non-canonical dataset versions, and zero canonical signal-ledger authority, so closure remains read-only and fail-closed.
+reason: The repaired closure is now derived from the real full census registries and preserves the census gaps as explicit authority blocks rather than synthetic summaries.
 timestamp: 2026-07-24T12:57:42+05:30
 research_only: true
 read_only: true
@@ -24,7 +24,7 @@ Owned paths:
 
 ## Design
 
-The closure package reads the committed census compact files and converts them into explicit authority records:
+The closure package reads the two full census registry runs, verifies they are semantically identical, and converts the real registry rows into explicit authority records:
 
 - input census integrity
 - dataset family authority reviews
@@ -37,6 +37,10 @@ The closure package reads the committed census compact files and converts them i
 - strategy prioritization
 
 Each output fails closed. No output claims canonical authority where the census still reports provisional or unresolved state.
+
+## Prior Invalidation History
+
+The earlier synthetic implementation was invalidated because it fabricated family, version, and prioritization records from aggregate counts. That history is preserved here as context, but the current implementation no longer uses those shortcuts.
 
 ## Safety Invariants
 
@@ -54,13 +58,14 @@ Each output fails closed. No output claims canonical authority where the census 
 
 Tests verify:
 
-- the closure layer reads the published census counts directly;
+- the closure layer reads the real full registry runs directly;
+- both full runs are semantically identical before closure is built;
 - the family and version authority outputs preserve the census gaps;
 - the Aeron7 review stays blocked with limitations;
 - unresolved source authority remains blocked;
 - the signal-ledger review remains blocked;
 - compact JSON outputs have sidecars;
-- the snapshot loader reproduces the committed census facts.
+- the snapshot loader reproduces the committed census facts from the full registry input.
 
 ## Rollout Notes
 
