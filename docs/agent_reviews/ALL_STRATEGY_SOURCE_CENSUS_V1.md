@@ -1,96 +1,153 @@
 # All Strategy Source Census v1
 
-candidate_id: all_strategy_source_census_v1
-decision: PROVISIONAL_CENSUS_WITH_DECLARED_GAPS
-mode: OFFLINE_CENSUS_AND_READINESS_MATRIX
-reason: Build a provisional all-strategy source census from the already materialized VWAP source bundle, deduplicate by content and semantic identity, and emit a strategy-specific execution-readiness matrix without running replay, WFA, holdout, broker, or fixed-economics tournament paths.
-timestamp: 2026-07-24T12:57:42+05:30
-read_only: true
-is_order_action: false
-broker_api_called: false
-allowed_for_live_execution: false
-append: false
-source: local bundle /Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/vwap_source_search/20260724-123741-41381
+candidate_id: all_strategy_source_census_v1  
+decision: PROVISIONAL_CENSUS_WITH_DECLARED_GAPS  
+mode: OFFLINE_CENSUS_AND_READINESS_MATRIX  
+research_only: true  
+read_only: true  
+is_order_action: false  
+broker_api_called: false  
+allowed_for_live_execution: false  
 source_head: `b4ccd69857ce0d594ef6e9c98646fa9f968b3c8c`
-research_only: true
 
-## Scope
+## Agent Work Contract
 
-This work adds a local census layer, compact repo summaries, and tests. It does not touch broker, live orders, live feeds, credentials, risk gates, dashboard code, production thresholds, or production registration.
+Build a provisional, deterministic census from the already materialized local source-search bundle. Separate physical candidate files, exact-content blobs, dataset partitions, logical dataset families, dataset versions, signal-ledger authority, and strategy readiness. Fail closed when source, provenance, split, parameter, or signal authority is incomplete.
 
-## Verified Input Bundle
+This contract does not authorize replay, profitability evaluation, WFA, holdout outcomes, broker interaction, order actions, production strategy changes, or fixed-economics comparisons.
 
-- `run_status.json`: `status=COMPLETE`
-- `source_search_summary.json`: `conclusion=SIGNAL_SOURCE_RESOLVED`
-- `source_search_manifest.json`: present
-- `candidate_inventory.jsonl`: present
-- `root_inventory.json`: present
-- `git_search_manifest.json`: present
-- `source_search_manifest.json.sha256`: present
+## Scope Guard
 
-Observed bundle counts:
+In scope:
 
-- Raw candidates: 6119
-- Raw accepted: 1055
-- Raw unresolved: 24
-- Physical candidate files: 6119
-- Exact content blobs: 2910
-- Dataset partitions: 1054
-- Logical dataset families: 8
-- Dataset versions: 986
-- Canonical dataset versions: 0
-- Usable-with-limitations versions: 25
-- Unresolved dataset versions: 961
-- Canonical signal ledgers: 1
-- Truncation: `true`
-- Timed out roots: 0
+- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/**`
+- `tests/research/option_e2e/test_all_strategy_source_census_v1.py`
+- this review document
+- generated Code Excellence changed-path and report files
 
-The census module rechecked the bundle and the compact evidence was deterministic across two independent output directories.
+Out of scope and not changed by this census commit:
 
-## What Changed
+- broker or order paths
+- live feeds and credentials
+- risk gates and dashboard behavior
+- production strategy thresholds or registration
+- real-money execution
+- option replay, P&L, WFA, holdout outcomes, or fixed-economics tournaments
 
-- Added `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census.py`
-- Added `research/option_e2e_recertification_v4/all_strategy_source_census_v1/__init__.py`
-- Added compact repo summaries and sidecars under `research/option_e2e_recertification_v4/all_strategy_source_census_v1/`
-- Added `tests/research/option_e2e/test_all_strategy_source_census_v1.py`
+## High-Risk Path Review
 
-## What Was Proven
+The census publication commit adds research-only census code, compact evidence, one focused test module, this review, and Code Excellence reports. It does not change the repository's broker, authentication, feed/WebSocket, orchestrator, execution, risk, or production strategy paths. The broader PR retains its existing historical scope, but this commit introduces no new live-runtime dependency or execution action.
 
-- Input bundle integrity checks pass for the verified bundle.
-- Exact duplicate groups are collapsed by `sha256 + classification + size`.
-- Minimal five-column signal ledgers do not become canonical by shape alone.
-- NIFTY-named OHLCV files are not treated as canonical unless they satisfy the census rules.
-- Strategy inventory and readiness are emitted separately from dataset and ledger registries.
-- Deterministic rerun hashes matched for the full external outputs and the compact outputs.
-- The earlier illustrative tournament contract was removed.
+## Grill Me Review
 
-## What Remains True
+### Assumptions challenged
 
-- The source bundle is resolved, but truncated.
-- The census is not an exhaustive closure proof for every possible root tail.
-- The census remains provisional because truncation and unresolved candidate tails still exist.
-- This does not execute options replay, WFA, holdout, or P&L.
-- This does not certify live readiness.
+- A scanner-accepted file is not automatically an authoritative dataset.
+- Multiple partitions are not multiple logical dataset families.
+- A minimally shaped signal ledger is not valid signal authority.
+- A deterministic artifact can still be incomplete or wrong.
+- Source resolution does not imply exhaustive closure.
 
-## Tests
+### Failure modes retained visibly
 
-- `PYTHONPATH=. pytest -q tests/research/option_e2e/test_all_strategy_source_census_v1.py`
-- `PYTHONPATH=. pytest -q tests/research/option_e2e/test_all_strategy_source_census_v1.py tests/research/option_e2e/test_signal_ledgers_v4_10.py tests/research/option_e2e/test_signal_ledgers_v4_10_2.py`
-- `AGENT_REVIEW_BASE_REF=origin/main PYTHONPATH=. python scripts/validate_agent_review_evidence.py`
+- The source scan is truncated.
+- Twenty-four source candidates remain unclosed in the input census.
+- Twenty-seven roots retain declared material blind spots.
+- No dataset version is canonical.
+- The one signal-ledger candidate has insufficient provenance and is not canonical.
+- No strategy lane is ready for unrestricted causal execution.
 
-## Output Paths
+Verdict: the census is useful as a provisional inventory and readiness blocker map, not as strategy certification.
 
-External evidence:
+## Hermes Review
 
-- `/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/all_strategy_source_census_v1/20260724-133422_family_model`
-- `/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/all_strategy_source_census_v1/20260724-133424_family_model_rerun`
+Scope and safety boundaries pass:
 
-Compact committed evidence:
+- `research_only=true`
+- `read_only=true`
+- `broker_api_called=false`
+- `is_order_action=false`
+- `allowed_for_live_execution=false`
 
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/schema.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/census_summary.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_family_summary.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/dataset_version_summary.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/signal_ledger_summary.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/execution_readiness_summary.json`
-- `research/option_e2e_recertification_v4/all_strategy_source_census_v1/external_evidence_manifest.json`
+The census reads an external evidence bundle and writes research evidence only. It does not import or call broker execution paths. No live behavior is introduced.
+
+## GSD Review
+
+Delivery status: `PROVISIONAL_CENSUS_WITH_DECLARED_GAPS`.
+
+Observed compact-evidence counts:
+
+- raw candidate files: `6119`
+- accepted physical files: `1055`
+- exact-content blobs: `2910`
+- dataset partitions: `1054`
+- logical dataset families: `8`
+- dataset versions: `986`
+- canonical dataset versions: `0`
+- usable-with-limitations versions: `25`
+- unresolved dataset versions: `961`
+- canonical signal ledgers: `0`
+- insufficient-provenance signal ledgers: `1`
+- ready-for-causal-execution lanes: `0`
+- valid-precomputed-signal lanes: `0`
+
+The old file-level count of `986 canonical datasets` is superseded because physical files and partitions had been mislabeled as logical datasets.
+
+Next action after publication is evidence closure and authority resolution, not strategy execution.
+
+## QA / Safety Review
+
+The focused tests invoke production census callables against controlled bundles to prove:
+
+- input count and sidecar validation;
+- exact duplicate collapse;
+- deterministic canonical-copy selection;
+- family/version separation;
+- minimal signal ledgers fail closed;
+- readiness does not inherit false signal authority;
+- compact evidence sidecars match committed files.
+
+The committed test is CI-portable and does not require `/Users/madhuram/...` paths. Mac-only full external-run verification remains evidence outside the portable unit suite.
+
+## Acceptance Proof
+
+Local publication evidence reported before commit:
+
+- focused census tests passed;
+- complete affected option-E2E suite passed locally;
+- Minerva classified the census test as `EVIDENCE_CONTRACT`;
+- unified Code Excellence completed with `total_blocks=0`;
+- Agent Review Evidence passed locally before publication;
+- two fresh external family-model runs matched semantically;
+- compact JSON files have matching `.sha256` sidecars.
+
+Remote CI is authoritative after push. A remote failure must be repaired before the PR can be considered publication-complete.
+
+## Runtime Proof Required After Merge
+
+No runtime or trading proof is requested by this commit because the change is research-only and non-executable. Before any later strategy execution work, a separate gate must prove:
+
+- authoritative dataset version and provenance;
+- implementation and parameter ownership;
+- chronological development/holdout authority;
+- causal signal timestamps;
+- option-data mapping and realistic execution costs;
+- independent replay, controls, WFA, and untouched holdout evidence.
+
+## What This PR Does Not Prove
+
+This census does not prove:
+
+- a profitable strategy;
+- structural edge;
+- canonical underlying data;
+- canonical pre-outcome signal authority;
+- exhaustive discovery across every root tail;
+- option replay correctness for these candidates;
+- WFA or holdout performance;
+- live or paper readiness;
+- permission for real-money execution.
+
+## Human Approval
+
+Human approval is required before merging PR #710 or beginning any strategy execution, replay, WFA, holdout, production integration, or live/paper workflow. The PR must remain draft and unmerged at this checkpoint.
