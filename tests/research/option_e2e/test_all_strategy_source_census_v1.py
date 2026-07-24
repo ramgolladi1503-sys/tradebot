@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -29,8 +30,13 @@ def _write_bundle(bundle: Path, candidates: list[dict[str, object]], *, manifest
         "semantic_sha256": manifest_sha,
     }
     (bundle / "source_search_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (bundle / "source_search_manifest.json.sha256").write_text(f"{manifest_sha}  source_search_manifest.json\n", encoding="utf-8")
-    (bundle / "root_inventory.json").write_text(json.dumps([{"root_id": "ROOT", "available": True, "is_directory": True}]), encoding="utf-8")
+    (bundle / "source_search_manifest.json.sha256").write_text(
+        f"{manifest_sha}  source_search_manifest.json\n", encoding="utf-8"
+    )
+    (bundle / "root_inventory.json").write_text(
+        json.dumps([{"root_id": "ROOT", "available": True, "is_directory": True}]),
+        encoding="utf-8",
+    )
     (bundle / "git_search_manifest.json").write_text("[]", encoding="utf-8")
     with (bundle / "candidate_inventory.jsonl").open("w", encoding="utf-8") as handle:
         for row in candidates:
@@ -42,8 +48,20 @@ def test_verify_input_bundle_detects_counts_and_sidecar(tmp_path: Path) -> None:
     _write_bundle(
         bundle,
         [
-            {"accepted": True, "unresolved": False, "sha256": "a", "classification": "UNDERLYING_CANDLE_DATASET", "size": 1},
-            {"accepted": False, "unresolved": True, "sha256": "b", "classification": "OVERSIZED_CANDIDATE", "size": 2},
+            {
+                "accepted": True,
+                "unresolved": False,
+                "sha256": "a",
+                "classification": "UNDERLYING_CANDLE_DATASET",
+                "size": 1,
+            },
+            {
+                "accepted": False,
+                "unresolved": True,
+                "sha256": "b",
+                "classification": "OVERSIZED_CANDIDATE",
+                "size": 2,
+            },
         ],
     )
 
@@ -95,7 +113,13 @@ def test_census_collapses_duplicates_and_flags_minimal_ledgers(tmp_path: Path) -
                 "classification": "PRE_OUTCOME_SIGNAL_LEDGER",
                 "size": 12,
                 "row_count": 1,
-                "columns": ["strategy_or_hypothesis_id", "signal_id", "signal_ts", "earliest_entry_ts", "direction"],
+                "columns": [
+                    "strategy_or_hypothesis_id",
+                    "signal_id",
+                    "signal_ts",
+                    "earliest_entry_ts",
+                    "direction",
+                ],
             },
         ],
     )
@@ -175,66 +199,44 @@ def test_canonical_selection_is_independent_of_input_order(tmp_path: Path) -> No
     assert first[0]["partition_count"] == 2
 
 
-def test_fresh_external_runs_are_semantically_stable() -> None:
-    base = Path("/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/all_strategy_source_census_v1")
-    run_one = base / "20260724-133422_family_model"
-    run_two = base / "20260724-133424_family_model_rerun"
-
-    for name in [
-        "input_bundle_integrity_independent.json",
-        "current_986_breakdown.json",
-        "physical_candidate_registry.jsonl",
-        "exact_content_blob_registry.jsonl",
-        "exact_duplicate_groups.jsonl",
-        "dataset_partition_registry.jsonl",
-        "logical_dataset_family_registry.json",
-        "dataset_version_registry.json",
-        "semantic_duplicate_groups.jsonl",
-        "canonical_signal_ledger_registry.json",
-        "canonical_signal_ledger_audit.json",
-        "aeron7_nifty_f1_dataset_family.json",
-        "unresolved_candidate_resolution.json",
-        "truncation_review.json",
-        "strategy_implementation_inventory.json",
-        "strategy_alias_registry.json",
-        "all_strategy_execution_readiness.json",
+def test_committed_compact_evidence_contract_is_self_consistent() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    compact = (
+        repo_root
+        / "research"
+        / "option_e2e_recertification_v4"
+        / "all_strategy_source_census_v1"
+    )
+    names = (
+        "schema.json",
         "census_summary.json",
-        "determinism.json",
-    ]:
-        assert (run_one / name).exists()
-        assert (run_two / name).exists()
+        "dataset_family_summary.json",
+        "dataset_version_summary.json",
+        "signal_ledger_summary.json",
+        "execution_readiness_summary.json",
+        "external_evidence_manifest.json",
+    )
 
-    for name in [
-        "input_bundle_integrity_independent.json",
-        "current_986_breakdown.json",
-        "physical_candidate_registry.jsonl",
-        "exact_content_blob_registry.jsonl",
-        "exact_duplicate_groups.jsonl",
-        "dataset_partition_registry.jsonl",
-        "logical_dataset_family_registry.json",
-        "dataset_version_registry.json",
-        "semantic_duplicate_groups.jsonl",
-        "canonical_signal_ledger_registry.json",
-        "canonical_signal_ledger_audit.json",
-        "aeron7_nifty_f1_dataset_family.json",
-        "unresolved_candidate_resolution.json",
-        "truncation_review.json",
-        "strategy_implementation_inventory.json",
-        "strategy_alias_registry.json",
-        "all_strategy_execution_readiness.json",
-        "census_summary.json",
-        "determinism.json",
-    ]:
-        assert (run_one / name).read_text(encoding="utf-8") == (run_two / name).read_text(encoding="utf-8")
+    for name in names:
+        artifact = compact / name
+        sidecar = compact / f"{name}.sha256"
+        expected_sha = sidecar.read_text(encoding="utf-8").split()[0]
+        actual_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        assert actual_sha == expected_sha
 
-    compact = Path("/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/research/option_e2e_recertification_v4/all_strategy_source_census_v1")
     summary = json.loads((compact / "census_summary.json").read_text(encoding="utf-8"))
     family_summary = json.loads((compact / "dataset_family_summary.json").read_text(encoding="utf-8"))
     version_summary = json.loads((compact / "dataset_version_summary.json").read_text(encoding="utf-8"))
     ledger_summary = json.loads((compact / "signal_ledger_summary.json").read_text(encoding="utf-8"))
     readiness_summary = json.loads((compact / "execution_readiness_summary.json").read_text(encoding="utf-8"))
+
     assert summary["raw_candidates"] == 6119
-    assert family_summary["raw_candidate_file_count"] == 6119
+    assert family_summary["raw_candidate_file_count"] == summary["raw_candidates"]
+    assert family_summary["logical_dataset_family_count"] == 8
     assert version_summary["dataset_version_count"] == 986
+    assert version_summary["canonical_dataset_version_count"] == 0
     assert ledger_summary["canonical_signal_ledger_count"] == 0
     assert readiness_summary["ready_for_causal_execution_lanes"] == 0
+    assert readiness_summary["valid_precomputed_signals_lanes"] == 0
+    assert summary["implementation_direction"] == "PROVISIONAL_CENSUS_WITH_DECLARED_GAPS"
+    assert "canonical_dataset_count" not in summary
