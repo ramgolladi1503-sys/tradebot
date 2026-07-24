@@ -3,25 +3,44 @@ from __future__ import annotations
 
 def certify_ledger(
     records: list[dict[str, object]],
-    contract_report: dict[str, object] | None = None,
+    *,
     source_manifest: dict[str, object] | None = None,
+    oracle_evidence: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    if source_manifest and source_manifest.get("conclusion") == "SIGNAL_SOURCE_BLOCKED_WITH_EXHAUSTIVE_EVIDENCE":
+    """Fail closed unless an independent oracle explicitly passes the same rows."""
+
+    source_status = str((source_manifest or {}).get("conclusion", "SIGNAL_SOURCE_SEARCH_INCOMPLETE"))
+    if not records:
         return {
-            "verdict": "SIGNAL_SOURCE_BLOCKED_WITH_EXHAUSTIVE_EVIDENCE",
-            "records": records,
-            "failures": list(source_manifest.get("reason", [])) if isinstance(source_manifest.get("reason"), list) else [str(source_manifest.get("reason"))],
+            "verdict": "SIGNAL_LEDGER_CERTIFICATION_DISABLED",
+            "records": [],
+            "failures": [source_status, "NO_SIGNAL_ROWS"],
         }
-    if contract_report and contract_report.get("valid") is False:
+
+    if not oracle_evidence:
         return {
-            "verdict": "SIGNAL_SOURCE_BLOCKED_WITH_EXHAUSTIVE_EVIDENCE",
+            "verdict": "SIGNAL_LEDGER_CERTIFICATION_DISABLED",
             "records": records,
-            "failures": list(contract_report.get("failures", [])),
+            "failures": ["INDEPENDENT_ORACLE_EVIDENCE_REQUIRED"],
         }
-    if records:
-        return {"verdict": "SIGNAL_LEDGER_CERTIFIED", "records": records, "failures": []}
+
+    if oracle_evidence.get("verdict") != "SIGNAL_LEDGER_ORACLE_PASS":
+        return {
+            "verdict": "SIGNAL_LEDGER_ORACLE_FAIL",
+            "records": records,
+            "failures": list(oracle_evidence.get("failures", ["ORACLE_DID_NOT_PASS"])),
+        }
+
+    expected_count = oracle_evidence.get("signal_count")
+    if expected_count != len(records):
+        return {
+            "verdict": "SIGNAL_LEDGER_ORACLE_FAIL",
+            "records": records,
+            "failures": ["ORACLE_SIGNAL_COUNT_MISMATCH"],
+        }
+
     return {
-        "verdict": "SIGNAL_SOURCE_BLOCKED_WITH_EXHAUSTIVE_EVIDENCE",
-        "records": [],
-        "failures": ["INSUFFICIENT_HISTORICAL_DATA_FOR_BACKTEST_OR_WFA"],
+        "verdict": "SIGNAL_LEDGER_CERTIFIED",
+        "records": records,
+        "failures": [],
     }
