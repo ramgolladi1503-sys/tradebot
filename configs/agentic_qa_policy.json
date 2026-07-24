@@ -1,0 +1,16 @@
+{
+  "schema_version": "agentic-qa-policy/v1",
+  "control_count": 70,
+  "minimum_control_plane_score": 10.0,
+  "minimum_conditional_score": 9.0,
+  "hard_fail_policy": "any FAIL or ERROR on a hard-fail control rejects the bundle",
+  "insufficient_policy": "missing evidence on a hard-fail control withholds certification",
+  "agent_authority": "advisory_only",
+  "human_approval_required": true,
+  "live_order_authority": false,
+  "truthful_non_claims": [
+    "no profitability claim without validated evidence",
+    "no live-readiness claim without paper and controlled deployment evidence",
+    "no online-model quality claim when online evaluation was not run"
+  ]
+}

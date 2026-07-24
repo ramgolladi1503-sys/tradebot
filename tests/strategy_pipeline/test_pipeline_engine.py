@@ -1,486 +1,369 @@
-import pytest
+from __future__ import annotations
+
+import json
+import re
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from core.strategy_pipeline.pipeline_models import PipelineState, EngineType, EngineResult, FinalDecision
-from core.strategy_pipeline.pipeline_context import PipelineContext
-from core.strategy_pipeline.pipeline_state import PipelineStateTracker
+import pytest
+
 from core.strategy_pipeline.artifact_locator import ArtifactLocator
-from core.strategy_pipeline.dependency_resolver import DependencyResolver
-from core.strategy_pipeline.pipeline_validator import PipelineValidator
+from core.strategy_pipeline.pipeline_context import PipelineContext
 from core.strategy_pipeline.pipeline_engine import StrategyPipelineEngine
-from core.strategy_pipeline.report_generator import ReportGenerator
+from core.strategy_pipeline.pipeline_models import (
+    EngineResult,
+    EngineType,
+    PipelineState,
+)
+from core.strategy_pipeline.pipeline_state import PipelineStateTracker
+from core.strategy_pipeline.pipeline_validator import (
+    PipelineValidationError,
+    PipelineValidator,
+)
+from core.strategy_pipeline.result_manifest import (
+    ResultManifestError,
+    load_engine_result_manifest,
+    sha256_file,
+    write_engine_result_manifest,
+)
 
-# --- Models Tests ---
 
-def test_pipeline_state_enum():
-    assert PipelineState.PENDING.value == "PENDING"
-    assert PipelineState.RUNNING.value == "RUNNING"
-    assert PipelineState.SUCCESS.value == "SUCCESS"
-    assert PipelineState.FAILED.value == "FAILED"
+def _success_result(
+    root: Path,
+    *,
+    engine: EngineType,
+    context: PipelineContext,
+    strategy_id: str = "s1",
+) -> EngineResult:
+    run_root = root / "runtime" / "strategy_pipeline" / strategy_id / context.run_id
+    artifact = run_root / f"{engine.value.lower()}.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text('{"ok": true}\n', encoding="utf-8")
+    result = EngineResult(
+        engine=engine,
+        state=PipelineState.SUCCESS,
+        run_id=context.run_id,
+        strategy_id=strategy_id,
+        artifacts_generated=[str(artifact)],
+        input_hashes=context.engine_input_hashes.get(engine.value, {}),
+        output_hashes={str(artifact.resolve()): sha256_file(artifact)},
+        verdict="PASS",
+        exit_code=0,
+        verified=True,
+    )
+    manifest = run_root / f"{engine.value.lower()}.result.json"
+    write_engine_result_manifest(manifest, result)
+    result.manifest_path = str(manifest)
+    return result
 
-def test_engine_type_enum():
-    assert EngineType.RESEARCH.value == "RESEARCH"
-    assert EngineType.REGISTRY.value == "REGISTRY"
-    assert EngineType.TRUTH.value == "TRUTH"
-    assert EngineType.OUTCOMES.value == "OUTCOMES"
-    assert EngineType.STATISTICS.value == "STATISTICS"
-    assert EngineType.CERTIFICATION.value == "CERTIFICATION"
-    assert EngineType.DRIFT.value == "DRIFT"
 
-def test_engine_result_initialization():
-    result = EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS)
-    assert result.engine == EngineType.RESEARCH
-    assert result.state == PipelineState.SUCCESS
-    assert result.cached is False
-    assert result.artifacts_generated == []
+def test_context_defaults_to_research_and_excludes_drift():
+    context = PipelineContext()
+    assert context.execution_mode == "RESEARCH"
+    assert context.include_drift is False
+    assert re.fullmatch(r"[0-9a-f]{32}", context.run_id)
 
-def test_final_decision_initialization():
-    fd = FinalDecision(strategy_id="test1", certification_status="Research Only", reason="Just starting")
-    assert fd.strategy_id == "test1"
-    assert fd.certification_status == "Research Only"
-    assert fd.reason == "Just starting"
-    assert fd.blockers == []
 
-# --- State Tracker Tests ---
+def test_pre_run_rejects_live_mode():
+    with pytest.raises(PipelineValidationError, match="unsafe_execution_mode"):
+        PipelineValidator().validate_pre_run(
+            "s1",
+            PipelineContext(execution_mode="LIVE"),
+        )
 
-def test_tracker_initialization():
-    tracker = PipelineStateTracker(strategy_id="s1")
-    assert tracker.strategy_id == "s1"
-    assert tracker.global_state == PipelineState.PENDING
-    assert tracker.engine_results == {}
 
-def test_tracker_update_success():
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS))
-    assert tracker.get_engine_state(EngineType.RESEARCH) == PipelineState.SUCCESS
-    assert tracker.global_state == PipelineState.PENDING
+def test_pre_run_rejects_live_environment(monkeypatch):
+    monkeypatch.setenv("TRADING_MODE", "LIVE")
+    with pytest.raises(PipelineValidationError, match="live_environment_forbidden"):
+        PipelineValidator().validate_pre_run("s1", PipelineContext())
 
-def test_tracker_update_failure():
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.FAILED))
-    assert tracker.get_engine_state(EngineType.RESEARCH) == PipelineState.FAILED
+
+def test_pre_run_hashes_exact_inputs(tmp_path):
+    source = tmp_path / "candidate.jsonl"
+    source.write_text('{"candidate_id":"1"}\n', encoding="utf-8")
+    context = PipelineContext(engine_inputs={"OUTCOMES": [str(source)]})
+    PipelineValidator().validate_pre_run("s1", context)
+    assert context.engine_input_hashes["OUTCOMES"][str(source.resolve())] == sha256_file(source)
+
+
+def test_pre_run_rejects_missing_input(tmp_path):
+    context = PipelineContext(engine_inputs={"OUTCOMES": [str(tmp_path / "missing.jsonl")]})
+    with pytest.raises(PipelineValidationError, match="engine_input_missing"):
+        PipelineValidator().validate_pre_run("s1", context)
+
+
+def test_artifact_locator_is_run_scoped(tmp_path):
+    locator = ArtifactLocator(tmp_path)
+    path = locator.result_manifest_path(EngineType.RESEARCH, "s1", "run12345")
+    assert path == (
+        tmp_path.resolve()
+        / "runtime"
+        / "strategy_pipeline"
+        / "s1"
+        / "run12345"
+        / "research.result.json"
+    )
+
+
+def test_result_manifest_round_trip(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    result = _success_result(tmp_path, engine=EngineType.RESEARCH, context=context)
+    loaded = load_engine_result_manifest(result.manifest_path)
+    assert loaded.engine == EngineType.RESEARCH
+    assert loaded.state == PipelineState.SUCCESS
+    assert loaded.strategy_id == "s1"
+    assert loaded.verified is True
+
+
+def test_result_manifest_internal_hash_forgery_is_rejected(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    result = _success_result(tmp_path, engine=EngineType.RESEARCH, context=context)
+    manifest = Path(result.manifest_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["verdict"] = "FORGED"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ResultManifestError, match="hash_mismatch"):
+        load_engine_result_manifest(manifest)
+
+
+def test_validator_rejects_success_without_artifacts(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = EngineResult(
+        engine=EngineType.RESEARCH,
+        state=PipelineState.SUCCESS,
+        run_id=context.run_id,
+        strategy_id="s1",
+        verdict="PASS",
+        exit_code=0,
+        verified=True,
+    )
+    with pytest.raises(PipelineValidationError, match="artifacts_required"):
+        PipelineValidator().validate_engine_result(
+            result,
+            EngineType.RESEARCH,
+            "s1",
+            context,
+            base_dir=tmp_path,
+        )
+
+
+def test_validator_rejects_tampered_output(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = _success_result(tmp_path, engine=EngineType.RESEARCH, context=context)
+    Path(result.artifacts_generated[0]).write_text("tampered", encoding="utf-8")
+    with pytest.raises(PipelineValidationError, match="hash_mismatch"):
+        PipelineValidator().validate_engine_result(
+            result,
+            EngineType.RESEARCH,
+            "s1",
+            context,
+            base_dir=tmp_path,
+        )
+
+
+def test_tracker_preserves_degraded_state():
+    tracker = PipelineStateTracker(strategy_id="s1", global_state=PipelineState.RUNNING)
+    tracker.update_engine_result(
+        EngineType.RESEARCH,
+        EngineResult(
+            engine=EngineType.RESEARCH,
+            state=PipelineState.DEGRADED,
+            errors=["limited evidence"],
+        ),
+    )
+    tracker.finalize([EngineType.RESEARCH])
+    assert tracker.global_state == PipelineState.DEGRADED
+
+
+def test_engine_sequence_excludes_drift_by_default(tmp_path):
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    assert EngineType.DRIFT not in engine._engine_sequence(PipelineContext())
+    assert EngineType.DRIFT in engine._engine_sequence(PipelineContext(include_drift=True))
+
+
+def test_downstream_inputs_bind_upstream_manifest(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    upstream = _success_result(tmp_path, engine=EngineType.RESEARCH, context=context)
+    tracker = PipelineStateTracker(strategy_id="s1", global_state=PipelineState.RUNNING)
+    tracker.update_engine_result(EngineType.RESEARCH, upstream)
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+
+    blocker = engine._bind_upstream_inputs(
+        EngineType.REGISTRY,
+        "s1",
+        context,
+        tracker,
+    )
+
+    manifest = str(Path(upstream.manifest_path).resolve())
+    assert blocker is None
+    assert context.engine_input_hashes["REGISTRY"][manifest] == sha256_file(manifest)
+
+
+def test_outcomes_requires_exact_arguments(tmp_path):
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = engine._build_command(
+        EngineType.OUTCOMES,
+        "s1",
+        context,
+        "scripts/run_outcome_evidence_replay.py",
+    )
+    assert isinstance(result, EngineResult)
+    assert result.state == PipelineState.BLOCKED
+    assert result.verdict == "ENGINE_ARGUMENTS_MISSING"
+
+
+def test_statistics_does_not_discover_latest_file(tmp_path):
+    evidence_dir = tmp_path / "runtime" / "outcome_evidence"
+    evidence_dir.mkdir(parents=True)
+    (evidence_dir / "evidence_old.jsonl").write_text("{}\n", encoding="utf-8")
+    (evidence_dir / "evidence_new.jsonl").write_text("{}\n", encoding="utf-8")
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = engine._build_command(
+        EngineType.STATISTICS,
+        "s1",
+        context,
+        "scripts/run_statistical_validation.py",
+    )
+    assert isinstance(result, EngineResult)
+    assert result.verdict == "ENGINE_ARGUMENTS_MISSING"
+
+
+def test_bare_zero_exit_without_manifest_is_blocked(tmp_path):
+    script = tmp_path / "scripts" / "run_strategy_pipeline_research.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("print('done')\n", encoding="utf-8")
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    context = PipelineContext(
+        run_id="run12345",
+        force_refresh=True,
+        engine_args={"RESEARCH": ["--governed-run-dir", str(tmp_path / "governed")]},
+    )
+    PipelineValidator().validate_pre_run("s1", context)
+
+    completed = type("Completed", (), {"returncode": 0, "stdout": "done", "stderr": ""})()
+    with patch("core.strategy_pipeline.pipeline_engine.subprocess.run", return_value=completed):
+        result = engine._run_engine(EngineType.RESEARCH, "s1", context)
+
+    assert result.state == PipelineState.BLOCKED
+    assert result.verdict == "RESULT_MANIFEST_MISSING"
+
+
+def test_registry_requires_exact_arguments(tmp_path):
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    context = PipelineContext(run_id="run12345", force_refresh=True)
+    PipelineValidator().validate_pre_run("s1", context)
+    result = engine._build_command(
+        EngineType.REGISTRY,
+        "s1",
+        context,
+        "scripts/run_strategy_pipeline_registry.py",
+    )
+    assert isinstance(result, EngineResult)
+    assert result.state == PipelineState.BLOCKED
+    assert result.verdict == "ENGINE_ARGUMENTS_MISSING"
+
+
+def test_invalid_mock_success_is_converted_to_failure(tmp_path):
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    context = PipelineContext(run_id="run12345", force_refresh=True)
+
+    invalid = EngineResult(
+        engine=EngineType.RESEARCH,
+        state=PipelineState.SUCCESS,
+        run_id=context.run_id,
+        strategy_id="s1",
+        verdict="PASS",
+        verified=True,
+        exit_code=0,
+    )
+    with patch.object(engine, "_run_engine", return_value=invalid):
+        tracker = engine.run("s1", context)
+
     assert tracker.global_state == PipelineState.FAILED
+    result = tracker.engine_results[EngineType.RESEARCH]
+    assert result.verdict == "INVALID_ENGINE_RESULT"
+    assert "success_result_artifacts_required" in result.errors[0]
 
-def test_tracker_get_missing_engine():
-    tracker = PipelineStateTracker(strategy_id="s1")
-    assert tracker.get_engine_state(EngineType.OUTCOMES) == PipelineState.PENDING
 
-# --- Context Tests ---
+def test_verified_cache_manifest_can_be_reused(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = _success_result(tmp_path, engine=EngineType.RESEARCH, context=context)
+    context.cache_manifests["RESEARCH"] = str(result.manifest_path)
 
-def test_context_initialization():
-    ctx = PipelineContext()
-    assert ctx.strategy_id is None
-    assert ctx.force_refresh is False
-    assert ctx.run_all is False
-    assert ctx.dry_run is False
-    assert ctx.reports_dir == "docs/strategy_pipeline"
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    cached = engine._run_engine(EngineType.RESEARCH, "s1", context)
+    PipelineValidator().validate_engine_result(
+        cached,
+        EngineType.RESEARCH,
+        "s1",
+        context,
+        base_dir=tmp_path,
+    )
+    assert cached.cached is True
 
-def test_context_artifacts():
-    ctx = PipelineContext()
-    ctx.set_artifact("key1", "val1")
-    assert ctx.get_artifact("key1") == "val1"
-    assert ctx.get_artifact("missing") is None
 
-# --- Artifact Locator Tests ---
+def test_cache_with_wrong_strategy_is_rejected_by_run(tmp_path):
+    context = PipelineContext(run_id="run12345")
+    PipelineValidator().validate_pre_run("s1", context)
+    result = _success_result(
+        tmp_path,
+        engine=EngineType.RESEARCH,
+        context=context,
+        strategy_id="other",
+    )
+    context.cache_manifests["RESEARCH"] = str(result.manifest_path)
 
-def test_locator_init():
-    loc = ArtifactLocator(base_dir="/fake/dir")
-    assert loc.base_dir == Path("/fake/dir")
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
+    tracker = engine.run("s1", context)
+    assert tracker.global_state == PipelineState.FAILED
+    assert "engine_result_strategy_mismatch" in tracker.engine_results[EngineType.RESEARCH].errors[0]
 
-@pytest.mark.parametrize("engine", [
-    "locate_research_hypothesis",
-    "locate_strategy_contract",
-    "locate_truth_report",
-    "locate_evidence_file",
-    "locate_statistics_report",
-    "locate_certification_report",
-    "locate_live_drift_report"
-])
-def test_locator_missing_files(engine, tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    method = getattr(loc, engine)
-    assert method("s1") is None
 
-def test_locator_research_hypothesis_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "docs" / "research_registry"
-    p.mkdir(parents=True)
-    (p / "01_hypothesis_inventory.md").touch()
-    assert loc.locate_research_hypothesis("s1") is not None
+def test_full_verified_mock_pipeline_finishes_research_only(tmp_path):
+    context = PipelineContext(run_id="run12345", force_refresh=True)
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
 
-def test_locator_strategy_contract_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "strategies"
-    p.mkdir(parents=True)
-    (p / "s1.py").touch()
-    assert loc.locate_strategy_contract("s1") is not None
+    def fake_run(stage, strategy_id, current_context):
+        return _success_result(
+            tmp_path,
+            engine=stage,
+            context=current_context,
+            strategy_id=strategy_id,
+        )
 
-def test_locator_evidence_file_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "runtime" / "outcome_evidence"
-    p.mkdir(parents=True)
-    (p / "evidence_123.jsonl").touch()
-    assert loc.locate_evidence_file("s1") is not None
+    with patch.object(engine, "_run_engine", side_effect=fake_run):
+        tracker = engine.run("s1", context)
 
-def test_locator_truth_report_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "docs" / "strategy_truth"
-    p.mkdir(parents=True)
-    (p / "s1_truth.md").touch()
-    assert loc.locate_truth_report("s1") is not None
-
-def test_locator_statistics_report_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "docs" / "statistical_validation"
-    p.mkdir(parents=True)
-    (p / "01_expectancy.md").touch()
-    assert loc.locate_statistics_report("s1") is not None
-
-def test_locator_certification_report_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "docs" / "strategy_certification"
-    p.mkdir(parents=True)
-    (p / "s1_cert.md").touch()
-    assert loc.locate_certification_report("s1") is not None
-
-def test_locator_live_drift_report_exists(tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    p = tmp_path / "docs" / "live_drift"
-    p.mkdir(parents=True)
-    (p / "06_certification_status.md").touch()
-    assert loc.locate_live_drift_report("s1") is not None
-
-# --- Dependency Resolver Tests ---
-
-def test_resolver_init():
-    res = DependencyResolver()
-    assert EngineType.RESEARCH in res.dependencies
-    assert res.dependencies[EngineType.REGISTRY] == [EngineType.RESEARCH]
-
-def test_resolver_can_run_research():
-    res = DependencyResolver()
-    tracker = PipelineStateTracker(strategy_id="s1")
-    assert res.can_run(EngineType.RESEARCH, tracker) is True
-
-def test_resolver_cannot_run_registry_if_research_pending():
-    res = DependencyResolver()
-    tracker = PipelineStateTracker(strategy_id="s1")
-    assert res.can_run(EngineType.REGISTRY, tracker) is False
-
-def test_resolver_can_run_registry_if_research_success():
-    res = DependencyResolver()
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS))
-    assert res.can_run(EngineType.REGISTRY, tracker) is True
-
-def test_resolver_cannot_run_truth_if_registry_failed():
-    res = DependencyResolver()
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS))
-    tracker.update_engine_result(EngineType.REGISTRY, EngineResult(engine=EngineType.REGISTRY, state=PipelineState.FAILED))
-    assert res.can_run(EngineType.TRUTH, tracker) is False
-
-# --- Pipeline Validator Tests ---
-
-def test_validator_pre_run():
-    val = PipelineValidator()
-    val.validate_pre_run() # Should not raise
-
-def test_validator_post_run():
-    val = PipelineValidator()
-    val.validate_post_run() # Should not raise
-
-# --- Engine Tests ---
-
-def test_engine_init():
-    eng = StrategyPipelineEngine()
-    assert eng.locator is not None
-    assert eng.resolver is not None
-    assert eng.validator is not None
-
-def test_engine_run_all_success():
-    eng = StrategyPipelineEngine()
-    ctx = PipelineContext()
-    
-    # Mock _run_engine to succeed everywhere so we can test the tracker states
-    def mock_run(engine, strategy_id, context):
-        return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        tracker = eng.run("s1", ctx)
-        
     assert tracker.global_state == PipelineState.SUCCESS
-    assert tracker.final_decision is not None
     assert tracker.final_decision.certification_status == "Research Only"
-    for e in EngineType:
-        assert tracker.get_engine_state(e) == PipelineState.SUCCESS
+    assert tracker.final_decision.reason == "VERIFIED_RESEARCH_PIPELINE_COMPLETE"
+    assert EngineType.DRIFT not in tracker.engine_results
 
-def test_engine_run_with_failure_aborts():
-    eng = StrategyPipelineEngine()
-    
-    # Mock _run_engine to fail on REGISTRY
-    def mock_run(engine, strategy_id, context):
-        if engine == EngineType.REGISTRY:
-            return EngineResult(engine=engine, state=PipelineState.FAILED)
-        return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        ctx = PipelineContext()
-        tracker = eng.run("s1", ctx)
-        
-    assert tracker.global_state == PipelineState.FAILED
-    assert tracker.get_engine_state(EngineType.RESEARCH) == PipelineState.SUCCESS
-    assert tracker.get_engine_state(EngineType.REGISTRY) == PipelineState.FAILED
-    assert tracker.get_engine_state(EngineType.TRUTH) == PipelineState.PENDING
 
-def test_engine_cache_hit():
-    loc = ArtifactLocator()
-    loc.locate_research_hypothesis = MagicMock(return_value=Path("some/path"))
-    eng = StrategyPipelineEngine(locator=loc)
-    ctx = PipelineContext(force_refresh=False)
-    
-    result = eng._run_engine(EngineType.RESEARCH, "s1", ctx)
-    assert result.cached is True
+def test_blocked_result_drives_truthful_final_decision(tmp_path):
+    context = PipelineContext(run_id="run12345", force_refresh=True)
+    engine = StrategyPipelineEngine(locator=ArtifactLocator(tmp_path))
 
-def test_engine_force_refresh():
-    loc = ArtifactLocator()
-    loc.locate_research_hypothesis = MagicMock(return_value=Path("some/path"))
-    eng = StrategyPipelineEngine(locator=loc)
-    ctx = PipelineContext(force_refresh=True)
-    
-    result = eng._run_engine(EngineType.RESEARCH, "s1", ctx)
-    assert result.cached is False
+    blocked = EngineResult(
+        engine=EngineType.RESEARCH,
+        state=PipelineState.BLOCKED,
+        run_id=context.run_id,
+        strategy_id="s1",
+        blockers=["frozen hypothesis missing"],
+        verdict="RESEARCH_INPUT_MISSING",
+    )
+    with patch.object(engine, "_run_engine", return_value=blocked):
+        tracker = engine.run("s1", context)
 
-# Multiple parameterizations to get >50 tests easily
-@pytest.mark.parametrize("engine_type", list(EngineType))
-def test_engine_get_cached_path_none(engine_type, tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    eng = StrategyPipelineEngine(locator=loc)
-    assert eng._get_cached_path(engine_type, "s1") is None
-
-@pytest.mark.parametrize("engine_type", list(EngineType))
-def test_engine_get_cached_path_exists(engine_type, tmp_path):
-    loc = ArtifactLocator(base_dir=str(tmp_path))
-    
-    # Create fake files for all locators
-    (tmp_path / "docs" / "research_registry").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs" / "research_registry" / "01_hypothesis_inventory.md").touch()
-    
-    (tmp_path / "strategies").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "strategies" / "s1.py").touch()
-    
-    (tmp_path / "docs" / "strategy_truth").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs" / "strategy_truth" / "s1_truth.md").touch()
-    
-    (tmp_path / "runtime" / "outcome_evidence").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "runtime" / "outcome_evidence" / "evidence_1.jsonl").touch()
-    
-    (tmp_path / "docs" / "statistical_validation").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs" / "statistical_validation" / "01_expectancy.md").touch()
-    
-    (tmp_path / "docs" / "strategy_certification").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs" / "strategy_certification" / "s1_cert.md").touch()
-    
-    (tmp_path / "docs" / "live_drift").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs" / "live_drift" / "06_certification_status.md").touch()
-    
-    eng = StrategyPipelineEngine(locator=loc)
-    assert eng._get_cached_path(engine_type, "s1") is not None
-
-# --- Report Generator Tests ---
-
-def test_report_generator_init():
-    gen = ReportGenerator(output_dir="fake/dir")
-    assert gen.output_dir == Path("fake/dir")
-
-def test_report_generator_all(tmp_path):
-    gen = ReportGenerator(output_dir=str(tmp_path))
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.final_decision = FinalDecision(strategy_id="s1", certification_status="Research Only", reason="Ok", blockers=["B1"], limitations=["L1"])
-    
-    gen.generate_all(tracker)
-    
-    strat_dir = tmp_path / "s1"
-    assert strat_dir.exists()
-    assert (strat_dir / "01_pipeline_summary.md").exists()
-    assert (strat_dir / "02_registry.md").exists()
-    assert (strat_dir / "03_truth.md").exists()
-    assert (strat_dir / "04_outcomes.md").exists()
-    assert (strat_dir / "05_statistics.md").exists()
-    assert (strat_dir / "06_certification.md").exists()
-    assert (strat_dir / "07_live_drift.md").exists()
-    assert (strat_dir / "08_blockers.md").exists()
-    assert (strat_dir / "09_limitations.md").exists()
-    assert (strat_dir / "10_final_decision.md").exists()
-    
-    # Check specific contents
-    content = (strat_dir / "10_final_decision.md").read_text()
-    assert "Research Only" in content
-    
-    blockers = (strat_dir / "08_blockers.md").read_text()
-    assert "B1" in blockers
-
-def test_report_generator_empty_decision(tmp_path):
-    gen = ReportGenerator(output_dir=str(tmp_path))
-    tracker = PipelineStateTracker(strategy_id="s1")
-    
-    gen.generate_all(tracker)
-    strat_dir = tmp_path / "s1"
-    
-    content = (strat_dir / "10_final_decision.md").read_text()
-    assert "Unknown. Pipeline did not complete." in content
-    
-    blockers = (strat_dir / "08_blockers.md").read_text()
-    assert "None." in blockers
-
-def test_report_generator_pipeline_summary(tmp_path):
-    gen = ReportGenerator(output_dir=str(tmp_path))
-    tracker = PipelineStateTracker(strategy_id="test_strat", global_state=PipelineState.FAILED)
-    
-    strat_dir = tmp_path / "test_strat"
-    strat_dir.mkdir(parents=True, exist_ok=True)
-    
-    gen._write_pipeline_summary(strat_dir, tracker)
-    content = (strat_dir / "01_pipeline_summary.md").read_text()
-    assert "test_strat" in content
-    assert "FAILED" in content
-
-@pytest.mark.parametrize("file_name, method_name", [
-    ("02_registry.md", "_write_registry"),
-    ("03_truth.md", "_write_truth"),
-    ("04_outcomes.md", "_write_outcomes"),
-    ("05_statistics.md", "_write_statistics"),
-    ("06_certification.md", "_write_certification"),
-    ("07_live_drift.md", "_write_live_drift"),
-])
-def test_report_generator_simple_reports(tmp_path, file_name, method_name):
-    gen = ReportGenerator(output_dir=str(tmp_path))
-    strat_dir = tmp_path / "s1"
-    strat_dir.mkdir(parents=True, exist_ok=True)
-    
-    method = getattr(gen, method_name)
-    method(strat_dir)
-    
-    assert (strat_dir / file_name).exists()
-
-def test_dependency_resolver_multiple_deps():
-    res = DependencyResolver()
-    res.dependencies[EngineType.DRIFT] = [EngineType.RESEARCH, EngineType.REGISTRY]
-    
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS))
-    tracker.update_engine_result(EngineType.REGISTRY, EngineResult(engine=EngineType.REGISTRY, state=PipelineState.FAILED))
-    
-    assert res.can_run(EngineType.DRIFT, tracker) is False
-    
-def test_pipeline_state_updates_global_state_only_on_failure():
-    tracker = PipelineStateTracker(strategy_id="s1")
-    tracker.update_engine_result(EngineType.RESEARCH, EngineResult(engine=EngineType.RESEARCH, state=PipelineState.SUCCESS))
-    assert tracker.global_state == PipelineState.PENDING # Still pending until explicitly succeeded
-
-def test_context_default_dir():
-    ctx = PipelineContext()
-    assert ctx.reports_dir == "docs/strategy_pipeline"
-
-def test_engine_result_with_errors():
-    er = EngineResult(engine=EngineType.RESEARCH, state=PipelineState.FAILED, errors=["Some error"])
-    assert er.errors == ["Some error"]
-
-def test_truth_stage_zero_strategies():
-    eng = StrategyPipelineEngine()
-    
-    original_run = eng._run_engine
-    def mock_run(engine, strategy_id, context):
-        if engine in (EngineType.RESEARCH, EngineType.REGISTRY):
-            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        return original_run(engine, strategy_id, context)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        ctx = PipelineContext(force_refresh=True)
-        tracker = eng.run("zero_truth", ctx)
-        
     assert tracker.global_state == PipelineState.BLOCKED
-    assert tracker.blocked_at == EngineType.TRUTH
-    assert tracker.get_engine_state(EngineType.OUTCOMES) == PipelineState.PENDING # downstream skipped
-    assert tracker.final_decision.reason == "0 strategies loaded from Strategy Registry"
-    assert "populate Strategy Registry manifests" in tracker.final_decision.blockers
-
-def test_outcome_stage_zero_executable():
-    eng = StrategyPipelineEngine()
-    
-    original_run = eng._run_engine
-    def mock_run(engine, strategy_id, context):
-        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH):
-            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        return original_run(engine, strategy_id, context)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        ctx = PipelineContext(force_refresh=True)
-        tracker = eng.run("zero_executable", ctx)
-        
-    assert tracker.global_state == PipelineState.BLOCKED
-    assert tracker.blocked_at == EngineType.OUTCOMES
-    assert tracker.get_engine_state(EngineType.STATISTICS) == PipelineState.PENDING
-    assert tracker.final_decision.reason == "no executable evidence available"
-    
-def test_certification_missing_disk():
-    eng = StrategyPipelineEngine()
-    
-    original_run = eng._run_engine
-    def mock_run(engine, strategy_id, context):
-        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH, EngineType.OUTCOMES, EngineType.STATISTICS):
-            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        return original_run(engine, strategy_id, context)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        ctx = PipelineContext(force_refresh=True)
-        tracker = eng.run("cert_missing", ctx)
-        
-    assert tracker.global_state == PipelineState.BLOCKED
-    assert tracker.blocked_at == EngineType.CERTIFICATION
-    assert tracker.final_decision.reason == "certification artifacts unavailable"
-
-def test_research_missing():
-    eng = StrategyPipelineEngine()
-    ctx = PipelineContext(force_refresh=True)
-    tracker = eng.run("s1", ctx)
-    assert tracker.global_state == PipelineState.BLOCKED
-    assert tracker.blocked_at == EngineType.RESEARCH
-    assert tracker.final_decision.reason == "EMPTY_RESEARCH_REGISTRY"
-
-def test_live_drift_missing_baseline():
-    eng = StrategyPipelineEngine()
-    
-    original_run = eng._run_engine
-    def mock_run(engine, strategy_id, context):
-        if engine in (EngineType.RESEARCH, EngineType.REGISTRY, EngineType.TRUTH, EngineType.OUTCOMES, EngineType.STATISTICS, EngineType.CERTIFICATION):
-            return EngineResult(engine=engine, state=PipelineState.SUCCESS)
-        return original_run(engine, strategy_id, context)
-        
-    with patch.object(eng, '_run_engine', side_effect=mock_run):
-        ctx = PipelineContext(force_refresh=True)
-        tracker = eng.run("s1", ctx)
-        
-    assert tracker.global_state == PipelineState.BLOCKED
-    assert tracker.blocked_at == EngineType.DRIFT
-    assert tracker.final_decision.reason == "live drift real baseline missing"
-
-def test_reports_only_mode():
-    eng = StrategyPipelineEngine()
-    ctx = PipelineContext(dry_run=True, force_refresh=True)
-    # The first engine it hits is RESEARCH, which will just fail with dry_run
-    tracker = eng.run("s1", ctx)
-    assert tracker.global_state == PipelineState.FAILED
-    assert "Artifact missing in reports-only mode" in tracker.engine_results[EngineType.RESEARCH].errors
-
-def test_cache_reuse():
-    loc = ArtifactLocator()
-    loc.locate_research_hypothesis = MagicMock(return_value=Path("some/path"))
-    eng = StrategyPipelineEngine(locator=loc)
-    ctx = PipelineContext(force_refresh=False)
-    
-    result = eng._run_engine(EngineType.RESEARCH, "s1", ctx)
-    assert result.cached is True
-    assert isinstance(result.created_timestamp, str)
-    assert float(result.created_timestamp) > 0
+    assert tracker.final_decision.reason == "RESEARCH_INPUT_MISSING"
+    assert tracker.final_decision.blockers == ["frozen hypothesis missing"]

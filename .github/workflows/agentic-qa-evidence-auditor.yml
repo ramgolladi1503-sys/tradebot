@@ -1,0 +1,74 @@
+name: Agentic QA Evidence Auditor
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "core/agentic_qa/**"
+      - "tests/agentic_qa/**"
+      - "scripts/run_agentic_qa_audit.py"
+      - "scripts/build_agentic_qa_evidence.py"
+      - "configs/agentic_qa_policy.json"
+      - "docs/agentic_qa/**"
+      - ".github/workflows/agentic-qa-evidence-auditor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-agentic-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install isolated test dependency
+        run: python -m pip install --upgrade pytest
+      - name: Compile isolated Agentic QA surfaces
+        run: |
+          python -m compileall -q core/agentic_qa
+          python -m compileall -q scripts/run_agentic_qa_audit.py scripts/build_agentic_qa_evidence.py
+      - name: Run Agentic QA regression suite
+        run: PYTHONPATH=. pytest -q -o addopts='' tests/agentic_qa
+      - name: Enforce read-only authority boundary
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          roots = [Path("core/agentic_qa"), Path("scripts/run_agentic_qa_audit.py"), Path("scripts/build_agentic_qa_evidence.py")]
+          allowed_imports = {
+              "__future__", "argparse", "collections", "copy", "dataclasses", "enum",
+              "hashlib", "json", "pathlib", "re", "typing", "uuid", "core",
+          }
+          denied_names = {"eval", "exec", "compile", "__import__", "system", "popen"}
+          violations = []
+          files = []
+          for root in roots:
+              files.extend(root.rglob("*.py") if root.is_dir() else [root])
+          for path in files:
+              tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      for alias in node.names:
+                          if alias.name.split(".")[0] not in allowed_imports:
+                              violations.append(f"{path}:import:{alias.name}")
+                  elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                      root = (node.module or "").split(".")[0]
+                      if root not in allowed_imports:
+                          violations.append(f"{path}:from:{node.module}")
+                  elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                      if node.func.id in denied_names:
+                          violations.append(f"{path}:call:{node.func.id}")
+          if violations:
+              raise SystemExit("\n".join(violations))
+          print("agentic_qa_read_only_boundary=PASS")
+          PY
