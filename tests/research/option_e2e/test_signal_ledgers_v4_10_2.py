@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
+from research.option_e2e_recertification_v4.signal_ledgers_v4_10_2 import (
+    generate_source_evidence as generator_module,
+)
 from research.option_e2e_recertification_v4.signal_ledgers_v4_10_2.determinism import (
     compare_deterministic_outputs,
 )
@@ -14,6 +18,7 @@ from research.option_e2e_recertification_v4.signal_ledgers_v4_10_2.ledger_oracle
 )
 from research.option_e2e_recertification_v4.signal_ledgers_v4_10_2.source_search_manifest import (
     SOURCE_INCOMPLETE,
+    SOURCE_RESOLVED,
     build_source_search_manifest,
 )
 
@@ -52,9 +57,9 @@ def test_v4_10_2_default_manifest_requires_explicit_local_evidence_generation() 
 
     assert manifest["conclusion"] == SOURCE_INCOMPLETE
     assert manifest["reason_codes"] == ["SOURCE_EVIDENCE_NOT_GENERATED"]
-    assert manifest["candidate_inventory"] == []
     assert manifest["candidate_count"] == 0
     assert manifest["accepted_candidate_count"] == 0
+    assert manifest["unresolved_candidate_count"] == 0
     assert manifest["semantic_sha256"]
     assert any(root["root_id"] == "CURRENT_WORKTREE" for root in manifest["root_inventory"])
 
@@ -84,3 +89,71 @@ def test_v4_10_2_semantic_determinism_ignores_diagnostic_paths() -> None:
 
     assert comparison["match"] is True
     assert comparison["first_semantic_sha256"] == comparison["second_semantic_sha256"]
+
+
+def test_v4_10_2_generator_materializes_streaming_evidence(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    dataset = data_root / "NIFTY_F1.csv"
+    dataset.write_text(
+        "timestamp,open,high,low,close,volume,symbol\n"
+        "2024-01-01T09:15:00+05:30,100,101,99,100.5,10,NIFTY_F1\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "evidence"
+
+    monkeypatch.setattr(
+        generator_module,
+        "discover_root_inventory",
+        lambda _repo: (
+            [
+                {
+                    "root_id": "TRADEBOT_DATA",
+                    "root_class": "EXTERNAL_ROOT",
+                    "available": True,
+                    "is_directory": True,
+                }
+            ],
+            {
+                "root_paths": {"TRADEBOT_DATA": str(data_root)},
+                "worktree_command": {"exit_code": 0, "timed_out": False, "stdout_lines": []},
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        generator_module,
+        "build_git_search_manifest",
+        lambda _repo: [
+            {
+                "command": ["git", "log", "--all", "-S", "NIFTY_F1", "--oneline"],
+                "exit_code": 0,
+                "timed_out": False,
+                "stdout_lines": ["abc123 dataset"],
+                "stderr": "",
+            }
+        ],
+    )
+
+    summary = generator_module.generate(
+        repo,
+        output,
+        max_candidates_per_root=10,
+        max_seconds_per_root=10,
+        max_hash_bytes=10 * 1024 * 1024,
+    )
+
+    assert summary["conclusion"] == SOURCE_RESOLVED
+    assert summary["accepted_candidate_count"] == 1
+    assert (output / "run_status.json").exists()
+    assert (output / "root_inventory.json").exists()
+    assert (output / "git_search_manifest.json").exists()
+    assert (output / "candidate_inventory.jsonl").exists()
+    assert (output / "source_search_manifest.json").exists()
+    assert (output / "source_search_summary.json").exists()
+    run_status = json.loads((output / "run_status.json").read_text(encoding="utf-8"))
+    assert run_status["status"] == "COMPLETE"
