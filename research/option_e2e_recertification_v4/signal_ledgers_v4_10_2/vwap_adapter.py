@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 
-def build_vwap_adapter(repo_root: Path) -> dict[str, str]:
-    path = repo_root / "strategies" / "movement" / "vwap_reclaim.py"
+def build_vwap_adapter(_repo_root: Path) -> dict[str, object]:
+    """No research adapter is frozen yet; direct strategy execution is not enabled."""
+
     return {
-        "path": str(path),
-        "hash": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "path": None,
+        "hash": None,
+        "status": "NO_REVIEWED_RESEARCH_ADAPTER",
     }
