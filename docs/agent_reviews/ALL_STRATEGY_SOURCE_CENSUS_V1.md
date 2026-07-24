@@ -3,6 +3,9 @@
 candidate_id: all_strategy_source_census_v1  
 decision: PROVISIONAL_CENSUS_WITH_DECLARED_GAPS  
 mode: OFFLINE_CENSUS_AND_READINESS_MATRIX  
+reason: Build a provisional all-strategy source census from the materialized scanner bundle while preserving unresolved and truncated-source gaps.  
+timestamp: 2026-07-24T12:57:42+05:30  
+source: local source-search bundle `vwap_source_search/20260724-123741-41381`  
 research_only: true  
 read_only: true  
 is_order_action: false  
