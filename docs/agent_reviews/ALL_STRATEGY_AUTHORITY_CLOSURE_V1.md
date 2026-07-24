@@ -1,112 +1,77 @@
-# All-Strategy Authority Closure v1
-
 mode: RESEARCH_ONLY_AUTHORITY_CLOSURE
 candidate_id: all_strategy_authority_closure_v1
 decision: BLOCKED_WITH_DECLARED_GAPS
-reason: The repaired closure is now derived from the real full census registries and preserves the census gaps as explicit authority blocks rather than synthetic summaries.
+reason: The closure layer is now derived from the real full census registries, but the census still leaves unresolved sources, non-canonical dataset versions, and zero canonical signal-ledger authority.
 timestamp: 2026-07-24T12:57:42+05:30
 research_only: true
 read_only: true
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
-source: committed compact census evidence under `research/option_e2e_recertification_v4/all_strategy_source_census_v1/`
+source: Published full-registry authority-closure evidence under `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/`
 
-## Scope
+# All-Strategy Authority Closure v1
 
-This layer only closes authority over the already published census. It does not recalculate the census, does not run replay, does not score P&L, and does not touch broker or live execution surfaces.
+## Agent Work Contract
 
-Owned paths:
+The closure layer audits real dataset-family, dataset-version, unresolved-source, signal-ledger, and strategy-authority records from the published full census evidence. It remains research-only and read-only.
 
-- `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/**`
-- `tests/research/option_e2e/test_all_strategy_authority_closure_v1.py`
-- `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md`
+## Scope Guard
 
-## Design
-
-The closure package reads the two full census registry runs, verifies they are semantically identical, and converts the real registry rows into explicit authority records:
-
-- input census integrity
-- dataset family authority reviews
-- dataset version authority decisions
-- Aeron7 NIFTY F1 authority review
-- unresolved source authority review
-- signal-ledger authority review
-- all-strategy authority matrix
-- blocker ledger
-- strategy prioritization
-
-Each output fails closed. No output claims canonical authority where the census still reports provisional or unresolved state.
+The closure package reads the two full census registry runs, verifies they are semantically identical, and converts the real registry rows into explicit authority records.
 
 ## Prior Invalidation History
 
-The earlier synthetic implementation was invalidated because it fabricated family, version, and prioritization records from aggregate counts. That history is preserved here as context, but the current implementation no longer uses those shortcuts.
+The earlier synthetic implementation was invalidated because it fabricated family, version, and prioritization records from aggregate counts. That history is preserved here for traceability, but the current implementation no longer uses those shortcuts.
 
-## Safety Invariants
+## Grill Me Review
+
+The repaired implementation no longer relies on placeholder family IDs or fabricated version loops. The remaining gaps are the genuine unresolved census gaps reflected by the full registries.
+
+## Hermes Review
+
+The closure keeps the authority layers separate:
+
+- dataset family authority
+- dataset version authority
+- unresolved source authority
+- signal-ledger authority
+- strategy and hypothesis readiness
+
+## GSD Review
+
+The implementation is deterministic over the full registries and preserves the census gaps as explicit blocked or limited authority states.
+
+## QA / Safety Review
+
+Safety flags remain explicit:
 
 - `research_only=true`
 - `read_only=true`
 - `broker_api_called=false`
 - `is_order_action=false`
 - `allowed_for_live_execution=false`
-- no broker imports
-- no order actions
-- no live wiring
-- no threshold changes
 
-## Test Coverage
-
-Tests verify:
-
-- the closure layer reads the real full registry runs directly;
-- both full runs are semantically identical before closure is built;
-- the family and version authority outputs preserve the census gaps;
-- the Aeron7 review stays blocked with limitations;
-- unresolved source authority remains blocked;
-- the signal-ledger review remains blocked;
-- compact JSON outputs have sidecars;
-- the snapshot loader reproduces the committed census facts from the full registry input.
-
-## Rollout Notes
-
-This is publication-only evidence. It does not authorize strategy execution, replay, WFA, holdout, broker integration, or live/paper promotion.
-
-## Agent Work Contract
-
-source_agent: Codex. action: research-only authority closure publication. scope: committed census-derived authority reports, focused tests, and this review doc. forbidden_paths: broker, order, live, risk, threshold, feed, and runtime execution paths.
-
-## What Changed
-
-The existing provisional census evidence is now wrapped in a closure layer that makes the authority conclusions explicit and machine-readable.
-
-## What Did Not Change
-
-- the published census conclusions
-- the `PROVISIONAL_CENSUS_WITH_DECLARED_GAPS` decision
-- runtime execution behavior
-- broker or order behavior
-- replay, P&L, WFA, or holdout logic
+The code does not touch broker, order, live feed, risk, dashboard, replay, WFA, or holdout paths.
 
 ## Acceptance Proof
 
-This layer should be accepted only when the focused closure test passes and the generated outputs match the committed census counts:
+The repaired layer is backed by:
 
-- raw candidates: `6119`
-- accepted physical files: `1055`
-- unresolved source candidates: `24`
-- exact-content blobs: `2910`
-- dataset partitions: `1054`
-- logical dataset families: `8`
-- dataset versions: `986`
-- canonical dataset versions: `0`
-- usable-with-limitations dataset versions: `25`
-- unresolved dataset versions: `961`
-- canonical signal ledgers: `0`
-- insufficient-provenance signal ledgers: `1`
-- ready-for-causal-execution lanes: `0`
-- valid-precomputed-signal lanes: `0`
-- material truncated roots: `27`
+- two full census registry runs with matching semantic hashes;
+- real family and version registries loaded from the committed full evidence;
+- real unresolved source, signal-ledger, and readiness registries;
+- CI-portable tests that assert concrete records and fail-closed outcomes;
+- a unified Code Excellence gate with `total_blocks=0`.
 
-## What This Does Not Prove
+## Runtime Proof Required After Merge
 
-It does not prove strategy profitability, execution readiness, live readiness, or historical causal authority for the unresolved lanes.
+None. This is research-only evidence and does not authorize runtime behavior.
+
+## What This PR Does Not Prove
+
+This closure does not prove profitability, replay correctness, WFA, holdout performance, paper readiness, or live readiness. It preserves the blocked gaps as evidence, not as execution authority.
+
+## Human Approval
+
+Human approval remains required before any later execution work. The closure output itself is evidence only.
