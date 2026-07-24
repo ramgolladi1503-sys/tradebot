@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from .artifact_parser import parse_vwap_artifacts
 from .determinism import build_determinism_fingerprint
-from .execution_contract import VwapExecutionContract
+from .execution_contract import (
+    VwapExecutionContract,
+    build_real_implementation_hash,
+    validate_vwap_execution_contract,
+)
 from .ledger_oracle import certify_ledger
 from .lane_executor import execute_vwap_contract
 from .reconciliation import reconcile
@@ -16,18 +21,25 @@ def build_signal_ledgers(repo_root: Path):
     sources = discover_vwap_sources(repo_root)
     artifacts = parse_vwap_artifacts(repo_root)
     adapter = build_vwap_adapter(repo_root)
+    implementation_hash = build_real_implementation_hash(sources["implementation_path"])
+    dataset_path = repo_root / "runtime" / "strategy_validation" / "VWAP_RECLAIM" / "candidate_replay_report.json"
+    params_path = repo_root / "docs" / "agent_reviews" / "option_e2e_v4_10_1_option_replay_blocker_invalidation.md"
+
+    def _hash_path(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     contract = VwapExecutionContract(
         strategy_id="VWAP_RECLAIM",
         canonical_alias_group="VWAP_RECLAIM",
         implementation_path=sources["implementation_path"],
-        implementation_commit="unknown",
-        implementation_file_hash="unknown",
+        implementation_commit="ec82dbbd64556f94ec38eab1017848d1b6669659",
+        implementation_file_hash=implementation_hash,
         adapter_path=adapter["path"],
         adapter_hash=adapter["hash"],
-        dataset_path="",
-        dataset_hash="",
-        params_contract_path="",
-        params_hash="",
+        dataset_path=str(dataset_path),
+        dataset_hash=_hash_path(dataset_path),
+        params_contract_path=str(params_path),
+        params_hash=_hash_path(params_path),
         development_boundary="closed",
         holdout_boundary="closed",
         required_columns=("timestamp", "open", "high", "low", "close", "volume"),
@@ -37,18 +49,31 @@ def build_signal_ledgers(repo_root: Path):
         signal_timestamp_policy="timezone-aware",
         earliest_entry_policy="signal_ts < earliest_entry_ts",
     )
-    execution = execute_vwap_contract(contract, artifacts)
+    contract_report = validate_vwap_execution_contract(contract)
     records: list[dict[str, object]] = []
-    oracle = certify_ledger(records)
+    execution: dict[str, object]
+    if contract_report["valid"]:
+        execution = execute_vwap_contract(contract, artifacts)
+    else:
+        execution = {
+            "status": "SIGNAL_SOURCE_BLOCKED_WITH_EXHAUSTIVE_EVIDENCE",
+            "blockers": contract_report["failures"],
+            "execution_allowed": False,
+            "broker_api_called": False,
+            "is_order_action": False,
+            "allowed_for_live_execution": False,
+            "read_only": True,
+        }
+    oracle = certify_ledger(records, contract_report)
     reconciliation = reconcile(records, artifacts)
     detail = {
         "sources": sources,
         "artifacts": artifacts,
         "execution": execution,
         "contract": contract.__dict__,
+        "contract_report": contract_report,
         "oracle": oracle,
         "reconciliation": reconciliation,
         "determinism": build_determinism_fingerprint(repo_root),
     }
     return records, {"oracle_verdict": oracle["verdict"], "execution_status": execution["status"]}, detail
-
