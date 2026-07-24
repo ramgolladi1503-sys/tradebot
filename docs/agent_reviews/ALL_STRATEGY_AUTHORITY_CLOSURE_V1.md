@@ -1,107 +1,63 @@
-# All-Strategy Authority Closure v1
-
 mode: RESEARCH_ONLY_AUTHORITY_CLOSURE
 candidate_id: all_strategy_authority_closure_v1
-decision: BLOCKED_WITH_DECLARED_GAPS
-reason: The published census is internally consistent, but it still leaves unresolved sources, non-canonical dataset versions, and zero canonical signal-ledger authority, so closure remains read-only and fail-closed.
-timestamp: 2026-07-24T12:57:42+05:30
+decision: INVALID_IMPLEMENTATION
+reason: The published v1 closure implementation synthesizes placeholder dataset-family, dataset-version, strategy-matrix, blocker, and prioritization records from aggregate census counts instead of auditing the full census registries. Its outputs are not evidence for authority closure.
+timestamp: 2026-07-24T21:20:00+05:30
 research_only: true
 read_only: true
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
-source: committed compact census evidence under `research/option_e2e_recertification_v4/all_strategy_source_census_v1/`
+source: Independent review of commit 76584f3e3a8c659a37583e79c485482ec0e852d2 against the published full-registry authority-closure contract.
 
-## Scope
-
-This layer only closes authority over the already published census. It does not recalculate the census, does not run replay, does not score P&L, and does not touch broker or live execution surfaces.
-
-Owned paths:
-
-- `research/option_e2e_recertification_v4/all_strategy_authority_closure_v1/**`
-- `tests/research/option_e2e/test_all_strategy_authority_closure_v1.py`
-- `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md`
-
-## Design
-
-The closure package reads the committed census compact files and converts them into explicit authority records:
-
-- input census integrity
-- dataset family authority reviews
-- dataset version authority decisions
-- Aeron7 NIFTY F1 authority review
-- unresolved source authority review
-- signal-ledger authority review
-- all-strategy authority matrix
-- blocker ledger
-- strategy prioritization
-
-Each output fails closed. No output claims canonical authority where the census still reports provisional or unresolved state.
-
-## Safety Invariants
-
-- `research_only=true`
-- `read_only=true`
-- `broker_api_called=false`
-- `is_order_action=false`
-- `allowed_for_live_execution=false`
-- no broker imports
-- no order actions
-- no live wiring
-- no threshold changes
-
-## Test Coverage
-
-Tests verify:
-
-- the closure layer reads the published census counts directly;
-- the family and version authority outputs preserve the census gaps;
-- the Aeron7 review stays blocked with limitations;
-- unresolved source authority remains blocked;
-- the signal-ledger review remains blocked;
-- compact JSON outputs have sidecars;
-- the snapshot loader reproduces the committed census facts.
-
-## Rollout Notes
-
-This is publication-only evidence. It does not authorize strategy execution, replay, WFA, holdout, broker integration, or live/paper promotion.
+# All-Strategy Authority Closure v1 — Invalid Implementation Notice
 
 ## Agent Work Contract
 
-source_agent: Codex. action: research-only authority closure publication. scope: committed census-derived authority reports, focused tests, and this review doc. forbidden_paths: broker, order, live, risk, threshold, feed, and runtime execution paths.
+The closure layer was intended to audit real dataset-family, dataset-version, unresolved-source, signal-ledger, and strategy-authority records from the published full census evidence. It must remain research-only and read-only.
 
-## What Changed
+## Scope Guard
 
-The existing provisional census evidence is now wrapped in a closure layer that makes the authority conclusions explicit and machine-readable.
+This notice changes only the authority interpretation of the closure package. It does not modify broker, order, feed, risk, dashboard, strategy thresholds, production registration, replay, P&L, WFA, holdout, or live/paper paths.
 
-## What Did Not Change
+## Grill Me Review
 
-- the published census conclusions
-- the `PROVISIONAL_CENSUS_WITH_DECLARED_GAPS` decision
-- runtime execution behavior
-- broker or order behavior
-- replay, P&L, WFA, or holdout logic
+The implementation cannot answer the required evidence questions because it creates family IDs, version IDs, authority statuses, blockers, and priority lanes from fixed Python literals and aggregate counts. It does not trace those records to the full census registries.
+
+## Hermes Review
+
+The output names suggest detailed authority reviews, but the implementation does not carry the required source paths, hashes, instrument identities, intervals, timezones, date ranges, sessions, version provenance, implementation owners, parameter owners, temporal contracts, or split/fold identities.
+
+## GSD Review
+
+The package is deterministic, but determinism of fabricated placeholders is not authority proof. The implementation must be rebuilt from the two full external census runs and must compare their semantic hashes before producing closure records.
+
+## QA / Safety Review
+
+The implementation remains fail-closed and does not touch execution paths, which is safe. However, its tests mainly assert that synthetic outputs match synthetic expectations. Passing tests and Code Excellence therefore do not validate the authority claims.
 
 ## Acceptance Proof
 
-This layer should be accepted only when the focused closure test passes and the generated outputs match the committed census counts:
+The current implementation is invalidated. Replacement acceptance requires:
 
-- raw candidates: `6119`
-- accepted physical files: `1055`
-- unresolved source candidates: `24`
-- exact-content blobs: `2910`
-- dataset partitions: `1054`
-- logical dataset families: `8`
-- dataset versions: `986`
-- canonical dataset versions: `0`
-- usable-with-limitations dataset versions: `25`
-- unresolved dataset versions: `961`
-- canonical signal ledgers: `0`
-- insufficient-provenance signal ledgers: `1`
-- ready-for-causal-execution lanes: `0`
-- valid-precomputed-signal lanes: `0`
-- material truncated roots: `27`
+- real eight-family records loaded from `logical_dataset_family_registry.json`;
+- real version decisions loaded from `dataset_version_registry.json`;
+- real unresolved-source grouping from `unresolved_candidate_resolution.json` and source inventory evidence;
+- real Aeron7/NIFTY_F1 authority fields;
+- real signal-ledger provenance review;
+- a strategy-by-strategy matrix derived from the strategy inventory, alias registry, and readiness registry;
+- no fabricated IDs or hardcoded priority outcomes;
+- two-run semantic determinism;
+- CI-portable behavioral tests and an independent external-evidence verifier.
 
-## What This Does Not Prove
+## Runtime Proof Required After Merge
 
-It does not prove strategy profitability, execution readiness, live readiness, or historical causal authority for the unresolved lanes.
+None. This is research-only evidence and does not authorize runtime behavior. Any later execution work requires a separately reviewed causal execution contract.
+
+## What This PR Does Not Prove
+
+The current closure package does not prove dataset-family authority, dataset-version authority, signal authority, strategy readiness, priority-lane selection, profitability, replay correctness, WFA performance, holdout performance, paper readiness, or live readiness.
+
+## Human Approval
+
+Human approval is required after the evidence-backed closure replacement is published and all exact-head workflows succeed. The current v1 closure implementation must not be used as authority evidence.
