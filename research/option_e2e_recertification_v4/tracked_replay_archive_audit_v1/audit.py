@@ -31,6 +31,7 @@ _DENIED_TOKENS = (
     "post_trade",
 )
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
+_OPTION_FILE_RE = re.compile(r"(?:^|\s)(?:CE|PE)(?:\s|$)", re.IGNORECASE)
 
 
 class TrackedArchiveAuditError(RuntimeError):
@@ -64,6 +65,15 @@ def sha256_file(path: Path) -> str:
 def _is_denied_path(name: str) -> bool:
     normalized = name.lower().replace("-", "_").replace(" ", "_")
     return any(token in normalized for token in _DENIED_TOKENS)
+
+
+def _is_archive_metadata(name: str) -> bool:
+    path = PurePosixPath(name)
+    return (
+        bool(path.parts and path.parts[0] == "__MACOSX")
+        or path.name.startswith("._")
+        or path.name == ".DS_Store"
+    )
 
 
 def _normalized_member_name(name: str) -> str:
@@ -224,6 +234,13 @@ def _member_name_collisions(
     return duplicate_names, case_collisions
 
 
+def _date_component(name: str) -> str | None:
+    for part in PurePosixPath(name).parts:
+        if len(part) == 8 and part.isdigit():
+            return part
+    return None
+
+
 def audit_tracked_archive(
     archive_path: Path,
     *,
@@ -250,18 +267,26 @@ def audit_tracked_archive(
         members: list[dict[str, Any]] = []
         denied_count = 0
         opened_count = 0
+        archive_metadata_count = 0
         signal_like_count = 0
         parquet_count = 0
+        option_like_parquet_count = 0
         manifest_count = 0
+        represented_dates: set[str] = set()
+        parquet_dates: set[str] = set()
+
         for info in infos:
             normalized_name = _normalized_member_name(info.filename)
             member_type, should_open = _member_kind(info, normalized_name)
-            denied = _is_denied_path(normalized_name)
-            candidate_class = (
-                "DENIED_OUTCOME_BEARING_CONTENT"
-                if denied
-                else _classify_candidate(normalized_name)
-            )
+            archive_metadata = _is_archive_metadata(normalized_name)
+            denied = not archive_metadata and _is_denied_path(normalized_name)
+            if archive_metadata:
+                candidate_class = "ARCHIVE_METADATA_MEMBER"
+            elif denied:
+                candidate_class = "DENIED_OUTCOME_BEARING_CONTENT"
+            else:
+                candidate_class = _classify_candidate(normalized_name)
+
             record: dict[str, Any] = {
                 "member_path": normalized_name,
                 "member_type": member_type,
@@ -270,9 +295,12 @@ def audit_tracked_archive(
                 "crc32": f"{info.CRC:08x}",
                 "candidate_class": candidate_class,
                 "content_opened": False,
+                "archive_metadata": archive_metadata,
                 "denied_by_policy": denied,
             }
-            if denied:
+            if archive_metadata:
+                archive_metadata_count += 1
+            elif denied:
                 denied_count += 1
             elif should_open:
                 try:
@@ -297,10 +325,18 @@ def audit_tracked_archive(
                     structured_summary=_structured_summary(normalized_name, content),
                 )
                 opened_count += 1
+
+            date_component = _date_component(normalized_name)
+            if not archive_metadata and date_component:
+                represented_dates.add(date_component)
             if candidate_class == "SIGNAL_LIKE_MEMBER":
                 signal_like_count += 1
             elif candidate_class == "MARKET_DATA_PARQUET_MEMBER":
                 parquet_count += 1
+                if date_component:
+                    parquet_dates.add(date_component)
+                if _OPTION_FILE_RE.search(PurePosixPath(normalized_name).stem):
+                    option_like_parquet_count += 1
             elif candidate_class == "SOURCE_MANIFEST_MEMBER":
                 manifest_count += 1
             members.append(record)
@@ -315,6 +351,10 @@ def audit_tracked_archive(
         reason_codes.append("signal_like_paths_require_independent_authority_evidence")
     if denied_count:
         reason_codes.append("outcome_bearing_members_excluded_without_content_read")
+    if archive_metadata_count:
+        reason_codes.append("appledouble_metadata_excluded_from_source_content")
+
+    content_members = [item for item in members if not item["archive_metadata"]]
     return {
         "schema_version": "tracked_replay_archive_source_audit_v1",
         "archive_path": "runtime/upstox_candidate_replay.zip",
@@ -329,10 +369,21 @@ def audit_tracked_archive(
         "duplicate_member_names": duplicate_names,
         "case_colliding_member_names": case_collisions,
         "opened_member_count": opened_count,
+        "archive_metadata_member_count": archive_metadata_count,
+        "content_tree_member_count": len(content_members),
+        "content_file_member_count": sum(
+            item["member_type"] == "FILE" for item in content_members
+        ),
+        "content_directory_member_count": sum(
+            item["member_type"] == "DIRECTORY" for item in content_members
+        ),
         "denied_outcome_member_count": denied_count,
         "signal_like_member_count": signal_like_count,
         "market_data_parquet_member_count": parquet_count,
+        "option_like_parquet_member_count": option_like_parquet_count,
         "source_manifest_member_count": manifest_count,
+        "represented_date_directory_count": len(represented_dates),
+        "dates_with_parquet_member_count": len(parquet_dates),
         "canonical_signal_source_count": 0,
         "canonical_dataset_source_count": 0,
         "source_disposition": classification,
