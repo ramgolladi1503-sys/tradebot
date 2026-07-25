@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - research/signal-ledger-provenance-v1
+  pull_request:
+    branches:
+      - research/all-strategy-option-e2e-recertification-v4
 
 permissions:
   contents: read
