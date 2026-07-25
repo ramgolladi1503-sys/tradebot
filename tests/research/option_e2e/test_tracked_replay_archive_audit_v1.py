@@ -13,6 +13,9 @@ from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1.audi
     UnsafeArchiveError,
     audit_tracked_archive,
 )
+from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1.build_evidence import (
+    build,
+)
 from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1.oracle import (
     oracle_archive_facts,
     reconcile_primary_oracle,
@@ -193,3 +196,46 @@ def test_audit_is_semantically_deterministic(tmp_path: Path) -> None:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def test_builder_publishes_compact_hash_bound_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = tmp_path / "replay.zip"
+    digest = _zip(
+        archive,
+        {
+            "__MACOSX/replay/._manifest.json": b"metadata",
+            "replay/20260709/manifests/fetch_manifest.json": b"{}",
+        },
+    )
+    from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1 import (
+        audit as audit_module,
+    )
+    from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1 import (
+        oracle as oracle_module,
+    )
+
+    monkeypatch.setattr(audit_module, "EXPECTED_ARCHIVE_SHA256", digest)
+    monkeypatch.setattr(oracle_module, "EXPECTED_ARCHIVE_SHA256", digest)
+    output_dir = tmp_path / "out"
+    build(archive, output_dir)
+
+    compact = json.loads(
+        (output_dir / "tracked_replay_archive_audit_compact.json").read_text()
+    )
+    manifest = json.loads((output_dir / "external_evidence_manifest.json").read_text())
+    assert "members" not in compact
+    assert compact["member_registry_semantic_sha256"]
+    assert compact["candidate_class_counts"] == {
+        "ARCHIVE_METADATA_MEMBER": 1,
+        "SOURCE_MANIFEST_MEMBER": 1,
+    }
+    assert manifest["full_member_registry_committed"] is False
+    for path in output_dir.glob("*.json"):
+        sidecar = path.with_suffix(path.suffix + ".sha256")
+        assert sidecar.is_file()
+        assert sidecar.read_text().split()[0] == hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest()
