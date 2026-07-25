@@ -24,6 +24,14 @@ _CANONICAL_DATASET_AUTHORITIES = {
 }
 _LIMITED_DATASET_AUTHORITIES = {"USABLE_WITH_LIMITATIONS", "PROVEN_WITH_LIMITATIONS"}
 
+_DERIVED_INVALIDATION_REASON = "DERIVED_THROUGH_PROVEN_INVALIDATED_GENERATOR_BINDING"
+_DERIVED_INVALIDATION_REASON_PUBLIC = "derived_through_proven_invalidated_generator_binding"
+_INVALIDATED_LEDGER_HASH = "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed"
+_INVALIDATED_LEDGER_ROWS = 24
+_INVALIDATED_ARTIFACT_KIND = "MULTI_OWNER_BLOCKED_PLACEHOLDER_INVENTORY"
+_BROKER_CALL_FIELD = "broker_api_called"
+_ORDER_ACTION_FIELD = "is_order_action"
+
 
 def _value(evidence: Mapping[str, Any], *names: str) -> Any:
     for name in names:
@@ -64,6 +72,44 @@ def _explicit_bool(value: Any) -> bool | None:
         if normalized in {"0", "false", "no"}:
             return False
     return None
+
+
+def _historical_status(value: bool | None) -> str:
+    if value is False:
+        return "CLEAR"
+    if value is True:
+        return "UNBOUND_ASSERTION"
+    return "UNRESOLVED"
+
+
+def _derived_invalidation_failures(evidence: Mapping[str, Any]) -> list[str]:
+    checks = {
+        "ledger_hash": (
+            _value(evidence, "physical_hash", "physical_sha256", "sha256")
+            == _value(evidence, "provenance_ledger_hash")
+            == _INVALIDATED_LEDGER_HASH
+        ),
+        "row_count": (
+            _value(evidence, "row_count")
+            == _value(evidence, "provenance_row_count")
+            == _INVALIDATED_LEDGER_ROWS
+        ),
+        "artifact_kind": _value(evidence, "artifact_kind") == _INVALIDATED_ARTIFACT_KIND,
+        "artifact_verdict": _value(evidence, "artifact_verdict") == "SIGNAL_LEDGER_INVALIDATED",
+        "direct_authority": _value(evidence, "direct_ledger_invalidation_authority") == "UNRESOLVED",
+        "implementation_authority": _value(evidence, "implementation_invalidation_authority") == "CONFIRMED",
+        "derived_authority": _value(evidence, "derived_ledger_invalidation_authority") == "CONFIRMED",
+        "derived_reason": _value(evidence, "derived_invalidation_reason_code") == _DERIVED_INVALIDATION_REASON,
+        "generator_binding": _value(evidence, "generator_output_binding_status") == "PROVEN",
+        "primary_oracle": _value(evidence, "primary_oracle_agreement") == "AGREEMENT",
+        "aggregate_owner": _value(evidence, "aggregate_canonical_strategy_id") is None,
+        "research_only": _value(evidence, "research_only") is True,
+        "read_only": _value(evidence, "read_only") is True,
+        "allowed_for_live_execution": _value(evidence, "allowed_for_live_execution") is False,
+        "broker_non_action": _value(evidence, _BROKER_CALL_FIELD) is False,
+        "order_non_action": _value(evidence, _ORDER_ACTION_FIELD) is False,
+    }
+    return [name for name, valid in checks.items() if not valid]
 
 
 def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any]:
@@ -135,7 +181,7 @@ def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any
         "option_price_contamination": _bool_status(option_price_contamination),
         "tuned_after_outcome": _bool_status(tuned_after_outcome),
         "holdout_contamination": _bool_status(holdout_contamination),
-        "historical_invalidation": _bool_status(historically_invalidated),
+        "historical_invalidation": _historical_status(historically_invalidated),
     }
 
     if fields["causal_timestamps"] == "INVALID":
@@ -151,8 +197,21 @@ def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any
 
     if invalid_reasons:
         return _result("INVALID_SIGNAL_LEDGER", fields, invalid_reasons)
-    if historically_invalidated is True:
-        return _result("INVALIDATED_HISTORICAL_EVIDENCE", fields, ["historical_evidence_invalidated"])
+    derived_authority = _value(evidence, "derived_ledger_invalidation_authority")
+    if derived_authority == "CONFIRMED":
+        derived_failures = _derived_invalidation_failures(evidence)
+        if derived_failures:
+            return _result(
+                "INVALID_SIGNAL_LEDGER",
+                fields,
+                [f"derived_invalidation_{failure}_invalid" for failure in derived_failures],
+            )
+        fields["historical_invalidation"] = "DERIVED_CONFIRMED"
+        return _result(
+            "INVALIDATED_HISTORICAL_EVIDENCE",
+            fields,
+            [_DERIVED_INVALIDATION_REASON_PUBLIC],
+        )
     if holdout_contamination is True:
         return _result("HOLDOUT_CONTAMINATED", fields, ["holdout_contamination_proven"])
     if outcome_contamination is True or option_price_contamination is True or tuned_after_outcome is True:
@@ -184,7 +243,7 @@ def assess_signal_ledger_authority(evidence: Mapping[str, Any]) -> dict[str, Any
             "holdout_contamination",
             "historical_invalidation",
         )
-        if fields[name] == "UNRESOLVED"
+        if fields[name] in {"UNRESOLVED", "UNBOUND_ASSERTION"}
     )
     if fields["dataset_authority"] == "UNPROVEN":
         missing.append("dataset_authority")

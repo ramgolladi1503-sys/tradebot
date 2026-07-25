@@ -12,7 +12,13 @@ from research.option_e2e_recertification_v4.all_strategy_authority_closure_v1 im
     AuthorityClosureReconciliationError,
     build_all_strategy_authority_closure,
     load_authority_closure_inputs,
+    load_signal_ledger_provenance_evidence,
 )
+
+
+LEDGER_HASH = "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed"
+LEDGER_ID = f"{LEDGER_HASH}:24"
+EVIDENCE_DIR = Path("research/option_e2e_recertification_v4/signal_ledger_provenance_v1")
 
 
 def _semantic_sha(path: Path) -> str:
@@ -81,8 +87,20 @@ def _snapshot() -> AuthorityClosureSnapshot:
         logical_dataset_family_registry=families,
         dataset_version_registry=versions,
         semantic_duplicate_groups=[],
-        canonical_signal_ledger_registry=[{"canonical_signal_ledger_id": "s1", "status": "INSUFFICIENT_PROVENANCE"}],
-        canonical_signal_ledger_audit=[{"canonical_signal_ledger_id": "s1", "status": "INSUFFICIENT_PROVENANCE"}],
+        canonical_signal_ledger_registry=[{
+            "canonical_signal_ledger_id": LEDGER_ID,
+            "sha256": LEDGER_HASH,
+            "row_count": 24,
+            "status": "INSUFFICIENT_PROVENANCE",
+        }],
+        canonical_signal_ledger_audit=[{
+            "canonical_signal_ledger_id": LEDGER_ID,
+            "physical_sha256": LEDGER_HASH,
+            "row_count": 24,
+            "signal_id_unique": True,
+            "status": "INSUFFICIENT_PROVENANCE",
+            "strategy_or_hypothesis_id": None,
+        }],
         aeron7_nifty_f1_dataset_family=[{"dataset_family_id": "FAMILY:NIFTY_F1:futures:NSE:1m", "exact_copy_count": 68}],
         unresolved_candidate_resolution=[{"input_unresolved_count": 1, "items": [{"candidate_id": "u1"}]}],
         truncation_review=[{"root_id": "ROOT", "final_materiality_verdict": "MATERIAL_GAP_NOT_FULLY_EXHAUSTED"}],
@@ -101,6 +119,7 @@ def _snapshot() -> AuthorityClosureSnapshot:
         signal_ledger_summary={"canonical_signal_ledger_count": 0, "insufficient_provenance_ledgers": 1, "valid_signal_ledger_with_limitations_count": 0},
         execution_readiness_summary={"blocked_lanes_by_blocker_class": {"INSUFFICIENT_SIGNAL_PROVENANCE": 1, "NO_TRADE_FILTER": 1}},
         determinism={"ok": True},
+        signal_ledger_provenance=load_signal_ledger_provenance_evidence(EVIDENCE_DIR),
     )
 
 
@@ -212,7 +231,12 @@ def test_loader_reconciles_semantically_identical_runs(tmp_path: Path) -> None:
     _write_json(compact / "signal_ledger_summary.json", {"canonical_signal_ledger_count": 0})
     _write_json(compact / "execution_readiness_summary.json", {"valid_precomputed_signals_lanes": 0})
 
-    snapshot = load_authority_closure_inputs(full_run_a=run_a, full_run_b=run_b, compact_census_dir=compact)
+    snapshot = load_authority_closure_inputs(
+        full_run_a=run_a,
+        full_run_b=run_b,
+        signal_ledger_provenance_dir=EVIDENCE_DIR,
+        compact_census_dir=compact,
+    )
 
     assert snapshot.census_summary["raw_candidates"] == 3
     assert snapshot.dataset_family_summary["logical_dataset_family_count"] == 2
@@ -236,6 +260,9 @@ def test_closure_builds_real_records_from_snapshot(tmp_path: Path) -> None:
     assert versions[0]["dataset_version_id"] == "VERSION:1"
     assert tuple(row["canonical_strategy_id"] for row in matrix) == ("NO_TRADE_CHOP", "VWAP_RECLAIM")
     assert signal["canonical_signal_ledger_count"] == 0
+    assert signal["authority_conclusion"] == "INVALIDATED_HISTORICAL_EVIDENCE"
+    assert signal["invalidated_signal_ledger_count"] == 1
+    assert signal["replacement_signal_ledger_required"] is True
 
 
 def test_sidecars_are_written(tmp_path: Path) -> None:
@@ -345,74 +372,43 @@ def test_version_decision_uses_evidence_when_declared_status_is_unchanged(tmp_pa
     assert baseline_a["authority_reason_codes"] != mutated_a["authority_reason_codes"]
 
 
-def test_signal_review_joins_typed_ids_and_uses_the_assessed_hashes(tmp_path: Path) -> None:
-    snapshot = _cross_record_snapshot()
-    family_id = "FAMILY:NIFTY_SPOT:spot:NSE:5m"
-    version_id = "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:bbbbbbbbbbbbbbbb"
-    ledger_id = "LEDGER:VWAP_RECLAIM:001"
-    audit = {
-        "canonical_signal_ledger_id": ledger_id,
-        "strategy_or_hypothesis_id": "VWAP_RECLAIM",
-        "implementation_commit": "c" * 64,
-        "dataset_source_hash": "d" * 64,
-        "dataset_family_id": family_id,
-        "dataset_version_id": version_id,
-        "row_count": 12,
-    }
-    registry = {"canonical_signal_ledger_id": ledger_id, "canonical_strategy_id": "VWAP_RECLAIM", "status": "INSUFFICIENT_PROVENANCE"}
-    inventory = [
-        {"canonical_strategy_id": "NO_TRADE_CHOP", "implementation_blob_hash": "e" * 64, "aliases": ["NO_TRADE_CHOP"]},
-        {"canonical_strategy_id": "VWAP_RECLAIM", "implementation_blob_hash": "f" * 64, "aliases": ["VWAP_RECLAIM"]},
-    ]
-    readiness = [
-        dict(snapshot.all_strategy_execution_readiness[1]),
-        dict(snapshot.all_strategy_execution_readiness[0], selected_canonical_dataset=version_id, selected_canonical_signal_ledger=ledger_id),
-    ]
-    build_all_strategy_authority_closure(
-        snapshot=replace(snapshot, canonical_signal_ledger_registry=[registry], canonical_signal_ledger_audit=[audit], strategy_implementation_inventory=inventory, all_strategy_execution_readiness=readiness),
-        output_dir=tmp_path / "closure",
-    )
+def test_signal_review_integrates_exact_derived_invalidation_without_lane_assignment(tmp_path: Path) -> None:
+    output = tmp_path / "closure"
+    build_all_strategy_authority_closure(snapshot=_cross_record_snapshot(), output_dir=output)
 
-    review = json.loads((tmp_path / "closure" / "signal_ledger_authority_review.json").read_text(encoding="utf-8"))
-    assert review["canonical_strategy_id"] == "VWAP_RECLAIM"
-    assert review["dataset_family_id"] == family_id
-    assert review["dataset_version_id"] == version_id
-    assert review["implementation_hash"] == "c" * 64
-    assert review["dataset_hash"] == "d" * 64
-    assert not review["dataset_family_id"].startswith("VERSION:")
+    review = json.loads((output / "signal_ledger_authority_review.json").read_text(encoding="utf-8"))
+    matrix = json.loads((output / "all_strategy_authority_matrix.json").read_text(encoding="utf-8"))
 
-
-def test_signal_review_does_not_fall_back_to_first_lane_when_ownership_is_unknown(tmp_path: Path) -> None:
-    snapshot = _cross_record_snapshot()
-    audit = {"canonical_signal_ledger_id": "LEDGER:UNKNOWN:001", "strategy_or_hypothesis_id": "UNKNOWN_OWNER", "implementation_commit": "c" * 64, "dataset_source_hash": "d" * 64}
-    registry = {"canonical_signal_ledger_id": "LEDGER:UNKNOWN:001", "status": "INSUFFICIENT_PROVENANCE"}
-    build_all_strategy_authority_closure(
-        snapshot=replace(snapshot, canonical_signal_ledger_registry=[registry], canonical_signal_ledger_audit=[audit]),
-        output_dir=tmp_path / "closure",
-    )
-
-    review = json.loads((tmp_path / "closure" / "signal_ledger_authority_review.json").read_text(encoding="utf-8"))
+    assert review["physical_hash"] == LEDGER_HASH
+    assert review["artifact_kind"] == "MULTI_OWNER_BLOCKED_PLACEHOLDER_INVENTORY"
+    assert review["authority_conclusion"] == "INVALIDATED_HISTORICAL_EVIDENCE"
+    assert review["direct_ledger_invalidation_authority"] == "UNRESOLVED"
+    assert review["implementation_invalidation_authority"] == "CONFIRMED"
+    assert review["derived_ledger_invalidation_authority"] == "CONFIRMED"
     assert review["canonical_strategy_id"] is None
-    assert review["aliases"] == []
-    assert review["implementation_path"] is None
-    assert review["parameter_owner"] is None
-    assert review["authority_conclusion"] == "INSUFFICIENT_PROVENANCE"
+    assert review["lane_impact_analysis"]["affected_lane_assignments"] == []
+    assert all(row["selected_canonical_signal_ledger"] != LEDGER_ID for row in matrix)
+    assert all(row["execution_eligible"] is False for row in matrix)
 
 
-def test_signal_review_rejects_version_identifier_as_dataset_family(tmp_path: Path) -> None:
+def test_alias_resolution_cannot_assign_multi_owner_placeholder(tmp_path: Path) -> None:
     snapshot = _cross_record_snapshot()
-    ledger_id = "LEDGER:VWAP_RECLAIM:BAD_FAMILY"
-    version_id = "VERSION:FAMILY:NIFTY_SPOT:spot:NSE:5m:bbbbbbbbbbbbbbbb"
-    audit = {
-        "canonical_signal_ledger_id": ledger_id,
-        "strategy_or_hypothesis_id": "VWAP_RECLAIM",
-        "dataset_family_id": version_id,
-        "dataset_version_id": version_id,
-    }
+    audit = dict(snapshot.canonical_signal_ledger_audit[0], strategy_or_hypothesis_id="VWAP_RECLAIM")
 
-    with pytest.raises(AuthorityClosureReconciliationError, match="dataset_family_id"):
+    with pytest.raises(AuthorityClosureReconciliationError, match="multi_owner_placeholder"):
         build_all_strategy_authority_closure(
-            snapshot=replace(snapshot, canonical_signal_ledger_registry=[{"canonical_signal_ledger_id": ledger_id, "canonical_strategy_id": "VWAP_RECLAIM"}], canonical_signal_ledger_audit=[audit]),
+            snapshot=replace(snapshot, canonical_signal_ledger_audit=[audit]),
+            output_dir=tmp_path / "closure",
+        )
+
+
+def test_closure_rejects_ledger_hash_mismatch_against_provenance(tmp_path: Path) -> None:
+    snapshot = _cross_record_snapshot()
+    audit = dict(snapshot.canonical_signal_ledger_audit[0], physical_sha256="f" * 64)
+
+    with pytest.raises(AuthorityClosureReconciliationError, match="signal_ledger_hash_provenance_mismatch"):
+        build_all_strategy_authority_closure(
+            snapshot=replace(snapshot, canonical_signal_ledger_audit=[audit]),
             output_dir=tmp_path / "closure",
         )
 

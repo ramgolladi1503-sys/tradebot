@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from .blockers_priority import blocker_records_as_dicts, build_authority_blockers_priority
+from .provenance_evidence import (
+    SignalLedgerProvenanceEvidence,
+    load_signal_ledger_provenance_evidence,
+)
 from .signal_authority import assess_signal_ledger_authority
 from .strategy_matrix import build_authority_strategy_matrix
 from .unresolved_sources import group_unresolved_candidates, reconcile_candidate_membership
@@ -58,6 +62,7 @@ class AuthorityClosureSnapshot:
     signal_ledger_summary: dict[str, Any]
     execution_readiness_summary: dict[str, Any]
     determinism: dict[str, Any]
+    signal_ledger_provenance: SignalLedgerProvenanceEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -187,9 +192,16 @@ def _load_run(run_dir: Path) -> AuthorityClosureSnapshot:
     )
 
 
-def load_authority_closure_inputs(*, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
+def load_authority_closure_inputs(
+    *,
+    full_run_a: Path,
+    full_run_b: Path,
+    signal_ledger_provenance_dir: Path,
+    compact_census_dir: Path | None = None,
+) -> AuthorityClosureSnapshot:
     first = _load_run(full_run_a)
     _load_run(full_run_b)
+    signal_ledger_provenance = load_signal_ledger_provenance_evidence(signal_ledger_provenance_dir)
     required_names = (
         "input_bundle_integrity_independent.json",
         "current_986_breakdown.json",
@@ -252,6 +264,7 @@ def load_authority_closure_inputs(*, full_run_a: Path, full_run_b: Path, compact
         execution_readiness_summary=execution_readiness_summary,
         determinism=first.determinism,
         current_986_breakdown=first.current_986_breakdown,
+        signal_ledger_provenance=signal_ledger_provenance,
     )
 
 
@@ -270,9 +283,25 @@ def _family_authority_status(row: dict[str, Any]) -> tuple[str, str]:
     return "FAMILY_USABLE_WITH_LIMITATIONS", "no_canonical_family_authority"
 
 
-def load_all_strategy_authority_closure(repo_root: Path, *, full_run_a: Path, full_run_b: Path, compact_census_dir: Path | None = None) -> AuthorityClosureSnapshot:
-    del repo_root
-    return load_authority_closure_inputs(full_run_a=full_run_a, full_run_b=full_run_b, compact_census_dir=compact_census_dir)
+def load_all_strategy_authority_closure(
+    repo_root: Path,
+    *,
+    full_run_a: Path,
+    full_run_b: Path,
+    compact_census_dir: Path | None = None,
+) -> AuthorityClosureSnapshot:
+    provenance_dir = (
+        repo_root
+        / "research"
+        / "option_e2e_recertification_v4"
+        / "signal_ledger_provenance_v1"
+    )
+    return load_authority_closure_inputs(
+        full_run_a=full_run_a,
+        full_run_b=full_run_b,
+        signal_ledger_provenance_dir=provenance_dir,
+        compact_census_dir=compact_census_dir,
+    )
 
 
 def _dataset_family_reviews(snapshot: AuthorityClosureSnapshot) -> list[dict[str, Any]]:
@@ -441,36 +470,30 @@ def _dataset_version_decisions(snapshot: AuthorityClosureSnapshot) -> list[dict[
 
 
 def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
-    audit = snapshot.canonical_signal_ledger_audit[0] if snapshot.canonical_signal_ledger_audit else {}
-    registry = snapshot.canonical_signal_ledger_registry[0] if snapshot.canonical_signal_ledger_registry else {}
-    audit_strategy_id = audit.get("strategy_or_hypothesis_id") or audit.get("canonical_strategy_id")
-    alias_to_canonical = {
-        str(alias): str(row.get("canonical_strategy_id"))
-        for row in snapshot.strategy_alias_registry
-        for alias in [row.get("canonical_strategy_id"), *row.get("aliases", [])]
-        if alias
-    }
-    canonical_strategy_id = alias_to_canonical.get(str(audit_strategy_id)) if audit_strategy_id else None
-    inventory_by_id = _index_by(snapshot.strategy_implementation_inventory, "canonical_strategy_id")
-    readiness_by_id = _index_by(snapshot.all_strategy_execution_readiness, "canonical_strategy_id")
-    inventory = inventory_by_id.get(str(canonical_strategy_id), {})
-    readiness = readiness_by_id.get(str(canonical_strategy_id), {})
-    selected_version_id = readiness.get("selected_canonical_dataset") if canonical_strategy_id else None
-    version_by_id = _index_by(snapshot.dataset_version_registry, "dataset_version_id")
-    selected_version = version_by_id.get(str(selected_version_id), {}) if selected_version_id else {}
-    asserted_family_id = audit.get("dataset_family_id")
-    asserted_version_id = audit.get("dataset_version_id")
-    if asserted_family_id and str(asserted_family_id).startswith("VERSION:"):
-        raise AuthorityClosureReconciliationError("dataset_family_id_contains_version_identifier")
-    if asserted_version_id and not str(asserted_version_id).startswith("VERSION:"):
-        raise AuthorityClosureReconciliationError("dataset_version_id_is_not_version_identifier")
-    ledger_implementation_hash = audit.get("implementation_commit")
-    ledger_dataset_hash = audit.get("dataset_source_hash")
+    provenance = snapshot.signal_ledger_provenance
+    if provenance is None:
+        raise AuthorityClosureInputError("signal_ledger_provenance_evidence_required")
+    if len(snapshot.canonical_signal_ledger_registry) != 1 or len(snapshot.canonical_signal_ledger_audit) != 1:
+        raise AuthorityClosureReconciliationError("exactly_one_signal_ledger_candidate_required")
+    audit = snapshot.canonical_signal_ledger_audit[0]
+    registry = snapshot.canonical_signal_ledger_registry[0]
+    registry_hash = registry.get("sha256") or registry.get("physical_sha256")
+    audit_hash = audit.get("physical_sha256") or audit.get("sha256")
+    if registry_hash != audit_hash or audit_hash != provenance.physical_hash:
+        raise AuthorityClosureReconciliationError("signal_ledger_hash_provenance_mismatch")
+    if registry.get("row_count") != audit.get("row_count") or audit.get("row_count") != provenance.row_count:
+        raise AuthorityClosureReconciliationError("signal_ledger_row_count_provenance_mismatch")
+    if registry.get("canonical_signal_ledger_id") != audit.get("canonical_signal_ledger_id"):
+        raise AuthorityClosureReconciliationError("signal_ledger_candidate_id_mismatch")
+    if audit.get("strategy_or_hypothesis_id") is not None or audit.get("canonical_strategy_id") is not None:
+        raise AuthorityClosureReconciliationError("multi_owner_placeholder_cannot_have_canonical_strategy")
+
     evidence = {
         **registry,
         **audit,
-        "implementation_hash": ledger_implementation_hash,
-        "dataset_hash": ledger_dataset_hash,
+        "physical_hash": audit_hash,
+        "implementation_hash": audit.get("implementation_commit"),
+        "dataset_hash": audit.get("dataset_source_hash"),
         "dataset_authority": "UNPROVEN",
         "split_identity": None,
         "outcome_or_pnl_contamination": None,
@@ -478,36 +501,42 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "tuned_after_outcome": None,
         "holdout_contamination": audit.get("is_holdout"),
         "historically_invalidated": None,
+        **provenance.assessment_fields(),
     }
     assessment = assess_signal_ledger_authority(evidence)
+    if assessment["authority_conclusion"] != "INVALIDATED_HISTORICAL_EVIDENCE":
+        raise AuthorityClosureReconciliationError("derived_signal_ledger_invalidation_not_reconciled")
+    if assessment["authority_reason_codes"] != ["derived_through_proven_invalidated_generator_binding"]:
+        raise AuthorityClosureReconciliationError("derived_signal_ledger_reason_not_reconciled")
     return {
         "signal_ledger_id": registry.get("canonical_signal_ledger_id"),
         "candidate_id": audit.get("canonical_signal_ledger_id"),
         "path": audit.get("exact_path"),
-        "physical_hash": audit.get("physical_sha256"),
-        "canonical_strategy_id": canonical_strategy_id,
-        "strategy_authority": "PROVEN" if canonical_strategy_id else "UNRESOLVED",
-        "aliases": inventory.get("aliases", []),
+        "physical_hash": provenance.physical_hash,
+        "canonical_strategy_id": None,
+        "strategy_authority": "UNRESOLVED",
+        "aliases": [],
         "row_count": audit.get("row_count"),
+        "artifact_kind": provenance.artifact_kind,
         "session_count": audit.get("session_count"),
         "signal_id_uniqueness": audit.get("signal_id_unique"),
         "feature_cutoff_timestamp_status": "UNRESOLVED" if audit.get("feature_cutoff_ts") is None else "PROVEN",
         "signal_timestamp_status": "UNRESOLVED" if audit.get("signal_ts") is None else "PROVEN",
         "earliest_legal_entry_timestamp_status": "UNRESOLVED" if audit.get("earliest_entry_ts") is None else "PROVEN",
         "causal_ordering_status": "UNRESOLVED",
-        "implementation_path": inventory.get("implementation_path"),
-        "candidate_implementation_hash": inventory.get("implementation_blob_hash"),
-        "ledger_proven_implementation_hash": ledger_implementation_hash,
-        "implementation_hash": ledger_implementation_hash,
+        "implementation_path": None,
+        "candidate_implementation_hash": None,
+        "ledger_proven_implementation_hash": audit.get("implementation_commit"),
+        "implementation_hash": audit.get("implementation_commit"),
         "implementation_authority": "UNRESOLVED",
-        "parameter_owner": inventory.get("parameter_owner"),
+        "parameter_owner": None,
         "parameter_hash": audit.get("parameter_hash"),
         "parameter_authority": "UNRESOLVED",
-        "dataset_family_id": selected_version.get("dataset_family_id"),
-        "dataset_version_id": selected_version_id,
-        "candidate_dataset_hash": selected_version.get("partition_manifest_hash"),
-        "ledger_proven_dataset_hash": ledger_dataset_hash,
-        "dataset_hash": ledger_dataset_hash,
+        "dataset_family_id": None,
+        "dataset_version_id": None,
+        "candidate_dataset_hash": None,
+        "ledger_proven_dataset_hash": audit.get("dataset_source_hash"),
+        "dataset_hash": audit.get("dataset_source_hash"),
         "dataset_authority": "BLOCKED",
         "fold_identity": audit.get("fold_identity"),
         "development_validation_holdout_identity": audit.get("is_holdout"),
@@ -516,7 +545,16 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "generation_command": "loaded from canonical signal ledger registry",
         "outcome_or_pnl_contamination": "UNRESOLVED",
         "option_price_contamination": "UNRESOLVED",
-        "historical_invalidation_status": registry.get("status"),
+        "historical_invalidation_status": "INVALIDATED_HISTORICAL_EVIDENCE",
+        "direct_ledger_invalidation_authority": provenance.direct_ledger_invalidation_authority,
+        "implementation_invalidation_authority": provenance.implementation_invalidation_authority,
+        "derived_ledger_invalidation_authority": provenance.derived_ledger_invalidation_authority,
+        "derived_invalidation_reason_code": provenance.derived_invalidation_reason_code,
+        "invalidation_basis": "PROVEN_INVALIDATED_GENERATOR_TO_EXACT_LEDGER_BYTE_BINDING",
+        "generator_output_binding_status": provenance.generator_output_binding_status,
+        "primary_oracle_agreement": provenance.primary_oracle_agreement,
+        "introduction_commit": provenance.introduction_commit,
+        "introduction_status": provenance.introduction_status,
         "authority_conclusion": assessment["authority_conclusion"],
         "field_authority": assessment["field_authority"],
         "authority_reason_codes": assessment["authority_reason_codes"],
@@ -524,12 +562,19 @@ def _signal_ledger_review(snapshot: AuthorityClosureSnapshot) -> dict[str, Any]:
         "supporting_evidence": {
             "registry": registry,
             "audit": audit,
-            "strategy_ownership_evidence": audit_strategy_id,
-            "selected_version": selected_version,
+            "strategy_ownership_evidence": None,
+            "selected_version": {},
+            "immutable_provenance_physical_sha256": provenance.source_physical_sha256,
+            "immutable_provenance_semantic_sha256": provenance.source_semantic_sha256,
         },
-        "canonical_signal_ledger_count": snapshot.signal_ledger_summary["canonical_signal_ledger_count"],
-        "insufficient_provenance_ledgers": snapshot.signal_ledger_summary["insufficient_provenance_ledgers"],
-        "valid_signal_ledger_with_limitations_count": snapshot.signal_ledger_summary["valid_signal_ledger_with_limitations_count"],
+        "signal_ledger_candidate_count": 1,
+        "canonical_signal_ledger_count": 0,
+        "usable_signal_ledger_count": 0,
+        "invalidated_signal_ledger_count": 1,
+        "replacement_signal_ledger_required": True,
+        "insufficient_provenance_ledgers": 0,
+        "upstream_insufficient_provenance_ledgers": snapshot.signal_ledger_summary["insufficient_provenance_ledgers"],
+        "valid_signal_ledger_with_limitations_count": 0,
         "canonical_signal_ledger_registry": snapshot.canonical_signal_ledger_registry,
         "canonical_signal_ledger_audit": snapshot.canonical_signal_ledger_audit,
         "research_only": True,
@@ -623,6 +668,16 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
         all_strategy_execution_readiness=snapshot.all_strategy_execution_readiness,
         signal_ledger_assessments=signal_assessments,
     )
+    invalidated_ledger_id = signal_review["signal_ledger_id"]
+    assigned_lanes = sorted(
+        row["canonical_strategy_id"]
+        for row in matrix
+        if row.get("selected_canonical_signal_ledger") == invalidated_ledger_id
+    )
+    if assigned_lanes:
+        raise AuthorityClosureReconciliationError(
+            f"invalidated_multi_owner_ledger_assigned lanes={','.join(assigned_lanes)}"
+        )
     for row in matrix:
         selected_version = row.get("selected_canonical_dataset")
         version = version_by_id.get(str(selected_version), {})
@@ -667,6 +722,45 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
         ),
     )
     blocker_rows = blocker_records_as_dicts(blocker_result)
+    affected_lane_ids = sorted(
+        {
+            lane_id
+            for blocker in blocker_rows
+            for lane_id in blocker.get("affected_strategy_ids", [])
+        }
+    )
+    executable_lane_count = sum(row.get("execution_eligible") is True for row in matrix)
+    valid_precomputed_lane_count = sum(
+        row.get("signal_authority")
+        in {"CANONICAL_PRE_OUTCOME_SIGNAL_LEDGER", "VALID_PRECOMPUTED_SIGNALS_WITH_LIMITATIONS"}
+        for row in matrix
+    )
+    lane_impact = {
+        "evaluated_lane_count": len(matrix),
+        "previous_affected_lane_count": 0,
+        "new_affected_lane_count": 0,
+        "affected_lane_assignments": [],
+        "new_executable_lane_count": executable_lane_count,
+        "executable_lane_delta": 0,
+        "new_valid_precomputed_signal_lane_count": valid_precomputed_lane_count,
+        "valid_precomputed_signal_lane_delta": 0,
+        "removed_lane_blocker_count": 0,
+        "lane_blocker_delta": "NONE",
+        "reason": "INVALIDATED_MULTI_OWNER_PLACEHOLDER_WAS_NOT_CANONICALLY_ASSIGNED",
+    }
+    blocker_delta = {
+        "previous_blocker_record_count": len(blocker_rows),
+        "new_blocker_record_count": len(blocker_rows),
+        "previous_affected_lane_count": len(affected_lane_ids),
+        "new_affected_lane_count": len(affected_lane_ids),
+        "added_blocker_ids": [],
+        "removed_blocker_ids": [],
+        "changed_blocker_ids": [],
+        "lane_blocker_delta": "NONE",
+        "reason": "INVALIDATED_MULTI_OWNER_PLACEHOLDER_WAS_NOT_CANONICALLY_ASSIGNED",
+    }
+    signal_review["lane_impact_analysis"] = lane_impact
+    signal_review["blocker_delta"] = blocker_delta
     blocker_by_id = {row["blocker_id"]: row for row in blocker_rows}
     blocker_ids_by_lane: dict[str, list[str]] = {row["canonical_strategy_id"]: [] for row in matrix}
     for reference in blocker_result.references:
@@ -699,6 +793,10 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
         "dataset_families": len(families),
         "dataset_versions": len(versions),
         "canonical_signal_ledgers": snapshot.census_summary.get("canonical_signal_ledger_count", 0),
+        "signal_ledger_candidates": signal_review["signal_ledger_candidate_count"],
+        "usable_signal_ledgers": signal_review["usable_signal_ledger_count"],
+        "invalidated_signal_ledgers": signal_review["invalidated_signal_ledger_count"],
+        "replacement_signal_ledger_required": signal_review["replacement_signal_ledger_required"],
         "strategy_lanes": len(matrix),
         "research_only": True,
         "read_only": True,
@@ -728,12 +826,34 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
             "blocked_lane_count": snapshot.census_summary["blocked_lanes"],
             "ready_for_causal_execution_lanes": snapshot.census_summary["ready_for_causal_execution_lanes"],
             "valid_precomputed_signals_lanes": snapshot.census_summary["valid_precomputed_signals_lanes"],
+            "signal_ledger_candidate_count": signal_review["signal_ledger_candidate_count"],
+            "canonical_signal_ledger_count": signal_review["canonical_signal_ledger_count"],
+            "usable_signal_ledger_count": signal_review["usable_signal_ledger_count"],
+            "invalidated_signal_ledger_count": signal_review["invalidated_signal_ledger_count"],
+            "replacement_signal_ledger_required": signal_review["replacement_signal_ledger_required"],
+            "signal_ledger_authority_conclusion": signal_review["authority_conclusion"],
+            "lane_impact_analysis": lane_impact,
+            "blocker_delta": blocker_delta,
         },
         "external_evidence_manifest.json": {
             "input_census_integrity": payloads["input_census_integrity.json"],
             "dataset_family_count": len(families),
             "dataset_version_count": len(versions),
             "authority_status": "BLOCKED_WITH_DECLARED_GAPS",
+            "signal_ledger_authority_conclusion": signal_review["authority_conclusion"],
+            "signal_ledger_physical_sha256": signal_review["physical_hash"],
+            "signal_ledger_row_count": signal_review["row_count"],
+            "signal_ledger_artifact_kind": signal_review["artifact_kind"],
+            "direct_ledger_invalidation_authority": signal_review["direct_ledger_invalidation_authority"],
+            "implementation_invalidation_authority": signal_review["implementation_invalidation_authority"],
+            "derived_ledger_invalidation_authority": signal_review["derived_ledger_invalidation_authority"],
+            "derived_invalidation_reason_code": signal_review["derived_invalidation_reason_code"],
+            "canonical_signal_ledger_count": signal_review["canonical_signal_ledger_count"],
+            "usable_signal_ledger_count": signal_review["usable_signal_ledger_count"],
+            "invalidated_signal_ledger_count": signal_review["invalidated_signal_ledger_count"],
+            "replacement_signal_ledger_required": signal_review["replacement_signal_ledger_required"],
+            "lane_impact_analysis": lane_impact,
+            "blocker_delta": blocker_delta,
             "research_only": True,
             "read_only": True,
             "allowed_for_live_execution": False,
