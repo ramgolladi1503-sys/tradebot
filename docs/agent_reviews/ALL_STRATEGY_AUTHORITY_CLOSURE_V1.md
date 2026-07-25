@@ -73,13 +73,17 @@ The repaired layer is backed by:
 - 98 blocker records linked bidirectionally to 16 affected lanes, with per-class record and unique-lane counts;
 - upstream readiness labels retained only as historical input metadata and not represented as the current component blocker set;
 - family review semantic SHA-256 `b3e32ea70a37f3fc014f894234e4166cc59d2cf80b3bee526705462c259e1ae5`;
-- strategy matrix semantic SHA-256 `722d16f83bcc4e6b99678cba50630e6102451294fcacf91ee0323bf61ee387e5`;
+- strategy matrix semantic SHA-256 `133d526b6ca0d26075087371199a13435fc15ffeb9fa744e0ae87666d23a05f4`;
 - version decision semantic SHA-256 `b1967dd24ac302848571e29df6e0c4ca492b346bf1cb60a64f9f44df87bb611a`;
 - signal authority semantic SHA-256 `3eb6f3394c9b5090b07e9b4b007291d6ec643eb58c961cebc0bdda7cb9e58242`;
-- blocker semantic SHA-256 `e98fff798da4c6c6853c440b5df28f662ba828f093ad9669bdffb6fbb55b4ef8` and priority semantic SHA-256 `3e5638089f483a6360821701a73d08d7a91f5b2001dc01b90c191762c249c50e`;
+- blocker semantic SHA-256 `e98fff798da4c6c6853c440b5df28f662ba828f093ad9669bdffb6fbb55b4ef8` and priority semantic SHA-256 `4b69668cf08247775d511ba328245b90d9244d8acaf3dfa8570c1b407bd593a9`;
+- compact blocker summary semantic SHA-256 `5225644ba14b36f0e573e6c9d0c4637a86931a79d7134b581acc9335cf2a23a2`;
+- compact strategy summary semantic SHA-256 `e7e6a0eb94d7bd0754cecb7ea7e3125529bcad54c8361d5247b32fe02750196f`;
+- compact priority summary semantic SHA-256 `511a2722c1253eee6f43e29b5c851f98537d5862992cf315072b69ec93a26d82`;
+- compact closure summary semantic SHA-256 `af18c59c025d68751e0b82db61a8fa8a33e8a9c969a440b043ddab40d8288d96`;
 - compact repository evidence with physical SHA-256 sidecars and links to full-artifact semantic hashes;
 - CI-portable tests that assert concrete records and fail-closed outcomes;
-- 74 closure tests, a 78-test combined slice, and 142 option-E2E tests passing locally.
+- 40 focused metadata tests and 144 option-E2E tests passing locally; the stale historical combined-slice count was removed rather than represented as current evidence.
 
 ## Runtime Proof Required After Merge
 
