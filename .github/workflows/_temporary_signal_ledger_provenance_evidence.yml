@@ -199,7 +199,29 @@ jobs:
 
       - name: Verify generated evidence contract
         run: |
-          test "$(rg -c '^(mode|candidate_id|decision|reason|timestamp|is_order_action|broker_api_called|source): .+' docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md)" -eq 8
+          python - <<'PY'
+          from pathlib import Path
+
+          required = {
+              "mode",
+              "candidate_id",
+              "decision",
+              "reason",
+              "timestamp",
+              "is_order_action",
+              "broker_api_called",
+              "source",
+          }
+          values = {}
+          for line in Path("docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md").read_text().splitlines():
+              key, separator, value = line.partition(":")
+              if separator and key in required:
+                  values[key] = value.strip()
+          missing = sorted(key for key in required if not values.get(key))
+          if missing:
+              raise SystemExit(f"missing required evidence fields: {missing}")
+          print("generated_evidence_contract=PASS")
+          PY
 
       - name: Run Agent Review evidence gate
         run: AGENT_REVIEW_BASE_REF="origin/$PARENT_BRANCH" python scripts/validate_agent_review_evidence.py
