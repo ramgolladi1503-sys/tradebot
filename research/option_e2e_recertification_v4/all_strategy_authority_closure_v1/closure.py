@@ -626,7 +626,7 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
     for row in matrix:
         selected_version = row.get("selected_canonical_dataset")
         version = version_by_id.get(str(selected_version), {})
-        blocker = str(row.get("remaining_blocker") or "AUTHORITY_EVIDENCE_INCOMPLETE")
+        upstream_readiness_blocker = str(row.pop("remaining_blocker", None) or "AUTHORITY_EVIDENCE_INCOMPLETE")
         row.update(
             {
                 "strategy_vs_hypothesis_vs_filter": "FILTER" if row["lane_kind"] == "NO_TRADE_FILTER" else "STRATEGY",
@@ -646,7 +646,7 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
                 "multi_asset_dependency_authority": "UNRESOLVED" if row["lane_kind"] == "MULTI_ASSET_STRATEGY" else "NOT_APPLICABLE",
                 "source_search_authority": "UNRESOLVED" if unresolved_review["unresolved_candidate_count"] else "PROVEN",
                 "historical_invalidation": bool(row.get("invalidated_evidence")),
-                "current_blocker_classes": [blocker],
+                "upstream_readiness_blocker": upstream_readiness_blocker,
                 "overall_authority_status": row.get("authority_status"),
                 "next_minimum_evidence_action": row.get("recommended_next_action"),
                 "supporting_evidence": {
@@ -667,6 +667,15 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
         ),
     )
     blocker_rows = blocker_records_as_dicts(blocker_result)
+    blocker_by_id = {row["blocker_id"]: row for row in blocker_rows}
+    blocker_ids_by_lane: dict[str, list[str]] = {row["canonical_strategy_id"]: [] for row in matrix}
+    for reference in blocker_result.references:
+        blocker_ids_by_lane[reference.authority_target].append(reference.blocker_id)
+    for row in matrix:
+        blocker_ids = sorted(set(blocker_ids_by_lane[row["canonical_strategy_id"]]))
+        row["current_blocker_ids"] = blocker_ids
+        row["current_blocker_classes"] = sorted({blocker_by_id[item]["blocker_class"] for item in blocker_ids})
+        row["component_blocker_count"] = len(blocker_ids)
     priorities = [
         {
             "canonical_strategy_id": priority.canonical_strategy_id,
@@ -677,7 +686,7 @@ def build_all_strategy_authority_closure(*, snapshot: AuthorityClosureSnapshot, 
             "blocker_ids": list(priority.remaining_blocker_ids),
             "remaining_blocker_ids": list(priority.remaining_blocker_ids),
             "authority_status": next(row["authority_status"] for row in matrix if row["canonical_strategy_id"] == priority.canonical_strategy_id),
-            "remaining_blocker": next(row["remaining_blocker"] for row in matrix if row["canonical_strategy_id"] == priority.canonical_strategy_id),
+            "upstream_readiness_blocker": next(row["upstream_readiness_blocker"] for row in matrix if row["canonical_strategy_id"] == priority.canonical_strategy_id),
             "next_minimum_evidence_action": priority.next_minimum_action,
             "next_minimum_action": priority.next_minimum_action,
         }

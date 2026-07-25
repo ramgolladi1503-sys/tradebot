@@ -99,12 +99,6 @@ def _counts(rows: Iterable[Mapping[str, Any]], key: str) -> dict[str, int]:
     return dict(sorted(Counter(str(row.get(key) or "UNKNOWN") for row in rows).items()))
 
 
-def _sum_counts(counts: Mapping[str, Any], label: str) -> int:
-    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in counts.values()):
-        raise CompactReconciliationError(f"invalid_count_map field={label}")
-    return sum(counts.values())
-
-
 def _status_index(rows: Iterable[Mapping[str, Any]], id_key: str, label: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for row in rows:
@@ -178,14 +172,18 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
     else:
         _assert_count(len(matrix), inputs.get("strategy_lanes"), "strategy_lanes")
 
-    blocker_counts = {
-        str(row.get("blocker_code") or row.get("blocker_class") or "UNKNOWN"):
-        len(row.get("authority_targets", [])) if "authority_targets" in row else row.get("blocked_lane_count")
-        for row in blockers
+    blocker_record_count_by_class = _counts(blockers, "blocker_class")
+    affected_lanes_by_class: dict[str, set[str]] = {}
+    for row in blockers:
+        blocker_class = str(row.get("blocker_class") or "UNKNOWN")
+        affected_ids = row.get("affected_strategy_ids", row.get("authority_targets", []))
+        if not isinstance(affected_ids, list) or any(not isinstance(item, str) or not item for item in affected_ids):
+            raise CompactReconciliationError("invalid_affected_strategy_ids")
+        affected_lanes_by_class.setdefault(blocker_class, set()).update(affected_ids)
+    affected_lane_count_by_class = {
+        blocker_class: len(lane_ids) for blocker_class, lane_ids in sorted(affected_lanes_by_class.items())
     }
-    blocked_lane_count = len({target for row in blockers for target in row.get("authority_targets", [])})
-    if not blocked_lane_count:
-        blocked_lane_count = _sum_counts(blocker_counts, "blocked_lane_count_by_class")
+    affected_lane_ids = set().union(*affected_lanes_by_class.values()) if affected_lanes_by_class else set()
     strategy_rows = (
         [row for row in matrix if row.get("authority_kind") == "strategy_hypothesis"]
         if legacy_matrix
@@ -205,6 +203,19 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         )
         if _status_index(priorities, "canonical_strategy_id", "priorities") != matrix_statuses:
             raise CompactReconciliationError("status_reconciliation_failed field=strategies")
+    if not legacy_matrix:
+        blocker_ids = {str(row.get("blocker_id") or "") for row in blockers}
+        if "" in blocker_ids or len(blocker_ids) != len(blockers):
+            raise CompactReconciliationError("blocker_ids_not_unique")
+        matrix_by_id = {str(row.get("canonical_strategy_id")): row for row in strategy_rows}
+        for lane_id, row in matrix_by_id.items():
+            current_ids = row.get("current_blocker_ids")
+            if not isinstance(current_ids, list) or set(current_ids) - blocker_ids:
+                raise CompactReconciliationError(f"matrix_blocker_reconciliation_failed lane={lane_id}")
+        for blocker in blockers:
+            for lane_id in blocker.get("affected_strategy_ids", []):
+                if lane_id not in matrix_by_id or blocker["blocker_id"] not in matrix_by_id[lane_id]["current_blocker_ids"]:
+                    raise CompactReconciliationError(f"blocker_matrix_backlink_failed lane={lane_id}")
 
     links = {key: _source_link(FULL_ARTIFACTS[key], full_payloads[key]) for key in FULL_ARTIFACTS}
     payloads: dict[str, dict[str, Any]] = {}
@@ -218,7 +229,8 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
     }
     family_statuses = _counts(families, "authority_status")
     version_decisions = _counts(versions, "authority_decision")
-    strategy_statuses = _counts(priorities, "authority_status")
+    strategy_statuses = _counts(strategy_rows, "authority_status")
+    priority_counts = _counts(priorities, "priority_class")
     payloads["dataset_family_authority_summary.json"] = _summary("dataset_family_authority", {
         "dataset_family_count": len(families), "authority_status_counts": family_statuses,
         "source": links["families"],
@@ -235,16 +247,23 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         **unresolved, "source": links["unresolved"],
     })
     payloads["strategy_authority_summary.json"] = _summary("strategy_authority", {
-        "strategy_count": len(priorities), "authority_status_counts": strategy_statuses,
-        "remaining_blocker_counts": _counts(priorities, "remaining_blocker"),
+        "strategy_count": len(strategy_rows), "authority_status_counts": strategy_statuses,
+        "signal_authority_counts": _counts(strategy_rows, "signal_authority"),
+        "signal_ledger_status_counts": _counts(strategy_rows, "signal_ledger_status"),
+        "priority_counts": priority_counts,
+        "component_blocker_class_counts": blocker_record_count_by_class,
+        "upstream_readiness_blocker_counts": _counts(strategy_rows, "upstream_readiness_blocker"),
         "sources": [links["strategies"], links["priorities"]],
     })
     payloads["blocker_summary.json"] = _summary("authority_blockers", {
-        "blocked_lane_count": blocked_lane_count, "blocked_lane_count_by_class": blocker_counts,
+        "blocker_record_count": len(blockers),
+        "blocker_record_count_by_class": blocker_record_count_by_class,
+        "affected_lane_count": len(affected_lane_ids),
+        "affected_lane_count_by_class": affected_lane_count_by_class,
         "source": links["blockers"],
     })
     payloads["priority_summary.json"] = _summary("strategy_priority", {
-        "prioritized_strategy_count": len(priorities), "priority_counts": _counts(priorities, "priority"),
+        "prioritized_strategy_count": len(priorities), "priority_counts": priority_counts,
         "ordered_strategy_ids": [row["canonical_strategy_id"] for row in sorted(
             priorities, key=lambda row: (str(row.get("priority", "")), str(row.get("canonical_strategy_id", "")))
         )], "source": links["priorities"],
@@ -254,7 +273,7 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         "dataset_family_count": len(families), "dataset_version_count": len(versions),
         "canonical_signal_ledger_count": int(signal.get("canonical_signal_ledger_count", 0)),
         "unresolved_candidate_count": int(unresolved.get("unresolved_candidate_count", 0)),
-        "strategy_count": len(priorities), "blocked_lane_count": blocked_lane_count,
+        "strategy_count": len(priorities), "blocked_lane_count": len(affected_lane_ids),
         "input_authority_status": inputs.get("authority_status") or inputs.get("status"),
         "safety": dict(SAFETY_FLAGS), "sources": list(links.values()),
     })

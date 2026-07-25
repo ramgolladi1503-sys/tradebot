@@ -415,3 +415,29 @@ def test_signal_review_rejects_version_identifier_as_dataset_family(tmp_path: Pa
             snapshot=replace(snapshot, canonical_signal_ledger_registry=[{"canonical_signal_ledger_id": ledger_id, "canonical_strategy_id": "VWAP_RECLAIM"}], canonical_signal_ledger_audit=[audit]),
             output_dir=tmp_path / "closure",
         )
+
+
+def test_matrix_and_priority_cross_link_every_component_blocker(tmp_path: Path) -> None:
+    output = tmp_path / "closure"
+    build_all_strategy_authority_closure(snapshot=_snapshot(), output_dir=output)
+    matrix = json.loads((output / "all_strategy_authority_matrix.json").read_text(encoding="utf-8"))
+    blockers = json.loads((output / "authority_blocker_ledger.json").read_text(encoding="utf-8"))
+    priorities = json.loads((output / "strategy_authority_prioritization.json").read_text(encoding="utf-8"))
+    blocker_by_id = {row["blocker_id"]: row for row in blockers}
+    matrix_by_id = {row["canonical_strategy_id"]: row for row in matrix}
+
+    for lane_id, lane in matrix_by_id.items():
+        expected_ids = sorted(row["blocker_id"] for row in blockers if lane_id in row["affected_strategy_ids"])
+        assert lane["current_blocker_ids"] == expected_ids
+        assert lane["component_blocker_count"] == len(expected_ids)
+        assert lane["current_blocker_classes"] == sorted({blocker_by_id[item]["blocker_class"] for item in expected_ids})
+    assert all(
+        blocker["blocker_id"] in matrix_by_id[lane_id]["current_blocker_ids"]
+        for blocker in blockers
+        for lane_id in blocker["affected_strategy_ids"]
+    )
+    assert {row["upstream_readiness_blocker"] for row in priorities} == {
+        "INSUFFICIENT_SIGNAL_PROVENANCE",
+        "NO_TRADE_FILTER",
+    }
+    assert all("remaining_blocker" not in row for row in priorities)

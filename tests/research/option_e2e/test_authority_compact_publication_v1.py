@@ -24,11 +24,11 @@ def _full_payloads() -> dict[str, object]:
         {"dataset_family_id": "FAMILY:B", "authority_status": "USABLE_WITH_LIMITATIONS"},
     ]
     priorities = [
-        {"canonical_strategy_id": "S2", "priority": 2, "authority_status": "BLOCKED", "remaining_blocker": "SOURCE"},
-        {"canonical_strategy_id": "S1", "priority": 1, "authority_status": "BLOCKED", "remaining_blocker": "SIGNAL"},
+        {"canonical_strategy_id": "S2", "priority": "P3", "priority_class": "P3", "authority_status": "BLOCKED", "upstream_readiness_blocker": "SOURCE"},
+        {"canonical_strategy_id": "S1", "priority": "P2", "priority_class": "P2", "authority_status": "BLOCKED", "upstream_readiness_blocker": "SIGNAL"},
     ]
     return {
-        "input": {"authority_status": "PASS", "dataset_families": 2, "dataset_versions": 3, "canonical_signal_ledgers": 0},
+        "input": {"authority_status": "PASS", "dataset_families": 2, "dataset_versions": 3, "canonical_signal_ledgers": 0, "strategy_lanes": 2},
         "families": families,
         "versions": [
             {"dataset_version_id": "V1", "authority_decision": "KEEP"},
@@ -38,12 +38,12 @@ def _full_payloads() -> dict[str, object]:
         "signal": {"authority_status": "BLOCKED", "canonical_signal_ledger_count": 0, "reason": "missing_provenance"},
         "unresolved": {"authority_status": "BLOCKED", "unresolved_candidate_count": 4, "material_truncated_roots": 2},
         "strategies": [
-            *[{"authority_kind": "dataset_family", "authority_target": row["dataset_family_id"], "authority_status": row["authority_status"]} for row in families],
-            *[{"authority_kind": "strategy_hypothesis", "authority_target": row["canonical_strategy_id"], "authority_status": row["authority_status"]} for row in priorities],
+            {"canonical_strategy_id": "S1", "authority_status": "BLOCKED", "signal_authority": "NOT_APPLICABLE", "signal_ledger_status": "NOT_APPLICABLE", "upstream_readiness_blocker": "SIGNAL", "current_blocker_ids": ["B1"]},
+            {"canonical_strategy_id": "S2", "authority_status": "BLOCKED", "signal_authority": "UNRESOLVED", "signal_ledger_status": "NO_SIGNAL_LEDGER", "upstream_readiness_blocker": "SOURCE", "current_blocker_ids": ["B2"]},
         ],
         "blockers": [
-            {"blocker_class": "SIGNAL", "blocked_lane_count": 1},
-            {"blocker_class": "SOURCE", "blocked_lane_count": 1},
+            {"blocker_id": "B1", "blocker_class": "SIGNAL", "affected_strategy_ids": ["S1"]},
+            {"blocker_id": "B2", "blocker_class": "SOURCE_SEARCH", "affected_strategy_ids": ["S2"]},
         ],
         "priorities": priorities,
     }
@@ -73,7 +73,11 @@ def test_generates_all_reconciled_compact_payloads_from_fixture() -> None:
         "BLOCKED": 1, "USABLE_WITH_LIMITATIONS": 1
     }
     assert compact["dataset_version_authority_summary.json"]["authority_decision_counts"] == {"KEEP": 2, "REJECT": 1}
-    assert compact["blocker_summary.json"]["blocked_lane_count"] == 2
+    assert compact["blocker_summary.json"]["blocker_record_count"] == 2
+    assert compact["blocker_summary.json"]["affected_lane_count"] == 2
+    assert compact["strategy_authority_summary.json"]["signal_authority_counts"] == {"NOT_APPLICABLE": 1, "UNRESOLVED": 1}
+    assert compact["strategy_authority_summary.json"]["upstream_readiness_blocker_counts"] == {"SIGNAL": 1, "SOURCE": 1}
+    assert "remaining_blocker_counts" not in compact["strategy_authority_summary.json"]
     assert compact["priority_summary.json"]["ordered_strategy_ids"] == ["S1", "S2"]
     assert compact["authority_closure_summary.json"]["safety"]["allowed_for_live_execution"] is False
     assert compact["external_evidence_manifest.json"]["safety"]["broker_api_called"] is False
@@ -97,10 +101,10 @@ def test_semantic_links_change_when_full_authority_evidence_changes() -> None:
     ("mutation", "message"),
     [
         (lambda full: full["input"].__setitem__("dataset_versions", 99), "dataset_versions"),
-        (lambda full: full["strategies"].pop(0), "matrix_dataset_families"),
+        (lambda full: full["strategies"].pop(0), "strategy_lanes"),
         (lambda full: full["strategies"][0].__setitem__("authority_status", "PROVEN"), "status_reconciliation_failed"),
         (lambda full: full["priorities"].append(deepcopy(full["priorities"][0])), "priority_strategy_ids_not_unique"),
-        (lambda full: full["blockers"][0].__setitem__("blocked_lane_count", -1), "invalid_count_map"),
+        (lambda full: full["blockers"][0].__setitem__("affected_strategy_ids", [""]), "invalid_affected_strategy_ids"),
     ],
 )
 def test_reconciliation_mutations_fail_closed(mutation, message: str) -> None:
@@ -115,6 +119,29 @@ def test_absolute_paths_are_rejected_from_semantic_content() -> None:
     full["unresolved"]["diagnostic_path"] = "/private/tmp/evidence.json"  # type: ignore[index]
     with pytest.raises(NonPortableSemanticContentError, match="absolute_path_in_semantic_content"):
         generate_compact_payloads(full)
+
+
+def test_repeated_blocker_classes_aggregate_records_and_unique_lanes() -> None:
+    full = _full_payloads()
+    for strategy in full["strategies"]:  # type: ignore[union-attr]
+        strategy["current_blocker_ids"] = []
+    blockers = []
+    for index in range(98):
+        lane_index = index % 2
+        lane_id = f"S{lane_index + 1}"
+        blocker_id = f"B{index:03d}"
+        blocker_class = "DATASET" if index < 64 else "SOURCE_SEARCH"
+        blockers.append({"blocker_id": blocker_id, "blocker_class": blocker_class, "affected_strategy_ids": [lane_id]})
+        full["strategies"][lane_index]["current_blocker_ids"].append(blocker_id)  # type: ignore[index]
+    full["blockers"] = blockers
+
+    summary = generate_compact_payloads(full)["blocker_summary.json"]
+
+    assert summary["blocker_record_count"] == 98
+    assert summary["blocker_record_count_by_class"] == {"DATASET": 64, "SOURCE_SEARCH": 34}
+    assert sum(summary["blocker_record_count_by_class"].values()) == summary["blocker_record_count"]
+    assert summary["affected_lane_count"] == 2
+    assert summary["affected_lane_count_by_class"] == {"DATASET": 2, "SOURCE_SEARCH": 2}
 
 
 def test_builder_writes_optional_physical_sidecars_and_detects_stale_full_artifact(tmp_path: Path) -> None:

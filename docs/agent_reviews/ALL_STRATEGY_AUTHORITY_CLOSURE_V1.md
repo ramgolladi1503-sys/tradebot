@@ -24,6 +24,8 @@ The closure package reads the two full census registry runs, verifies they are s
 
 The synthetic implementation at `76584f3e3a8c659a37583e79c485482ec0e852d2` was invalid. The loader at `2d7dfa1eaab7afa9b60e37967cd6236b0edcb152` was incomplete. Commit `7bcefdf12aae64f63279fdd3e79994d4b7c677aa` established portable loading/building but did not complete authority semantics. Commit `7844ca5bc9648a8e07b16173872090b95d2596c9` produced a deterministic fail-closed publication, but an independent audit correctly found that its cross-record joins, signal ownership, blocker traceability, and priority derivation were semantically incomplete.
 
+Commit `ea756e71d5b497a6462b824c1d3c26b7fbbdab62` completed the cross-record authority semantics. This metadata follow-up attaches every generated component blocker to its matrix lane, separates upstream readiness labels from current blocker evidence, and repairs compact blocker/strategy count names and aggregation. Authority remains `AUTHORITY_CLOSURE_BLOCKED_WITH_DECLARED_GAPS`.
+
 ## Grill Me Review
 
 The repaired implementation joins families through partition, version, physical-candidate, exact-blob, and duplicate evidence. Version decisions evaluate independent evidence fields. Signal ownership is never selected positionally, and unowned ledger evidence remains unresolved. The remaining gaps are the genuine unresolved census gaps reflected by the full registries.
@@ -67,6 +69,9 @@ The repaired layer is backed by:
 - 98 component-traceable blockers across implementation, parameter, dataset, split/fold, instrument identity, multi-asset dependency, and source-search authority;
 - component-derived priority distribution of 13 P3, 2 P4, and 1 P5, with zero P1 and `NO_TRADE_CHOP` retained as P5;
 - durable runs `20260725-010100_cross_record_semantics_final` and `20260725-010101_cross_record_semantics_final_rerun`;
+- metadata-consistency runs `20260725-013000_metadata_consistency` and `20260725-013001_metadata_consistency_rerun`, identical artifact for artifact;
+- 98 blocker records linked bidirectionally to 16 affected lanes, with per-class record and unique-lane counts;
+- upstream readiness labels retained only as historical input metadata and not represented as the current component blocker set;
 - family review semantic SHA-256 `b3e32ea70a37f3fc014f894234e4166cc59d2cf80b3bee526705462c259e1ae5`;
 - strategy matrix semantic SHA-256 `722d16f83bcc4e6b99678cba50630e6102451294fcacf91ee0323bf61ee387e5`;
 - version decision semantic SHA-256 `b1967dd24ac302848571e29df6e0c4ca492b346bf1cb60a64f9f44df87bb611a`;
