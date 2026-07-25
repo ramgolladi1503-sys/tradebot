@@ -1,0 +1,42 @@
+name: Temporary Agent Review Debug
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  capture-validator-output:
+    if: github.head_ref == 'research/tracked-replay-archive-source-audit-v1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch --no-tags --prune origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - name: Capture validator output
+        id: validate
+        continue-on-error: true
+        env:
+          AGENT_REVIEW_BASE_REF: "origin/${{ github.base_ref }}"
+        run: |
+          set +e
+          python scripts/validate_agent_review_evidence.py > /tmp/agent-review.stdout 2> /tmp/agent-review.stderr
+          status=$?
+          printf '%s\n' "$status" > /tmp/agent-review.exit
+          exit 0
+
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-review-debug-v1
+          path: /tmp/agent-review.*
+          if-no-files-found: error
+          retention-days: 1
