@@ -26,6 +26,15 @@ def _hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _is_archive_metadata(name: str) -> bool:
+    path = PurePosixPath(name)
+    return (
+        bool(path.parts and path.parts[0] == "__MACOSX")
+        or path.name.startswith("._")
+        or path.name == ".DS_Store"
+    )
+
+
 def oracle_archive_facts(
     path: Path,
     *,
@@ -38,10 +47,14 @@ def oracle_archive_facts(
         raise ArchiveHashMismatchError(
             f"archive_hash_mismatch:expected={expected_sha256}:actual={digest}"
         )
+
+    names: list[str] = []
+    metadata_count = 0
+    content_file_count = 0
+    content_directory_count = 0
     try:
         with zipfile.ZipFile(path) as archive:
             infos = archive.infolist()
-            names: list[str] = []
             for info in infos:
                 name = info.filename
                 member = PurePosixPath(name)
@@ -59,7 +72,14 @@ def oracle_archive_facts(
                     raise UnsafeArchiveError(f"non_regular_member:{name}")
                 if info.flag_bits & 0x1:
                     raise UnsafeArchiveError(f"encrypted_member:{name}")
-                names.append(member.as_posix())
+                normalized = member.as_posix()
+                names.append(normalized)
+                if _is_archive_metadata(normalized):
+                    metadata_count += 1
+                elif info.is_dir():
+                    content_directory_count += 1
+                else:
+                    content_file_count += 1
     except zipfile.BadZipFile as exc:
         raise ArchiveFormatError("archive_not_valid_zip") from exc
 
@@ -67,10 +87,15 @@ def oracle_archive_facts(
         raise UnsafeArchiveError("duplicate_member_names")
     if len({name.casefold() for name in names}) != len(names):
         raise UnsafeArchiveError("case_colliding_member_names")
+
     return {
         "archive_sha256": digest,
         "archive_size_bytes": path.stat().st_size,
         "member_count": len(names),
+        "archive_metadata_member_count": metadata_count,
+        "content_tree_member_count": len(names) - metadata_count,
+        "content_file_member_count": content_file_count,
+        "content_directory_member_count": content_directory_count,
         "member_name_manifest_sha256": hashlib.sha256(
             ("\n".join(sorted(names)) + "\n").encode("utf-8")
         ).hexdigest(),
@@ -87,28 +112,31 @@ def reconcile_primary_oracle(
     primary: dict[str, Any],
     oracle: dict[str, Any],
 ) -> dict[str, Any]:
+    exact_fields = (
+        "archive_sha256",
+        "archive_size_bytes",
+        "member_count",
+        "archive_metadata_member_count",
+        "content_tree_member_count",
+        "content_file_member_count",
+        "content_directory_member_count",
+    )
     checks = {
-        "archive_sha256": (
-            primary.get("archive_sha256") == oracle.get("archive_sha256")
-        ),
-        "archive_size_bytes": (
-            primary.get("archive_size_bytes") == oracle.get("archive_size_bytes")
-        ),
-        "member_count": primary.get("member_count") == oracle.get("member_count"),
-        "zip_valid": (
-            primary.get("zip_valid") is True and oracle.get("zip_valid") is True
-        ),
-        "safety": all(
-            primary.get(key) == oracle.get(key)
-            for key in (
-                "research_only",
-                "read_only",
-                "is_order_action",
-                "broker_api_called",
-                "allowed_for_live_execution",
-            )
-        ),
+        field: primary.get(field) == oracle.get(field) for field in exact_fields
     }
+    checks["zip_valid"] = (
+        primary.get("zip_valid") is True and oracle.get("zip_valid") is True
+    )
+    checks["safety"] = all(
+        primary.get(key) == oracle.get(key)
+        for key in (
+            "research_only",
+            "read_only",
+            "is_order_action",
+            "broker_api_called",
+            "allowed_for_live_execution",
+        )
+    )
     return {
         "status": "AGREEMENT" if all(checks.values()) else "DISAGREEMENT",
         "checks": checks,
