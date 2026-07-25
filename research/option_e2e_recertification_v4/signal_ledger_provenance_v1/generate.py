@@ -3,11 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .audit import EXPECTED_LEDGER_SHA256, EXPECTED_ROW_COUNT, SAFETY_FLAGS, audit_signal_ledger, semantic_sha256
+from .git_provenance import LEDGER_RELATIVE_PATH
 from .oracle import oracle_audit
-
 
 OUTPUT_NAMES = (
     "schema.json",
@@ -31,40 +31,42 @@ def _write_json(path: Path, payload: Any) -> None:
 
 
 def _agreement(primary: Mapping[str, Any], oracle: Mapping[str, Any]) -> dict[str, Any]:
+    history = primary["implementation"]["historical_binding"]["history"]
+    blobs = primary["implementation"]["historical_binding"]["historical_blobs"]
+    generator_binding = primary["implementation"]["historical_binding"]["generator_output_binding"]
+    invalidation = primary["historical_invalidation"]
     checks = {
-        "physical_hash": oracle["physical_hash_matches"] and primary["ledger"]["physical_sha256"] == EXPECTED_LEDGER_SHA256,
-        "row_count": oracle["row_count_matches"] and primary["ledger"]["row_count"] == EXPECTED_ROW_COUNT,
-        "ownership": primary["ownership"]["canonical_strategy_ids"] == oracle["canonical_strategy_ids"],
-        "implementation": (primary["implementation"]["implementation_authority"] != "UNRESOLVED") == oracle["bindings"]["implementation"],
-        "parameters": (primary["parameters"]["parameter_authority"] == "PROVEN") == oracle["bindings"]["parameters"],
-        "dataset": (primary["dataset"]["dataset_authority"] == "PROVEN") == oracle["bindings"]["dataset"],
-        "temporal": (primary["temporal_split"]["temporal_authority"] == "PROVEN") == oracle["bindings"]["temporal"],
-        "split_fold": (primary["temporal_split"]["split_authority"] == "PROVEN") == oracle["bindings"]["split_fold"],
-        "freeze": (primary["freeze_contamination"]["freeze_authority"] == "PROVEN") == oracle["bindings"]["freeze"],
-        "verdict": primary["verdict"] == oracle["verdict"],
+        "physical_hash": oracle.get("physical_hash_matches") is True and primary["ledger"]["physical_sha256"] == EXPECTED_LEDGER_SHA256,
+        "row_count": oracle.get("row_count_matches") is True and primary["ledger"]["row_count"] == EXPECTED_ROW_COUNT,
+        "introduction_commit": history.get("introduction_commit") == oracle.get("introduction_commit"),
+        "historical_ledger_sha256": blobs.get("historical_ledger_physical_sha256") == oracle.get("historical_ledger_sha256"),
+        "historical_sidecar": blobs.get("historical_sidecar_matches_ledger") == oracle.get("historical_sidecar_matches"),
+        "generator_blob": blobs.get("generator_git_blob_sha") == oracle.get("historical_generator_blob_sha"),
+        "generator_output_binding": (generator_binding.get("status") == "PROVEN") == oracle.get("generator_output_binding"),
+        "ledger_equality": blobs.get("historical_current_ledger_equality") == oracle.get("current_historical_ledger_equality"),
+        "parent_path_absence": all(not record.get("existed_in_parent") for record in history.get("paths", {}).values()) == all(oracle.get("parent_path_absence", {}).values()),
+        "ownership": primary["ownership"].get("embedded_row_owner_ids") == oracle.get("embedded_row_owner_ids"),
+        "direct_invalidation": invalidation.get("direct_ledger_invalidation_authority") == oracle.get("direct_ledger_invalidation_authority"),
+        "implementation_invalidation": invalidation.get("implementation_invalidation_authority") == oracle.get("implementation_invalidation_authority"),
+        "derived_invalidation": invalidation.get("derived_ledger_invalidation_authority") == oracle.get("derived_ledger_invalidation_authority"),
+        "search_counts": [(item.get("candidate_count"), item.get("inspected_candidate_count"), len(item.get("matching_records", [])), item.get("search_completed")) for item in primary.get("source_searches", [])] == [(item.get("candidate_count"), item.get("inspected_candidate_count"), item.get("matching_record_count"), item.get("search_completed")) for item in oracle.get("search_records", [])],
+        "verdict": primary["verdict"] == oracle.get("verdict"),
     }
     return {"status": "AGREEMENT" if all(checks.values()) else "MISMATCH", "checks": checks}
 
 
-def publish_provenance_evidence(ledger_path: Path, evidence: Mapping[str, Any], source_inventory: list[dict[str, Any]], output_dir: Path) -> dict[str, Any]:
-    content = ledger_path.read_bytes()
-    primary = audit_signal_ledger(
-        content,
-        evidence,
-        expected_sha256=EXPECTED_LEDGER_SHA256,
-        expected_row_count=EXPECTED_ROW_COUNT,
-    )
-    oracle = oracle_audit(content, evidence, EXPECTED_LEDGER_SHA256, EXPECTED_ROW_COUNT)
+def publish_provenance_evidence(repo_root: Path, output_dir: Path, *, external_roots: Iterable[Path] = ()) -> dict[str, Any]:
+    from .build_evidence import build_immutable_evidence
+
+    evidence, source_inventory = build_immutable_evidence(repo_root, external_roots)
+    content = (repo_root / LEDGER_RELATIVE_PATH).read_bytes()
+    primary = audit_signal_ledger(content, evidence)
+    oracle = oracle_audit(repo_root, EXPECTED_LEDGER_SHA256, EXPECTED_ROW_COUNT, external_roots)
     agreement = _agreement(primary, oracle)
     if agreement["status"] != "AGREEMENT":
         raise ValueError("PRIMARY_ORACLE_MISMATCH")
     schema = {"schema_version": "signal_ledger_provenance_v1", "required_safety_flags": SAFETY_FLAGS, "output_names": list(OUTPUT_NAMES)}
-    manifest = {
-        **SAFETY_FLAGS,
-        "artifact_semantic_sha256": {},
-        "searched_source_count": len(source_inventory),
-        "absolute_paths_excluded_from_semantic_hashes": True,
-    }
+    manifest = {**SAFETY_FLAGS, "artifact_semantic_sha256": {}, "searched_source_count": len(source_inventory), "absolute_paths_excluded_from_semantic_hashes": True}
     outputs = {
         "schema.json": schema,
         "signal_ledger_source_inventory.json": {**SAFETY_FLAGS, "sources": source_inventory},
