@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .audit import audit_tracked_archive
+from .audit import EXPECTED_ARCHIVE_SHA256, audit_tracked_archive
 from .oracle import oracle_archive_facts, reconcile_primary_oracle
 
 
@@ -76,10 +76,21 @@ def _compact_primary(primary: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
-def build(archive_path: Path, output_dir: Path) -> dict[str, Any]:
+def build(
+    archive_path: Path,
+    output_dir: Path,
+    *,
+    expected_sha256: str = EXPECTED_ARCHIVE_SHA256,
+) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    primary = audit_tracked_archive(archive_path)
-    oracle = oracle_archive_facts(archive_path)
+    primary = audit_tracked_archive(
+        archive_path,
+        expected_sha256=expected_sha256,
+    )
+    oracle = oracle_archive_facts(
+        archive_path,
+        expected_sha256=expected_sha256,
+    )
     agreement = reconcile_primary_oracle(primary, oracle)
     if agreement["status"] != "AGREEMENT":
         raise RuntimeError("primary_oracle_disagreement")
@@ -188,8 +199,17 @@ def main() -> int:
     )
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--expected-sha256",
+        default=EXPECTED_ARCHIVE_SHA256,
+        help="Frozen archive SHA-256; defaults to the audited repository artifact.",
+    )
     args = parser.parse_args()
-    summary = build(args.archive, args.output_dir)
+    summary = build(
+        args.archive,
+        args.output_dir,
+        expected_sha256=args.expected_sha256,
+    )
     print(json.dumps(summary, sort_keys=True))
     return 0
 
