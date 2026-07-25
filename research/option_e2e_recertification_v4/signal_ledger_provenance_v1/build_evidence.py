@@ -7,13 +7,9 @@ from typing import Any, Iterable
 
 from .audit import audit_signal_ledger
 from .generate import publish_provenance_evidence
-from .git_provenance import (
-    LEDGER_RELATIVE_PATH,
-    derive_invalidation,
-    derive_ownership,
-    search_non_outcome_provenance,
-)
+from .git_provenance import LEDGER_RELATIVE_PATH, derive_invalidation, derive_ownership
 from .lineage import build_historical_binding
+from .provenance_search import search_preexisting_non_outcome_provenance
 
 
 def build_immutable_evidence(repo_root: Path, external_roots: Iterable[Path] = ()) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -21,7 +17,7 @@ def build_immutable_evidence(repo_root: Path, external_roots: Iterable[Path] = (
     ledger_bytes = (repo_root / LEDGER_RELATIVE_PATH).read_bytes()
     ownership = derive_ownership(ledger_bytes, binding["historical_inventory"])
     invalidation = derive_invalidation(repo_root, binding)
-    search_records = search_non_outcome_provenance(repo_root, external_roots)
+    search_records = search_preexisting_non_outcome_provenance(repo_root, external_roots)
     evidence = {
         "historical_binding": {
             "history": binding["history"],
