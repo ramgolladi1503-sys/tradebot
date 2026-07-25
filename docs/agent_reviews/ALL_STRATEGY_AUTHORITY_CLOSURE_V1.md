@@ -1,7 +1,7 @@
 mode: RESEARCH_ONLY_AUTHORITY_CLOSURE
 candidate_id: all_strategy_authority_closure_v1
 decision: AUTHORITY_CLOSURE_BLOCKED_WITH_DECLARED_GAPS
-reason: The closure layer is now derived from the real full census registries, but the census still leaves unresolved sources, non-canonical dataset versions, and zero canonical signal-ledger authority.
+reason: The closure remains blocked by declared source, dataset, implementation, parameter, instrument, split/fold, and multi-asset gaps; the sole signal-ledger candidate is now correctly classified as invalidated derived historical evidence and still grants no lane authority.
 timestamp: 2026-07-25T01:00:01+05:30
 research_only: true
 read_only: true
@@ -25,6 +25,8 @@ The closure package reads the two full census registry runs, verifies they are s
 The synthetic implementation at `76584f3e3a8c659a37583e79c485482ec0e852d2` was invalid. The loader at `2d7dfa1eaab7afa9b60e37967cd6236b0edcb152` was incomplete. Commit `7bcefdf12aae64f63279fdd3e79994d4b7c677aa` established portable loading/building but did not complete authority semantics. Commit `7844ca5bc9648a8e07b16173872090b95d2596c9` produced a deterministic fail-closed publication, but an independent audit correctly found that its cross-record joins, signal ownership, blocker traceability, and priority derivation were semantically incomplete.
 
 Commit `ea756e71d5b497a6462b824c1d3c26b7fbbdab62` completed the cross-record authority semantics. This metadata follow-up attaches every generated component blocker to its matrix lane, separates upstream readiness labels from current blocker evidence, and repairs compact blocker/strategy count names and aggregation. Authority remains `AUTHORITY_CLOSURE_BLOCKED_WITH_DECLARED_GAPS`.
+
+The signal-ledger invalidation integration consumes PR #711's immutable evidence without rewriting it. Direct hash-level invalidation remains `UNRESOLVED`; implementation and derived invalidation are `CONFIRMED` through the proven generator-to-ledger byte binding. The global candidate conclusion is now `INVALIDATED_HISTORICAL_EVIDENCE`, while canonical ownership remains null and all lane evidence remains unchanged.
 
 ## Grill Me Review
 
@@ -64,7 +66,7 @@ The repaired layer is backed by:
 - 8 of 8 dataset families, 986 exact blobs, 1,054 physical candidate copies, and 986 of 986 dataset versions reconciled through cross-record joins;
 - all 25 limitation-qualified versions reviewed individually and 961 unresolved versions retained as unresolved;
 - 24 unresolved candidates reconciled into 2 physical-source groups with complete, non-duplicated membership;
-- one signal ledger classified `INSUFFICIENT_PROVENANCE`, with zero canonical signal ledgers;
+- one signal-ledger candidate classified `INVALIDATED_HISTORICAL_EVIDENCE`, with zero canonical or usable signal ledgers, one invalidated ledger, and replacement required;
 - an exact 16-lane strategy matrix where the unowned ledger conclusion is not propagated to any strategy lane;
 - 98 component-traceable blockers across implementation, parameter, dataset, split/fold, instrument identity, multi-asset dependency, and source-search authority;
 - component-derived priority distribution of 13 P3, 2 P4, and 1 P5, with zero P1 and `NO_TRADE_CHOP` retained as P5;
@@ -83,7 +85,8 @@ The repaired layer is backed by:
 - compact closure summary semantic SHA-256 `af18c59c025d68751e0b82db61a8fa8a33e8a9c969a440b043ddab40d8288d96`;
 - compact repository evidence with physical SHA-256 sidecars and links to full-artifact semantic hashes;
 - CI-portable tests that assert concrete records and fail-closed outcomes;
-- 40 focused metadata tests and 144 option-E2E tests passing locally; the stale historical combined-slice count was removed rather than represented as current evidence.
+- signal-ledger integration semantic SHA-256 `a9c955b972d7aacaa4533ed9579b4687aa4e5279c73f40c60f48b354614e30df`;
+- two integration builds with byte-identical full and compact artifacts, 87 focused authority tests passing, and 183 option-E2E tests passing locally.
 
 ## Runtime Proof Required After Merge
 
@@ -91,7 +94,7 @@ None. This is research-only evidence and does not authorize runtime behavior.
 
 ## What This PR Does Not Prove
 
-This closure does not prove profitability, replay correctness, WFA, holdout performance, paper readiness, or live readiness. Dataset provenance remains limitation-qualified, 961 versions remain unresolved, source search retains declared gaps, and the only signal ledger lacks implementation, parameter, dataset, temporal, split, freeze, and contamination authority. These are blockers, not execution authority.
+This closure does not prove profitability, replay correctness, WFA, holdout performance, paper readiness, or live readiness. Dataset provenance remains limitation-qualified, 961 versions remain unresolved, source search retains declared gaps, and the invalidated placeholder does not establish strategy implementation, parameter, dataset, temporal, split, freeze, or contamination authority. These are blockers, not execution authority.
 
 ## Human Approval
 

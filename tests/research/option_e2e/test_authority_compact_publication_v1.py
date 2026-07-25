@@ -35,7 +35,50 @@ def _full_payloads() -> dict[str, object]:
             {"dataset_version_id": "V2", "authority_decision": "KEEP"},
             {"dataset_version_id": "V3", "authority_decision": "REJECT"},
         ],
-        "signal": {"authority_status": "BLOCKED", "canonical_signal_ledger_count": 0, "reason": "missing_provenance"},
+        "signal": {
+            "authority_status": "BLOCKED",
+            "signal_ledger_id": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed:24",
+            "physical_hash": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+            "row_count": 24,
+            "signal_ledger_candidate_count": 1,
+            "authority_conclusion": "INVALIDATED_HISTORICAL_EVIDENCE",
+            "artifact_kind": "MULTI_OWNER_BLOCKED_PLACEHOLDER_INVENTORY",
+            "direct_ledger_invalidation_authority": "UNRESOLVED",
+            "implementation_invalidation_authority": "CONFIRMED",
+            "derived_ledger_invalidation_authority": "CONFIRMED",
+            "derived_invalidation_reason_code": "DERIVED_THROUGH_PROVEN_INVALIDATED_GENERATOR_BINDING",
+            "generator_output_binding_status": "PROVEN",
+            "primary_oracle_agreement": "AGREEMENT",
+            "canonical_strategy_id": None,
+            "canonical_signal_ledger_count": 0,
+            "usable_signal_ledger_count": 0,
+            "invalidated_signal_ledger_count": 1,
+            "replacement_signal_ledger_required": True,
+            "lane_impact_analysis": {
+                "evaluated_lane_count": 2,
+                "previous_affected_lane_count": 0,
+                "new_affected_lane_count": 0,
+                "affected_lane_assignments": [],
+                "new_executable_lane_count": 0,
+                "executable_lane_delta": 0,
+                "new_valid_precomputed_signal_lane_count": 0,
+                "valid_precomputed_signal_lane_delta": 0,
+                "removed_lane_blocker_count": 0,
+                "lane_blocker_delta": "NONE",
+                "reason": "INVALIDATED_MULTI_OWNER_PLACEHOLDER_WAS_NOT_CANONICALLY_ASSIGNED",
+            },
+            "blocker_delta": {
+                "previous_blocker_record_count": 2,
+                "new_blocker_record_count": 2,
+                "previous_affected_lane_count": 2,
+                "new_affected_lane_count": 2,
+                "added_blocker_ids": [],
+                "removed_blocker_ids": [],
+                "changed_blocker_ids": [],
+                "lane_blocker_delta": "NONE",
+                "reason": "INVALIDATED_MULTI_OWNER_PLACEHOLDER_WAS_NOT_CANONICALLY_ASSIGNED",
+            },
+        },
         "unresolved": {"authority_status": "BLOCKED", "unresolved_candidate_count": 4, "material_truncated_roots": 2},
         "strategies": [
             {"canonical_strategy_id": "S1", "authority_status": "BLOCKED", "signal_authority": "NOT_APPLICABLE", "signal_ledger_status": "NOT_APPLICABLE", "upstream_readiness_blocker": "SIGNAL", "current_blocker_ids": ["B1"]},
@@ -80,6 +123,9 @@ def test_generates_all_reconciled_compact_payloads_from_fixture() -> None:
     assert "remaining_blocker_counts" not in compact["strategy_authority_summary.json"]
     assert compact["priority_summary.json"]["ordered_strategy_ids"] == ["S1", "S2"]
     assert compact["authority_closure_summary.json"]["safety"]["allowed_for_live_execution"] is False
+    assert compact["authority_closure_summary.json"]["invalidated_signal_ledger_count"] == 1
+    assert compact["authority_closure_summary.json"]["replacement_signal_ledger_required"] is True
+    assert compact["blocker_summary.json"]["signal_ledger_integration_delta"]["lane_blocker_delta"] == "NONE"
     assert compact["external_evidence_manifest.json"]["safety"]["broker_api_called"] is False
 
 
@@ -134,6 +180,10 @@ def test_repeated_blocker_classes_aggregate_records_and_unique_lanes() -> None:
         blockers.append({"blocker_id": blocker_id, "blocker_class": blocker_class, "affected_strategy_ids": [lane_id]})
         full["strategies"][lane_index]["current_blocker_ids"].append(blocker_id)  # type: ignore[index]
     full["blockers"] = blockers
+    full["signal"]["blocker_delta"].update(  # type: ignore[index]
+        previous_blocker_record_count=98,
+        new_blocker_record_count=98,
+    )
 
     summary = generate_compact_payloads(full)["blocker_summary.json"]
 

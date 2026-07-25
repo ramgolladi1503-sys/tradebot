@@ -161,6 +161,28 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         inputs.get("canonical_signal_ledgers"),
         "canonical_signal_ledgers",
     )
+    expected_signal_contract = {
+        "authority_conclusion": "INVALIDATED_HISTORICAL_EVIDENCE",
+        "artifact_kind": "MULTI_OWNER_BLOCKED_PLACEHOLDER_INVENTORY",
+        "direct_ledger_invalidation_authority": "UNRESOLVED",
+        "implementation_invalidation_authority": "CONFIRMED",
+        "derived_ledger_invalidation_authority": "CONFIRMED",
+        "derived_invalidation_reason_code": "DERIVED_THROUGH_PROVEN_INVALIDATED_GENERATOR_BINDING",
+        "generator_output_binding_status": "PROVEN",
+        "primary_oracle_agreement": "AGREEMENT",
+        "canonical_strategy_id": None,
+        "canonical_signal_ledger_count": 0,
+        "usable_signal_ledger_count": 0,
+        "invalidated_signal_ledger_count": 1,
+        "replacement_signal_ledger_required": True,
+    }
+    mismatches = {
+        key: (signal.get(key), expected)
+        for key, expected in expected_signal_contract.items()
+        if signal.get(key) != expected
+    }
+    if mismatches:
+        raise CompactReconciliationError(f"signal_invalidation_reconciliation_failed mismatches={mismatches}")
     legacy_matrix = bool(matrix and "authority_target" in matrix[0])
     if legacy_matrix:
         family_matrix = [row for row in matrix if row.get("authority_kind") == "dataset_family"]
@@ -189,6 +211,32 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         if legacy_matrix
         else matrix
     )
+    lane_impact = _as_object(signal.get("lane_impact_analysis"), "signal.lane_impact_analysis")
+    blocker_delta = _as_object(signal.get("blocker_delta"), "signal.blocker_delta")
+    expected_lane_impact = {
+        "evaluated_lane_count": len(strategy_rows),
+        "previous_affected_lane_count": 0,
+        "new_affected_lane_count": 0,
+        "affected_lane_assignments": [],
+        "executable_lane_delta": 0,
+        "valid_precomputed_signal_lane_delta": 0,
+        "removed_lane_blocker_count": 0,
+        "lane_blocker_delta": "NONE",
+    }
+    if any(lane_impact.get(key) != value for key, value in expected_lane_impact.items()):
+        raise CompactReconciliationError("signal_lane_impact_reconciliation_failed")
+    expected_blocker_delta = {
+        "previous_blocker_record_count": len(blockers),
+        "new_blocker_record_count": len(blockers),
+        "previous_affected_lane_count": len(affected_lane_ids),
+        "new_affected_lane_count": len(affected_lane_ids),
+        "added_blocker_ids": [],
+        "removed_blocker_ids": [],
+        "changed_blocker_ids": [],
+        "lane_blocker_delta": "NONE",
+    }
+    if any(blocker_delta.get(key) != value for key, value in expected_blocker_delta.items()):
+        raise CompactReconciliationError("signal_blocker_delta_reconciliation_failed")
     priority_ids = [str(row.get("canonical_strategy_id") or "") for row in priorities]
     if len(priority_ids) != len(set(priority_ids)) or any(not value for value in priority_ids):
         raise CompactReconciliationError("priority_strategy_ids_not_unique")
@@ -216,6 +264,16 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
             for lane_id in blocker.get("affected_strategy_ids", []):
                 if lane_id not in matrix_by_id or blocker["blocker_id"] not in matrix_by_id[lane_id]["current_blocker_ids"]:
                     raise CompactReconciliationError(f"blocker_matrix_backlink_failed lane={lane_id}")
+        invalidated_id = signal.get("signal_ledger_id")
+        assigned = [
+            str(row.get("canonical_strategy_id"))
+            for row in strategy_rows
+            if row.get("selected_canonical_signal_ledger") == invalidated_id
+        ]
+        if assigned:
+            raise CompactReconciliationError(
+                f"invalidated_multi_owner_ledger_assigned lanes={','.join(sorted(assigned))}"
+            )
 
     links = {key: _source_link(FULL_ARTIFACTS[key], full_payloads[key]) for key in FULL_ARTIFACTS}
     payloads: dict[str, dict[str, Any]] = {}
@@ -226,6 +284,7 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         "physical_sidecar_format": "<sha256>  <filename>",
         "required_safety_flags": SAFETY_FLAGS,
         "full_artifact_inputs": dict(FULL_ARTIFACTS),
+        "required_signal_invalidation_fields": dict(expected_signal_contract),
     }
     family_statuses = _counts(families, "authority_status")
     version_decisions = _counts(versions, "authority_decision")
@@ -253,6 +312,7 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         "priority_counts": priority_counts,
         "component_blocker_class_counts": blocker_record_count_by_class,
         "upstream_readiness_blocker_counts": _counts(strategy_rows, "upstream_readiness_blocker"),
+        "signal_ledger_lane_impact": signal.get("lane_impact_analysis"),
         "sources": [links["strategies"], links["priorities"]],
     })
     payloads["blocker_summary.json"] = _summary("authority_blockers", {
@@ -260,6 +320,7 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         "blocker_record_count_by_class": blocker_record_count_by_class,
         "affected_lane_count": len(affected_lane_ids),
         "affected_lane_count_by_class": affected_lane_count_by_class,
+        "signal_ledger_integration_delta": signal.get("blocker_delta"),
         "source": links["blockers"],
     })
     payloads["priority_summary.json"] = _summary("strategy_priority", {
@@ -272,6 +333,13 @@ def generate_compact_payloads(full_payloads: Mapping[str, Any]) -> dict[str, dic
         "authority_status": "BLOCKED_WITH_DECLARED_GAPS",
         "dataset_family_count": len(families), "dataset_version_count": len(versions),
         "canonical_signal_ledger_count": int(signal.get("canonical_signal_ledger_count", 0)),
+        "signal_ledger_candidate_count": int(signal.get("signal_ledger_candidate_count", 0)),
+        "usable_signal_ledger_count": int(signal.get("usable_signal_ledger_count", 0)),
+        "invalidated_signal_ledger_count": int(signal.get("invalidated_signal_ledger_count", 0)),
+        "replacement_signal_ledger_required": signal.get("replacement_signal_ledger_required") is True,
+        "signal_ledger_authority_conclusion": signal.get("authority_conclusion"),
+        "signal_ledger_lane_impact": signal.get("lane_impact_analysis"),
+        "signal_ledger_blocker_delta": signal.get("blocker_delta"),
         "unresolved_candidate_count": int(unresolved.get("unresolved_candidate_count", 0)),
         "strategy_count": len(priorities), "blocked_lane_count": len(affected_lane_ids),
         "input_authority_status": inputs.get("authority_status") or inputs.get("status"),
