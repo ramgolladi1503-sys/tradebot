@@ -186,10 +186,16 @@ jobs:
 
       - name: Generate direct changed-path evidence
         run: |
-          FIXTURE=runtime/strategy_validation/resolved_option_ticks_20260702.parquet
-          git cat-file blob "HEAD:$FIXTURE" > "$FIXTURE"
-          git diff --quiet -- "$FIXTURE"
-          git diff --name-only "origin/$PARENT_BRANCH" -- | sort -u \
+          git add \
+            "$PKG" \
+            tests/research/option_e2e/test_signal_ledger_provenance_v1.py \
+            tests/research/option_e2e/test_signal_ledger_provenance_prior_lineage.py \
+            tests/research/option_e2e/test_signal_ledger_provenance_search_scope.py \
+            docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md \
+            docs/code_excellence/reports/changed_paths.txt \
+            docs/code_excellence/reports/unified_ce_gate_latest.md \
+            .github/workflows/_temporary_signal_ledger_provenance_evidence.yml
+          git diff --cached --name-only "origin/$PARENT_BRANCH" -- | sort -u \
             > docs/code_excellence/reports/changed_paths.txt
           ! grep -q '_temporary_signal_ledger_provenance_evidence.yml' \
             docs/code_excellence/reports/changed_paths.txt
