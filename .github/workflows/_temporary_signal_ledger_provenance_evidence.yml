@@ -1,0 +1,35 @@
+name: Temporary Signal Ledger Provenance Evidence
+
+on:
+  push:
+    branches:
+      - research/signal-ledger-provenance-v1
+
+permissions:
+  contents: read
+
+jobs:
+  generate-provenance-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run focused provenance tests
+        run: PYTHONPATH=. pytest -q tests/research/option_e2e/test_signal_ledger_provenance_v1.py
+      - name: Generate repository-history evidence
+        run: |
+          PYTHONPATH=. python -m research.option_e2e_recertification_v4.signal_ledger_provenance_v1.build_evidence \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output-dir "$RUNNER_TEMP/signal-ledger-provenance"
+      - name: Upload generated evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: signal-ledger-provenance-generated
+          path: ${{ runner.temp }}/signal-ledger-provenance
+          if-no-files-found: error
