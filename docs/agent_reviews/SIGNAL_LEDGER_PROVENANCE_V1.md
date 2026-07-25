@@ -1,7 +1,7 @@
 mode: RESEARCH_ONLY_PROVENANCE_AUDIT
 candidate_id: signal_ledger_provenance_v1
 decision: SIGNAL_LEDGER_INVALIDATED
-reason: Immutable Git history proves the 24-row artifact is a multi-owner blocked-placeholder inventory generated at commit 686af0fe, and a later hash-linked repository record explicitly invalidates that v4.2 evidence implementation.
+reason: The audited bytes are an exact 24-row multi-owner blocked-placeholder inventory. Git history dynamically proves the ledger and sidecar were introduced with the historical placeholder generator at commit 686af0fe, while the inventory has prior immutable lineage and was present at that commit. Historical generator execution and an independent reconstruction reproduce the exact ledger bytes. The immutable invalidation record directly invalidates the generator implementation; direct ledger-hash invalidation remains unresolved, while ledger invalidation is derived through the proven generator-to-ledger and historical-to-current byte chain.
 timestamp: 2026-07-25T03:00:01+05:30
 research_only: true
 read_only: true
@@ -11,33 +11,31 @@ allowed_for_live_execution: false
 outcomes_read: false
 pnl_read: false
 holdout_outcomes_read: false
-source: Immutable repository history, hash-protected ledger content, declared non-outcome external evidence roots, and two independent durable audit runs
+source: Immutable Git history and blobs, the committed ledger and sidecar, the historical generator and inventory, the implementation-invalidation record, and two independent full-history evidence builds
 
 # Signal-Ledger Ownership and Provenance Evidence v1
 
 ## Agent Work Contract
 
-This task audits immutable ownership and provenance for the physical artifact `research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json`, SHA-256 `b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed`, 24 rows. It does not execute strategies or inspect outcomes.
+Audit immutable ownership and provenance for `signal_ledgers_v4_2/signal_ledgers.json`, physical SHA-256 `b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed`, 24 rows. No strategy execution, outcome inspection, P&L, replay, WFA, tuning, or holdout evaluation is permitted.
 
 ## Scope Guard
 
-The implementation reads the ledger, its sidecar, Git objects and history, its historical generator and inventory, the repository invalidation record, and non-outcome closure evidence. It does not read outcome or P&L artifacts and does not run replay, WFA, holdout evaluation, tuning, broker, order, feed, risk, dashboard, or strategy-registration paths.
+Evidence is limited to Git history and blobs, the committed ledger and sidecar, the historical placeholder generator and inventory, the immutable implementation-invalidation record, and explicitly recorded non-outcome metadata searches. Self-generated provenance-package files, this Agent Review, its tests, temporary workflow, and Code Excellence reports are excluded from provenance-search findings.
 
 ## Grill Me Review
 
-The artifact name overstates its content. All 24 records have `status=SIGNAL_INPUT_DATA_MISSING`, `blocker=NO_SIGNAL_LEDGER_SOURCE`, and blank implementation, parameter, source, temporal, and fold fields. The hash protects the embedded row owners, but those rows are blocked placeholders and not generated trading signals. Determinism does not create authority.
+All 24 rows are blocked placeholders: `status=SIGNAL_INPUT_DATA_MISSING`, `blocker=NO_SIGNAL_LEDGER_SOURCE`, and blank implementation, parameter, dataset, temporal, and fold fields. The artifact is not a collection of executed trading signals.
 
 ## Hermes Review
 
-The audit keeps ownership, generator implementation, strategy implementation, parameters, dataset, temporal ordering, split/fold, freeze, and contamination authority separate. A Git commit that atomically introduces a placeholder generator and its output proves which generator created the bytes; it does not prove that any named strategy implementation generated a signal.
+The audit separates embedded owner labels, canonical strategy mapping, aggregate ownership, historical generator identity, strategy implementation authority, parameters, datasets, temporal ordering, split/fold, freeze, contamination clearance, and invalidation authority.
 
 ## GSD Review
 
-The primary evaluator and independent oracle separately verify physical hash, row count, embedded owners, immutable generator binding, missing provenance layers, contamination evidence state, and historical invalidation. Publication fails closed on semantic disagreement.
+The primary path discovers ledger and sidecar introduction dynamically and permits proven prior inventory lineage. It hashes historical Git blobs, executes the historical generator, and independently reconstructs expected output bytes. A separate oracle independently derives history, blobs, output binding, invalidation lineage, and non-outcome search counts without consuming the primary evidence dictionary or primary search helper.
 
 ## QA / Safety Review
-
-Every compact artifact records:
 
 - `research_only=true`
 - `read_only=true`
@@ -48,35 +46,39 @@ Every compact artifact records:
 - `pnl_read=false`
 - `holdout_outcomes_read=false`
 
-No production or high-risk path was modified.
-
 ## Acceptance Proof
 
-Sources searched and findings:
-
-- Exact ledger and sidecar: physical hash and 24-row count match.
-- Git history: commit `686af0feff7a4485ebe4e249cb498b33d649a5cd` atomically introduced the generator and exact ledger bytes.
-- Generator: `build_signal_ledgers.py`, Git blob `935bdbdf30a461e290ee3566ac7e5e3e859e271b`, content SHA-256 `6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b`.
-- Historical inventory: Git blob `976872766598486f2150c3008a79b07ea634c887` supplied 18 counted strategies; the generator appended six hardcoded research hypotheses.
-- Embedded owners: 24 distinct strategy or hypothesis IDs are protected by the ledger physical hash. Ownership is `PROVEN_WITH_LIMITATIONS` for individual placeholder rows; the aggregate ledger has no single canonical strategy owner.
-- Implementation: the placeholder generator is proven, but no strategy implementation commit or hash is bound to any row.
-- Parameters and dataset: all row parameter and source hashes are blank; no ledger-bound parameter or dataset manifest was found.
-- Temporal and split: feature cutoff, signal, legal-entry, and fold fields are blank. The literal session value `frozen` and `is_holdout=false` are not treated as freeze or split proof.
-- Freeze and contamination: no hash-bound pre-outcome freeze manifest or immutable contamination-clearance record was found. Outcomes and P&L were not read, so all four contamination-clearance states remain `UNRESOLVED`.
-- Historical invalidation: `v4_2_evidence_implementation_invalidation.json`, SHA-256 `8d1b8d7cc264b92bf1499ede393b5ed3ec1220419c2fc031039717b67400a1b0`, binds the invalid decision to commit `686af0fe...` and the generator path.
-- Durable runs: `/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/signal_ledger_provenance_v1/20260725-030000_run_a` and `20260725-030001_run_b`.
-- Semantic determinism: both runs have semantic manifest SHA-256 `52b4c6bffd23a2a9708cdc6af0bfa63a5fe44127ea92a3d5744a125a2a70617a`.
-- Primary/oracle result: `AGREEMENT` on every declared semantic check.
+- Audited ledger: 24 rows, SHA-256 `b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed`.
+- Ledger, sidecar, and placeholder generator introduction: dynamically discovered commit `686af0feff7a4485ebe4e249cb498b33d649a5cd`.
+- Introduction status: `PROVEN_WITH_PRIOR_LINEAGE`; the historical inventory predates the ledger and is present at the introduction commit.
+- Historical ledger Git blob: `b8b9b8e9b9cfc53122ef01126a6817d7bcb5a4d2`.
+- Historical sidecar Git blob: `e5e221c6e0d8d19dc05a1839efbf4f7fe2e5aa47`; its digest matches the historical ledger.
+- Historical generator Git blob: `935bdbdf30a461e290ee3566ac7e5e3e859e271b`.
+- Historical inventory Git blob: `976872766598486f2150c3008a79b07ea634c887`.
+- Historical generator execution and independent reconstruction reproduce the exact committed ledger bytes and SHA-256.
+- Embedded owner labels: 24 proven fields; 18 map to counted historical strategy IDs and six remain historical hypothesis labels. Aggregate canonical strategy owner is null.
+- Strategy implementation, parameters, dataset, temporal ordering, split/fold, pre-outcome freeze, and contamination clearance remain unresolved.
+- Direct ledger-hash invalidation: `UNRESOLVED`; the immutable invalidation file does not contain the ledger hash.
+- Implementation invalidation: `CONFIRMED`; it identifies commit `686af0fe...` and the placeholder generator path.
+- Derived ledger invalidation: `CONFIRMED` with reason `DERIVED_THROUGH_PROVEN_INVALIDATED_GENERATOR_BINDING`.
+- Primary/oracle agreement: `AGREEMENT` on physical hash, row count, introduction history, blobs, generator binding, ownership, invalidation levels, scoped search counts, and verdict.
+- Two independent full-history builds are byte-for-byte and semantically identical.
 - Final verdict: `SIGNAL_LEDGER_INVALIDATED`.
 
 ## Runtime Proof Required After Merge
 
-None. This evidence is research-only and grants no runtime, paper, or live authority.
+None. This is research evidence only and grants no paper or live authority.
 
 ## What This PR Does Not Prove
 
-This work does not prove real signals, strategy correctness, parameters, dataset lineage, causal timestamps, split or fold identity, pre-outcome freeze, contamination clearance, profitability, replay validity, paper readiness, or live readiness. It does not convert any ledger into canonical signal authority.
+It does not prove real signals, strategy correctness, parameter authority, dataset lineage, causal timestamps, fold identity, freeze authority, contamination clearance, profitability, replay validity, WFA, paper readiness, or live readiness.
 
 ## Human Approval
 
-Human approval remains required for any later research execution or authority decision. The invalidated artifact must not be promoted or used as a substitute for newly generated pre-outcome evidence.
+Human approval is required before any replacement ledger generation or later authority decision. The invalidated v4.2 placeholder ledger must not be promoted.
+
+## Validation
+
+- Focused provenance tests: `22 passed in 1.77s`
+- Full option-E2E tests: `166 passed in 85.83s (0:01:25)`
+- Evidence manifest semantic SHA-256: `2d5d6bcb62909e9a6763314be9779a823ec36dd817d6faeac03c5aa5b91cc872`
