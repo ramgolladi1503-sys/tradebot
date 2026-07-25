@@ -240,7 +240,8 @@ jobs:
             --config .gsd-forensics.yaml \
             --changed-paths-file docs/code_excellence/reports/changed_paths.txt \
             --out docs/code_excellence/reports/unified_ce_gate_latest.md
-          grep -q 'total_blocks=0' docs/code_excellence/reports/unified_ce_gate_latest.md
+          grep -q '^- total_blocks: `0`$' docs/code_excellence/reports/unified_ce_gate_latest.md
+          grep -q '^- exit_code: `0`$' docs/code_excellence/reports/unified_ce_gate_latest.md
 
       - name: Verify final scope and commit
         run: |
