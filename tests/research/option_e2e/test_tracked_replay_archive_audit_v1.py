@@ -33,8 +33,8 @@ def test_audit_classifies_replay_archive_without_authority(
     digest = _zip(
         archive,
         {
-            "underlying/NIFTY.parquet": b"PAR1x",
-            "manifests/fetch_manifest.json": json.dumps(
+            "replay/20260709/underlying/NIFTY.parquet": b"PAR1x",
+            "replay/20260709/manifests/fetch_manifest.json": json.dumps(
                 {"provider": "upstox", "files": 1}
             ).encode(),
         },
@@ -47,7 +47,59 @@ def test_audit_classifies_replay_archive_without_authority(
     assert result["canonical_dataset_source_count"] == 0
     assert result["market_data_parquet_member_count"] == 1
     assert result["source_manifest_member_count"] == 1
+    assert result["represented_date_directory_count"] == 1
+    assert result["dates_with_parquet_member_count"] == 1
     assert result["allowed_for_live_execution"] is False
+
+
+def test_appledouble_metadata_is_counted_but_never_opened(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive = tmp_path / "replay.zip"
+    digest = _zip(
+        archive,
+        {
+            "__MACOSX/replay/._NIFTY.parquet": b"metadata",
+            "replay/20260709/underlying/NIFTY.parquet": b"PAR1x",
+        },
+    )
+    original = zipfile.ZipFile.open
+
+    def guarded(self, name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        candidate = name.filename if isinstance(name, zipfile.ZipInfo) else str(name)
+        if candidate.startswith("__MACOSX/"):
+            raise AssertionError("archive metadata opened")
+        return original(self, name, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", guarded)
+    result = audit_tracked_archive(archive, expected_sha256=digest)
+
+    metadata = next(item for item in result["members"] if item["archive_metadata"])
+    assert metadata["candidate_class"] == "ARCHIVE_METADATA_MEMBER"
+    assert metadata["content_opened"] is False
+    assert result["archive_metadata_member_count"] == 1
+    assert result["content_tree_member_count"] == 1
+    assert result["opened_member_count"] == 1
+    assert result["market_data_parquet_member_count"] == 1
+
+
+def test_option_like_parquets_exclude_appledouble_copies(tmp_path: Path) -> None:
+    archive = tmp_path / "replay.zip"
+    digest = _zip(
+        archive,
+        {
+            "__MACOSX/replay/20260709/underlying/._NIFTY 24000 CE.parquet": b"x",
+            "replay/20260709/underlying/NIFTY 24000 CE.parquet": b"PAR1x",
+            "replay/20260709/underlying/NIFTY 24000 PE.parquet": b"PAR1y",
+        },
+    )
+
+    result = audit_tracked_archive(archive, expected_sha256=digest)
+
+    assert result["market_data_parquet_member_count"] == 2
+    assert result["option_like_parquet_member_count"] == 2
+    assert result["archive_metadata_member_count"] == 1
 
 
 def test_wrong_physical_hash_fails(tmp_path: Path) -> None:
@@ -112,7 +164,10 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     archive = tmp_path / "replay.zip"
     digest = _zip(
         archive,
-        {"manifests/fetch_manifest.json": b'{"source":"upstox"}'},
+        {
+            "__MACOSX/replay/._manifest.json": b"metadata",
+            "replay/manifests/fetch_manifest.json": b'{"source":"upstox"}',
+        },
     )
 
     primary = audit_tracked_archive(archive, expected_sha256=digest)
