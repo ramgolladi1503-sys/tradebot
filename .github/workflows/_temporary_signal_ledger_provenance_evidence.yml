@@ -193,8 +193,7 @@ jobs:
             tests/research/option_e2e/test_signal_ledger_provenance_search_scope.py \
             docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md \
             docs/code_excellence/reports/changed_paths.txt \
-            docs/code_excellence/reports/unified_ce_gate_latest.md \
-            .github/workflows/_temporary_signal_ledger_provenance_evidence.yml
+            docs/code_excellence/reports/unified_ce_gate_latest.md
           git diff --cached --name-only "origin/$PARENT_BRANCH" -- | sort -u \
             > docs/code_excellence/reports/changed_paths.txt
           ! grep -q '_temporary_signal_ledger_provenance_evidence.yml' \
