@@ -21,7 +21,7 @@ source: runtime/upstox_candidate_replay.zip at SHA-256 4357f109ed631802b3774c34d
 - action: GENERATE_PATCH
 - title: Audit the tracked Upstox replay archive as one unique source
 - scope: Research-only ZIP integrity, member inventory, deny-boundary enforcement, independent oracle, deterministic evidence, and compact publication
-- allowed_paths: Focused archive-audit package, focused tests, this review, generated evidence, changed-scope reports, and a temporary evidence workflow removed before publication
+- allowed_paths: Focused archive-audit package, focused tests, this review, generated evidence, changed-scope reports, and temporary workflows removed before publication
 - forbidden_paths: Strategy runtime, broker, order, execution, feed, risk, dashboard, outcomes, P&L, replay execution, WFA, holdout evaluation, and live or paper configuration
 - expected_tests: Focused archive security tests plus repository-required exact-head checks
 - acceptance_proof: Exact archive hash, safe member inventory, AppleDouble separation, primary-oracle agreement, two byte-identical builds, matching sidecars, and zero execution authority
@@ -29,6 +29,18 @@ source: runtime/upstox_candidate_replay.zip at SHA-256 4357f109ed631802b3774c34d
 ## Scope Guard
 
 This work audits only the repository-tracked `runtime/upstox_candidate_replay.zip`, previously represented by 23 exact-content copies in the source census. It does not inspect the Mac-only execution trace or claim that the 27 declared local roots have been exhausted. It does not extract archive members into the repository or execute the replay.
+
+## Grill Me Review
+
+Archive validity and deterministic bytes are not authority. A replay bundle can be useful input while still lacking dataset-version ownership, strategy ownership, implementation and parameter binding, causal timestamps, split/fold identity, pre-outcome freeze, and contamination clearance. The audit therefore rejects any promotion based on filenames, member count, parseability, or provider labels alone.
+
+## Hermes Review
+
+The primary inspector owns member safety, deny-boundary enforcement, content classification, and compact publication. A separate oracle independently recomputes the archive hash, physical size, ZIP validity, name uniqueness, metadata/content partition, file/directory counts, and safety flags. The evidence builder refuses publication on disagreement.
+
+## GSD Review
+
+The implementation remains narrow: one frozen archive, one focused audit package, one focused test file, one compact evidence set, and temporary workflows removed before final publication. It does not create a generic source framework, alter the existing authority closure, or introduce runtime behavior.
 
 ## Frozen Input
 
@@ -154,7 +166,7 @@ No runtime, broker, order, feed, risk, dashboard, outcome, P&L, replay, WFA, hol
 - canonical dataset sources: `0`
 - final disposition: `ARCHIVE_REPLAY_INPUT_ONLY`
 
-Permanent exact-head repository checks must pass after the temporary workflow is removed. This review does not treat the temporary workflow run as the final branch gate.
+Permanent exact-head repository checks must pass after all temporary workflows are removed. Temporary diagnostic or evidence workflows are not treated as the final branch gate.
 
 ## Runtime Proof Required After Merge
 
@@ -174,4 +186,4 @@ This work does not prove a canonical signal source, canonical dataset source, st
 
 ## Human Approval
 
-Human approval remains required before replacement-ledger generation or any later authority decision. The archive result narrows one unique source; it does not authorize execution or remove the remaining local-source blockers.
+Human approval remains required before replacement-ledger generation or any later authority decision. The archive result narrows one unique source; it does not authorize execution or remove the remaining local-source gaps.
