@@ -186,6 +186,8 @@ jobs:
 
       - name: Generate direct changed-path evidence
         run: |
+          git restore --worktree -- \
+            runtime/strategy_validation/resolved_option_ticks_20260702.parquet
           git diff --name-only "origin/$PARENT_BRANCH" -- | sort -u \
             > docs/code_excellence/reports/changed_paths.txt
           ! grep -q '_temporary_signal_ledger_provenance_evidence.yml' \
