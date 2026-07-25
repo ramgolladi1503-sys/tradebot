@@ -1,9 +1,9 @@
 name: Temporary Signal Ledger Provenance Finalizer
 
 on:
-  push:
+  pull_request:
     branches:
-      - research/signal-ledger-provenance-v1
+      - research/all-strategy-option-e2e-recertification-v4
 
 permissions:
   contents: write
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   finalize-provenance-repair:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'research/signal-ledger-provenance-v1' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
