@@ -23,16 +23,31 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run focused provenance tests
-        run: PYTHONPATH=. pytest -q tests/research/option_e2e/test_signal_ledger_provenance_v1.py
-      - name: Generate repository-history evidence
+      - name: Capture focused provenance tests
+        shell: bash
         run: |
+          set +e
+          PYTHONPATH=. pytest -q tests/research/option_e2e/test_signal_ledger_provenance_v1.py 2>&1 | tee "$RUNNER_TEMP/focused-tests.log"
+          echo "${PIPESTATUS[0]}" > "$RUNNER_TEMP/focused-tests.status"
+          exit 0
+      - name: Capture repository-history evidence generation
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$RUNNER_TEMP/signal-ledger-provenance"
           PYTHONPATH=. python -m research.option_e2e_recertification_v4.signal_ledger_provenance_v1.build_evidence \
             --repo-root "$GITHUB_WORKSPACE" \
-            --output-dir "$RUNNER_TEMP/signal-ledger-provenance"
-      - name: Upload generated evidence
+            --output-dir "$RUNNER_TEMP/signal-ledger-provenance" 2>&1 | tee "$RUNNER_TEMP/builder.log"
+          echo "${PIPESTATUS[0]}" > "$RUNNER_TEMP/builder.status"
+          exit 0
+      - name: Upload generated evidence and diagnostics
         uses: actions/upload-artifact@v4
         with:
           name: signal-ledger-provenance-generated
-          path: ${{ runner.temp }}/signal-ledger-provenance
+          path: |
+            ${{ runner.temp }}/signal-ledger-provenance
+            ${{ runner.temp }}/focused-tests.log
+            ${{ runner.temp }}/focused-tests.status
+            ${{ runner.temp }}/builder.log
+            ${{ runner.temp }}/builder.status
           if-no-files-found: error
