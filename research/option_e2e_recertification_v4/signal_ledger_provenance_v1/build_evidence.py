@@ -9,11 +9,11 @@ from .audit import audit_signal_ledger
 from .generate import publish_provenance_evidence
 from .git_provenance import (
     LEDGER_RELATIVE_PATH,
-    build_historical_binding,
     derive_invalidation,
     derive_ownership,
     search_non_outcome_provenance,
 )
+from .lineage import build_historical_binding
 
 
 def build_immutable_evidence(repo_root: Path, external_roots: Iterable[Path] = ()) -> tuple[dict[str, Any], list[dict[str, Any]]]:
