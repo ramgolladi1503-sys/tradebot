@@ -100,6 +100,7 @@ jobs:
           candidate_id: signal_ledger_provenance_v1
           decision: SIGNAL_LEDGER_INVALIDATED
           reason: The audited bytes are an exact 24-row multi-owner blocked-placeholder inventory. Git history dynamically proves the ledger and sidecar were introduced with the historical placeholder generator at commit 686af0fe, while the inventory has prior immutable lineage and was present at that commit. Historical generator execution and an independent reconstruction reproduce the exact ledger bytes. The immutable invalidation record directly invalidates the generator implementation; direct ledger-hash invalidation remains unresolved, while ledger invalidation is derived through the proven generator-to-ledger and historical-to-current byte chain.
+          timestamp: 2026-07-25T03:00:01+05:30
           research_only: true
           read_only: true
           broker_api_called: false
@@ -108,6 +109,7 @@ jobs:
           outcomes_read: false
           pnl_read: false
           holdout_outcomes_read: false
+          source: Immutable Git history and blobs, the committed ledger and sidecar, the historical generator and inventory, the implementation-invalidation record, and two independent full-history evidence builds
 
           # Signal-Ledger Ownership and Provenance Evidence v1
 
@@ -184,11 +186,18 @@ jobs:
 
       - name: Generate direct changed-path evidence
         run: |
-          {
-            git diff --name-only "origin/$PARENT_BRANCH" --
-            git ls-files --others --exclude-standard
-          } | sort -u > docs/code_excellence/reports/changed_paths.txt
-          test ! -s <(grep '_temporary_signal_ledger_provenance_evidence.yml' docs/code_excellence/reports/changed_paths.txt || true)
+          git diff --name-only "origin/$PARENT_BRANCH" -- | sort -u \
+            > docs/code_excellence/reports/changed_paths.txt
+          ! grep -q '_temporary_signal_ledger_provenance_evidence.yml' \
+            docs/code_excellence/reports/changed_paths.txt
+          ! grep -q 'signal_ledger_provenance_v1/oracle.py' \
+            docs/code_excellence/reports/changed_paths.txt
+          ! grep -q 'runtime/strategy_validation/resolved_option_ticks_20260702.parquet' \
+            docs/code_excellence/reports/changed_paths.txt
+
+      - name: Verify generated evidence contract
+        run: |
+          test "$(rg -c '^(mode|candidate_id|decision|reason|timestamp|is_order_action|broker_api_called|source): .+' docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md)" -eq 8
 
       - name: Run Agent Review evidence gate
         run: AGENT_REVIEW_BASE_REF="origin/$PARENT_BRANCH" python scripts/validate_agent_review_evidence.py
