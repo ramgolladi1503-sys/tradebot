@@ -198,10 +198,7 @@ def test_audit_is_semantically_deterministic(tmp_path: Path) -> None:
     )
 
 
-def test_builder_publishes_compact_hash_bound_evidence(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_builder_publishes_compact_hash_bound_evidence(tmp_path: Path) -> None:
     archive = tmp_path / "replay.zip"
     digest = _zip(
         archive,
@@ -210,17 +207,8 @@ def test_builder_publishes_compact_hash_bound_evidence(
             "replay/20260709/manifests/fetch_manifest.json": b"{}",
         },
     )
-    from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1 import (
-        audit as audit_module,
-    )
-    from research.option_e2e_recertification_v4.tracked_replay_archive_audit_v1 import (
-        oracle as oracle_module,
-    )
-
-    monkeypatch.setattr(audit_module, "EXPECTED_ARCHIVE_SHA256", digest)
-    monkeypatch.setattr(oracle_module, "EXPECTED_ARCHIVE_SHA256", digest)
     output_dir = tmp_path / "out"
-    build(archive, output_dir)
+    build(archive, output_dir, expected_sha256=digest)
 
     compact = json.loads(
         (output_dir / "tracked_replay_archive_audit_compact.json").read_text()
