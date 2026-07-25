@@ -6,8 +6,14 @@ import subprocess
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from ..git_provenance import search_non_outcome_provenance
+from ..git_provenance import (
+    EXPECTED_INTRODUCTION_COMMIT,
+    FORBIDDEN_CONTENT_MARKERS,
+    GENERATOR_RELATIVE_PATH,
+    TEXT_SUFFIXES,
+)
 from ..lineage_oracle import oracle_audit as _lineage_oracle_audit
+from ..search_policy import is_self_audit_path
 
 
 def _parent_path_absence(repo_root: Path, first_commits: dict[str, str]) -> dict[str, bool]:
@@ -68,6 +74,63 @@ def _legacy_oracle(ledger_content: bytes, evidence: Mapping[str, Any], expected_
     return {"physical_hash_matches": digest == expected_sha256, "row_count_matches": len(records) == expected_rows, "row_count": len(records), "canonical_strategy_ids": owners, "bindings": bindings, "contamination_states": states, "verdict": verdict}
 
 
+def _oracle_candidate_paths(root: Path, *, repo_root: Path | None = None) -> list[Path]:
+    if repo_root is not None and root == repo_root:
+        tracked = subprocess.run(
+            ["git", "ls-files"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        return [repo_root / path for path in tracked]
+    return [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
+
+
+def _oracle_search(repo_root: Path, external_roots: Iterable[Path], ledger_sha256: str, row_count: int) -> list[dict[str, Any]]:
+    terms = [ledger_sha256, f"{ledger_sha256}:{row_count}", GENERATOR_RELATIVE_PATH, EXPECTED_INTRODUCTION_COMMIT]
+    roots = [("repository", repo_root, repo_root)] + [
+        (f"external_{index}", root, None) for index, root in enumerate(external_roots, start=1)
+    ]
+    records: list[dict[str, Any]] = []
+    for search_id, root, git_root in roots:
+        candidate_paths = _oracle_candidate_paths(root, repo_root=git_root)
+        inspected_count = 0
+        matching_count = 0
+        scope_excluded_count = 0
+        errors: list[str] = []
+        for path in candidate_paths:
+            relative = str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
+            lower = relative.lower()
+            if any(marker in lower for marker in FORBIDDEN_CONTENT_MARKERS):
+                continue
+            if path.suffix.lower() not in TEXT_SUFFIXES:
+                continue
+            if is_self_audit_path(relative):
+                scope_excluded_count += 1
+                continue
+            try:
+                if path.stat().st_size > 2_000_000:
+                    continue
+                text = path.read_text(encoding="utf-8", errors="strict")
+            except (OSError, UnicodeError) as exc:
+                errors.append(f"{relative}:{type(exc).__name__}")
+                continue
+            inspected_count += 1
+            if any(term in text for term in terms):
+                matching_count += 1
+        records.append(
+            {
+                "candidate_count": max(0, len(candidate_paths) - scope_excluded_count),
+                "inspected_candidate_count": inspected_count,
+                "matching_record_count": matching_count,
+                "scope_excluded_candidate_count": scope_excluded_count,
+                "search_completed": root.exists() and not errors,
+            }
+        )
+    return records
+
+
 def oracle_audit(subject: Path | bytes, *args: Any) -> dict[str, Any]:
     if isinstance(subject, (bytes, bytearray)):
         evidence, expected_sha256, expected_rows = args
@@ -78,15 +141,7 @@ def oracle_audit(subject: Path | bytes, *args: Any) -> dict[str, Any]:
     result = _lineage_oracle_audit(repo_root, expected_sha256, expected_rows, external_roots)
     first_commits = result.get("first_commits", {})
     result["parent_path_absence"] = _parent_path_absence(repo_root, first_commits) if first_commits else {}
-    result["search_records"] = [
-        {
-            "candidate_count": item.get("candidate_count"),
-            "inspected_candidate_count": item.get("inspected_candidate_count"),
-            "matching_record_count": len(item.get("matching_records", [])),
-            "search_completed": item.get("search_completed"),
-        }
-        for item in search_non_outcome_provenance(repo_root, external_roots, ledger_sha256=expected_sha256, row_count=expected_rows)
-    ]
+    result["search_records"] = _oracle_search(repo_root, external_roots, expected_sha256, expected_rows)
     return result
 
 
