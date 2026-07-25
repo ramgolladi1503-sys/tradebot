@@ -28,6 +28,18 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _safe_timestamp(value: Any, timezone: str) -> pd.Timestamp | None:
+    try:
+        if value in (None, "", "None"):
+            return None
+        parsed = pd.Timestamp(value)
+        if parsed.tzinfo is None:
+            return parsed.tz_localize(timezone)
+        return parsed.tz_convert(timezone)
+    except Exception:
+        return None
+
+
 class OptionBacktestEngine:
     def __init__(self, cfg: OptionBacktestConfig):
         self.cfg = cfg
@@ -366,6 +378,18 @@ class OptionBacktestEngine:
             if entry_index <= open_until_index:
                 continue
             entry_row = candles.iloc[entry_index]
+            if self._strict_certification_mode():
+                entry_quote_ts = _safe_timestamp(entry_row.get("quote_timestamp"), self.cfg.timezone)
+                signal_ts = _safe_timestamp(candidate.get("signal_ts"), self.cfg.timezone)
+                if entry_quote_ts is None:
+                    rejected_reasons["missing_entry_quote_timestamp"] += 1
+                    continue
+                if signal_ts is None:
+                    rejected_reasons["missing_signal_timing_provenance"] += 1
+                    continue
+                if entry_quote_ts <= signal_ts:
+                    rejected_reasons["entry_quote_before_signal"] += 1
+                    continue
 
             fill = self._simulate_entry(candidate, entry_row, entry_index)
             if fill.get("status") not in {"FILLED", "PARTIAL"}:

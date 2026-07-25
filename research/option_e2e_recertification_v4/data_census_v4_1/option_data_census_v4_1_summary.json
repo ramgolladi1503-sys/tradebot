@@ -1,0 +1,35 @@
+{
+  "archive_files": 2,
+  "archive_members_scanned": 2343,
+  "blocked_files": 12078,
+  "census_sha256": "55e353652e182dec615db61e157ad2919b7940aed4c70266cf089485d7cc9528",
+  "executable_quote_files": 1,
+  "files_classified": 12078,
+  "files_scanned": 12078,
+  "instrument_master_files": 1,
+  "option_quote_files": 1,
+  "parse_error_files": 13,
+  "point_in_time_authority_files": 0,
+  "root_proof_sha256": "0cc7e6a48eb6a555111ae97d5fad345ba0332e9284f0a8644347791ab7af417f",
+  "roots_existing": [
+    "/Users/madhuram/tradebot/.runtime/market_data",
+    "/Users/madhuram/tradebot/runtime/market_data",
+    "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+    "/Users/madhuram/tradebot/runtime/kite_candidate_replay",
+    "/Users/madhuram/tradebot/runtime/upstox_instruments",
+    "/Users/madhuram/tradebot/runtime/strategy_validation",
+    "/Users/madhuram/tradebot-data",
+    "/Users/madhuram/tradebot-ml-evidence"
+  ],
+  "roots_requested": [
+    "/Users/madhuram/tradebot/.runtime/market_data",
+    "/Users/madhuram/tradebot/runtime/market_data",
+    "/Users/madhuram/tradebot/runtime/upstox_candidate_replay",
+    "/Users/madhuram/tradebot/runtime/kite_candidate_replay",
+    "/Users/madhuram/tradebot/runtime/upstox_instruments",
+    "/Users/madhuram/tradebot/runtime/strategy_validation",
+    "/Users/madhuram/tradebot-data",
+    "/Users/madhuram/tradebot-ml-evidence"
+  ],
+  "version": "option_e2e_data_census_v4_1"
+}

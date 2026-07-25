@@ -1,0 +1,19 @@
+{
+  "blocked_files": 3451,
+  "census_sha256": "5dc807a26cdc682e42d21e6892efbb2271f650c03ba1f7ddfbaf579811daf384",
+  "executable_quote_files": 1325,
+  "files_classified": 4775,
+  "files_scanned": 4775,
+  "instrument_master_files": 1,
+  "option_quote_files": 1325,
+  "point_in_time_authority_files": 0,
+  "roots": [
+    "/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/runtime/market_data",
+    "/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/runtime/upstox_instruments",
+    "/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/runtime/strategy_validation",
+    "/Users/madhuram/tradebot-all-strategy-option-e2e-recertification-v4/configs/backtest_data_schema_examples",
+    "/Users/madhuram/tradebot-data",
+    "/Users/madhuram/tradebot-ml-evidence"
+  ],
+  "version": "option_e2e_data_census_v4"
+}

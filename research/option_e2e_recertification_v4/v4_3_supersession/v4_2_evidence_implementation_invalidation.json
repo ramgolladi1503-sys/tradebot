@@ -1,0 +1,29 @@
+{
+  "campaign_id": "all-strategy-option-e2e-recertification-v4",
+  "current_head": "research/all-strategy-option-e2e-recertification-v4",
+  "decision": "INVALID_INCOMPLETE_EVIDENCE_IMPLEMENTATION_PLACEHOLDER_SIGNAL_AND_RECONSTRUCTION",
+  "previous_head": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+  "reason": "The v4.2 signal and reconstruction path relied on placeholder identity classification, filename heuristics, and hardcoded historical blockers instead of proving contract identity from explicit row fields, manifest content, and historical token mapping evidence.",
+  "scope": [
+    "research/option_e2e_recertification_v4/contract_reconstruction_v4_2/build_reconstruction.py",
+    "research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py",
+    "tests/research/option_e2e/test_contract_reconstruction_v4_2.py",
+    "tests/research/option_e2e/test_signal_ledgers_v4_2.py",
+    "docs/research/all_strategy_option_e2e_recertification_v4.md",
+    "docs/research/all_strategy_option_e2e_recertification_v4.json"
+  ],
+  "still_valid": [
+    "v4.2 offline evidence packaging",
+    "v4.2 CI repairs",
+    "v4.2 inventory and supersession lineage"
+  ],
+  "invalid": [
+    "claim that timestamp and bid/ask alone prove contract identity",
+    "claim that filename keywords prove historical authority",
+    "claim that current master diagnostics prove historical authority",
+    "claim that token-only rows can be enriched without a mapping source"
+  ],
+  "is_order_action": false,
+  "broker_api_called": false,
+  "research_only": true
+}

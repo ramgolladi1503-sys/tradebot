@@ -1,0 +1,5 @@
+[unified-ce-gates] report=research/option_e2e_recertification_v4/ci_forensics_v4_1/unified_ce_gate_latest.md
+[unified-ce-gates] changed_paths=42
+[unified-ce-gates] total_findings=67
+[unified-ce-gates] total_blocks=30
+[unified-ce-gates] exit_code=1
