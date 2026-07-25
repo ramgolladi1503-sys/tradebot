@@ -1,0 +1,66 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true,
+  "sources": [
+    {
+      "category": "LEDGER",
+      "finding": "EXACT_HASH_AND_24_ROWS_VERIFIED",
+      "semantic_path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json",
+      "sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed"
+    },
+    {
+      "category": "GIT_HISTORY",
+      "finding": "ATOMIC_GENERATOR_AND_LEDGER_INTRODUCTION",
+      "semantic_path": "git:686af0feff7a4485ebe4e249cb498b33d649a5cd"
+    },
+    {
+      "category": "GENERATOR",
+      "finding": "BLOCKED_PLACEHOLDER_AGGREGATE_GENERATOR",
+      "semantic_path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py",
+      "sha256": "6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b"
+    },
+    {
+      "category": "STRATEGY_INVENTORY",
+      "finding": "GENERATOR_INPUT_PRESENT_WITH_SAME_INTRODUCTION_COMMIT",
+      "git_blob_sha": "976872766598486f2150c3008a79b07ea634c887",
+      "semantic_path": "research/option_e2e_recertification_v4/inventory_v4_1/historical_strategy_inventory_v4_1.json"
+    },
+    {
+      "category": "SIDECAR",
+      "finding": "PHYSICAL_HASH_MATCH",
+      "semantic_path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json.sha256"
+    },
+    {
+      "category": "INVALIDATION",
+      "finding": "V4_2_IMPLEMENTATION_EXPLICITLY_INVALIDATED",
+      "semantic_path": "research/option_e2e_recertification_v4/v4_3_supersession/v4_2_evidence_implementation_invalidation.json",
+      "sha256": "8d1b8d7cc264b92bf1499ede393b5ed3ec1220419c2fc031039717b67400a1b0"
+    },
+    {
+      "category": "LEDGER_FIELDS",
+      "finding": "IMPLEMENTATION_PARAMETER_DATASET_TEMPORAL_AND_FOLD_FIELDS_BLANK",
+      "semantic_path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json"
+    },
+    {
+      "category": "EXTERNAL_CLOSURE_EVIDENCE",
+      "finding": "INSUFFICIENT_PROVENANCE_RECONFIRMED_NO_NEW_IMMUTABLE_BINDING",
+      "semantic_path": "external:all_strategy_authority_closure_v1"
+    },
+    {
+      "category": "FREEZE_RECORDS",
+      "finding": "NO_HASH_BOUND_PRE_OUTCOME_FREEZE_MANIFEST_FOUND",
+      "semantic_path": "repository_and_declared_external_roots"
+    },
+    {
+      "category": "CONTAMINATION_RECORDS",
+      "finding": "NO_IMMUTABLE_CLEARANCE_EVIDENCE_FOUND_OUTCOMES_NOT_READ",
+      "semantic_path": "repository_and_declared_external_roots"
+    }
+  ]
+}

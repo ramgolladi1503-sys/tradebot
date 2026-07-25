@@ -1,0 +1,31 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "ledger": {
+    "canonical_signal_ledger_id": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed:24",
+    "physical_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+    "row_count": 24
+  },
+  "outcomes_read": false,
+  "pnl_read": false,
+  "primary_oracle_agreement": {
+    "checks": {
+      "dataset": true,
+      "freeze": true,
+      "implementation": true,
+      "ownership": true,
+      "parameters": true,
+      "physical_hash": true,
+      "row_count": true,
+      "split_fold": true,
+      "temporal": true,
+      "verdict": true
+    },
+    "status": "AGREEMENT"
+  },
+  "read_only": true,
+  "research_only": true,
+  "verdict": "SIGNAL_LEDGER_INVALIDATED"
+}

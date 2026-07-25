@@ -9,10 +9,10 @@
 
 ## Summary
 
-- repo_root: `/Users/madhuram/tradebot-authority-closure-reconcile-v1`
-- config_path: `/Users/madhuram/tradebot-authority-closure-reconcile-v1/.gsd-forensics.yaml`
-- changed_paths: `261`
-- total_findings: `252`
+- repo_root: `/Users/madhuram/tradebot-signal-ledger-provenance-v1`
+- config_path: `/Users/madhuram/tradebot-signal-ledger-provenance-v1/.gsd-forensics.yaml`
+- changed_paths: `288`
+- total_findings: `271`
 - total_blocks: `0`
 - exit_code: `0`
 
@@ -20,15 +20,16 @@
 
 | Gate | Status | Exit Code | Findings | Blocks | Error |
 |---|---:|---:|---:|---:|---|
-| `minerva` | `PASS` | `0` | `23` | `0` |  |
-| `cerberus` | `PASS` | `0` | `215` | `0` |  |
-| `evidence` | `PASS` | `0` | `14` | `0` |  |
+| `minerva` | `PASS` | `0` | `24` | `0` |  |
+| `cerberus` | `PASS` | `0` | `232` | `0` |  |
+| `evidence` | `PASS` | `0` | `15` | `0` |  |
 
 ## Changed Paths
 
 - `core/option_backtest/engine.py`
 - `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md`
 - `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md`
+- `docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md`
 - `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md`
 - `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md`
 - `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md`
@@ -165,6 +166,31 @@
 - `research/option_e2e_recertification_v4/redteam/pipeline_defect_ledger.md`
 - `research/option_e2e_recertification_v4/replay_bridge.py`
 - `research/option_e2e_recertification_v4/signal_contract.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/__init__.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/audit.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/build_evidence.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/external_evidence_manifest.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/external_evidence_manifest.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/generate.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/oracle.py`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/schema.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/schema.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_dataset_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_dataset_review.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_freeze_contamination_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_freeze_contamination_review.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_implementation_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_implementation_review.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_ownership_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_ownership_review.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_parameter_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_parameter_review.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_provenance_summary.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_provenance_summary.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_source_inventory.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_source_inventory.json.sha256`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_temporal_split_review.json`
+- `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_temporal_split_review.json.sha256`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_10/__init__.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_10/git_discovery.py`
 - `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_executor.py`
@@ -278,6 +304,7 @@
 - `tests/research/option_e2e/test_contract_reconstruction_v4_2.py`
 - `tests/research/option_e2e/test_foundation_contracts.py`
 - `tests/research/option_e2e/test_inventory_v4_1.py`
+- `tests/research/option_e2e/test_signal_ledger_provenance_v1.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_10.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py`
 - `tests/research/option_e2e/test_signal_ledgers_v4_2.py`
@@ -306,6 +333,7 @@
 | `tests/research/option_e2e/test_contract_reconstruction_v4_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `test_reality_accepted` |
+| `tests/research/option_e2e/test_signal_ledger_provenance_v1.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_10.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py` | `PASS` | `test_reality_accepted` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `test_reality_accepted` |
@@ -323,6 +351,7 @@
 | `core/option_backtest/engine.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md` | `PASS` | `no_restricted_boundary_marker_found` |
+| `docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -422,6 +451,21 @@
 | `research/option_e2e_recertification_v4/redteam/pipeline_defect_ledger.md` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/replay_bridge.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_contract.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/audit.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/build_evidence.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/external_evidence_manifest.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/generate.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/oracle.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/schema.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_dataset_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_freeze_contamination_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_implementation_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_ownership_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_parameter_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_provenance_summary.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_source_inventory.json` | `PASS` | `no_restricted_boundary_marker_found` |
+| `research/option_e2e_recertification_v4/signal_ledger_provenance_v1/signal_ledger_temporal_split_review.json` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_10/__init__.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_10/git_discovery.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `research/option_e2e_recertification_v4/signal_ledgers_v4_10/lane_executor.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -526,6 +570,7 @@
 | `tests/research/option_e2e/test_contract_reconstruction_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_foundation_contracts.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_inventory_v4_1.py` | `PASS` | `no_restricted_boundary_marker_found` |
+| `tests/research/option_e2e/test_signal_ledger_provenance_v1.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_10.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_10_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
 | `tests/research/option_e2e/test_signal_ledgers_v4_2.py` | `PASS` | `no_restricted_boundary_marker_found` |
@@ -542,6 +587,7 @@
 |---|---|---|
 | `docs/agent_reviews/ALL_STRATEGY_AUTHORITY_CLOSURE_V1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/ALL_STRATEGY_SOURCE_CENSUS_V1.md` | `PASS` | `evidence_contract_satisfied` |
+| `docs/agent_reviews/SIGNAL_LEDGER_PROVENANCE_V1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_authority_oracle_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_ci_forensics_v4_1.md` | `PASS` | `evidence_contract_satisfied` |
 | `docs/agent_reviews/option_e2e_contract_reconstruction_v4_1.md` | `PASS` | `evidence_contract_satisfied` |

@@ -1,0 +1,16 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "dataset_authority": "UNRESOLVED",
+  "dataset_binding_evidence": [],
+  "dataset_content_sha256": null,
+  "dataset_family_id": null,
+  "dataset_manifest_sha256": null,
+  "dataset_version_id": null,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true
+}
