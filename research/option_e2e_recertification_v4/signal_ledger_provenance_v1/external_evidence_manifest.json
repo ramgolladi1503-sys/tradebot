@@ -1,0 +1,23 @@
+{
+  "absolute_paths_excluded_from_semantic_hashes": true,
+  "allowed_for_live_execution": false,
+  "artifact_semantic_sha256": {
+    "schema.json": "9e99c26eb214b21d174cd7430d2ebe2581180a61269c98dfa0d35fd1a99a671c",
+    "signal_ledger_dataset_review.json": "a819498e9b5e9dae15d8e9015e76acf00ead88a11f4250d8777b7c9e035dd243",
+    "signal_ledger_freeze_contamination_review.json": "ce94023458a29a33cbe9eb08bd4ccc7175e0d18ab0dba871c8158d8bf20baf34",
+    "signal_ledger_implementation_review.json": "7bd0261d0082ad9686e5a6f3ba3d591d2de7b424e46abf53cae0978d581b6142",
+    "signal_ledger_ownership_review.json": "7d36a9346b95499dd736bf60ec75bfdd1c3cd86194f97ae135c00a80959f054f",
+    "signal_ledger_parameter_review.json": "5c7cdda06a811adac0c5ca3cd055ff68c2f944ca32eec4e644cf89c5af026b8a",
+    "signal_ledger_provenance_summary.json": "1778b94a35ae871b408d3e61d24fc4dd702585c2d271af760e5e1de3f4cc5a87",
+    "signal_ledger_source_inventory.json": "1d1afd8447de58fe6a8d093923c006d443c97ec452fd4fe0c2711d72c8f75737",
+    "signal_ledger_temporal_split_review.json": "22db3be686d08d3c3ad3d7d7c8cfbb634498f825fc850d7fa6085556c8f2d744"
+  },
+  "broker_api_called": false,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true,
+  "searched_source_count": 7
+}
