@@ -1,4 +1,4 @@
-from .universe import (
+from .universe_v2 import (
     CampaignUniverse,
     CampaignUniverseEntry,
     build_campaign_universe,
