@@ -34,11 +34,22 @@ jobs:
           python -m pip install pandas pyarrow numpy pydantic pyyaml python-dotenv
 
       - name: Run tracked archive Compression smoke
+        id: smoke
+        shell: bash
         run: |
-          rm -rf /tmp/compression-breakout-archive-smoke
+          output=/tmp/compression-breakout-archive-smoke
+          rm -rf "$output"
+          mkdir -p "$output"
+          set +e
           python scripts/run_tracked_archive_compression_smoke.py \
             --archive runtime/upstox_candidate_replay.zip \
-            --output-dir /tmp/compression-breakout-archive-smoke
+            --output-dir "$output" \
+            >"$output/run.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" >"$output/exit_status.txt"
+          cat "$output/run.log"
+          exit "$status"
 
       - name: Upload smoke evidence
         if: always()
