@@ -1,9 +1,11 @@
 mode: RESEARCH_ONLY_ALL_STRATEGY_OPTION_ANALYTICS
 candidate_id: all_strategy_option_universe_v1
-decision: EXHAUSTIVE_UNIVERSE_COMPLETE_ANALYTICS_CAMPAIGNS_PENDING
-timestamp: 2026-07-26T20:30:00+05:30
+decision: IMPLEMENTATION_READY_RUNTIME_DATA_REQUIRED
+reason: The repository now has a complete strategy and hypothesis coverage contract plus a master analytics skeleton, but real profit-factor rows still require causal adapters and usable historical option OHLCV or LTP data.
+timestamp: 2026-07-26T20:40:00+05:30
 research_only: true
 read_only: true
+append: false
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
@@ -112,7 +114,8 @@ hypothesis, including blocked and deferred rows. Fields include:
 - ranking eligibility;
 - exact result or blocker reason.
 
-The table is therefore complete even before all campaigns are runnable.
+The table is complete as an implementation/status artifact even before all
+campaigns are runnable. This is not a claim that runtime analytics are complete.
 
 ## Ranking Policy
 
@@ -142,21 +145,23 @@ explicit inputs supplied only by later strategy campaigns.
 The first strict universe workflow intentionally failed on unclassified support
 infrastructure. The classifications were repaired rather than hidden.
 
-Final exhaustive workflow evidence before the analytics-skeleton extension:
+Exact-head universe and analytics-skeleton evidence:
 
 - workflow: `All Strategy Option Universe`;
-- run ID: `30207167818`;
+- run ID: `30207440509`;
 - job: `exhaustive-universe`;
 - conclusion: `success`;
-- artifact ID: `8633400832`;
+- artifact ID: `8633474085`;
 - artifact digest:
-  `sha256:a4bfd7e4e2e98901ba6e996edbaed4e4c89228455ff651e34c34315a5f4539a8`;
+  `sha256:b41c708435749979730d2fd23f2afe0438c920bfb77eeee001136aa6e50043ee`;
 - universe rows: 54;
+- analytics-relevant rows: 27;
 - hard gaps: 0;
-- coverage complete: true.
+- coverage complete: true;
+- completed strategy results: 0;
+- ranking-eligible strategies: 0.
 
-The current head must regenerate the same complete universe plus the master
-analytics skeleton and pass all permanent CI gates before this review is final.
+The current head must pass every permanent CI gate before this review is final.
 
 ## Non-Claims
 
