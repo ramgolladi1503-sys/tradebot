@@ -31,6 +31,7 @@ class CalculationStatus(str, Enum):
     PRICE_UNAVAILABLE = "PRICE_UNAVAILABLE"
     INSUFFICIENT_SURFACE_NEIGHBOURS = "INSUFFICIENT_SURFACE_NEIGHBOURS"
     DUPLICATE_STRIKE = "DUPLICATE_STRIKE"
+    DUPLICATE_OBSERVATION_ID = "DUPLICATE_OBSERVATION_ID"
     OUT_OF_ORDER_TIMESTAMPS = "OUT_OF_ORDER_TIMESTAMPS"
 
 
@@ -107,7 +108,7 @@ class ImpliedVolatilityResult:
     absolute_price_error: float | None
     lower_volatility_bound: float
     upper_volatility_bound: float
-    market_price: float
+    market_price: float | None
     lower_price_bound: float | None
     upper_price_bound: float | None
     solver: str
@@ -141,7 +142,7 @@ class QuoteResult:
     spread_absolute: float | None
     spread_fraction_of_mid: float | None
     quote_age_seconds: float | None
-    freshness_limit_seconds: float
+    freshness_limit_seconds: float | None
     locked_market: bool
     crossed_market: bool
     source: str
