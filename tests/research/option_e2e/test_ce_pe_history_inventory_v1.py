@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -205,3 +206,36 @@ def test_build_requires_primary_oracle_agreement_and_no_go(
     assert summary["strategy_development_authorized"] is False
     assert summary["candidate_limit"] is None
     assert summary["next_gate"] == "LOCAL_EXTERNAL_ROOT_EXECUTION_REQUIRED"
+
+
+def test_committed_tracked_archive_evidence_is_hash_bound_and_no_go() -> None:
+    evidence = Path(
+        "research/option_e2e_recertification_v4/ce_pe_history_inventory_v1/"
+        "tracked_replay_archive_option_history_compact_v1.json"
+    )
+    sidecar = evidence.with_suffix(evidence.suffix + ".sha256")
+    expected_sha256, expected_name = sidecar.read_text(encoding="utf-8").split()
+
+    assert expected_name == evidence.name
+    assert hashlib.sha256(evidence.read_bytes()).hexdigest() == expected_sha256
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["source_archive_sha256"] == (
+        "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707"
+    )
+    assert payload["source_full_audit_sha256"] == (
+        "f9c4d7b92deb45bae64fb3b9bc3eabdfef516864a9eb6988c5a5042fc65aa2d9"
+    )
+    assert payload["option_member_count"] == 126
+    assert payload["option_session_directories"] == ["20260709"]
+    assert payload["option_type_counts"] == {"CE": 63, "PE": 63}
+    assert payload["underlying_counts"] == {
+        "BANKNIFTY": 42,
+        "NIFTY": 42,
+        "SENSEX": 42,
+    }
+    assert payload["chronological_coverage_verdict"] == "ONE_SESSION_SMOKE_ONLY"
+    assert payload["development_validation_holdout_authorized"] is False
+    assert payload["outcomes_read"] is False
+    assert payload["pnl_read"] is False
+    assert payload["holdout_outcomes_read"] is False
