@@ -150,6 +150,11 @@ def run_option_candle_backtest(
     signal_rows["signal_ts"] = signal_rows["signal_ts"].map(
         lambda value: _timestamp(value, config.timezone)
     )
+    if "signal_id" in signal_rows.columns:
+        explicit_ids = signal_rows["signal_id"].astype(str).str.strip()
+        nonblank_ids = explicit_ids.loc[explicit_ids != ""]
+        if nonblank_ids.duplicated().any():
+            raise ValueError("duplicate_signal_ids")
     signal_rows = signal_rows.sort_values("signal_ts", kind="mergesort").reset_index(drop=True)
 
     bars = option_bars.copy()
@@ -230,6 +235,7 @@ def run_option_candle_backtest(
         exit_reason = "TIME_EXIT"
         exit_reference: float | None = None
         same_bar_ambiguity = False
+        exit_validation_reason: str | None = None
         for _, candidate_bar in eligible_exit_rows.iterrows():
             try:
                 reason, reference, ambiguous = long_exit_trigger(
@@ -239,8 +245,7 @@ def run_option_candle_backtest(
                     config=config,
                 )
             except ValueError as exc:
-                rejections.append({"signal_id": signal_id, "reason": str(exc)})
-                exit_row = None
+                exit_validation_reason = str(exc)
                 break
             if reason is not None:
                 exit_row = candidate_bar
@@ -248,7 +253,8 @@ def run_option_candle_backtest(
                 exit_reference = reference
                 same_bar_ambiguity = ambiguous
                 break
-        if exit_row is None and any(row["signal_id"] == signal_id for row in rejections):
+        if exit_validation_reason is not None:
+            rejections.append({"signal_id": signal_id, "reason": exit_validation_reason})
             continue
         if exit_row is None:
             exit_row = eligible_exit_rows.iloc[-1]
@@ -258,8 +264,10 @@ def run_option_candle_backtest(
                 rejections.append({"signal_id": signal_id, "reason": str(exc)})
                 continue
             exit_reference = float(exit_row["close"])
+        if exit_reference is None:
+            rejections.append({"signal_id": signal_id, "reason": "missing_exit_reference"})
+            continue
 
-        assert exit_reference is not None
         exit_result = exit_fill(
             exit_row,
             reference_price=exit_reference,
