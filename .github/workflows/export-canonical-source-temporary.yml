@@ -33,10 +33,19 @@ jobs:
             strategies/movement
             strategies/simple_orb.py
             strategies/strategy_registry.py
-            scripts/backtest_all_strategies_available_data.py
-            tests/test_compression_trend_movement_strategies.py
-            tests/test_event_late_day_movement_strategies.py
-            tests/test_vwap_trap_movement_strategies.py
+            research/option_e2e_recertification_v4/current_certification_source_universe_v1/contract.py
+            research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/canonical_adapter.py
+            research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/canonical_intent_campaign.py
+            research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/underlying_corpus.py
+            research/option_e2e_recertification_v4/expired_option_replay_v1/archive_source.py
+            research/option_e2e_recertification_v4/expired_option_replay_v1/engine.py
+            scripts/run_canonical_option_intent_campaign_v1.py
+            scripts/run_expired_option_contract_replay_v1.py
+            scripts/run_canonical_all_strategy_expired_option_pf_campaign_v1.py
+            tests/research/option_e2e/test_canonical_underlying_adapter.py
+            tests/research/option_e2e/test_canonical_option_intent_campaign_v1.py
+            tests/research/option_e2e/test_expired_option_replay_v1.py
+            tests/research/option_e2e/test_expired_option_replay_authority_v1.py
           )
           for path in "${paths[@]}"; do
             if [[ -e "$path" ]]; then
