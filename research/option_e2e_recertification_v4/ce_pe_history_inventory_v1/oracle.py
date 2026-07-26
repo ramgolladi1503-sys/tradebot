@@ -11,7 +11,9 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from research.option_e2e_recertification_v4.current_certification_source_universe_v1.contract import OPERATIONAL_EXCLUSIONS
+from research.option_e2e_recertification_v4.current_certification_source_universe_v1.contract import (
+    OPERATIONAL_EXCLUSIONS,
+)
 
 _OPTION_RE = re.compile(r"(?:^|[^A-Z0-9])(CE|PE)(?:[^A-Z0-9]|$)", re.IGNORECASE)
 _DENIED = (
@@ -35,6 +37,9 @@ _TIME = {
 _ID = {"instrument_key", "instrument_token", "symbol", "trading_symbol", "tradingsymbol"}
 _BID = {"bid", "bid_price", "best_bid"}
 _ASK = {"ask", "ask_price", "best_ask"}
+_OPTION_TYPE = {"option_type", "instrument_type", "type"}
+_STRIKE = {"strike", "strike_price"}
+_EXPIRY = {"expiry", "expiry_date"}
 _NORMALIZED = {
     "timestamp",
     "open",
@@ -54,6 +59,7 @@ _NORMALIZED = {
     "dataset_hash",
     "bar_interval",
 }
+MAX_ZIP_PARQUET_MEMBER_BYTES = 128 * 1024 * 1024
 
 
 def _denied(value: str) -> bool:
@@ -97,6 +103,8 @@ def _relevant(columns: list[str], path_hint: str) -> bool:
         return True
     if values & _TIME and values & _ID and values & _BID and values & _ASK:
         return True
+    if values & _TIME and values & _OPTION_TYPE and values & _STRIKE and values & _EXPIRY:
+        return True
     return bool(
         values & _TIME
         and {"open", "high", "low", "close"}.issubset(values)
@@ -113,12 +121,17 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
     parquet_metadata_inspected = 0
     zip_members_inspected = 0
     archive_metadata_members = 0
-    for root in sorted(payload.get("roots", []), key=lambda row: str(row["current_root_id"])):
+    oversized_option_members = 0
+
+    for root in sorted(
+        payload.get("roots", []), key=lambda row: str(row["current_root_id"])
+    ):
         root_id = str(root["current_root_id"])
         root_path = Path(root["absolute_path"])
         if root_path.is_symlink() or not root_path.is_dir():
             raise ValueError(f"oracle_invalid_root:{root_id}")
         root_path = root_path.resolve(strict=True)
+
         for directory, dirnames, filenames in os.walk(root_path, followlinks=False):
             retained: list[str] = []
             for name in sorted(dirnames):
@@ -132,6 +145,7 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                     )
                 retained.append(name)
             dirnames[:] = retained
+
             for filename in sorted(filenames):
                 path = Path(directory) / filename
                 relative = path.relative_to(root_path).as_posix()
@@ -143,6 +157,7 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                 if _denied(relative):
                     denied_count += 1
                     continue
+
                 if path.suffix.casefold() == ".parquet":
                     columns = _footer(path)
                     parquet_metadata_inspected += 1
@@ -151,8 +166,11 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                     continue
                 if path.suffix.casefold() != ".zip":
                     continue
+
                 with zipfile.ZipFile(path) as archive:
-                    for info in sorted(archive.infolist(), key=lambda item: item.filename):
+                    for info in sorted(
+                        archive.infolist(), key=lambda item: item.filename
+                    ):
                         zip_members_inspected += 1
                         name = PurePosixPath(info.filename).as_posix()
                         if _archive_metadata(name):
@@ -165,8 +183,15 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                             or not _option_name(name)
                         ):
                             continue
+                        if info.file_size > MAX_ZIP_PARQUET_MEMBER_BYTES:
+                            oversized_option_members += 1
+                            continue
                         with archive.open(info) as handle:
-                            content = handle.read()
+                            content = handle.read(MAX_ZIP_PARQUET_MEMBER_BYTES + 1)
+                        if len(content) != info.file_size:
+                            raise ValueError(
+                                f"oracle_archive_member_size_mismatch:{name}"
+                            )
                         columns = _footer(io.BytesIO(content))
                         parquet_metadata_inspected += 1
                         if _relevant(columns, name):
@@ -174,9 +199,12 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                             found = _path_date(name)
                             if found:
                                 session_dates.add(found)
+
     candidate_ids.sort()
     digest = hashlib.sha256(
-        "".join(f"{candidate_id}\n" for candidate_id in candidate_ids).encode("utf-8")
+        "".join(f"{candidate_id}\n" for candidate_id in candidate_ids).encode(
+            "utf-8"
+        )
     ).hexdigest()
     return {
         "schema_version": "ce_pe_history_inventory_oracle_v1",
@@ -188,6 +216,8 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
         "parquet_metadata_inspected": parquet_metadata_inspected,
         "zip_members_inspected": zip_members_inspected,
         "archive_metadata_members": archive_metadata_members,
+        "oversized_option_members_not_opened": oversized_option_members,
+        "zip_member_read_limit_bytes": MAX_ZIP_PARQUET_MEMBER_BYTES,
         "denied_metadata_only_count": denied_count,
         "outcomes_read": False,
         "pnl_read": False,
