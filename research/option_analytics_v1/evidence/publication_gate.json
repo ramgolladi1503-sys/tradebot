@@ -1,0 +1,21 @@
+{
+  "determinism": {
+    "failure_count": 0,
+    "first": {
+      "legacy_compatibility_audit.json": "dfb972f9b57195e11223338303b7ff86fa2f14d1630ad2212ca5fb2072fcc7d2",
+      "reference_case_results.json": "0ab4f905f84470d0f716dcea9e460af946c67abbc58f8c5ade6d4fbacb21d302",
+      "run_manifest.json": "cf9e7b25e8ab3d2363d36665173618c4f5324140fa3922d5ef2c9579a1a787a3"
+    },
+    "schema_version": "1.0.0",
+    "second": {
+      "legacy_compatibility_audit.json": "dfb972f9b57195e11223338303b7ff86fa2f14d1630ad2212ca5fb2072fcc7d2",
+      "reference_case_results.json": "0ab4f905f84470d0f716dcea9e460af946c67abbc58f8c5ade6d4fbacb21d302",
+      "run_manifest.json": "cf9e7b25e8ab3d2363d36665173618c4f5324140fa3922d5ef2c9579a1a787a3"
+    },
+    "semantic_hashes_equal": true
+  },
+  "errors": [],
+  "failure_count": 0,
+  "schema_version": "1.0.0",
+  "verdict": "PASS_RESEARCH_SIDECAR_GATE"
+}
