@@ -2,7 +2,7 @@ mode: PRODUCTION_CALCULATION_LIBRARY_WITHOUT_LIVE_WIRING
 candidate_id: option_analytics_v1
 decision: ACCEPT_PRODUCTION_CALCULATION_LIBRARY_FOR_DRAFT_REVIEW_WITH_LIVE_WIRING_DEFERRED
 reason: Production calculation contracts, independent mathematical oracles, deterministic evidence, legacy compatibility audit, and fail-closed publication checks pass; live option-chain integration remains excluded until a separate shadow/replay validation change proves unchanged strategy and execution behaviour.
-timestamp: 2026-07-26T12:30:00+05:30
+timestamp: 2026-07-26T12:45:00+05:30
 source: core/option_analytics, research/option_analytics_v1, focused production and evidence tests, committed hash-linked evidence, and exact-head GitHub checks
 base_sha: 596fff09859afeca292bc3e3e31d4a55db1fd8c6
 branch: feature/production-option-analytics-v1
@@ -53,7 +53,7 @@ The main failure modes are false precision, hidden conventions, silent numerical
 
 The evidence distinguishes IV-identifiable prices from deep ITM/OTM near-expiry prices that are numerically at the zero-volatility lower bound. Those lower-bound cases are recorded rather than falsely claimed as successful recovery of the generating volatility.
 
-Hardening proves that invalid enum values cannot be treated as puts, missing IV rows cannot report `OK`, non-finite result fields cannot leak `NaN`, duplicate observation identifiers fail closed, signed European carry value is preserved rather than dishonestly clamped, and packaged evidence must pass both package-byte and decoded-ledger hashes.
+Hardening proves that invalid enum values cannot be treated as puts, missing IV rows cannot report `OK`, non-finite result fields cannot leak `NaN`, duplicate observation identifiers fail closed, signed European carry value is preserved rather than dishonestly clamped, and the exact committed evidence bundle must pass its SHA-256 list, compressed-package hash, decoded-ledger hash, and publication gate.
 
 ## Hermes Review
 
@@ -68,19 +68,21 @@ The production implementation remains compact: twelve files under one new packag
 Exact intended GitHub-focused test inventory:
 
 - Production option-analytics tests: `77`.
-- Independent evidence/publication tests: `8`.
-- Total focused tests: `85`.
+- Independent evidence/publication tests: `9`.
+- Total focused tests: `86`.
 - Independent reference grid: `96` cases with `96` outputs and `0` failures.
 - Independent put-call parity checks: `48` with `0` failures.
 - IV-identifiable round trips: `48`.
 - Numerically lower-bound/non-identifiable IV cases: `48`, explicitly classified.
 - Executable legacy audit: `17` cases and `7` confirmed legacy defects.
 - Two-directory semantic determinism: `PASS`.
+- Exact committed evidence-bundle verification: `PASS`.
 - Publication verdict: `PASS_RESEARCH_SIDECAR_GATE`.
 
 Evidence hashes:
 
-- Reference semantic SHA-256: `0ab4f905f84470d0f716dcea9e460af946c67abbc58f8c5ade6d4fbacb21d302`.
+- Reference payload semantic SHA-256: `35548e4ea12053eb84373e5a67dd6b0c58c876cda778088ecf80a158a392d2a5`.
+- Reference artifact semantic SHA-256: `0ab4f905f84470d0f716dcea9e460af946c67abbc58f8c5ade6d4fbacb21d302`.
 - Canonical reference JSON SHA-256: `1b305ed9fb9fa6e21c51ec164be661e5964240d9e489788f5408a9bcc7f8d9ed`.
 - Committed reference package SHA-256: `0bb9d38316302141bbb6b7a4a7a69c7c790c9a99d7d69a682c631b7aff1a7de1`.
 - Legacy audit semantic SHA-256: `dfb972f9b57195e11223338303b7ff86fa2f14d1630ad2212ca5fb2072fcc7d2`.
@@ -113,10 +115,10 @@ Safety fields:
 
 Publication requires:
 
-- all `85` focused tests passing on the exact PR head;
+- all `86` focused tests passing on the exact PR head;
 - independent reference grid, finite-difference Greeks, parity, and IV round trips passing within frozen tolerances;
 - deterministic audit verdict and packaged-evidence round trip passing;
-- all committed SHA-256 manifests verifying;
+- the exact committed evidence bundle and all committed SHA-256 manifests verifying;
 - all permanent GitHub checks completing successfully;
 - changed files matching the declared scope;
 - PR remaining draft and unmerged;
