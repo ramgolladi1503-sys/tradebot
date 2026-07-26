@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import stat
 import zipfile
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -60,6 +61,15 @@ def _denied(value: str) -> bool:
     return any(token in text for token in _DENIED)
 
 
+def _archive_metadata(value: str) -> bool:
+    path = PurePosixPath(value)
+    return (
+        bool(path.parts and path.parts[0] == "__MACOSX")
+        or path.name.startswith("._")
+        or path.name == ".DS_Store"
+    )
+
+
 def _option_name(value: str) -> bool:
     name = PurePosixPath(value).name.replace("_", " ").replace("-", " ")
     return bool(_OPTION_RE.search(name))
@@ -102,17 +112,34 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
     files_visited = 0
     parquet_metadata_inspected = 0
     zip_members_inspected = 0
+    archive_metadata_members = 0
     for root in sorted(payload.get("roots", []), key=lambda row: str(row["current_root_id"])):
         root_id = str(root["current_root_id"])
-        root_path = Path(root["absolute_path"]).resolve(strict=True)
+        root_path = Path(root["absolute_path"])
+        if root_path.is_symlink() or not root_path.is_dir():
+            raise ValueError(f"oracle_invalid_root:{root_id}")
+        root_path = root_path.resolve(strict=True)
         for directory, dirnames, filenames in os.walk(root_path, followlinks=False):
-            dirnames[:] = sorted(
-                name for name in dirnames if name not in OPERATIONAL_EXCLUSIONS
-            )
+            retained: list[str] = []
+            for name in sorted(dirnames):
+                child = Path(directory) / name
+                if name in OPERATIONAL_EXCLUSIONS:
+                    continue
+                if child.is_symlink():
+                    raise ValueError(
+                        f"oracle_symlink_directory:{root_id}:"
+                        f"{child.relative_to(root_path).as_posix()}"
+                    )
+                retained.append(name)
+            dirnames[:] = retained
             for filename in sorted(filenames):
                 path = Path(directory) / filename
                 relative = path.relative_to(root_path).as_posix()
                 files_visited += 1
+                if path.is_symlink():
+                    raise ValueError(f"oracle_symlink_file:{root_id}:{relative}")
+                if stat.S_IFMT(path.lstat().st_mode) != stat.S_IFREG or not path.is_file():
+                    raise ValueError(f"oracle_non_regular_file:{root_id}:{relative}")
                 if _denied(relative):
                     denied_count += 1
                     continue
@@ -128,6 +155,9 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                     for info in sorted(archive.infolist(), key=lambda item: item.filename):
                         zip_members_inspected += 1
                         name = PurePosixPath(info.filename).as_posix()
+                        if _archive_metadata(name):
+                            archive_metadata_members += 1
+                            continue
                         if (
                             info.is_dir()
                             or _denied(name)
@@ -157,6 +187,7 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
         "files_visited": files_visited,
         "parquet_metadata_inspected": parquet_metadata_inspected,
         "zip_members_inspected": zip_members_inspected,
+        "archive_metadata_members": archive_metadata_members,
         "denied_metadata_only_count": denied_count,
         "outcomes_read": False,
         "pnl_read": False,
