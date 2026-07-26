@@ -28,18 +28,19 @@ jobs:
       - name: Build exhaustive strategy and hypothesis universe
         shell: bash
         run: |
-          output=/tmp/all-strategy-option-universe
-          rm -rf "$output"
-          mkdir -p "$output"
+          root=/tmp/all-strategy-option-universe
+          evidence="$root/evidence"
+          rm -rf "$root"
+          mkdir -p "$root"
           set +e
           PYTHONPATH=. python scripts/run_all_strategy_option_universe.py \
             --repo-root . \
-            --output-dir "$output" \
-            >"$output/run.log" 2>&1
+            --output-dir "$evidence" \
+            >"$root/run.log" 2>&1
           status=$?
           set -e
-          printf '%s\n' "$status" >"$output/exit_status.txt"
-          cat "$output/run.log"
+          printf '%s\n' "$status" >"$root/exit_status.txt"
+          cat "$root/run.log"
           exit "$status"
 
       - name: Upload universe evidence
