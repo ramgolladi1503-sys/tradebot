@@ -9,6 +9,10 @@ from .pricing import price_option
 
 
 def calculate_greeks(inputs: ModelInputs) -> GreeksResult:
+    if not isinstance(inputs.model, PricingModel):
+        return _empty(inputs, CalculationStatus.INVALID_INPUT, "unsupported pricing model")
+    if not isinstance(inputs.option_type, OptionType):
+        return _empty(inputs, CalculationStatus.INVALID_INPUT, "unsupported option type")
     numeric = [inputs.strike, inputs.risk_free_rate, inputs.volatility, inputs.dividend_yield]
     if inputs.spot is not None:
         numeric.append(inputs.spot)
@@ -58,6 +62,7 @@ def calculate_greeks(inputs: ModelInputs) -> GreeksResult:
         sigma = inputs.volatility
         df = math.exp(-r * t)
         d1 = (math.log(f / k) + 0.5 * sigma**2 * t) / (sigma * sqrt_t)
+        d2 = d1 - sigma * sqrt_t
         pdf = normal_pdf(d1)
         if inputs.option_type is OptionType.CALL:
             delta = df * normal_cdf(d1)
