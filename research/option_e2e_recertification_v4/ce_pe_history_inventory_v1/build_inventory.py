@@ -26,7 +26,9 @@ def _prepare_output(path: Path) -> Path:
 
 
 def _coverage_verdict(session_count: int) -> str:
-    if session_count <= 1:
+    if session_count == 0:
+        return "NO_VALID_OPTION_SESSIONS"
+    if session_count == 1:
         return "ONE_SESSION_SMOKE_ONLY"
     if session_count < 20:
         return "MULTI_SESSION_ADAPTER_VALIDATION_ONLY"
@@ -40,22 +42,29 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
     primary_option_ids = sorted(
         row["candidate_id"]
         for row in primary["candidates"]
-        if row.get("candidate_class") in {
+        if row.get("candidate_class")
+        in {
             "RAW_OPTION_TICK_DATASET",
             "OPTION_CONTRACT_DATASET",
             "NORMALIZED_OPTION_REPLAY_DATASET",
         }
     )
     primary_option_manifest = hashlib.sha256(
-        "".join(f"{candidate_id}\n" for candidate_id in primary_option_ids).encode("utf-8")
+        "".join(f"{candidate_id}\n" for candidate_id in primary_option_ids).encode(
+            "utf-8"
+        )
     ).hexdigest()
     checks = {
         "candidate_identity_set": primary_option_ids == oracle["candidate_ids"],
-        "candidate_identity_manifest": primary_option_manifest == oracle["candidate_identity_manifest_sha256"],
+        "candidate_identity_manifest": primary_option_manifest
+        == oracle["candidate_identity_manifest_sha256"],
         "files_visited": primary["files_visited"] == oracle["files_visited"],
-        "parquet_metadata_inspected": primary["parquet_metadata_inspected"] == oracle["parquet_metadata_inspected"],
-        "zip_members_inspected": primary["zip_members_inspected"] == oracle["zip_members_inspected"],
-        "denied_metadata_only_count": primary["denied_metadata_only_count"] == oracle["denied_metadata_only_count"],
+        "parquet_metadata_inspected": primary["parquet_metadata_inspected"]
+        == oracle["parquet_metadata_inspected"],
+        "zip_members_inspected": primary["zip_members_inspected"]
+        == oracle["zip_members_inspected"],
+        "denied_metadata_only_count": primary["denied_metadata_only_count"]
+        == oracle["denied_metadata_only_count"],
         "safety": all(
             primary[key] is False
             for key in (
@@ -68,7 +77,9 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
         ),
     }
     agreement = "AGREEMENT" if all(checks.values()) else "DISAGREEMENT"
-    session_dates = sorted(set(primary["valid_option_session_dates"]) | set(oracle["session_dates"]))
+    session_dates = sorted(
+        set(primary["valid_option_session_dates"]) | set(oracle["session_dates"])
+    )
     coverage = _coverage_verdict(len(session_dates))
     summary = {
         "schema_version": "ce_pe_history_inventory_summary_v1",
@@ -102,9 +113,15 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
-    primary_sha = write_json_with_sidecar(output / "ce_pe_history_inventory.json", primary)
-    oracle_sha = write_json_with_sidecar(output / "ce_pe_history_inventory_oracle.json", oracle)
-    summary_sha = write_json_with_sidecar(output / "ce_pe_history_inventory_summary.json", summary)
+    primary_sha = write_json_with_sidecar(
+        output / "ce_pe_history_inventory.json", primary
+    )
+    oracle_sha = write_json_with_sidecar(
+        output / "ce_pe_history_inventory_oracle.json", oracle
+    )
+    summary_sha = write_json_with_sidecar(
+        output / "ce_pe_history_inventory_summary.json", summary
+    )
     external = {
         "schema_version": "ce_pe_history_inventory_external_manifest_v1",
         "artifacts": {
@@ -118,18 +135,24 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
         "pnl_read": False,
         "holdout_outcomes_read": False,
     }
-    write_json_with_sidecar(output / "ce_pe_history_inventory_external_manifest.json", external)
+    write_json_with_sidecar(
+        output / "ce_pe_history_inventory_external_manifest.json", external
+    )
     if agreement != "AGREEMENT":
         raise RuntimeError("ce_pe_history_inventory_primary_oracle_disagreement")
     return summary
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Metadata-first CE/PE history inventory")
+    parser = argparse.ArgumentParser(
+        description="Metadata-first CE/PE history inventory"
+    )
     parser.add_argument("--machine-manifest", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
-    result = build(machine_manifest=args.machine_manifest, output_dir=args.output_dir)
+    result = build(
+        machine_manifest=args.machine_manifest, output_dir=args.output_dir
+    )
     print(json.dumps(result, sort_keys=True))
     return 0
 
