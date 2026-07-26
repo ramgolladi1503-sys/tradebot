@@ -15,8 +15,13 @@ def attribute_interval(start: AttributionSnapshot, end: AttributionSnapshot) -> 
     if end.timestamp <= start.timestamp:
         return _invalid_interval(start, end, CalculationStatus.OUT_OF_ORDER_TIMESTAMPS, "end timestamp must be after start timestamp")
     numeric = [start.option_price, end.option_price, start.underlying_value, end.underlying_value]
-    if not all(is_finite_number(value) for value in numeric):
-        return _invalid_interval(start, end, CalculationStatus.NON_FINITE_INPUT, "price and underlying values must be finite")
+    optional_numeric = [
+        value
+        for value in (start.volatility, end.volatility, start.risk_free_rate, end.risk_free_rate)
+        if value is not None
+    ]
+    if not all(is_finite_number(value) for value in numeric + optional_numeric):
+        return _invalid_interval(start, end, CalculationStatus.NON_FINITE_INPUT, "all provided attribution inputs must be finite")
     if start.greeks.status is not CalculationStatus.OK:
         return _invalid_interval(start, end, start.greeks.status, "start Greeks are unavailable")
 
