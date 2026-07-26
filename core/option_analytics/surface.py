@@ -28,6 +28,7 @@ def diagnose_surface(
         groups[key].append(obs)
 
     output: dict[str, SurfaceDiagnostic] = {}
+    observation_id_counts = Counter(obs.observation_id for obs in observations)
     for group in groups.values():
         strike_counts = Counter(obs.strike for obs in group)
         valid = [
@@ -46,6 +47,20 @@ def diagnose_surface(
         positions = {obs.observation_id: index for index, obs in enumerate(valid)}
 
         for obs in group:
+            if observation_id_counts[obs.observation_id] > 1:
+                output[obs.observation_id] = SurfaceDiagnostic(
+                    observation_id=obs.observation_id,
+                    status=CalculationStatus.DUPLICATE_OBSERVATION_ID,
+                    log_moneyness=_log_moneyness(obs),
+                    neighbour_count=0,
+                    local_median_iv=None,
+                    absolute_iv_residual=None,
+                    relative_iv_residual=None,
+                    robust_scale=None,
+                    robust_z_score=None,
+                    warnings=("duplicate observation_id in input",),
+                )
+                continue
             if strike_counts[obs.strike] > 1:
                 output[obs.observation_id] = SurfaceDiagnostic(
                     observation_id=obs.observation_id,
@@ -61,9 +76,16 @@ def diagnose_surface(
                 )
                 continue
             if obs.observation_id not in positions:
+                invalid_status = (
+                    obs.solver_status
+                    if obs.solver_status is not CalculationStatus.OK
+                    else obs.quote_status
+                    if obs.quote_status is not CalculationStatus.OK
+                    else CalculationStatus.INVALID_INPUT
+                )
                 output[obs.observation_id] = SurfaceDiagnostic(
                     observation_id=obs.observation_id,
-                    status=obs.solver_status if obs.solver_status is not CalculationStatus.OK else obs.quote_status,
+                    status=invalid_status,
                     log_moneyness=_log_moneyness(obs),
                     neighbour_count=0,
                     local_median_iv=None,
