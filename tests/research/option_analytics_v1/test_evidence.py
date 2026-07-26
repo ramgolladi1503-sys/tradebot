@@ -11,6 +11,7 @@ from research.option_analytics_v1.evidence import (
     write_bundle,
 )
 from research.option_analytics_v1.legacy_audit import run_legacy_compatibility_audit
+from research.option_analytics_v1.packaged_evidence import package_reference_artifact, verify_committed_bundle
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -69,3 +70,14 @@ def test_publication_gate_fails_tampered_evidence(tmp_path):
     gate = publication_gate(ROOT, tmp_path)
     assert gate["verdict"] == "FAIL_RESEARCH_SIDECAR_GATE"
     assert gate["failure_count"] > 0
+
+
+def test_packaged_reference_round_trip(tmp_path):
+    from research.option_analytics_v1.evidence import write_complete_bundle
+
+    evidence_dir = tmp_path / "evidence"
+    write_complete_bundle(ROOT, evidence_dir)
+    package_reference_artifact(evidence_dir, remove_plaintext=True)
+    payload = verify_committed_bundle(ROOT, evidence_dir)
+    assert payload["verdict"] == "PASS_RESEARCH_SIDECAR_GATE"
+    assert payload["packaged_reference_verified"]
