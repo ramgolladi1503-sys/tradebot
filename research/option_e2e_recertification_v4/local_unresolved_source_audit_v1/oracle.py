@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .root_scan import (
+    EXCLUDED_DIRECTORY_NAMES,
     InvalidRootSpecError,
+    OverlappingResolvedRootError,
     RootPermissionError,
     RootSpec,
     UnsupportedFilesystemEntryError,
@@ -34,6 +36,7 @@ _DENIED = (
     "holdout",
     "post_trade",
 )
+_EXCLUDED_DIRECTORY_NAME_SET = frozenset(EXCLUDED_DIRECTORY_NAMES)
 _NOT_OPENED_DIGEST = "NOT_OPENED_BY_POLICY"
 
 
@@ -151,27 +154,48 @@ def oracle_root_facts(
         raise InvalidRootSpecError("oracle_duplicate_root_id")
     total_files = 0
     total_directories = 0
+    excluded_directory_count = 0
     denied_candidate_count = 0
     all_file_manifest = hashlib.sha256()
+    excluded_directory_manifest = hashlib.sha256()
     candidate_rows: list[tuple[str, str | None, str, bool]] = []
-    resolved_seen: set[Path] = set()
+    resolved_roots: list[tuple[RootSpec, Path]] = []
     for spec in sorted(root_specs, key=lambda item: item.root_id):
         if spec.path.is_symlink() or not spec.path.is_dir():
             raise InvalidRootSpecError(f"oracle_root_absent:{spec.root_id}")
         root = spec.path.resolve(strict=True)
-        if root in resolved_seen:
-            raise InvalidRootSpecError("oracle_duplicate_resolved_root")
-        resolved_seen.add(root)
+        for existing_spec, existing_root in resolved_roots:
+            if root == existing_root:
+                raise InvalidRootSpecError("oracle_duplicate_resolved_root")
+            if root.is_relative_to(existing_root) or existing_root.is_relative_to(root):
+                raise OverlappingResolvedRootError(
+                    f"oracle_overlapping_roots:{existing_spec.root_id}:{spec.root_id}"
+                )
+        resolved_roots.append((spec, root))
+
+    for spec, root in resolved_roots:
         for directory, dirnames, filenames in os.walk(root, followlinks=False):
             dirnames.sort()
             filenames.sort()
-            for name in list(dirnames):
-                candidate = Path(directory) / name
-                if candidate.is_symlink():
-                    raise UnsupportedFilesystemEntryError(
-                        f"oracle_symlink_directory:{spec.root_id}:{candidate.relative_to(root)}"
-                    )
+            relative_directory = Path(directory).relative_to(root)
             total_directories += len(dirnames)
+            retained_directories: list[str] = []
+            for name in dirnames:
+                child = Path(directory) / name
+                relative = (relative_directory / name).as_posix()
+                if name in _EXCLUDED_DIRECTORY_NAME_SET:
+                    excluded_directory_count += 1
+                    excluded_directory_manifest.update(
+                        f"{spec.root_id}\0{relative}\n".encode("utf-8")
+                    )
+                    continue
+                if child.is_symlink():
+                    raise UnsupportedFilesystemEntryError(
+                        f"oracle_symlink_directory:{spec.root_id}:{relative}"
+                    )
+                retained_directories.append(name)
+            dirnames[:] = retained_directories
+
             for name in filenames:
                 candidate = Path(directory) / name
                 relative = candidate.relative_to(root).as_posix()
@@ -214,6 +238,7 @@ def oracle_root_facts(
                 candidate_rows.append(
                     (f"{spec.root_id}:{relative}", digest, candidate_class, denied)
                 )
+
     candidate_manifest = hashlib.sha256()
     candidate_id_manifest = hashlib.sha256()
     for candidate_id, digest, candidate_class, denied in sorted(candidate_rows):
@@ -229,6 +254,9 @@ def oracle_root_facts(
         "declared_root_count": len(root_specs),
         "total_file_count": total_files,
         "total_directory_count": total_directories,
+        "excluded_directory_names": list(EXCLUDED_DIRECTORY_NAMES),
+        "excluded_directory_count": excluded_directory_count,
+        "excluded_directory_path_manifest_sha256": excluded_directory_manifest.hexdigest(),
         "source_candidate_count": len(candidate_rows),
         "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "all_file_identity_manifest_sha256": all_file_manifest.hexdigest(),
@@ -277,6 +305,14 @@ def reconcile_primary_oracle(
         == root_oracle.get("total_file_count"),
         "root_directory_count": root_primary.get("total_directory_count")
         == root_oracle.get("total_directory_count"),
+        "root_excluded_directory_names": root_primary.get("excluded_directory_names")
+        == root_oracle.get("excluded_directory_names"),
+        "root_excluded_directory_count": root_primary.get("excluded_directory_count")
+        == root_oracle.get("excluded_directory_count"),
+        "root_excluded_directory_manifest": root_primary.get(
+            "excluded_directory_path_manifest_sha256"
+        )
+        == root_oracle.get("excluded_directory_path_manifest_sha256"),
         "root_candidate_count": root_primary.get("source_candidate_count")
         == root_oracle.get("source_candidate_count"),
         "root_denied_candidate_count": root_primary.get(
