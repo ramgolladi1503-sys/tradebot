@@ -63,6 +63,7 @@ def _result(
     spread_fraction = spread / mid if spread is not None and mid and mid > 0 else None
     if spread_fraction is not None and not math.isfinite(spread_fraction):
         spread_fraction = None
+    safe_freshness_limit = float(freshness_limit_seconds) if is_finite_number(freshness_limit_seconds) else None
     return QuoteResult(
         status=status,
         price_basis=basis,
@@ -74,7 +75,7 @@ def _result(
         spread_absolute=spread,
         spread_fraction_of_mid=spread_fraction,
         quote_age_seconds=age,
-        freshness_limit_seconds=freshness_limit_seconds,
+        freshness_limit_seconds=safe_freshness_limit,
         locked_market=locked,
         crossed_market=crossed,
         source=quote.source,
