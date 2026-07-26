@@ -27,7 +27,7 @@ source: merged PR #713 at 49beef400c39d45a69c7fd587172032cf0a650e1; unresolved s
 
 This PR creates only the audit mechanism. It does not read `/Users/madhuram/tradebot/.runtime/logs/execution_entry_trace.jsonl`, discover the current local worktree registry, or scan the 27 declared roots because those inputs are not available to the GitHub connector or hosted runner. No generated real-input evidence is committed.
 
-The CLI requires exactly 27 `ROOT_ID=PATH` bindings by default. It performs an exhaustive sorted walk with `candidate_limit=null`, hashes every source-authority candidate, and rejects missing roots, duplicate physical roots, permission failures, symlinks, and special filesystem entries rather than silently claiming completion.
+The CLI requires exactly 27 `ROOT_ID=PATH` bindings by default and performs an exhaustive sorted walk with `candidate_limit=null`. It fails closed when a declared root is absent or unreadable, when physical roots are duplicated, or when symlinks and special filesystem entries prevent exhaustive inspection. Every source-authority candidate selected by the frozen policy is content-hashed.
 
 ## Grill Me Review
 
@@ -37,7 +37,7 @@ A root scanner can also create false confidence if it truncates or follows alias
 
 ## Hermes Review
 
-The primary implementation owns detailed trace aggregates, per-root inventories, candidate content hashes, and exact-duplicate groups. A separately implemented oracle re-parses the trace and independently walks the roots, then reconciles physical trace hash, semantic stream, timestamp range, key manifest, root/file/directory counts, candidate count, candidate identity manifest, completion flags, and safety flags.
+The primary implementation owns detailed trace aggregates, per-root inventories, candidate content hashes, and exact-duplicate groups. A separately implemented oracle re-parses the trace and independently walks the roots, then reconciles physical trace hash, semantic stream, timestamp range, key manifest, root/file/directory counts, the complete file-identity manifest, candidate content identities, completion flags, and safety flags.
 
 Oracle agreement is necessary but not sufficient for source authority. The output always retains canonical signal and dataset source counts at zero and requires human authority review for any discovered candidate.
 
@@ -73,6 +73,8 @@ Local synthetic validation before publication:
 - candidate limit: `null`
 - deterministic two-directory evidence: passed
 - independent oracle: `AGREEMENT`
+- independent candidate-content manifest: reconciled
+- independent complete file-identity manifest: reconciled
 
 Repository CI and Code Excellence must still pass on the exact PR head. The real trace and all 27 roots must be supplied on the Mac before source-search completion can change from incomplete.
 
