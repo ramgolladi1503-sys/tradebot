@@ -14,3 +14,4 @@ docs/agent_reviews/OPTION_ANALYTICS_V1.md
 docs/code_excellence/reports/changed_paths.txt
 scripts/audit_option_analytics_v1.py
 tests/core/test_option_analytics.py
+tests/core/test_option_analytics_hardening.py
