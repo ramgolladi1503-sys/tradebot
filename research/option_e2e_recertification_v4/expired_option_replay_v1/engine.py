@@ -139,9 +139,13 @@ def _contract_rows(payload: Any) -> list[Mapping[str, Any]]:
     return []
 
 
-def _instrument_dir_name(instrument_key: str, expiry: date) -> str:
+def _instrument_dir_names(instrument_key: str, expiry: date) -> tuple[str, ...]:
     token = str(instrument_key).replace("|", "_")
-    return f"instrument={token}_{expiry.strftime('%d-%m-%Y')}"
+    names = (
+        f"instrument={token}",
+        f"instrument={token}_{expiry.strftime('%d-%m-%Y')}",
+    )
+    return tuple(dict.fromkeys(names))
 
 
 def _valid_candle_session_dates(candles: Sequence[Sequence[Any]]) -> tuple[date, ...]:
@@ -201,12 +205,19 @@ def build_contract_inventory(
             instrument_key = str(row.get("instrument_key") or "")
             if not instrument_key:
                 continue
-            candle_path = (
-                contract_file.parent
-                / _instrument_dir_name(instrument_key, expiry)
-                / "candles_1minute.json"
+            candle_path = next(
+                (
+                    contract_file.parent / directory_name / "candles_1minute.json"
+                    for directory_name in _instrument_dir_names(instrument_key, expiry)
+                    if (
+                        contract_file.parent
+                        / directory_name
+                        / "candles_1minute.json"
+                    ).exists()
+                ),
+                None,
             )
-            if not candle_path.exists():
+            if candle_path is None:
                 continue
             candles = _candles_from_payload(_load_json(candle_path))
             session_dates = _valid_candle_session_dates(candles)
