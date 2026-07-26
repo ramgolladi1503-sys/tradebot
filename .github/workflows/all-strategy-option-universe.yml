@@ -8,6 +8,7 @@ on:
       - "strategies/**"
       - "research/**"
       - "scripts/run_all_strategy_option_universe.py"
+      - "scripts/run_all_strategy_option_analytics.py"
 
 permissions:
   contents: read
@@ -25,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build exhaustive strategy and hypothesis universe
+      - name: Build exhaustive universe and master analytics skeleton
         shell: bash
         run: |
           root=/tmp/all-strategy-option-universe
@@ -33,9 +34,10 @@ jobs:
           rm -rf "$root"
           mkdir -p "$root"
           set +e
-          PYTHONPATH=. python scripts/run_all_strategy_option_universe.py \
+          PYTHONPATH=. python scripts/run_all_strategy_option_analytics.py \
             --repo-root . \
             --output-dir "$evidence" \
+            --require-complete-universe \
             >"$root/run.log" 2>&1
           status=$?
           set -e
@@ -43,7 +45,7 @@ jobs:
           cat "$root/run.log"
           exit "$status"
 
-      - name: Upload universe evidence
+      - name: Upload universe and analytics evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
