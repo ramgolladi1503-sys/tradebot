@@ -177,7 +177,9 @@ def test_archive_option_date_is_session_directory_not_expiry_name(
         for row in result["candidates"]
         if row.get("candidate_class") == "OPTION_CONTRACT_DATASET"
     ]
-    assert len(option_rows) == 1
+    assert [row["archive_member"] for row in option_rows] == [
+        "20260709/options/NIFTY 31JUL2026 25000 CE.parquet"
+    ]
     assert option_rows[0]["session_dates"] == ["2026-07-09"]
     assert result["valid_option_session_dates"] == ["2026-07-09"]
     assert result["zip_members_inspected"] == 2
