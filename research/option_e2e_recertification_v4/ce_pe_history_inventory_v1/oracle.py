@@ -7,7 +7,7 @@ import os
 import re
 import stat
 import zipfile
-from datetime import datetime
+from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -26,14 +26,14 @@ _DENIED = (
     "forward_return",
     "post_trade",
 )
-_TIME = {
+_TIME = (
     "timestamp",
     "ts",
     "local_ts",
     "exchange_timestamp",
     "quote_timestamp",
     "quote_ts",
-}
+)
 _ID = {"instrument_key", "instrument_token", "symbol", "trading_symbol", "tradingsymbol"}
 _BID = {"bid", "bid_price", "best_bid"}
 _ASK = {"ask", "ask_price", "best_ask"}
@@ -91,22 +91,100 @@ def _path_date(value: str) -> str | None:
     return None
 
 
-def _footer(source: Any) -> list[str]:
+def _to_date(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(
+                value.strip().replace("Z", "+00:00")
+            ).date().isoformat()
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        magnitude = abs(number)
+        divisor = (
+            1e9
+            if magnitude >= 1e17
+            else 1e6
+            if magnitude >= 1e14
+            else 1e3
+            if magnitude >= 1e11
+            else 1.0
+        )
+        try:
+            return datetime.fromtimestamp(number / divisor, tz=timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    return None
+
+
+def _footer(source: Any, path_hint: str) -> dict[str, Any]:
     import pyarrow.parquet as pq
 
-    return [str(name) for name in pq.ParquetFile(source).schema_arrow.names]
+    parquet = pq.ParquetFile(source)
+    metadata = parquet.metadata
+    columns = [str(name) for name in parquet.schema_arrow.names]
+    timestamp_column = next((name for name in _TIME if name in columns), None)
+    dates: set[str] = set()
+    if timestamp_column:
+        for group_index in range(metadata.num_row_groups):
+            group = metadata.row_group(group_index)
+            for column_index in range(group.num_columns):
+                column = group.column(column_index)
+                if column.path_in_schema != timestamp_column:
+                    continue
+                stats = column.statistics
+                if stats is None or not stats.has_min_max:
+                    continue
+                minimum = _to_date(stats.min)
+                maximum = _to_date(stats.max)
+                if minimum:
+                    dates.add(minimum)
+                if maximum:
+                    dates.add(maximum)
+    if len(dates) == 1:
+        session_dates = sorted(dates)
+        evidence = "PARQUET_FOOTER_STATISTICS"
+    elif dates:
+        session_dates = []
+        evidence = "MULTI_DATE_FOOTER_REQUIRES_DEEP_REVIEW"
+    else:
+        hinted = _path_date(path_hint)
+        session_dates = [hinted] if hinted else []
+        evidence = "PATH_HINT_ONLY" if hinted else "NOT_ESTABLISHED"
+    return {
+        "columns": columns,
+        "session_dates": session_dates,
+        "session_date_evidence": evidence,
+    }
 
 
 def _relevant(columns: list[str], path_hint: str) -> bool:
     values = set(columns)
     if _NORMALIZED.issubset(values):
         return True
-    if values & _TIME and values & _ID and values & _BID and values & _ASK:
+    if values & set(_TIME) and values & _ID and values & _BID and values & _ASK:
         return True
-    if values & _TIME and values & _OPTION_TYPE and values & _STRIKE and values & _EXPIRY:
+    if (
+        values & set(_TIME)
+        and values & _OPTION_TYPE
+        and values & _STRIKE
+        and values & _EXPIRY
+    ):
         return True
     return bool(
-        values & _TIME
+        values & set(_TIME)
         and {"open", "high", "low", "close"}.issubset(values)
         and _option_name(path_hint)
     )
@@ -159,10 +237,11 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                     continue
 
                 if path.suffix.casefold() == ".parquet":
-                    columns = _footer(path)
+                    footer = _footer(path, relative)
                     parquet_metadata_inspected += 1
-                    if _relevant(columns, relative):
+                    if _relevant(footer["columns"], relative):
                         candidate_ids.append(f"{root_id}:{relative}")
+                        session_dates.update(footer["session_dates"])
                     continue
                 if path.suffix.casefold() != ".zip":
                     continue
@@ -192,13 +271,11 @@ def oracle_inventory(machine_manifest: Path) -> dict[str, Any]:
                             raise ValueError(
                                 f"oracle_archive_member_size_mismatch:{name}"
                             )
-                        columns = _footer(io.BytesIO(content))
+                        footer = _footer(io.BytesIO(content), name)
                         parquet_metadata_inspected += 1
-                        if _relevant(columns, name):
+                        if _relevant(footer["columns"], name):
                             candidate_ids.append(f"{root_id}:{relative}!{name}")
-                            found = _path_date(name)
-                            if found:
-                                session_dates.add(found)
+                            session_dates.update(footer["session_dates"])
 
     candidate_ids.sort()
     digest = hashlib.sha256(
