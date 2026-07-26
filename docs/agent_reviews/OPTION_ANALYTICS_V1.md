@@ -1,5 +1,9 @@
 mode: PRODUCTION_CALCULATION_LIBRARY_WITHOUT_LIVE_WIRING
 candidate_id: option_analytics_v1
+decision: ACCEPT_PRODUCTION_CALCULATION_LIBRARY_FOR_DRAFT_REVIEW_WITH_LIVE_WIRING_DEFERRED
+reason: Mathematical and contract tests pass for the isolated calculation API; live option-chain integration remains excluded until a separate compatibility and replay-validation change proves unchanged strategy and execution behaviour.
+timestamp: 2026-07-26T11:45:41+05:30
+source: core/option_analytics, tests/core/test_option_analytics.py, scripts/audit_option_analytics_v1.py, and exact-head GitHub checks
 base_sha: 596fff09859afeca292bc3e3e31d4a55db1fd8c6
 branch: feature/production-option-analytics-v1
 read_only_runtime: true
