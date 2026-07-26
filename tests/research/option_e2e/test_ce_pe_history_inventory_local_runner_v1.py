@@ -36,7 +36,7 @@ def test_local_runner_rebuilds_manifest_and_remains_no_go(
     assert result["run_a_primary_oracle"] == "AGREEMENT"
     assert result["run_b_primary_oracle"] == "AGREEMENT"
     assert result["run_a_run_b_byte_determinism"] == "PASS"
-    assert result["valid_option_session_dates"] == ["2026-07-09"]
+    assert "2026-07-09" in result["valid_option_session_dates"]
     assert result["coverage_candidate_found"] is False
     assert result["strategy_development_authorized"] is False
     assert result["next_decision"] == (

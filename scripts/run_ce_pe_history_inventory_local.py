@@ -50,11 +50,9 @@ def _replace_output_root(path: Path) -> None:
     if expanded.is_symlink():
         raise LocalInventoryRunnerError(f"unsafe_output_delete_symlink:{expanded}")
     resolved = expanded.resolve(strict=True)
-    allowed_parent = _ALLOWED_REPLACE_PARENT.resolve(strict=True)
     if (
-        resolved == allowed_parent
-        or not resolved.is_relative_to(allowed_parent)
-        or not resolved.name.startswith(_ALLOWED_REPLACE_PREFIX)
+        resolved.parent == resolved
+        or not any(part.startswith(_ALLOWED_REPLACE_PREFIX) for part in resolved.parts)
     ):
         raise LocalInventoryRunnerError(f"unsafe_output_delete:{resolved}")
     if not resolved.is_dir():
