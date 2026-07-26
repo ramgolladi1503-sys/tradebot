@@ -124,9 +124,40 @@ def test_root_scan_is_unlimited_hashes_candidates_and_groups_duplicates(
     assert result["scan_complete"] is True
     assert result["total_file_count"] == 4
     assert result["source_candidate_count"] == 3
+    assert result["denied_outcome_or_pnl_candidate_count"] == 0
     assert result["exact_duplicate_group_count"] == 1
     assert str(first.resolve()) not in serialized
     assert str(second.resolve()) not in serialized
+
+
+def test_root_scan_keeps_outcome_candidate_metadata_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    denied = root / "signal_realized_pnl.json"
+    denied.write_text('{"realized_pnl":100}', encoding="utf-8")
+    original_open = Path.open
+
+    def guarded_open(self: Path, *args: object, **kwargs: object):
+        if self == denied:
+            raise AssertionError("outcome-bearing candidate content was opened")
+        return original_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    result = scan_declared_roots(
+        [RootSpec("ROOT_A", root)], expected_root_count=1
+    )
+
+    candidate = result["source_candidates"][0]
+    assert candidate["denied_by_policy"] is True
+    assert candidate["content_opened"] is False
+    assert candidate["sha256"] is None
+    assert result["denied_outcome_or_pnl_candidate_count"] == 1
+    assert result["outcomes_read"] is False
+    assert result["pnl_read"] is False
+    assert result["holdout_outcomes_read"] is False
 
 
 def test_root_scan_fails_closed_on_symlink(tmp_path: Path) -> None:
@@ -158,6 +189,9 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
     (root / "candidate_manifest.json").write_text("{}", encoding="utf-8")
+    (root / "signal_holdout_result.json").write_text(
+        '{"holdout_result":"redacted"}', encoding="utf-8"
+    )
     specs = [RootSpec("ROOT_A", root)]
 
     trace_primary = audit_execution_entry_trace(trace)
@@ -170,6 +204,8 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
 
     assert agreement["status"] == "AGREEMENT"
     assert all(agreement["checks"].values())
+    assert root_primary["denied_outcome_or_pnl_candidate_count"] == 1
+    assert root_oracle["denied_outcome_or_pnl_candidate_count"] == 1
 
 
 def test_build_is_byte_deterministic_and_hash_bound(tmp_path: Path) -> None:
@@ -225,3 +261,5 @@ def test_build_never_grants_canonical_or_execution_authority(tmp_path: Path) -> 
     assert summary["canonical_dataset_source_count"] == 0
     assert summary["allowed_for_live_execution"] is False
     assert summary["replacement_signal_ledger_required"] is True
+    assert summary["outcomes_read"] is False
+    assert summary["pnl_read"] is False
