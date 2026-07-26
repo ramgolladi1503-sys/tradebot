@@ -14,6 +14,7 @@ from research.option_analytics_v1.evidence import publication_gate
 REFERENCE_JSON = "reference_case_results.json"
 REFERENCE_PACKAGE = "reference_case_results.json.gz.b64"
 EXPECTED_REFERENCE_SHA256 = "1b305ed9fb9fa6e21c51ec164be661e5964240d9e489788f5408a9bcc7f8d9ed"
+EXPECTED_PACKAGE_SHA256 = "0bb9d38316302141bbb6b7a4a7a69c7c790c9a99d7d69a682c631b7aff1a7de1"
 STATIC_JSON_ARTIFACTS = (
     "bundle_summary.json",
     "determinism_report.json",
@@ -48,7 +49,11 @@ def materialize_committed_bundle(source_dir: str | Path, target_dir: str | Path)
     target.mkdir(parents=True, exist_ok=True)
     for name in STATIC_JSON_ARTIFACTS:
         shutil.copy2(source / name, target / name)
-    encoded = (source / REFERENCE_PACKAGE).read_bytes().strip()
+    package_bytes = (source / REFERENCE_PACKAGE).read_bytes()
+    package_digest = hashlib.sha256(package_bytes).hexdigest()
+    if package_digest != EXPECTED_PACKAGE_SHA256:
+        raise ValueError(f"reference package digest mismatch: {package_digest}")
+    encoded = package_bytes.strip()
     raw = gzip.decompress(base64.b64decode(encoded, validate=True))
     digest = hashlib.sha256(raw).hexdigest()
     if digest != EXPECTED_REFERENCE_SHA256:
