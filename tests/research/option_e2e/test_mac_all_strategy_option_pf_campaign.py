@@ -45,6 +45,17 @@ def test_actual_files_drive_session_discovery_and_counts_change(tmp_path) -> Non
     assert any(row["campaign_usable"] for row in matrix)
 
 
+def test_five_minute_underlying_files_classify_as_five_minute(tmp_path) -> None:
+    root = tmp_path / "replay"
+    _write(
+        root / "2026-07-01" / "underlying" / "NIFTY_2026-07-01.parquet",
+        [{"date": "2026-07-01 09:15:00+05:30", "open": 100, "high": 101, "low": 99, "close": 100, "volume": 1, "instrument": "NIFTY", "interval": "5minute"}],
+    )
+    inventory, schema_groups, _, _ = inspect_replay_root(root)
+    assert inventory[0]["classification"] == "UNDERLYING_5M_OHLCV"
+    assert schema_groups[0]["classifications"] == {"UNDERLYING_5M_OHLCV": 1}
+
+
 def test_committed_summary_json_cannot_create_a_session(tmp_path) -> None:
     root = tmp_path / "replay"
     root.mkdir()

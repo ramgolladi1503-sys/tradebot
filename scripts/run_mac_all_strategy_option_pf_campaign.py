@@ -70,7 +70,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = sorted({key for row in rows for key in row}) or ["empty"]
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
@@ -159,10 +159,11 @@ def _inspect_parquet(root: Path, path: Path) -> dict[str, Any]:
             positive_ltp = bool((pd.to_numeric(df[ltp_col], errors="coerce") > 0).any())
         lower = rel.casefold()
         explicit_option_name = bool(identity["option_type_from_name"] and identity["strike_from_name"] and identity["expiry_from_name"])
+        interval_value = str(df.get("interval", pd.Series([""])).dropna().astype(str).iloc[0] if "interval" in df.columns and not df.empty else "").casefold()
         is_underlying = "underlying/" in lower and has_ohlc and any(item in path.name.upper() for item in UNDERLYINGS) and not explicit_option_name
         is_mock = bool("mock" in lower or ("mock" in df.columns and df["mock"].astype(str).str.lower().eq("true").any()))
         if is_underlying and valid_ohlc:
-            classification = "UNDERLYING_1M_OHLCV"
+            classification = "UNDERLYING_5M_OHLCV" if interval_value == "5minute" else "UNDERLYING_1M_OHLCV"
         elif has_ohlc and valid_ohlc and identity["has_required_option_identity"] and not is_mock:
             classification = "OPTION_1M_OHLCV"
         elif has_tick and positive_ltp and identity["has_required_option_identity"] and not is_mock:

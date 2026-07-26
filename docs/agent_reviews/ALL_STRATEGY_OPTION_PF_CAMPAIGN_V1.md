@@ -1,8 +1,8 @@
 mode: RESEARCH_ONLY_ALL_STRATEGY_OPTION_PF_CAMPAIGN
 candidate_id: all_strategy_option_pf_campaign_v1
-decision: KITE_REPLAY_CONTAINS_NO_USABLE_OPTION_PRICE_AUTHORITY
+decision: NO_VALIDATED_DIRECTIONAL_EDGE_FOUND
 v1_invalidation: INVALID_IMPLEMENTATION_MISSED_KITE_CANDIDATE_REPLAY_CORPUS
-reason: The repaired runner inspected actual parquet files under /Users/madhuram/tradebot/runtime/kite_candidate_replay and found underlying candles plus mock option-like placeholders, but no option rows with positive price authority and expiry, strike, CE/PE, and contract identity.
+reason: The repaired option-price authority conclusion remains valid, and the new Kite underlying directional lane ran the 493-session, three-index, five-minute corpus through development and validation without producing a validation directional candidate.
 timestamp: 2026-07-26T22:20:00+05:30
 research_only: true
 read_only: true
@@ -47,25 +47,33 @@ Underlying candle coverage exists for NIFTY, BANKNIFTY, and SENSEX across the sc
 
 Actual campaign-usable session count: `0`.
 
+# Underlying Directional Edge Campaign
+
+Added `KITE_REPLAY_UNDERLYING_DIRECTIONAL_EDGE_CAMPAIGN_V1` as a separate research-only lane. It treats the same corpus as underlying five-minute candles only, never as option premium history.
+
+The authenticity audit read all 1,479 underlying files and recorded `bar_interval=5minute`, timestamp timezone, session start/end, expected bar count, actual bar count, missing bars, duplicate timestamps, and synthetic/fallback/mock row counts. Accepted market-performance rows require non-synthetic, non-fallback, non-mock positive OHLC geometry.
+
+The directional campaign produced 8,860 underlying proxy trades across development and validation partitions only. Holdout remained sealed. Validation survivor count is `0`; option intent count is `0` because no strategy qualified for targeted option validation.
+
 # Partition Manifest
 
 The frozen partition policy yields `DATA_BLOCKED` because fewer than three actual overlapping sessions exist. Development, validation, and holdout partitions are empty. Holdout remains sealed.
 
 # Strategy Results
 
-No strategy was executed. All 12 canonical strategies are present and marked `DATA_BLOCKED`: `COMPRESSION_BREAKOUT`, `EVENT_VOLATILITY_EXPANSION`, `EXHAUSTION_REVERSAL`, `FAILED_BREAKOUT_TRAP`, `LATE_DAY_MOMENTUM`, `MEAN_REVERSION_EXTENSION`, `OPENING_DRIVE`, `OPENING_RANGE_BREAKOUT`, `OPTION_PRESSURE`, `SIMPLE_ORB`, `TREND_PULLBACK`, and `VWAP_RECLAIM`.
+The option PF lane executed no strategy because option-price authority is absent. The underlying directional lane evaluated all canonical strategy/index rows where an underlying-only directional adapter was available. `OPTION_PRESSURE` remains `DATA_BLOCKED_REQUIRED_OPTION_FEATURE` because historical option-pressure features are unavailable.
 
 # Research Hypothesis Results
 
-No research hypothesis was executed. All 11 frozen hypothesis rows are present and marked `DATA_BLOCKED`: `CONSTITUENT_BREADTH`, `CONSTITUENT_LEAD_LAG`, `CONTINUOUS_STRUCTURAL_EDGE_DISCOVERY`, `FIVE_MINUTE_GOVERNED_DISCOVERY`, `ML_STRATEGY_DISCOVERY`, `OPENING_RANGE_RETEST`, `OPENING_STATE_MOMENTUM`, `RESIDUAL_MEAN_REVERSION`, `RSI2_MEAN_REVERSION`, `STRUCTURAL_PATTERN_SUITE`, and `STRUCTURAL_STATE_DISCOVERY`.
+The frozen research hypothesis rows are emitted without omission and marked `PRIOR_NEGATIVE_VERDICT_PRESERVED` when no frozen causal adapter exists for this five-minute underlying corpus. No descriptive finding was converted into a new strategy.
 
 # Profit Factor
 
-No PF is rendered for blocked rows. No no-loss or no-trade row is represented as an infinite or robust edge. Trade ledger is empty by design because option-price authority is absent.
+No option PF is rendered for blocked rows. Directional proxy PF is reported only as underlying points/basis points/R multiples, not option rupees or option P&L. No validation survivor exists.
 
 # Negative Controls
 
-Negative controls are recorded as `NOT_RUN_DATA_BLOCKED`. Running direction flip, delayed entry, random controls, strike shift, or slippage stress without option-price authority would create fake precision.
+Directional negative controls were emitted for the underlying proxy campaign. They did not rescue any strategy into validation-candidate status. Option negative controls remain blocked by `KITE_REPLAY_CONTAINS_NO_USABLE_OPTION_PRICE_AUTHORITY`.
 
 # QA / Safety Review
 
