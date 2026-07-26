@@ -48,6 +48,17 @@ _DENIED_PATH_TOKENS = (
     "holdout",
     "post_trade",
 )
+EXCLUDED_DIRECTORY_NAMES = (
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "venv",
+)
+_EXCLUDED_DIRECTORY_NAME_SET = frozenset(EXCLUDED_DIRECTORY_NAMES)
 _NOT_OPENED_DIGEST = "NOT_OPENED_BY_POLICY"
 
 
@@ -65,6 +76,10 @@ class RootMissingError(LocalRootScanError):
 
 class DuplicateResolvedRootError(LocalRootScanError):
     """Two root identifiers point to the same physical directory."""
+
+
+class OverlappingResolvedRootError(LocalRootScanError):
+    """Nested roots would double-count the same filesystem subtree."""
 
 
 class UnsupportedFilesystemEntryError(LocalRootScanError):
@@ -149,13 +164,24 @@ def _validate_roots(root_specs: Sequence[RootSpec]) -> list[tuple[RootSpec, Path
             raise DuplicateResolvedRootError(
                 f"duplicate_resolved_root:{prior}:{spec.root_id}"
             )
+        for existing_path, existing_id in seen_paths.items():
+            if physical.is_relative_to(existing_path) or existing_path.is_relative_to(
+                physical
+            ):
+                raise OverlappingResolvedRootError(
+                    f"overlapping_resolved_roots:{existing_id}:{spec.root_id}"
+                )
         seen_paths[physical] = spec.root_id
         resolved.append((spec, physical))
     return sorted(resolved, key=lambda item: item[0].root_id)
 
 
-def _iter_entries(root_id: str, root: Path) -> Iterable[tuple[str, os.DirEntry[str]]]:
-    def walk(directory: Path, prefix: Path) -> Iterable[tuple[str, os.DirEntry[str]]]:
+def _iter_entries(
+    root_id: str, root: Path
+) -> Iterable[tuple[str, os.DirEntry[str], bool]]:
+    def walk(
+        directory: Path, prefix: Path
+    ) -> Iterable[tuple[str, os.DirEntry[str], bool]]:
         try:
             with os.scandir(directory) as iterator:
                 entries = sorted(iterator, key=lambda entry: entry.name)
@@ -165,16 +191,19 @@ def _iter_entries(root_id: str, root: Path) -> Iterable[tuple[str, os.DirEntry[s
             ) from exc
         for entry in entries:
             relative = (prefix / entry.name).as_posix()
+            excluded_directory = False
             try:
-                if entry.is_symlink():
+                if entry.is_dir(follow_symlinks=False):
+                    excluded_directory = entry.name in _EXCLUDED_DIRECTORY_NAME_SET
+                    yield relative, entry, excluded_directory
+                    if not excluded_directory:
+                        yield from walk(Path(entry.path), prefix / entry.name)
+                elif entry.is_symlink():
                     raise UnsupportedFilesystemEntryError(
                         f"symlink_prevents_exhaustive_scan:{root_id}:{relative}"
                     )
-                if entry.is_dir(follow_symlinks=False):
-                    yield relative, entry
-                    yield from walk(Path(entry.path), prefix / entry.name)
                 elif entry.is_file(follow_symlinks=False):
-                    yield relative, entry
+                    yield relative, entry, False
                 else:
                     raise UnsupportedFilesystemEntryError(
                         f"special_entry_prevents_exhaustive_scan:{root_id}:{relative}"
@@ -204,17 +233,20 @@ def scan_declared_roots(
     candidates: list[dict[str, Any]] = []
     all_file_manifest = hashlib.sha256()
     candidate_identity_manifest = hashlib.sha256()
+    excluded_directory_manifest = hashlib.sha256()
     total_file_count = 0
     total_directory_count = 0
+    excluded_directory_count = 0
     denied_candidate_count = 0
 
     for spec, physical in resolved_roots:
         root_file_count = 0
         root_directory_count = 0
+        root_excluded_directory_count = 0
         root_candidate_count = 0
         root_denied_candidate_count = 0
         root_manifest = hashlib.sha256()
-        for relative, entry in _iter_entries(spec.root_id, physical):
+        for relative, entry, excluded_directory in _iter_entries(spec.root_id, physical):
             try:
                 stat_result = entry.stat(follow_symlinks=False)
             except PermissionError as exc:
@@ -225,6 +257,12 @@ def scan_declared_roots(
             if stat.S_ISDIR(mode):
                 root_directory_count += 1
                 total_directory_count += 1
+                if excluded_directory:
+                    root_excluded_directory_count += 1
+                    excluded_directory_count += 1
+                    excluded_directory_manifest.update(
+                        f"{spec.root_id}\0{relative}\n".encode("utf-8")
+                    )
                 continue
             if not stat.S_ISREG(mode):
                 raise UnsupportedFilesystemEntryError(
@@ -280,6 +318,7 @@ def scan_declared_roots(
                 ).hexdigest(),
                 "file_count": root_file_count,
                 "directory_count": root_directory_count,
+                "excluded_directory_count": root_excluded_directory_count,
                 "candidate_count": root_candidate_count,
                 "denied_outcome_or_pnl_candidate_count": root_denied_candidate_count,
                 "file_identity_manifest_sha256": root_manifest.hexdigest(),
@@ -310,6 +349,9 @@ def scan_declared_roots(
         "root_records": root_records,
         "total_file_count": total_file_count,
         "total_directory_count": total_directory_count,
+        "excluded_directory_names": list(EXCLUDED_DIRECTORY_NAMES),
+        "excluded_directory_count": excluded_directory_count,
+        "excluded_directory_path_manifest_sha256": excluded_directory_manifest.hexdigest(),
         "source_candidate_count": len(candidates),
         "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "source_candidates": candidates,
