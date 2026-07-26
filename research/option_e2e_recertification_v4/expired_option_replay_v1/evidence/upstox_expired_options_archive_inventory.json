@@ -1,0 +1,16 @@
+{
+  "archive_filename": "upstox-expired-options-v1.zip",
+  "archive_sha256": "06b895d6b9f813297e7110ce3319bf385aa9690cb959dfafecb8b2af31ad0f12",
+  "authority_backed_expiry_count": 80,
+  "authority_backed_expiry_end": "2026-07-21",
+  "authority_backed_expiry_start": "2024-10-03",
+  "authority_rule": "raw data.candles must be non-empty; normalized parquet presence alone is not authority",
+  "empty_raw_candle_response_files": 106,
+  "holdout_opened": false,
+  "non_empty_raw_candle_response_files": 379,
+  "normalized_parquet_files": 379,
+  "raw_candle_response_files": 485,
+  "research_only": true,
+  "schema_version": "expired_option_archive_inventory_v1",
+  "total_non_metadata_files": 1445
+}
