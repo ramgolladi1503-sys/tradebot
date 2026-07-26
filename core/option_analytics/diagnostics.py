@@ -30,7 +30,17 @@ def enrich_candidate(
     freshness_limit_seconds: float = 8.0,
     surface_diagnostic: SurfaceDiagnostic | None = None,
 ) -> CandidateAnalyticsResult:
-    candidate_hash = _stable_hash(candidate)
+    try:
+        candidate_hash = _stable_hash(candidate)
+    except (TypeError, ValueError) as exc:
+        status = CalculationStatus.NON_FINITE_INPUT if "Out of range float values" in str(exc) else CalculationStatus.INVALID_INPUT
+        return CandidateAnalyticsResult(
+            status=status,
+            original_candidate_hash="unavailable",
+            analytics_schema_version=ANALYTICS_SCHEMA_VERSION,
+            analytics={"diagnostic_flags": [status.value]},
+            warnings=(str(exc),),
+        )
     quote_result = resolve_quote(quote, basis=price_basis, freshness_limit_seconds=freshness_limit_seconds)
     if quote_result.status is not CalculationStatus.OK or quote_result.market_price is None:
         return CandidateAnalyticsResult(
