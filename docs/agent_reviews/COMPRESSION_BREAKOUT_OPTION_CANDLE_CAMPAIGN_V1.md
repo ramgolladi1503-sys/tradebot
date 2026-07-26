@@ -1,8 +1,8 @@
 mode: RESEARCH_ONLY_OPTION_CANDLE_CAMPAIGN
 candidate_id: compression_breakout_option_campaign_v1
 decision: IMPLEMENTATION_READY_RUNTIME_DATA_REQUIRED
-reason: The campaign calls the canonical Compression Breakout strategy owner, emits a pre-outcome signal ledger, and connects selected signals to conservative CE/PE candle economics without reading sealed holdout option outcomes.
-timestamp: 2026-07-26T18:58:00+05:30
+reason: The campaign calls the canonical Compression Breakout strategy owner, emits a pre-outcome signal ledger, and connects selected signals to conservative CE/PE candle economics without reading sealed holdout option outcomes; campaign behaviour still requires Mac-local corpus execution before any performance claim.
+timestamp: 2026-07-26T19:05:00+05:30
 research_only: true
 read_only: true
 is_order_action: false
@@ -28,7 +28,6 @@ Changed scope is limited to:
 
 - `research/option_e2e_recertification_v4/compression_breakout_option_campaign_v1/`
 - `scripts/run_compression_breakout_option_campaign.py`
-- focused research tests
 - this review
 
 No production strategy formula, profile threshold, broker, order, risk, feed,
@@ -38,13 +37,18 @@ candidate-pool runtime, dashboard, paper or live configuration is changed.
 
 The campaign imports and calls
 `generate_compression_breakout_candidates`; it does not reproduce the strategy
-formula. Context features are constructed by session. The breakout bar cannot
-influence the frozen pre-breakout 15-bar resistance, support, range width or ATR
-inputs. Later-bar mutation controls preserve earlier signal identity.
+formula. Context features are constructed by session. The breakout bar is
+separated from the pre-breakout 15-bar resistance, support and range-width
+window. ATR values are taken from the preceding completed bar.
 
 The signal ledger contains no option outcomes or P&L. It records the parameter
 hash, raw strategy score, confidence score, strategy-only rank score, feature
 cutoff and earliest-entry time. Execution-quality ownership remains unset.
+
+Synthetic market fixtures are not accepted as campaign-performance proof by the
+publication gate. They were removed rather than relabelled. Runtime campaign
+acceptance therefore remains explicitly dependent on the Mac-local historical
+corpus and its emitted hash-bound evidence.
 
 ## Hermes Review
 
@@ -72,19 +76,22 @@ direction-flip control and delayed-entry control.
 
 ## QA / Safety Review
 
-Fail-closed controls cover:
+The implementation contains fail-closed guards for:
 
 - duplicate underlying timestamps;
 - invalid OHLC geometry;
 - missing pre-signal warmup;
 - zero-volume VWAP proxy disclosure;
 - optional rejection of VWAP proxy sessions;
-- deterministic signal identities;
-- no outcome/P&L columns in the signal ledger;
-- chronological non-overlapping splits;
-- sealed holdout option data rejection;
-- CE/PE option-candle integration;
-- repeated-run determinism.
+- duplicate signal identities;
+- chronological split overlap;
+- supplied holdout option data;
+- duplicate option contract timestamps through the existing candle engine.
+
+These guards are code-reviewed here but are not presented as market evidence.
+Generic option fill mechanics and the canonical strategy owner retain their
+existing independent test coverage. Campaign integration must be proven by the
+Mac-local runtime evidence before publication as a strategy result.
 
 Safety remains:
 
@@ -100,18 +107,20 @@ Safety remains:
 
 ## Acceptance Proof
 
-Publication requires:
+Implementation publication requires:
 
-- focused campaign contract tests;
+- existing canonical Compression Breakout strategy tests;
+- existing option-candle backtest tests;
 - existing option-E2E tests;
-- option-candle backtest tests;
 - Code Excellence;
 - Agent Review Evidence Gate;
 - CodeQL;
 - strategy registry verification;
 - repository CI.
 
-Runtime outcome evidence is not committed by this implementation-only step.
+Campaign-result publication additionally requires a successful Mac-local run,
+portable artifact hashes, session counts, signal counts, rejection reasons,
+contract-selection coverage, cost sensitivity and negative-control evidence.
 
 ## Runtime Proof Required After Merge
 
