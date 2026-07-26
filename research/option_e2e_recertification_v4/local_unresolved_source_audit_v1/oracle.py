@@ -13,6 +13,7 @@ from .root_scan import (
     RootSpec,
     UnsupportedFilesystemEntryError,
     classify_source_candidate,
+    is_outcome_or_pnl_path,
 )
 from .trace_audit import (
     OutcomeBearingFieldError,
@@ -33,6 +34,7 @@ _DENIED = (
     "holdout",
     "post_trade",
 )
+_NOT_OPENED_DIGEST = "NOT_OPENED_BY_POLICY"
 
 
 def _key_is_denied(key: str) -> bool:
@@ -149,12 +151,13 @@ def oracle_root_facts(
         raise InvalidRootSpecError("oracle_duplicate_root_id")
     total_files = 0
     total_directories = 0
+    denied_candidate_count = 0
     all_file_manifest = hashlib.sha256()
-    candidate_rows: list[tuple[str, str, str]] = []
+    candidate_rows: list[tuple[str, str | None, str, bool]] = []
     resolved_seen: set[Path] = set()
     for spec in sorted(root_specs, key=lambda item: item.root_id):
         if spec.path.is_symlink() or not spec.path.is_dir():
-            raise InvalidRootSpecError(f"oracle_root_missing:{spec.root_id}")
+            raise InvalidRootSpecError(f"oracle_root_absent:{spec.root_id}")
         root = spec.path.resolve(strict=True)
         if root in resolved_seen:
             raise InvalidRootSpecError("oracle_duplicate_resolved_root")
@@ -181,45 +184,60 @@ def oracle_root_facts(
                         raise UnsupportedFilesystemEntryError(
                             f"oracle_non_regular:{spec.root_id}:{relative}"
                         )
+                    size = candidate.stat().st_size
                 except PermissionError as exc:
                     raise RootPermissionError(
                         f"oracle_unreadable:{spec.root_id}:{relative}"
                     ) from exc
-                size = candidate.stat().st_size
                 all_file_manifest.update(
                     f"{spec.root_id}\0{relative}\0{size}\n".encode("utf-8")
                 )
                 total_files += 1
                 candidate_class = classify_source_candidate(relative)
-                if candidate_class is not None:
-                    digest = hashlib.sha256()
+                if candidate_class is None:
+                    continue
+                denied = is_outcome_or_pnl_path(relative)
+                digest: str | None = None
+                if denied:
+                    denied_candidate_count += 1
+                else:
+                    file_digest = hashlib.sha256()
                     try:
                         with candidate.open("rb") as handle:
                             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                                digest.update(chunk)
+                                file_digest.update(chunk)
                     except PermissionError as exc:
                         raise RootPermissionError(
                             f"oracle_candidate_unreadable:{spec.root_id}:{relative}"
                         ) from exc
-                    candidate_rows.append(
-                        (f"{spec.root_id}:{relative}", digest.hexdigest(), candidate_class)
-                    )
+                    digest = file_digest.hexdigest()
+                candidate_rows.append(
+                    (f"{spec.root_id}:{relative}", digest, candidate_class, denied)
+                )
     candidate_manifest = hashlib.sha256()
     candidate_id_manifest = hashlib.sha256()
-    for candidate_id, digest, candidate_class in sorted(candidate_rows):
+    for candidate_id, digest, candidate_class, denied in sorted(candidate_rows):
         candidate_id_manifest.update(f"{candidate_id}\n".encode("utf-8"))
+        manifest_digest = digest if digest is not None else _NOT_OPENED_DIGEST
         candidate_manifest.update(
-            f"{candidate_id}\0{digest}\0{candidate_class}\n".encode("utf-8")
+            (
+                f"{candidate_id}\0{manifest_digest}\0{candidate_class}\0"
+                f"{int(denied)}\n"
+            ).encode("utf-8")
         )
     return {
         "declared_root_count": len(root_specs),
         "total_file_count": total_files,
         "total_directory_count": total_directories,
         "source_candidate_count": len(candidate_rows),
+        "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "all_file_identity_manifest_sha256": all_file_manifest.hexdigest(),
         "candidate_id_manifest_sha256": candidate_id_manifest.hexdigest(),
         "candidate_identity_manifest_sha256": candidate_manifest.hexdigest(),
         "scan_complete": True,
+        "outcomes_read": False,
+        "pnl_read": False,
+        "holdout_outcomes_read": False,
         "research_only": True,
         "read_only": True,
         "is_order_action": False,
@@ -261,6 +279,10 @@ def reconcile_primary_oracle(
         == root_oracle.get("total_directory_count"),
         "root_candidate_count": root_primary.get("source_candidate_count")
         == root_oracle.get("source_candidate_count"),
+        "root_denied_candidate_count": root_primary.get(
+            "denied_outcome_or_pnl_candidate_count"
+        )
+        == root_oracle.get("denied_outcome_or_pnl_candidate_count"),
         "root_candidate_id_manifest": candidate_manifest.hexdigest()
         == root_oracle.get("candidate_id_manifest_sha256"),
         "root_all_file_manifest": root_primary.get("all_file_identity_manifest_sha256")
@@ -271,6 +293,10 @@ def reconcile_primary_oracle(
         == root_oracle.get("candidate_identity_manifest_sha256"),
         "scan_complete": root_primary.get("scan_complete") is True
         and root_oracle.get("scan_complete") is True,
+        "outcome_boundary": all(
+            root_primary.get(key) is False and root_oracle.get(key) is False
+            for key in ("outcomes_read", "pnl_read", "holdout_outcomes_read")
+        ),
         "safety": all(
             trace_primary.get(key) == trace_oracle.get(key)
             and root_primary.get(key) == root_oracle.get(key)
