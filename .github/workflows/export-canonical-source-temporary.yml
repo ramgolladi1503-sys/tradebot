@@ -1,0 +1,51 @@
+name: Export Canonical Source Temporary
+
+on:
+  push:
+    branches:
+      - research/all-strategy-option-pf-v1
+    paths:
+      - .github/workflows/export-canonical-source-temporary.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build canonical source bundle
+        run: |
+          set -euo pipefail
+          mkdir -p export
+          paths=(
+            core/movement_contract.py
+            core/candidate_outcome_contract.py
+            core/movement_regime.py
+            core/strategy_parameter_profiles.py
+            strategies/movement
+            strategies/simple_orb.py
+            strategies/strategy_registry.py
+            scripts/backtest_all_strategies_available_data.py
+            tests/test_compression_trend_movement_strategies.py
+            tests/test_event_late_day_movement_strategies.py
+            tests/test_vwap_trap_movement_strategies.py
+          )
+          for path in "${paths[@]}"; do
+            if [[ -e "$path" ]]; then
+              mkdir -p "export/$(dirname "$path")"
+              cp -R "$path" "export/$path"
+            fi
+          done
+          printf '%s\n' "$(git rev-parse HEAD)" > export/HEAD.txt
+          tar -czf canonical-source.tar.gz -C export .
+          sha256sum canonical-source.tar.gz > canonical-source.tar.gz.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-source-${{ github.sha }}
+          path: |
+            canonical-source.tar.gz
+            canonical-source.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
