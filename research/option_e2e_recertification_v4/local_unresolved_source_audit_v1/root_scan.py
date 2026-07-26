@@ -36,6 +36,19 @@ _SOURCE_TOKENS = (
     "source",
     "strategy_validation",
 )
+_DENIED_PATH_TOKENS = (
+    "outcome",
+    "realized_pnl",
+    "pnl",
+    "profit",
+    "loss",
+    "future_return",
+    "forward_return",
+    "trade_result",
+    "holdout",
+    "post_trade",
+)
+_NOT_OPENED_DIGEST = "NOT_OPENED_BY_POLICY"
 
 
 class LocalRootScanError(RuntimeError):
@@ -47,7 +60,7 @@ class InvalidRootSpecError(LocalRootScanError):
 
 
 class RootMissingError(LocalRootScanError):
-    """A declared root is missing or is not a directory."""
+    """A declared root is absent or is not a directory."""
 
 
 class DuplicateResolvedRootError(LocalRootScanError):
@@ -77,6 +90,15 @@ def parse_root_spec(value: str) -> RootSpec:
     return RootSpec(root_id=root_id, path=Path(raw_path).expanduser())
 
 
+def _normalized_path(value: str) -> str:
+    return value.casefold().replace("-", "_").replace(" ", "_")
+
+
+def is_outcome_or_pnl_path(relative_path: str) -> bool:
+    normalized = _normalized_path(relative_path)
+    return any(token in normalized for token in _DENIED_PATH_TOKENS)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     try:
@@ -89,7 +111,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def classify_source_candidate(relative_path: str) -> str | None:
-    lowered = relative_path.casefold().replace("-", "_").replace(" ", "_")
+    lowered = _normalized_path(relative_path)
     suffix = Path(lowered).suffix
     if lowered.endswith("execution_entry_trace.jsonl"):
         return "EXECUTION_TRACE"
@@ -117,7 +139,7 @@ def _validate_roots(root_specs: Sequence[RootSpec]) -> list[tuple[RootSpec, Path
             raise InvalidRootSpecError(f"duplicate root_id:{spec.root_id}")
         seen_ids.add(spec.root_id)
         if spec.path.is_symlink() or not spec.path.is_dir():
-            raise RootMissingError(f"root_missing_or_not_directory:{spec.root_id}")
+            raise RootMissingError(f"root_absent_or_not_directory:{spec.root_id}")
         try:
             physical = spec.path.resolve(strict=True)
         except OSError as exc:
@@ -184,19 +206,22 @@ def scan_declared_roots(
     candidate_identity_manifest = hashlib.sha256()
     total_file_count = 0
     total_directory_count = 0
+    denied_candidate_count = 0
 
     for spec, physical in resolved_roots:
         root_file_count = 0
         root_directory_count = 0
         root_candidate_count = 0
+        root_denied_candidate_count = 0
         root_manifest = hashlib.sha256()
         for relative, entry in _iter_entries(spec.root_id, physical):
             try:
-                mode = entry.stat(follow_symlinks=False).st_mode
+                stat_result = entry.stat(follow_symlinks=False)
             except PermissionError as exc:
                 raise RootPermissionError(
                     f"entry_stat_failed:{spec.root_id}:{relative}"
                 ) from exc
+            mode = stat_result.st_mode
             if stat.S_ISDIR(mode):
                 root_directory_count += 1
                 total_directory_count += 1
@@ -205,7 +230,7 @@ def scan_declared_roots(
                 raise UnsupportedFilesystemEntryError(
                     f"non_regular_entry:{spec.root_id}:{relative}"
                 )
-            size = entry.stat(follow_symlinks=False).st_size
+            size = stat_result.st_size
             identity_line = f"{spec.root_id}\0{relative}\0{size}\n".encode("utf-8")
             root_manifest.update(identity_line)
             all_file_manifest.update(identity_line)
@@ -214,21 +239,36 @@ def scan_declared_roots(
             candidate_class = classify_source_candidate(relative)
             if candidate_class is None:
                 continue
-            candidate_path = physical / Path(relative)
+
+            denied = is_outcome_or_pnl_path(relative)
+            digest: str | None = None
+            content_opened = False
+            authority_status = "REQUIRES_HUMAN_AUTHORITY_REVIEW"
+            if denied:
+                denied_candidate_count += 1
+                root_denied_candidate_count += 1
+                authority_status = "OUTCOME_OR_PNL_METADATA_ONLY_REQUIRES_SEPARATE_REVIEW"
+            else:
+                digest = _sha256_file(physical / Path(relative))
+                content_opened = True
+
             candidate = {
                 "candidate_id": f"{spec.root_id}:{relative}",
                 "root_id": spec.root_id,
                 "relative_path": relative,
                 "size_bytes": size,
-                "sha256": _sha256_file(candidate_path),
+                "sha256": digest,
                 "candidate_class": candidate_class,
-                "authority_status": "REQUIRES_HUMAN_AUTHORITY_REVIEW",
+                "content_opened": content_opened,
+                "denied_by_policy": denied,
+                "authority_status": authority_status,
             }
             candidates.append(candidate)
+            manifest_digest = digest if digest is not None else _NOT_OPENED_DIGEST
             candidate_identity_manifest.update(
                 (
-                    f"{candidate['candidate_id']}\0{candidate['sha256']}\0"
-                    f"{candidate_class}\n"
+                    f"{candidate['candidate_id']}\0{manifest_digest}\0"
+                    f"{candidate_class}\0{int(denied)}\n"
                 ).encode("utf-8")
             )
             root_candidate_count += 1
@@ -241,6 +281,7 @@ def scan_declared_roots(
                 "file_count": root_file_count,
                 "directory_count": root_directory_count,
                 "candidate_count": root_candidate_count,
+                "denied_outcome_or_pnl_candidate_count": root_denied_candidate_count,
                 "file_identity_manifest_sha256": root_manifest.hexdigest(),
                 "scan_complete": True,
             }
@@ -249,7 +290,9 @@ def scan_declared_roots(
     candidates.sort(key=lambda item: item["candidate_id"])
     groups_by_sha: dict[str, list[str]] = {}
     for candidate in candidates:
-        groups_by_sha.setdefault(candidate["sha256"], []).append(candidate["candidate_id"])
+        digest = candidate.get("sha256")
+        if isinstance(digest, str) and digest:
+            groups_by_sha.setdefault(digest, []).append(candidate["candidate_id"])
     exact_duplicate_groups = [
         {
             "sha256": digest,
@@ -268,6 +311,7 @@ def scan_declared_roots(
         "total_file_count": total_file_count,
         "total_directory_count": total_directory_count,
         "source_candidate_count": len(candidates),
+        "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "source_candidates": candidates,
         "exact_duplicate_group_count": len(exact_duplicate_groups),
         "exact_duplicate_groups": exact_duplicate_groups,
@@ -278,6 +322,9 @@ def scan_declared_roots(
         "absolute_paths_published": False,
         "canonical_signal_source_count": 0,
         "canonical_dataset_source_count": 0,
+        "outcomes_read": False,
+        "pnl_read": False,
+        "holdout_outcomes_read": False,
         "research_only": True,
         "read_only": True,
         "is_order_action": False,
