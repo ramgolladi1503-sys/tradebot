@@ -18,6 +18,7 @@ from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.ora
 )
 from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.root_scan import (
     InvalidRootSpecError,
+    OverlappingResolvedRootError,
     RootSpec,
     UnsupportedFilesystemEntryError,
     scan_declared_roots,
@@ -162,7 +163,33 @@ def test_root_scan_keeps_outcome_candidate_metadata_only(
     assert result["holdout_outcomes_read"] is False
 
 
-def test_root_scan_fails_closed_on_symlink(tmp_path: Path) -> None:
+def test_root_scan_excludes_virtual_environment_tree_and_its_symlinks(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    environment = root / ".venv"
+    environment.mkdir()
+    target = environment / "python-real"
+    target.write_text("binary", encoding="utf-8")
+    link = environment / "python"
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    (root / "candidate_manifest.json").write_text("{}", encoding="utf-8")
+
+    result = scan_declared_roots(
+        [RootSpec("ROOT_A", root)], expected_root_count=1
+    )
+
+    assert result["excluded_directory_count"] == 1
+    assert result["total_file_count"] == 1
+    assert result["source_candidate_count"] == 1
+    assert result["root_records"][0]["excluded_directory_count"] == 1
+
+
+def test_root_scan_fails_closed_on_in_scope_symlink(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()
     target = root / "target.json"
@@ -185,6 +212,18 @@ def test_root_scan_requires_exact_declared_root_count(tmp_path: Path) -> None:
         scan_declared_roots([RootSpec("ROOT_A", root)], expected_root_count=27)
 
 
+def test_root_scan_rejects_nested_declared_roots(tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    child = parent / "child"
+    child.mkdir(parents=True)
+
+    with pytest.raises(OverlappingResolvedRootError):
+        scan_declared_roots(
+            [RootSpec("ROOT_A", parent), RootSpec("ROOT_B", child)],
+            expected_root_count=2,
+        )
+
+
 def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     trace = tmp_path / "execution_entry_trace.jsonl"
     _write_trace(trace, [_record()])
@@ -194,6 +233,9 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     (root / "signal_holdout_result.json").write_text(
         '{"holdout_result":"redacted"}', encoding="utf-8"
     )
+    excluded = root / ".pytest_cache"
+    excluded.mkdir()
+    (excluded / "signal_ledger.json").write_text("{}", encoding="utf-8")
     specs = [RootSpec("ROOT_A", root)]
 
     trace_primary = audit_execution_entry_trace(trace)
@@ -208,6 +250,8 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     assert all(agreement["checks"].values())
     assert root_primary["denied_outcome_or_pnl_candidate_count"] == 1
     assert root_oracle["denied_outcome_or_pnl_candidate_count"] == 1
+    assert root_primary["excluded_directory_count"] == 1
+    assert root_oracle["excluded_directory_count"] == 1
 
 
 def test_build_rejects_output_inside_declared_root(tmp_path: Path) -> None:
