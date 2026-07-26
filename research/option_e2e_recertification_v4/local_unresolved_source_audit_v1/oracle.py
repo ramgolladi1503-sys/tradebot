@@ -149,7 +149,8 @@ def oracle_root_facts(
         raise InvalidRootSpecError("oracle_duplicate_root_id")
     total_files = 0
     total_directories = 0
-    candidate_ids: list[str] = []
+    all_file_manifest = hashlib.sha256()
+    candidate_rows: list[tuple[str, str, str]] = []
     resolved_seen: set[Path] = set()
     for spec in sorted(root_specs, key=lambda item: item.root_id):
         if spec.path.is_symlink() or not spec.path.is_dir():
@@ -184,18 +185,40 @@ def oracle_root_facts(
                     raise RootPermissionError(
                         f"oracle_unreadable:{spec.root_id}:{relative}"
                     ) from exc
+                size = candidate.stat().st_size
+                all_file_manifest.update(
+                    f"{spec.root_id}\0{relative}\0{size}\n".encode("utf-8")
+                )
                 total_files += 1
-                if classify_source_candidate(relative) is not None:
-                    candidate_ids.append(f"{spec.root_id}:{relative}")
-    manifest = hashlib.sha256()
-    for candidate_id in sorted(candidate_ids):
-        manifest.update(f"{candidate_id}\n".encode("utf-8"))
+                candidate_class = classify_source_candidate(relative)
+                if candidate_class is not None:
+                    digest = hashlib.sha256()
+                    try:
+                        with candidate.open("rb") as handle:
+                            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                                digest.update(chunk)
+                    except PermissionError as exc:
+                        raise RootPermissionError(
+                            f"oracle_candidate_unreadable:{spec.root_id}:{relative}"
+                        ) from exc
+                    candidate_rows.append(
+                        (f"{spec.root_id}:{relative}", digest.hexdigest(), candidate_class)
+                    )
+    candidate_manifest = hashlib.sha256()
+    candidate_id_manifest = hashlib.sha256()
+    for candidate_id, digest, candidate_class in sorted(candidate_rows):
+        candidate_id_manifest.update(f"{candidate_id}\n".encode("utf-8"))
+        candidate_manifest.update(
+            f"{candidate_id}\0{digest}\0{candidate_class}\n".encode("utf-8")
+        )
     return {
         "declared_root_count": len(root_specs),
         "total_file_count": total_files,
         "total_directory_count": total_directories,
-        "source_candidate_count": len(candidate_ids),
-        "candidate_id_manifest_sha256": manifest.hexdigest(),
+        "source_candidate_count": len(candidate_rows),
+        "all_file_identity_manifest_sha256": all_file_manifest.hexdigest(),
+        "candidate_id_manifest_sha256": candidate_id_manifest.hexdigest(),
+        "candidate_identity_manifest_sha256": candidate_manifest.hexdigest(),
         "scan_complete": True,
         "research_only": True,
         "read_only": True,
@@ -238,8 +261,14 @@ def reconcile_primary_oracle(
         == root_oracle.get("total_directory_count"),
         "root_candidate_count": root_primary.get("source_candidate_count")
         == root_oracle.get("source_candidate_count"),
-        "root_candidate_manifest": candidate_manifest.hexdigest()
+        "root_candidate_id_manifest": candidate_manifest.hexdigest()
         == root_oracle.get("candidate_id_manifest_sha256"),
+        "root_all_file_manifest": root_primary.get("all_file_identity_manifest_sha256")
+        == root_oracle.get("all_file_identity_manifest_sha256"),
+        "root_candidate_content_manifest": root_primary.get(
+            "candidate_identity_manifest_sha256"
+        )
+        == root_oracle.get("candidate_identity_manifest_sha256"),
         "scan_complete": root_primary.get("scan_complete") is True
         and root_oracle.get("scan_complete") is True,
         "safety": all(
