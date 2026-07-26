@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from pathlib import PurePosixPath
 import re
+from typing import Any
+
+import pandas as pd
 
 import run_tracked_archive_compression_smoke as smoke_v1
 
@@ -48,7 +51,124 @@ def _select_underlying_member(members: list[str]) -> str:
     return candidates[0]
 
 
+def _empty_option_bars(contract_symbol: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "timestamp": pd.Series(dtype="datetime64[ns, Asia/Kolkata]"),
+            "open": pd.Series(dtype=float),
+            "high": pd.Series(dtype=float),
+            "low": pd.Series(dtype=float),
+            "close": pd.Series(dtype=float),
+            "volume": pd.Series(dtype=float),
+            "contract_symbol": pd.Series(dtype=str),
+        }
+    )
+
+
+def _normalise_tick_volume(series: pd.Series) -> pd.Series:
+    cumulative = pd.to_numeric(series, errors="coerce").fillna(0.0).clip(lower=0.0)
+    increment = cumulative.diff()
+    increment = increment.where(increment >= 0.0, cumulative)
+    return increment.fillna(0.0).clip(lower=0.0)
+
+
+def _normalize_ohlcv(
+    frame: pd.DataFrame,
+    *,
+    symbol: str,
+    contract_symbol: str | None = None,
+) -> pd.DataFrame:
+    lowered = {str(column).strip().lower() for column in frame.columns}
+    if {"open", "high", "low", "close"}.issubset(lowered):
+        return smoke_v1_original_normalize(
+            frame,
+            symbol=symbol,
+            contract_symbol=contract_symbol,
+        )
+
+    if contract_symbol is None:
+        raise ValueError(f"tick_schema_not_valid_for_underlying:{symbol}")
+
+    timestamp_column = smoke_v1._first_column(
+        frame, ("timestamp", "date", "datetime", "ts", "time")
+    )
+    ltp_column = smoke_v1._first_column(frame, ("ltp", "last_price", "close"))
+    volume_column = smoke_v1._first_column(frame, ("vol", "volume", "v"))
+    if timestamp_column is None:
+        raise ValueError(f"missing_tick_timestamp_column:{symbol}")
+    if ltp_column is None:
+        raise ValueError(f"missing_tick_ltp_column:{symbol}")
+
+    ticks = pd.DataFrame()
+    ticks["timestamp"] = smoke_v1._timestamps(frame[timestamp_column])
+    ticks["ltp"] = pd.to_numeric(frame[ltp_column], errors="coerce")
+    ticks["volume_increment"] = (
+        _normalise_tick_volume(frame[volume_column])
+        if volume_column is not None
+        else 0.0
+    )
+    ticks = ticks.loc[
+        ticks["timestamp"].notna()
+        & ticks["ltp"].notna()
+        & (ticks["ltp"] > 0.0)
+    ].copy()
+    if ticks.empty:
+        return _empty_option_bars(contract_symbol)
+
+    ticks = ticks.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+    ticks["minute"] = ticks["timestamp"].dt.floor("min")
+    grouped = ticks.groupby("minute", sort=True, observed=True)
+    bars = grouped["ltp"].agg(
+        open="first",
+        high="max",
+        low="min",
+        close="last",
+    )
+    bars["volume"] = grouped["volume_increment"].sum()
+    bars = bars.reset_index().rename(columns={"minute": "timestamp"})
+    bars["contract_symbol"] = contract_symbol
+    return bars[
+        [
+            "timestamp",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "contract_symbol",
+        ]
+    ].reset_index(drop=True)
+
+
+def _quote_coverage(frame: pd.DataFrame) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for source, name in (("ltp", "positive_ltp"), ("bid", "positive_bid"), ("ask", "positive_ask")):
+        if source in frame.columns:
+            values = pd.to_numeric(frame[source], errors="coerce")
+            payload[f"{name}_rows"] = int((values > 0.0).sum())
+            payload[f"{name}_coverage"] = float((values > 0.0).mean()) if len(values) else 0.0
+    if "bid" in frame.columns and "ask" in frame.columns:
+        bid = pd.to_numeric(frame["bid"], errors="coerce")
+        ask = pd.to_numeric(frame["ask"], errors="coerce")
+        joint = (bid > 0.0) & (ask > 0.0) & (ask >= bid)
+        payload["valid_joint_bid_ask_rows"] = int(joint.sum())
+        payload["valid_joint_bid_ask_coverage"] = float(joint.mean()) if len(joint) else 0.0
+    return payload
+
+
+def _read_parquet_member(
+    archive: Any,
+    member: str,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    frame, metadata = smoke_v1_original_read_member(archive, member)
+    return frame, {**metadata, **_quote_coverage(frame)}
+
+
+smoke_v1_original_normalize = smoke_v1._normalize_ohlcv
+smoke_v1_original_read_member = smoke_v1._read_parquet_member
 smoke_v1._select_underlying_member = _select_underlying_member
+smoke_v1._normalize_ohlcv = _normalize_ohlcv
+smoke_v1._read_parquet_member = _read_parquet_member
 
 
 if __name__ == "__main__":
