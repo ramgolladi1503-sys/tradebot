@@ -23,6 +23,10 @@ class LocalInventoryRunnerError(RuntimeError):
     pass
 
 
+_ALLOWED_REPLACE_PARENT = Path("/tmp")
+_ALLOWED_REPLACE_PREFIX = "tradebot-ce-pe-history-inventory"
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -39,6 +43,23 @@ def _require_clean_output_root(path: Path) -> Path:
         raise LocalInventoryRunnerError(f"output_root_not_empty:{resolved}")
     resolved.mkdir(parents=True, exist_ok=True)
     return resolved
+
+
+def _replace_output_root(path: Path) -> None:
+    expanded = path.expanduser()
+    if expanded.is_symlink():
+        raise LocalInventoryRunnerError(f"unsafe_output_delete_symlink:{expanded}")
+    resolved = expanded.resolve(strict=True)
+    allowed_parent = _ALLOWED_REPLACE_PARENT.resolve(strict=True)
+    if (
+        resolved == allowed_parent
+        or not resolved.is_relative_to(allowed_parent)
+        or not resolved.name.startswith(_ALLOWED_REPLACE_PREFIX)
+    ):
+        raise LocalInventoryRunnerError(f"unsafe_output_delete:{resolved}")
+    if not resolved.is_dir():
+        raise LocalInventoryRunnerError(f"output_delete_target_not_directory:{resolved}")
+    shutil.rmtree(resolved)
 
 
 def _assert_output_outside_inputs(
@@ -222,17 +243,15 @@ def main() -> int:
     parser.add_argument(
         "--replace-output",
         action="store_true",
-        help="Delete only the exact requested output root before running.",
+        help=(
+            "Delete only an explicitly named "
+            "/tmp/tradebot-ce-pe-history-inventory* directory before running."
+        ),
     )
     args = parser.parse_args()
 
     if args.replace_output and args.output_root.exists():
-        resolved = args.output_root.expanduser().resolve(strict=True)
-        if resolved == Path("/") or len(resolved.parts) < 3:
-            raise LocalInventoryRunnerError(
-                f"unsafe_output_delete:{resolved}"
-            )
-        shutil.rmtree(resolved)
+        _replace_output_root(args.output_root)
 
     result = run(
         campaign_worktree=args.campaign_worktree,
