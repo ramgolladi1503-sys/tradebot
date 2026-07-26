@@ -40,6 +40,13 @@ jobs:
           output=/tmp/compression-breakout-archive-smoke
           rm -rf "$output"
           mkdir -p "$output"
+          python - <<'PY' >"$output/member_paths_20260709.txt"
+          import zipfile
+          with zipfile.ZipFile("runtime/upstox_candidate_replay.zip") as archive:
+              for name in sorted(archive.namelist()):
+                  if "20260709" in name and name.lower().endswith(".parquet"):
+                      print(name)
+          PY
           set +e
           PYTHONPATH=. python scripts/run_tracked_archive_compression_smoke.py \
             --archive runtime/upstox_candidate_replay.zip \
@@ -48,6 +55,7 @@ jobs:
           status=$?
           set -e
           printf '%s\n' "$status" >"$output/exit_status.txt"
+          cat "$output/member_paths_20260709.txt"
           cat "$output/run.log"
           exit "$status"
 
