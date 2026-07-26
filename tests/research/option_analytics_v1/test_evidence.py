@@ -11,7 +11,11 @@ from research.option_analytics_v1.evidence import (
     write_bundle,
 )
 from research.option_analytics_v1.legacy_audit import run_legacy_compatibility_audit
-from research.option_analytics_v1.packaged_evidence import package_reference_artifact, verify_committed_bundle
+from research.option_analytics_v1.packaged_evidence import (
+    package_reference_artifact,
+    verify_committed_bundle,
+    verify_committed_hashes,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -78,6 +82,14 @@ def test_packaged_reference_round_trip(tmp_path):
     evidence_dir = tmp_path / "evidence"
     write_complete_bundle(ROOT, evidence_dir)
     package_reference_artifact(evidence_dir, remove_plaintext=True)
+    payload = verify_committed_bundle(ROOT, evidence_dir)
+    assert payload["verdict"] == "PASS_RESEARCH_SIDECAR_GATE"
+    assert payload["packaged_reference_verified"]
+
+
+def test_committed_evidence_bundle_verifies():
+    evidence_dir = ROOT / "research/option_analytics_v1/evidence"
+    assert verify_committed_hashes(evidence_dir) == []
     payload = verify_committed_bundle(ROOT, evidence_dir)
     assert payload["verdict"] == "PASS_RESEARCH_SIDECAR_GATE"
     assert payload["packaged_reference_verified"]
