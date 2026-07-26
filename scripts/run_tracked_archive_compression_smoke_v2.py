@@ -142,17 +142,25 @@ def _normalize_ohlcv(
 
 def _quote_coverage(frame: pd.DataFrame) -> dict[str, Any]:
     payload: dict[str, Any] = {}
-    for source, name in (("ltp", "positive_ltp"), ("bid", "positive_bid"), ("ask", "positive_ask")):
+    for source, name in (
+        ("ltp", "positive_ltp"),
+        ("bid", "positive_bid"),
+        ("ask", "positive_ask"),
+    ):
         if source in frame.columns:
             values = pd.to_numeric(frame[source], errors="coerce")
             payload[f"{name}_rows"] = int((values > 0.0).sum())
-            payload[f"{name}_coverage"] = float((values > 0.0).mean()) if len(values) else 0.0
+            payload[f"{name}_coverage"] = (
+                float((values > 0.0).mean()) if len(values) else 0.0
+            )
     if "bid" in frame.columns and "ask" in frame.columns:
         bid = pd.to_numeric(frame["bid"], errors="coerce")
         ask = pd.to_numeric(frame["ask"], errors="coerce")
         joint = (bid > 0.0) & (ask > 0.0) & (ask >= bid)
         payload["valid_joint_bid_ask_rows"] = int(joint.sum())
-        payload["valid_joint_bid_ask_coverage"] = float(joint.mean()) if len(joint) else 0.0
+        payload["valid_joint_bid_ask_coverage"] = (
+            float(joint.mean()) if len(joint) else 0.0
+        )
     return payload
 
 
@@ -164,11 +172,41 @@ def _read_parquet_member(
     return frame, {**metadata, **_quote_coverage(frame)}
 
 
+def _run_smoke(path: Any) -> dict[str, object]:
+    result = smoke_v1_original_run_smoke(path)
+    option_members = list(result.get("option_members") or [])
+    positive_ltp_rows = sum(
+        int(item.get("positive_ltp_rows") or 0)
+        for item in option_members
+        if isinstance(item, dict)
+    )
+    valid_joint_bid_ask_rows = sum(
+        int(item.get("valid_joint_bid_ask_rows") or 0)
+        for item in option_members
+        if isinstance(item, dict)
+    )
+    result["positive_option_ltp_rows"] = positive_ltp_rows
+    result["valid_joint_bid_ask_rows"] = valid_joint_bid_ask_rows
+    result["option_price_authority"] = (
+        "ZERO_USABLE_OPTION_PRICES"
+        if positive_ltp_rows == 0
+        else "LTP_TICK_PRICE_PATH_AVAILABLE"
+    )
+    result["option_candle_backtest_authorized"] = positive_ltp_rows > 0
+    result["bid_ask_execution_certified"] = False
+    if positive_ltp_rows == 0:
+        result["status"] = "ARCHIVE_SCHEMA_ONLY_ZERO_USABLE_OPTION_PRICES"
+        result["coverage_verdict"] = "ONE_SESSION_SCHEMA_ONLY_NO_OPTION_ECONOMICS"
+    return result
+
+
 smoke_v1_original_normalize = smoke_v1._normalize_ohlcv
 smoke_v1_original_read_member = smoke_v1._read_parquet_member
+smoke_v1_original_run_smoke = smoke_v1.run_smoke
 smoke_v1._select_underlying_member = _select_underlying_member
 smoke_v1._normalize_ohlcv = _normalize_ohlcv
 smoke_v1._read_parquet_member = _read_parquet_member
+smoke_v1.run_smoke = _run_smoke
 
 
 if __name__ == "__main__":
