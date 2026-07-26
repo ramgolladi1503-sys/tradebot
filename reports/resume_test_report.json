@@ -1,0 +1,7 @@
+{
+  "status": "PASSED",
+  "interrupted_contracts": 6,
+  "resumed_contracts": 6,
+  "duplicate_rows": 0,
+  "final_manifest_matches_control": true
+}
