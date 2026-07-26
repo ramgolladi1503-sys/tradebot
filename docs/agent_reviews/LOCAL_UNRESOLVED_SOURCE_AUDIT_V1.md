@@ -20,7 +20,7 @@ source: merged PR #713 at 49beef400c39d45a69c7fd587172032cf0a650e1; unresolved s
 - scope: Streamed execution-trace inspection, exact declared-root census, candidate hashing, outcome/P&L metadata-only handling, duplicate grouping, independent oracle, deterministic evidence publication, and synthetic negative controls
 - allowed_paths: Focused research package, focused tests, this review, and changed-scope Code Excellence input
 - forbidden_paths: Runtime strategy behaviour, broker, orders, execution decisions, feed, risk, dashboard, live configuration, paper configuration, outcome evaluation, P&L evaluation, replay execution, WFA, and holdout analysis
-- expected_tests: Trace schema and safety controls, root-count enforcement, no candidate limit, symlink failure, deny-boundary non-open proof, output isolation, duplicate grouping, primary/oracle agreement, deterministic evidence, and non-authority guarantees
+- expected_tests: Trace schema and safety controls, root-count enforcement, no candidate limit, symlink failure, deny-boundary non-open proof, output isolation and cleanliness, duplicate grouping, primary/oracle agreement, deterministic evidence, and non-authority guarantees
 - acceptance_proof: Synthetic tests pass and permanent PR checks pass; real Mac-local execution remains a separate evidence step
 
 ## Scope Guard
@@ -31,13 +31,13 @@ The CLI requires exactly 27 `ROOT_ID=PATH` bindings by default and performs an e
 
 A source-authority path carrying outcome, P&L, holdout-result, forward-return, or post-trade markers is recorded by identity and size only. Its content is never opened, its SHA-256 remains null, and the final authority-source status remains incomplete pending a separate approved review.
 
-Evidence output is required to live outside every declared root. The builder validates that boundary before creating the output directory, preventing Run A artifacts from mutating the corpus later scanned by Run B.
+Evidence output is required to live outside every declared root and to begin absent or empty. The builder validates both boundaries before writing, preventing Run A artifacts or stale files from contaminating a later census.
 
 ## Grill Me Review
 
 A parser can create false confidence if it merely counts lines. The trace lane therefore verifies the physical SHA-256, bounds line size, requires UTF-8 object JSONL, validates timestamp/module/stage fields, computes a canonical semantic stream hash, recursively checks key names against an outcome/P&L deny boundary, and publishes only aggregates rather than trade IDs or row values.
 
-A root scanner can also create false confidence if it truncates, follows aliases, or writes evidence into its own input corpus. This implementation has no candidate limit, requires the exact declared root count, rejects two identifiers resolving to the same directory, does not follow symlinks, inventories every regular file by relative path and size, hashes every permitted candidate selected by the frozen source policy, and blocks self-referential output placement.
+A root scanner can also create false confidence if it truncates, follows aliases, or writes evidence into its own input corpus. This implementation has no candidate limit, requires the exact declared root count, rejects two identifiers resolving to the same directory, does not follow symlinks, inventories every regular file by relative path and size, hashes every permitted candidate selected by the frozen source policy, and blocks self-referential or stale output directories.
 
 ## Hermes Review
 
@@ -49,11 +49,11 @@ Oracle agreement is necessary but not sufficient for source authority. The outpu
 
 The implementation is deliberately narrow and uses the existing option-E2E research namespace. It does not introduce a second runtime census service, database, scheduler, or generic filesystem framework. The package consists of a trace inspector, a declared-root scanner, an independent oracle, and one deterministic evidence builder.
 
-The first real local run should use two independent output directories outside all scanned roots and a recursive byte comparison before any compact publication or authority-closure update is considered.
+The first real local run should use two independent clean output directories outside all scanned roots and a recursive byte comparison before any compact publication or authority-closure update is considered.
 
 ## QA / Safety Review
 
-Negative controls cover malformed JSONL, oversized records, trace outcome/P&L field rejection, root candidate metadata-only deny behaviour, symlink rejection, exact root-count enforcement, self-referential output rejection, duplicate-content grouping, absolute-path non-publication, primary/oracle agreement, byte-identical builds, sidecar binding, and permanent zero execution authority.
+Negative controls cover malformed JSONL, oversized records, trace outcome/P&L field rejection, root candidate metadata-only deny behaviour, symlink rejection, exact root-count enforcement, self-referential output rejection, non-empty output rejection, duplicate-content grouping, absolute-path non-publication, primary/oracle agreement, byte-identical builds, sidecar binding, and permanent zero execution authority.
 
 Safety invariants:
 
@@ -69,17 +69,19 @@ Safety invariants:
 - absolute local paths are not published
 - denied candidate content is not opened
 - evidence output cannot be placed inside an audited root
+- evidence output cannot contain pre-existing files
 - canonical authority is never granted automatically
 
 ## Acceptance Proof
 
 Local synthetic validation before publication:
 
-- focused tests: `12 passed`
+- focused tests: `13 passed`
 - Python compilation: passed
 - trace values absent from published aggregate evidence: passed
 - denied root candidate content-open guard: passed
 - output-inside-root rejection before mutation: passed
+- non-empty output rejection without mutation: passed
 - exact duplicate grouping: passed
 - candidate limit: `null`
 - deterministic two-directory evidence: passed
@@ -92,9 +94,10 @@ Repository CI and Code Excellence must still pass on the exact PR head. The real
 
 ## Runtime Proof Required After Merge
 
-Run the harness from the main TradeBot checkout with the real trace and exactly 27 declared roots. Keep evidence output outside every audited root:
+Run the harness from the main TradeBot checkout with the real trace and exactly 27 declared roots. Keep evidence output outside every audited root and delete any prior output directories before starting:
 
 ```bash
+rm -rf /tmp/tradebot-local-source-audit-v1/run-a /tmp/tradebot-local-source-audit-v1/run-b
 python -m research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.build_evidence \
   --trace /Users/madhuram/tradebot/.runtime/logs/execution_entry_trace.jsonl \
   --root CURRENT_WORKTREE=/path/to/current/worktree \
