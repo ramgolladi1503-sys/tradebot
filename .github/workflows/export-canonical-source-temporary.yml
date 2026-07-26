@@ -44,9 +44,12 @@ jobs:
           printf '%s\n' "$(git rev-parse HEAD)" > export/HEAD.txt
           tar -czf canonical-source.tar.gz -C export .
           sha256sum canonical-source.tar.gz > canonical-source.tar.gz.sha256
-          base64 -w 0 canonical-source.tar.gz | fold -w 76 > canonical-source.tar.gz.b64.txt
-          wc -l canonical-source.tar.gz.b64.txt > total_lines.txt
-          sha256sum canonical-source.tar.gz.b64.txt > wrapped_base64.sha256
+          base64 -w 0 canonical-source.tar.gz > canonical-source.tar.gz.b64
+          rm -rf chunks
+          mkdir -p chunks
+          split -b 4000 -d -a 3 canonical-source.tar.gz.b64 chunks/chunk_
+          wc -c canonical-source.tar.gz.b64 > chunks/total_bytes.txt
+          sha256sum canonical-source.tar.gz.b64 > chunks/base64.sha256
       - name: Commit temporary source export
         run: |
           set -euo pipefail
@@ -54,14 +57,12 @@ jobs:
           rm -rf "$export_dir"
           mkdir -p "$export_dir"
           cp canonical-source.tar.gz.sha256 "$export_dir/"
-          cp canonical-source.tar.gz.b64.txt "$export_dir/"
-          cp total_lines.txt "$export_dir/"
-          cp wrapped_base64.sha256 "$export_dir/"
+          cp -R chunks/. "$export_dir/"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$export_dir"
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m "chore(research): wrap canonical source export"
+          git commit -m "chore(research): split canonical source into retrievable chunks"
           git push origin HEAD:research/all-strategy-option-pf-v1
