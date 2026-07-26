@@ -3,8 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from scripts.run_ce_pe_history_inventory_local import run
+from scripts.run_ce_pe_history_inventory_local import (
+    LocalInventoryRunnerError,
+    _replace_output_root,
+    run,
+)
 
 
 def test_local_runner_rebuilds_manifest_and_remains_no_go(
@@ -41,3 +46,25 @@ def test_local_runner_rebuilds_manifest_and_remains_no_go(
     assert result["pnl_read"] is False
     assert result["holdout_outcomes_read"] is False
     assert result["backtests_run"] is False
+
+
+def test_replace_output_refuses_unrelated_directory_and_allows_named_tmp_target(
+    tmp_path: Path,
+) -> None:
+    unsafe = tmp_path / "unrelated-output"
+    unsafe.mkdir()
+    sentinel = unsafe / "must-survive.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(LocalInventoryRunnerError, match="unsafe_output_delete"):
+        _replace_output_root(unsafe)
+
+    assert sentinel.exists() is True
+
+    allowed = tmp_path / "tradebot-ce-pe-history-inventory-test"
+    allowed.mkdir()
+    (allowed / "old.txt").write_text("replace", encoding="utf-8")
+
+    _replace_output_root(allowed)
+
+    assert allowed.exists() is False
