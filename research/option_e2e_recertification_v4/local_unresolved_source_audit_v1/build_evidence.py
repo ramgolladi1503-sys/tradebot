@@ -65,31 +65,45 @@ def build(
     }
     oracle_sha = write_json(output_dir / "local_source_audit_oracle.json", oracle_payload)
 
-    decision = (
-        "LOCAL_SOURCE_CANDIDATES_FOUND_REQUIRES_HUMAN_AUTHORITY_REVIEW"
-        if root_primary["source_candidate_count"]
-        else "LOCAL_SOURCE_AUDIT_COMPLETE_NO_ADDITIONAL_CANDIDATES"
+    candidate_count = int(root_primary["source_candidate_count"])
+    denied_candidate_count = int(
+        root_primary["denied_outcome_or_pnl_candidate_count"]
     )
+    if denied_candidate_count:
+        decision = "LOCAL_SOURCE_CANDIDATES_FOUND_WITH_DENIED_CONTENT"
+    elif candidate_count:
+        decision = "LOCAL_SOURCE_CANDIDATES_FOUND_REQUIRES_HUMAN_AUTHORITY_REVIEW"
+    else:
+        decision = "LOCAL_SOURCE_AUDIT_COMPLETE_NO_ADDITIONAL_CANDIDATES"
+    source_search_completion = (
+        "INCOMPLETE_CANDIDATE_AUTHORITY_REVIEW_REQUIRED"
+        if candidate_count
+        else "COMPLETE_NO_ADDITIONAL_CANDIDATES"
+    )
+
     summary = {
         "schema_version": "local_unresolved_source_audit_v1",
         "decision": decision,
-        "source_search_completion": "COMPLETE_DECLARED_ROOTS_INSPECTED",
+        "declared_root_inventory_status": "COMPLETE",
+        "source_search_completion": source_search_completion,
         "trace_candidate_id": trace_primary["candidate_id"],
         "trace_sha256": trace_primary["trace_sha256"],
         "trace_record_count": trace_primary["record_count"],
         "trace_source_disposition": trace_primary["source_disposition"],
         "declared_root_count": root_primary["declared_root_count"],
-        "source_candidate_count": root_primary["source_candidate_count"],
+        "source_candidate_count": candidate_count,
+        "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "exact_duplicate_group_count": root_primary["exact_duplicate_group_count"],
-        "remaining_uninspected_known_source_count": 0,
-        "authority_candidate_review_required": bool(
-            root_primary["source_candidate_count"]
-        ),
+        "remaining_uninspected_known_source_count": denied_candidate_count,
+        "authority_candidate_review_required": bool(candidate_count),
         "canonical_signal_source_count": 0,
         "canonical_dataset_source_count": 0,
         "replacement_signal_ledger_required": True,
         "primary_oracle_agreement": agreement["status"],
         "outcome_or_pnl_fields_present": False,
+        "outcomes_read": False,
+        "pnl_read": False,
+        "holdout_outcomes_read": False,
         "research_only": True,
         "read_only": True,
         "is_order_action": False,
@@ -112,7 +126,11 @@ def build(
         "candidate_identity_manifest_sha256": root_primary[
             "candidate_identity_manifest_sha256"
         ],
+        "denied_outcome_or_pnl_candidate_count": denied_candidate_count,
         "primary_oracle_agreement": agreement["status"],
+        "outcomes_read": False,
+        "pnl_read": False,
+        "holdout_outcomes_read": False,
         "research_only": True,
         "read_only": True,
         "is_order_action": False,
