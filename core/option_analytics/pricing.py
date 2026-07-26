@@ -31,6 +31,10 @@ def _invalid_result(inputs: ModelInputs, status: CalculationStatus, warning: str
 
 
 def _validate_inputs(inputs: ModelInputs) -> tuple[CalculationStatus, float | None, float | None, str | None]:
+    if not isinstance(inputs.model, PricingModel):
+        return CalculationStatus.INVALID_INPUT, None, None, "unsupported pricing model"
+    if not isinstance(inputs.option_type, OptionType):
+        return CalculationStatus.INVALID_INPUT, None, None, "unsupported option type"
     numeric = [inputs.strike, inputs.risk_free_rate, inputs.volatility, inputs.dividend_yield]
     if inputs.spot is not None:
         numeric.append(inputs.spot)
@@ -138,7 +142,9 @@ def price_option(inputs: ModelInputs) -> PricingResult:
     if price < lower - numerical_tolerance or price > upper + numerical_tolerance:
         return _invalid_result(inputs, CalculationStatus.NUMERICAL_FAILURE, "pricing materially violated model-consistent bounds")
     price = min(max(price, lower), upper)
-    time_value = max(price - intrinsic, 0.0)
+    # For European options, carry can make model value minus spot intrinsic negative.
+    # Preserve the signed value instead of silently clamping it.
+    time_value = price - intrinsic
     return PricingResult(
         status=status,
         model=inputs.model,
