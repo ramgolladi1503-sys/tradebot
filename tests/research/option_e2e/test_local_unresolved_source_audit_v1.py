@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.build_evidence import (
+    OutputDirectoryInsideDeclaredRootError,
     build,
 )
 from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.oracle import (
@@ -206,6 +207,24 @@ def test_primary_and_independent_oracle_agree(tmp_path: Path) -> None:
     assert all(agreement["checks"].values())
     assert root_primary["denied_outcome_or_pnl_candidate_count"] == 1
     assert root_oracle["denied_outcome_or_pnl_candidate_count"] == 1
+
+
+def test_build_rejects_output_inside_declared_root(tmp_path: Path) -> None:
+    trace = tmp_path / "execution_entry_trace.jsonl"
+    _write_trace(trace, [_record()])
+    root = tmp_path / "root"
+    root.mkdir()
+    output = root / "audit-output"
+
+    with pytest.raises(OutputDirectoryInsideDeclaredRootError):
+        build(
+            trace_path=trace,
+            root_specs=[RootSpec("ROOT_A", root)],
+            output_dir=output,
+            expected_root_count=1,
+        )
+
+    assert not output.exists()
 
 
 def test_build_is_byte_deterministic_and_hash_bound(tmp_path: Path) -> None:
