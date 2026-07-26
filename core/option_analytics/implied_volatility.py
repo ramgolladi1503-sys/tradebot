@@ -95,6 +95,7 @@ def _result(
     years: float | None = None,
     error: float | None = None,
 ) -> ImpliedVolatilityResult:
+    safe_market_price = float(market_price) if is_finite_number(market_price) else None
     return ImpliedVolatilityResult(
         status=status,
         model=inputs.model,
@@ -105,7 +106,7 @@ def _result(
         absolute_price_error=error,
         lower_volatility_bound=lower_volatility_bound,
         upper_volatility_bound=upper_volatility_bound,
-        market_price=market_price,
+        market_price=safe_market_price,
         lower_price_bound=lower_price_bound,
         upper_price_bound=upper_price_bound,
         solver=solver,
