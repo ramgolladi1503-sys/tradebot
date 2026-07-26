@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/compression-breakout-archive-smoke.yml"
       - "scripts/run_tracked_archive_compression_smoke.py"
+      - "scripts/run_tracked_archive_compression_smoke_v2.py"
       - "research/option_e2e_recertification_v4/compression_breakout_option_campaign_v1/**"
       - "research/option_e2e_recertification_v4/option_candle_backtest_v1/**"
       - "strategies/movement/compression_breakout.py"
@@ -48,7 +49,7 @@ jobs:
                       print(name)
           PY
           set +e
-          PYTHONPATH=. python scripts/run_tracked_archive_compression_smoke.py \
+          PYTHONPATH=.:scripts python scripts/run_tracked_archive_compression_smoke_v2.py \
             --archive runtime/upstox_candidate_replay.zip \
             --output-dir "$output" \
             >"$output/run.log" 2>&1
