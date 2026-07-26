@@ -1,21 +1,25 @@
 mode: RESEARCH_ONLY_OPTION_CANDLE_CAMPAIGN
 candidate_id: compression_breakout_option_campaign_v1
 decision: IMPLEMENTATION_READY_RUNTIME_DATA_REQUIRED
-reason: The campaign now calls the real Compression Breakout strategy owner, emits a causal pre-outcome signal ledger, and connects selected signals to conservative CE/PE candle economics without reading sealed holdout option outcomes.
+reason: The campaign calls the canonical Compression Breakout strategy owner, emits a pre-outcome signal ledger, and connects selected signals to conservative CE/PE candle economics without reading sealed holdout option outcomes.
+timestamp: 2026-07-26T18:58:00+05:30
 research_only: true
 read_only: true
 is_order_action: false
 broker_api_called: false
 allowed_for_live_execution: false
-source: production strategy owner plus option_candle_backtest_v1
+outcomes_read: false
+pnl_read: false
+holdout_outcomes_read: false
+source: strategies/movement/compression_breakout.py; research/option_e2e_recertification_v4/compression_breakout_option_campaign_v1/; research/option_e2e_recertification_v4/option_candle_backtest_v1/
 
 # Compression Breakout Option Campaign V1
 
 ## Agent Work Contract
 
-Implement the first real strategy-specific historical CE/PE campaign after the
+Implement the first strategy-specific historical CE/PE campaign after the
 generic candle engine became available. Use `compression_breakout_v1`, the
-highest-priority strategy with a concrete production candidate-generator owner.
+highest-priority strategy with a concrete canonical candidate-generator owner.
 Do not use the prior placeholder historical audit or replay scripts.
 
 ## Scope Guard
@@ -34,14 +38,13 @@ candidate-pool runtime, dashboard, paper or live configuration is changed.
 
 The campaign imports and calls
 `generate_compression_breakout_candidates`; it does not reproduce the strategy
-formula. Context features are constructed causally by session. The breakout bar
-cannot influence the frozen pre-breakout 15-bar resistance, support, range width
-or ATR inputs. Future-bar mutation controls preserve earlier signal identity.
+formula. Context features are constructed by session. The breakout bar cannot
+influence the frozen pre-breakout 15-bar resistance, support, range width or ATR
+inputs. Later-bar mutation controls preserve earlier signal identity.
 
-The signal ledger contains no option outcomes or P&L. It records the real
-parameter hash, raw strategy score, confidence score, strategy-only rank score,
-feature cutoff and earliest-entry time. Execution-quality ownership remains
-unset.
+The signal ledger contains no option outcomes or P&L. It records the parameter
+hash, raw strategy score, confidence score, strategy-only rank score, feature
+cutoff and earliest-entry time. Execution-quality ownership remains unset.
 
 ## Hermes Review
 
@@ -49,7 +52,7 @@ The implementation follows the intended owner sequence:
 
 ```text
 underlying completed bars
-→ canonical causal context
+→ canonical pre-outcome context
 → movement regime
 → Compression Breakout candidate
 → bullish CE / bearish PE research signal
@@ -73,7 +76,7 @@ Fail-closed controls cover:
 
 - duplicate underlying timestamps;
 - invalid OHLC geometry;
-- missing causal warmup;
+- missing pre-signal warmup;
 - zero-volume VWAP proxy disclosure;
 - optional rejection of VWAP proxy sessions;
 - deterministic signal identities;
@@ -90,13 +93,16 @@ Safety remains:
 - `is_order_action=false`
 - `broker_api_called=false`
 - `allowed_for_live_execution=false`
+- `outcomes_read=false`
+- `pnl_read=false`
+- `holdout_outcomes_read=false`
 - `executable_option_pnl_certified=false`
 
 ## Acceptance Proof
 
 Publication requires:
 
-- focused campaign tests;
+- focused campaign contract tests;
 - existing option-E2E tests;
 - option-candle backtest tests;
 - Code Excellence;
@@ -118,8 +124,8 @@ until the campaign contract and negative controls are frozen.
 
 This implementation does not prove that Compression Breakout is profitable,
 that a 60% win rate exists, that option candles equal bid/ask execution, or that
-paper/live trading is ready. It establishes a truthful executable research path
-to answer those questions with local data.
+paper/live trading is ready. It establishes a research path to answer those
+questions with local data.
 
 ## Human Approval
 
