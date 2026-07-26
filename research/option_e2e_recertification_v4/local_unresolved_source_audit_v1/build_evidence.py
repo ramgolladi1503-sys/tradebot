@@ -11,6 +11,10 @@ from .root_scan import RootSpec, parse_root_spec, scan_declared_roots
 from .trace_audit import audit_execution_entry_trace
 
 
+class OutputDirectoryInsideDeclaredRootError(ValueError):
+    """Evidence output must not mutate any directory being audited."""
+
+
 def canonical_json(payload: Any) -> str:
     return (
         json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -28,6 +32,19 @@ def write_json(path: Path, payload: Any) -> str:
     return digest
 
 
+def _validate_output_outside_roots(
+    output_dir: Path, root_specs: Sequence[RootSpec]
+) -> Path:
+    resolved_output = output_dir.expanduser().resolve(strict=False)
+    for spec in root_specs:
+        resolved_root = spec.path.expanduser().resolve(strict=True)
+        if resolved_output == resolved_root or resolved_output.is_relative_to(resolved_root):
+            raise OutputDirectoryInsideDeclaredRootError(
+                f"output_directory_inside_declared_root:root_id={spec.root_id}"
+            )
+    return resolved_output
+
+
 def build(
     *,
     trace_path: Path,
@@ -36,7 +53,8 @@ def build(
     expected_root_count: int = 27,
     expected_trace_sha256: str | None = None,
 ) -> dict[str, Any]:
-    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_output = _validate_output_outside_roots(output_dir, root_specs)
+    resolved_output.mkdir(parents=True, exist_ok=True)
     trace_primary = audit_execution_entry_trace(
         trace_path, expected_sha256=expected_trace_sha256
     )
@@ -55,15 +73,19 @@ def build(
     if agreement["status"] != "AGREEMENT":
         raise RuntimeError("local_source_primary_oracle_disagreement")
 
-    trace_sha = write_json(output_dir / "local_execution_trace_audit.json", trace_primary)
-    root_sha = write_json(output_dir / "local_root_census.json", root_primary)
+    trace_sha = write_json(
+        resolved_output / "local_execution_trace_audit.json", trace_primary
+    )
+    root_sha = write_json(resolved_output / "local_root_census.json", root_primary)
     oracle_payload = {
         "schema_version": "local_unresolved_source_audit_v1",
         "trace": trace_oracle,
         "roots": root_oracle,
         "primary_oracle_agreement": agreement,
     }
-    oracle_sha = write_json(output_dir / "local_source_audit_oracle.json", oracle_payload)
+    oracle_sha = write_json(
+        resolved_output / "local_source_audit_oracle.json", oracle_payload
+    )
 
     candidate_count = int(root_primary["source_candidate_count"])
     denied_candidate_count = int(
@@ -110,7 +132,9 @@ def build(
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
-    summary_sha = write_json(output_dir / "local_source_audit_summary.json", summary)
+    summary_sha = write_json(
+        resolved_output / "local_source_audit_summary.json", summary
+    )
     manifest = {
         "schema_version": "local_unresolved_source_audit_v1",
         "artifacts": {
@@ -137,7 +161,7 @@ def build(
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
-    write_json(output_dir / "external_evidence_manifest.json", manifest)
+    write_json(resolved_output / "external_evidence_manifest.json", manifest)
     return summary
 
 
