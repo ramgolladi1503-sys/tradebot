@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .campaign import (
-    CompressionCampaignConfig,
-    CompressionCampaignResult,
-    run_compression_campaign as _run_compression_campaign,
-)
+from .campaign import CompressionCampaignConfig, CompressionCampaignResult
 from .identity import rebind_campaign_identity, rebind_ledger_identity
+from .safe_campaign import run_compression_campaign_safe as _run_compression_campaign
 from .signal_ledger import (
     CompressionLedgerConfig,
     CompressionSignalLedgerResult,
