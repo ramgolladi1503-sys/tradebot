@@ -38,7 +38,7 @@ The repaired runner inspected 1,509 parquet files under `/Users/madhuram/tradebo
 
 Schema groups:
 
-- `2926ae9907f2eb27`: 1,479 files, 110,547 rows, classified `UNDERLYING_1M_OHLCV`; columns are `date`, `open`, `high`, `low`, `close`, `volume`, `instrument`, `instrument_token`, `interval`, `source`, `synthetic`, `fallback`, `mock`, and `fetch_date`.
+- `2926ae9907f2eb27`: 1,479 files, 110,547 rows, classified `UNDERLYING_5M_OHLCV`; columns are `date`, `open`, `high`, `low`, `close`, `volume`, `instrument`, `instrument_token`, `interval`, `source`, `synthetic`, `fallback`, `mock`, and `fetch_date`.
 - `b8d58dc60a910d8d`: 30 files, 9,735 rows, classified `ZERO_PRICE_PLACEHOLDER`; columns are `timestamp`, `open`, `high`, `low`, `close`, and `volume`; file names are `*_OPT_MOCK_ltp.parquet` and do not provide expiry, strike, CE/PE, or contract identity.
 
 # Session Matrix

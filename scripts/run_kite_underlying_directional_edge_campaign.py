@@ -160,7 +160,8 @@ def audit_corpus(root: Path) -> tuple[dict[tuple[str, str], pd.DataFrame], list[
                 instrument = "SENSEX"
             else:
                 instrument = "NIFTY"
-            summary.update({"relative_path": path.relative_to(root).as_posix(), "date": session_date, "index": instrument, "source_sha256": sha256_file(path)})
+            source_hash = sha256_file(path)
+            summary.update({"relative_path": path.relative_to(root).as_posix(), "date": session_date, "index": instrument, "source_file_id": source_hash[:16]})
             by_file.append(summary)
             by_session[(session_date, instrument)] = {
                 "date": session_date,
@@ -169,7 +170,7 @@ def audit_corpus(root: Path) -> tuple[dict[tuple[str, str], pd.DataFrame], list[
                 "accepted_row_count": summary["accepted_row_count"],
                 "missing_bar_count": summary["missing_bar_count"],
                 "authority_classification": summary["authority_classification"],
-                "source_sha256": summary["source_sha256"],
+                "source_file_id": summary["source_file_id"],
             }
             if summary["authority_classification"] in {"REAL_KITE_UNDERLYING_CANDLES", "PARTIAL_REAL_WITH_REJECTED_ROWS"} and summary["bar_interval"] == "5minute":
                 sessions[(session_date, instrument)] = df
@@ -179,7 +180,7 @@ def audit_corpus(root: Path) -> tuple[dict[tuple[str, str], pd.DataFrame], list[
             rejected["mock_true_rows"] += int(summary["mock_true_rows"])
             rejected["duplicate_timestamp_rows"] += int(summary["duplicate_timestamp_rows"])
         except Exception:
-            by_file.append({"relative_path": path.relative_to(root).as_posix(), "authority_classification": "MALFORMED", "source_sha256": sha256_file(path)})
+            by_file.append({"relative_path": path.relative_to(root).as_posix(), "authority_classification": "MALFORMED", "source_file_id": sha256_file(path)[:16]})
     audit = {
         "schema_version": "kite_underlying_authenticity_audit_v1",
         "classification": "UNDERLYING_5M_OHLCV",
@@ -455,7 +456,7 @@ def run_campaign(kite_root: Path, output_root: Path) -> dict[str, Any]:
     write_json_with_sidecar(output_root / "targeted_option_history_request_manifest.json", {"rows": requests, "schema_version": "targeted_option_history_request_manifest_v1"})
     _write_csv(output_root / "targeted_option_history_request_manifest.csv", requests)
     write_json_with_sidecar(output_root / "targeted_option_data_search_results.json", search)
-    hashes = {path.name: sha256_file(path) for path in output_root.iterdir() if path.is_file() and not path.name.endswith(".sha256")}
+    hashes = {path.name: f"sha256:{sha256_file(path)}" for path in output_root.iterdir() if path.is_file() and not path.name.endswith(".sha256")}
     verdict = "TARGETED_OPTION_HISTORY_NOT_FOUND" if requests else "NO_VALIDATED_DIRECTIONAL_EDGE_FOUND"
     manifest = {"schema_version": "kite_replay_underlying_directional_edge_campaign_manifest_v1", "campaign": "KITE_REPLAY_UNDERLYING_DIRECTIONAL_EDGE_CAMPAIGN_V1", "zip_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d", "total_parquet_files": 1509, "underlying_files": len(by_file), "date_range": ["2024-07-09", "2026-07-08"], "directional_trade_count": len(trades), "validation_survivor_count": len(top_selected), "option_intent_count": len(intents), "final_verdict": verdict, "artifact_hashes": hashes, "read_only": True, "is_order_action": False, "broker_api_called": False, "allowed_for_live_execution": False, "holdout_outcomes_read": False}
     write_json_with_sidecar(output_root / "manifest.json", manifest)
