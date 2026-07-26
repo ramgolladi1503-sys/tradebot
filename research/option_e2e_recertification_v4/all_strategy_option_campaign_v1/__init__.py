@@ -1,3 +1,8 @@
+from .analytics import (
+    StrategyAnalyticsRow,
+    build_master_analytics,
+    write_master_analytics,
+)
 from .universe_v2 import (
     CampaignUniverse,
     CampaignUniverseEntry,
@@ -8,6 +13,9 @@ from .universe_v2 import (
 __all__ = [
     "CampaignUniverse",
     "CampaignUniverseEntry",
+    "StrategyAnalyticsRow",
     "build_campaign_universe",
+    "build_master_analytics",
     "write_campaign_universe",
+    "write_master_analytics",
 ]
