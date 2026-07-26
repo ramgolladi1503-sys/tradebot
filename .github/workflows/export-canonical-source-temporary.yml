@@ -8,16 +8,19 @@ on:
       - .github/workflows/export-canonical-source-temporary.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   export:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: research/all-strategy-option-pf-v1
       - name: Build canonical source bundle
         run: |
           set -euo pipefail
+          rm -rf export
           mkdir -p export
           paths=(
             core/movement_contract.py
@@ -41,11 +44,19 @@ jobs:
           printf '%s\n' "$(git rev-parse HEAD)" > export/HEAD.txt
           tar -czf canonical-source.tar.gz -C export .
           sha256sum canonical-source.tar.gz > canonical-source.tar.gz.sha256
-      - uses: actions/upload-artifact@v4
-        with:
-          name: canonical-source-${{ github.sha }}
-          path: |
-            canonical-source.tar.gz
-            canonical-source.tar.gz.sha256
-          if-no-files-found: error
-          retention-days: 1
+          base64 -w 0 canonical-source.tar.gz > canonical-source.tar.gz.b64
+      - name: Commit temporary source export
+        run: |
+          set -euo pipefail
+          export_dir="research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/temporary_source_export"
+          mkdir -p "$export_dir"
+          cp canonical-source.tar.gz.b64 "$export_dir/canonical-source.tar.gz.b64"
+          cp canonical-source.tar.gz.sha256 "$export_dir/canonical-source.tar.gz.sha256"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$export_dir"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore(research): export canonical source temporarily"
+          git push origin HEAD:research/all-strategy-option-pf-v1
