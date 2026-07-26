@@ -1,8 +1,8 @@
 mode: RESEARCH_ONLY_SOURCE_UNIVERSE_REPAIR_AND_DATASET_PREFLIGHT
 candidate_id: current_source_universe_and_ce_pe_dataset_preflight_v1
-decision: RAW_CE_PE_TICK_SOURCE_NORMALIZER_SMOKE_PASS_INSUFFICIENT_REPLAY_COVERAGE
-reason: immutable source evidence is preserved and selected contracts can be normalized into files accepted by the actual strict loader, but only one valid CE/PE session is proven, provider authority remains path-inferred, exhaustive all-root content inventory did not complete, and strategy development remains unauthorized
-timestamp: 2026-07-26T13:45:00+05:30
+decision: RAW_CE_PE_TICK_SOURCE_NORMALIZER_SMOKE_PASS_METADATA_FIRST_INVENTORY_IMPLEMENTED_LOCAL_EXECUTION_REQUIRED
+reason: immutable source evidence and one-session normalization smoke proof remain valid; a bounded metadata-first all-root inventory with independent oracle and real archive evidence is now implemented, but it has not been executed against the Mac-only external roots and sufficient multi-session replay coverage is not established
+timestamp: 2026-07-26T16:45:00+05:30
 research_only: true
 read_only: true
 is_order_action: false
@@ -11,17 +11,17 @@ allowed_for_live_execution: false
 outcomes_read: false
 pnl_read: false
 holdout_outcomes_read: false
-source: research/option_e2e_recertification_v4/current_certification_source_universe_v1/portable_source_snapshot_manifest.json; research/option_e2e_recertification_v4/current_certification_source_universe_v1/frozen_source_audit_evidence_v1/local_source_audit_summary.json; research/option_e2e_recertification_v4/ce_pe_dataset_preflight_v1/frozen_preflight_evidence_v1/ce_pe_dataset_preflight.json; research/option_e2e_recertification_v4/ce_pe_replay_normalization_v1/replay_readiness_evidence_v1/ce_pe_replay_readiness_summary.json
+source: research/option_e2e_recertification_v4/current_certification_source_universe_v1/portable_source_snapshot_manifest.json; research/option_e2e_recertification_v4/current_certification_source_universe_v1/frozen_source_audit_evidence_v1/local_source_audit_summary.json; research/option_e2e_recertification_v4/ce_pe_dataset_preflight_v1/frozen_preflight_evidence_v1/ce_pe_dataset_preflight.json; research/option_e2e_recertification_v4/ce_pe_replay_normalization_v1/replay_readiness_evidence_v1/ce_pe_replay_readiness_summary.json; research/option_e2e_recertification_v4/ce_pe_history_inventory_v1/tracked_replay_archive_option_history_compact_v1.json
 
 # Agent Work Contract
 
-- source_agent: ChatGPT independent review and GitHub repair
-- action: REPAIR_PUBLICATION_BOUNDARY
-- title: Invalidate weak CE/PE acceptance while preserving immutable raw-source evidence
-- scope: preflight fail-closed semantics, focused tests, compact evidence, Agent Review, and PR publication boundary
-- allowed_paths: existing CE/PE preflight research package, focused tests, compact evidence, and this review
+- source_agent: ChatGPT independent review and direct GitHub implementation
+- action: REPAIR_PUBLICATION_BOUNDARY_AND_IMPLEMENT_METADATA_FIRST_INVENTORY
+- title: Preserve raw CE/PE evidence, prove one-session replay smoke, and implement bounded local-history discovery
+- scope: preflight fail-closed semantics, immutable evidence, raw-to-replay smoke normalization, actual strict-loader proof, metadata-first parquet/ZIP inventory, independent oracle, focused tests, and publication boundary
+- allowed_paths: focused CE/PE research packages, focused tests, compact evidence, and this review
 - forbidden_paths: strategies, candidate-pool runtime behaviour, broker, order, execution, feed, risk, dashboard, live/paper config, outcome, P&L, WFA, holdout, and Git/LFS history
-- acceptance_proof: raw-source and replay-dataset authority are separated; no raw tick source is promoted without actual strict-loader execution and independent oracle evidence
+- acceptance_proof: no raw tick source is promoted without actual strict-loader execution; metadata discovery does not full-read broad parquet files; archive evidence is hash-bound; strategy work remains blocked without sufficient chronological coverage
 
 # Scope Guard
 
@@ -70,54 +70,82 @@ Truthful raw-source verdict:
 
 `RAW_CE_PE_TICK_SOURCE_VALIDATED`
 
-This verdict means actual CE and PE tick rows with real bid/ask observations exist. It does not mean the file is directly replay-compatible.
+This means actual CE and PE tick rows with real bid/ask observations exist. It does not mean the raw file is directly replay-compatible.
 
-# Exhaustive Inventory Status
+# Strict Option-Replay Smoke
 
-The immutable snapshot inventory is deterministic and compact, but exhaustive all-root content inventory is not complete in this PR revision. A run against the approved current source-universe machine manifest was started and stopped after it spent several minutes opening a broad data artifact through the existing preflight path. That path is too expensive for all approved roots because it reads dataframes before proving option relevance.
+A deterministic research-only normalizer produced selected per-contract CSV files outside Git and invoked the actual loader using `ResearchMode.REAL_EXECUTABLE_RESEARCH`.
 
-Current all-root inventory verdict:
-
-`EXHAUSTIVE_ALL_ROOT_CONTENT_INVENTORY_NOT_ESTABLISHED`
-
-This is a blocker for strategy development. It does not invalidate the immutable snapshot smoke proof; it prevents claiming that the whole local Mac source universe has been exhausted.
-
-# Strict Option-Replay Readiness
-
-The raw schema lacks the normalized replay contract required by the existing loader, including canonical timestamp/OHLC, canonical bid/ask names, quote timestamp, underlying, option type, strike, expiry, provider, dataset hash, and bar interval in loader-compatible rows.
-
-The source also has incomplete bid/ask and contract metadata coverage. A deterministic normalized smoke output was produced for selected contracts and passed the actual strict loader, but that proof covers only one session and does not establish a replay dataset for development/validation/holdout.
-
-Correction after local normalization:
-
-- normalizer package: `research/option_e2e_recertification_v4/ce_pe_replay_normalization_v1`
-- full normalized outputs: external evidence root, not committed
 - normalized contract files attempted: 12
 - actual strict-loader pass count: 12
 - actual strict-loader fail count: 0
-- loader mode: `ResearchMode.REAL_EXECUTABLE_RESEARCH`
 - normalizer result: `NORMALIZER_SMOKE_PASS`
 - independent oracle agreement: `AGREEMENT`
+- valid session: `2026-07-14`
+- chronological coverage: `ONE_SESSION_SMOKE_ONLY`
+- replay dataset verdict: `INSUFFICIENT_REPLAY_COVERAGE`
+- strategy development authorized: false
 
-Replay dataset verdict:
+The top-12 contract selection proves only adapter/loader wiring. It does not represent the future deterministic expiry/strike policy and grants no strategy authority.
 
-`INSUFFICIENT_REPLAY_COVERAGE`
+# Metadata-First Inventory Implementation
 
-Chronological coverage:
+The new package `research/option_e2e_recertification_v4/ce_pe_history_inventory_v1` implements the previously missing bounded local-history discovery lane.
 
-`ONE_SESSION_SMOKE_ONLY`
+It:
 
-No strategy backtest is authorized.
+- traverses approved roots deterministically with `candidate_limit=null`;
+- rejects symlinks, overlapping roots, and special files;
+- records denied outcome/P&L paths by metadata only and does not hash or open them;
+- inspects parquet footer/schema metadata through `pyarrow.parquet.ParquetFile` rather than `pandas.read_parquet`;
+- full-reads no broad parquet table during candidate discovery;
+- ignores stale allowed-class lists for discovery so option files in external roots cannot be silently hidden;
+- selectively inspects option-like ZIP parquet members without extracting the whole archive;
+- separates archive session directories from expiry labels;
+- groups exact-content duplicates;
+- publishes a primary inventory plus independently implemented oracle and reconciliation matrix;
+- always leaves `strategy_development_authorized=false` at inventory stage.
+
+Synthetic controls prove broad parquet tables are not full-read, stale class lists cannot hide option data, denied files stay unopened, and archive expiry labels cannot masquerade as session dates.
+
+# Tracked Replay Archive Result
+
+The PR #713 archive evidence is now bound into a compact committed artifact and sidecar.
+
+- archive: `runtime/upstox_candidate_replay.zip`
+- archive SHA-256: `4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707`
+- source full-audit SHA-256: `f9c4d7b92deb45bae64fb3b9bc3eabdfef516864a9eb6988c5a5042fc65aa2d9`
+- option-like parquet members: 126
+- CE members: 63
+- PE members: 63
+- option session directories: only `20260709`
+- underlyings: BANKNIFTY, NIFTY, SENSEX
+- chronological verdict: `ONE_SESSION_SMOKE_ONLY`
+
+The archive's hundreds of underlying parquet dates are not option-history dates. It adds at most one further option smoke session and cannot establish development/validation/holdout coverage.
+
+# Current Exhaustive Inventory Status
+
+The metadata-first implementation is present and CI-testable, but the complete all-root run has not been executed against:
+
+- `/Users/madhuram/tradebot`
+- `/Users/madhuram/tradebot-ce-pe-option-certification-v1`
+- `/Users/madhuram/tradebot-data`
+- `/Users/madhuram/tradebot-ml-evidence`
+
+Those paths are available only on the user's Mac and are inaccessible to GitHub-hosted execution and this connector environment.
+
+Current verdict:
+
+`METADATA_FIRST_INVENTORY_IMPLEMENTED_LOCAL_EXTERNAL_ROOT_EXECUTION_REQUIRED`
+
+This remains a blocker for strategy development.
 
 # Independent Oracle
 
-The previous preflight oracle was not independent. The replay-readiness oracle now independently checks the candidate identity hash, dates, strict-loader pass/fail counts, strict-loader pass symbols, final verdict, and safety flags without consuming a copied primary acceptance flag.
+The replay-readiness oracle agrees with the one-session normalization smoke proof. The new inventory oracle independently walks roots and ZIP members, derives option candidate identities, session dates, footer counts, denied counts, and candidate-manifest hashes without consuming the primary inventory summary.
 
-Current oracle verdict:
-
-`AGREEMENT`
-
-Remaining limitation: the oracle agrees with the smoke-normalization verdict, not with strategy readiness or full local-source exhaustion.
+The inventory publication fails closed on disagreement.
 
 # Git LFS Review
 
@@ -131,38 +159,45 @@ No LFS or Git history repair is included.
 
 # Grill Me Review
 
-A large row count and partial valid-quote coverage can create false confidence. TradeBot's target is a live-equivalent pipeline where a directional signal selects an actual CE or PE contract, then freshness, liquidity, confidence and ranking operate on executable quote truth. That requires deterministic normalization and strict-loader acceptance, not merely a raw parquet containing some bid/ask rows.
+A large raw row count or hundreds of underlying dates can create false confidence. The product target is a live-equivalent replay where a strategy chooses an actual CE or PE contract and downstream freshness, liquidity, confidence, ranking, and ask-entry/bid-exit accounting operate on executable quote truth.
 
-The prior implementation violated this boundary by redefining acceptance until the candidate passed. This repair restores fail-closed semantics.
+That requires sufficient option sessions, deterministic all-contract availability, real strict-loader compatibility, and frozen chronological partitions. One or two smoke sessions cannot support this claim.
 
 # Hermes Review
 
-Architecture must separate:
+Architecture remains separated into:
 
 1. immutable raw-source authority;
-2. deterministic raw-to-replay normalization;
-3. actual strict-loader compatibility;
-4. chronological partition sufficiency;
-5. pre-outcome strategy ledger;
-6. candidate-pool to strategy to CE/PE to freshness to ranking replay;
-7. development, validation and untouched holdout.
+2. bounded metadata-first source discovery;
+3. deterministic raw-to-replay normalization;
+4. actual strict-loader compatibility;
+5. chronological partition sufficiency;
+6. pre-outcome strategy ledger;
+7. candidate-pool to strategy to CE/PE to freshness to ranking replay;
+8. development, validation and untouched holdout.
 
-PR #717 currently proves only parts of layer 1.
+PR #717 proves parts of layers 1-4 for smoke use and implements the discovery mechanism for layer 2. It does not prove layers 5-8.
 
 # GSD Review
 
-The repair updates preflight semantics, focused tests, compact evidence, sidecars, replay-normalization smoke tooling, actual strict-loader proof, PR body and this Agent Review. It does not alter production architecture or execute strategy workflows.
+Changes remain inside research, compact evidence, tests, and this review. No production architecture or strategy workflow is altered.
 
 # Negative Controls
 
-Focused controls now require:
+Focused controls require:
 
 - incomplete bid/ask coverage cannot become strict acceptance;
 - path-derived provider evidence remains limitation-qualified;
 - a raw tick source cannot authorize a replay dataset;
 - accepted dataset ID remains null without actual loader invocation;
-- independent oracle status cannot be hardcoded to agreement.
-- one-session loader success remains insufficient replay coverage.
+- independent oracle status cannot be hardcoded to agreement;
+- one-session loader success remains insufficient replay coverage;
+- broad parquet files are not full-read during inventory;
+- stale allowed-class lists cannot hide option candidates;
+- denied outcome/P&L files remain unopened;
+- archive expiry labels cannot become session dates;
+- committed archive evidence and its sidecar must reconcile;
+- the archive remains a one-session no-go result.
 
 # QA / Safety Review
 
@@ -181,28 +216,31 @@ Safety invariants:
 
 # Acceptance Proof
 
-The corrected compact evidence states:
+Current proven facts:
 
-- accepted replay dataset ID: null;
 - raw source candidate: hash-bound;
 - raw-source verdict: `RAW_CE_PE_TICK_SOURCE_VALIDATED`;
-- replay verdict: `INSUFFICIENT_REPLAY_COVERAGE`;
-- coverage verdict: `ONE_SESSION_SMOKE_ONLY`;
-- normalizer result: `NORMALIZER_SMOKE_PASS`;
+- normalization result: `NORMALIZER_SMOKE_PASS`;
 - actual strict-loader passes: 12;
 - actual strict-loader failures: 0;
-- oracle agreement: `AGREEMENT`.
+- replay-readiness oracle: `AGREEMENT`;
+- valid normalized smoke session: `2026-07-14`;
+- tracked archive option session: `2026-07-09` only;
+- replay verdict: `INSUFFICIENT_REPLAY_COVERAGE`;
+- strategy authorization: false;
+- metadata-first all-root scanner: implemented;
+- local external-root scan: not executed in this environment.
 
-Repository CI on the corrected exact head is still required after this update.
+All permanent repository checks must be terminal and successful on the exact final head before publication.
 
 # Runtime Proof Required After Merge
 
-None. This PR must not merge as strategy-readiness evidence. Before strategy development, a local-data lane must perform exhaustive candidate discovery, deterministic normalization, actual strict-loader execution, independent oracle reconciliation, and prove sufficient multi-session chronological coverage.
+None. This PR must remain draft and unmerged as strategy-readiness evidence. The next required runtime proof is a read-only Mac-local execution of the metadata-first inventory against the regenerated machine-specific root manifest, followed by two deterministic runs and oracle reconciliation.
 
 # What This PR Does Not Prove
 
-This work does not prove sufficient development/validation/holdout coverage, exhaustive all-root source inventory, authoritative provider provenance, strategy correctness, strategy edge, candidate-pool equivalence, confidence calibration, ranking quality, profitability, paper readiness or live readiness.
+This does not prove exhaustive Mac-local source coverage, at least 100 valid option sessions, authoritative provider provenance, development/validation/holdout partitions, candidate-pool equivalence, strategy correctness, edge, confidence calibration, ranking quality, profitability, paper readiness, or live readiness.
 
 # Human Approval
 
-No human approval should promote the one-session raw tick source directly into strategy backtesting. The next local execution must first establish normalized strict replay readiness and adequate historical coverage.
+No human approval should promote the one-session raw tick source or the one-session archive into strategy backtesting. Strategy work can start only after the local inventory finds and validates sufficient chronological CE/PE replay coverage.
