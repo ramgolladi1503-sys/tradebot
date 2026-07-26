@@ -35,4 +35,4 @@ def parse_candles(raw_json: bytes, meta: dict) -> tuple[pd.DataFrame, pd.DataFra
     
     df['normalizer_version'] = NORMALIZER_VERSION
     df = ensure_schema(df)
-    return df, quarantined\n
+    return df, quarantined

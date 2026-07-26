@@ -13,4 +13,9 @@ def validate_post_expiry(df: pd.DataFrame, expiry_date: str) -> pd.DataFrame:
     # allow until 15:30 on expiry
     exp_dt = KOLKATA.localize(datetime(exp_d.year, exp_d.month, exp_d.day, 15, 30))
     post = df['timestamp'] > exp_dt
-    return df[~post].copy(), df[post].copy()\n
+    return df[~post].copy(), df[post].copy()
+
+def is_contract_complete(path_1m, path_5m):
+    import os
+    if not path_1m or not path_5m: return False
+    return os.path.exists(path_1m) and os.path.exists(path_5m)

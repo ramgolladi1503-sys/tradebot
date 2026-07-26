@@ -31,4 +31,4 @@ def test_aggregate_5m():
     assert not agg.iloc[0]['is_complete_5m_bar']
     
     assert agg.iloc[1]['open'] == 19
-    assert agg.iloc[1]['source_bar_count'] == 1\n
+    assert agg.iloc[1]['source_bar_count'] == 1

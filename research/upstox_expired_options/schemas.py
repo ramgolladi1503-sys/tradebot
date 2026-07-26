@@ -14,4 +14,4 @@ def ensure_schema(df: pd.DataFrame) -> pd.DataFrame:
     missing = [c for c in REQUIRED_CANDLE_COLUMNS if c not in df.columns]
     if missing:
         raise ValueError(f"Missing schema columns: {missing}")
-    return df[REQUIRED_CANDLE_COLUMNS].copy()\n
+    return df[REQUIRED_CANDLE_COLUMNS].copy()

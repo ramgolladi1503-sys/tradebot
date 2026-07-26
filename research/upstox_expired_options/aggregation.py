@@ -34,4 +34,4 @@ def aggregate_5m(df_1m: pd.DataFrame) -> pd.DataFrame:
             agg[k] = v
     agg['interval'] = '5minute'
     
-    return agg.reset_index()\n
+    return agg.reset_index()

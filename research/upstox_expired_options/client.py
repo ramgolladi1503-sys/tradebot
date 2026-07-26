@@ -55,4 +55,4 @@ class UpstoxClient:
                 time.sleep(2 ** attempt)
                 attempt += 1
                 
-        raise UpstoxAPIError("MAX_RETRIES", "Retries exceeded")\n
+        raise UpstoxAPIError("MAX_RETRIES", "Retries exceeded")
