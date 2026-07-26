@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -34,18 +33,27 @@ def _sha256_file(path: Path) -> str:
 
 def _require_clean_output_root(path: Path) -> Path:
     resolved = path.expanduser().resolve(strict=False)
-    if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
+    if resolved.exists() and (
+        not resolved.is_dir() or any(resolved.iterdir())
+    ):
         raise LocalInventoryRunnerError(f"output_root_not_empty:{resolved}")
     resolved.mkdir(parents=True, exist_ok=True)
     return resolved
 
 
-def _assert_output_outside_inputs(output_root: Path, machine: dict[str, Any]) -> None:
+def _assert_output_outside_inputs(
+    output_root: Path, machine: dict[str, Any]
+) -> None:
     for row in machine.get("roots", []):
         root = Path(row["absolute_path"]).resolve(strict=True)
-        if output_root == root or output_root.is_relative_to(root) or root.is_relative_to(output_root):
+        if (
+            output_root == root
+            or output_root.is_relative_to(root)
+            or root.is_relative_to(output_root)
+        ):
             raise LocalInventoryRunnerError(
-                f"output_root_overlaps_input:{row['current_root_id']}:{output_root}"
+                f"output_root_overlaps_input:{row['current_root_id']}:"
+                f"{output_root}"
             )
 
 
@@ -57,7 +65,9 @@ def _portable_artifact_hashes(directory: Path) -> dict[str, str]:
     }
 
 
-def _run_once(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
+def _run_once(
+    *, machine_manifest: Path, output_dir: Path
+) -> dict[str, Any]:
     return build_inventory_evidence(
         machine_manifest=machine_manifest,
         output_dir=output_dir,
@@ -73,12 +83,16 @@ def run(*, campaign_worktree: Path, output_root: Path) -> dict[str, Any]:
     portable = manifests["portable"]
     universe_oracle = recompute_current_universe(machine, portable)
     if universe_oracle.get("primary_oracle_agreement") != "AGREEMENT":
-        raise LocalInventoryRunnerError("current_source_universe_primary_oracle_disagreement")
+        raise LocalInventoryRunnerError(
+            "current_source_universe_primary_oracle_disagreement"
+        )
     _assert_output_outside_inputs(output, machine)
 
     manifest_dir = output / "source-universe"
     manifest_dir.mkdir()
-    machine_manifest = manifest_dir / "current_source_universe_machine_manifest.json"
+    machine_manifest = (
+        manifest_dir / "current_source_universe_machine_manifest.json"
+    )
     write_json_with_sidecar(machine_manifest, machine)
     write_json_with_sidecar(
         manifest_dir / "current_source_universe_contract.json",
@@ -91,23 +105,29 @@ def run(*, campaign_worktree: Path, output_root: Path) -> dict[str, Any]:
 
     run_a_dir = output / "run-a"
     run_b_dir = output / "run-b"
-    summary_a = _run_once(machine_manifest=machine_manifest, output_dir=run_a_dir)
-    summary_b = _run_once(machine_manifest=machine_manifest, output_dir=run_b_dir)
+    summary_a = _run_once(
+        machine_manifest=machine_manifest, output_dir=run_a_dir
+    )
+    summary_b = _run_once(
+        machine_manifest=machine_manifest, output_dir=run_b_dir
+    )
 
     hashes_a = _portable_artifact_hashes(run_a_dir)
     hashes_b = _portable_artifact_hashes(run_b_dir)
     deterministic = hashes_a == hashes_b
     if not deterministic:
-        raise LocalInventoryRunnerError("run_a_run_b_portable_artifacts_differ")
+        raise LocalInventoryRunnerError(
+            "run_a_run_b_portable_artifacts_differ"
+        )
 
     valid_dates = sorted(
         set(summary_a.get("valid_option_session_dates", []))
         | set(summary_b.get("valid_option_session_dates", []))
     )
     session_count = len(valid_dates)
-    strategy_authorized = bool(
-        summary_a.get("strategy_development_authorized")
-        and summary_b.get("strategy_development_authorized")
+    calendar_months = sorted({value[:7] for value in valid_dates})
+    coverage_candidate_found = (
+        session_count >= 100 and len(calendar_months) >= 6
     )
 
     final = {
@@ -121,25 +141,49 @@ def run(*, campaign_worktree: Path, output_root: Path) -> dict[str, Any]:
             None,
         ),
         "root_count": machine.get("root_count"),
-        "source_universe_oracle": universe_oracle.get("primary_oracle_agreement"),
-        "run_a_primary_oracle": summary_a.get("primary_oracle_agreement"),
-        "run_b_primary_oracle": summary_b.get("primary_oracle_agreement"),
-        "run_a_run_b_byte_determinism": "PASS" if deterministic else "FAIL",
+        "source_universe_oracle": universe_oracle.get(
+            "primary_oracle_agreement"
+        ),
+        "run_a_primary_oracle": summary_a.get(
+            "primary_oracle_agreement"
+        ),
+        "run_b_primary_oracle": summary_b.get(
+            "primary_oracle_agreement"
+        ),
+        "run_a_run_b_byte_determinism": (
+            "PASS" if deterministic else "FAIL"
+        ),
         "portable_artifact_hashes": hashes_a,
         "files_visited": summary_a.get("files_visited"),
-        "parquet_metadata_inspected": summary_a.get("parquet_metadata_inspected"),
-        "zip_members_inspected": summary_a.get("zip_members_inspected"),
-        "option_candidate_count": summary_a.get("option_candidate_count"),
+        "parquet_metadata_inspected": summary_a.get(
+            "parquet_metadata_inspected"
+        ),
+        "zip_members_inspected": summary_a.get(
+            "zip_members_inspected"
+        ),
+        "option_candidate_count": summary_a.get(
+            "option_candidate_count"
+        ),
         "valid_option_session_dates": valid_dates,
         "valid_option_session_count": session_count,
+        "calendar_months": calendar_months,
+        "calendar_month_count": len(calendar_months),
         "chronological_coverage_verdict": summary_a.get(
             "chronological_coverage_verdict"
         ),
-        "minimum_strategy_authorization_sessions": 100,
-        "strategy_development_authorized": strategy_authorized,
+        "minimum_coverage_candidate_sessions": 100,
+        "minimum_coverage_candidate_months": 6,
+        "coverage_candidate_found": coverage_candidate_found,
+        "strategy_development_authorized": False,
+        "strategy_authorization_blockers": [
+            "contract_availability_review_required",
+            "expiry_and_non_expiry_coverage_review_required",
+            "chronological_partition_freeze_required",
+            "strict_loader_all_selected_contracts_required",
+        ],
         "next_decision": (
-            "STRATEGY_DATA_FOUND_REQUIRES_PARTITION_AND_CONTRACT_REVIEW"
-            if strategy_authorized
+            "COVERAGE_CANDIDATE_FOUND_REQUIRES_CONTRACT_AND_PARTITION_REVIEW"
+            if coverage_candidate_found
             else "MORE_CE_PE_HISTORY_REQUIRED_OR_DEEP_CANDIDATE_REVIEW"
         ),
         "outcomes_read": False,
@@ -150,18 +194,25 @@ def run(*, campaign_worktree: Path, output_root: Path) -> dict[str, Any]:
         "broker_api_called": False,
         "allowed_for_live_execution": False,
     }
-    write_json_with_sidecar(output / "ce_pe_history_inventory_local_summary.json", final)
+    write_json_with_sidecar(
+        output / "ce_pe_history_inventory_local_summary.json", final
+    )
     return final
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run deterministic metadata-first CE/PE history inventory on Mac-local roots"
+        description=(
+            "Run deterministic metadata-first CE/PE history inventory "
+            "on Mac-local roots"
+        )
     )
     parser.add_argument(
         "--campaign-worktree",
         type=Path,
-        default=Path("/Users/madhuram/tradebot-ce-pe-option-certification-v1"),
+        default=Path(
+            "/Users/madhuram/tradebot-ce-pe-option-certification-v1"
+        ),
     )
     parser.add_argument(
         "--output-root",
@@ -178,7 +229,9 @@ def main() -> int:
     if args.replace_output and args.output_root.exists():
         resolved = args.output_root.expanduser().resolve(strict=True)
         if resolved == Path("/") or len(resolved.parts) < 3:
-            raise LocalInventoryRunnerError(f"unsafe_output_delete:{resolved}")
+            raise LocalInventoryRunnerError(
+                f"unsafe_output_delete:{resolved}"
+            )
         shutil.rmtree(resolved)
 
     result = run(
