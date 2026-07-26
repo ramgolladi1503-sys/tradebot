@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from research.option_e2e_recertification_v4.current_certification_source_universe_v1.contract import write_json_with_sidecar
-from .inventory import build_inventory
+from research.option_e2e_recertification_v4.current_certification_source_universe_v1.contract import (
+    write_json_with_sidecar,
+)
+from .inventory import OPTION_CLASSES, build_inventory
 from .oracle import oracle_inventory
 
 
@@ -35,19 +37,44 @@ def _coverage_verdict(session_count: int) -> str:
     return "DEVELOPMENT_ONLY_COVERAGE"
 
 
+def _sanitize_primary_session_dates(primary: dict[str, Any]) -> list[str]:
+    authoritative: set[str] = set()
+    for row in primary.get("candidates", []):
+        if row.get("candidate_class") not in OPTION_CLASSES:
+            continue
+        footer = row.get("parquet_footer") or {}
+        minimum = footer.get("footer_date_min")
+        maximum = footer.get("footer_date_max")
+        footer_dates = {value for value in (minimum, maximum) if value}
+        if len(footer_dates) == 1:
+            dates = sorted(footer_dates)
+            evidence = "PARQUET_FOOTER_STATISTICS"
+        elif footer_dates:
+            dates = []
+            evidence = "MULTI_DATE_FOOTER_REQUIRES_DEEP_REVIEW"
+        elif row.get("session_date_evidence") == "PATH_HINT_ONLY":
+            dates = list(row.get("session_dates", []))
+            evidence = "PATH_HINT_ONLY"
+        else:
+            dates = []
+            evidence = "NOT_ESTABLISHED"
+        row["session_dates"] = dates
+        row["session_date_evidence"] = evidence
+        authoritative.update(dates)
+    primary["valid_option_session_dates"] = sorted(authoritative)
+    primary["valid_option_session_count"] = len(authoritative)
+    return primary["valid_option_session_dates"]
+
+
 def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
     output = _prepare_output(output_dir)
     primary = build_inventory(machine_manifest)
+    primary_session_dates = _sanitize_primary_session_dates(primary)
     oracle = oracle_inventory(machine_manifest)
     primary_option_ids = sorted(
         row["candidate_id"]
         for row in primary["candidates"]
-        if row.get("candidate_class")
-        in {
-            "RAW_OPTION_TICK_DATASET",
-            "OPTION_CONTRACT_DATASET",
-            "NORMALIZED_OPTION_REPLAY_DATASET",
-        }
+        if row.get("candidate_class") in OPTION_CLASSES
     )
     primary_option_manifest = hashlib.sha256(
         "".join(f"{candidate_id}\n" for candidate_id in primary_option_ids).encode(
@@ -58,6 +85,7 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
         "candidate_identity_set": primary_option_ids == oracle["candidate_ids"],
         "candidate_identity_manifest": primary_option_manifest
         == oracle["candidate_identity_manifest_sha256"],
+        "session_date_set": primary_session_dates == oracle["session_dates"],
         "files_visited": primary["files_visited"] == oracle["files_visited"],
         "parquet_metadata_inspected": primary["parquet_metadata_inspected"]
         == oracle["parquet_metadata_inspected"],
@@ -77,9 +105,7 @@ def build(*, machine_manifest: Path, output_dir: Path) -> dict[str, Any]:
         ),
     }
     agreement = "AGREEMENT" if all(checks.values()) else "DISAGREEMENT"
-    session_dates = sorted(
-        set(primary["valid_option_session_dates"]) | set(oracle["session_dates"])
-    )
+    session_dates = primary_session_dates if agreement == "AGREEMENT" else []
     coverage = _coverage_verdict(len(session_dates))
     summary = {
         "schema_version": "ce_pe_history_inventory_summary_v1",
