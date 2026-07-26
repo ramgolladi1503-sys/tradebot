@@ -2,8 +2,8 @@ mode: PRODUCTION_CALCULATION_LIBRARY_WITHOUT_LIVE_WIRING
 candidate_id: option_analytics_v1
 decision: ACCEPT_PRODUCTION_CALCULATION_LIBRARY_FOR_DRAFT_REVIEW_WITH_LIVE_WIRING_DEFERRED
 reason: Mathematical and contract tests pass for the isolated calculation API; live option-chain integration remains excluded until a separate compatibility and replay-validation change proves unchanged strategy and execution behaviour.
-timestamp: 2026-07-26T11:45:41+05:30
-source: core/option_analytics, tests/core/test_option_analytics.py, scripts/audit_option_analytics_v1.py, and exact-head GitHub checks
+timestamp: 2026-07-26T11:58:13+05:30
+source: core/option_analytics, tests/core/test_option_analytics.py, tests/core/test_option_analytics_hardening.py, scripts/audit_option_analytics_v1.py, and exact-head GitHub checks
 base_sha: 596fff09859afeca292bc3e3e31d4a55db1fd8c6
 branch: feature/production-option-analytics-v1
 read_only_runtime: true
@@ -20,7 +20,7 @@ risk_gate_changed: false
 - source_agent: ChatGPT
 - action: IMPLEMENT_AND_VERIFY
 - scope: New `core/option_analytics/` calculation library, focused tests, deterministic audit script, review evidence, and changed-path reporting.
-- allowed_paths: `core/option_analytics/`, `tests/core/test_option_analytics.py`, `scripts/audit_option_analytics_v1.py`, this review, and changed-path reporting.
+- allowed_paths: `core/option_analytics/`, `tests/core/test_option_analytics.py`, `tests/core/test_option_analytics_hardening.py`, `scripts/audit_option_analytics_v1.py`, this review, and changed-path reporting.
 - forbidden_paths: Existing broker, execution, feed, risk, dashboard, strategy, ranking, option-chain, configuration, and live-state files.
 - acceptance_proof: Focused mathematical tests, deterministic audit grid, permanent PR gates, exact changed-file inventory, draft PR, and no live activation.
 
@@ -51,19 +51,21 @@ The main failure modes are false precision, hidden conventions, and treating mod
 
 The audit also distinguishes IV-identifiable prices from deep ITM/OTM near-expiry prices that are numerically at the zero-volatility lower bound. Those lower-bound cases are recorded rather than falsely claimed as successful recovery of the generating volatility.
 
+Additional hardening proves that invalid enum values cannot be treated as puts, missing IV rows cannot report `OK`, non-finite result fields cannot leak `NaN`, duplicate observation identifiers fail closed, and signed European carry value is preserved rather than dishonestly clamped.
+
 ## Hermes Review
 
 Mathematical contracts are centralized in frozen dataclasses and enums. Both models share explicit time and status conventions. The IV solver is bracketed bisection, checks model-consistent no-arbitrage bounds first, and returns no IV for out-of-bounds, unbracketed, or maximum-iteration outcomes. Analytic Greeks are checked against independent central finite differences, including put theta.
 
 ## GSD Review
 
-The implementation is deliberately compact: twelve files under one new package, one focused test file, and one audit script. No new service, database, framework, external dependency, configuration key, broker adapter, or dashboard component is introduced.
+The implementation is deliberately compact: twelve files under one new package, two focused test files, and one audit script. No new service, database, framework, external dependency, configuration key, broker adapter, or dashboard component is introduced.
 
 ## QA / Safety Review
 
 Local isolated verification on Python 3.13.5:
 
-- Focused tests: `68 passed`.
+- Focused tests: `77 passed` for the exact code and test set published to GitHub.
 - Audit grid: `96` pricing/Greeks/IV cases.
 - Put-call parity: `48` cases.
 - Identifiable IV round trips: `48` cases.
