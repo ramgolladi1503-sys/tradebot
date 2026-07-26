@@ -1,8 +1,8 @@
 mode: RESEARCH_ONLY_SOURCE_UNIVERSE_REPAIR_AND_DATASET_PREFLIGHT
 candidate_id: current_source_universe_and_ce_pe_dataset_preflight_v1
-decision: RAW_CE_PE_TICK_SOURCE_IDENTIFIED_STRICT_OPTION_REPLAY_DATASET_NOT_YET_ESTABLISHED
-reason: immutable source evidence is preserved, but independent review invalidated the prior dataset-acceptance claim because the raw tick parquet was not passed through the actual strict option-replay loader, incomplete bid/ask and contract metadata were weakened into warnings, provider provenance was inferred from a path, and preflight oracle agreement was hardcoded
-timestamp: 2026-07-26T12:30:00+05:30
+decision: RAW_CE_PE_TICK_SOURCE_NORMALIZER_SMOKE_PASS_INSUFFICIENT_REPLAY_COVERAGE
+reason: immutable source evidence is preserved and selected contracts can be normalized into files accepted by the actual strict loader, but only one valid CE/PE session is proven, provider authority remains path-inferred, exhaustive all-root content inventory did not complete, and strategy development remains unauthorized
+timestamp: 2026-07-26T13:45:00+05:30
 research_only: true
 read_only: true
 is_order_action: false
@@ -11,7 +11,7 @@ allowed_for_live_execution: false
 outcomes_read: false
 pnl_read: false
 holdout_outcomes_read: false
-source: research/option_e2e_recertification_v4/current_certification_source_universe_v1/portable_source_snapshot_manifest.json; research/option_e2e_recertification_v4/current_certification_source_universe_v1/frozen_source_audit_evidence_v1/local_source_audit_summary.json; research/option_e2e_recertification_v4/ce_pe_dataset_preflight_v1/frozen_preflight_evidence_v1/ce_pe_dataset_preflight.json
+source: research/option_e2e_recertification_v4/current_certification_source_universe_v1/portable_source_snapshot_manifest.json; research/option_e2e_recertification_v4/current_certification_source_universe_v1/frozen_source_audit_evidence_v1/local_source_audit_summary.json; research/option_e2e_recertification_v4/ce_pe_dataset_preflight_v1/frozen_preflight_evidence_v1/ce_pe_dataset_preflight.json; research/option_e2e_recertification_v4/ce_pe_replay_normalization_v1/replay_readiness_evidence_v1/ce_pe_replay_readiness_summary.json
 
 # Agent Work Contract
 
@@ -72,15 +72,36 @@ Truthful raw-source verdict:
 
 This verdict means actual CE and PE tick rows with real bid/ask observations exist. It does not mean the file is directly replay-compatible.
 
+# Exhaustive Inventory Status
+
+The immutable snapshot inventory is deterministic and compact, but exhaustive all-root content inventory is not complete in this PR revision. A run against the approved current source-universe machine manifest was started and stopped after it spent several minutes opening a broad data artifact through the existing preflight path. That path is too expensive for all approved roots because it reads dataframes before proving option relevance.
+
+Current all-root inventory verdict:
+
+`EXHAUSTIVE_ALL_ROOT_CONTENT_INVENTORY_NOT_ESTABLISHED`
+
+This is a blocker for strategy development. It does not invalidate the immutable snapshot smoke proof; it prevents claiming that the whole local Mac source universe has been exhausted.
+
 # Strict Option-Replay Readiness
 
 The raw schema lacks the normalized replay contract required by the existing loader, including canonical timestamp/OHLC, canonical bid/ask names, quote timestamp, underlying, option type, strike, expiry, provider, dataset hash, and bar interval in loader-compatible rows.
 
-The source also has incomplete bid/ask and contract metadata coverage. The actual strict loader has not been invoked against a deterministic normalized output.
+The source also has incomplete bid/ask and contract metadata coverage. A deterministic normalized smoke output was produced for selected contracts and passed the actual strict loader, but that proof covers only one session and does not establish a replay dataset for development/validation/holdout.
 
-Current verdict:
+Correction after local normalization:
 
-`STRICT_OPTION_REPLAY_DATASET_NOT_YET_ESTABLISHED`
+- normalizer package: `research/option_e2e_recertification_v4/ce_pe_replay_normalization_v1`
+- full normalized outputs: external evidence root, not committed
+- normalized contract files attempted: 12
+- actual strict-loader pass count: 12
+- actual strict-loader fail count: 0
+- loader mode: `ResearchMode.REAL_EXECUTABLE_RESEARCH`
+- normalizer result: `NORMALIZER_SMOKE_PASS`
+- independent oracle agreement: `AGREEMENT`
+
+Replay dataset verdict:
+
+`INSUFFICIENT_REPLAY_COVERAGE`
 
 Chronological coverage:
 
@@ -90,13 +111,13 @@ No strategy backtest is authorized.
 
 # Independent Oracle
 
-The previous preflight oracle was not independent. The corrected compact evidence now states:
+The previous preflight oracle was not independent. The replay-readiness oracle now independently checks the candidate identity hash, dates, strict-loader pass/fail counts, strict-loader pass symbols, final verdict, and safety flags without consuming a copied primary acceptance flag.
 
-- `primary_oracle_agreement=NOT_ESTABLISHED`
-- `oracle_verdict=INDEPENDENT_ORACLE_REQUIRED`
-- `primary_summary_consumed=false`
+Current oracle verdict:
 
-A future oracle must independently inspect candidate identities, hashes, CE/PE counts, quote coverage, metadata mapping, provider evidence, normalized outputs, actual loader results, selection ordering, and final verdict.
+`AGREEMENT`
+
+Remaining limitation: the oracle agrees with the smoke-normalization verdict, not with strategy readiness or full local-source exhaustion.
 
 # Git LFS Review
 
@@ -130,7 +151,7 @@ PR #717 currently proves only parts of layer 1.
 
 # GSD Review
 
-The GitHub repair updates preflight semantics, focused tests, compact evidence, sidecars, the PR title/body and this Agent Review. It does not alter production architecture or execute local external data workflows.
+The repair updates preflight semantics, focused tests, compact evidence, sidecars, replay-normalization smoke tooling, actual strict-loader proof, PR body and this Agent Review. It does not alter production architecture or execute strategy workflows.
 
 # Negative Controls
 
@@ -141,6 +162,7 @@ Focused controls now require:
 - a raw tick source cannot authorize a replay dataset;
 - accepted dataset ID remains null without actual loader invocation;
 - independent oracle status cannot be hardcoded to agreement.
+- one-session loader success remains insufficient replay coverage.
 
 # QA / Safety Review
 
@@ -164,19 +186,22 @@ The corrected compact evidence states:
 - accepted replay dataset ID: null;
 - raw source candidate: hash-bound;
 - raw-source verdict: `RAW_CE_PE_TICK_SOURCE_VALIDATED`;
-- replay verdict: `STRICT_OPTION_REPLAY_DATASET_NOT_YET_ESTABLISHED`;
+- replay verdict: `INSUFFICIENT_REPLAY_COVERAGE`;
 - coverage verdict: `ONE_SESSION_SMOKE_ONLY`;
-- oracle agreement: `NOT_ESTABLISHED`.
+- normalizer result: `NORMALIZER_SMOKE_PASS`;
+- actual strict-loader passes: 12;
+- actual strict-loader failures: 0;
+- oracle agreement: `AGREEMENT`.
 
-Repository CI on the corrected exact head is still required.
+Repository CI on the corrected exact head is still required after this update.
 
 # Runtime Proof Required After Merge
 
 None. This PR must not merge as strategy-readiness evidence. Before strategy development, a local-data lane must perform exhaustive candidate discovery, deterministic normalization, actual strict-loader execution, independent oracle reconciliation, and prove sufficient multi-session chronological coverage.
 
-# What This Does Not Prove
+# What This PR Does Not Prove
 
-This work does not prove a normalized replay dataset, sufficient development/validation/holdout coverage, strategy correctness, strategy edge, candidate-pool equivalence, confidence calibration, ranking quality, profitability, paper readiness or live readiness.
+This work does not prove sufficient development/validation/holdout coverage, exhaustive all-root source inventory, authoritative provider provenance, strategy correctness, strategy edge, candidate-pool equivalence, confidence calibration, ranking quality, profitability, paper readiness or live readiness.
 
 # Human Approval
 
