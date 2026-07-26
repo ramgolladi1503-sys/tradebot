@@ -169,8 +169,17 @@ def test_archive_option_date_is_session_directory_not_expiry_name(
             "20240101/underlying/NIFTY.parquet",
             underlying_bytes.getvalue(),
         )
+        archive.writestr(
+            "__MACOSX/20260709/options/._NIFTY 31JUL2026 25000 CE.parquet",
+            b"appledouble-metadata-must-not-be-opened",
+        )
 
-    result = build_inventory(_manifest(tmp_path / "manifest.json", root))
+    manifest = _manifest(tmp_path / "manifest.json", root)
+    summary = build(
+        machine_manifest=manifest,
+        output_dir=tmp_path / "archive-evidence",
+    )
+    result = build_inventory(manifest)
 
     option_rows = [
         row
@@ -182,7 +191,9 @@ def test_archive_option_date_is_session_directory_not_expiry_name(
     ]
     assert option_rows[0]["session_dates"] == ["2026-07-09"]
     assert result["valid_option_session_dates"] == ["2026-07-09"]
-    assert result["zip_members_inspected"] == 2
+    assert result["zip_members_inspected"] == 3
+    assert summary["primary_oracle_agreement"] == "AGREEMENT"
+    assert summary["strategy_development_authorized"] is False
 
 
 def test_build_requires_primary_oracle_agreement_and_no_go(
