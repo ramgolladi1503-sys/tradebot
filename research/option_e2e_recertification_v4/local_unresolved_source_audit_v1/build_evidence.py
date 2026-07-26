@@ -15,6 +15,10 @@ class OutputDirectoryInsideDeclaredRootError(ValueError):
     """Evidence output must not mutate any directory being audited."""
 
 
+class OutputDirectoryNotEmptyError(ValueError):
+    """Evidence output must start absent or empty to exclude stale artifacts."""
+
+
 def canonical_json(payload: Any) -> str:
     return (
         json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -32,7 +36,7 @@ def write_json(path: Path, payload: Any) -> str:
     return digest
 
 
-def _validate_output_outside_roots(
+def _prepare_output_directory(
     output_dir: Path, root_specs: Sequence[RootSpec]
 ) -> Path:
     resolved_output = output_dir.expanduser().resolve(strict=False)
@@ -42,6 +46,13 @@ def _validate_output_outside_roots(
             raise OutputDirectoryInsideDeclaredRootError(
                 f"output_directory_inside_declared_root:root_id={spec.root_id}"
             )
+    if resolved_output.exists():
+        if not resolved_output.is_dir() or any(resolved_output.iterdir()):
+            raise OutputDirectoryNotEmptyError(
+                f"output_directory_not_empty:{resolved_output}"
+            )
+    else:
+        resolved_output.mkdir(parents=True, exist_ok=False)
     return resolved_output
 
 
@@ -53,8 +64,7 @@ def build(
     expected_root_count: int = 27,
     expected_trace_sha256: str | None = None,
 ) -> dict[str, Any]:
-    resolved_output = _validate_output_outside_roots(output_dir, root_specs)
-    resolved_output.mkdir(parents=True, exist_ok=True)
+    resolved_output = _prepare_output_directory(output_dir, root_specs)
     trace_primary = audit_execution_entry_trace(
         trace_path, expected_sha256=expected_trace_sha256
     )
