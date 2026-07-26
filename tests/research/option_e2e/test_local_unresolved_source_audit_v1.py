@@ -8,6 +8,7 @@ import pytest
 
 from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.build_evidence import (
     OutputDirectoryInsideDeclaredRootError,
+    OutputDirectoryNotEmptyError,
     build,
 )
 from research.option_e2e_recertification_v4.local_unresolved_source_audit_v1.oracle import (
@@ -225,6 +226,28 @@ def test_build_rejects_output_inside_declared_root(tmp_path: Path) -> None:
         )
 
     assert not output.exists()
+
+
+def test_build_rejects_non_empty_output_directory(tmp_path: Path) -> None:
+    trace = tmp_path / "execution_entry_trace.jsonl"
+    _write_trace(trace, [_record()])
+    root = tmp_path / "root"
+    root.mkdir()
+    output = tmp_path / "output"
+    output.mkdir()
+    stale = output / "stale.json"
+    stale.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(OutputDirectoryNotEmptyError):
+        build(
+            trace_path=trace,
+            root_specs=[RootSpec("ROOT_A", root)],
+            output_dir=output,
+            expected_root_count=1,
+        )
+
+    assert stale.read_text(encoding="utf-8") == "{}"
+    assert sorted(path.name for path in output.iterdir()) == ["stale.json"]
 
 
 def test_build_is_byte_deterministic_and_hash_bound(tmp_path: Path) -> None:
