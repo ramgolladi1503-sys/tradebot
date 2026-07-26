@@ -32,15 +32,21 @@ def package_reference_artifact(evidence_dir: str | Path, *, remove_plaintext: bo
     encoded = base64.b64encode(gzip.compress(raw, compresslevel=9, mtime=0)) + b"\n"
     target = source_dir / REFERENCE_PACKAGE
     target.write_bytes(encoded)
-    if remove_plaintext:
-        source.unlink()
-    return {
+    metadata = {
         "schema_version": "1.0.0",
         "reference_json_sha256": digest,
         "package_sha256": hashlib.sha256(encoded).hexdigest(),
-        "uncompressed_bytes": len(raw),
+        "reference_json_bytes": len(raw),
         "package_bytes": len(encoded),
+        "package_filename": REFERENCE_PACKAGE,
     }
+    (source_dir / "reference_package_manifest.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if remove_plaintext:
+        source.unlink()
+    _write_committed_sha256s(source_dir)
+    return metadata
 
 
 def materialize_committed_bundle(source_dir: str | Path, target_dir: str | Path) -> Path:
@@ -66,13 +72,47 @@ def materialize_committed_bundle(source_dir: str | Path, target_dir: str | Path)
     return target
 
 
+def verify_committed_hashes(source_dir: str | Path) -> list[str]:
+    source = Path(source_dir)
+    sums = source / "SHA256SUMS"
+    if not sums.exists():
+        return ["SHA256SUMS missing"]
+    errors: list[str] = []
+    for line in sums.read_text(encoding="utf-8").splitlines():
+        expected, name = line.split("  ", 1)
+        path = source / name
+        if not path.exists():
+            errors.append(f"missing committed artifact: {name}")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            errors.append(f"committed hash mismatch: {name}")
+    return errors
+
+
 def verify_committed_bundle(repo_root: str | Path, source_dir: str | Path) -> dict[str, Any]:
+    hash_errors = verify_committed_hashes(source_dir)
+    if hash_errors:
+        return {
+            "schema_version": "1.0.0",
+            "verdict": "FAIL_RESEARCH_SIDECAR_GATE",
+            "failure_count": len(hash_errors),
+            "errors": hash_errors,
+            "packaged_reference_verified": False,
+        }
     with tempfile.TemporaryDirectory() as tmp:
         materialized = materialize_committed_bundle(source_dir, tmp)
         gate = publication_gate(repo_root, materialized)
         gate["packaged_reference_sha256"] = EXPECTED_REFERENCE_SHA256
         gate["packaged_reference_verified"] = gate["verdict"] == "PASS_RESEARCH_SIDECAR_GATE"
         return gate
+
+
+def _write_committed_sha256s(source: Path) -> None:
+    lines = [
+        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}"
+        for path in sorted(source.iterdir())
+        if path.is_file() and path.name != "SHA256SUMS"
+    ]
+    (source / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _write_sha256s(target: Path) -> None:
