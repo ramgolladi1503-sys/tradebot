@@ -32,7 +32,8 @@ These results are a `PRICE_STRUCTURE_CANDIDATE_OVERLAY` using `COMMON_OPTION_OVE
 - Gap-through stop uses the worse of stop or bar open for a long option
 - Three normalizations reported: one-lot rupee, per-unit, return-percent
 - ATM ±50 is sensitivity-only and excluded from verdicts
-- 26 focused tests passed
+- Local reconstructed-source focused suite: 26 passed
+- GitHub complete-repository publication suite: 32 passed in 0.54 seconds
 - Two independent directory runs produced byte-identical outputs
 - Independent oracle passed
 
