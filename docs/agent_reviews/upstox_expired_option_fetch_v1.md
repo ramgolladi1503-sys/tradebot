@@ -7,11 +7,16 @@
 
 ## Validation Results
 - Data Quality: Validated (no OHLC violations detected in complete bars)
-- Determinism Proof: PASS (0 mismatches across clean directories)
-- Resume/Idempotence Proof: PASS (0 duplicate downloads/normalizations on resume)
+- Determinism Proof: `FIXTURE_NORMALIZATION_DETERMINISM_PASS_WITH_FULL_DATASET_SEMANTIC_INVENTORY` (15-file fixture scope for normalization determinism; full 1199-file scope for semantic dataset hashing)
+- Resume/Idempotence Proof: `FIXTURE_FILESYSTEM_RESUME_PASS` (15-file filesystem-based simulation)
 - Security Audit: PASS (No tokens leaked)
   - Credential Revocation: `USER_CONFIRMATION_NOT_AVAILABLE`
-- Reconciliation: PASS (All components reconciled 1:1)
+- Reconciliation: PASS (1199 populated raw aligned perfectly with 1199 normalized)
+- Full Dataset Semantic Inventory: `FULL_DATASET_SEMANTIC_INVENTORY_PASS` (0 mismatches across 1199 files run independently twice)
+
+## Historic Invalidation
+- The previous hash `44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a` is EXPLICITLY INVALIDATED. It was an empty object hash `{}` caused by an os.listdir root traversal defect.
+- The defect has been repaired with a canonical semantic hashing implementation (`semantic_hash.py`) and accurate deep path traversal (`rglob`).
 
 ## Data Summary
 - Known Expiries: 95
