@@ -132,7 +132,14 @@ def _to_date(value: Any) -> str | None:
 def _footer(source: Any, path_hint: str) -> dict[str, Any]:
     import pyarrow.parquet as pq
 
-    parquet = pq.ParquetFile(source)
+    try:
+        parquet = pq.ParquetFile(source)
+    except Exception as exc:
+        return {
+            "columns": [],
+            "session_dates": [],
+            "session_date_evidence": f"PARQUET_FOOTER_REJECTED:{type(exc).__name__}",
+        }
     metadata = parquet.metadata
     columns = [str(name) for name in parquet.schema_arrow.names]
     timestamp_column = next((name for name in _TIME if name in columns), None)

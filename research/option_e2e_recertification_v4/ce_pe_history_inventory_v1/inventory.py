@@ -180,7 +180,22 @@ def _session_dates(
 def _parquet_candidate(
     root: RootBinding, path: Path, relative: str
 ) -> dict[str, Any] | None:
-    footer = inspect_parquet_footer(path, path_hint=relative)
+    try:
+        footer = inspect_parquet_footer(path, path_hint=relative)
+    except Exception as exc:
+        return {
+            "candidate_id": f"{root.root_id}:{relative}",
+            "root_id": root.root_id,
+            "relative_path": relative,
+            "candidate_class": "REJECTED_MALFORMED_PARQUET",
+            "size_bytes": path.stat().st_size,
+            "physical_sha256": sha256_file(path),
+            "metadata_status": f"PARQUET_FOOTER_REJECTED:{type(exc).__name__}",
+            "session_dates": [],
+            "session_date_evidence": "NOT_ESTABLISHED",
+            "allowed_class_filter_applied": False,
+            "authority_status": "REJECTED",
+        }
     candidate_class = footer.get("candidate_class")
     if candidate_class not in OPTION_CLASSES:
         return None
