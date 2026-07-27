@@ -1,0 +1,37 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "ledger": {
+    "artifact_kind": "MULTI_OWNER_BLOCKED_PLACEHOLDER_INVENTORY",
+    "canonical_signal_ledger_id": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed:24",
+    "physical_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+    "row_count": 24
+  },
+  "outcomes_read": false,
+  "pnl_read": false,
+  "primary_oracle_agreement": {
+    "checks": {
+      "derived_invalidation": true,
+      "direct_invalidation": true,
+      "generator_blob": true,
+      "generator_output_binding": true,
+      "historical_ledger_sha256": true,
+      "historical_sidecar": true,
+      "implementation_invalidation": true,
+      "introduction_commit": true,
+      "ledger_equality": true,
+      "ownership": true,
+      "parent_path_absence": true,
+      "physical_hash": true,
+      "row_count": true,
+      "search_counts": true,
+      "verdict": true
+    },
+    "status": "AGREEMENT"
+  },
+  "read_only": true,
+  "research_only": true,
+  "verdict": "SIGNAL_LEDGER_INVALIDATED"
+}

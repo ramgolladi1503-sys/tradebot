@@ -1,0 +1,20 @@
+{
+  "verdict": "INVALID_UNEXECUTED_NO_SIGNALS_VERDICT",
+  "valid": [
+    "repository inventory loading",
+    "implementation path hashing",
+    "current implementation commit lookup",
+    "non-directional lane classification",
+    "historical claim-map ingestion",
+    "fail-closed zero-ledger behavior"
+  ],
+  "invalid": [
+    "NO_SIGNALS_UNDER_FROZEN_CONTRACT without strategy execution",
+    "static searched-root claims",
+    "static branch-search claims",
+    "arbitrary non-empty-list certification",
+    "empty builder as campaign completion"
+  ],
+  "replacement": "SIGNAL_RECOVERY_NOT_EXECUTED",
+  "checkpoint_head": "2efda4e14c669925dbc2dc984e3525ad79b9fb01"
+}

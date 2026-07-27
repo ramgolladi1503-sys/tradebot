@@ -6,6 +6,7 @@ import hashlib
 
 import pandas as pd
 
+from core.top_opportunity_executable_truth import classify_top_opportunity_row
 from dashboard.ui.utils.derive_fields import parse_option_side
 
 _ENTRY_STATUSES_WITH_QUOTE_BACKFILL = {
@@ -37,11 +38,12 @@ direction_family family_rank family_blocker family_strength family_allowed_in_co
 family_gate_override_applied fallback_candidate fresh_quote_ok liquidity_ok spread_ok primary_blocker selector_outcome
 selection_probability simulation_outcome simulation_fill_status mfe mae simulated_pnl realized_r_multiple
 stop_hit_before_target risk_plan_respected readiness execution_status entry_status entry_source execution_entry_status
-display_entry_status execution_entry_source display_entry_source hard_blockers soft_penalties warnings trade_key tradingsymbol
+display_entry_status execution_entry_source display_entry_source quote_source option_ltp_source is_executable
+ui_execution_truth ui_execution_truth_reason top_opportunity_truth_reason hard_blockers soft_penalties warnings trade_key tradingsymbol
 """.split()
 
 NUMERIC_COLUMNS = """
-strike entry stop target live_ltp price_age_sec pnl_points pnl_cash qty confidence confidence_raw
+strike entry execution_entry display_entry stop target live_ltp price_age_sec pnl_points pnl_cash qty confidence confidence_raw
 confidence_penalty confidence_final final_score signal_score execution_score priority_score priority_weight_signal
 priority_weight_execution setup_score trigger_score entry_quality_score overextension_score overextension_penalty
 entry_distance_to_invalidation session_entry_penalty family_feedback_adjustment family_feedback_confidence
@@ -163,6 +165,37 @@ def _merge_duplicate_columns(out: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(deduped, index=out.index)
 
 
+def _explicit_true(value) -> bool:
+    return value is True or (isinstance(value, int) and not isinstance(value, bool) and value == 1)
+
+
+def _stamp_ui_execution_truth(out: pd.DataFrame) -> pd.DataFrame:
+    """Expose canonical execution-entry truth without changing runtime decisions."""
+    if out.empty:
+        return out
+
+    ui_truth: list[bool] = []
+    ui_reasons: list[str] = []
+    for _, row in out.iterrows():
+        row_payload = row.to_dict()
+        decision = classify_top_opportunity_row(
+            row_payload,
+            source_list="top_executable",
+        )
+        explicit_executable = _explicit_true(row_payload.get("is_executable"))
+        operator_executable = bool(explicit_executable and decision.executable_truth)
+        reason = decision.reason
+        if decision.executable_truth and not explicit_executable:
+            reason = "canonical_entry_but_row_not_marked_executable"
+        ui_truth.append(operator_executable)
+        ui_reasons.append(reason)
+
+    out = out.copy()
+    out["ui_execution_truth"] = ui_truth
+    out["ui_execution_truth_reason"] = ui_reasons
+    return out
+
+
 def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
     if df is None or df.empty:
         return _empty_df()
@@ -253,7 +286,7 @@ def normalize_df(df: pd.DataFrame | None) -> pd.DataFrame:
         out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), inferred)
     out["opt_type"] = out["opt_type"].where(out["opt_type"].isin(["CE", "PE"]), "")
     out["status"] = out["status"].astype(str).str.upper()
-    return out
+    return _stamp_ui_execution_truth(out)
 
 
 def compute_trade_key(df: pd.DataFrame) -> pd.DataFrame:
@@ -325,11 +358,26 @@ def select_display_df(df: pd.DataFrame, view: str) -> pd.DataFrame:
         cols = ["display_ts_ist"]
         if include_last_seen:
             cols.append("last_seen_ts")
-        cols += ["identity", "status", "candidate_class", "final_score", "market_mode", "fallback_candidate", "readiness", "execution_status", "side", "entry", "entry_status", "entry_source", "stop", "target", "confidence_raw", "confidence_penalty", "confidence_final", "fresh_quote_ok", "liquidity_ok", "spread_ok", "primary_blocker", "hard_blockers", "soft_penalties", "warnings", "trade_key", "tradingsymbol"]
+        cols += [
+            "identity", "status", "ui_execution_truth", "ui_execution_truth_reason",
+            "is_executable", "top_opportunity_truth_reason", "candidate_class", "final_score",
+            "market_mode", "fallback_candidate", "quote_source", "option_ltp_source",
+            "readiness", "execution_status", "side", "execution_entry",
+            "execution_entry_status", "execution_entry_source", "display_entry",
+            "display_entry_status", "display_entry_source", "entry", "entry_status",
+            "entry_source", "stop", "target", "confidence_raw", "confidence_penalty",
+            "confidence_final", "fresh_quote_ok", "liquidity_ok", "spread_ok",
+            "primary_blocker", "hard_blockers", "soft_penalties", "warnings",
+            "trade_key", "tradingsymbol",
+        ]
     out = out[[c for c in cols if c in out.columns]].copy()
     if "status" in out.columns:
         out["status"] = out["status"].apply(_status_badge)
-    for c in ("entry", "stop", "target", "live_ltp", "pnl_points", "pnl_cash", "confidence", "confidence_raw", "confidence_penalty", "confidence_final"):
+    for c in (
+        "entry", "execution_entry", "display_entry", "stop", "target", "live_ltp",
+        "pnl_points", "pnl_cash", "confidence", "confidence_raw", "confidence_penalty",
+        "confidence_final",
+    ):
         if c in out.columns:
             out[c] = out[c].round(2)
     if "display_ts_ist" in out.columns:

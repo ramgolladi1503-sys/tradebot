@@ -116,6 +116,83 @@ def test_signal_enters_on_first_eligible_later_candle_in_certification_mode(tmp_
     assert trade.exit_price == 102.8
 
 
+def test_certification_mode_rejects_entry_quote_captured_before_signal(tmp_path: Path):
+    data_path = tmp_path / "strict_pre_signal_entry_quote.csv"
+    pd.DataFrame([
+        _base_row(
+            underlying="NIFTY",
+            option_type="CE",
+            strike=25500,
+            expiry="2026-04-30",
+            provider="upstox",
+            dataset_hash="hash-1",
+            bar_interval="1m",
+            quote_timestamp="2026-04-01 09:14:55",
+            feature_cutoff_ts="2026-04-01 09:15:00",
+            signal_ts="2026-04-01 09:15:55",
+            earliest_entry_ts="2026-04-01 09:15:55",
+            setup_id="breakout",
+            regime="trend",
+            is_oos=False,
+        ),
+        _base_row(
+            timestamp="2026-04-01 09:16:00",
+            underlying="NIFTY",
+            option_type="CE",
+            strike=25500,
+            expiry="2026-04-30",
+            provider="upstox",
+            dataset_hash="hash-1",
+            bar_interval="1m",
+            quote_timestamp="2026-04-01 09:15:50",
+            bid=100.2,
+            ask=100.5,
+            bid_qty=50,
+            ask_qty=50,
+            close=100.4,
+            selected_for_execution=False,
+            signal_score=0.2,
+            setup_id="breakout",
+            regime="trend",
+            is_oos=False,
+        ),
+        _base_row(
+            timestamp="2026-04-01 09:17:00",
+            underlying="NIFTY",
+            option_type="CE",
+            strike=25500,
+            expiry="2026-04-30",
+            provider="upstox",
+            dataset_hash="hash-1",
+            bar_interval="1m",
+            quote_timestamp="2026-04-01 09:16:50",
+            open=101.8,
+            high=103.5,
+            low=101.6,
+            close=103.0,
+            bid=102.8,
+            ask=103.1,
+            bid_qty=50,
+            ask_qty=50,
+            selected_for_execution=False,
+            signal_score=0.1,
+            setup_id="breakout",
+            regime="trend",
+            is_oos=False,
+        ),
+    ]).to_csv(data_path, index=False)
+    result = run_option_symbol_backtest(
+        OptionBacktestConfig(
+            symbol="NIFTY24APR25500CE",
+            data_path=data_path,
+            research_mode=ResearchMode.REAL_EXECUTABLE_RESEARCH,
+            allow_derived_levels=False,
+        )
+    )
+    assert result.summary["trades_taken"] == 0
+    assert result.summary["rejected_reasons"]["entry_quote_before_signal"] == 1
+
+
 def test_trade_cannot_exit_using_signal_candle_range(tmp_path: Path):
     data_path = tmp_path / "signal_candle_cheat.csv"
     pd.DataFrame([

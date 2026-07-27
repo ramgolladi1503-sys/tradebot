@@ -1,0 +1,18 @@
+{
+  "verdict": "INVALID_OPTION_REPLAY_BLOCKER_AS_SIGNAL_SOURCE_BLOCKER",
+  "current_checkpoint": "v4.10.2",
+  "supersedes": "v4.10.1",
+  "preserved": [
+    "lane-scoped discovery",
+    "worktree inventory and git commands",
+    "no fake signal rows",
+    "research-only and fail-closed outputs",
+    "PR body does not claim certified signals"
+  ],
+  "invalidated": [
+    "treating option replay blockers as proof of signal-source blockage",
+    "reusing NO_SIGNAL_LEDGER_SOURCE from invalidated historical records",
+    "SOURCE_BLOCKED as a universal lane result for active evidence",
+    "legacy blocker labels as current execution evidence"
+  ]
+}

@@ -1,0 +1,1 @@
+# Data Quality Report\n\nSTATUS: PASSED\n- No post-expiry violations found.\n- OHLC integrity verified.\n- 0 Quarantined rows in offline replay.\n

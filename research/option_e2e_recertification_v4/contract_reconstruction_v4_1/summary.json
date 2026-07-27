@@ -1,0 +1,18 @@
+{
+  "blocked_by_no_point_in_time_authority": 1336,
+  "coverage_sha256": "120c91acc412557c88baa1d8183275be8b25f080b4b6efdf28002c59901172a7",
+  "depth_files": 1,
+  "files_discovered": 1336,
+  "files_proving_historical_contract_existence": 0,
+  "files_with_reconstructed_identity": 1264,
+  "quote_files": 1327,
+  "repo_root": "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4",
+  "roots": [
+    "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/runtime/market_data/upstox",
+    "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/runtime/strategy_validation",
+    "/Users/madhuram/tradebot-option-e2e-contract-reconstruction-v4/configs/backtest_data_schema_examples",
+    "/Users/madhuram/tradebot-data",
+    "/Users/madhuram/tradebot-ml-evidence"
+  ],
+  "version": "option_e2e_contract_reconstruction_v4_1"
+}

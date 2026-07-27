@@ -1,0 +1,22 @@
+{
+  "verdict": "INVALID_PLACEHOLDER_EXECUTION_CONTEXT_AND_FAKE_DETERMINISM",
+  "current_checkpoint": "v4.10.3",
+  "supersedes": "v4.10.2",
+  "preserved": [
+    "legacy option-replay records are separated",
+    "invalidated historical records are excluded",
+    "no fake signal rows are emitted",
+    "research-only boundary"
+  ],
+  "invalidated": [
+    "source paths returned without searches",
+    "unknown implementation commit/hash",
+    "empty dataset and parameter hashes",
+    "placeholder adapter hash",
+    "constant execution blocker",
+    "arbitrary non-empty-list certification",
+    "static determinism fingerprint",
+    "tamper function that always passes",
+    "tests proving only the placeholder blocker"
+  ]
+}

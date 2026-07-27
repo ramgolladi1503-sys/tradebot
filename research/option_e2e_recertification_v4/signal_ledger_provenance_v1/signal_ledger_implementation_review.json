@@ -1,0 +1,85 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "historical_binding": {
+    "generator_output_binding": {
+      "byte_equality": true,
+      "historical_committed_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+      "independent_reconstruction_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+      "primary_regenerated_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+      "semantic_equality": true,
+      "status": "PROVEN"
+    },
+    "historical_blobs": {
+      "current_generator_content_sha256": "6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b",
+      "current_generator_git_blob_sha": "935bdbdf30a461e290ee3566ac7e5e3e859e271b",
+      "current_ledger_git_blob_sha": "b8b9b8e9b9cfc53122ef01126a6817d7bcb5a4d2",
+      "current_ledger_physical_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+      "generator_git_blob_sha": "935bdbdf30a461e290ee3566ac7e5e3e859e271b",
+      "historical_current_generator_equality": true,
+      "historical_current_ledger_equality": true,
+      "historical_generator_content_sha256": "6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b",
+      "historical_ledger_physical_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed",
+      "historical_sidecar_matches_ledger": true,
+      "inventory_git_blob_sha": "976872766598486f2150c3008a79b07ea634c887",
+      "ledger_git_blob_sha": "b8b9b8e9b9cfc53122ef01126a6817d7bcb5a4d2",
+      "sidecar_git_blob_sha": "e5e221c6e0d8d19dc05a1839efbf4f7fe2e5aa47"
+    },
+    "history": {
+      "atomic_introduction_status": "PROVEN_WITH_PRIOR_LINEAGE",
+      "configured_commit_matches_discovery": true,
+      "configured_expected_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+      "generator_and_inventory_present_at_introduction": true,
+      "introduction_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+      "paths": {
+        "research/option_e2e_recertification_v4/inventory_v4_1/historical_strategy_inventory_v4_1.json": {
+          "all_touch_commits": [
+            "cfcdfafb6ce7f8f79ad464938d1f1ba3b68e7675"
+          ],
+          "existed_in_parent": false,
+          "first_add_blob_sha": "976872766598486f2150c3008a79b07ea634c887",
+          "first_add_commit": "cfcdfafb6ce7f8f79ad464938d1f1ba3b68e7675",
+          "parent_commit": "86b2c663f898bfced73fc3bb4d74dfdd1231b1a6",
+          "path": "research/option_e2e_recertification_v4/inventory_v4_1/historical_strategy_inventory_v4_1.json"
+        },
+        "research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py": {
+          "all_touch_commits": [
+            "686af0feff7a4485ebe4e249cb498b33d649a5cd"
+          ],
+          "existed_in_parent": false,
+          "first_add_blob_sha": "935bdbdf30a461e290ee3566ac7e5e3e859e271b",
+          "first_add_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+          "parent_commit": "5c1553e928316a56a3dcbbb5464a46318fb94e2d",
+          "path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py"
+        },
+        "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json": {
+          "all_touch_commits": [
+            "686af0feff7a4485ebe4e249cb498b33d649a5cd"
+          ],
+          "existed_in_parent": false,
+          "first_add_blob_sha": "b8b9b8e9b9cfc53122ef01126a6817d7bcb5a4d2",
+          "first_add_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+          "parent_commit": "5c1553e928316a56a3dcbbb5464a46318fb94e2d",
+          "path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json"
+        },
+        "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json.sha256": {
+          "all_touch_commits": [
+            "686af0feff7a4485ebe4e249cb498b33d649a5cd"
+          ],
+          "existed_in_parent": false,
+          "first_add_blob_sha": "e5e221c6e0d8d19dc05a1839efbf4f7fe2e5aa47",
+          "first_add_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+          "parent_commit": "5c1553e928316a56a3dcbbb5464a46318fb94e2d",
+          "path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/signal_ledgers.json.sha256"
+        }
+      }
+    }
+  },
+  "holdout_outcomes_read": false,
+  "implementation_authority": "PROVEN_FOR_PLACEHOLDER_GENERATOR_ONLY",
+  "is_order_action": false,
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true
+}

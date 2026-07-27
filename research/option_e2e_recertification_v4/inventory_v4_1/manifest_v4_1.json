@@ -1,0 +1,22 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "artifacts": {
+    "docs/agent_reviews/option_e2e_historical_inventory_v4_1.md": "015ad2f853749ca1650200cbcd7ca132d8cb9341cf11ebfa6ff618566883e742",
+    "historical_strategy_inventory_v4_1.json": "25b369552dd1ea7b891edb4bca844f8f32d1a27f21ce99e120430d6cc58098bc"
+  },
+  "broker_api_called": false,
+  "counts": {
+    "aggregate_or_registry_count": 3,
+    "durable_verdict_labels": 154,
+    "entities_total": 33,
+    "evidence_files_with_family_or_verdict_hits": 372,
+    "families_with_evidence": 16,
+    "non_strategy_support_count": 12,
+    "strategies_counted": 18,
+    "strategy_files_scanned": 31
+  },
+  "is_order_action": false,
+  "read_only": true,
+  "schema_version": "option_e2e_historical_inventory_v4_1_manifest"
+}

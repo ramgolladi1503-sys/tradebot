@@ -1,0 +1,19 @@
+{
+  "composite_historical_authority_files": 0,
+  "current_master_diagnostic_matches": 1,
+  "filename_describing_files": 22,
+  "files_proving_historical_identity": 0,
+  "files_proving_observed_contract_existence": 2,
+  "files_proving_observed_dataset_universe": 28,
+  "files_read_failed": 6,
+  "files_read_success": 1653,
+  "files_total": 1659,
+  "files_with_lot_size_authority": 0,
+  "files_with_tick_size_authority": 0,
+  "identity_conflict_files": 0,
+  "manifest_describing_files": 28,
+  "post_expiry_files": 0,
+  "self_describing_quote_files": 2,
+  "token_only_quote_files": 1,
+  "version": "option_e2e_contract_reconstruction_v4_2"
+}

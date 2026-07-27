@@ -1,0 +1,22 @@
+{
+  "verdict": "INVALID_DORMANT_OPTION_METADATA_AS_SIGNAL_SOURCE_PATH",
+  "research_only": true,
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "is_order_action": false,
+  "valid": [
+    "source resolution no longer certifies ledgers",
+    "empty/placeholder ledgers fail oracle",
+    "current master remains diagnostic-only",
+    "coverage is labeled source-resolution coverage",
+    "PR body accurately says real signal recovery is pending"
+  ],
+  "invalid": [
+    "option authority candidates becoming strategy signal candidates",
+    "generic dated files resolving unrelated strategies",
+    "placeholder ledger construction on source resolution",
+    "adapter hash acting as strategy implementation SHA"
+  ],
+  "checkpoint_head": "4f0fd862478c6905b9bf1ff8ac0230d0bfdb0969",
+  "branch": "research/all-strategy-option-e2e-recertification-v4"
+}
