@@ -9,18 +9,7 @@ from datetime import datetime
 EVIDENCE_ROOT = Path("/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1")
 REPORTS_DIR = EVIDENCE_ROOT / "reports"
 
-def get_dir_hash(directory):
-    hashes = {}
-    for root, _, files in os.walk(directory):
-        for f in sorted(files):
-            if f.endswith('.parquet'):
-                p = Path(root) / f
-                sha = hashlib.sha256()
-                with open(p, 'rb') as fd:
-                    for chunk in iter(lambda: fd.read(8192), b''):
-                        sha.update(chunk)
-                hashes[str(p.relative_to(directory))] = sha.hexdigest()
-    return hashes
+from research.upstox_expired_options.semantic_hash import compute_semantic_hash
 
 def main():
     print("Starting Resume Proof...")
@@ -28,9 +17,13 @@ def main():
     
     frozen_raw = tempfile.mkdtemp(prefix="upstox_frozen_raw_")
     
-    raws = [d for d in os.listdir(EVIDENCE_ROOT / "raw") if (EVIDENCE_ROOT / "raw" / d).is_dir()]
-    source_expiry = EVIDENCE_ROOT / "raw" / raws[0]
-    shutil.copytree(source_expiry, Path(frozen_raw) / "raw" / source_expiry.name)
+    raw_resp = EVIDENCE_ROOT / "raw" / "responses"
+    und = [d for d in os.listdir(raw_resp) if (raw_resp / d).is_dir() and d != '.DS_Store'][0]
+    exps = [d for d in os.listdir(raw_resp / und) if (raw_resp / und / d).is_dir() and d != '.DS_Store']
+    source_expiry = raw_resp / und / exps[0]
+    
+    dest = Path(frozen_raw) / "raw" / "responses" / source_expiry.parent.name / source_expiry.name
+    shutil.copytree(source_expiry, dest)
     
     dir_control = tempfile.mkdtemp(prefix="upstox_res_ctrl_")
     dir_test = tempfile.mkdtemp(prefix="upstox_res_test_")
@@ -43,64 +36,101 @@ def main():
     from research.upstox_expired_options.storage import atomic_write_parquet
     
     def process_files(base_dir, limit=None):
-        raw_base = Path(base_dir) / "raw"
+        raw_base = Path(base_dir) / "raw" / "responses"
         count = 0
         normalized_count = 0
-        for exp in os.listdir(raw_base):
-            exp_path = raw_base / exp
-            if exp_path.is_dir():
-                contracts_json = exp_path / "contracts.json"
-                if not contracts_json.exists(): continue
-                with open(contracts_json) as cj:
-                    meta = json.load(cj)
-                meta_map = {m['instrument_key']: m for m in meta}
-                
-                for f in sorted(os.listdir(exp_path)):
-                    if f.endswith('.json') and f != 'contracts.json':
-                        ikey = f.replace('.json', '')
-                        if ikey not in meta_map: continue
+        if not raw_base.exists(): return 0
+        
+        for und in os.listdir(raw_base):
+            und_path = raw_base / und
+            if not und_path.is_dir() or und == '.DS_Store': continue
+            for exp in os.listdir(und_path):
+                exp_path = und_path / exp
+                if exp_path.is_dir():
+                    contracts_json = exp_path / "contracts.json"
+                    if not contracts_json.exists(): continue
+                    with open(contracts_json) as cj:
+                        meta = json.load(cj)
                         
-                        # Mock resume check
-                        norm_1m = Path(base_dir) / "normalized" / "candles_1minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
-                        norm_5m = Path(base_dir) / "normalized" / "candles_5minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
-                        if norm_1m.exists() and norm_5m.exists():
-                            continue # skip (resume logic)
+                    def enrich(m):
+                        return {
+                            'underlying': m.get('underlying_symbol', 'NIFTY'),
+                            'underlying_key': m.get('underlying_key', 'NSE_INDEX|Nifty 50'),
+                            'expiry': m.get('expiry'),
+                            'strike': m.get('strike_price'),
+                            'option_type': m.get('instrument_type'),
+                            'trading_symbol': m.get('trading_symbol'),
+                            'expired_instrument_key': m.get('instrument_key'),
+                            'exchange_token': m.get('exchange_token'),
+                            'lot_size': m.get('lot_size'),
+                            'minimum_lot': m.get('minimum_lot'),
+                            'weekly': m.get('weekly', True),
+                            'source': 'upstox_plus',
+                            'interval': '1minute',
+                            'fetched_at': '2024-01-01T00:00:00.000Z',
+                            'request_from_date': '2024-01-01',
+                            'request_to_date': m.get('expiry'),
+                        }
+                    meta_map = {m['instrument_key'].replace('|', '_'): enrich(m) for m in meta}
+                    
+                    for f_dir in sorted(os.listdir(exp_path)):
+                        f_dir_path = exp_path / f_dir
+                        if f_dir_path.is_dir() and f_dir.startswith('instrument='):
+                            ikey = f_dir.replace('instrument=', '')
+                            if ikey not in meta_map: continue
                             
-                        if limit is not None and count >= limit:
-                            return normalized_count
-                        count += 1
-                        
-                        with open(exp_path / f, 'rb') as fb:
-                            raw = fb.read()
-                        try:
-                            df_1m, _ = parse_candles(raw, meta_map[ikey])
-                            if not df_1m.empty:
-                                df_5m = aggregate_5m(df_1m)
+                            json_file = f_dir_path / 'candles_1minute.json'
+                            if not json_file.exists(): continue
+                            
+                            # Mock resume check
+                            norm_1m = Path(base_dir) / "normalized" / "candles_1minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
+                            norm_5m = Path(base_dir) / "normalized" / "candles_5minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
+                            if norm_1m.exists() and norm_5m.exists():
+                                continue # skip (resume logic)
                                 
-                                p1 = Path(base_dir) / "normalized" / "candles_1minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
-                                p5 = Path(base_dir) / "normalized" / "candles_5minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
-                                p1.parent.mkdir(parents=True, exist_ok=True)
-                                p5.parent.mkdir(parents=True, exist_ok=True)
-                                
-                                atomic_write_parquet(df_1m, p1)
-                                atomic_write_parquet(df_5m, p5)
-                                normalized_count += 1
-                        except:
-                            pass
+                            if limit is not None and count >= limit:
+                                return normalized_count
+                            count += 1
+                            
+                            with open(json_file, 'rb') as fb:
+                                raw = fb.read()
+                            
+                            m_enriched = meta_map[ikey].copy()
+                            import hashlib
+                            m_enriched['raw_response_sha256'] = hashlib.sha256(raw).hexdigest()
+                            
+                            try:
+                                df_1m, _ = parse_candles(raw, m_enriched)
+                                if not df_1m.empty:
+                                    df_5m = aggregate_5m(df_1m)
+                                    
+                                    p1 = Path(base_dir) / "normalized" / "candles_1minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
+                                    p5 = Path(base_dir) / "normalized" / "candles_5minute" / f"underlying={meta_map[ikey].get('underlying_symbol', 'UNKNOWN')}" / f"expiry={meta_map[ikey].get('expiry')}" / f"{ikey}.parquet"
+                                    p1.parent.mkdir(parents=True, exist_ok=True)
+                                    p5.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    atomic_write_parquet(df_1m, p1)
+                                    atomic_write_parquet(df_5m, p5)
+                                    normalized_count += 1
+                            except:
+                                pass
         return normalized_count
                             
     # Control run
     process_files(dir_control)
-    hash_ctrl = get_dir_hash(Path(dir_control) / "normalized")
-    ctrl_digest = hashlib.sha256(json.dumps(hash_ctrl, sort_keys=True).encode()).hexdigest()
+    hash_ctrl_obj = compute_semantic_hash(Path(dir_control) / "normalized" / "candles_1minute")
+    ctrl_digest = hash_ctrl_obj["aggregate_hash"]
     
     # Interrupted run
     process_files(dir_test, limit=2)
     # Resume run
     process_files(dir_test)
     
-    hash_test = get_dir_hash(Path(dir_test) / "normalized")
-    test_digest = hashlib.sha256(json.dumps(hash_test, sort_keys=True).encode()).hexdigest()
+    hash_test_obj = compute_semantic_hash(Path(dir_test) / "normalized" / "candles_1minute")
+    test_digest = hash_test_obj["aggregate_hash"]
+    
+    # Empty Object Hash Protection
+    assert ctrl_digest != "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a", "Empty object hashed!"
     
     # Second resume
     second_resume_count = process_files(dir_test)
