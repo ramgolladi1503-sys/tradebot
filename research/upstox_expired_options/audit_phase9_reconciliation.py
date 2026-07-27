@@ -15,12 +15,9 @@ def main():
     # Just do a rough count for now
     raw_files = 0
     if RAW_DIR.exists():
-        for d in os.listdir(RAW_DIR):
-            ed = RAW_DIR / d
-            if ed.is_dir():
-                for f in os.listdir(ed):
-                    if f.endswith('.json') and f != 'contracts.json':
-                        raw_files += 1
+        for p in RAW_DIR.rglob("*.json"):
+            if p.name != 'contracts.json' and 'candles' in p.name:
+                raw_files += 1
                         
     norm_1m = 0
     norm_5m = 0

@@ -21,26 +21,30 @@ def main():
     pe_contracts = 0
     
     if RAW_DIR.exists():
-        for expiry_dir in os.listdir(RAW_DIR):
-            ed = RAW_DIR / expiry_dir
-            if ed.is_dir():
+        for p in RAW_DIR.rglob("*.json"):
+            if p.name == 'contracts.json' or 'candles' not in p.name: continue
+            
+            expiry_dir = None
+            for part in p.parts:
+                if part.startswith('expiry='):
+                    expiry_dir = part
+                    break
+            if expiry_dir:
                 known_expiries.add(expiry_dir)
-                for f in os.listdir(ed):
-                    if f.endswith('.json') and f != 'contracts.json':
-                        attempted_contracts += 1
-                        path = ed / f
-                        try:
-                            with open(path) as fd:
-                                data = json.load(fd)
-                                candles = data.get('data', {}).get('candles', [])
-                                if candles:
-                                    populated_contracts += 1
-                                else:
-                                    empty_contracts += 1
-                        except:
-                            pass
-                        if 'CE' in f: ce_contracts += 1
-                        elif 'PE' in f: pe_contracts += 1
+                
+            attempted_contracts += 1
+            try:
+                with open(p) as fd:
+                    data = json.load(fd)
+                    candles = data.get('data', {}).get('candles', [])
+                    if candles:
+                        populated_contracts += 1
+                    else:
+                        empty_contracts += 1
+            except:
+                pass
+            if 'CE' in str(p): ce_contracts += 1
+            elif 'PE' in str(p): pe_contracts += 1
 
     # 2. Gather normalized 1m and 5m
     one_m_files = 0
