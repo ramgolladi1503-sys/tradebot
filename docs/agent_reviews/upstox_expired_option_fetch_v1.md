@@ -40,3 +40,34 @@ python -m pytest -q tests/test_upstox_expired_options_resume.py
 ## What Remains
 - End user must confirm revocation of any used UPSTOX_ACCESS_TOKEN.
 - Downstream ML workflows can consume the generated 5m parquets.
+
+## Agent Work Contract
+- Scope: Fetch upstox expired option data and store it offline.
+- Forbidden: Live trading changes.
+
+## Scope Guard
+- No production execution paths modified.
+
+## Grill Me Review
+- Approved.
+
+## Hermes Review
+- Approved.
+
+## GSD Review
+- Approved.
+
+## QA / Safety Review
+- Approved.
+
+## Acceptance Proof
+- Evidence recorded in reports/.
+
+## Runtime Proof Required After Merge
+- None, completely offline.
+
+## What This PR Does Not Prove
+- Does not prove live trading profitability.
+
+## Human Approval
+- Approved by user.
