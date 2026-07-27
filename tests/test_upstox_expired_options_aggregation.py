@@ -18,7 +18,7 @@ def test_five_minute_aggregation_boundaries():
     df_1m['timestamp'] = pd.to_datetime(df_1m['timestamp'])
     
     df_5m = aggregate_5m(df_1m)
-    assert len(df_5m) == 2
+    assert df_5m.shape[0] == 2
     
     # Check first candle properties
     assert df_5m.iloc[0]['timestamp'].isoformat() == "2024-10-01T09:15:00+05:30"
@@ -44,14 +44,11 @@ def test_no_cross_session_aggregation():
     df_1m = pd.DataFrame(data)
     df_1m['timestamp'] = pd.to_datetime(df_1m['timestamp'])
     df_5m = aggregate_5m(df_1m)
-    assert len(df_5m) == 2
+    assert df_5m.shape[0] == 2
     assert df_5m.iloc[0]['timestamp'].isoformat() == "2024-10-01T15:25:00+05:30"
     assert df_5m.iloc[1]['timestamp'].isoformat() == "2024-10-02T09:15:00+05:30"
 
-def test_no_cross_contract_aggregation():
-    # The normalizer aggregates per file, so it naturally handles per-contract aggregation.
-    # We test it just takes 1 contract df.
-    pass
+
 
 def test_partial_five_minute_flags():
     data = [
@@ -61,5 +58,5 @@ def test_partial_five_minute_flags():
     df_1m = pd.DataFrame(data)
     df_1m['timestamp'] = pd.to_datetime(df_1m['timestamp'])
     df_5m = aggregate_5m(df_1m)
-    assert len(df_5m) == 1
+    assert df_5m.shape[0] == 1
     assert df_5m.iloc[0]['is_complete_5m_bar'] == False

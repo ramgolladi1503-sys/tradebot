@@ -21,7 +21,7 @@ def test_aggregate_5m():
     df['interval'] = '1minute'
     
     agg = aggregate_5m(df)
-    assert len(agg) == 2
+    assert agg.shape[0] == 2
     assert agg.iloc[0]['open'] == 10
     assert agg.iloc[0]['high'] == 20
     assert agg.iloc[0]['low'] == 9

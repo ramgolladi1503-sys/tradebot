@@ -27,4 +27,4 @@ def test_dynamic_union_covers_each_session_atm_band():
     )
     assert {23900, 23950, 24000, 24050, 24100}.issubset(selected)
     assert {24900, 24950, 25000, 25050, 25100}.issubset(selected)
-    assert len(selected) == 10
+    assert sum(1 for _ in selected) == 10

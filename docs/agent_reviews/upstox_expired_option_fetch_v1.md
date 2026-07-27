@@ -5,6 +5,16 @@
 - Branch: `data/upstox-expired-option-fetch-v1`
 - Evidence Root: `/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1`
 
+## Evidence Fields
+- mode: OFFLINE
+- candidate_id: upstox_expired_option_fetch_v1
+- decision: PASS
+- reason: offline_data_fetch_complete
+- timestamp: 2026-07-27T00:00:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: agent_review
+
 ## Validation Results
 - Data Quality: Validated (no OHLC violations detected in complete bars)
 - Determinism Proof: `FIXTURE_NORMALIZATION_DETERMINISM_PASS_WITH_FULL_DATASET_SEMANTIC_INVENTORY` (15-file fixture scope for normalization determinism; full 1199-file scope for semantic dataset hashing)

@@ -35,7 +35,7 @@ def test_request_manifest_reconstruction():
         pytest.skip("No request manifest")
     with open(MANIFESTS_DIR / "request_manifest.jsonl") as f:
         lines = f.readlines()
-    assert len(lines) > 0
+    assert bool(lines) is True
     # ensure JSON valid
     for l in lines:
         json.loads(l)
@@ -45,8 +45,8 @@ def test_campaign_manifest_count_reconciliation():
         pytest.skip("No campaign manifest")
     with open(MANIFESTS_DIR / "campaign_manifest.json") as f:
         data = json.load(f)
-    assert data["attempted_contract_count"] > 0
-    assert data["populated_contract_count"] > 0
+    assert data["attempted_contract_count"] >= 1
+    assert data["populated_contract_count"] >= 1
 
 def test_data_quality_violation_detection():
     # Verify no post-expiry violations exist in populated data
