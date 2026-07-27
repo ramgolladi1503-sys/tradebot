@@ -20,6 +20,14 @@ jobs:
           ref: research/all-strategy-option-pf-v1
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install focused test dependencies
+        run: python -m pip install --disable-pip-version-check pytest pandas pyarrow
+
       - name: Install hash-verified logic-integrity repair
         shell: bash
         run: |
