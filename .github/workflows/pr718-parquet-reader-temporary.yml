@@ -20,7 +20,8 @@ jobs:
           python-version: '3.13'
       - name: Download pyarrow wheel
         run: python -m pip download --only-binary=:all: --no-deps pyarrow==25.0.0 -d /tmp/wheel
-      - uses: actions/upload-artifact@v4
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
         with:
           name: pr718-pyarrow-cp313
           path: /tmp/wheel/*.whl
