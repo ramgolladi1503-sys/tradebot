@@ -363,7 +363,11 @@ def rule_mask(df: pd.DataFrame, candidate: dict[str, Any]) -> pd.Series:
             raise AuditError("RULE_REPRODUCTION_FAILED", "candidate feature missing", {"feature": feature})
         if op not in {">", ">=", "<", "<=", "=="} or not isinstance(threshold, (int, float)) or not math.isfinite(float(threshold)):
             raise AuditError("RULE_REPRODUCTION_FAILED", "invalid condition", {"condition": cond})
-        values = df[feature].fillna(impute.get(feature))
+        impute_val = impute.get(feature)
+        if impute_val is not None:
+            values = df[feature].fillna(impute_val)
+        else:
+            values = df[feature]
         if values.isna().any():
             raise AuditError("IMPUTATION_MAP_MISMATCH", "candidate imputation map does not cover missing values", {"feature": feature})
         if op == ">":

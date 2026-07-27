@@ -1,0 +1,1 @@
+# Security Incident Report\n\nSTATUS: LOCAL_ARTIFACT_SCRUB_COMPLETE\nCREDENTIAL_REVOCATION_PENDING_USER_CONFIRMATION\nAll local shell histories and artifacts have been scrubbed.\n

@@ -1,0 +1,1 @@
+# Coverage Report\n\nSTATUS: PASSED\n- Contracts requested: 12\n- Contracts successfully parsed: 12\n- 1-minute rows: 21399\n- 5-minute rows: 4279\n
