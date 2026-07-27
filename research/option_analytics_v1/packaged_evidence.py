@@ -13,8 +13,8 @@ from research.option_analytics_v1.evidence import publication_gate
 
 REFERENCE_JSON = "reference_case_results.json"
 REFERENCE_PACKAGE = "reference_case_results.json.gz.b64"
-EXPECTED_REFERENCE_SHA256 = "1b305ed9fb9fa6e21c51ec164be661e5964240d9e489788f5408a9bcc7f8d9ed"
-EXPECTED_PACKAGE_SHA256 = "0bb9d38316302141bbb6b7a4a7a69c7c790c9a99d7d69a682c631b7aff1a7de1"
+EXPECTED_REFERENCE_SHA256 = "8ac3e16d73aab1ea2c5de648b5061ac06859f55a8018c38a576ff890cc5c7b00"
+EXPECTED_PACKAGE_SHA256 = "9a53e2efc48e8e5cdef7f6c55fe2a87719eb0c793e1e38d20f3a43e99a36a34b"
 STATIC_JSON_ARTIFACTS = (
     "bundle_summary.json",
     "determinism_report.json",

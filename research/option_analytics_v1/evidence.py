@@ -55,8 +55,10 @@ def _json_value(value: Any) -> Any:
         return {str(key): _json_value(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_value(item) for item in value]
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ValueError("non-finite float is forbidden in evidence")
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("non-finite float is forbidden in evidence")
+        return round(value, 10)
     return value
 
 
@@ -90,7 +92,7 @@ def _oracle_price(inputs: ModelInputs) -> float:
     assert years is not None
     if inputs.model is PricingModel.BLACK_SCHOLES_MERTON:
         assert inputs.spot is not None
-        return bsm_price(
+        price = bsm_price(
             spot=inputs.spot,
             strike=inputs.strike,
             time_years=years,
@@ -99,8 +101,9 @@ def _oracle_price(inputs: ModelInputs) -> float:
             volatility=inputs.volatility,
             is_call=inputs.option_type is OptionType.CALL,
         )
+        return max(0.0, price)
     assert inputs.forward is not None
-    return black76_price(
+    price = black76_price(
         forward=inputs.forward,
         strike=inputs.strike,
         time_years=years,
@@ -108,6 +111,7 @@ def _oracle_price(inputs: ModelInputs) -> float:
         volatility=inputs.volatility,
         is_call=inputs.option_type is OptionType.CALL,
     )
+    return max(0.0, price)
 
 
 def _year_fraction(inputs: ModelInputs) -> tuple[float, float, float]:

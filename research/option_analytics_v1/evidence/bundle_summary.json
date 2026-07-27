@@ -1,11 +1,11 @@
 {
   "artifact_semantic_hashes": {
-    "legacy_compatibility_audit.json": "dfb972f9b57195e11223338303b7ff86fa2f14d1630ad2212ca5fb2072fcc7d2",
-    "reference_case_results.json": "0ab4f905f84470d0f716dcea9e460af946c67abbc58f8c5ade6d4fbacb21d302",
-    "run_manifest.json": "cf9e7b25e8ab3d2363d36665173618c4f5324140fa3922d5ef2c9579a1a787a3"
+    "legacy_compatibility_audit.json": "a031495b1b4f75600543dbe60c862325741567182993dcf3bfee113b5835f776",
+    "reference_case_results.json": "c717164e97860abdfe39a97ed04a36eafbc062e2f0ec849ff44283104a110dd5",
+    "run_manifest.json": "431b1a4c24bd105041b517753af57f2f6e86a5ea546bb74723d26e364172c3b4"
   },
   "legacy_confirmed_defect_count": 7,
   "reference_failure_count": 0,
   "schema_version": "1.0.0",
-  "semantic_sha256": "2b79032e6407a69fb0a2561e72e3f045ad92ce4b45e0faf45768178f68e4ba20"
+  "semantic_sha256": "9cd5e075142fd7fa4190c650aee0d9bae0f1990356fec888d268d03d0ca73cc8"
 }

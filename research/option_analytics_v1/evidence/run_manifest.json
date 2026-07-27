@@ -1,15 +1,15 @@
 {
   "base_sha": "596fff09859afeca292bc3e3e31d4a55db1fd8c6",
-  "branch": "LOCAL_ISOLATED_HARNESS",
+  "branch": "feature/production-option-analytics-v1",
   "broker_api_called": false,
   "candidate_ranking_changed": false,
   "generated_at_utc": "2026-07-26T06:28:13+00:00",
-  "head_sha_or_working_tree_marker": "LOCAL_ISOLATED_HARNESS",
+  "head_sha_or_working_tree_marker": "6bbb8e947923c7de5840676af38253fbf52663b3",
   "holdout_read": false,
   "live_execution_changed": false,
   "order_action": false,
   "outcomes_read": false,
-  "platform": "Linux-6.12.13-x86_64-with-glibc2.41",
+  "platform": "macOS-26.3-arm64-arm-64bit",
   "production_files_touched": [
     "core/option_analytics/__init__.py",
     "core/option_analytics/attribution.py",
@@ -23,7 +23,7 @@
     "core/option_analytics/quotes.py",
     "core/option_analytics/surface.py"
   ],
-  "python_version": "3.13.5",
+  "python_version": "3.12.2",
   "real_or_replay_pnl_read": false,
   "repository": "ramgolladi1503-sys/tradebot",
   "risk_gate_changed": false,

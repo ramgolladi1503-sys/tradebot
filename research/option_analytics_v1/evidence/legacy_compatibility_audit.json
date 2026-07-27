@@ -8,91 +8,91 @@
       "case_id": "call_price",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar prices agree under the legacy q=0 convention.",
-      "legacy_output": 7.155896056109235,
-      "oracle_output": 7.155896056109235,
+      "legacy_output": 7.1558960561,
+      "oracle_output": 7.1558960561,
       "severity": "NONE",
-      "sidecar_output": 7.155896056109235
+      "sidecar_output": 7.1558960561
     },
     {
       "case_id": "put_price",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar prices agree under the legacy q=0 convention.",
-      "legacy_output": 4.200449410960054,
-      "oracle_output": 4.200449410960054,
+      "legacy_output": 4.200449411,
+      "oracle_output": 4.200449411,
       "severity": "NONE",
-      "sidecar_output": 4.200449410960054
+      "sidecar_output": 4.200449411
     },
     {
       "case_id": "call_delta",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": 0.6113512946052392,
-      "oracle_output": 0.6113512946052392,
+      "legacy_output": 0.6113512946,
+      "oracle_output": 0.6113512946,
       "severity": "NONE",
-      "sidecar_output": 0.6113512946052392
+      "sidecar_output": 0.6113512946
     },
     {
       "case_id": "put_delta",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": -0.3886487053947608,
-      "oracle_output": -0.3886487053947608,
+      "legacy_output": -0.3886487054,
+      "oracle_output": -0.3886487054,
       "severity": "NONE",
-      "sidecar_output": -0.3886487053947608
+      "sidecar_output": -0.3886487054
     },
     {
       "case_id": "call_gamma",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": 0.02710336967762158,
-      "oracle_output": 0.02710336967762158,
+      "legacy_output": 0.0271033697,
+      "oracle_output": 0.0271033697,
       "severity": "NONE",
-      "sidecar_output": 0.02710336967762158
+      "sidecar_output": 0.0271033697
     },
     {
       "case_id": "put_gamma",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": 0.02710336967762158,
-      "oracle_output": 0.02710336967762158,
+      "legacy_output": 0.0271033697,
+      "oracle_output": 0.0271033697,
       "severity": "NONE",
-      "sidecar_output": 0.02710336967762158
+      "sidecar_output": 0.0271033697
     },
     {
       "case_id": "call_vega",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": 27.103369677621583,
-      "oracle_output": 27.103369677621583,
+      "legacy_output": 27.1033696776,
+      "oracle_output": 27.1033696776,
       "severity": "NONE",
-      "sidecar_output": 27.103369677621583
+      "sidecar_output": 27.1033696776
     },
     {
       "case_id": "put_vega",
       "classification": "MATCH",
       "explanation": "Legacy and sidecar agree under identical q=0 and unit conventions.",
-      "legacy_output": 27.103369677621583,
-      "oracle_output": 27.103369677621583,
+      "legacy_output": 27.1033696776,
+      "oracle_output": 27.1033696776,
       "severity": "NONE",
-      "sidecar_output": 27.103369677621583
+      "sidecar_output": 27.1033696776
     },
     {
       "case_id": "call_theta",
       "classification": "MATCH",
       "explanation": "Call theta agrees under q=0.",
-      "legacy_output": -8.659427939789197,
-      "oracle_output": -8.659427939789197,
+      "legacy_output": -8.6594279398,
+      "oracle_output": -8.6594279398,
       "severity": "NONE",
-      "sidecar_output": -8.659427939789197
+      "sidecar_output": -8.6594279398
     },
     {
       "case_id": "put_theta",
       "classification": "LEGACY_DEFECT_CONFIRMED",
       "explanation": "Legacy put theta subtracts the interest term; the independently finite-difference-validated sidecar uses the correct positive put interest term.",
-      "legacy_output": -8.004593132550482,
-      "oracle_output": -2.836754738498148,
+      "legacy_output": -8.0045931326,
+      "oracle_output": -2.8367547385,
       "severity": "HIGH",
-      "sidecar_output": -2.836754738498148
+      "sidecar_output": -2.8367547385
     },
     {
       "case_id": "implied_volatility_regular_case",
@@ -101,7 +101,7 @@
       "legacy_output": 0.35,
       "oracle_output": 0.35,
       "severity": "NONE",
-      "sidecar_output": 0.3500000003259629
+      "sidecar_output": 0.3500000003
     },
     {
       "case_id": "negative_volatility_input",
