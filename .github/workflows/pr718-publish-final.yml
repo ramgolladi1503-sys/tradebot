@@ -41,14 +41,29 @@ jobs:
       - name: Run focused logic-integrity tests
         shell: bash
         run: |
-          set -euo pipefail
+          set -o pipefail
           PYTHONPATH=. pytest -q \
             tests/research/option_e2e/test_expired_option_replay_v1.py \
             tests/research/option_e2e/test_expired_option_replay_authority_v1.py \
             tests/research/option_e2e/test_canonical_underlying_adapter.py \
             tests/research/option_e2e/test_underlying_corpus_semantics_v1.py \
-            tests/research/option_e2e/test_canonical_option_intent_campaign_v1.py
-          git diff --check
+            tests/research/option_e2e/test_canonical_option_intent_campaign_v1.py \
+            2>&1 | tee /tmp/pr718-logic-integrity-tests.log
+          test_status=${PIPESTATUS[0]}
+          if [[ $test_status -eq 0 ]]; then
+            git diff --check 2>&1 | tee -a /tmp/pr718-logic-integrity-tests.log
+            test_status=${PIPESTATUS[0]}
+          fi
+          exit $test_status
+
+      - name: Upload diagnostic test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr718-logic-integrity-test-log-${{ github.sha }}
+          path: /tmp/pr718-logic-integrity-tests.log
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Commit repaired replay code and evidence
         shell: bash
