@@ -1,6 +1,5 @@
 import pandas as pd
 from datetime import datetime, timezone
-import pytz
 import pytest
 from research.upstox_expired_options.aggregation import aggregate_5m
 

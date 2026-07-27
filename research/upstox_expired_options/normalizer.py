@@ -1,11 +1,14 @@
 import pandas as pd
 import json
-import pytz
+import logging
+from zoneinfo import ZoneInfo
 from datetime import datetime
 from .schemas import ensure_schema
 from .validation import validate_ohlc, validate_post_expiry
 
-KOLKATA = pytz.timezone("Asia/Kolkata")
+logger = logging.getLogger(__name__)
+
+KOLKATA = ZoneInfo("Asia/Kolkata")
 NORMALIZER_VERSION = "1.0.0"
 
 def parse_candles(raw_json: bytes, meta: dict) -> tuple[pd.DataFrame, pd.DataFrame]:

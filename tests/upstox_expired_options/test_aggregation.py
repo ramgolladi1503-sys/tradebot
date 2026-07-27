@@ -1,16 +1,16 @@
 import pandas as pd
-import pytz
+from zoneinfo import ZoneInfo
 from datetime import datetime
 from research.upstox_expired_options.aggregation import aggregate_5m
 
-KOLKATA = pytz.timezone("Asia/Kolkata")
+KOLKATA = ZoneInfo("Asia/Kolkata")
 
 def test_aggregate_5m():
     # 3 bars in first 5 min, 1 bar in next
-    dt1 = KOLKATA.localize(datetime(2026, 7, 7, 9, 15))
-    dt2 = KOLKATA.localize(datetime(2026, 7, 7, 9, 16))
-    dt3 = KOLKATA.localize(datetime(2026, 7, 7, 9, 17))
-    dt4 = KOLKATA.localize(datetime(2026, 7, 7, 9, 21))
+    dt1 = datetime(2026, 7, 7, 9, 15, tzinfo=KOLKATA)
+    dt2 = datetime(2026, 7, 7, 9, 16, tzinfo=KOLKATA)
+    dt3 = datetime(2026, 7, 7, 9, 17, tzinfo=KOLKATA)
+    dt4 = datetime(2026, 7, 7, 9, 21, tzinfo=KOLKATA)
     
     df = pd.DataFrame([
         {'timestamp': dt1, 'session_date': '2026-07-07', 'open': 10, 'high': 15, 'low': 9, 'close': 14, 'volume': 100, 'open_interest': 50},

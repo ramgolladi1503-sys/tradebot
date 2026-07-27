@@ -104,10 +104,10 @@ def main():
                     if expiry_date:
                         try:
                             # simplistic check
-                            import pytz
-                            KOLKATA = pytz.timezone("Asia/Kolkata")
+                            from zoneinfo import ZoneInfo
+                            KOLKATA = ZoneInfo("Asia/Kolkata")
                             exp_d = datetime.strptime(expiry_date, "%Y-%m-%d").date()
-                            exp_dt = KOLKATA.localize(datetime(exp_d.year, exp_d.month, exp_d.day, 15, 30))
+                            exp_dt = datetime(exp_d.year, exp_d.month, exp_d.day, 15, 30, tzinfo=KOLKATA)
                             ts_dt = pd.to_datetime(df['timestamp'])
                             if ts_dt.dt.tz is None:
                                 ts_dt = ts_dt.dt.tz_localize(KOLKATA)
