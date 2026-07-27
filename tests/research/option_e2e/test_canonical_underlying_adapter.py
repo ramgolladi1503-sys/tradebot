@@ -78,8 +78,9 @@ def test_completed_history_contains_no_future_rows() -> None:
         rows[:3], symbol="NIFTY", session_date="2026-01-02", timeframe="5m"
     )
     assert len(history) == 3
-    assert history[-1]["bar_start_timestamp"] == str(rows[2]["timestamp"])
-    assert str(rows[3]["timestamp"]) not in {row["bar_start_timestamp"] for row in history}
+    assert history[-1]["bar_start_timestamp"] == rows[2]["timestamp"]
+    assert isinstance(history[-1]["bar_start_timestamp"], pd.Timestamp)
+    assert rows[3]["timestamp"] not in {row["bar_start_timestamp"] for row in history}
 
 
 def test_unknown_strategy_fails_closed() -> None:

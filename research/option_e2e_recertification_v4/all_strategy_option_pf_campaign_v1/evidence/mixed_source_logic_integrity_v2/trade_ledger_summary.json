@@ -1,0 +1,33 @@
+{
+  "evidence_lane": "PRICE_STRUCTURE_CANDIDATE_OVERLAY",
+  "executable_strategy_evidence": "UNAVAILABLE_WITH_HISTORICAL_PHASE2_TRUTH",
+  "exit_reason_counts": {
+    "stop": 47,
+    "target": 28,
+    "time_exit": 141
+  },
+  "full_ledger_sha256": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d",
+  "maximum_signal_to_entry_seconds": 60.0,
+  "minimum_signal_to_entry_seconds": 60.0,
+  "native_strategy_profit_factor_claimed": false,
+  "option_type_counts": {
+    "CE": 95,
+    "PE": 121
+  },
+  "overlay_name": "COMMON_OPTION_OVERLAY_V1",
+  "partition_counts": {
+    "development": 174,
+    "validation": 42
+  },
+  "schema_version": "pr718_exact_atm_trade_summary_v1",
+  "strategy_counts": {
+    "EVENT_VOLATILITY_EXPANSION": 8,
+    "EXHAUSTION_REVERSAL": 3,
+    "LATE_DAY_MOMENTUM": 74,
+    "MEAN_REVERSION_EXTENSION": 52,
+    "OPENING_DRIVE": 79
+  },
+  "strike_distance_max": 0.0,
+  "strike_distance_min": 0.0,
+  "trade_count": 216
+}

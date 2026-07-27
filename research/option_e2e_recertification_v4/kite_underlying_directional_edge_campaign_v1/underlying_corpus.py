@@ -12,6 +12,10 @@ from research.option_e2e_recertification_v4.current_certification_source_univers
 )
 
 IST = "Asia/Kolkata"
+SOURCE_TIMESTAMP_TIMEZONE = "UTC"
+UNSUPPORTED_SPECIAL_SESSIONS = {
+    "2024-11-01": "MUHURAT_SESSION_DIFFERENT_TRADING_HOURS",
+}
 UNDERLYINGS = ("BANKNIFTY", "NIFTY", "SENSEX")
 DATE_RE = re.compile(r"(20\d{2})-?(\d{2})-?(\d{2})")
 
@@ -25,10 +29,13 @@ def _date_from_path(path: Path) -> str:
 
 
 def _normalize_ts(series: pd.Series) -> pd.Series:
-    timestamps = pd.to_datetime(series, errors="coerce")
-    if getattr(timestamps.dt, "tz", None) is None:
-        return timestamps.dt.tz_localize(IST)
-    return timestamps.dt.tz_convert(IST)
+    """Convert the corpus' UTC-authoritative parquet timestamps to IST.
+
+    The retained parquet metadata declares pandas ``datetimetz`` with timezone
+    ``UTC``.  Passing ``utc=True`` also handles timezone-aware fixture strings
+    without guessing or double-localizing.
+    """
+    return pd.to_datetime(series, errors="coerce", utc=True).dt.tz_convert(IST)
 
 
 def _expected_bar_count(frame: pd.DataFrame) -> int:
@@ -36,8 +43,8 @@ def _expected_bar_count(frame: pd.DataFrame) -> int:
         return 0
     session_date = frame["timestamp"].iloc[0].date()
     start = pd.Timestamp(f"{session_date} 09:15:00", tz=IST)
-    end = pd.Timestamp(f"{session_date} 15:30:00", tz=IST)
-    return len(pd.date_range(start, end, freq="5min"))
+    last_bar_start = pd.Timestamp(f"{session_date} 15:25:00", tz=IST)
+    return len(pd.date_range(start, last_bar_start, freq="5min"))
 
 
 def _load_underlying(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -96,7 +103,7 @@ def _load_underlying(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
         "out_of_session_rows": (
             int(
                 (accepted["timestamp"].dt.time < pd.Timestamp("09:15").time()).sum()
-                + (accepted["timestamp"].dt.time > pd.Timestamp("15:30").time()).sum()
+                + (accepted["timestamp"].dt.time > pd.Timestamp("15:25").time()).sum()
             )
             if not accepted.empty
             else 0
@@ -105,9 +112,11 @@ def _load_underlying(path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
         "minimum_timestamp": str(accepted["timestamp"].min()) if not accepted.empty else None,
         "maximum_timestamp": str(accepted["timestamp"].max()) if not accepted.empty else None,
         "bar_interval": interval,
+        "timestamp_source_timezone": SOURCE_TIMESTAMP_TIMEZONE,
         "timestamp_timezone": IST,
         "timestamp_semantics": "bar_start",
         "session_start": "09:15:00",
+        "last_regular_bar_start": "15:25:00",
         "session_end": "15:30:00",
         "expected_bar_count": expected,
         "actual_bar_count": actual,
@@ -164,6 +173,9 @@ def audit_corpus(
                     "source_file_id": source_hash[:16],
                 }
             )
+            if session_date in UNSUPPORTED_SPECIAL_SESSIONS:
+                summary["authority_classification"] = "UNSUPPORTED_SPECIAL_SESSION"
+                summary["exact_reason"] = UNSUPPORTED_SPECIAL_SESSIONS[session_date]
             by_file.append(summary)
             by_session[(session_date, instrument)] = {
                 "date": session_date,
@@ -173,9 +185,11 @@ def audit_corpus(
                 "missing_bar_count": summary["missing_bar_count"],
                 "authority_classification": summary["authority_classification"],
                 "source_file_id": summary["source_file_id"],
+                "exact_reason": summary.get("exact_reason"),
             }
             if (
-                summary["authority_classification"]
+                session_date not in UNSUPPORTED_SPECIAL_SESSIONS
+                and summary["authority_classification"]
                 in {"REAL_KITE_UNDERLYING_CANDLES", "PARTIAL_REAL_WITH_REJECTED_ROWS"}
                 and summary["bar_interval"] == "5minute"
             ):
