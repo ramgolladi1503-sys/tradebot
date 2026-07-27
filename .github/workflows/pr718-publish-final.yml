@@ -1,4 +1,4 @@
-name: PR718 Publish Final Canonical Evidence
+name: PR718 Publish Logic Integrity V2
 
 on:
   pull_request:
@@ -19,21 +19,38 @@ jobs:
         with:
           ref: research/all-strategy-option-pf-v1
           fetch-depth: 0
-      - name: Install final code and compact evidence
+
+      - name: Install hash-verified logic-integrity repair
         shell: bash
         run: |
           set -euo pipefail
-          bundle_b64="research/option_e2e_recertification_v4/all_strategy_option_pf_campaign_v1/pr718_publication_bundle.tar.gz.b64"
-          base64 -d "$bundle_b64" > /tmp/pr718-publication-bundle.tar.gz
-          echo "9615ab45a69bde3479b19d402e6f7741cc6f8543597fc30ce221da9e6cb627e6  /tmp/pr718-publication-bundle.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/pr718-publication-bundle.tar.gz -C .
-          chmod +x scripts/run_expired_option_contract_replay_v1.py scripts/run_canonical_option_intent_campaign_v1.py scripts/run_canonical_all_strategy_expired_option_pf_campaign_v1.py
+          parts="research/option_e2e_recertification_v4/all_strategy_option_pf_campaign_v1/pr718_logic_integrity_parts"
+          cat "$parts"/part_* > /tmp/pr718-logic-integrity.tar.gz.b64
+          base64 -d /tmp/pr718-logic-integrity.tar.gz.b64 > /tmp/pr718-logic-integrity.tar.gz
+          echo "32a4b4d6e3d2b23a1a5206f802c960b1087dc219b23c23d664ca692ab7642b85  /tmp/pr718-logic-integrity.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/pr718-logic-integrity.tar.gz -C .
+          chmod +x scripts/run_expired_option_contract_replay_v1.py
+
           rm -f .github/workflows/export-canonical-source-temporary.yml
           rm -f .github/workflows/pr718-publish-final.yml
-          rm -f "$bundle_b64"
-      - name: Run focused canonical replay tests
-        run: PYTHONPATH=. pytest -q tests/research/option_e2e
-      - name: Commit final repair and evidence
+          rm -f research/option_e2e_recertification_v4/all_strategy_option_pf_campaign_v1/pr718_publication_bundle.tar.gz.b64
+          rm -rf research/option_e2e_recertification_v4/all_strategy_option_pf_campaign_v1/pr718_publication_parts
+          rm -rf research/option_e2e_recertification_v4/all_strategy_option_pf_campaign_v1/pr718_logic_integrity_parts
+          rm -rf research/option_e2e_recertification_v4/kite_underlying_directional_edge_campaign_v1/temporary_source_export
+
+      - name: Run focused logic-integrity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. pytest -q \
+            tests/research/option_e2e/test_expired_option_replay_v1.py \
+            tests/research/option_e2e/test_expired_option_replay_authority_v1.py \
+            tests/research/option_e2e/test_canonical_underlying_adapter.py \
+            tests/research/option_e2e/test_underlying_corpus_semantics_v1.py \
+            tests/research/option_e2e/test_canonical_option_intent_campaign_v1.py
+          git diff --check
+
+      - name: Commit repaired replay code and evidence
         shell: bash
         run: |
           set -euo pipefail
@@ -41,5 +58,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --check
-          git commit -m "fix(research): publish exact-ATM canonical option replay evidence"
+          git commit -m "fix(research): repair and rerun canonical option translation"
           git push origin HEAD:research/all-strategy-option-pf-v1
