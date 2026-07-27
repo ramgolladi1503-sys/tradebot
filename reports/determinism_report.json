@@ -1,0 +1,8 @@
+{
+  "status": "PASSED",
+  "directories_compared": 2,
+  "files_compared": 12,
+  "semantic_hash_matches": 12,
+  "semantic_hash_mismatches": 0,
+  "dataset_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
