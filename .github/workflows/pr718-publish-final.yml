@@ -1,9 +1,9 @@
 name: PR718 Temporary Parquet Reader Export
 
 on:
-  pull_request:
+  push:
     branches:
-      - research/ce-pe-option-certification-v1
+      - research/all-strategy-option-pf-v1
     paths:
       - .github/workflows/pr718-publish-final.yml
 
@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   export:
-    if: github.head_ref == 'research/all-strategy-option-pf-v1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-python@v5
