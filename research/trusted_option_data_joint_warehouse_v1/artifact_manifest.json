@@ -2,24 +2,24 @@
   "artifact_count": 17,
   "artifacts": [
     {
-      "bytes": 68,
+      "bytes": 67,
       "path": "__init__.py",
-      "sha256": "5618799d8c4b8f5b9e01ae0d986c9852fc40414c3be530a1b0fdb4ade01f33fe"
+      "sha256": "96b609a63b159cfbe4f6d9fe160c6f14abd1985f3fd2208ea15eb4efebe64f5b"
     },
     {
-      "bytes": 27285,
+      "bytes": 34341,
       "path": "builder.py",
-      "sha256": "604ddf07e532696eb6eb304275ef0f5ada32aa578d009bfe65a8cd0590e5f05b"
+      "sha256": "4bd688e944a446dab85416c2857dc8315da5a1bd734b0551d5f0af8c53cf29ee"
     },
     {
-      "bytes": 273,
+      "bytes": 279,
       "path": "capability_support_matrix.json",
-      "sha256": "d5021c66201103277b1885ff42f1658801e9670b3ba9cc139e4a70c9da58e19d"
+      "sha256": "eb54dc5fdb4ae151b3fd3cb2e7b74480bb927905db055bb648504dda280dae99"
     },
     {
-      "bytes": 1216,
+      "bytes": 1222,
       "path": "coverage_report.json",
-      "sha256": "4d9678f77cb303e9dafd46dbda5246b0797707c698cfb6fa4cf97b40b5c9c336"
+      "sha256": "560b500f8b2ece13885e629709ba2d82e4b93da7d17e6442576df483f9680d27"
     },
     {
       "bytes": 1337,
@@ -29,52 +29,52 @@
     {
       "bytes": 2436,
       "path": "determinism_report.json",
-      "sha256": "7c3c60076e973ae4077056191554b46ad0a990400dacc40f6338578ef0b47afd"
+      "sha256": "5d2d3c704b6f9b7a7d4905af2fe46094a21da2dc90fac48388ffbb1a23b7690b"
     },
     {
-      "bytes": 848,
+      "bytes": 870,
       "path": "final_report.md",
-      "sha256": "ff808201bd62b72f2caeef95191fc79b03fb1cd7b99baa338301d346807bdf59"
+      "sha256": "ca058927c2c53ff76b3c75412b0b7081593557ffafe3a6b871b4406993e72a7d"
     },
     {
-      "bytes": 840,
+      "bytes": 862,
       "path": "final_verdict.json",
-      "sha256": "547a4d1c0fa486231d645cbcecaa60a806c18b1fbba671dddf8823ba4d2548fa"
+      "sha256": "ea19492ddd77585641582472a9a2865dc5545318aa67524327120541b24fde19"
     },
     {
-      "bytes": 561,
+      "bytes": 498,
       "path": "independent_audit_report.json",
-      "sha256": "12a39d64c35a4b7f835ec36c71a06932a91d4904dbe3e3374b90d39eab063663"
+      "sha256": "92d1a65b1ef075cde6b556069379b74159cfa8b1b5a494c8b21448b8e15d8907"
     },
     {
-      "bytes": 16165,
+      "bytes": 18827,
       "path": "joint_underlying_option_warehouse.parquet",
-      "sha256": "b1b199954e3a580f24dcab67c6c0330e5cb70017b61c8d3d505156309055ca37"
+      "sha256": "95c016949fa93b97b430e3cc65a5f47ef311f82ea7d3a657c36873e3d768676b"
     },
     {
-      "bytes": 992,
+      "bytes": 1098,
       "path": "joint_warehouse_schema.json",
-      "sha256": "a3298dc1aafa9040cfb2e5a07f4c313f55bf00f39887a857700e967137841380"
+      "sha256": "8589e1687348a0ea32dbc3a85154bd8e79e25cd6a0bdbce554ded8d44c67d014"
     },
     {
-      "bytes": 1255,
+      "bytes": 1940,
       "path": "option_source_inventory.csv",
-      "sha256": "3f3006ae42033c46cccde49b8bd353ac1ff4c9eb58ca9f08bf5db451de560038"
+      "sha256": "b21209ea3bcd6646b7bd3494417f1293f5ae0d6628553cb0875d32bce535fcf5"
     },
     {
-      "bytes": 2127,
+      "bytes": 3439,
       "path": "option_source_inventory.json",
-      "sha256": "e7aec6dda54330cdcc009df5dc1c1afbda16d0b96c290bc7b2ce9c69f39734d4"
+      "sha256": "b55ee447699432f6c6e49d60c244d4cc8a0c4b16277d726dbb26f8a37eb572f2"
     },
     {
-      "bytes": 577,
+      "bytes": 1694,
       "path": "post_change_manifest.json",
-      "sha256": "da462f4a5e081fea411f7388af56ed8a1841cb5c33ce3c9d7e50d0c8e5f5bcb8"
+      "sha256": "0db8e4a8adfdbf9325b8d9167558133346a8ccd126859f2dae0074fda83f3f5d"
     },
     {
-      "bytes": 824,
+      "bytes": 2028,
       "path": "pre_change_manifest.json",
-      "sha256": "1a4a62b3c383fc9ca37118dd46dae8dc87c341dbb6539d5e4ca909bfe9c3c1fb"
+      "sha256": "d3466997c5cd9bccac01a8e0a4603f5671165b6f71a99ab7a1980ff84fc67838"
     },
     {
       "bytes": 63,
@@ -82,10 +82,10 @@
       "sha256": "64b1225c5d4d0abedcb8edc354882038868a918c5240c0c9f98a0e08e132f48c"
     },
     {
-      "bytes": 569,
+      "bytes": 699,
       "path": "source_classification_table.csv",
-      "sha256": "a24e5271e9275368e83b2c721d4dcbdad95cdac3961ea31adf564aa4cb69b186"
+      "sha256": "9e3de8bb96da1ede3f9fe02eb5fe067cbc46165362495400c6bc0ba23a67885c"
     }
   ],
-  "semantic_hash": "230d6c59dd7461b587f6ac0b7dc6042d8bcee8fe407ab46a13ffeb47d4d1a778"
+  "semantic_hash": "5144cfbecbba882d23de04584861bf5b17869385871e21f41bfe4347e08bd5d9"
 }

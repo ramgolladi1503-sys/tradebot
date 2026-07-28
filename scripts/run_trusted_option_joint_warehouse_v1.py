@@ -14,10 +14,21 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("research/trusted_option_data_joint_warehouse_v1"))
     parser.add_argument("--source-commit", default="151fe6b17900508b7b578aea482d55e4fdabbdf5")
     parser.add_argument("--source-branch", default="research/structural-edge-discovery-sprint-one-survivor")
+    parser.add_argument("--external-evidence-root", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     output_dir = args.output_dir if args.output_dir.is_absolute() else repo / args.output_dir
-    result = run_build(BuildConfig(repo=repo, output_dir=output_dir, source_commit=args.source_commit, source_branch=args.source_branch, worktree_path=repo))
+    external = args.external_evidence_root.resolve() if args.external_evidence_root else None
+    result = run_build(
+        BuildConfig(
+            repo=repo,
+            output_dir=output_dir,
+            source_commit=args.source_commit,
+            source_branch=args.source_branch,
+            worktree_path=repo,
+            external_evidence_root=external,
+        )
+    )
     print(result)
     return 0
 

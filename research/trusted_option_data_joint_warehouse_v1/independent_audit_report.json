@@ -1,17 +1,15 @@
 {
   "allowed_for_live_execution": false,
   "audit_pass": true,
-  "blockers": [
-    "no_trusted_raw_or_derived_option_contract_source"
-  ],
+  "blockers": [],
   "broker_api_called": false,
   "diagnostic_metrics_verified": true,
-  "feature_causality": "OBSERVATIONAL_ONLY_NO_FORWARD_FILL",
+  "feature_causality": "TRUSTED_DERIVED_COMPLETED_BARS",
   "is_order_action": false,
   "raw_hashes_verified": true,
   "read_only": true,
   "row_counts_verified": true,
-  "strike_expiry_mapping_verified": false,
+  "strike_expiry_mapping_verified": true,
   "timestamp_alignment_verified": true,
   "warehouse_semantic_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 }

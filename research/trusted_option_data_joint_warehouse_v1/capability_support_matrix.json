@@ -1,8 +1,8 @@
 {
   "algotest_comparison": "NOT_SUPPORTED",
-  "iv_oi_research": "NOT_SUPPORTED",
-  "option_premium_replay": "NOT_SUPPORTED",
+  "iv_oi_research": "PARTIALLY_SUPPORTED_OI_ONLY",
+  "option_premium_replay": "SUPPORTED",
   "premium_lead_lag_research": "NOT_SUPPORTED",
   "spread_aware_fill_simulation": "NOT_SUPPORTED",
-  "strike_selection_research": "NOT_SUPPORTED"
+  "strike_selection_research": "SUPPORTED"
 }

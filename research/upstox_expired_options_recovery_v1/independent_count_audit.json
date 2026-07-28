@@ -1,0 +1,52 @@
+{
+  "evidence_root": "/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1",
+  "independent_counts": {
+    "empty_or_failure_responses": 116,
+    "expiry_count": 82,
+    "expiry_end": "2026-07-21",
+    "expiry_start": "2024-10-03",
+    "file_inventory_rows": 5135,
+    "file_inventory_semantic_hash": "372aab7b6dc8853e171c5054fd3684fa6d2181241cd8a341db3fa3ffce832a71",
+    "five_minute_rows": 399844,
+    "missing_normalized_pairs": 0,
+    "normalized_1m_partitions": 1199,
+    "normalized_5m_partitions": 1199,
+    "one_minute_rows": 1998358,
+    "option_type_counts": {
+      "CE": 549,
+      "PE": 650
+    },
+    "populated_raw_contracts": 1199,
+    "raw_candle_json_files": 1315,
+    "raw_response_count": 1315,
+    "source_provenance": "upstox_plus expired option historical candles, recovered locally without refetch",
+    "strike_count": 131,
+    "strike_max": 26450.0,
+    "strike_min": 12000.0,
+    "timestamp_end": "2026-07-21T15:29:00+05:30",
+    "timestamp_start": "2024-09-26T09:15:00+05:30",
+    "timezone_semantics": "Asia/Kolkata timestamps in normalized completed candles",
+    "underlyings": [
+      "NIFTY"
+    ]
+  },
+  "prior_claim_reconciliation": {
+    "differences": {},
+    "expected": {
+      "missing_normalized_pairs": 0,
+      "normalized_1m_partitions": 1199,
+      "normalized_5m_partitions": 1199,
+      "populated_raw_contracts": 1199
+    },
+    "status": "PASS"
+  },
+  "recovery_verdict": "RECOVERED_LOCAL_EVIDENCE",
+  "root_bytes": 247030739,
+  "root_semantic_hash": "372aab7b6dc8853e171c5054fd3684fa6d2181241cd8a341db3fa3ffce832a71",
+  "safety": {
+    "allowed_for_live_execution": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true
+  }
+}

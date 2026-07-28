@@ -1,13 +1,14 @@
 {
   "allowed_for_live_execution": false,
   "broker_api_called": false,
-  "clean_status_before": "?? docs/research/trusted_option_data_joint_warehouse_v1/\n?? research/trusted_option_data_joint_warehouse_v1/\n?? scripts/audit_trusted_option_joint_warehouse_v1.py\n?? scripts/run_trusted_option_joint_warehouse_v1.py\n?? tests/research/test_trusted_option_data_joint_warehouse_v1.py",
-  "current_branch": "research/trusted-option-data-joint-warehouse-v1",
-  "current_commit": "151fe6b17900508b7b578aea482d55e4fdabbdf5",
+  "clean_status_before": "M research/trusted_option_data_joint_warehouse_v1/artifact_manifest.json\n M research/trusted_option_data_joint_warehouse_v1/builder.py\n M research/trusted_option_data_joint_warehouse_v1/capability_support_matrix.json\n M research/trusted_option_data_joint_warehouse_v1/coverage_report.json\n M research/trusted_option_data_joint_warehouse_v1/determinism_report.json\n M research/trusted_option_data_joint_warehouse_v1/final_report.md\n M research/trusted_option_data_joint_warehouse_v1/final_verdict.json\n M research/trusted_option_data_joint_warehouse_v1/independent_audit_report.json\n M research/trusted_option_data_joint_warehouse_v1/joint_underlying_option_warehouse.parquet\n M research/trusted_option_data_joint_warehouse_v1/joint_warehouse_schema.json\n M research/trusted_option_data_joint_warehouse_v1/option_source_inventory.csv\n M research/trusted_option_data_joint_warehouse_v1/option_source_inventory.json\n M research/trusted_option_data_joint_warehouse_v1/post_change_manifest.json\n M research/trusted_option_data_joint_warehouse_v1/pre_change_manifest.json\n M research/trusted_option_data_joint_warehouse_v1/source_classification_table.csv\n M scripts/run_trusted_option_joint_warehouse_v1.py\n?? research/upstox_expired_options_recovery_v1/\n?? scripts/recover_upstox_expired_options_evidence_v1.py\n?? tests/research/test_recover_upstox_expired_options_evidence_v1.py",
+  "current_branch": "research/recover-upstox-expired-options-evidence-v1",
+  "current_commit": "04cb251d628b2767e6df7986aadb48263db41925",
+  "external_evidence_root": "/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1",
   "is_order_action": false,
   "python_version": "3.12.2",
   "read_only": true,
-  "source_branch": "research/structural-edge-discovery-sprint-one-survivor",
-  "source_commit": "151fe6b17900508b7b578aea482d55e4fdabbdf5",
-  "worktree_path": "/Users/madhuram/tradebot-trusted-option-data-joint-warehouse-v1"
+  "source_branch": "research/trusted-option-data-joint-warehouse-v1",
+  "source_commit": "04cb251d628b2767e6df7986aadb48263db41925",
+  "worktree_path": "/Users/madhuram/tradebot-recover-upstox-expired-options-evidence-v1"
 }

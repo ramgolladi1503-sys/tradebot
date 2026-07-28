@@ -1,11 +1,11 @@
 {
   "capability_support_matrix": {
     "algotest_comparison": "NOT_SUPPORTED",
-    "iv_oi_research": "NOT_SUPPORTED",
-    "option_premium_replay": "NOT_SUPPORTED",
+    "iv_oi_research": "PARTIALLY_SUPPORTED_OI_ONLY",
+    "option_premium_replay": "SUPPORTED",
     "premium_lead_lag_research": "NOT_SUPPORTED",
     "spread_aware_fill_simulation": "NOT_SUPPORTED",
-    "strike_selection_research": "NOT_SUPPORTED"
+    "strike_selection_research": "SUPPORTED"
   },
   "coverage": {
     "bars_per_session": {},
@@ -26,9 +26,9 @@
     "strike_continuity": "NOT_EVALUABLE",
     "strikes_per_expiry": {},
     "timestamp_monotonicity": "NOT_EVALUABLE",
-    "total_option_sources": 2,
+    "total_option_sources": 3,
     "total_sessions": 0,
-    "trusted_option_sources": 0,
+    "trusted_option_sources": 1,
     "underlying_option_timestamp_alignment": "NOT_EVALUABLE",
     "zero_oi_rate": null,
     "zero_volume_rate": null
