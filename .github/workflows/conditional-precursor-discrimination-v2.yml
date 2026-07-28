@@ -10,12 +10,15 @@ on:
       - 'scripts/run_option_surface_transition_discovery_v1.py'
       - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
+      - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
+      - 'research/late_day_ce_inventory_rebound_v3/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
   pull_request:
     paths:
@@ -23,12 +26,15 @@ on:
       - 'scripts/run_option_surface_transition_discovery_v1.py'
       - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
+      - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
+      - 'research/late_day_ce_inventory_rebound_v3/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
@@ -70,7 +76,8 @@ jobs:
           python -m pytest -q \
             tests/research/test_conditional_precursor_discrimination_v2.py \
             tests/research/test_option_surface_transition_discovery_v1.py \
-            tests/research/test_extreme_option_pressure_discovery_v2.py
+            tests/research/test_extreme_option_pressure_discovery_v2.py \
+            tests/research/test_late_day_ce_inventory_rebound_v3.py
 
       - name: Verify corpus and reproduce prior campaign
         run: |
@@ -80,16 +87,21 @@ jobs:
         run: |
           python -m scripts.run_option_surface_transition_discovery_v1_cli --repo-root "$GITHUB_WORKSPACE"
 
-      - name: Run extreme option-pressure OOF and holdout discovery V2
+      - name: Run extreme option-pressure OOF discovery V2
         run: |
           python -m scripts.run_extreme_option_pressure_discovery_v2 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Run frozen late-day CE untouched-holdout test V3
+        run: |
+          python -m scripts.run_late_day_ce_inventory_rebound_v3 --repo-root "$GITHUB_WORKSPACE"
 
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
         run: |
           if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ] && \
              [ ! -d runtime/research/option_surface_transition_discovery_v1 ] && \
-             [ ! -d runtime/research/extreme_option_pressure_discovery_v2 ]; then
+             [ ! -d runtime/research/extreme_option_pressure_discovery_v2 ] && \
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v3 ]; then
             echo "No runtime research evidence directory was produced."
             exit 0
           fi
@@ -100,8 +112,11 @@ jobs:
           git add -f runtime/research/option_surface_transition_discovery_v1/*.csv || true
           git add -f runtime/research/extreme_option_pressure_discovery_v2/*.json || true
           git add -f runtime/research/extreme_option_pressure_discovery_v2/*.csv || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v3/*.json || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v3/*.csv || true
           git add -f research/option_surface_transition_discovery_v1/RESULT.md || true
           git add -f research/extreme_option_pressure_discovery_v2/RESULT.md || true
+          git add -f research/late_day_ce_inventory_rebound_v3/RESULT.md || true
           if git diff --cached --quiet; then
             echo "No deterministic diagnostic changes to preserve."
             exit 0
@@ -118,8 +133,10 @@ jobs:
             runtime/research/conditional_precursor_discrimination_v2/**
             runtime/research/option_surface_transition_discovery_v1/**
             runtime/research/extreme_option_pressure_discovery_v2/**
+            runtime/research/late_day_ce_inventory_rebound_v3/**
             research/conditional_precursor_discrimination_v2/prior_campaign_reproduction.md
             research/option_surface_transition_discovery_v1/RESULT.md
             research/extreme_option_pressure_discovery_v2/RESULT.md
+            research/late_day_ce_inventory_rebound_v3/RESULT.md
           if-no-files-found: warn
           retention-days: 30
