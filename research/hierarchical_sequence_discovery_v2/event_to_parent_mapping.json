@@ -1,0 +1,75 @@
+{
+  "mapping": {
+    "call_elasticity_collapse": {
+      "level1": "ELASTICITY_COLLAPSE",
+      "level2": "CALL_ELASTICITY_COLLAPSE",
+      "level3": "call_elasticity_collapse"
+    },
+    "call_elasticity_expansion": {
+      "level1": "ELASTICITY_EXPANSION",
+      "level2": "CALL_ELASTICITY_EXPANSION",
+      "level3": "call_elasticity_expansion"
+    },
+    "call_non_confirmation": {
+      "level1": "OPTION_NON_CONFIRMATION",
+      "level2": "CALL_NON_CONFIRMATION",
+      "level3": "call_non_confirmation"
+    },
+    "compression": {
+      "level1": "COMPRESSION",
+      "level2": "RANGE_COMPRESSION",
+      "level3": "compression"
+    },
+    "cross_strike_dispersion": {
+      "level1": "CROSS_STRIKE_DISAGREEMENT",
+      "level2": "CROSS_STRIKE_DISPERSION",
+      "level3": "cross_strike_dispersion"
+    },
+    "expiry_day": {
+      "level1": "EXPIRY",
+      "level2": "EXPIRY_DAY",
+      "level3": "expiry_day"
+    },
+    "expiry_week": {
+      "level1": "EXPIRY",
+      "level2": "EXPIRY_WEEK",
+      "level3": "expiry_week"
+    },
+    "opening_displacement": {
+      "level1": "OPENING",
+      "level2": "OPENING_DISPLACEMENT",
+      "level3": "opening_displacement"
+    },
+    "put_elasticity_collapse": {
+      "level1": "ELASTICITY_COLLAPSE",
+      "level2": "PUT_ELASTICITY_COLLAPSE",
+      "level3": "put_elasticity_collapse"
+    },
+    "put_elasticity_expansion": {
+      "level1": "ELASTICITY_EXPANSION",
+      "level2": "PUT_ELASTICITY_EXPANSION",
+      "level3": "put_elasticity_expansion"
+    },
+    "put_non_confirmation": {
+      "level1": "OPTION_NON_CONFIRMATION",
+      "level2": "PUT_NON_CONFIRMATION",
+      "level3": "put_non_confirmation"
+    },
+    "underlying_above_vwap_extension": {
+      "level1": "ACCEPTANCE",
+      "level2": "ABOVE_VWAP_EXTENSION",
+      "level3": "underlying_above_vwap_extension"
+    },
+    "underlying_below_vwap_extension": {
+      "level1": "ACCEPTANCE",
+      "level2": "BELOW_VWAP_EXTENSION",
+      "level3": "underlying_below_vwap_extension"
+    },
+    "volatility_expansion": {
+      "level1": "EXPANSION",
+      "level2": "VOLATILITY_EXPANSION",
+      "level3": "volatility_expansion"
+    }
+  },
+  "semantic_hash": "f8fb622851594524602dbbcf2396d17bcfdbf225f272310f2c792236327e72e8"
+}
