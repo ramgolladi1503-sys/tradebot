@@ -1,0 +1,10 @@
+{
+  "development_events_counted": false,
+  "minimum_later_support": {
+    "expiries": 12,
+    "sessions": 30,
+    "trades": 100
+  },
+  "pnl_inspected": false,
+  "status": "NOT_RUN_NO_AUTHORIZED_UNIVERSE"
+}

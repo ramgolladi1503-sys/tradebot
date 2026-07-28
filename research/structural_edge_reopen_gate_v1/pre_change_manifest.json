@@ -1,0 +1,24 @@
+{
+  "branch": "research/structural-edge-reopen-gate-v1",
+  "clean_status_before_generation": "",
+  "closeout_registry_hash": "b6bd3ddfdf817bbeb1f8995e73698971b5f89a932b89d15ce4bf7bbddab43fd5",
+  "current_commit": "d7ed6391c874197da32939852f818c974b2b0afc",
+  "input_data_hashes": {
+    "active_options_replay": "6e54493d43391b8804e2270f62a997e29a0b2d1b666c7982ff794601d784ac56",
+    "banknifty_candidate_replay_tree": "a9911bb79ec15a782bee1851ef179a9e20109d17ff1e355972cb90d58da4f03e",
+    "banknifty_candidate_replay_tree_file_count": 543,
+    "banknifty_one_minute_bar": "c59fa4b365724369737ef3b6da7b51c1a641a0884732ae4d5532b38029d8ea81",
+    "closeout_duplicate_registry": "b6bd3ddfdf817bbeb1f8995e73698971b5f89a932b89d15ce4bf7bbddab43fd5",
+    "closeout_mechanism_registry": "a7f52fc7c4b44eed146484e3ff81dc4aa1de50eefb0d49522e2127c5b4c80a4f",
+    "closeout_reopen_conditions": "f1bf4af27b244f3cf5ebf09d98fb1bd5f62ddf5e54861b6cb4edf4b357980cd1",
+    "constituent_candle_audit": "fa00302059bf65d48cb825846c7cda5eb5126317e9158e9d1eb06277b7b33f38",
+    "expired_option_campaign_manifest": "d7f843a980677ef52423530775c6f570ba1754050cd7112dcfbc8adb3abf505d",
+    "expired_option_dataset_semantic_hash_1m": "d793acd74010a6b1b2010e2b9d393dffd0a1ee77d437b2dbf5bb47b12c8ce494",
+    "nifty_one_minute_bar": "10fabb8fdac27d71fe2d0df9f714f9d93e5348fb83e01fac9b586da86141b55b",
+    "tick_json_tree": "50b9a21bfa2a2e6208b6204e0ecab0d3bfeeeca380661a21e6acf75c8fdaaf59"
+  },
+  "prior_mechanism_registry_hash": "a7f52fc7c4b44eed146484e3ff81dc4aa1de50eefb0d49522e2127c5b4c80a4f",
+  "reopen_condition_hash": "f1bf4af27b244f3cf5ebf09d98fb1bd5f62ddf5e54861b6cb4edf4b357980cd1",
+  "source_commit": "d7ed6391c874197da32939852f818c974b2b0afc",
+  "worktree": "/Users/madhuram/tradebot-structural-edge-reopen-gate-v1"
+}
