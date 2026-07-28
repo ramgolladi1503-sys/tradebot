@@ -1,0 +1,62 @@
+name: Conditional Precursor Discrimination V2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/conditional-precursor-discrimination-v2
+    paths:
+      - 'scripts/run_conditional_precursor_discrimination_v2.py'
+      - 'tests/research/test_conditional_precursor_discrimination_v2.py'
+      - 'research/conditional_precursor_discrimination_v2/**'
+      - '.github/workflows/conditional-precursor-discrimination-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository and LFS evidence
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Verify LFS checkout
+        run: |
+          git lfs install
+          git lfs pull
+          git lfs ls-files | head -100
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow pytest
+
+      - name: Run focused tests
+        run: |
+          python -m pytest -q tests/research/test_conditional_precursor_discrimination_v2.py
+
+      - name: Verify corpus and reproduce prior campaign
+        run: |
+          python scripts/run_conditional_precursor_discrimination_v2.py --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Upload research evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conditional-precursor-discrimination-v2-evidence
+          path: |
+            runtime/research/conditional_precursor_discrimination_v2/**
+            research/conditional_precursor_discrimination_v2/prior_campaign_reproduction.md
+          if-no-files-found: warn
+          retention-days: 30
