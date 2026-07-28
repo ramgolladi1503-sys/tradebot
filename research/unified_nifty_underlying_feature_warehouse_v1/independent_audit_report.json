@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": false,
+  "blockers": [
+    "incomplete_one_minute_sessions",
+    "index_source_has_zero_volume",
+    "incomplete_sessions_prevent_full_5m_reconciliation"
+  ],
+  "broker_api_called": false,
+  "feature_causality": "PASS_COMPLETED_BAR_ONLY",
+  "is_order_action": false,
+  "option_alignment": "PASS",
+  "previous_session_boundaries": "PASS_SHIFTED_BY_SESSION",
+  "read_only": true,
+  "semantic_hashes": {
+    "canonical_1m": "298d908c557e85a2c4086446d7d7df22a83d6b8f51d5a6f34fadc9c4a7007e57",
+    "canonical_5m": "b9863212fabfb6fb6bded2eff6431dca1c249d0ade6641ab7a5914f5b2c1d5c2",
+    "features": "899874e344c199522cc9a7853be4deef589a2eb93216ce91040e86962a67dfe5",
+    "joint": "4ef56581c44fbfb0d834a39f6d5954773f495a7d3739e8d60c7b7ff3acc28dfb"
+  },
+  "source_hashes_verified": true,
+  "vwap_causality": "PASS_SESSION_CUMULATIVE_ONLY"
+}

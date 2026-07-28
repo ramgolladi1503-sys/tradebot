@@ -1,15 +1,13 @@
 {
   "allowed_for_live_execution": false,
   "audit_pass": true,
-  "blockers": [
-    "no_overlap_with_existing_underlying_feature_warehouse"
-  ],
+  "blockers": [],
   "broker_api_called": false,
   "capability_support_matrix": {
     "algotest_comparison": "NOT_SUPPORTED",
     "iv_oi_research": "PARTIALLY_SUPPORTED_OI_ONLY",
     "option_premium_replay": "SUPPORTED",
-    "premium_lead_lag_research": "NOT_SUPPORTED",
+    "premium_lead_lag_research": "PARTIALLY_SUPPORTED",
     "spread_aware_fill_simulation": "NOT_SUPPORTED",
     "strike_selection_research": "SUPPORTED"
   },
@@ -18,6 +16,6 @@
   "is_order_action": false,
   "primary_verdict": "OPTION_DATA_READY_FOR_DISCOVERY",
   "read_only": true,
-  "warehouse_rows": 0,
-  "warehouse_sessions": 0
+  "warehouse_rows": 395923,
+  "warehouse_sessions": 386
 }

@@ -1,0 +1,66 @@
+{
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "bytes": 987,
+      "path": "coverage_integrity_report.json",
+      "sha256": "11b85906f4193c977624ecf1cd7c4d2a4c183f94642e03351710162a3f5801e7"
+    },
+    {
+      "bytes": 14800,
+      "path": "daily_coverage_ledger.csv",
+      "sha256": "0102cd27dc1a6baf7194607bb2b37474dcdeeeff10013c330679179bf079df5d"
+    },
+    {
+      "bytes": 1429,
+      "path": "feature_inventory.json",
+      "sha256": "5a17b764c19913dd31257d7a886a7c6da34cc6a130301f504e3febb866eb948a"
+    },
+    {
+      "bytes": 1308,
+      "path": "final_verdict.json",
+      "sha256": "99b64f3d3a2ff8671ce20538e1f91b5846a5dbe05d243fdb568bad57e802c5b9"
+    },
+    {
+      "bytes": 1183,
+      "path": "frozen_data_contract.json",
+      "sha256": "55a19c8c1caf2e45b960d30e992a66cd0972f4275c80c71ef3cd68ef0231c59e"
+    },
+    {
+      "bytes": 890,
+      "path": "independent_audit_report.json",
+      "sha256": "4587d87306ecb4798fd89f842814797c1187d1034e7206379b9d9a89bdea0d9f"
+    },
+    {
+      "bytes": 2645,
+      "path": "option_alignment_report.json",
+      "sha256": "ce0294ca43fa40680cb92b083060622df9a2dbf47961d70446594ee11eaeeaa8"
+    },
+    {
+      "bytes": 1664,
+      "path": "post_change_manifest.json",
+      "sha256": "2b70fc3823dfe3a05ab9a2377ee00004f4ae37604a46d887e44c61aa32e5ee7a"
+    },
+    {
+      "bytes": 1862,
+      "path": "pre_change_manifest.json",
+      "sha256": "89f35a8a000282036f9605da8d0955fe1fe27fde03868d276edf28613d80de54"
+    },
+    {
+      "bytes": 120544,
+      "path": "selected_source_manifest.json",
+      "sha256": "a42c7373639b3a0f5e222efcb5c6c04f0af0be67a0f141f9d15eb39af604d825"
+    },
+    {
+      "bytes": 349077,
+      "path": "underlying_source_inventory.csv",
+      "sha256": "92e2761354072b84cea14bb5c3ab4af0164afefd7aad7ce7372fc9be9cf3c1fb"
+    },
+    {
+      "bytes": 678980,
+      "path": "underlying_source_inventory.json",
+      "sha256": "6708fec961b79f7090fa566701a29fb767ae4aac68948d1cd24f6ea5968202a8"
+    }
+  ],
+  "semantic_hash": "10b0a6dc6751f47a6fdd933e98537d02b78a1eb19498f1df249f28668ea56e0d"
+}

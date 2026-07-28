@@ -15,10 +15,12 @@ def main() -> int:
     parser.add_argument("--source-commit", default="151fe6b17900508b7b578aea482d55e4fdabbdf5")
     parser.add_argument("--source-branch", default="research/structural-edge-discovery-sprint-one-survivor")
     parser.add_argument("--external-evidence-root", type=Path)
+    parser.add_argument("--underlying-warehouse-path", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     output_dir = args.output_dir if args.output_dir.is_absolute() else repo / args.output_dir
     external = args.external_evidence_root.resolve() if args.external_evidence_root else None
+    underlying = args.underlying_warehouse_path.resolve() if args.underlying_warehouse_path else None
     result = run_build(
         BuildConfig(
             repo=repo,
@@ -27,6 +29,7 @@ def main() -> int:
             source_branch=args.source_branch,
             worktree_path=repo,
             external_evidence_root=external,
+            underlying_warehouse_path=underlying,
         )
     )
     print(result)

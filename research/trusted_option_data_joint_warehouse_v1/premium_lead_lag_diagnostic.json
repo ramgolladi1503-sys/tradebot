@@ -1,4 +1,18 @@
 {
-  "reason": "empty_joint_warehouse",
-  "status": "BLOCKED"
+  "controls": {
+    "ce_pe_inversion": "NOT_EVALUABLE_NO_CE_PE_IDENTITY",
+    "count_matched_random_events": 0.84,
+    "delayed_entry": 0.0055596978359268535,
+    "lag_shifted_option_series": 0.0007300441326463846,
+    "random_strike_substitution": "NOT_EVALUABLE_NO_STRIKE_IDENTITY",
+    "shuffled_option_timestamps": 0.00098321586759031,
+    "underlying_only_baseline": 0.0
+  },
+  "development_only": true,
+  "incremental_option_information": "NOT_CERTIFIED_CONTRACT_IDENTITY_MISSING",
+  "joint_score": 0.002248247478582956,
+  "option_only_score": 0.002248247478582956,
+  "status": "OBSERVATIONAL_ONLY",
+  "target20_rate": 0.8730747275951081,
+  "underlying_only_score": 0.0
 }

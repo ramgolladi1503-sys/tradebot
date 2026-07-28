@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": false,
+  "blockers": [
+    "incomplete_one_minute_sessions",
+    "index_source_has_zero_volume",
+    "incomplete_sessions_prevent_full_5m_reconciliation"
+  ],
+  "broker_api_called": false,
+  "canonical_1m_path": "/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_1minute.parquet",
+  "canonical_1m_rows": 166251,
+  "canonical_5m_path": "/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_5minute.parquet",
+  "canonical_5m_rows": 33245,
+  "determinism": "PASS",
+  "exact_next_action": "Either repair/refetch only the 11 incomplete NIFTY one-minute sessions or explicitly accept partial coverage before discovery; use the canonical five-minute warehouse for bounded joint research only.",
+  "feature_rows": 166251,
+  "feature_warehouse_path": "/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+  "is_order_action": false,
+  "joint_rows": 392832,
+  "joint_sessions": 386,
+  "primary_verdict": "UNDERLYING_WAREHOUSE_PARTIALLY_READY",
+  "read_only": true
+}

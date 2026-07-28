@@ -29,6 +29,7 @@ class BuildConfig:
     source_branch: str
     worktree_path: Path
     external_evidence_root: Path | None = None
+    underlying_warehouse_path: Path | None = None
 
 
 def stable_hash(payload: Any) -> str:
@@ -316,7 +317,40 @@ def build_observational_option_state(repo: Path) -> tuple[pd.DataFrame, dict[str
     return grouped, {"raw_rows": int(len(raw)), "observational_rows": int(len(grouped))}
 
 
-def build_underlying_state(repo: Path) -> pd.DataFrame:
+def build_underlying_state(repo: Path, underlying_warehouse_path: Path | None = None) -> pd.DataFrame:
+    if underlying_warehouse_path is not None and underlying_warehouse_path.exists():
+        data = pd.read_parquet(underlying_warehouse_path)
+        state = data.rename(columns={"timestamp": "event_timestamp"}).copy()
+        if "instrument" not in state.columns:
+            state["instrument"] = state["symbol"]
+        if "session_id" not in state.columns:
+            state["session_id"] = state["session_date"].astype(str)
+        if "minute_index" not in state.columns:
+            state["minute_index"] = state.groupby("session_date").cumcount()
+        for col in ["gap_pct", "rolling_range_15", "atr_14", "vwap_distance", "dist_session_high", "dist_session_low", "compression_duration", "ret_1", "range"]:
+            if col not in state.columns:
+                state[col] = pd.NA
+        state["minute"] = pd.to_datetime(state["event_timestamp"], utc=True).dt.tz_convert(IST).dt.floor("min")
+        return state[
+            [
+                "session_id",
+                "session_date",
+                "instrument",
+                "event_timestamp",
+                "close",
+                "minute_index",
+                "gap_pct",
+                "rolling_range_15",
+                "atr_14",
+                "vwap_distance",
+                "dist_session_high",
+                "dist_session_low",
+                "compression_duration",
+                "ret_1",
+                "range",
+                "minute",
+            ]
+        ].drop_duplicates()
     path = repo / "research/structural_edge_discovery_v3/pre_outcome_features.parquet"
     if not path.exists():
         return pd.DataFrame()
@@ -343,8 +377,8 @@ def build_underlying_state(repo: Path) -> pd.DataFrame:
     return state
 
 
-def build_joint_warehouse(repo: Path, out: Path, external_evidence_root: Path | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
-    underlying = build_underlying_state(repo)
+def build_joint_warehouse(repo: Path, out: Path, external_evidence_root: Path | None = None, underlying_warehouse_path: Path | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
+    underlying = build_underlying_state(repo, underlying_warehouse_path)
     option_state, option_meta = build_recovered_option_state(external_evidence_root)
     classification = "TRUSTED_DERIVED"
     certified = True
@@ -507,7 +541,7 @@ def determinism(cfg: BuildConfig) -> dict[str, Any]:
     rerun = cfg.output_dir.parent / (cfg.output_dir.name + "_rerun")
     if rerun.exists():
         shutil.rmtree(rerun)
-    run_build(BuildConfig(cfg.repo, rerun, cfg.source_commit, cfg.source_branch, cfg.worktree_path, cfg.external_evidence_root), run_determinism=False)
+    run_build(BuildConfig(cfg.repo, rerun, cfg.source_commit, cfg.source_branch, cfg.worktree_path, cfg.external_evidence_root, cfg.underlying_warehouse_path), run_determinism=False)
     compare = [
         "option_source_inventory.json",
         "option_source_inventory.csv",
@@ -540,6 +574,7 @@ def run_build(cfg: BuildConfig, *, run_determinism: bool = True) -> dict[str, An
         "current_commit": git(["rev-parse", "HEAD"], cfg.repo),
         "worktree_path": str(cfg.worktree_path),
         "external_evidence_root": str(cfg.external_evidence_root.resolve()) if cfg.external_evidence_root else "",
+        "underlying_warehouse_path": str(cfg.underlying_warehouse_path.resolve()) if cfg.underlying_warehouse_path else "",
         "clean_status_before": git(["status", "--short"], cfg.repo),
         "python_version": platform.python_version(),
         "read_only": True,
@@ -568,7 +603,7 @@ def run_build(cfg: BuildConfig, *, run_determinism: bool = True) -> dict[str, An
         ]
     ].to_csv(out / "source_classification_table.csv", index=False)
     write_json(out / "data_contract.json", data_contract())
-    warehouse, schema = build_joint_warehouse(cfg.repo, out, cfg.external_evidence_root)
+    warehouse, schema = build_joint_warehouse(cfg.repo, out, cfg.external_evidence_root, cfg.underlying_warehouse_path)
     cov, capability = coverage_report(inventory, warehouse)
     write_json(out / "coverage_report.json", {"coverage": cov, "capability_support_matrix": capability})
     write_json(out / "capability_support_matrix.json", capability)
