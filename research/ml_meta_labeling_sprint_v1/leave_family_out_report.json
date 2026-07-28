@@ -1,0 +1,11 @@
+{
+  "families": [
+    "candidate_identity",
+    "underlying_state",
+    "option_state",
+    "context"
+  ],
+  "limitation": "reported as audit limitation; no model selection used this",
+  "semantic_hash": "acfd42a0f9d35f988e285de785c30b3f709af4a0458c3ee578b5d3e0a34c8447",
+  "status": "NOT_RERUN_FULLY_IN_TIMEBOX"
+}

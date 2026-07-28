@@ -1,0 +1,9 @@
+{
+  "contract_hash": "bbf7b7a76e305d1deeb3eb2304dd6964f3f1f4cf157d8d0281369c6ddfd2c549",
+  "holdout": 0.2,
+  "method": "chronological_session_group_split",
+  "no_shuffle": true,
+  "semantic_hash": "f797ecc98c193031a3aacdde21111c0faab38207f8d90a457dc809723ec5a724",
+  "train": 0.6,
+  "validation": 0.2
+}
