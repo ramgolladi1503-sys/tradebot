@@ -3,8 +3,8 @@
 Primary verdict: OPTION_DATA_READY_FOR_DISCOVERY
 Trusted option sources: 1
 Observational option sources: 1
-Warehouse rows: 395923
-Warehouse sessions: 386
+Warehouse rows: 392006
+Warehouse sessions: 382
 Determinism: PASS
 Independent audit pass: True
 

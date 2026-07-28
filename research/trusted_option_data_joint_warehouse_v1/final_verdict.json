@@ -16,6 +16,6 @@
   "is_order_action": false,
   "primary_verdict": "OPTION_DATA_READY_FOR_DISCOVERY",
   "read_only": true,
-  "warehouse_rows": 395923,
-  "warehouse_sessions": 386
+  "warehouse_rows": 392006,
+  "warehouse_sessions": 382
 }

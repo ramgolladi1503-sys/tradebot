@@ -1,15 +1,15 @@
 {
   "allowed_for_live_execution": false,
   "broker_api_called": false,
-  "clean_status_before": "M research/trusted_option_data_joint_warehouse_v1/builder.py\n M scripts/run_trusted_option_joint_warehouse_v1.py\n?? research/unified_nifty_underlying_feature_warehouse_v1/\n?? scripts/build_unified_nifty_underlying_feature_warehouse_v1.py",
-  "current_branch": "research/unified-nifty-underlying-feature-warehouse-v1",
-  "current_commit": "10c705e4664a50d1ae0a03af2e52eba6a7ca4db8",
+  "clean_status_before": "M research/unified_nifty_underlying_feature_warehouse_v1/artifact_manifest.json\n M research/unified_nifty_underlying_feature_warehouse_v1/coverage_integrity_report.json\n M research/unified_nifty_underlying_feature_warehouse_v1/daily_coverage_ledger.csv\n M research/unified_nifty_underlying_feature_warehouse_v1/final_verdict.json\n M research/unified_nifty_underlying_feature_warehouse_v1/independent_audit_report.json\n M research/unified_nifty_underlying_feature_warehouse_v1/option_alignment_report.json\n M research/unified_nifty_underlying_feature_warehouse_v1/post_change_manifest.json\n M research/unified_nifty_underlying_feature_warehouse_v1/pre_change_manifest.json\n M research/unified_nifty_underlying_feature_warehouse_v1/selected_source_manifest.json\n M research/unified_nifty_underlying_feature_warehouse_v1/underlying_source_inventory.csv\n M research/unified_nifty_underlying_feature_warehouse_v1/underlying_source_inventory.json\n M scripts/build_unified_nifty_underlying_feature_warehouse_v1.py\n?? research/repair_11_nifty_sessions_v1/\n?? scripts/repair_11_nifty_sessions_v1.py",
+  "current_branch": "research/repair-11-nifty-sessions-v1",
+  "current_commit": "37038103979530b2cfa22ccc2f4c0b154d94dff8",
   "external_evidence_root": "/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1",
   "is_order_action": false,
   "python_version": "3.12.2",
   "read_only": true,
-  "source_branch": "research/recover-upstox-expired-options-evidence-v1",
-  "source_commit": "10c705e4664a50d1ae0a03af2e52eba6a7ca4db8",
-  "underlying_warehouse_path": "/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_5minute.parquet",
-  "worktree_path": "/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1"
+  "source_branch": "research/unified-nifty-underlying-feature-warehouse-v1",
+  "source_commit": "37038103979530b2cfa22ccc2f4c0b154d94dff8",
+  "underlying_warehouse_path": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_5minute.parquet",
+  "worktree_path": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1"
 }

@@ -2,9 +2,8 @@
   "allowed_for_live_execution": false,
   "audit_pass": false,
   "blockers": [
-    "incomplete_one_minute_sessions",
-    "index_source_has_zero_volume",
-    "incomplete_sessions_prevent_full_5m_reconciliation"
+    "excluded_sessions_require_authorized_refetch",
+    "index_source_has_zero_volume"
   ],
   "broker_api_called": false,
   "feature_causality": "PASS_COMPLETED_BAR_ONLY",
@@ -13,10 +12,10 @@
   "previous_session_boundaries": "PASS_SHIFTED_BY_SESSION",
   "read_only": true,
   "semantic_hashes": {
-    "canonical_1m": "298d908c557e85a2c4086446d7d7df22a83d6b8f51d5a6f34fadc9c4a7007e57",
-    "canonical_5m": "b9863212fabfb6fb6bded2eff6431dca1c249d0ade6641ab7a5914f5b2c1d5c2",
-    "features": "899874e344c199522cc9a7853be4deef589a2eb93216ce91040e86962a67dfe5",
-    "joint": "4ef56581c44fbfb0d834a39f6d5954773f495a7d3739e8d60c7b7ff3acc28dfb"
+    "canonical_1m": "cf7a7c0e385e5f1ccefec772853b7b7b7acbea9c64e7a79c29e36e256a80646c",
+    "canonical_5m": "0173a970a344da1ec87507f6b6c24d95ac687d315c4f235dc537a8fcd3b1db91",
+    "features": "b675697ff7127b661a16573a34aff9696392e31fae66d797e458607ebb050b81",
+    "joint": "e6a0bbb054523e0ff3613452a5608c5322e1f26f58f6e37f13d27cc7654e1d86"
   },
   "source_hashes_verified": true,
   "vwap_causality": "PASS_SESSION_CUMULATIVE_ONLY"

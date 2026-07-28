@@ -1,4 +1,4 @@
 source_path,classification,suitable_for_causal_replay,has_bid_ask,has_volume,has_oi,has_iv,has_strike,has_expiry,has_option_type,exclusion_reason
 /Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1,TRUSTED_DERIVED,True,False,True,True,False,True,True,True,
-/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/runtime/strategy_validation/resolved_option_ticks_20260702.parquet,OBSERVATIONAL_ONLY,False,True,True,False,False,False,False,False,missing_strike_expiry_option_type_contract_identity
-/Users/madhuram/tradebot-unified-nifty-underlying-feature-warehouse-v1/runtime/upstox_candidate_replay.zip,UNUSABLE,False,False,False,False,False,False,False,False,no_option_members
+/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/runtime/strategy_validation/resolved_option_ticks_20260702.parquet,OBSERVATIONAL_ONLY,False,True,True,False,False,False,False,False,missing_strike_expiry_option_type_contract_identity
+/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/runtime/upstox_candidate_replay.zip,UNUSABLE,False,False,False,False,False,False,False,False,no_option_members

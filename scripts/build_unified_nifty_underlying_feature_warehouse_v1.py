@@ -140,7 +140,15 @@ def selected_files(source_root: Path) -> list[Path]:
     return sorted(p for p in source_root.rglob("*.parquet") if name_re.match(p.name))
 
 
-def load_canonical_1m(files: list[Path]) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+def load_repair_policy(path: Path | None) -> dict[str, dict[str, Any]]:
+    if path is None or not path.exists():
+        return {}
+    payload = json.loads(path.read_text())
+    return {row["session_date"]: row for row in payload.get("repair_ledger", [])}
+
+
+def load_canonical_1m(files: list[Path], repair_policy: dict[str, dict[str, Any]] | None = None) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    repair_policy = repair_policy or {}
     frames = []
     manifest = []
     for path in files:
@@ -149,6 +157,13 @@ def load_canonical_1m(files: list[Path]) -> tuple[pd.DataFrame, list[dict[str, A
         frame = frame[(frame["timestamp"] >= TARGET_START) & (frame["timestamp"] <= TARGET_END)].copy()
         if frame.empty:
             continue
+        source_date = frame["timestamp"].dt.date.astype(str).iloc[0]
+        policy = repair_policy.get(source_date, {})
+        if policy.get("action") == "EXCLUDE_REQUIRES_REFETCH":
+            continue
+        if policy.get("action") == "USE_REPAIRED_FILE":
+            frame = pd.read_parquet(policy["repaired_path"])
+            frame["timestamp"] = parse_ts(frame["timestamp"])
         frame["session_date"] = frame["timestamp"].dt.date.astype(str)
         frame["symbol"] = "NIFTY"
         frame["bar_resolution"] = "1minute"
@@ -160,7 +175,7 @@ def load_canonical_1m(files: list[Path]) -> tuple[pd.DataFrame, list[dict[str, A
         frame["provenance_class"] = "TRUSTED_RAW_UPSTOX_V3_HISTORICAL_CANDLE"
         keep = ["session_date", "timestamp", "symbol", "open", "high", "low", "close", "volume", "bar_resolution", "source_id", "source_hash", "is_completed_bar", "is_missing_gap", "is_stale", "provenance_class"]
         frames.append(frame[keep])
-        manifest.append({"path": str(path.resolve()), "sha256": file_sha256(path), "rows_in_target": int(len(frame)), "date": frame["session_date"].iloc[0]})
+        manifest.append({"path": str(path.resolve()), "sha256": file_sha256(path), "rows_in_target": int(len(frame)), "date": frame["session_date"].iloc[0], "repair_action": policy.get("action", "NONE")})
     data = pd.concat(frames, ignore_index=True).sort_values(["timestamp"]).reset_index(drop=True)
     return data, manifest
 
@@ -259,7 +274,8 @@ def feature_frame(one: pd.DataFrame) -> pd.DataFrame:
 def coverage(one: pd.DataFrame, five: pd.DataFrame) -> tuple[dict[str, Any], pd.DataFrame]:
     sessions = one.groupby("session_date").size().rename("one_minute_rows").reset_index()
     sessions["five_minute_rows"] = five.groupby("session_date").size().reindex(sessions["session_date"]).fillna(0).astype(int).to_numpy()
-    sessions["expected_1m_rows"] = 375
+    sessions["expected_1m_rows"] = sessions["session_date"].isin({"2024-11-01", "2025-10-21"}).map({True: 60, False: 375})
+    sessions["expected_5m_rows"] = sessions["expected_1m_rows"] // 5
     sessions["missing_1m_bars"] = sessions["expected_1m_rows"] - sessions["one_minute_rows"]
     sessions["status"] = sessions["missing_1m_bars"].eq(0).map({True: "COMPLETE", False: "INCOMPLETE"})
     report = {
@@ -279,7 +295,7 @@ def coverage(one: pd.DataFrame, five: pd.DataFrame) -> tuple[dict[str, Any], pd.
         "complete_sessions": int(sessions["status"].eq("COMPLETE").sum()),
         "incomplete_sessions": int(sessions["status"].ne("COMPLETE").sum()),
         "sessions_by_month": one.assign(month=one["timestamp"].dt.strftime("%Y-%m")).groupby("month")["session_date"].nunique().to_dict(),
-        "one_minute_five_minute_reconciliation": "PASS" if sessions["five_minute_rows"].eq(75).all() else "FAIL",
+        "one_minute_five_minute_reconciliation": "PASS" if sessions["five_minute_rows"].eq(sessions["expected_5m_rows"]).all() else "FAIL",
     }
     return report, sessions
 
@@ -344,6 +360,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("research/unified_nifty_underlying_feature_warehouse_v1"))
     parser.add_argument("--source-root", type=Path, default=Path("/Users/madhuram/tradebot/runtime/upstox_candidate_replay"))
     parser.add_argument("--option-root", type=Path, default=Path("/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1"))
+    parser.add_argument("--repair-ledger", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     out = args.output_dir if args.output_dir.is_absolute() else repo / args.output_dir
@@ -355,7 +372,8 @@ def main() -> int:
     write_json(out / "underlying_source_inventory.json", inventory)
     pd.DataFrame(inventory).to_csv(out / "underlying_source_inventory.csv", index=False)
     files = selected_files(args.source_root)
-    one, selected_manifest = load_canonical_1m(files)
+    repair_policy = load_repair_policy(args.repair_ledger)
+    one, selected_manifest = load_canonical_1m(files, repair_policy)
     five = canonical_5m(one)
     features = feature_frame(one)
     one_path = out / "canonical_nifty_1minute.parquet"
@@ -376,6 +394,9 @@ def main() -> int:
     blockers = []
     if cov["incomplete_sessions"]:
         blockers.append("incomplete_one_minute_sessions")
+    excluded_refetch = [row for row in repair_policy.values() if row.get("action") == "EXCLUDE_REQUIRES_REFETCH"]
+    if excluded_refetch:
+        blockers.append("excluded_sessions_require_authorized_refetch")
     if cov["zero_volume_rate"] == 1.0:
         blockers.append("index_source_has_zero_volume")
     if cov["one_minute_five_minute_reconciliation"] != "PASS":
@@ -398,7 +419,12 @@ def main() -> int:
     }
     write_json(out / "independent_audit_report.json", audit)
     verdict = "UNDERLYING_WAREHOUSE_READY" if audit["audit_pass"] else "UNDERLYING_WAREHOUSE_PARTIALLY_READY"
-    final = {"primary_verdict": verdict, "blockers": blockers, "canonical_1m_path": str(one_path.resolve()), "canonical_1m_rows": len(one), "canonical_5m_path": str(five_path.resolve()), "canonical_5m_rows": len(five), "feature_warehouse_path": str(feat_path.resolve()), "feature_rows": len(features), "joint_rows": alignment["joint_rows"], "joint_sessions": alignment["joint_sessions"], "audit_pass": audit["audit_pass"], "determinism": "PASS", "exact_next_action": "Either repair/refetch only the 11 incomplete NIFTY one-minute sessions or explicitly accept partial coverage before discovery; use the canonical five-minute warehouse for bounded joint research only.", "read_only": True, "is_order_action": False, "broker_api_called": False, "allowed_for_live_execution": False}
+    next_action = (
+        "Authorize a read-only historical Upstox refetch for only 2024-12-12, 2025-03-25, 2025-04-04, and 2025-04-23, then rerun this repair build."
+        if excluded_refetch
+        else "Use the canonical five-minute warehouse for bounded joint research only; index volume remains unavailable."
+    )
+    final = {"primary_verdict": verdict, "blockers": blockers, "canonical_1m_path": str(one_path.resolve()), "canonical_1m_rows": len(one), "canonical_5m_path": str(five_path.resolve()), "canonical_5m_rows": len(five), "feature_warehouse_path": str(feat_path.resolve()), "feature_rows": len(features), "joint_rows": alignment["joint_rows"], "joint_sessions": alignment["joint_sessions"], "audit_pass": audit["audit_pass"], "determinism": "PASS", "exact_next_action": next_action, "read_only": True, "is_order_action": False, "broker_api_called": False, "allowed_for_live_execution": False}
     write_json(out / "final_verdict.json", final)
     write_json(out / "post_change_manifest.json", {"current_commit": git(["rev-parse", "HEAD"], repo), "status_short": git(["status", "--short"], repo), "artifact_root": str(out.resolve())})
     artifacts = [{"path": str(p.relative_to(out)), "sha256": file_sha256(p), "bytes": p.stat().st_size} for p in sorted(out.rglob("*")) if p.is_file() and p.name != "artifact_manifest.json" and p.suffix != ".parquet"]
