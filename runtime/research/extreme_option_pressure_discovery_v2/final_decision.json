@@ -1,0 +1,10 @@
+{
+  "allowed_for_live_execution": false,
+  "contract_semantic_sha256": "179cd45319cc2699c966570f0223f7eeba76d94e0ccd1c31175ba165d72ebf33",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_outcomes_materialized": false,
+  "holdout_survivors": [],
+  "oof_survivors": [],
+  "principal_verdict": "NO_OOF_SURVIVOR_IN_EXTREME_PRESSURE_FAMILIES",
+  "research_only": true
+}
