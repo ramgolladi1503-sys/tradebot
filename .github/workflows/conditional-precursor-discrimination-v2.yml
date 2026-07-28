@@ -19,17 +19,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Checkout repository and LFS evidence
+      - name: Checkout repository pointers
         uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
           fetch-depth: 1
 
-      - name: Verify LFS checkout
+      - name: Materialize only required LFS evidence
         run: |
           git lfs install
-          git lfs pull
-          git lfs ls-files | head -100
+          git lfs pull \
+            --include='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/*' \
+            --exclude=''
+          required='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1'
+          find "$required" -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
 
       - name: Set up Python
         uses: actions/setup-python@v5
