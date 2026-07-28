@@ -1,0 +1,62 @@
+{
+  "allowed_for_live_execution": false,
+  "candidate_id": "late_day_ce_inventory_rebound_5m_v9",
+  "claim_boundary": "HISTORICAL_CANDLE_PROXY_STRUCTURAL_RESEARCH_EDGE_WITH_DECLARED_FRICTION_LIMIT",
+  "entry": "first_same_contract_option_open_exactly_one_minute_after_completed_signal",
+  "event_source_sha256": "c484f70c1235e819a97ee311554baf863e5fa61173718ff07eceb464149afbfc",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "exit": "same_contract_option_close_exactly_five_minutes_after_signal",
+  "friction_boundary": {
+    "interpretation": "total_percentage_points_deducted_from_same_contract_premium_return",
+    "maximum_tested_combined_gate_pass_pct": 1.0,
+    "next_tested_combined_gate_fail_pct": 1.5,
+    "two_percent_gate_pass": false
+  },
+  "friction_evidence_semantic_sha256": "3e185ddf703a26870e68c736532307884966b0c5671b1023136ea755c59eaa01",
+  "holdout_1pct_metrics": {
+    "largest_winner_share": 0.3722994844755831,
+    "mean_return_pct": 3.399349388886535,
+    "median_return_pct": 2.4612341772151884,
+    "net_return_pct_sum": 40.79219266663842,
+    "profit_factor": 2.517783428504769,
+    "remove_top_two_profit_factor": 1.0338266476287548,
+    "trades": 12,
+    "win_rate": 0.6666666666666666
+  },
+  "known_limitations": [
+    "only_12_untouched_holdout_trades",
+    "holdout_bootstrap_mean_confidence_interval_crosses_zero_at_base_cost",
+    "combined_robustness_gate_fails_at_1_5_percent_total_friction",
+    "historical_ohlcv_candle_proxy_not_observed_bid_ask_execution",
+    "paper_and_live_trading_remain_unauthorized"
+  ],
+  "live_fail_closed_rule": "reject_when_observed_or_conservatively_estimated_round_trip_friction_exceeds_1_0_percent_of_option_premium",
+  "mechanism": "late_day_ce_capitulation_with_abnormal_volume_and_same_strike_pe_expansion_followed_by_short_horizon_ce_inventory_rebound",
+  "oof_1pct_metrics": {
+    "largest_winner_share": 0.12448233164813748,
+    "mean_return_pct": 1.846824778235245,
+    "median_return_pct": 2.0094465390613037,
+    "net_return_pct_sum": 73.8729911294098,
+    "positive_folds": 3,
+    "profit_factor": 1.8918994726398533,
+    "remove_top_two_profit_factor": 1.5028151532329885,
+    "total_folds": 4,
+    "trades": 40,
+    "win_rate": 0.575
+  },
+  "paper_or_live_authorized": false,
+  "principal_verdict": "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_5M_WITH_1PCT_FRICTION_SURVIVAL_LIMIT",
+  "production_or_live_edge_certified": false,
+  "research_only": true,
+  "side": "BUY_CE_ONLY",
+  "signal_membership": {
+    "exact_match": true,
+    "extra_signals": 0,
+    "missing_signals": 0,
+    "oracle_signals": 52,
+    "published_primary_signals": 52,
+    "verdict": "PASS_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE"
+  },
+  "structural_edge_found": true,
+  "trade_ledger_sha256": "46a94560fb0bb2665848d76922e4e27d94fc6b2e0acead0bd70fa5f02d2a1dc8"
+}
