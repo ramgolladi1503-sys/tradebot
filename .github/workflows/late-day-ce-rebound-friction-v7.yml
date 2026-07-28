@@ -1,0 +1,195 @@
+name: Late-Day CE Rebound Friction V7
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/conditional-precursor-discrimination-v2
+    paths:
+      - 'scripts/audit_late_day_ce_inventory_rebound_v7_friction.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v7_friction.py'
+      - 'runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
+      - 'runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/**'
+      - 'runtime/research/late_day_ce_inventory_rebound_v6_final/**'
+      - '.github/workflows/late-day-ce-rebound-friction-v7.yml'
+  pull_request:
+    paths:
+      - 'scripts/audit_late_day_ce_inventory_rebound_v7_friction.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v7_friction.py'
+      - 'runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
+      - 'runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/**'
+      - 'runtime/research/late_day_ce_inventory_rebound_v6_final/**'
+      - '.github/workflows/late-day-ce-rebound-friction-v7.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  audit-friction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pytest
+
+      - name: Run focused friction tests
+        run: |
+          python -m pytest -q tests/research/test_late_day_ce_inventory_rebound_v7_friction.py
+
+      - name: Run predeclared friction sensitivity
+        id: friction
+        continue-on-error: true
+        run: |
+          python -m scripts.audit_late_day_ce_inventory_rebound_v7_friction --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Publish final friction-hardened verdict V8
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          v6_path = Path("runtime/research/late_day_ce_inventory_rebound_v6_final/final_decision.json")
+          v7_path = Path("runtime/research/late_day_ce_inventory_rebound_v7_friction_audit/friction_sensitivity.json")
+          out = Path("runtime/research/late_day_ce_inventory_rebound_v8_final")
+          research = Path("research/late_day_ce_inventory_rebound_v8_final")
+          out.mkdir(parents=True, exist_ok=True)
+          research.mkdir(parents=True, exist_ok=True)
+
+          v6 = json.loads(v6_path.read_text(encoding="utf-8")) if v6_path.exists() else {}
+          v7 = json.loads(v7_path.read_text(encoding="utf-8")) if v7_path.exists() else {}
+          edge_found = bool(
+              v6.get("structural_edge_found") is True
+              and v6.get("signal_membership_exact") is True
+              and v6.get("evidence_hash_binding") is True
+              and v7.get("required_gate_pass") is True
+              and v7.get("required_total_friction_pct") == 2.0
+              and v7.get("ledger_sha256") == v6.get("trade_ledger_sha256")
+          )
+          verdict = (
+              "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_5M_SURVIVES_TWO_PERCENT_TOTAL_FRICTION_RESEARCH_GATE"
+              if edge_found
+              else "NO_STRUCTURAL_EDGE_AFTER_TWO_PERCENT_TOTAL_FRICTION_GATE"
+          )
+          required = next(
+              (
+                  scenario
+                  for scenario in v7.get("scenarios", [])
+                  if scenario.get("total_friction_pct") == 2.0
+              ),
+              None,
+          )
+          payload = {
+              "principal_verdict": verdict,
+              "structural_edge_found": edge_found,
+              "candidate_id": "late_day_ce_inventory_rebound_5m_v8",
+              "claim_boundary": "HISTORICAL_CANDLE_PROXY_RESEARCH_EDGE_NOT_EXECUTION_CERTIFIED",
+              "mechanism": v6.get("mechanism"),
+              "side": v6.get("side"),
+              "entry": v6.get("entry"),
+              "exit": v6.get("exit"),
+              "required_total_friction_pct": 2.0,
+              "required_friction_scenario": required,
+              "maximum_tested_passing_total_friction_pct": v7.get("maximum_tested_passing_total_friction_pct"),
+              "next_tested_failing_total_friction_pct": v7.get("next_tested_failing_total_friction_pct"),
+              "base_oof_metrics_at_0_1pct": v6.get("oof_metrics"),
+              "base_holdout_metrics_at_0_1pct": v6.get("holdout_primary_metrics"),
+              "signal_membership_oracle": v6.get("signal_membership_oracle"),
+              "signal_membership_exact": v6.get("signal_membership_exact"),
+              "event_source_sha256": v6.get("event_source_sha256"),
+              "trade_ledger_sha256": v6.get("trade_ledger_sha256"),
+              "friction_evidence_sha256": v7.get("semantic_sha256"),
+              "known_limitations": [
+                  "only_12_untouched_holdout_trades",
+                  "holdout_bootstrap_mean_ci_crosses_zero_at_base_cost",
+                  "two_percent_friction_is_a_sensitivity_deduction_not_observed_spread",
+                  "historical_ohlcv_candle_proxy_not_bid_ask_execution",
+                  "paper_and_live_trading_remain_unauthorized",
+              ],
+              "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+              "production_or_live_edge_certified": False,
+              "paper_or_live_authorized": False,
+              "research_only": True,
+              "allowed_for_live_execution": False,
+          }
+          payload["semantic_sha256"] = hashlib.sha256(
+              json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+          ).hexdigest()
+          (out / "final_decision.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          (research / "RESULT.md").write_text(
+              "# Late-Day CE Inventory Rebound V8 — Friction-Hardened Verdict\n\n"
+              f"Principal verdict: `{verdict}`\n\n"
+              f"Structural edge found: `{edge_found}`\n\n"
+              f"Required 2% friction scenario: `{json.dumps(required, sort_keys=True)}`\n\n"
+              f"Maximum tested passing friction: `{payload['maximum_tested_passing_total_friction_pct']}%`.\n\n"
+              f"Next tested failing friction: `{payload['next_tested_failing_total_friction_pct']}%`.\n\n"
+              "This remains a historical OHLCV candle-proxy research edge. The friction deduction is not an observed spread or fill model. No paper or live authorization is granted.\n",
+              encoding="utf-8",
+          )
+          print(verdict)
+          PY
+
+      - name: Preserve friction evidence on branch
+        if: always() && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f runtime/research/late_day_ce_inventory_rebound_v7_friction_audit/*.json || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v7_friction_audit/*.csv || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v8_final/*.json || true
+          git add -f research/late_day_ce_inventory_rebound_v7_friction_audit/RESULT.md || true
+          git add -f research/late_day_ce_inventory_rebound_v8_final/RESULT.md || true
+          if git diff --cached --quiet; then
+            echo "No friction evidence changes to preserve."
+            exit 0
+          fi
+          git commit -m "research: preserve friction-hardened edge evidence [skip ci]"
+          git push origin HEAD:research/conditional-precursor-discrimination-v2
+
+      - name: Upload friction evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: late-day-ce-rebound-friction-v7
+          path: |
+            runtime/research/late_day_ce_inventory_rebound_v7_friction_audit/**
+            runtime/research/late_day_ce_inventory_rebound_v8_final/**
+            research/late_day_ce_inventory_rebound_v7_friction_audit/RESULT.md
+            research/late_day_ce_inventory_rebound_v8_final/RESULT.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce friction-hardened edge verdict
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("runtime/research/late_day_ce_inventory_rebound_v8_final/final_decision.json")
+          if not path.exists():
+              raise SystemExit("Friction-hardened final decision is missing.")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          if payload.get("structural_edge_found") is not True:
+              raise SystemExit("The candidate failed the 2% total-friction gate.")
+          if payload.get("paper_or_live_authorized") is not False:
+              raise SystemExit("Research evidence must not authorize trading.")
+          print(payload["principal_verdict"])
+          PY
