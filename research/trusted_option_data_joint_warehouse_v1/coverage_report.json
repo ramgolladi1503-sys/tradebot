@@ -1,0 +1,36 @@
+{
+  "capability_support_matrix": {
+    "algotest_comparison": "NOT_SUPPORTED",
+    "iv_oi_research": "NOT_SUPPORTED",
+    "option_premium_replay": "NOT_SUPPORTED",
+    "premium_lead_lag_research": "NOT_SUPPORTED",
+    "spread_aware_fill_simulation": "NOT_SUPPORTED",
+    "strike_selection_research": "NOT_SUPPORTED"
+  },
+  "coverage": {
+    "bars_per_session": {},
+    "ce_pe_symmetry": "NOT_EVALUABLE",
+    "coverage_by_dte": {},
+    "coverage_by_premium_band": {},
+    "coverage_by_time_of_day": {},
+    "crossed_invalid_spread_rate": null,
+    "date_span": [],
+    "duplicate_percentage": null,
+    "expiries_covered": [],
+    "expiry_consistency": "NOT_EVALUABLE",
+    "missing_bar_percentage": null,
+    "observational_option_sources": 1,
+    "option_chain_completeness": "NOT_EVALUABLE_WITHOUT_CONTRACT_IDENTITY",
+    "sessions_per_underlying": {},
+    "stale_price_rate": null,
+    "strike_continuity": "NOT_EVALUABLE",
+    "strikes_per_expiry": {},
+    "timestamp_monotonicity": "NOT_EVALUABLE",
+    "total_option_sources": 2,
+    "total_sessions": 0,
+    "trusted_option_sources": 0,
+    "underlying_option_timestamp_alignment": "NOT_EVALUABLE",
+    "zero_oi_rate": null,
+    "zero_volume_rate": null
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "clean_status_before": "?? docs/research/trusted_option_data_joint_warehouse_v1/\n?? research/trusted_option_data_joint_warehouse_v1/\n?? scripts/audit_trusted_option_joint_warehouse_v1.py\n?? scripts/run_trusted_option_joint_warehouse_v1.py\n?? tests/research/test_trusted_option_data_joint_warehouse_v1.py",
+  "current_branch": "research/trusted-option-data-joint-warehouse-v1",
+  "current_commit": "151fe6b17900508b7b578aea482d55e4fdabbdf5",
+  "is_order_action": false,
+  "python_version": "3.12.2",
+  "read_only": true,
+  "source_branch": "research/structural-edge-discovery-sprint-one-survivor",
+  "source_commit": "151fe6b17900508b7b578aea482d55e4fdabbdf5",
+  "worktree_path": "/Users/madhuram/tradebot-trusted-option-data-joint-warehouse-v1"
+}

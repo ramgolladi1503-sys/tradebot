@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": true,
+  "blockers": [
+    "no_joinable_trusted_option_data"
+  ],
+  "broker_api_called": false,
+  "capability_support_matrix": {
+    "algotest_comparison": "NOT_SUPPORTED",
+    "iv_oi_research": "NOT_SUPPORTED",
+    "option_premium_replay": "NOT_SUPPORTED",
+    "premium_lead_lag_research": "NOT_SUPPORTED",
+    "spread_aware_fill_simulation": "NOT_SUPPORTED",
+    "strike_selection_research": "NOT_SUPPORTED"
+  },
+  "determinism": "PASS",
+  "exact_next_action": "Acquire or restore historical option data with explicit underlying, expiry, strike, CE/PE, exchange timestamps, and bid/ask provenance before the next discovery sprint.",
+  "is_order_action": false,
+  "primary_verdict": "NEED_TRUSTED_OPTION_DATA",
+  "read_only": true,
+  "warehouse_rows": 0,
+  "warehouse_sessions": 0
+}
