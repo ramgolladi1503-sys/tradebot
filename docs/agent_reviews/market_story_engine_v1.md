@@ -83,7 +83,9 @@ Safety flags are emitted in every decision and certification artifact:
 - `research_only=true`;
 - `allowed_for_live_execution=false`;
 - `broker_api_called=false`;
-- `is_order_action=false`.
+- `is_order_action=false`;
+- `live_order_action=false`;
+- `broker_order_action=false`.
 
 QA status: focused local suite passed before publication, and the isolated GitHub workflow independently passed compile, tests, certification, audit, determinism comparison, and artifact upload.
 
@@ -103,14 +105,16 @@ Acceptance is limited to deterministic implementation robustness. It is not acce
 
 ## Machine-Readable Evidence Contract
 
-- mode: RESEARCH
-- candidate_id: MARKET_STORY_ENGINE_V1_IMPLEMENTATION_ROBUSTNESS
-- decision: PASS_IMPLEMENTATION_ROBUSTNESS_GATE
-- reason: The five-layer causal engine passed deterministic robustness, adversarial controls, and an implementation-independent audit; economic edge remains unproven.
-- timestamp: 2026-07-28T19:30:00+05:30
-- is_order_action: false
-- broker_api_called: false
-- source: GitHub Actions Market Story Engine V1 run 30366017470 on commit bafd32cf6e40fcadbe384157f5baef5d0df6512c
+mode: RESEARCH
+candidate_id: MARKET_STORY_ENGINE_V1_IMPLEMENTATION_ROBUSTNESS
+decision: PASS_IMPLEMENTATION_ROBUSTNESS_GATE
+reason: Five-layer causal mechanics passed deterministic robustness, adversarial controls, and an implementation-independent audit; economic edge remains unproven.
+timestamp: 2026-07-28T19:30:00+05:30
+is_order_action: false
+broker_api_called: false
+live_order_action: false
+broker_order_action: false
+source: GitHub Actions Market Story Engine V1 on branch research/market-story-engine-v1
 
 ## Runtime Proof Required After Merge
 
