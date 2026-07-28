@@ -1,0 +1,10 @@
+{
+  "sources": [
+    {
+      "id": "upstox_tick_data",
+      "path": "runtime/market_data/upstox",
+      "format": "parquet",
+      "type": "tick"
+    }
+  ]
+}

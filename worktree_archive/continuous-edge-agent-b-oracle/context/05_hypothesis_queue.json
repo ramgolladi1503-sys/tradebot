@@ -1,0 +1,43 @@
+[
+  {
+    "id": "opening_dislocation_reversal",
+    "status": "BLOCKED_PENDING_WAVE1_AUTHORITY",
+    "record": "PREMATURELY_FROZEN_WITHOUT_COMPLETE_PIPELINE_AUTHORITY"
+  },
+  {
+    "id": "opening_compression_continuation",
+    "status": "QUEUED"
+  },
+  {
+    "id": "intraday_failed_breakout_reversal",
+    "status": "QUEUED"
+  },
+  {
+    "id": "volatility_compression_expansion",
+    "status": "QUEUED"
+  },
+  {
+    "id": "trend_pullback_continuation_with_participation_confirmation",
+    "status": "QUEUED"
+  },
+  {
+    "id": "liquidity_shock_absorption",
+    "status": "QUEUED"
+  },
+  {
+    "id": "futures_breadth_conditioning",
+    "status": "QUEUED"
+  },
+  {
+    "id": "certified_microstructure_candidates",
+    "status": "QUEUED"
+  },
+  {
+    "id": "option_state_meta_filter",
+    "status": "QUEUED"
+  },
+  {
+    "id": "small_supervised_ML_meta_filter",
+    "status": "QUEUED"
+  }
+]

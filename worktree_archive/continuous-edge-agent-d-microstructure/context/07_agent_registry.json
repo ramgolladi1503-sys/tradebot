@@ -1,0 +1,45 @@
+[
+  {
+    "agent_id": "Agent_A",
+    "status": "ABORTED_MISSING_CONTEXT",
+    "consumed_evidence": false,
+    "hypothesis_tested": false,
+    "eligible_for_retry": true
+  },
+  {
+    "agent_id": "agent_A",
+    "attempt_id": 1,
+    "capsule_version": "1.1",
+    "capsule_hash": "e7f8d13315c879d9d12e5150b7fb1447a89f78a6cd8f494ff131a8cf82d37a22",
+    "starting_sha": "HEAD",
+    "worktree": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-a-source",
+    "branch": "research/continuous-edge-agent-a-source",
+    "owned_paths": [],
+    "handoff_path": "research/continuous_structural_edge_discovery_v1/context/agents/agent_A/handoff.md",
+    "status": "PENDING"
+  },
+  {
+    "agent_id": "agent_B",
+    "attempt_id": 1,
+    "capsule_version": "1.1",
+    "capsule_hash": "3a41d14f661a0b904d118def321142162e94479d3b20e98fb38eae426a98e65e",
+    "starting_sha": "HEAD",
+    "worktree": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-b-oracle",
+    "branch": "research/continuous-edge-agent-b-oracle",
+    "owned_paths": [],
+    "handoff_path": "research/continuous_structural_edge_discovery_v1/context/agents/agent_B/handoff.md",
+    "status": "PENDING"
+  },
+  {
+    "agent_id": "agent_D",
+    "attempt_id": 1,
+    "capsule_version": "1.1",
+    "capsule_hash": "81aba0dbcb68ac7cfdeeef4f0432e20aa612553746566e166615eb20f3b096fd",
+    "starting_sha": "HEAD",
+    "worktree": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-d-microstructure",
+    "branch": "continuous-edge-agent-d-microstructure",
+    "owned_paths": [],
+    "handoff_path": "research/continuous_structural_edge_discovery_v1/context/agents/agent_D/handoff.md",
+    "status": "PENDING"
+  }
+]

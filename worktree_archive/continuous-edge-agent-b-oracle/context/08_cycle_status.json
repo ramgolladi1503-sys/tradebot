@@ -1,0 +1,7 @@
+{
+  "phase": "WAVE1_REOPENED_INCOMPLETE",
+  "current_hypothesis": null,
+  "holdout_locked": true,
+  "fresh_confirmation_locked": true,
+  "next_action": "REVERIFY_AGENT_A_AND_COMPLETE_AGENT_B_D"
+}

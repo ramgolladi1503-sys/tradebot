@@ -1,0 +1,5 @@
+{
+  "prior_consumption_state": "UNKNOWN_REQUIRES_AUDIT",
+  "holdout": "default-denied",
+  "fresh_confirmation": "default-denied"
+}

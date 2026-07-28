@@ -1,0 +1,45 @@
+{
+  "primary_head": "1ae106641fe946b5122548e74983623bff18f4da",
+  "bootstrap_commit": "17e7dd19",
+  "capsule_fix_commits": ["7ca6ca32", "1ae10664"],
+  "cleanliness": "clean",
+  "worktrees": {
+    "primary": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1",
+    "agent_A": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-a-source",
+    "agent_B": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-b-oracle",
+    "agent_C": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-c-statistics",
+    "agent_D": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-edge-agent-d-microstructure"
+  },
+  "wave_1_attempts": [
+    {
+      "attempt_id": "attempt_1",
+      "agent": "Agent_A",
+      "status": "ABORTED_MISSING_CONTEXT",
+      "reason": "Missing research directory prior to bootstrap"
+    },
+    {
+      "attempt_id": "attempt_2",
+      "agent": "Agent_A",
+      "status": "REJECTED_MISSING_SOURCE",
+      "reason": "Missing approved source (UNVERIFIED_PENDING_SOURCE_AGENT)"
+    },
+    {
+      "attempt_id": "attempt_2",
+      "agent": "Agent_B",
+      "status": "REJECTED_MISSING_SOURCE",
+      "reason": "Missing approved source (UNVERIFIED_PENDING_PIPELINE_AGENT)"
+    },
+    {
+      "attempt_id": "attempt_2",
+      "agent": "Agent_C",
+      "status": "HANDOFF_PENDING_PRIMARY_VERIFICATION",
+      "reason": "Reported 10 passing tests, requires independent verification"
+    },
+    {
+      "attempt_id": "attempt_2",
+      "agent": "Agent_D",
+      "status": "REJECTED_MISSING_SOURCE",
+      "reason": "Missing approved source (UNVERIFIED_PENDING_SOURCE_AGENT)"
+    }
+  ]
+}

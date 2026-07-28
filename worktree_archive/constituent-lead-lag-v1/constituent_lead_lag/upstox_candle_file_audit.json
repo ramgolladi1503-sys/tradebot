@@ -1,0 +1,8 @@
+{
+  "classification": "UPSTOX_CANDLE_FILES_INVALID",
+  "files_audited": 0,
+  "blockers": [
+    "NO_REAL_UPSTOX_CANDLES_AVAILABLE"
+  ],
+  "details": []
+}

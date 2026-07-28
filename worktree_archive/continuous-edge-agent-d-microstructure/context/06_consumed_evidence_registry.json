@@ -1,0 +1,32 @@
+{
+  "evidence_classes": {
+    "development_consumed": [
+      "runtime/strategy_validation/MEAN_REVERSION_EXTENSION/phase_5_wfa_report.json",
+      "runtime/strategy_validation/VWAP_RECLAIM/phase_5_wfa_report.json",
+      "runtime/strategy_validation/COMPRESSION_BREAKOUT/phase_5_wfa_report.json",
+      "runtime/strategy_validation/OPENING_RANGE_BREAKOUT/phase_5_wfa_report.json",
+      "runtime/strategy_validation/EVENT_VOLATILITY_EXPANSION/phase_5_wfa_report.json",
+      "runtime/strategy_validation/OPTION_PRESSURE/phase_5_wfa_report.json",
+      "runtime/strategy_validation/SIMPLE_ORB/phase_5_wfa_report.json",
+      "runtime/strategy_validation/NO_TRADE_CHOP/phase_5_wfa_report.json",
+      "runtime/strategy_validation/TREND_PULLBACK/phase_5_wfa_report.json",
+      "runtime/strategy_validation/LATE_DAY_MOMENTUM/phase_5_wfa_report.json",
+      "runtime/strategy_validation/EXHAUSTION_REVERSAL/phase_5_wfa_report.json"
+    ],
+    "validation_consumed": [],
+    "holdout_locked_unopened": [
+      "runtime/market_data/upstox_holdout"
+    ],
+    "holdout_consumed": [],
+    "fresh_confirmation_locked_unopened": [
+      "runtime/market_data/upstox_fresh"
+    ],
+    "fresh_confirmation_consumed": [],
+    "unused_eligible": [
+      "runtime/market_data/upstox (non-overlapping sessions)"
+    ],
+    "source_invalid": [],
+    "unknown_requires_audit": []
+  },
+  "status": "CONSUMED_EVIDENCE_RECONSTRUCTED"
+}

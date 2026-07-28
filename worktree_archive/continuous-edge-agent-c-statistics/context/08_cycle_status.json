@@ -1,0 +1,7 @@
+{
+  "phase": "BOOTSTRAP_CONTEXT",
+  "current_hypothesis": null,
+  "holdout_locked": true,
+  "fresh_confirmation_locked": true,
+  "next_action": "VALIDATE_CONTEXT_AND_CREATE_WAVE_1_CAPSULES"
+}

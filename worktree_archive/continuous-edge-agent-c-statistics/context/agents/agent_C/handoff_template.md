@@ -1,0 +1,9 @@
+# Handoff Report
+## Status
+ACCEPTED | ACCEPTED_WITH_GAPS | REJECTED | REQUIRES_REPAIR
+## Summary
+...
+## Changed Files
+...
+## Artifacts & Hashes
+...

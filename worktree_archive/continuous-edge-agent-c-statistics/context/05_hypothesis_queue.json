@@ -1,0 +1,42 @@
+[
+  {
+    "id": "opening_dislocation_reversal",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "opening_compression_continuation",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "intraday_failed_breakout_reversal",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "volatility_compression_expansion",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "trend_pullback_continuation_with_participation_confirmation",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "liquidity_shock_absorption",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "futures_breadth_conditioning",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "certified_microstructure_candidates",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "option_state_meta_filter",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  },
+  {
+    "id": "small_supervised_ML_meta_filter",
+    "status": "BLOCKED_AUTHORITY_UNVERIFIED"
+  }
+]

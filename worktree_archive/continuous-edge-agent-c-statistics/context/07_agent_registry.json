@@ -1,0 +1,9 @@
+[
+  {
+    "agent_id": "Agent_A",
+    "status": "ABORTED_MISSING_CONTEXT",
+    "consumed_evidence": false,
+    "hypothesis_tested": false,
+    "eligible_for_retry": true
+  }
+]

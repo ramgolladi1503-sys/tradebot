@@ -1,0 +1,11 @@
+{
+  "source_inventory.json": "be31d88dc099c4cfb67f0eb12a01640673896a3f194e1f3d678525744e274e96",
+  "session_cardinality_audit.json": "8b47d5282fe95a1d62c70b49051ccde39a81d3edba72520fa11918307cf5f07d",
+  "composite_source_suitability.json": "3161db8212fd136904f965c77432b6f1ece96d39954f01a8d2b47a25f3b5ae3f",
+  "feature_availability_matrix.json": "066c5d2bb24c92a3694f335c3cf391c9c0003e37f72bb1950c09bfb1ae6f9c62",
+  "source_audit_report.md": "774b3a6f295f257d1ff938af38c16ff48d51fdb7d17b35f706c71e6c1a4afb85",
+  "handoff_report.md": "f5076aeb3b8679bfca1d6b945176efe487fcdea139d8fb1cebfe345002638cc3",
+  "commands.txt": "e79b936eb6501884f270693f4f3d5acc54d9b634163a3647787ef3fc32dc6d4e",
+  "tests.txt": "c17f7c4f4f5922bd3fbf912ba10e09ec0bd312e9e03de1c0514044d4f504b75d",
+  "result.json": "82c0ef3d56d68a94f1c78653e93d48e7259e0ea87e1d5327b52cf900d101abd8"
+}

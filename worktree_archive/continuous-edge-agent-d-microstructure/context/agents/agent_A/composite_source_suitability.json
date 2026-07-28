@@ -1,0 +1,5 @@
+{
+  "is_suitable": true,
+  "reason": "Data exists and has necessary columns (ltp, bid, ask, greeks, ts, instrument_key)",
+  "gaps": []
+}

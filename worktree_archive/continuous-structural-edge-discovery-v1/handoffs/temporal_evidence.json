@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "gates": {
+    "temporal": {
+      "checks": {
+        "timestamp_order": {
+          "status": "PASS",
+          "command": "python script",
+          "exit_code": 0,
+          "producer_commit": "HEAD",
+          "artifact": "/Users/madhuram/.antigravity/worktrees/tradebot/continuous-structural-edge-discovery-v1/handoffs/temporal_timestamp_order.json",
+          "sha256": "1ab2abdeeb040c9831ab727030a90db52809e5067c572f37d95f38905d1d7daf"
+        }
+      }
+    }
+  }
+}

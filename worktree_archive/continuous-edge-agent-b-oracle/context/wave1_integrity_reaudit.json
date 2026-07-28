@@ -1,0 +1,53 @@
+{
+  "claims": [
+    {
+      "claim": "WAVE1_AUTHORITY_COMPLETE",
+      "required_evidence": [
+        "Agent A source certification with independent primary-agent verification",
+        "Agent B real-data temporal audit",
+        "Agent C deterministic statistical gates with mutation checks",
+        "Agent D microstructure suitability read-only audit",
+        "Consumed evidence reconstruction",
+        "Holdout and fresh confirmation lock preservation",
+        "Valid capsule hashes",
+        "No production logic changes"
+      ],
+      "available_evidence": [
+        "Agent A handoff summary without independent recomputation",
+        "Agent B static and synthetic scaffolding only",
+        "Agent C mutation tests passed",
+        "Agent D aborted due to uncertified source",
+        "Prior WFA manifests unmapped"
+      ],
+      "verification_status": "FAILED_PREMATURE"
+    },
+    {
+      "claim": "opening_dislocation_reversal FROZEN_ACTIVE",
+      "required_evidence": [
+        "WAVE1_AUTHORITY_COMPLETE",
+        "Source authority independently verified",
+        "Real-data pipeline compatibility verified",
+        "Completed-candle and next-bar semantics pass",
+        "Session universe frozen",
+        "Prior consumed evidence reconstructed",
+        "Hypothesis contract written and hashed"
+      ],
+      "available_evidence": [
+        "None of the prerequisites are fully complete"
+      ],
+      "verification_status": "FAILED_PREMATURE"
+    }
+  ],
+  "commits": {
+    "bootstrap": "17e7dd19",
+    "capsule_repair": "56b6fe1c",
+    "agent_c": [
+      "e0b3b799",
+      "5aec9404"
+    ],
+    "agent_a_handoff": "cac2a870",
+    "source_authority_update": "f68a8c9d",
+    "cycle_status_update": "f68a8c9d",
+    "hypothesis_freeze": "cb2f946d"
+  }
+}

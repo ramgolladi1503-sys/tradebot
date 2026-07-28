@@ -1,0 +1,5 @@
+{"decision": "Agent A abort classification", "value": "ABORTED_MISSING_CONTEXT"}
+{"decision": "bootstrap-before-delegation rule", "value": "Enforced"}
+{"decision": "contract freeze", "value": "v2 frozen"}
+{"decision": "default-deny evidence access", "value": "Enforced"}
+{"decision": "no strategy discovery before authority verification", "value": "Enforced"}

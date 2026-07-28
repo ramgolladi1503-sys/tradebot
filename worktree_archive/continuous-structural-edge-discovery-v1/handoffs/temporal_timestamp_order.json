@@ -1,0 +1,15 @@
+{
+  "path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250709/underlying/NIFTY_20250709.parquet",
+  "source_timezone_mode": "explicit_localization",
+  "source_timezone": "Asia/Kolkata",
+  "output_timezone": "UTC",
+  "first_timestamp_utc": "2025-07-09T03:45:00+00:00",
+  "last_timestamp_utc": "2025-07-09T09:59:00+00:00",
+  "first_timestamp_local": "2025-07-09T09:15:00+05:30",
+  "last_timestamp_local": "2025-07-09T15:29:00+05:30",
+  "rows": 375,
+  "order_violations": 0,
+  "adjacent_duplicates": 0,
+  "sample_violations": [],
+  "monotonic_non_decreasing": true
+}

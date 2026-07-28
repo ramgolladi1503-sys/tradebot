@@ -1,0 +1,21 @@
+# Central Research Contract (v2)
+
+- Primary discovery universe: NIFTY.
+- Generalization: BANKNIFTY only as an independent generalization or separately frozen study.
+- Decisions: completed-candle-only decisions.
+- Entry: next executable bar entry.
+- Primary horizon: 20-minute.
+- Descriptive horizons: 5, 10, 15, and 30-minute.
+- Outcome labels: underlying outcome labels first.
+- Cost: conservative transaction-cost proxy.
+- WFA: chronological session-level WFA.
+- Separation: purge and embargo required.
+- Size gates: minimum rows and sessions, fold-coverage gate.
+- Limits: concentration limits.
+- Stress testing: one-bar and two-bar latency stress, negative controls (random entries, inverted signals).
+- Correction: multiple-testing correction.
+- Determinism: deterministic A/B reruns.
+- Independence: independent oracle required.
+- Final gate: one-time fresh-confirmation gate.
+- Options rule: option replay blocked until underlying confirmation passes.
+- Approved verdicts: FRESH_OOS_EDGE_CONFIRMATION_PASS, FRESH_OOS_EDGE_CONFIRMATION_FAIL, NO_CONFIRMED_STRUCTURAL_EDGE_FOUND, NO_STABLE_CANDIDATE, NEED_FRESH_OOS_DATA, INSUFFICIENT_DATA, SOURCE_PROVENANCE_INVALID, CAUSALITY_OR_LEAKAGE_DEFECT, PIPELINE_INVALID, EVIDENCE_INVALID, IMPLEMENTATION_BLOCKED.

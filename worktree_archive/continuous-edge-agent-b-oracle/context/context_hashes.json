@@ -1,0 +1,15 @@
+{
+  "00_mission.md": "ff3cc91f0bd55a7ed481faaadf0a7badeedbaf8d7f8f6f49abcd976bd78706d5",
+  "01_research_contract.md": "919af5dc1d3ff962cdfd62533684c765460472c01a6c0cf280ca550d99c8309f",
+  "02_safety_boundaries.md": "8444487476352c00349078b2a297e9f0d412c8469f4316cc844eef60b41e7f0d",
+  "03_data_authority.md": "2f181f5a5bbb0f6bf74cedf8880c799dd01294f9ba61c8fab5005cce45f5bf77",
+  "04_pipeline_authority.md": "456a8c13f33708efad388a1fbe33c00e86f3b60341f2642bd0073251aa53512a",
+  "05_hypothesis_queue.json": "568de9ae486a999bb860bfbc6d1deb52c0d9cef5a4c8fffdafa7bf458fff90c6",
+  "06_consumed_evidence_registry.json": "7d72654fb5bdf99ab8fbeb89a4717811d1ad8f06b217238222c9ab0bde34e614",
+  "07_agent_registry.json": "f4021e06b5406e4d4fb88f2a67a0070843b2c10ff5d677f28ffc9cdfb1ab386f",
+  "08_cycle_status.json": "db1ea6fb49a08071823374a3e6e15e408b8f89fad8246cb9b10435a9dd07521d",
+  "09_decision_log.jsonl": "c69386424f3a99fe498550bd3619dff215630963271d22a7a1f73450a9f9821a",
+  "10_unresolved_blockers.json": "0110210e0aa6f8368cf4901af73fc88622b5870b54c150d6308b46bc53161131",
+  "11_candidate_freeze_registry.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "12_context_index.md": "7df82f61fa9b77106860362fb3afcab14e71382d93f74e2072514908330e81ac"
+}

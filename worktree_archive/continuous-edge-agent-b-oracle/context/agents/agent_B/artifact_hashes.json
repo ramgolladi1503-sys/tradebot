@@ -1,0 +1,11 @@
+{
+"handoff_report.md": "7dd173c9b33490ecbd6c73e6cb5d58e04398c8485b850ff0378508beea87c8a5",
+"pipeline_candidate_inventory.json": "4d94228e1a3053dd96f636a25ce333c5b9a34ae6909e6f3e3b004ec113b1a4fd",
+"pipeline_static_audit.json": "36ed5945e31d8439ded676986372846156ef4d54d974c039273325447457f6ab",
+"synthetic_temporal_test_report.json": "009b4dd5dabfaf6164bf1919478e2982f21dd733da3685a17e4fdcd8db79c0e8",
+"real_data_checks_pending.json": "2e16c3c50f58d05b13fa5bb5e9cf7c40da8828e7ee68f3ba5d90037d11a3877c",
+"oracle_scaffold_report.json": "e257bffa605cf682a7eece8ac691449abbd027cc1793476588378496fd18915c",
+"commands.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+"tests.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+"result.json": "1ee4f8144959aa05de4d6c882a0c92d087c2eeecb4c5cc0fa1763f45eb31d6c8"
+}
