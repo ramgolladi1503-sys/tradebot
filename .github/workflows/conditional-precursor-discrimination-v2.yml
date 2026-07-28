@@ -7,21 +7,27 @@ on:
       - research/conditional-precursor-discrimination-v2
     paths:
       - 'scripts/run_conditional_precursor_discrimination_v2.py'
+      - 'scripts/run_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
+      - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'research/conditional_precursor_discrimination_v2/**'
+      - 'research/option_surface_transition_discovery_v1/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
   pull_request:
     paths:
       - 'scripts/run_conditional_precursor_discrimination_v2.py'
+      - 'scripts/run_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
+      - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'research/conditional_precursor_discrimination_v2/**'
+      - 'research/option_surface_transition_discovery_v1/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
   contents: write
 
 jobs:
-  verify-and-reproduce:
+  verify-and-discover:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -53,27 +59,37 @@ jobs:
 
       - name: Run focused tests
         run: |
-          python -m pytest -q tests/research/test_conditional_precursor_discrimination_v2.py
+          python -m pytest -q \
+            tests/research/test_conditional_precursor_discrimination_v2.py \
+            tests/research/test_option_surface_transition_discovery_v1.py
 
       - name: Verify corpus and reproduce prior campaign
         run: |
           python scripts/run_conditional_precursor_discrimination_v2.py --repo-root "$GITHUB_WORKSPACE"
 
+      - name: Run frozen option-surface economic discovery
+        run: |
+          python scripts/run_option_surface_transition_discovery_v1.py --repo-root "$GITHUB_WORKSPACE"
+
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
         run: |
-          if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ]; then
+          if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ] && \
+             [ ! -d runtime/research/option_surface_transition_discovery_v1 ]; then
             echo "No runtime research evidence directory was produced."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f runtime/research/conditional_precursor_discrimination_v2/*.json || true
+          git add -f runtime/research/option_surface_transition_discovery_v1/*.json || true
+          git add -f runtime/research/option_surface_transition_discovery_v1/*.csv || true
+          git add -f research/option_surface_transition_discovery_v1/RESULT.md || true
           if git diff --cached --quiet; then
             echo "No deterministic diagnostic changes to preserve."
             exit 0
           fi
-          git commit -m "research: preserve conditional precursor diagnostics [skip ci]"
+          git commit -m "research: preserve option-surface discovery evidence [skip ci]"
           git push origin HEAD:research/conditional-precursor-discrimination-v2
 
       - name: Upload research evidence
@@ -83,6 +99,8 @@ jobs:
           name: conditional-precursor-discrimination-v2-evidence
           path: |
             runtime/research/conditional_precursor_discrimination_v2/**
+            runtime/research/option_surface_transition_discovery_v1/**
             research/conditional_precursor_discrimination_v2/prior_campaign_reproduction.md
+            research/option_surface_transition_discovery_v1/RESULT.md
           if-no-files-found: warn
           retention-days: 30
