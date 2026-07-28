@@ -1,0 +1,63 @@
+name: Market Story Engine V1
+
+on:
+  pull_request:
+    paths:
+      - "research/market_story_engine_v1/**"
+      - "scripts/run_market_story_engine_v1.py"
+      - "scripts/audit_market_story_engine_v1.py"
+      - "tests/research/test_market_story_engine_v1.py"
+      - ".github/workflows/market_story_engine_v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install focused dependencies
+        run: python -m pip install pandas numpy pytest pyarrow
+      - name: Compile
+        run: >-
+          python -m py_compile
+          research/market_story_engine_v1/*.py
+          scripts/run_market_story_engine_v1.py
+          scripts/audit_market_story_engine_v1.py
+      - name: Focused tests
+        run: >-
+          PYTHONPATH=. pytest -q
+          tests/research/test_market_story_engine_v1.py
+      - name: Generate deterministic robustness certification
+        run: >-
+          PYTHONPATH=. python scripts/run_market_story_engine_v1.py
+          --certify-synthetic
+          --output-dir evidence/market_story_engine_v1
+      - name: Independent audit
+        run: >-
+          PYTHONPATH=. python scripts/audit_market_story_engine_v1.py
+          evidence/market_story_engine_v1/certification.json
+          --output evidence/market_story_engine_v1/oracle_report.json
+      - name: Re-run and compare semantic hashes
+        run: |
+          PYTHONPATH=. python scripts/run_market_story_engine_v1.py \
+            --certify-synthetic \
+            --output-dir evidence/market_story_engine_v1_second
+          python - <<'PY'
+          import json
+
+          with open('evidence/market_story_engine_v1/certification.json') as file:
+              first = json.load(file)
+          with open('evidence/market_story_engine_v1_second/certification.json') as file:
+              second = json.load(file)
+          assert first['semantic_sha256'] == second['semantic_sha256']
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-story-engine-v1-evidence
+          path: evidence/
