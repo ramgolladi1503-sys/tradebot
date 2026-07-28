@@ -101,6 +101,17 @@ Accepted bounded result:
 
 Acceptance is limited to deterministic implementation robustness. It is not acceptance of market profitability.
 
+## Machine-Readable Evidence Contract
+
+- mode: RESEARCH
+- candidate_id: MARKET_STORY_ENGINE_V1_IMPLEMENTATION_ROBUSTNESS
+- decision: PASS_IMPLEMENTATION_ROBUSTNESS_GATE
+- reason: The five-layer causal engine passed deterministic robustness, adversarial controls, and an implementation-independent audit; economic edge remains unproven.
+- timestamp: 2026-07-28T19:30:00+05:30
+- is_order_action: false
+- broker_api_called: false
+- source: GitHub Actions Market Story Engine V1 run 30366017470 on commit bafd32cf6e40fcadbe384157f5baef5d0df6512c
+
 ## Runtime Proof Required After Merge
 
 This PR should remain draft and unmerged. Before any later runtime integration, a separate human-reviewed campaign must prove all of the following on authoritative synchronized data:
