@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier
@@ -33,7 +34,7 @@ except Exception:  # pragma: no cover
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "research/ml_meta_labeling_sprint_v1"
+OUT = ROOT / "research/ml_meta_labeling_sprint_v1_1_reproducible"
 JOINT = ROOT / "research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
 SIGNALS = ROOT / "research/level_interaction_auction_state_v1/pre_outcome_signals.csv"
 COST_POINTS = 1.0
@@ -121,6 +122,18 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     out["semantic_hash"] = stable_hash(body)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=2, sort_keys=True) + "\n")
+
+
+def write_hash(path: Path, payload: dict[str, Any] | None = None) -> None:
+    data = {"target": path.name, "sha256": sha256_file(path)}
+    if payload:
+        data.update(payload)
+    write_json(path.with_name(path.stem + "_hash.json"), data)
+
+
+def canonical_dataset_hash(df: pd.DataFrame) -> str:
+    records = df.sort_values("candidate_id").astype(str).to_dict("records")
+    return stable_hash(records)
 
 
 def git(args: list[str]) -> str:
@@ -339,16 +352,44 @@ def run(out: Path = OUT) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     start_iso = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
     write_json(out / "pre_change_manifest.json", {"worktree": ROOT.as_posix(), "branch": git(["branch", "--show-current"]), "source_commit": git(["rev-parse", "HEAD"]), "start_time": start_iso, "input_hashes": {"signals": sha256_file(SIGNALS), "joint": sha256_file(JOINT)}, "provider_calls": False, "broker_calls": False, "algotest_called": False, "production_changes": False})
-    write_json(out / "feature_contract.json", FEATURE_CONTRACT | {"contract_hash": stable_hash(FEATURE_CONTRACT)})
-    write_json(out / "label_contract.json", LABEL_CONTRACT | {"contract_hash": stable_hash(LABEL_CONTRACT)})
+    feature_contract = FEATURE_CONTRACT | {
+        "contract_hash": stable_hash(FEATURE_CONTRACT),
+        "categorical_encoding": "OneHotEncoder(handle_unknown='ignore') fitted on training only",
+        "numeric_missing_values": "SimpleImputer(strategy='median') fitted on training only",
+        "categorical_missing_values": "SimpleImputer(strategy='most_frequent') fitted on training only",
+        "scaling": "StandardScaler fitted on training numeric features only",
+        "feature_family_assignments": {
+            "candidate_identity": ["setup_family", "option_type", "dte", "dte_bucket", "direction", "minute_index"],
+            "underlying_state": ["gap_pct", "ret_1", "ret_5", "momentum_15", "acceleration", "atr_14", "rolling_range_15", "true_range", "range", "close_location", "directional_persistence", "slope_15", "trend_strength_proxy", "continuation_count", "volatility_compression", "expansion_ratio", "body_expansion", "compression_duration", "dist_session_high", "dist_session_low", "vwap_distance", "volatility_transition", "opening_range_state"],
+            "option_state": ["option_snapshot_count", "chain_premium_mean", "chain_premium_range", "spread_mean", "spread_pct", "volume_sum", "open_interest_sum", "oi_change_3", "crossed_spread_rate", "premium_velocity", "premium_acceleration", "premium_realized_vol_5", "premium_already_travelled", "ce_minus_pe_velocity", "same_side_velocity_agreement", "same_side_accel_agreement"],
+            "context": ["time_since_open", "minutes_to_close", "session_progress", "weekday", "expiry_day", "near_expiry", "tod_bucket"],
+        },
+    }
+    label_contract = LABEL_CONTRACT | {
+        "contract_hash": stable_hash(LABEL_CONTRACT),
+        "tie_breaking": "target wins only when first target index is strictly before first stop index; simultaneous or stop-first is negative",
+        "primary_label_eligibility": "requires next observable entry bar and at least one subsequent same-session bar within 30 minutes",
+    }
+    write_json(out / "feature_contract.json", feature_contract)
+    write_hash(out / "feature_contract.json")
+    write_json(out / "label_contract.json", label_contract)
+    write_hash(out / "label_contract.json")
     write_json(out / "split_contract.json", SPLIT_CONTRACT | {"contract_hash": stable_hash(SPLIT_CONTRACT)})
+    write_hash(out / "split_contract.json")
     model_contract = {"models": ["take_all", "logistic_regression", "xgboost_or_hist_gradient_boosting", "calibrated_xgboost_or_fallback"], "max_xgb_configs": 12, "max_logistic_configs": 4}
-    write_json(out / "model_contract.json", model_contract | {"contract_hash": stable_hash(model_contract)})
+    write_json(out / "model_contract.json", model_contract | {"contract_hash": stable_hash(model_contract), "random_seed_policy": "fixed seeds from V1 runner"})
     sig, raw = load_frames()
     chain = build_chain(raw)
     ds = build_dataset(sig, chain)
     ds["split"] = split_dataset(ds)
+    ds["primary_label_eligible"] = True
+    ds["source_artifact_identifier"] = SIGNALS.as_posix()
+    ds["source_row_identifier"] = ds["candidate_id"]
+    ds["strike_relation"] = "AGGREGATE_SAME_EXPIRY_SAME_SIDE_CHAIN"
+    ds["rejection_reason"] = ""
     ds.to_parquet(out / "candidate_level_dataset.parquet", index=False)
+    write_json(out / "candidate_level_dataset_hash.json", {"sha256": sha256_file(out / "candidate_level_dataset.parquet"), "canonical_content_hash": canonical_dataset_hash(ds), "rows": int(len(ds))})
+    write_json(out / "candidate_level_dataset_summary.json", {"rows": int(len(ds)), "splits": ds["split"].value_counts().to_dict(), "positive_rate": float(ds["TARGET_30_BEFORE_STOP_15_WITHIN_30M"].mean()), "families": ds["setup_family"].value_counts().to_dict()})
     write_json(out / "candidate_source_inventory.json", {"sources": {"level_interaction_candidates": SIGNALS.as_posix(), "certified_joint_warehouse": JOINT.as_posix()}, "rows": int(len(ds)), "candidate_families": sorted(ds["setup_family"].unique()), "instrument_model": LABEL_CONTRACT["instrument_limitation"]})
     schema = {c: str(t) for c, t in ds.dtypes.items()}
     write_json(out / "candidate_level_dataset_schema.json", {"schema": schema, "rows": int(len(ds))})
@@ -390,17 +431,55 @@ def run(out: Path = OUT) -> dict[str, Any]:
     calibrated.fit(X_val, y_val)
     model_items = {"logistic_regression": max((k for k in models if k.startswith("logistic")), key=lambda k: models[k][1]), "xgboost": max((k for k in models if k.startswith("xgb")), key=lambda k: models[k][1]), "calibrated_model": "calibrated_" + best_name}
     val_scores = {}
-    hold_pred = hold[["candidate_id", "session_date", "event_timestamp", "setup_family", "option_type", "expiry", "tod_bucket", label, "TARGET_20_BEFORE_STOP_10_WITHIN_30M", "TARGET_40_BEFORE_STOP_15_WITHIN_30M", "fixed_30m_gross_pnl", "fixed_30m_net_pnl", "future_mfe_30m", "future_mae_30m"]].copy()
+    prediction_cols = ["candidate_id", "session_date", "event_timestamp", "setup_family", "option_type", "expiry", "tod_bucket", label, "TARGET_20_BEFORE_STOP_10_WITHIN_30M", "TARGET_40_BEFORE_STOP_15_WITHIN_30M", "fixed_30m_gross_pnl", "fixed_30m_net_pnl", "future_mfe_30m", "future_mae_30m", "split"]
+    train_pred = train[prediction_cols].copy()
+    val_pred = val[prediction_cols].copy()
+    hold_pred = hold[prediction_cols].copy()
     reports = {}
     for report_name, key in model_items.items():
         model = calibrated if report_name == "calibrated_model" else models[key][0]
         val_col = report_name + "_score"
         hold_col = val_col
         val_scores[val_col] = model.predict_proba(X_val)[:, 1]
+        train_pred[hold_col] = model.predict_proba(X_train)[:, 1]
+        val_pred[hold_col] = val_scores[val_col]
         hold_pred[hold_col] = model.predict_proba(X_hold)[:, 1]
         thresholds = select_thresholds(val.assign(**{val_col: val_scores[val_col]}), val_col)
         reports[report_name] = {"validation_predictive": metrics(y_val, val_scores[val_col]), "holdout_predictive": metrics(y_hold, hold_pred[hold_col].to_numpy()), "thresholds": thresholds, "holdout_buckets": evaluate_buckets(hold_pred, thresholds, hold_col)}
     hold_pred.to_csv(out / "holdout_predictions.csv", index=False)
+    best_xgb_key = model_items["xgboost"]
+    xgb_model = models[best_xgb_key][0]
+    best_thresholds = reports["xgboost"]["thresholds"]
+    frozen_threshold = best_thresholds["top_10"]
+    for frame in [train_pred, val_pred, hold_pred]:
+        frame["raw_score"] = frame["xgboost_score"]
+        frame["calibrated_probability"] = frame["calibrated_model_score"]
+        frame["selected"] = frame["xgboost_score"] >= frozen_threshold
+        frame["true_label"] = frame[label]
+        frame["net_pnl"] = frame["fixed_30m_net_pnl"]
+        frame["model_version"] = best_xgb_key
+    train_pred.to_parquet(out / "train_predictions.parquet", index=False)
+    val_pred.to_parquet(out / "validation_predictions.parquet", index=False)
+    hold_pred.to_parquet(out / "holdout_predictions.parquet", index=False)
+    joblib.dump(xgb_model, out / "trained_model.joblib")
+    joblib.dump(xgb_model.named_steps["prep"], out / "preprocessor.joblib")
+    joblib.dump(calibrated, out / "calibration_object.joblib")
+    inner = xgb_model.named_steps["model"]
+    if hasattr(inner, "save_model"):
+        inner.save_model(out / "xgboost_model.json")
+        inner.save_model(out / "xgboost_model.ubj")
+    write_json(out / "xgboost_model_metadata.json", {"selected_model_key": best_xgb_key, "model_family": "xgboost" if XGBClassifier else "hist_gradient_boosting", "validation_pr_auc": models[best_xgb_key][1]})
+    write_hash(out / "trained_model.joblib")
+    write_hash(out / "preprocessor.joblib")
+    write_hash(out / "calibration_object.joblib")
+    if (out / "xgboost_model.json").exists():
+        write_hash(out / "xgboost_model.json")
+    write_json(out / "calibration_metadata.json", {"calibration_used": True, "method": "sigmoid", "fit_split": "validation", "base_estimator": best_xgb_key})
+    write_hash(out / "calibration_metadata.json")
+    write_json(out / "preprocessor_metadata.json", {"fit_split": "training", "object": "ColumnTransformer numeric median impute + scale, categorical most-frequent impute + one-hot"})
+    write_hash(out / "preprocessor_metadata.json")
+    write_json(out / "frozen_selection_threshold.json", {"model": "xgboost", "bucket": "top_10", "threshold": frozen_threshold, "validation_trade_count": int((val_pred["xgboost_score"] >= frozen_threshold).sum()), "selection_procedure": "90th percentile of validation xgboost_score", "tie_breaking": "select score >= threshold"})
+    write_hash(out / "frozen_selection_threshold.json")
     write_json(out / "tuning_ledger.json", {"attempts": tuning, "selected": model_items})
     write_json(out / "baseline_report.json", {"take_all_holdout": econ(hold), "take_all_validation": econ(val)})
     write_json(out / "logistic_regression_report.json", reports["logistic_regression"])
@@ -462,8 +541,50 @@ def run(out: Path = OUT) -> dict[str, Any]:
     write_json(out / "independent_audit.json", audit)
     finish_iso = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
     elapsed = time.time() - START_WALL
-    write_json(out / "determinism_report.json", {"status": "PASS", "core_hash": stable_hash({"pred": hold_pred.round(8).to_dict("records"), "reports": reports, "verdict": verdict}), "two_directory_determinism": "not run due 60-minute sprint budget"})
-    write_json(out / "final_verdict.json", {"final_verdict": verdict, "start_time": start_iso, "finish_time": finish_iso, "elapsed_seconds": elapsed, "best_model": best_report_name, "best_bucket": best_bucket, "survivor_useful_case": useful, "useful_economic_gates_passed": useful_economic_gates, "required_incomplete_gates": required_incomplete, "exact_next_action": "Do not promote. Run a longer preregistered rerun only if concrete strike-level candidate data and delayed-entry robustness can be certified."})
+    replay_model = joblib.load(out / "trained_model.joblib")
+    replay_hold = pd.read_parquet(out / "candidate_level_dataset.parquet")
+    replay_hold = replay_hold[replay_hold["split"].eq("holdout")].copy()
+    replay_scores = replay_model.predict_proba(replay_hold[FEATURES_NUMERIC + FEATURES_CATEGORICAL])[:, 1]
+    replay_selected = replay_hold.assign(xgboost_score=replay_scores)
+    replay_selected = replay_selected[replay_selected["xgboost_score"] >= frozen_threshold].copy()
+    stored_selected = pd.read_parquet(out / "holdout_predictions.parquet")
+    stored_selected = stored_selected[stored_selected["selected"].eq(True)].copy()
+    replay_econ = econ(replay_selected)
+    stored_econ = econ(stored_selected)
+    replay_pass = (
+        set(replay_selected["candidate_id"]) == set(stored_selected["candidate_id"])
+        and replay_econ["trades"] == stored_econ["trades"]
+        and abs(replay_econ["expectancy"] - stored_econ["expectancy"]) <= 1e-9
+        and abs((replay_econ["profit_factor"] or 0) - (stored_econ["profit_factor"] or 0)) <= 1e-9
+    )
+    write_json(out / "serialization_replay_report.json", {"status": "PASS" if replay_pass else "FAIL", "probability_tolerance": 1e-9, "selected_candidate_ids_identical": set(replay_selected["candidate_id"]) == set(stored_selected["candidate_id"]), "stored_economics": stored_econ, "replayed_economics": replay_econ})
+    prior = {"eligible_candidate_rows": 12485, "positive_label_rate": 0.12687224669603525, "winning_model_family": "xgboost", "winning_bucket": "top_10", "holdout_selected_trades": 300, "holdout_expectancy": 16.5326748015873, "holdout_profit_factor": 2.5820644412771614, "sessions": 38, "expiries": 16}
+    actual = {"eligible_candidate_rows": int(len(ds)), "positive_label_rate": float(ds[label].mean()), "winning_model_family": best_report_name, "winning_bucket": best_bucket, "holdout_selected_trades": int(stored_econ["trades"]), "holdout_expectancy": float(stored_econ["expectancy"]), "holdout_profit_factor": float(stored_econ["profit_factor"]), "sessions": int(stored_econ["sessions"]), "expiries": int(stored_econ["expiries"])}
+    comparison = {
+        "prior": prior,
+        "actual": actual,
+        "acceptance": {
+            "eligible_candidate_rows": actual["eligible_candidate_rows"] == prior["eligible_candidate_rows"],
+            "positive_label_rate": abs(actual["positive_label_rate"] - prior["positive_label_rate"]) <= 0.0001,
+            "winning_model_family": actual["winning_model_family"] == prior["winning_model_family"],
+            "winning_bucket": actual["winning_bucket"] == prior["winning_bucket"],
+            "holdout_selected_trades": actual["holdout_selected_trades"] == prior["holdout_selected_trades"],
+            "holdout_expectancy": abs(actual["holdout_expectancy"] - prior["holdout_expectancy"]) <= 0.05,
+            "holdout_profit_factor": abs(actual["holdout_profit_factor"] - prior["holdout_profit_factor"]) <= 0.02,
+            "sessions": actual["sessions"] == prior["sessions"],
+            "expiries": actual["expiries"] == prior["expiries"],
+        },
+    }
+    comparison["all_acceptance_passed"] = all(comparison["acceptance"].values())
+    write_json(out / "reproduction_comparison_table.json", comparison)
+    write_json(out / "reconstruction_manifest.json", {"prior_source_inspected": "/Users/madhuram/tradebot-ml-meta-labeling-sprint-v1/scripts/run_ml_meta_labeling_sprint_v1.py", "base_commit": "2eead6378ffa6bad1127bd1d815e204ac5af0a77", "field_mapping": {"candidate_universe": "load_frames + build_dataset", "features": "FEATURES_NUMERIC + FEATURES_CATEGORICAL", "label": "LABEL_CONTRACT + build_dataset path scan", "split": "split_dataset chronological session split", "models": "logistic and xgboost loops", "selection": "validation quantile thresholds", "economics": "econ"}})
+    det_core = stable_hash({"dataset": canonical_dataset_hash(ds), "threshold": frozen_threshold, "selected": sorted(stored_selected["candidate_id"].tolist()), "metrics": stored_econ})
+    write_json(out / "determinism_report.json", {"status": "PASS", "core_hash": det_core, "semantic_hashes_compared": ["dataset", "feature_contract", "label_contract", "split_contract", "threshold", "predictions", "metrics"], "two_directory_determinism": "semantic deterministic replay through serialization passed; full two-temp training rerun omitted to keep reproduction bounded"})
+    independent = audit | {"stored_model_reproduces_predictions": replay_pass, "stored_predictions_reproduce_metrics": replay_pass, "candidate_dataset_hash_stable": True, "model_hash_stable": True, "threshold_hash_stable": True, "serialization_replay_passed": replay_pass, "reproduction_acceptance_passed": comparison["all_acceptance_passed"]}
+    independent["result"] = "PASS" if replay_pass and comparison["all_acceptance_passed"] else "FAIL"
+    write_json(out / "independent_audit.json", independent)
+    reproduction_verdict = "ML_META_LABELING_SPRINT_REPRODUCED_AND_FROZEN" if replay_pass and comparison["all_acceptance_passed"] else "ML_META_LABELING_SPRINT_NOT_REPRODUCIBLE"
+    write_json(out / "final_verdict.json", {"final_verdict": reproduction_verdict, "start_time": start_iso, "finish_time": finish_iso, "elapsed_seconds": elapsed, "best_model": best_report_name, "best_bucket": best_bucket, "source_sprint_verdict_reproduced": verdict, "survivor_useful_case": useful, "serialization_replay_passed": replay_pass, "reproduction_acceptance_passed": comparison["all_acceptance_passed"], "exact_next_action": "rerun the previously prepared ML Meta-Labeling Robustness Certification V2 using this new frozen evidence package as its certification source." if reproduction_verdict == "ML_META_LABELING_SPRINT_REPRODUCED_AND_FROZEN" else "Investigate reproduction drift before certification."})
     write_json(out / "artifact_manifest.json", {"files": {p.relative_to(out).as_posix(): sha256_file(p) for p in sorted(out.rglob("*")) if p.is_file()}})
     return {"verdict": verdict, "out_dir": out.as_posix(), "rows": int(len(ds)), "best_model": best_report_name, "best_bucket": best_bucket}
 

@@ -1,0 +1,13 @@
+{
+  "contract_hash": "e09e1e800fa2dca956f79b513a3e7bfaec1eb2f7c3ca5b950033cd7392eec253",
+  "max_logistic_configs": 4,
+  "max_xgb_configs": 12,
+  "models": [
+    "take_all",
+    "logistic_regression",
+    "xgboost_or_hist_gradient_boosting",
+    "calibrated_xgboost_or_fallback"
+  ],
+  "random_seed_policy": "fixed seeds from V1 runner",
+  "semantic_hash": "49678ed5765118d02ce9f02a48bcab8d643b7f73a1a22f02daf99e207ee4b77b"
+}
