@@ -11,14 +11,17 @@ on:
       - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
       - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v4.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v4.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
       - 'research/late_day_ce_inventory_rebound_v3/**'
+      - 'research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
   pull_request:
     paths:
@@ -27,14 +30,17 @@ on:
       - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
       - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v4.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v4.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
       - 'research/late_day_ce_inventory_rebound_v3/**'
+      - 'research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
@@ -77,7 +83,8 @@ jobs:
             tests/research/test_conditional_precursor_discrimination_v2.py \
             tests/research/test_option_surface_transition_discovery_v1.py \
             tests/research/test_extreme_option_pressure_discovery_v2.py \
-            tests/research/test_late_day_ce_inventory_rebound_v3.py
+            tests/research/test_late_day_ce_inventory_rebound_v3.py \
+            tests/research/test_late_day_ce_inventory_rebound_v4.py
 
       - name: Verify corpus and reproduce prior campaign
         run: |
@@ -91,9 +98,64 @@ jobs:
         run: |
           python -m scripts.run_extreme_option_pressure_discovery_v2 --repo-root "$GITHUB_WORKSPACE"
 
-      - name: Run frozen late-day CE untouched-holdout test V3
+      - name: Regenerate late-day CE candidate evidence V3
         run: |
           python -m scripts.run_late_day_ce_inventory_rebound_v3 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Run independent exact-horizon audit V4
+        id: horizon_audit
+        continue-on-error: true
+        run: |
+          python -m scripts.audit_late_day_ce_inventory_rebound_v4 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Invalidate mismatched V3 publication
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          audit_path = Path("runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/independent_horizon_audit.json")
+          if not audit_path.exists():
+              print("V4 audit did not produce a decision; no V3 rewrite performed.")
+              raise SystemExit(0)
+
+          audit = json.loads(audit_path.read_text(encoding="utf-8"))
+          if audit.get("v3_publication_status") != "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH":
+              print("No V3 exit-horizon mismatch was reported.")
+              raise SystemExit(0)
+
+          final_path = Path("runtime/research/late_day_ce_inventory_rebound_v3/final_decision.json")
+          prior = json.loads(final_path.read_text(encoding="utf-8"))
+          prior_verdict = prior.get("principal_verdict")
+          prior.update(
+              {
+                  "prior_principal_verdict": prior_verdict,
+                  "principal_verdict": "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH",
+                  "structural_edge_found": False,
+                  "publication_invalidated": True,
+                  "invalidation_reason": "declared_20_minute_exit_but_consumed_label_horizon_is_5_minutes",
+                  "superseded_by": "late_day_ce_inventory_rebound_v4_horizon_audit",
+                  "paper_or_live_authorized": False,
+                  "allowed_for_live_execution": False,
+              }
+          )
+          final_path.write_text(
+              json.dumps(prior, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          Path("research/late_day_ce_inventory_rebound_v3/RESULT.md").write_text(
+              "# Late-Day CE Inventory Rebound V3 — Invalidated\n\n"
+              "Principal verdict: `INVALID_EXIT_HORIZON_CONTRACT_MISMATCH`\n\n"
+              "The previous publication declared a fixed 20-minute exit, but every "
+              "consumed outcome and committed trade-ledger row used a five-minute "
+              "label. The previous structural-edge claim is invalid as stated.\n\n"
+              "Authoritative continuation: "
+              "`research/late_day_ce_inventory_rebound_v4_horizon_audit/RESULT.md`.\n\n"
+              "No paper or live trading is authorized.\n",
+              encoding="utf-8",
+          )
+          PY
 
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
@@ -101,7 +163,8 @@ jobs:
           if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ] && \
              [ ! -d runtime/research/option_surface_transition_discovery_v1 ] && \
              [ ! -d runtime/research/extreme_option_pressure_discovery_v2 ] && \
-             [ ! -d runtime/research/late_day_ce_inventory_rebound_v3 ]; then
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v3 ] && \
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit ]; then
             echo "No runtime research evidence directory was produced."
             exit 0
           fi
@@ -114,14 +177,17 @@ jobs:
           git add -f runtime/research/extreme_option_pressure_discovery_v2/*.csv || true
           git add -f runtime/research/late_day_ce_inventory_rebound_v3/*.json || true
           git add -f runtime/research/late_day_ce_inventory_rebound_v3/*.csv || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/*.json || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/*.csv || true
           git add -f research/option_surface_transition_discovery_v1/RESULT.md || true
           git add -f research/extreme_option_pressure_discovery_v2/RESULT.md || true
           git add -f research/late_day_ce_inventory_rebound_v3/RESULT.md || true
+          git add -f research/late_day_ce_inventory_rebound_v4_horizon_audit/RESULT.md || true
           if git diff --cached --quiet; then
             echo "No deterministic diagnostic changes to preserve."
             exit 0
           fi
-          git commit -m "research: preserve conditional edge discovery evidence [skip ci]"
+          git commit -m "research: preserve independently audited edge evidence [skip ci]"
           git push origin HEAD:research/conditional-precursor-discrimination-v2
 
       - name: Upload research evidence
@@ -134,9 +200,31 @@ jobs:
             runtime/research/option_surface_transition_discovery_v1/**
             runtime/research/extreme_option_pressure_discovery_v2/**
             runtime/research/late_day_ce_inventory_rebound_v3/**
+            runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/**
             research/conditional_precursor_discrimination_v2/prior_campaign_reproduction.md
             research/option_surface_transition_discovery_v1/RESULT.md
             research/extreme_option_pressure_discovery_v2/RESULT.md
             research/late_day_ce_inventory_rebound_v3/RESULT.md
+            research/late_day_ce_inventory_rebound_v4_horizon_audit/RESULT.md
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Enforce independent horizon-audit verdict
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/independent_horizon_audit.json")
+          if not path.exists():
+              raise SystemExit("Independent horizon audit evidence is missing.")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          if payload.get("structural_edge_found_5m_candle_proxy") is not True:
+              raise SystemExit(
+                  "Independent audit did not establish the five-minute candle-proxy edge."
+              )
+          if payload.get("v3_publication_status") != "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH":
+              raise SystemExit("V3 horizon mismatch was not detected.")
+          print(payload["principal_verdict"])
+          PY
