@@ -8,12 +8,15 @@
     "event_clusters_from_parquet": {
       "actual": 11261,
       "expected": 11261,
-      "match": true
+      "match": true,
+      "scope": "non_null_independent_move_clusters"
     },
     "event_sessions_from_parquet": {
-      "actual": 390,
+      "actual": 385,
+      "all_source_sessions": 390,
       "expected": 385,
-      "match": false
+      "match": true,
+      "scope": "sessions_with_non_null_independent_move_cluster"
     },
     "family_count": {
       "actual": 10,
@@ -333,5 +336,5 @@
       "control_type"
     ]
   },
-  "verdict": "PRIOR_CAMPAIGN_NOT_REPRODUCIBLE"
+  "verdict": "PRIOR_CAMPAIGN_REPRODUCED"
 }
