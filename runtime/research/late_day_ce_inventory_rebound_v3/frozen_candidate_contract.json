@@ -1,0 +1,33 @@
+{
+  "allowed_for_live_execution": false,
+  "asymmetry_gate": "development_ce_minus_pe_asymmetry_p10_or_lower",
+  "candidate_id": "late_day_ce_inventory_rebound_v3",
+  "ce_acceleration_gate": "development_return_acceleration_p10_or_lower",
+  "ce_return_gate": "development_prior_5m_return_p10_or_lower",
+  "ce_volume_gate": "development_prior_5m_volume_ratio_p90_or_higher",
+  "controls": [
+    "same_strike_pe_direction_flip",
+    "five_minute_delayed_ce"
+  ],
+  "dte": {
+    "maximum": 7,
+    "minimum": 0
+  },
+  "entry": "governed_next_open_proxy",
+  "entry_premium": {
+    "maximum": 150.0,
+    "minimum": 30.0
+  },
+  "exit": "existing_fixed_20_minute_forward_close",
+  "holdout_policy": "materialize_once_only_after_exact_oof_gate_pass",
+  "holdout_sessions": 98,
+  "mirror_pe_gate": "development_mirror_return_p80_or_higher",
+  "normal_cost_pct": 0.1,
+  "research_only": true,
+  "research_sessions": 292,
+  "selection": "first_eligible_occurrence_per_session_then_max_extremity",
+  "semantic_sha256": "08941889f2dd3aec8591274b04f170fe57bccc1d160854247f7e9b328df83a88",
+  "session_gate": "minute_of_day_gte_780",
+  "side": "BUY_CE_ONLY",
+  "stress_cost_pct": 1.0
+}

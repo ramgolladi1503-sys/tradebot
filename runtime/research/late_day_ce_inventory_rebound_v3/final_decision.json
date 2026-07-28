@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "candidate_id": "late_day_ce_inventory_rebound_v3",
+  "contract_semantic_sha256": "08941889f2dd3aec8591274b04f170fe57bccc1d160854247f7e9b328df83a88",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_control_gate": true,
+  "holdout_outcomes_materialized": true,
+  "holdout_primary_gate": true,
+  "oof_gate": true,
+  "paper_or_live_authorized": false,
+  "principal_verdict": "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_CANDLE_PROXY",
+  "research_only": true,
+  "structural_edge_found": true
+}
