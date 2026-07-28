@@ -1,0 +1,7 @@
+{
+  "assumption_warning": "Uses prior frozen holdout only; does not assume observed effect is true.",
+  "minimum_detectable_net_expectancy_points_at_current_n": 5.8376666837968,
+  "observed_effect_points": 5.852380952380953,
+  "observed_std_points": 13.648749724704425,
+  "probability_of_sign_error_normal_approximation": 0.024710572426936663
+}

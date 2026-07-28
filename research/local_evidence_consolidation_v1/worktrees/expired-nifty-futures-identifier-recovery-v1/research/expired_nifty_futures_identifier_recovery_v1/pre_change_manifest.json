@@ -1,0 +1,14 @@
+{
+  "branch": "research/expired-nifty-futures-identifier-recovery-v1",
+  "broker_order_action": false,
+  "clean_status_at_start": false,
+  "current_contract_manifest_hash": "60435f1d89fa0abc0e7e86212e7d127c12112bf23d28d1f062968b0518b65232",
+  "options_warehouse_hash": "3e30d3273b7c0498cf0bb28abc2b30e7ae1c3cc0fb1dbc7823f2dbbab3008be3",
+  "pnl_or_strategy": false,
+  "prior_certification_hash": "9344a9b49d808643fa0ee37ec913553eb9065ba2600abe0497681128884d4a73",
+  "provider_response_hashes": {},
+  "semantic_hash": "8852cf34acaf1e991f873153aaea060430ecc2ea13b50ed851255fd0a80e9c11",
+  "source_commit": "c5e3bca912b705c73f934e59de8c3965555f8693",
+  "underlying_warehouse_hash": "3e27a2404360f173b5999832a5fa2d5382bfff60ecc3459d0750ae0a3a8b97fb",
+  "worktree": "/Users/madhuram/tradebot-expired-nifty-futures-identifier-recovery-v1"
+}

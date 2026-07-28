@@ -1,0 +1,12 @@
+{
+  "accepted_candidate_count": 0,
+  "candidate_count": 1000,
+  "elapsed_seconds": 3.068,
+  "errors": [],
+  "root_id": "REGISTERED_WORKTREE_014",
+  "status": "INCOMPLETE",
+  "timed_out": false,
+  "truncated": true,
+  "unresolved_candidate_count": 0,
+  "yielded_path_count": 1000
+}

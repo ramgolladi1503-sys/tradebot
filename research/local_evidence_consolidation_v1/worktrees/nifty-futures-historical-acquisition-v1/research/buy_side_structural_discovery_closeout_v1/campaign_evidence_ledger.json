@@ -1,0 +1,395 @@
+{
+  "campaign_scope": "BUY-only NIFTY options",
+  "mechanisms": [
+    {
+      "aliases": [
+        "bullish ORB",
+        "opening range breakout CE"
+      ],
+      "canonical_mechanism_name": "bullish_ORB",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "bearish ORB",
+        "opening range breakout PE"
+      ],
+      "canonical_mechanism_name": "bearish_ORB",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "underlying percentage momentum",
+        "index return momentum"
+      ],
+      "canonical_mechanism_name": "underlying_percentage_momentum",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "ORB plus momentum agreement",
+        "opening breakout momentum confirmation"
+      ],
+      "canonical_mechanism_name": "ORB_plus_momentum_agreement",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "opening-state momentum",
+        "open-session directional continuation"
+      ],
+      "canonical_mechanism_name": "opening_state_momentum_variants",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "underlying mean reversion",
+        "option premium mean reversion"
+      ],
+      "canonical_mechanism_name": "mean_reversion_variants",
+      "concentration_result": "FAILED_REQUIRED_ROBUSTNESS_OR_CONCENTRATION_GATE",
+      "control_result": "NO_SURVIVING_CAUSAL_INCREMENT",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+        "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "prior BUY-only mechanism campaigns",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_OR_NOT_POSITIVE_ACROSS_REQUIRED_FOLDS"
+    },
+    {
+      "aliases": [
+        "delayed option convexity",
+        "underlying confirmation then option catch-up"
+      ],
+      "canonical_mechanism_name": "delayed_option_convexity_after_underlying_confirmation",
+      "concentration_result": "80_SESSIONS_20_EXPIRIES",
+      "control_result": "NO_VALIDATED_INCREMENTAL_OPTION_EDGE",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 1341,
+      "evidence": {
+        "path": "research/frozen_joint_mechanisms_repaired_v2/holdout_results.json",
+        "sha256": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2"
+      },
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "gross_expectancy_points": -2.152609992542878,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": -3.152609992542879,
+      "session_count": 80,
+      "source_campaign": "frozen_joint_mechanisms_repaired_v2",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "VALID_RERUN; ADEQUATELY_POWERED; NO_SURVIVOR"
+    },
+    {
+      "aliases": [
+        "premium compression release",
+        "compression-release continuation"
+      ],
+      "canonical_mechanism_name": "premium_compression_release_with_underlying_state_filter",
+      "concentration_result": "8_SESSIONS_6_EXPIRIES; CLUSTER_INTERVALS_CROSS_ZERO",
+      "control_result": "NOT_ELIGIBLE_FOR_EDGE_CLAIM",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 21,
+      "evidence": {
+        "path": "research/frozen_joint_mechanisms_repaired_v2/holdout_results.json",
+        "sha256": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2"
+      },
+      "final_status": "UNRESOLVED_UNDERPOWERED",
+      "gross_expectancy_points": 6.852380952380954,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": 5.852380952380953,
+      "session_count": 8,
+      "source_campaign": "frozen_joint_mechanisms_repaired_v2",
+      "superseded_status": "PARKED_UNRESOLVED; MUST_NOT_BE_CITED_AS_EDGE",
+      "walk_forward_result": "INSUFFICIENT_EFFECTIVE_SAMPLE"
+    },
+    {
+      "aliases": [
+        "pair asymmetry",
+        "CE/PE response imbalance"
+      ],
+      "canonical_mechanism_name": "FQSDV2_PAIR_ASYM_01",
+      "concentration_result": "81_SESSIONS_20_EXPIRIES",
+      "control_result": "INTRINSICALLY_NEGATIVE_BEFORE_COSTS",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 5004,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+        "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+      },
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "gross_expectancy_points": -0.3316566746602718,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": -1.3316566746602718,
+      "session_count": 81,
+      "source_campaign": "frequency_qualified_structural_discovery_v2",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_SURVIVAL_STANDARD"
+    },
+    {
+      "aliases": [
+        "ladder confirmation",
+        "cross-strike confirmation"
+      ],
+      "canonical_mechanism_name": "FQSDV2_LADDER_CONFIRM_02",
+      "concentration_result": "81_SESSIONS_20_EXPIRIES",
+      "control_result": "INTRINSICALLY_NEGATIVE_BEFORE_COSTS",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 6010,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+        "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+      },
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "gross_expectancy_points": -0.6344026622296175,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": -1.6344026622296173,
+      "session_count": 81,
+      "source_campaign": "frequency_qualified_structural_discovery_v2",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_SURVIVAL_STANDARD"
+    },
+    {
+      "aliases": [
+        "expiry transition",
+        "expiry-week premium acceleration"
+      ],
+      "canonical_mechanism_name": "FQSDV2_EXPIRY_TRANSITION_03",
+      "concentration_result": "45_SESSIONS_18_EXPIRIES",
+      "control_result": "INTRINSICALLY_NEGATIVE_BEFORE_COSTS",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 2145,
+      "evidence": {
+        "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+        "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+      },
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "gross_expectancy_points": -1.9564568764568762,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": -2.9564568764568757,
+      "session_count": 45,
+      "source_campaign": "frequency_qualified_structural_discovery_v2",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "FAILED_SURVIVAL_STANDARD"
+    },
+    {
+      "aliases": [
+        "previously rejected broad joint candidates",
+        "joint premium state partitions"
+      ],
+      "canonical_mechanism_name": "broad_joint_state_partition_candidates",
+      "concentration_result": "MONTH_CONCENTRATION_GATE_FAILED",
+      "control_result": "NO_CANDIDATE_SURVIVED_ALL_CAUSAL_AND_ECONOMIC_GATES",
+      "data_used": "certified joint NIFTY underlying-option one-minute warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": null,
+      "evidence": {
+        "path": "research/joint_underlying_option_structural_discovery_v1/final_verdict.json",
+        "sha256": "dbd22126c608f834457d5b348f654613fc47d3ddba325aa3dd1fd9a0f76fe7e2"
+      },
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": null,
+      "source_campaign": "joint_underlying_option_structural_discovery_v1",
+      "superseded_status": "CURRENT_FINAL_EVIDENCE",
+      "walk_forward_result": "MAJORITY_POSITIVE_FOLDS_FAILED"
+    },
+    {
+      "aliases": [
+        "old zero-event frozen test",
+        "pre-repair frozen rerun"
+      ],
+      "canonical_mechanism_name": "zero_event_frozen_mechanism_test",
+      "concentration_result": "ZERO_EVENTS",
+      "control_result": "NOT_APPLICABLE",
+      "data_used": "defective pre-repair joint warehouse",
+      "development_period": [
+        "2024-09-26",
+        "2026-02-28"
+      ],
+      "event_count": 0,
+      "evidence": {
+        "path": "research/frozen_joint_mechanisms_v1/effective_sample_size_report.json",
+        "sha256": "c5b0006671f8989afe265b467bef76079219dd4bdc40863f5a3890e801e3f79e"
+      },
+      "final_status": "SUPERSEDED_BY_VALID_RERUN",
+      "gross_expectancy_points": null,
+      "holdout_period": [
+        "2026-03-01",
+        "2026-07-21"
+      ],
+      "net_expectancy_points": null,
+      "session_count": 0,
+      "source_campaign": "frozen_joint_mechanisms_v1",
+      "superseded_status": "MUST_NEVER_BE_CITED_AS_FINAL; REPLACED_BY_REPAIRED_V2",
+      "walk_forward_result": "INVALID_FOR_INFERENCE"
+    }
+  ]
+}

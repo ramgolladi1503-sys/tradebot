@@ -1,0 +1,20 @@
+[
+  {
+    "bytes": 99764888,
+    "contains_contract_inventory": true,
+    "contains_normalized_1m": true,
+    "contains_normalized_5m": true,
+    "member_count": 14613,
+    "path": "/Users/madhuram/tradebot/runtime/upstox-expired-options-v1.zip",
+    "sha256": "66bfe7583e5d47f69e053f2e1c3462b242fbcde77a62e14fe0d448fa1a5e3e2b"
+  },
+  {
+    "bytes": 83282831,
+    "contains_contract_inventory": false,
+    "contains_normalized_1m": true,
+    "contains_normalized_5m": false,
+    "member_count": 10740,
+    "path": "/Users/madhuram/tradebot-ml-evidence/upstox-expired-options-v1.zip",
+    "sha256": "4ece07d0b788d415a79f40c1245030cba361e886473a2e24ac299a1dcbb985d8"
+  }
+]

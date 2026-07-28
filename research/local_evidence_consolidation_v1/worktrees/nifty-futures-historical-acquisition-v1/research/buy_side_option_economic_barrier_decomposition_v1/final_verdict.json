@@ -1,0 +1,9 @@
+{
+  "algotest_used": false,
+  "broker_api_called": false,
+  "exact_next_action": "Stop current BUY-only search space.",
+  "final_campaign_verdict": "CURRENT_BUY_SIDE_SEARCH_SPACE_EXHAUSTED",
+  "new_mechanisms_generated": false,
+  "production_modified": false,
+  "thresholds_tuned": false
+}

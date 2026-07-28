@@ -1,0 +1,43 @@
+{
+  "count": 6,
+  "mechanisms": [
+    {
+      "description": "approach -> close breach -> hold/retest -> continuation attempt",
+      "id": "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL",
+      "semantic_hash": "18276981edd36b055408f85113f54a17380e0504faec4397fd43d1b1532cb32d",
+      "side": "trend"
+    },
+    {
+      "description": "breach beyond level -> re-entry/reclaim -> opposite-side option response",
+      "id": "M2_FAILED_AUCTION_RECLAIM",
+      "semantic_hash": "f44cf2797c2eb4203e38f6fcd4074c5d708d98eb4b4524dbf688c3fd211b431a",
+      "side": "reversal"
+    },
+    {
+      "description": "multiple tests -> diminishing rejection -> acceptance -> expansion",
+      "id": "M3_REPEATED_TEST_DEPLETION_PROXY",
+      "semantic_hash": "90e6ac2a8ba61a67b3c3e76b112dc0c1eace5180361d54a269f37aa4b5e8d0f6",
+      "side": "trend"
+    },
+    {
+      "description": "highest close versus highest wick distinction",
+      "id": "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK",
+      "semantic_hash": "92313b30effde8ee561263a7e0b6df5eeb20687e64d35fcd91c2a4dd6f30db5a",
+      "side": "mixed"
+    },
+    {
+      "description": "directional approach -> compression near known level -> boundary decision",
+      "id": "M5_COMPRESSION_NEAR_BOUNDARY",
+      "semantic_hash": "f3d72058b05974fbd3c0004ff702f317da89bcf15722162da6544b355d468c17",
+      "side": "decision"
+    },
+    {
+      "description": "option confirmation/non-confirmation overlay on level interaction",
+      "id": "M6_OPTION_CONFIRMATION_NON_CONFIRMATION",
+      "semantic_hash": "07e4ce6ff02674a3180a5282aeb27ef16e21406eb14b0d58f719c98aeddc542e",
+      "side": "overlay"
+    }
+  ],
+  "no_extra_mechanisms": true,
+  "semantic_hash": "063d7db3ea819ca2ee303a479158593d2a382579de409758885856d37f7c29dd"
+}

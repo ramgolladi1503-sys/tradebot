@@ -1,0 +1,14 @@
+{
+  "branch": "research/frozen-joint-mechanisms-v1",
+  "clean_status": "?? research/frozen_joint_mechanisms_v1/\n?? scripts/audit_frozen_joint_mechanisms_v1.py\n?? scripts/run_frozen_joint_mechanisms_v1.py\n?? tests/research/test_frozen_joint_mechanisms_v1.py",
+  "current_commit": "7a83c6f7d9c5df2eaee68dc906f03866fd49d3a6",
+  "relevant_prior_artifact_hashes": {
+    "candidate_space_coverage_map_hash": "db1996deb8f4e49cc51990c48dbf80103a7bf525bc328a4a03a08f1daa36675c",
+    "decomposition_report_hash": "59e587d1e2c55c387830c7b9eedf5ce6cd5625589619a980a6101cc41d78ec6b",
+    "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+    "trusted_joint_warehouse_file_hash": "4b804e196f3ae18fa79a4228f822177cde6476541278eda596525b0cffec11f3",
+    "trusted_joint_warehouse_semantic_hash": "48ae9f351b6ca0f0f1a970ae8a10c863be90d5c127d841b29193a3e71d8cd954"
+  },
+  "source_commit": "7a83c6f7d9c5df2eaee68dc906f03866fd49d3a6",
+  "worktree": "/Users/madhuram/tradebot-frozen-joint-mechanisms-v1"
+}

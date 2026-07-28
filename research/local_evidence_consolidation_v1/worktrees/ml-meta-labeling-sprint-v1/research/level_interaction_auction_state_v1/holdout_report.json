@@ -1,0 +1,78 @@
+{
+  "mechanisms": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "expiries": 24,
+      "max_expiry_share": 0.0971563981042654,
+      "max_month_share": 0.2559241706161137,
+      "net_expectancy": -62.52834123222748,
+      "profit_factor": 0.5703111540143815,
+      "sessions": 82,
+      "top5_removed_expectancy": -97.48611510791369,
+      "trades": 422,
+      "underlying_mean_directional_ret_5": -4.0250170762728186e-05,
+      "win_rate": 0.4028436018957346
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "expiries": 13,
+      "max_expiry_share": 0.1650485436893204,
+      "max_month_share": 0.30097087378640774,
+      "net_expectancy": -72.84902912621362,
+      "profit_factor": 0.3583229999572411,
+      "sessions": 30,
+      "top5_removed_expectancy": -106.9811224489796,
+      "trades": 103,
+      "underlying_mean_directional_ret_5": 0.00011766237286151324,
+      "win_rate": 0.42718446601941745
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "expiries": 25,
+      "max_expiry_share": 0.0550051247010591,
+      "max_month_share": 0.19883840109326956,
+      "net_expectancy": -74.31328664161256,
+      "profit_factor": 0.5193901762255988,
+      "sessions": 115,
+      "top5_removed_expectancy": -81.35405201916495,
+      "trades": 2927,
+      "underlying_mean_directional_ret_5": -2.307640976673175e-05,
+      "win_rate": 0.3928937478647079
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "expiries": 25,
+      "max_expiry_share": 0.054848371396480716,
+      "max_month_share": 0.19299887682515912,
+      "net_expectancy": -89.19950205915387,
+      "profit_factor": 0.43209843819953614,
+      "sessions": 115,
+      "top5_removed_expectancy": -93.06825744800446,
+      "trades": 5342,
+      "underlying_mean_directional_ret_5": 2.5084159409992e-05,
+      "win_rate": 0.3858105578435043
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "expiries": 25,
+      "max_expiry_share": 0.09283625730994152,
+      "max_month_share": 0.25511695906432746,
+      "net_expectancy": -136.7648538011696,
+      "profit_factor": 0.31567654504700465,
+      "sessions": 98,
+      "top5_removed_expectancy": -152.07143800440207,
+      "trades": 1368,
+      "underlying_mean_directional_ret_5": -2.4958201765384887e-05,
+      "win_rate": 0.3567251461988304
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "expiries": 24,
+      "max_expiry_share": 0.09001636661211129,
+      "max_month_share": 0.21685761047463176,
+      "net_expectancy": -73.99344517184943,
+      "profit_factor": 0.40176104049394085,
+      "sessions": 89,
+      "top5_removed_expectancy": -89.29337715694331,
+      "trades": 1222,
+      "underlying_mean_directional_ret_5": -5.421509076053294e-05,
+      "win_rate": 0.4157119476268412
+    }
+  },
+  "semantic_hash": "7de15993a0dedf902430e14739b18f171054f7d9c64a0e2bc164c55a270a33ee",
+  "status": "RUN"
+}

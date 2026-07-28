@@ -1,0 +1,159 @@
+{
+  "bootstrap_ci": {
+    "ci95_high": 11.523869047619044,
+    "ci95_low": 0.3617857142857168,
+    "rounds": 5000
+  },
+  "ce_pe_counts": {
+    "CE": 11,
+    "PE": 10
+  },
+  "cluster_bootstrap_ci_by_expiry": {
+    "ci95_high": 14.71875,
+    "ci95_low": -6.716729910714283,
+    "cluster": "expiry",
+    "clusters": 6,
+    "rounds": 5000
+  },
+  "cluster_bootstrap_ci_by_session": {
+    "ci95_high": 14.963096590909085,
+    "ci95_low": -5.791709558823528,
+    "cluster": "session_date",
+    "clusters": 8,
+    "rounds": 5000
+  },
+  "clustered_effective_sample_size_by_expiry": {
+    "cluster": "expiry",
+    "cluster_count": 6,
+    "cluster_mean_ci": {
+      "ci95_high": 13.764977534689603,
+      "ci95_low": -6.671644201356266,
+      "mean": 3.546666666666669,
+      "n": 6,
+      "std": 12.770228397853085
+    },
+    "raw_trade_count": 21
+  },
+  "clustered_effective_sample_size_by_session": {
+    "cluster": "session_date",
+    "cluster_count": 8,
+    "cluster_mean_ci": {
+      "ci95_high": 14.293571068091998,
+      "ci95_low": -3.623987734758659,
+      "mean": 5.3347916666666695,
+      "n": 8,
+      "std": 12.928191154902468
+    },
+    "raw_trade_count": 21
+  },
+  "dte_distribution": {
+    "0": 8,
+    "1": 7,
+    "4": 6
+  },
+  "expiry_level_expectancy": [
+    {
+      "expiry": "2026-03-10",
+      "net_points": -12.166666666666666
+    },
+    {
+      "expiry": "2026-04-21",
+      "net_points": -7.5
+    },
+    {
+      "expiry": "2026-05-05",
+      "net_points": 20.033333333333335
+    },
+    {
+      "expiry": "2026-05-12",
+      "net_points": -2.666666666666663
+    },
+    {
+      "expiry": "2026-06-16",
+      "net_points": 12.050000000000004
+    },
+    {
+      "expiry": "2026-07-14",
+      "net_points": 11.530000000000001
+    }
+  ],
+  "month_distribution": {
+    "2026-03": 3,
+    "2026-04": 3,
+    "2026-05": 9,
+    "2026-06": 1,
+    "2026-07": 5
+  },
+  "raw_trades": 21,
+  "session_level_expectancy": [
+    {
+      "net_points": -12.166666666666666,
+      "session_date": "2026-03-10"
+    },
+    {
+      "net_points": -7.5,
+      "session_date": "2026-04-21"
+    },
+    {
+      "net_points": 20.740000000000002,
+      "session_date": "2026-05-04"
+    },
+    {
+      "net_points": 16.5,
+      "session_date": "2026-05-05"
+    },
+    {
+      "net_points": -9.525,
+      "session_date": "2026-05-11"
+    },
+    {
+      "net_points": 11.050000000000011,
+      "session_date": "2026-05-12"
+    },
+    {
+      "net_points": 12.050000000000004,
+      "session_date": "2026-06-12"
+    },
+    {
+      "net_points": 11.530000000000001,
+      "session_date": "2026-07-10"
+    }
+  ],
+  "time_of_day_distribution": {
+    "9": 12,
+    "12": 6,
+    "14": 3
+  },
+  "top_trade_removal": {
+    "remove_top_1": {
+      "ci95_high": 10.496628127690487,
+      "ci95_low": -0.9466281276904862,
+      "mean": 4.775,
+      "n": 20,
+      "std": 13.055050444378342
+    },
+    "remove_top_2": {
+      "ci95_high": 9.452734965693057,
+      "ci95_low": -1.8895770709562139,
+      "mean": 3.781578947368422,
+      "n": 19,
+      "std": 12.612242845372242
+    },
+    "remove_top_3": {
+      "ci95_high": 8.507243875878771,
+      "ci95_low": -2.8294660981009896,
+      "mean": 2.8388888888888903,
+      "n": 18,
+      "std": 12.269792600427945
+    },
+    "remove_top_5": {
+      "ci95_high": 6.850637942255931,
+      "ci95_low": -4.744387942255928,
+      "mean": 1.0531250000000016,
+      "n": 16,
+      "std": 11.831659065828427
+    }
+  },
+  "unique_expiries": 6,
+  "unique_sessions": 8
+}

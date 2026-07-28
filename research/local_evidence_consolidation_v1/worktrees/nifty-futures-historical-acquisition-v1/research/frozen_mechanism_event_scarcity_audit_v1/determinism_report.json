@@ -1,0 +1,17 @@
+{
+  "semantic_hashes": {
+    "condition_compatibility_matrix": "91d028351292b86a91530dacedc01c39224761f4c7afb092de3f16533be39d80",
+    "development_vs_holdout_support_report": "08d54bd371889d45967b36b65cfe18d2767598b63fbd9b6b07da6e285650c6bf",
+    "eligibility_loss_report": "2afb80785ff7761797fa8a9e42166d62b9e61ac462796503996fcf9ce2441680",
+    "event_funnel_report": "63981dac8edf18742786cd80a40ebb3703317f803ebbc916071def1739908297",
+    "final_verdict": "262ffd15cd2684029992d3fe5b96073051cbba9a93e18eec1e6c04ee67990c99",
+    "independent_audit": "8d5ff8f4b84baa3f736a70ee2cd23ab61cdfb696021c4fec8d6eac82db94c5e7",
+    "independent_detector_results": "0617e41c81f72023fc4e2602a29e6fb4f963bf1fd26ee435690bc78ada9827f5",
+    "per_mechanism_feasibility_classification": "676485d59f29168b3503fedf4d47d390bfa3ce0021f29b5b1ffe38b8ad2f66a0",
+    "pre_change_manifest": "6696b67e2df04777fb97a93a09138d24eb1c201d79748ba2f58758c88b687b3c",
+    "prior_artifact_verification": "ec558dcfd17da575440c046f193740cd4b687ead42801a425d3a6d27b2c7a853",
+    "redesigned_contract_proposals": "0036413b780c83a66e2e84af2d9f0754410aeec60d819686476eb083ab981a3b"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS_BY_STABLE_PAYLOAD_HASH"
+}

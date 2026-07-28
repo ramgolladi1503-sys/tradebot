@@ -1,0 +1,15 @@
+{
+  "evaluation/chronological_folds.json": "49350579e8ceea37727205db88fa64e945437098149d2106f2f957857c42dc0c",
+  "evaluation/concentration.json": "0c27d6c1814bfd14cc27664c0a78a57ac6face80a41cd58c44a99d34c7b403e9",
+  "evaluation/control_summary.json": "7b839d25de6d1b1b51416ce7fb078276cfa71356878c652e3d731816f68fdba6",
+  "evaluation/delay_sensitivity.json": "37687babe42c859ab72031058fdff4323b8561aa903a33ac6ebdfae16e4b0631",
+  "evaluation/delayed_entry_outcomes.parquet": "168b58b490c95f9ac2c316292a77b327ed9bb264aae9ab5475272a4ef02bd9cd",
+  "evaluation/matched_control.parquet": "ea1cbae72f6b9bd7d4bc3435c133bc50a851c1ab25325bd44921e40a6797fdcb",
+  "evaluation/signal_states_unweighted.parquet": "fc9c89f745db15a1235eed1e4dca727a9f7293dc430d8695b79c99ebb3b83ef2",
+  "evaluation/signal_states_weighted.parquet": "b81d791c00e0f8f9f39a3dc293f14e02d46335e9f139ab4f5e560021b12732bc",
+  "evaluation/summary.json": "1f4081df0b81e6ba31b75108d59db991892168dff812efd4272ee15660103279",
+  "evaluation/trade_outcomes_unweighted.parquet": "1444bf44b6ad2436657c9f7188f6af4996105e1688b9759596f753f94364ec11",
+  "evaluation/trade_outcomes_weighted.parquet": "168b58b490c95f9ac2c316292a77b327ed9bb264aae9ab5475272a4ef02bd9cd",
+  "reports/membership_coverage.parquet": "ae6ee393b3afc77064327591973f1ed741829067966f4ce917890ea0523e8d7b",
+  "reports/membership_coverage_summary.json": "7fb7cb196f8230c8994c6e2487946ef4d701cf13fd4f9873e2006deabd40bea3"
+}

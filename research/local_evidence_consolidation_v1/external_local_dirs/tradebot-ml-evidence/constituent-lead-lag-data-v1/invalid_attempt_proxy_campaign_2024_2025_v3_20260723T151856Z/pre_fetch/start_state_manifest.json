@@ -1,0 +1,66 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/constituent-lead-lag-v1",
+  "broker_api_called": false,
+  "created_at_asia_kolkata": "2026-07-23T20:34:08.399853+05:30",
+  "created_at_utc": "2026-07-23T15:04:08.399826+00:00",
+  "inputs": {
+    "instrument_master": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot/.runtime/upstox_instruments.json.gz",
+      "sha256": "1b07e99f4bd4d1951d348ef27c197982320270b9068e6d2d5f1605942b25d15b",
+      "size": 3542284
+    },
+    "proxy_source_manifest": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/download_manifest.json",
+      "sha256": "5eb212dd676be7258baf1aec9fb0dcfd2677bb2a35a092a2e1e5f08c451b5a32",
+      "size": 1169
+    },
+    "raw_weights": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/raw/weights.csv",
+      "sha256": "3a3441a997b64a54363b38ebc02807e82cc0e0affd2efda147d1b7758a0b10cb",
+      "size": 103604
+    },
+    "v2_accepted_manifest": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/accepted_raw_files.json",
+      "sha256": "87f7c772642f5ba68b49f715a980c4713eed59f63685669e1c8a401a89a36088",
+      "size": 1189483
+    },
+    "v2_bars": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+      "sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+      "size": 47788672
+    },
+    "v2_normalized_weights": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/point_in_time_weights_proxy.global_intervals.csv",
+      "sha256": "aa403401627f0fb433026f23531b59d61b07c499b9fe6c9095eb04ca35c2c416",
+      "size": 2487359
+    },
+    "v2_rejected_manifest": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/rejected_raw_files.json",
+      "sha256": "95b7d15a0cc61295c4048ab6d9d0c5744151cb9800bf237c2c0705c383e21163",
+      "size": 511463
+    },
+    "v2_ticker_resolution": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/ticker_resolution.csv",
+      "sha256": "8ec27e7ee74e97e2593f42ba4136c902c62bea660a6d57234caca59aa6643e7c",
+      "size": 268326
+    }
+  },
+  "is_order_action": false,
+  "local_head": "ae6f2b97739883f924cdffc1924476a7fcc74bf4",
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "python": "3.12.2 | packaged by conda-forge | (main, Feb 16 2024, 20:54:21) [Clang 16.0.6 ]",
+  "remote_head": "ae6f2b97739883f924cdffc1924476a7fcc74bf4",
+  "research_only": true,
+  "status_short": "?? audit_v2.py\n?? inventory_ohlcv.py\n?? runtime/strategy_validation/constituent_lead_lag/",
+  "tracked_clean": true,
+  "worktree": "/Users/madhuram/tradebot-constituent-lead-lag-v1"
+}

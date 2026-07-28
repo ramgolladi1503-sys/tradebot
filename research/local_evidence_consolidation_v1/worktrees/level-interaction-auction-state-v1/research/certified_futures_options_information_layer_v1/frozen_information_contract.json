@@ -1,0 +1,35 @@
+{
+  "alignment_tolerance": "exact same minute only",
+  "bar_granularity": "one_minute",
+  "ce_pe_requirements": "both CE and PE required for synchronized response features",
+  "duplicate_handling": "fail closed on duplicate timestamp/instrument rows",
+  "exact_date_range": null,
+  "exact_instruments": {
+    "futures": [],
+    "options": "NIFTY expired option contracts from certified Upstox corpus",
+    "underlying": [
+      "NIFTY"
+    ]
+  },
+  "feature_lineage": "every feature records required inputs and trailing-only lookback",
+  "front_month_selection_rule": "BLOCKED_NO_CERTIFIED_FUTURES_CONTRACTS",
+  "futures_expiry_mapping": "BLOCKED_NO_CERTIFIED_FUTURES_CONTRACTS",
+  "null_handling": "null feature values invalidate research eligibility for dependent rows",
+  "option_expiry_universe": "freeze only after futures contract set exists",
+  "option_strike_universe": "freeze only after futures contract set exists; no future-aware selection",
+  "prohibited_synthetic_operations": [
+    "forward_fill",
+    "interpolation",
+    "synthetic_ohlc",
+    "synthetic_bid_ask",
+    "future_aware_roll_selection",
+    "future_aware_strike_selection",
+    "post_outcome_filtering"
+  ],
+  "rollover_rule": "BLOCKED_NO_CERTIFIED_FUTURES_CONTRACTS",
+  "semantic_hash": "1b638088c7448edd7bf8a87e688c4698a64d97ad57eeb6c4fbb4df09e114cfea",
+  "session_rules": "NSE regular session minute bars only; special sessions require explicit manifest entries.",
+  "sparse_bar_rules": "reuse provider_sparse_bar_governance_v1; no synthetic OHLC",
+  "status": "FROZEN_BUT_BLOCKED",
+  "timestamp_semantics": "provider candle timestamp; no exchange-event chronology without provider proof"
+}

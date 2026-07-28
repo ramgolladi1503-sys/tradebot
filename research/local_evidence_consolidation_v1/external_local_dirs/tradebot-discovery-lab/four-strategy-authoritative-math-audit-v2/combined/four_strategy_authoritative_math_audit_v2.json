@@ -1,0 +1,141 @@
+{
+  "artifact": "four_strategy_authoritative_math_audit_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "baseline_reconciliation": "BASELINE_VERIFIED_CURRENT_ORIGIN_MAIN",
+  "design_decisions_required": [
+    {
+      "decision": "Approve or replace the four-bar trend/pullback/trigger definition and support/resistance anchor ownership.",
+      "strategy": "trend_pullback"
+    },
+    {
+      "decision": "Approve measured compression range versus traded breakout boundary hierarchy and threshold unit semantics.",
+      "strategy": "compression_breakout"
+    },
+    {
+      "decision": "Decide whether VWAP rejection is a real strategy behavior or naming-only legacy.",
+      "strategy": "vwap_reclaim"
+    }
+  ],
+  "lanes": {
+    "compression-breakout": {
+      "artifact": "lane_authoritative_math_audit_v2",
+      "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+      "backtest_performed": "NO",
+      "current_main_summary": "Entry point uses profile gates, session range-width fraction, ATR ratio, optional compression-regime boost, and nearest/ORB/day breakout levels.",
+      "design_ambiguities": [
+        "Strategy spec must approve relationship between measured compression range and traded breakout boundary hierarchy.",
+        "MAX_RANGE_WIDTH_PCT is a fraction threshold per current owner despite pct naming."
+      ],
+      "forward_returns_calculated": "NO",
+      "mathematical_readiness": false,
+      "no_future_returns": true,
+      "objective_defects": [],
+      "parameter_tuning_performed": "NO",
+      "repository_modified": "NO",
+      "source_refs": [
+        "strategies/movement/compression_breakout.py:41",
+        "strategies/movement/compression_breakout.py:186",
+        "core/session_bar_history.py:78",
+        "core/movement_regime.py:222"
+      ],
+      "strategy": "compression_breakout",
+      "verdict": "COMPRESSION_STRATEGY_INTENT_AMBIGUOUS"
+    },
+    "opening-range-retest": {
+      "artifact": "lane_authoritative_math_audit_v2",
+      "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+      "backtest_performed": "NO",
+      "current_main_summary": "Entry point validates completed 1m history, builds OR from first 15 bars, scans breakout then retest then terminal continuation; stale snapshot claim is superseded.",
+      "design_ambiguities": [],
+      "forward_returns_calculated": "NO",
+      "mathematical_readiness": false,
+      "no_future_returns": true,
+      "objective_defects": [
+        "retest_distance_pct is computed from breakout_bar.close rather than retest_bar.close, so the evidence/scoring name does not match the retest event."
+      ],
+      "parameter_tuning_performed": "NO",
+      "repository_modified": "NO",
+      "source_refs": [
+        "strategies/movement/opening_range_breakout.py:91",
+        "strategies/movement/opening_range_breakout.py:119",
+        "strategies/movement/opening_range_breakout.py:355",
+        "strategies/movement/opening_range_breakout.py:405"
+      ],
+      "strategy": "opening_range_retest",
+      "verdict": "ORB_OBJECTIVE_DEFECTS_REQUIRE_REPAIR"
+    },
+    "trend-pullback": {
+      "artifact": "lane_authoritative_math_audit_v2",
+      "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+      "backtest_performed": "NO",
+      "current_main_summary": "Entry point resolves required profile, validates completed history, and applies a four-bar trend/pullback/trigger contract against support or resistance with no VWAP anchor fallback.",
+      "design_ambiguities": [
+        "Approved strategy intent must decide whether the four-bar window is sufficient and whether support/resistance ownership is the final anchor model."
+      ],
+      "forward_returns_calculated": "NO",
+      "mathematical_readiness": false,
+      "no_future_returns": true,
+      "objective_defects": [],
+      "parameter_tuning_performed": "NO",
+      "repository_modified": "NO",
+      "source_refs": [
+        "strategies/movement/trend_pullback.py:82",
+        "strategies/movement/trend_pullback.py:245",
+        "strategies/movement/trend_pullback.py:266",
+        "strategies/movement/trend_pullback.py:351"
+      ],
+      "strategy": "trend_pullback",
+      "verdict": "TREND_PULLBACK_STRATEGY_INTENT_AMBIGUOUS"
+    },
+    "vwap-reclaim": {
+      "artifact": "lane_authoritative_math_audit_v2",
+      "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+      "backtest_performed": "NO",
+      "current_main_summary": "Entry point validates completed history, computes causal VWAP, requires ctx.vwap to match final causal VWAP, and tests establishment/reclaim/hold sequence.",
+      "design_ambiguities": [
+        "Decide whether rejection is in scope; if yes define an explicit rejection predicate, otherwise rename labels/spec."
+      ],
+      "forward_returns_calculated": "NO",
+      "mathematical_readiness": false,
+      "no_future_returns": true,
+      "objective_defects": [
+        "Candidate labels say reclaim_or_rejection, but source contains no distinct rejection predicate beyond bullish/bearish reclaim/cross sequence."
+      ],
+      "parameter_tuning_performed": "NO",
+      "repository_modified": "NO",
+      "source_refs": [
+        "strategies/movement/vwap_reclaim.py:88",
+        "strategies/movement/vwap_reclaim.py:246",
+        "strategies/movement/vwap_reclaim.py:279",
+        "strategies/movement/vwap_reclaim.py:405"
+      ],
+      "strategy": "vwap_reclaim",
+      "verdict": "VWAP_RECLAIM_OBJECTIVE_DEFECTS_REQUIRE_REPAIR"
+    }
+  },
+  "objective_repairs_required": [
+    {
+      "production_change_made": false,
+      "repair": "Compute retest_distance_pct from retest_bar.close against retest_level, or rename the field if the intended value is breakout-bar boundary distance.",
+      "severity": "OBJECTIVE_DEFECT",
+      "strategy": "opening_range_retest"
+    },
+    {
+      "production_change_made": false,
+      "repair": "Either add an approved explicit VWAP rejection predicate with tests or remove rejection wording from candidate labels/spec.",
+      "severity": "OBJECTIVE_DEFECT",
+      "strategy": "vwap_reclaim"
+    }
+  ],
+  "overall_verdict": "FOUR_STRATEGY_MATH_AUDIT_V2_COMPLETE_WITH_OBJECTIVE_REPAIRS_AND_DESIGN_DECISIONS",
+  "previous_audit_baseline_verdict": "BASELINE_UNPROVEN",
+  "safety": {
+    "ARCHITECTURE_ADDED": "NO",
+    "BACKTEST_PERFORMED": "NO",
+    "FORWARD_RETURNS_CALCULATED": "NO",
+    "FULL_CI": "NO",
+    "GIT_OPERATIONS": "FETCH_AND_DETACHED_WORKTREE_ONLY",
+    "PARAMETER_TUNING_PERFORMED": "NO",
+    "REPOSITORY_MODIFIED": "NO"
+  }
+}

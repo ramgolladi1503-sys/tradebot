@@ -1,0 +1,21 @@
+{
+  "checks": {
+    "allowed_final_verdict": true,
+    "certified_rows_fully_true": true,
+    "contract_identity_matches_prior": true,
+    "effective_sample_report_for_two_mechanisms": true,
+    "event_funnels_present_for_two_mechanisms": true,
+    "events_reconstructed_after_repair": true,
+    "exactly_two_contracts": true,
+    "generated_audit_passed": true,
+    "next_bar_execution_costed": true,
+    "no_algotest_without_survivor": true,
+    "no_broker_or_live": true,
+    "no_production_modifications": true,
+    "repaired_manifest_matches_parquet": true,
+    "ret_1_fully_populated": true,
+    "zero_duplicate_repaired_keys": true
+  },
+  "production_touched": [],
+  "status": "PASS"
+}

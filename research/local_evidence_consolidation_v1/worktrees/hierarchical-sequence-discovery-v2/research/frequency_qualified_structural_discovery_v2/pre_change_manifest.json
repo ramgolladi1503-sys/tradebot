@@ -1,0 +1,13 @@
+{
+  "branch": "research/frequency-qualified-structural-discovery-v2",
+  "clean_status": "",
+  "clean_status_note": "Sparse isolated worktree was created from source commit before generated V2 files were added; frozen for deterministic semantic hashes.",
+  "current_commit": "d8fb9c953b9cb45554111f405a3c58e8c6b5d73a",
+  "eligibility_contract_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "prior_rejected_mechanism_manifest_hash": "2087485cf43f9768c5b2dfdc3626cf2f6d3c1841bea07a1e2393558a66c78240",
+  "prior_unresolved_mechanism_manifest_hash": "c7a4ab194524df3acc32b5009ad5bad2a6763bed44818206ab40e289c074f696",
+  "repaired_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "source_commit": "d8fb9c953b9cb45554111f405a3c58e8c6b5d73a",
+  "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+  "worktree": "/Users/madhuram/tradebot-frequency-qualified-discovery-v2"
+}

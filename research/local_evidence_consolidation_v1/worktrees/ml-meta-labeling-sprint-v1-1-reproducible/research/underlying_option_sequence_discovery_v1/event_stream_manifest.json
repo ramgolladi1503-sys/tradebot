@@ -1,0 +1,22 @@
+{
+  "event_frequency": {
+    "call_elasticity_collapse": 3049,
+    "call_elasticity_expansion": 3208,
+    "call_non_confirmation": 1078,
+    "compression": 28587,
+    "cross_strike_dispersion": 3343,
+    "expiry_day": 5795,
+    "expiry_week": 21555,
+    "opening_displacement": 939,
+    "put_elasticity_collapse": 1839,
+    "put_elasticity_expansion": 1650,
+    "put_non_confirmation": 438,
+    "underlying_above_vwap_extension": 454,
+    "underlying_below_vwap_extension": 534,
+    "volatility_expansion": 711
+  },
+  "path": "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/underlying_option_sequence_discovery_v1/event_stream.csv",
+  "row_count": 73180,
+  "semantic_hash": "a15878da218b92b57984de7d7e384c074ac4a8adf120d277de30eb2e13fa832a",
+  "session_count": 382
+}

@@ -1,0 +1,18 @@
+{
+  "semantic_hashes": {
+    "clustered_power_analysis": "cf8b0cd9d9f0b3bf5c9f8d4e23a6698a70118d795c46a006f2fdd475f29a08b4",
+    "contract_identity_proof": "ab601545b9f381c090ea474e1397e773630c126021119d026c8098561db46d2f",
+    "effective_sample_size_report": "2d0eb997d7713307d2176974fcc0ffaca115ddee2aab0ec2695bdf8d58db4ac0",
+    "exhaustive_local_data_inventory": "2eb4c4ce70c5d28612e4358920d047b9d4a48a873bfc53f5c9b52b4d91b749eb",
+    "final_verdict": "2231e1d6dd7f2274abceba5ec272ba7bbe948aaa9a1b9b71f70732075d2a2abf",
+    "frozen_future_decision_rule": "8a12cf8b60a6223e14229b0de95aac3d7a422e8b8429f77eb996e80a754cb82e",
+    "independent_audit": "eedaf006b9331a2adba7579e25e76f624fd73627561700c5a863020eb5f47cbd",
+    "pre_change_manifest": "9b38f22fa769fe2030df9030d22a5b66c746df37394475363a5fbcc23a934373",
+    "prior_result_verification": "a66cf5601e8db8f55b0229f7ee107bfe3bd2415e3eefc468f52a3036e856a375",
+    "prospective_chronological_expansion_plan": "a954196686c25e2af3d351314e1fad1398796c3f5f1ee35b0f722a9ddf85c516",
+    "provider_feasibility_report": "0bdf1ae4f7648935f9af9f10798aaadc7482a160b8cea81b45ff8c25f6957014",
+    "required_additional_evidence_table": "94c98d5f792a9c117cc8a86444a9f443cbce929b691a25557e50def59370b0a5",
+    "shrinkage_scenario_analysis": "94c98d5f792a9c117cc8a86444a9f443cbce929b691a25557e50def59370b0a5"
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-21T23:45:00Z",
+  "code_commit_sha": "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01",
+  "input_hashes": {},
+  "deterministic_seeds": [],
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "forensic_verdict": "FRESH_CONFIRMATION_OUTCOMES_CONSUMED",
+  "findings": {
+    "labels_generated": true,
+    "outcomes_loaded": true,
+    "used_for_rejection": true,
+    "serialized_logged": true,
+    "freeze_completed_before_access": false,
+    "acknowledgement_required": false,
+    "one_time_token_consumed": false,
+    "repeat_evaluation_possible": true,
+    "long_and_short_inspected": true,
+    "dates_accessed": [
+      "2026-07-11 to present (e.g. 2026-07-21)"
+    ]
+  },
+  "manifest_status": "CONSUMED_AND_INVALID_FOR_FUTURE_CONFIRMATION",
+  "future_requirement": "NEED_NEW_FRESH_CONFIRMATION_DATA"
+}

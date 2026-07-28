@@ -1,0 +1,10 @@
+{
+  "development_only": true,
+  "methods_required": [
+    "frequent_sequence_mining",
+    "change_point_segmentation",
+    "state_clustering"
+  ],
+  "semantic_hash": "a5a2a64bb30bd95272ec8b98511e54389b8f25159579ec6e0ad4f9a243481fcc",
+  "status": "NOT_RUN"
+}

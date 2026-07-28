@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/joint-discovery-failure-decomposition-v1",
+  "broker_api_called": false,
+  "current_commit": "37b49f85bb9d3f7791816289ccebfb063702b3a0",
+  "exact_next_action": "Freeze and test only the READY_FOR_FROZEN_TEST redesigned mechanisms in a new preregistered campaign; do not tune the failed four candidates.",
+  "final_verdict": "NEW_MECHANISMS_JUSTIFIED",
+  "is_order_action": false,
+  "prior_source_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "read_only": true,
+  "source_commit": "37b49f85bb9d3f7791816289ccebfb063702b3a0",
+  "worktree": "/Users/madhuram/tradebot-joint-failure-decomposition-v1"
+}

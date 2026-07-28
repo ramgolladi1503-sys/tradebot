@@ -1,0 +1,215 @@
+{
+  "capability_matrix": {
+    "A_SOURCE_INTEGRITY": {
+      "blockers": [],
+      "can_run": true,
+      "classification": "SOURCE_INTEGRITY_REPAIRED"
+    },
+    "B_CAUSAL_STRUCTURAL_DISCOVERY": {
+      "blockers": [],
+      "can_run": true,
+      "classification": "STRUCTURAL_DISCOVERY_ONLY"
+    },
+    "C_GROSS_OUTCOME_EVALUATION": {
+      "blockers": [],
+      "can_run": true,
+      "classification": "GROSS_OUTCOME_ONLY"
+    },
+    "D_ASSUMPTION_COST_STRESS": {
+      "blockers": [],
+      "can_run": true,
+      "classification": "ASSUMPTION_BASED_COST_STRESS_ONLY"
+    },
+    "E_EXECUTION_CERTIFICATION": {
+      "blockers": [
+        "AUTHORITATIVE_QUOTE_OR_SPREAD_MISSING"
+      ],
+      "can_run": false,
+      "classification": "EXECUTION_CERTIFICATION"
+    },
+    "F_FINAL_VALIDATED_EDGE": {
+      "blockers": [
+        "AUTHORITATIVE_QUOTE_OR_SPREAD_MISSING",
+        "FROZEN_MECHANISM_MISSING",
+        "UNTOUCHED_HOLDOUT_NOT_EXECUTED",
+        "INDEPENDENT_FINAL_AUDIT_NOT_EXECUTED"
+      ],
+      "can_run": false,
+      "classification": "VALIDATED_OPTION_EXPANSION_EDGE"
+    }
+  },
+  "created_at": "2026-07-28T16:12:37.520399+00:00",
+  "data_inventory": {
+    "atm_selection_ledger": {
+      "columns": [
+        "expiry",
+        "selection_timestamp",
+        "underlying_price",
+        "strike_interval",
+        "available_strike_grid_hash",
+        "atm_strike",
+        "selected_strikes",
+        "option_types",
+        "tie_break_rule",
+        "underlying_source_path",
+        "underlying_source_hash",
+        "selection_policy_version"
+      ],
+      "exists": true,
+      "file_kind": "atm_selection_ledger",
+      "first_bytes_hex": "5041523115041594121584074c15a601",
+      "first_timestamp": "2024-09-27 09:15:00+05:30",
+      "is_lfs_pointer": false,
+      "last_timestamp": "2026-07-15 09:15:00+05:30",
+      "path": "/Users/madhuram/tradebot/runtime/upstox-expired-options-v1/manifests/atm_selection_ledger.parquet",
+      "row_count": 83,
+      "schema_fingerprint": "8a0de1355fa1e6e1cce5150099b7e56963c201820ae82ac77dceae7ac11337aa",
+      "sha256": "84deba49afe9363b31f779bd7ae09e61c97444e4c26b597dc74df9862cdbe3b6",
+      "size_bytes": 12030
+    },
+    "contract_inventory": {
+      "columns": [
+        "underlying",
+        "underlying_key",
+        "expiry",
+        "strike",
+        "option_type",
+        "trading_symbol",
+        "expired_instrument_key",
+        "exchange_token",
+        "lot_size",
+        "minimum_lot",
+        "weekly",
+        "raw_contract_metadata_path",
+        "raw_contract_metadata_sha256",
+        "raw_candle_path",
+        "raw_candle_sha256",
+        "normalized_1m_path",
+        "normalized_1m_sha256",
+        "normalized_5m_path",
+        "normalized_5m_sha256",
+        "request_from_date",
+        "request_to_date",
+        "one_minute_row_count",
+        "five_minute_row_count",
+        "first_candle",
+        "last_candle",
+        "unique_session_count",
+        "empty_response",
+        "quarantined_row_count",
+        "final_status",
+        "status_reason"
+      ],
+      "exists": true,
+      "file_kind": "contract_inventory",
+      "first_bytes_hex": "504152311504151215164c1502150012",
+      "first_timestamp": null,
+      "is_lfs_pointer": false,
+      "last_timestamp": null,
+      "path": "/Users/madhuram/tradebot/runtime/upstox-expired-options-v1/manifests/contract_inventory.parquet",
+      "row_count": 1315,
+      "schema_fingerprint": "0a773e051e5d6072fb564edea09b659ecc42e4e8f40149e25ba532f7c6251454",
+      "sha256": "0c65627990d2ef3aaf59e3cc487381bb3103337caccaf338a80a4fed48c66530",
+      "size_bytes": 340166
+    },
+    "contract_inventory_rows": 1315,
+    "expiries": 82,
+    "first_candle": "2024-09-26 09:15:00+05:30",
+    "has_depth": false,
+    "has_observed_quote_or_spread": false,
+    "has_option_premium_ohlcv": true,
+    "has_real_instrument_identity": true,
+    "has_underlying_observations": true,
+    "has_underlying_provenance_hash": false,
+    "last_candle": "2026-07-21 15:29:00+05:30",
+    "lfs_candidate_files": [
+      {
+        "columns": [
+          "local_ts",
+          "exchange_timestamp",
+          "symbol",
+          "instrument_token",
+          "last_price",
+          "best_bid",
+          "best_ask",
+          "volume",
+          "depth_json"
+        ],
+        "exists": true,
+        "file_kind": "lfs_candidate",
+        "first_bytes_hex": "50415231150415f0c42615929e1d4c15",
+        "first_timestamp": null,
+        "is_lfs_pointer": false,
+        "last_timestamp": null,
+        "path": "/Users/madhuram/tradebot-reverse-causal-option-expansion-v1/runtime/strategy_validation/resolved_option_ticks_20260702.parquet",
+        "row_count": 876127,
+        "schema_fingerprint": "08ba2b04602c55874dec35e46e112e50ec97d4d8445b0694fed2e7318791f17d",
+        "sha256": "7ef6dfae7de94a1f52fac97b007259ada769347ff72299e238b6cac43ab54508",
+        "size_bytes": 95829241
+      }
+    ],
+    "one_minute_rows": 1998358,
+    "option_schema_fingerprint": "a29c4610f163c93892fb7d5da5b42b3eb669c553c34f99039c2e16306381f6aa",
+    "option_types": [
+      "CE",
+      "PE"
+    ],
+    "source_hash": "8b0fc1ad8d02ff0a3c6842b00360c48a370cf2fe56bb75f66cc7ac2d13774abc",
+    "source_root": "/Users/madhuram/tradebot/runtime/upstox-expired-options-v1",
+    "source_root_exists": true,
+    "underlying_source": {
+      "columns": [
+        "timestamp",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "oi",
+        "session",
+        "symbol",
+        "data_origin",
+        "synthetic",
+        "mock",
+        "fallback",
+        "provider",
+        "source_endpoint"
+      ],
+      "exists": true,
+      "file_kind": "underlying_source",
+      "first_bytes_hex": "5041523115041590dd2915b0b5254c15",
+      "first_timestamp": "2024-01-01 09:15:00+05:30",
+      "is_lfs_pointer": false,
+      "last_timestamp": "2026-07-22 15:25:00+05:30",
+      "path": "/Users/madhuram/tradebot/runtime/indices/aggregated_bars.parquet",
+      "row_count": 3546483,
+      "schema_fingerprint": "9c82ff9ad5fb820e5f3d43477c14feb1dcc46773c23ec7e637328ede0abc6dc7",
+      "sha256": "d31102b506175d3d585376577bfda84ebbdb055860a9f4f6b56f0fd266615367",
+      "size_bytes": 64263593
+    },
+    "valid_contract_rows": 1199
+  },
+  "discovery_summary": {
+    "accepted_precursors": 0,
+    "event_universe_rows": 1997159,
+    "events_with_at_least_one_control": 59507,
+    "independent_event_clusters": 11261,
+    "matched_control_rows": 178521,
+    "near_miss_rows": 100983,
+    "raw_event_rows": 60392
+  },
+  "execution_certification": "BLOCKED_AUTHORITATIVE_QUOTE_OR_SPREAD_MISSING",
+  "frozen_mechanisms": [],
+  "holdout_status": "NOT_OPENED_NO_FROZEN_MECHANISM",
+  "mission": "reverse_causal_option_expansion_discovery_v1",
+  "non_action_flags": {
+    "allowed_for_live_execution": false,
+    "append": false,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "read_only": true,
+    "research_only": true
+  },
+  "principal_verdict": "NO_DISCRIMINATIVE_PRECURSOR",
+  "repo_head": "ebf0c59dcc8fa8d9bb57572c5331282dd89e473b"
+}

@@ -1,0 +1,39 @@
+{
+  "candidate_count": 0,
+  "cost_hurdle_contract": {
+    "ABSOLUTE_EXPANSION": {
+      "column": "absolute_30m_move_bps",
+      "direction_semantics": "directionless absolute move over frozen 20 bps hurdle",
+      "hurdle_bps": 20.0,
+      "multiplier": 1.0
+    },
+    "CONTINUATION": {
+      "column": "continuation_30m_return_bps",
+      "direction_semantics": "follow cutoff direction",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    },
+    "RAW_LONG": {
+      "column": "raw_30m_return_bps",
+      "direction_semantics": "fixed long",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    },
+    "RAW_SHORT": {
+      "column": "raw_30m_return_bps",
+      "direction_semantics": "fixed short, raw return sign inverted",
+      "hurdle_bps": 5.0,
+      "multiplier": -1.0
+    },
+    "REVERSAL": {
+      "column": "reversal_30m_return_bps",
+      "direction_semantics": "against cutoff direction",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    }
+  },
+  "discovery_last_session": "2026-02-10",
+  "entry": "interval_start == cutoff",
+  "horizon_minutes": 30,
+  "validation_first_session": "2026-02-11"
+}

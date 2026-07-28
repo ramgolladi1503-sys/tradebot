@@ -1,0 +1,16 @@
+{
+  "defect_reason": "",
+  "imports_main_detector": false,
+  "mechanism_final_events": {
+    "delayed_option_convexity_after_underlying_confirmation": {
+      "development": 0,
+      "holdout": 0
+    },
+    "premium_compression_release_with_underlying_state_filter": {
+      "development": 0,
+      "holdout": 0
+    }
+  },
+  "prior_test_defective": false,
+  "status": "PASS"
+}

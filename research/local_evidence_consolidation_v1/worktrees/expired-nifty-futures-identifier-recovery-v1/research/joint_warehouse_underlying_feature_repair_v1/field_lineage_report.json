@@ -1,0 +1,612 @@
+{
+  "fields": [
+    {
+      "current_joint_non_null_count": 0,
+      "field": "ret_1",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "ret_1",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "ret_1",
+      "post_merge_column_name": "ret_1__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164304,
+      "source_unique_count": 163120
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "ret_5",
+      "final_non_null_count": 386987,
+      "final_output_column_name": "ret_5",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "ret_5",
+      "post_merge_column_name": "ret_5__underlying_canonical",
+      "post_merge_non_null_count": 386987,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 162540,
+      "source_unique_count": 161995
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "momentum_15",
+      "final_non_null_count": 376859,
+      "final_output_column_name": "momentum_15",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "momentum_15",
+      "post_merge_column_name": "momentum_15__underlying_canonical",
+      "post_merge_non_null_count": 376859,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 158130,
+      "source_unique_count": 157835
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "acceleration",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "acceleration",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "acceleration",
+      "post_merge_column_name": "acceleration__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 163863,
+      "source_unique_count": 163862
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "true_range",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "true_range",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "true_range",
+      "post_merge_column_name": "true_range__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2020
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "atr_14",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "atr_14",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "atr_14",
+      "post_merge_column_name": "atr_14__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 36050
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "vwap_distance",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "vwap_distance",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "vwap_distance",
+      "post_merge_column_name": "vwap_distance__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 164745
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "dist_session_high",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "dist_session_high",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "dist_session_high",
+      "post_merge_column_name": "dist_session_high__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 153922
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "dist_session_low",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "dist_session_low",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "dist_session_low",
+      "post_merge_column_name": "dist_session_low__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 153780
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "close_location",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "close_location",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "close_location",
+      "post_merge_column_name": "close_location__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 155645
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "directional_persistence",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "directional_persistence",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "directional_persistence",
+      "post_merge_column_name": "directional_persistence__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 6
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "higher_high_state",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "higher_high_state",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "higher_high_state",
+      "post_merge_column_name": "higher_high_state__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "bool",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "lower_low_state",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "lower_low_state",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "lower_low_state",
+      "post_merge_column_name": "lower_low_state__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "bool",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "slope_15",
+      "final_non_null_count": 376859,
+      "final_output_column_name": "slope_15",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "slope_15",
+      "post_merge_column_name": "slope_15__underlying_canonical",
+      "post_merge_non_null_count": 376859,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 158130,
+      "source_unique_count": 7648
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "trend_strength_proxy",
+      "final_non_null_count": 376859,
+      "final_output_column_name": "trend_strength_proxy",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "trend_strength_proxy",
+      "post_merge_column_name": "trend_strength_proxy__underlying_canonical",
+      "post_merge_non_null_count": 376859,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 158130,
+      "source_unique_count": 156949
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "continuation_count",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "continuation_count",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "continuation_count",
+      "post_merge_column_name": "continuation_count__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "int64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 16
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "rolling_range_15",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "rolling_range_15",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "rolling_range_15",
+      "post_merge_column_name": "rolling_range_15__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 5054
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "volatility_compression",
+      "final_non_null_count": 381935,
+      "final_output_column_name": "volatility_compression",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "volatility_compression",
+      "post_merge_column_name": "volatility_compression__underlying_canonical",
+      "post_merge_non_null_count": 381935,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 158571,
+      "source_unique_count": 158141
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "expansion_ratio",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "expansion_ratio",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "expansion_ratio",
+      "post_merge_column_name": "expansion_ratio__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 162052
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "body_expansion",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "body_expansion",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "body_expansion",
+      "post_merge_column_name": "body_expansion__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 160118
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "inside_bar",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "inside_bar",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "inside_bar",
+      "post_merge_column_name": "inside_bar__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "bool",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "outside_bar",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "outside_bar",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "outside_bar",
+      "post_merge_column_name": "outside_bar__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "bool",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "gap_state",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "gap_state",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "gap_state",
+      "post_merge_column_name": "gap_state__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "object",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 3
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "opening_range_state",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "opening_range_state",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "opening_range_state",
+      "post_merge_column_name": "opening_range_state__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "object",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "vwap_cross_reclaim",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "vwap_cross_reclaim",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "vwap_cross_reclaim",
+      "post_merge_column_name": "vwap_cross_reclaim__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "bool",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "breakout_failed_state",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "breakout_failed_state",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "breakout_failed_state",
+      "post_merge_column_name": "breakout_failed_state__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "object",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 1
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "pullback_count",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "pullback_count",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "pullback_count",
+      "post_merge_column_name": "pullback_count__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 21
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "rejection_acceptance_proxy",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "rejection_acceptance_proxy",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "rejection_acceptance_proxy",
+      "post_merge_column_name": "rejection_acceptance_proxy__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 155645
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "volatility_transition",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "volatility_transition",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "volatility_transition",
+      "post_merge_column_name": "volatility_transition__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "object",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 2
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "session_progress",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "session_progress",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "session_progress",
+      "post_merge_column_name": "session_progress__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "float64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 375
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "time_since_open",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "time_since_open",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "time_since_open",
+      "post_merge_column_name": "time_since_open__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "int64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 375
+    },
+    {
+      "current_joint_non_null_count": 0,
+      "field": "minutes_to_close",
+      "final_non_null_count": 392006,
+      "final_output_column_name": "minutes_to_close",
+      "join_key": [
+        "session_date",
+        "event_timestamp/minute"
+      ],
+      "merge_suffix": "no suffix; repaired values selected explicitly from canonical underlying source",
+      "original_source_column_name": "minutes_to_close",
+      "post_merge_column_name": "minutes_to_close__underlying_canonical",
+      "post_merge_non_null_count": 392006,
+      "rename_step": "underlying.timestamp -> event_timestamp",
+      "source_dtype": "int64",
+      "source_file": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+      "source_non_null_count": 164745,
+      "source_unique_count": 375
+    }
+  ]
+}

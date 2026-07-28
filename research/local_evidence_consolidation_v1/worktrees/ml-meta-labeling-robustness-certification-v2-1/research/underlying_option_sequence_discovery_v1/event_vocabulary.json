@@ -1,0 +1,20 @@
+{
+  "definitions_frozen_before_outcomes": true,
+  "events": [
+    "call_elasticity_collapse",
+    "call_elasticity_expansion",
+    "call_non_confirmation",
+    "compression",
+    "cross_strike_dispersion",
+    "expiry_day",
+    "expiry_week",
+    "opening_displacement",
+    "put_elasticity_collapse",
+    "put_elasticity_expansion",
+    "put_non_confirmation",
+    "underlying_above_vwap_extension",
+    "underlying_below_vwap_extension",
+    "volatility_expansion"
+  ],
+  "semantic_hash": "ea87c1d278ca38b08e238c9e4520d4b6900d7c3f20c45cfe66dabca4286de267"
+}

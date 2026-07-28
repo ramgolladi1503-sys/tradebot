@@ -1,0 +1,12 @@
+{
+  "lanes": [
+    "quantile_single",
+    "quantile_interaction_2",
+    "quantile_interaction_3",
+    "shallow_tree_leaf",
+    "sparse_model_nomination",
+    "cluster_state"
+  ],
+  "max_predicates": 3,
+  "minimum_session_support": 30
+}

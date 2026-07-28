@@ -1,0 +1,17 @@
+{
+  "candidate_families": [
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL",
+    "M2_FAILED_AUCTION_RECLAIM",
+    "M3_REPEATED_TEST_DEPLETION_PROXY",
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK",
+    "M5_COMPRESSION_NEAR_BOUNDARY",
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION"
+  ],
+  "instrument_model": "candidate artifact has no selected strike; labels use certified same-expiry same-side option-chain aggregate, not fabricated strike prices",
+  "rows": 12485,
+  "semantic_hash": "b9f72b5c553fbf0e4dfa962776ec569fa88e9758de280bbe338fc60efd3e3001",
+  "sources": {
+    "certified_joint_warehouse": "/Users/madhuram/tradebot-ml-meta-labeling-sprint-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet",
+    "level_interaction_candidates": "/Users/madhuram/tradebot-ml-meta-labeling-sprint-v1/research/level_interaction_auction_state_v1/pre_outcome_signals.csv"
+  }
+}

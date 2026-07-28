@@ -1,0 +1,26 @@
+{
+  "dataset_name": "Historical Nifty 50 Constituent Weights (Rolling 20-Year Window)",
+  "creator": "Sukrit Bera",
+  "source_platform": "Figshare",
+  "source_url": "https://figshare.com/articles/dataset/Historical_Nifty_50_Constituent_Weights_Rolling_20-Year_Window/30217915",
+  "doi": "10.6084/m9.figshare.30217915",
+  "download_timestamp_utc": "2026-07-23T08:05:27.909393+00:00",
+  "version_or_updated_date": "2025-09-26T19:06:30Z",
+  "license": "CC BY-NC-SA 4.0",
+  "raw_files": [
+    "validate.py",
+    "README.md",
+    "weights.csv",
+    "validation_report.txt",
+    "CHANGELOG.md",
+    "LICENSE.txt"
+  ],
+  "sha256_by_file": {
+    "validate.py": "59a0ad27cfe4d008daf0db5bf72b580d13d1df8a777e4670b70aaa5d524fa298",
+    "README.md": "4e948e7332379156daaabeda4f1aeb19ecc9304a72f0582f44f3a0216150a83b",
+    "weights.csv": "3a3441a997b64a54363b38ebc02807e82cc0e0affd2efda147d1b7758a0b10cb",
+    "validation_report.txt": "8c1b59437e4900bbd1744b24837cf9970ea8643cce1f6e86d883df91cae89609",
+    "CHANGELOG.md": "e5384573761b905de373d28301e1308de1639697586ae78707a64ad6675a0560",
+    "LICENSE.txt": "1349a4b6148492b44f629e64eed676612e234fe9a839e4f3b277c1482c8849f1"
+  }
+}

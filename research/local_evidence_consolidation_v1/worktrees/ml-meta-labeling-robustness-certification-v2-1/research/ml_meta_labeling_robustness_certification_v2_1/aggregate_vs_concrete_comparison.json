@@ -1,0 +1,37 @@
+{
+  "aggregate": {
+    "expectancy": 16.5326748015873,
+    "gross_loss": 3135.0192261904745,
+    "gross_profit": 8094.821666666667,
+    "net_pnl": 4959.802440476191,
+    "profit_factor": 2.5820644412771614,
+    "trades": 300,
+    "win_rate": 0.53
+  },
+  "concrete": {
+    "expectancy": -1.097166666666667,
+    "expiries": 16,
+    "gross_loss": 2636.3,
+    "gross_profit": 2307.15,
+    "net_pnl": -329.1500000000001,
+    "profit_factor": 0.875146986306566,
+    "sessions": 38,
+    "trades": 300,
+    "win_rate": 0.38333333333333336
+  },
+  "disagreement_matrix": {
+    "0": {
+      "0": 231,
+      "1": 14
+    },
+    "1": {
+      "0": 8,
+      "1": 47
+    }
+  },
+  "expectancy_difference_concrete_minus_aggregate": -17.629841468253968,
+  "label_agreement_rate": 0.9266666666666666,
+  "pf_difference_concrete_minus_aggregate": null,
+  "pnl_correlation": 0.04384085224840372,
+  "semantic_hash": "6d60525acee4ee856e00c9d61e6bf4604cebaf8ff97c83351cc1d114c01ed103"
+}

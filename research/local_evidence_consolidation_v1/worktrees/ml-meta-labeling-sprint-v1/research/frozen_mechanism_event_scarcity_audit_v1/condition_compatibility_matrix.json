@@ -1,0 +1,258 @@
+{
+  "matrix": [
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.0,
+      "condition_a": "research_eligible",
+      "condition_b": "ret_1_available",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.0,
+      "condition_a": "research_eligible",
+      "condition_b": "same_side_underlying",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 1.0,
+      "condition_a": "research_eligible",
+      "condition_b": "dte_0_14",
+      "conditional_b_given_a": 1.0,
+      "joint_frequency": 0.5834298454615491,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.6284342586593062,
+      "condition_a": "research_eligible",
+      "condition_b": "atm_near_mid",
+      "conditional_b_given_a": 0.9016169088969341,
+      "joint_frequency": 0.5260302138232578,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.7154150701774973,
+      "condition_a": "research_eligible",
+      "condition_b": "premium_ge_5",
+      "conditional_b_given_a": 1.0,
+      "joint_frequency": 0.5834298454615491,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "research_eligible",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.971168476835091,
+      "joint_frequency": 0.5666086743570251,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.5834298454615491,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "research_eligible",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 1.0,
+      "joint_frequency": 0.5834298454615491,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.0,
+      "condition_a": "ret_1_available",
+      "condition_b": "same_side_underlying",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 1.0,
+      "condition_a": "ret_1_available",
+      "condition_b": "dte_0_14",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.6284342586593062,
+      "condition_a": "ret_1_available",
+      "condition_b": "atm_near_mid",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.7154150701774973,
+      "condition_a": "ret_1_available",
+      "condition_b": "premium_ge_5",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "ret_1_available",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "ret_1_available",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 1.0,
+      "condition_a": "same_side_underlying",
+      "condition_b": "dte_0_14",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.6284342586593062,
+      "condition_a": "same_side_underlying",
+      "condition_b": "atm_near_mid",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.7154150701774973,
+      "condition_a": "same_side_underlying",
+      "condition_b": "premium_ge_5",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "same_side_underlying",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 0.0,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "same_side_underlying",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.0,
+      "joint_frequency": 0.0,
+      "mutually_exclusive": true
+    },
+    {
+      "a_frequency": 1.0,
+      "b_frequency": 0.6284342586593062,
+      "condition_a": "dte_0_14",
+      "condition_b": "atm_near_mid",
+      "conditional_b_given_a": 0.6284342586593062,
+      "joint_frequency": 0.6284342586593062,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 1.0,
+      "b_frequency": 0.7154150701774973,
+      "condition_a": "dte_0_14",
+      "condition_b": "premium_ge_5",
+      "conditional_b_given_a": 0.7154150701774973,
+      "joint_frequency": 0.7154150701774973,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 1.0,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "dte_0_14",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.9726483778309516,
+      "joint_frequency": 0.9726483778309516,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 1.0,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "dte_0_14",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.9969439243276889,
+      "joint_frequency": 0.9969439243276889,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.6284342586593062,
+      "b_frequency": 0.7154150701774973,
+      "condition_a": "atm_near_mid",
+      "condition_b": "premium_ge_5",
+      "conditional_b_given_a": 0.9368175360259793,
+      "joint_frequency": 0.5887282337515242,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.6284342586593062,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "atm_near_mid",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.9700426222853663,
+      "joint_frequency": 0.6096080162038336,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.6284342586593062,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "atm_near_mid",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.9975319667140248,
+      "joint_frequency": 0.6268832619908878,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.7154150701774973,
+      "b_frequency": 0.9726483778309516,
+      "condition_a": "premium_ge_5",
+      "condition_b": "valid_option_history",
+      "conditional_b_given_a": 0.9690101873081188,
+      "joint_frequency": 0.6932444911557476,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.7154150701774973,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "premium_ge_5",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.9980424108655112,
+      "joint_frequency": 0.7140145814094683,
+      "mutually_exclusive": false
+    },
+    {
+      "a_frequency": 0.9726483778309516,
+      "b_frequency": 0.9969439243276889,
+      "condition_a": "valid_option_history",
+      "condition_b": "has_next_bar",
+      "conditional_b_given_a": 0.9968894577270486,
+      "joint_frequency": 0.9696229139349908,
+      "mutually_exclusive": false
+    }
+  ],
+  "root_incompatibility": "ret_1_available is mutually exclusive with every underlying-state requirement because ret_1 has no populated observations.",
+  "status": "PASS"
+}

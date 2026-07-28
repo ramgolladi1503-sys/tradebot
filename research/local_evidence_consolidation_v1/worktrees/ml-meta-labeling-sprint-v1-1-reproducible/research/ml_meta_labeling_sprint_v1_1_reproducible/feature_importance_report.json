@@ -1,0 +1,86 @@
+{
+  "importance": [
+    {
+      "feature": "dte",
+      "holdout_pr_auc_drop": 0.008719277122012342
+    },
+    {
+      "feature": "direction",
+      "holdout_pr_auc_drop": 0.0
+    },
+    {
+      "feature": "minute_index",
+      "holdout_pr_auc_drop": 0.012570846110781547
+    },
+    {
+      "feature": "time_since_open",
+      "holdout_pr_auc_drop": 0.0017661983190770114
+    },
+    {
+      "feature": "minutes_to_close",
+      "holdout_pr_auc_drop": 0.0006722496088512331
+    },
+    {
+      "feature": "session_progress",
+      "holdout_pr_auc_drop": 0.0
+    },
+    {
+      "feature": "gap_pct",
+      "holdout_pr_auc_drop": 0.0
+    },
+    {
+      "feature": "ret_1",
+      "holdout_pr_auc_drop": 0.0026738165334106445
+    },
+    {
+      "feature": "ret_5",
+      "holdout_pr_auc_drop": -0.010508368536653184
+    },
+    {
+      "feature": "momentum_15",
+      "holdout_pr_auc_drop": 0.0005606018271321622
+    },
+    {
+      "feature": "acceleration",
+      "holdout_pr_auc_drop": -0.003911079767328157
+    },
+    {
+      "feature": "atr_14",
+      "holdout_pr_auc_drop": 0.013261946112667594
+    },
+    {
+      "feature": "rolling_range_15",
+      "holdout_pr_auc_drop": 0.0008182418514846024
+    },
+    {
+      "feature": "true_range",
+      "holdout_pr_auc_drop": 0.005527206980077498
+    },
+    {
+      "feature": "range",
+      "holdout_pr_auc_drop": 0.0
+    },
+    {
+      "feature": "close_location",
+      "holdout_pr_auc_drop": 0.0013358761754799775
+    },
+    {
+      "feature": "directional_persistence",
+      "holdout_pr_auc_drop": 0.0004567674502553021
+    },
+    {
+      "feature": "slope_15",
+      "holdout_pr_auc_drop": -0.0009790427311323902
+    },
+    {
+      "feature": "trend_strength_proxy",
+      "holdout_pr_auc_drop": -0.0008292481214774439
+    },
+    {
+      "feature": "continuation_count",
+      "holdout_pr_auc_drop": 0.0
+    }
+  ],
+  "method": "bounded_holdout_permutation_for_interpretation_only",
+  "semantic_hash": "bc616def71cc5d047c1eec2650b506d1158e4eeecaa07a44ff24eabd2ca4dd86"
+}

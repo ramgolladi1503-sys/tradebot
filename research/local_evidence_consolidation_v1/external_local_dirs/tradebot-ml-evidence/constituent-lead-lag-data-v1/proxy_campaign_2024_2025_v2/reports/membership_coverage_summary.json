@@ -1,0 +1,10 @@
+{
+  "both_gates_pass_rate": 1.0,
+  "count_coverage_median": 0.96,
+  "count_coverage_min": 0.94,
+  "low_count_coverage_states": 0,
+  "low_weight_coverage_states": 0,
+  "states": 4110,
+  "weight_coverage_median": 0.9712971,
+  "weight_coverage_min": 0.9632108
+}

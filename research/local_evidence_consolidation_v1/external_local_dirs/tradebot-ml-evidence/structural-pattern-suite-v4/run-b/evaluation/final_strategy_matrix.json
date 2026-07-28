@@ -1,0 +1,32 @@
+{
+  "GAP_GO_LEADER_V1": {
+    "Aeron7_30m": "NOT_EVALUABLE_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+    "Combined_folds": "NOT_EVALUABLE_AERON7_EXCLUDED",
+    "Concentration": "TAIL_EVENT_DEPENDENT",
+    "Control_lift": 8.433818983124164,
+    "Delay": 1.2448869797928692,
+    "Final": "KEEP_FOR_PROSPECTIVE_SHADOW_ONLY_IF_AERON7_AND_REAL_CONTROLS_ARE_LATER_PROVEN",
+    "Kite_30m_net5_mean_bps": -0.783090508437918,
+    "Neighbourhood": "CANONICAL_ONLY_FAIL_CLOSED"
+  },
+  "LATE_DAY_PERSISTENCE_V1": {
+    "Aeron7_30m": "NOT_EVALUABLE_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+    "Combined_folds": "NOT_EVALUABLE_AERON7_EXCLUDED",
+    "Concentration": "DIVERSIFIED",
+    "Control_lift": 4.860712876361807,
+    "Delay": -3.9347371714311685,
+    "Final": "REJECT_FROZEN_STRATEGY",
+    "Kite_30m_net5_mean_bps": -2.311621067347136,
+    "Neighbourhood": "CANONICAL_ONLY_FAIL_CLOSED"
+  },
+  "PRIOR_RANGE_LEADER_V1": {
+    "Aeron7_30m": "NOT_EVALUABLE_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+    "Combined_folds": "NOT_EVALUABLE_AERON7_EXCLUDED",
+    "Concentration": "MODERATELY_CONCENTRATED",
+    "Control_lift": 1.5014827668800188,
+    "Delay": -2.709123702889067,
+    "Final": "REJECT_FROZEN_STRATEGY",
+    "Kite_30m_net5_mean_bps": -4.253949518875592,
+    "Neighbourhood": "CANONICAL_ONLY_FAIL_CLOSED"
+  }
+}

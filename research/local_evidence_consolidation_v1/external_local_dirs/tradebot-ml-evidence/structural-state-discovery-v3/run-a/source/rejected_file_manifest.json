@@ -1,0 +1,154 @@
+{
+  "rejected_files": [
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2024-11-01/underlying/BANKNIFTY_2024-11-01.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2024-11-01/underlying/NIFTY_2024-11-01.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2024-11-01/underlying/SENSEX_2024-11-01.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2025-10-21/underlying/BANKNIFTY_2025-10-21.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2025-10-21/underlying/NIFTY_2025-10-21.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "bad_rows": 0,
+      "path": "kite_candidate_replay/2025-10-21/underlying/SENSEX_2025-10-21.parquet",
+      "reason": "insufficient_valid_rows"
+    },
+    {
+      "path": "kite_candidate_replay/20260508/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260515/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260518/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260519/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260522/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260525/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260527/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260529/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260603/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260604/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260605/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260610/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260610/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260611/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260612/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260615/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260615/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260616/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260618/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260618/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260619/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260619/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260622/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260625/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260625/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260629/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260630/options/BANKNIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260630/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260701/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    },
+    {
+      "path": "kite_candidate_replay/20260703/options/NIFTY_OPT_MOCK_ltp.parquet",
+      "reason": "not_underlying_parquet"
+    }
+  ]
+}

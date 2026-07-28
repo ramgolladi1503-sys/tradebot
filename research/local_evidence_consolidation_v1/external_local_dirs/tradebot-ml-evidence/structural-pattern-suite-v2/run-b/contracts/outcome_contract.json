@@ -1,0 +1,14 @@
+{
+  "cost_sensitivity_bps": [
+    2.5,
+    5.0,
+    10.0
+  ],
+  "entry": "next legal open",
+  "horizons": [
+    "15m",
+    "30m",
+    "60m",
+    "close"
+  ]
+}

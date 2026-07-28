@@ -1,0 +1,5 @@
+{
+  "one_bar_delayed_entry": "not recomputed in sprint; label already uses next observable bar and no extra delayed premium path was materialized",
+  "semantic_hash": "8c3d54d6320246ba7eac9c5ad28bb8b75c172b2d13b4b8d3e9da5d99c3d32b2f",
+  "status": "LIMITED"
+}

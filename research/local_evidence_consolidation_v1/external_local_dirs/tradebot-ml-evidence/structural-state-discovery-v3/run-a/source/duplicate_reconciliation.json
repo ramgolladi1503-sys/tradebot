@@ -1,0 +1,6 @@
+{
+  "conflicting_duplicate_files_rejected": [],
+  "duplicate_key_count": 0,
+  "duplicate_keys_enumerated": [],
+  "policy": "collapse only identical OHLC duplicates; reject conflicting duplicate OHLC"
+}

@@ -1,0 +1,6 @@
+{
+  "event_count_only_detector_run": false,
+  "new_events": 0,
+  "reason": "No certified unused option warehouse could be built because Upstox did not return pre-2024-09-26 expired option contracts.",
+  "target_reached": false
+}

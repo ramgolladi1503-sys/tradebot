@@ -1,0 +1,42 @@
+{
+  "classification": "PARTIAL_OOF_CONTINUATION_SCAN",
+  "not_valid_for": [
+    "broad NO_STABLE_STATE_EDGE_FOUND",
+    "reversal-state conclusions",
+    "raw-long or raw-short conclusions",
+    "movement-expansion conclusions",
+    "sparse-model candidate conclusions",
+    "cluster-state candidate conclusions",
+    "recurring cross-fold rule validation",
+    "inner-fold model-selection claims",
+    "negative-control execution claims",
+    "independent mutation-specific detection claims",
+    "production or prospective-shadow decisions"
+  ],
+  "reasons": [
+    "TARGET is globally fixed to continuation_30m_return_bps",
+    "reversal, expansion, raw-long and raw-short outcomes are built but not searched",
+    "inner folds are created but never used for rule/model selection",
+    "every outer-fold rule is treated as a separate hypothesis",
+    "economically equivalent rules are not aggregated across outer folds",
+    "there is no gate requiring recurrence in four of five outer folds",
+    "family and global BH q-values are computed identically over the same full ledger",
+    "sparse models generate predictions but cannot produce or reject candidates",
+    "cluster states generate rows but cannot produce or reject candidates",
+    "the no-edge verdict is driven only by quantile and tree continuation rules",
+    "negative controls are populated from the empty survivor set rather than executed",
+    "mutation tests modify only final_verdict.json with a generic mutation marker",
+    "the oracle detects a generic marker rather than named mutated invariants",
+    "oracle feature reconstruction is limited and does not verify rule membership",
+    "tests do not prove multi-target search, cross-fold aggregation, actual controls, or mutation-specific detection"
+  ],
+  "valid_for": [
+    "Kite source hash verification",
+    "duplicate reconciliation prototype",
+    "repaired causal feature formulas",
+    "legal entry/outcome matrix",
+    "proof that continuation-focused outer-test rules were evaluated",
+    "preliminary OOF continuation screening",
+    "code provenance"
+  ]
+}

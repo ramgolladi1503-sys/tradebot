@@ -1,0 +1,39 @@
+{
+  "closed_lane_proof": {
+    "exists": true,
+    "path": "/Users/madhuram/tradebot-information-rich-structural-edge-v1/research/level_auction_failure_decomposition_v1/final_verdict.json",
+    "sha256": "e47e4df1e3f344d9b6dfc36f517c66f40c32729a06196d0cb29a2e7723eaa9da"
+  },
+  "futures_warehouse": {
+    "exists": true,
+    "path": "/Users/madhuram/tradebot-information-rich-structural-edge-v1/research/nifty_futures_historical_acquisition_v1/normalized/NSE_FO_61093.parquet",
+    "sha256": "8120d53a270ef2d5ebe1e94e800c8cd289df6e4081d7fa019e7c9ca0bd5bd92b"
+  },
+  "joint_warehouse": {
+    "exists": true,
+    "path": "/Users/madhuram/tradebot-information-rich-structural-edge-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet",
+    "sha256": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0"
+  },
+  "live_tick_archive": {
+    "exists": true,
+    "parquet_file_count": 1323,
+    "path": "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox",
+    "reason_not_used": "local live quote/Greek files are not certified as synchronized to the historical joint option-expansion warehouse",
+    "sample_files": [
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783918406.parquet",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783919006.parquet",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783919606.parquet",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783920206.parquet",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783920806.parquet"
+    ],
+    "sample_hashes": {
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783918406.parquet": "aa5a4ace841e2d162e03024ff08c0b4ca076ddea430d2b9f858b6c9abb072e2b",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783919006.parquet": "8e3c2533ba6222fd24d934ad09debc4a0546e05698957c3fee4ce71a9770cd5d",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783919606.parquet": "2c3cdeee35774c0f86d25ad01806a82e31fde51c30915c8dae23c2a645fdc8d3",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783920206.parquet": "665c54a7923bb3de9e2ace017ab564e13ec3bb702cb1a21685687a03ed47bd29",
+      "/Users/madhuram/tradebot-information-rich-structural-edge-v1/runtime/market_data/upstox/20260713/ticks_1783920806.parquet": "6ac2e7a26f0df3589612c4a535a23c4b58449eb47feab01187d6a33afa1a4ced"
+    },
+    "used_for_historical_holdout": false
+  },
+  "semantic_hash": "2d4aae073afc5045d57c0873cad4cb5b80d44b34a82a929b9702dc78a79bfde9"
+}

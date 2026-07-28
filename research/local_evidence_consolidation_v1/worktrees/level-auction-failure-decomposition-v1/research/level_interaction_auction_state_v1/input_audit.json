@@ -1,0 +1,18 @@
+{
+  "classification": "SUPPORTED_REDUCED_CANDLE_DERIVED_AUCTION_STATE_PROXY",
+  "expiries": 82,
+  "joint_rows": 392006,
+  "semantic_hash": "2ca6224296bd709acaf3a593f639fdec30dcaa0126b4dca073325bedc6aadcfb",
+  "sessions": 382,
+  "unsupported_exclusions": [
+    "order-book absorption",
+    "executable spread",
+    "aggressor flow",
+    "queue depletion",
+    "IV surface",
+    "Greeks",
+    "dealer gamma",
+    "futures positioning",
+    "constituent breadth"
+  ]
+}

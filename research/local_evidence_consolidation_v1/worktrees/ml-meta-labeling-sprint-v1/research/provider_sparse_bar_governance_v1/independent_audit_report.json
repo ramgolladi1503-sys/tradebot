@@ -1,0 +1,19 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "changed_paths_from_source": [],
+  "checks": {
+    "exactly_four_provider_authoritative_sparse_bars": true,
+    "gap_aware_5minute_aggregation": true,
+    "gap_aware_feature_calculation": true,
+    "gap_aware_rolling_windows": true,
+    "joint_warehouse_eligibility": true,
+    "no_production_modifications": true,
+    "zero_forward_filling": true,
+    "zero_synthetic_ohlc": true
+  },
+  "is_order_action": false,
+  "production_touched": [],
+  "read_only": true,
+  "status": "PASS"
+}

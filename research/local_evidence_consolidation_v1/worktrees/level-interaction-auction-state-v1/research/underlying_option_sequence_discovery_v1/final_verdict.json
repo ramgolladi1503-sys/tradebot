@@ -1,0 +1,8 @@
+{
+  "exact_next_action": "Do not test P&L on these motifs; either certify richer inputs or explicitly authorize a different pre-outcome motif representation with the same frequency gate.",
+  "final_verdict": "NO_MOTIF_PASSED_FREQUENCY_GATE",
+  "pnl_or_backtest_allowed": false,
+  "reason": "No development-only discovered motif satisfied the mandatory pre-outcome frequency gate, so outcomes, holdout, WFA, controls, robustness, and AlgoTest specs were not run.",
+  "semantic_hash": "2a1f7256d7a62d7b9139d86ea35296f6eeb81338fd4a9a8ebc8e98ac359f7b17",
+  "strategy_discovery_allowed": false
+}

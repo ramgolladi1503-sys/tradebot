@@ -1,0 +1,124 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "campaign_window": {
+    "end": "2025-08-29",
+    "start": "2024-01-01"
+  },
+  "chronological_folds": {
+    "folds": [],
+    "positive_mean_folds": 0,
+    "positive_median_folds": 0
+  },
+  "commercial_use_allowed": false,
+  "completed_regular_sessions": 409,
+  "concentration": {
+    "concentration_spec": "absolute_net_contribution_v1",
+    "result": "NOT_APPLICABLE_ZERO_SIGNALS",
+    "signals": 0
+  },
+  "control_result": {
+    "control_count": 0,
+    "control_spec": "causal_matched_no_lead_v1",
+    "result": "NOT_APPLICABLE_ZERO_SIGNALS",
+    "signal_count": 0
+  },
+  "coverage_summary": {
+    "both_gates_pass_rate": 1.0,
+    "count_coverage_median": 0.96,
+    "count_coverage_min": 0.94,
+    "coverage_contract": "exact_T_Tminus5_Tminus10_v1",
+    "low_count_coverage_states": 0,
+    "low_weight_coverage_states": 0,
+    "state_count_coverage_mismatches": 0,
+    "state_weight_coverage_mismatches": 0,
+    "states": 4090,
+    "weight_coverage_median": 0.9712971,
+    "weight_coverage_min": 0.9632108
+  },
+  "decision_times": [
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "12:30",
+    "13:00",
+    "13:30",
+    "14:00",
+    "14:15"
+  ],
+  "delay_sensitivity": {
+    "delay_spec": "additional_one_bar_delay_v1",
+    "result": "NOT_APPLICABLE_ZERO_SIGNALS",
+    "signal_count": 0
+  },
+  "is_order_action": false,
+  "official_weight_gate_passed": false,
+  "post_warmup_sessions": 389,
+  "pre_outcome_freeze_sha256": "0db3684bed2e3ebede13e0b42cd855529bf8e0fe005cdb2f2f0a99c638dd7a7f",
+  "proxy_final_decision": "NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT",
+  "research_only": true,
+  "state_reason_counts": {
+    "dispersion_too_high": 645,
+    "frozen_entry_conditions_not_met": 8,
+    "index_already_caught_up": 3139,
+    "index_range_already_consumed": 98,
+    "insufficient_lead_gap_history": 200
+  },
+  "state_rows": 4090,
+  "status": "RESEARCH_EVALUATION_COMPLETE",
+  "theoretical_max_state_rows": 4090,
+  "unweighted_outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "chronological_fold_summary": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_mean_bps": 2.5000000000013944,
+          "net_median_bps": 2.5000000000013944,
+          "positive_rate": 1.0,
+          "session_end": "2025-05-30",
+          "session_start": "2025-05-30",
+          "sessions": 1,
+          "signals": 1
+        }
+      ],
+      "positive_mean_folds": 1,
+      "positive_median_folds": 1
+    },
+    "is_order_action": false,
+    "net_mean_bps": 2.5000000000013944,
+    "net_median_bps": 2.5000000000013944,
+    "positive_rate": 1.0,
+    "research_lane": "UNWEIGHTED_CONSTITUENT_BREADTH",
+    "research_only": true,
+    "signals_evaluable": 1,
+    "signals_total": 1
+  },
+  "unweighted_signals": 1,
+  "unweighted_state_reason_counts": {
+    "dispersion_too_high": 631,
+    "frozen_unweighted_entry_conditions_not_met": 48,
+    "index_already_caught_up": 2623,
+    "index_range_already_consumed": 587,
+    "insufficient_lead_gap_history": 200,
+    "unweighted_constituents_lead_index_down": 1
+  },
+  "unweighted_state_rows": 4090,
+  "weighted_outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "net_mean_bps": null,
+    "net_median_bps": null,
+    "positive_rate": null,
+    "research_only": true,
+    "signals_evaluable": 0,
+    "signals_total": 0
+  },
+  "weighted_signals": 0
+}

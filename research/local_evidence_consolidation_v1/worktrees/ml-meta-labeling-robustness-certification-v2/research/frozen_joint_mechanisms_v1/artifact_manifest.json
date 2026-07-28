@@ -1,0 +1,110 @@
+{
+  "artifact_count": 21,
+  "artifacts": [
+    {
+      "bytes": 5150,
+      "path": "ablation_report.json",
+      "sha256": "2363f9dd17ce5ad131dfec5ad015fc2a5717c91fe4ba0bd172255af1b61c21c2"
+    },
+    {
+      "bytes": 46,
+      "path": "algotest_translation_specification.json",
+      "sha256": "7dff1e578e616af4ee8ae4f797a74a36133f6a3dba9cc5ef3420dda2359e18fa"
+    },
+    {
+      "bytes": 235,
+      "path": "concentration_report.json",
+      "sha256": "e37096ec18cfe13e3e82a1321f10f919cb7a10ec2b4dde9156e15124756645c7"
+    },
+    {
+      "bytes": 3577,
+      "path": "control_experiments.json",
+      "sha256": "86761f020154ead80e4cadbf4425753e1152f8820f022969e792990c7189bdcd"
+    },
+    {
+      "bytes": 1869,
+      "path": "determinism_report.json",
+      "sha256": "97c0592d5a877a2701862511afc415fd755a1e410f830a0212369d882eaa3c03"
+    },
+    {
+      "bytes": 7971,
+      "path": "development_only_benchmark_report.json",
+      "sha256": "864da0d376d32c9248c7f83093e1d8630e615e0839dc584c4c902dbba6fff911"
+    },
+    {
+      "bytes": 281,
+      "path": "effective_sample_size_report.json",
+      "sha256": "c5b0006671f8989afe265b467bef76079219dd4bdc40863f5a3890e801e3f79e"
+    },
+    {
+      "bytes": 180,
+      "path": "execution_cost_report.json",
+      "sha256": "18b70a543eaf67905686b4988dd7ea628454a3cfa4665983162b576c9af9fad0"
+    },
+    {
+      "bytes": 580,
+      "path": "final_verdict.json",
+      "sha256": "94c6315aaa7b7934b94ce3f311722288c3213f89f896ae6f9176864d99549a92"
+    },
+    {
+      "bytes": 2837,
+      "path": "frozen_specifications.json",
+      "sha256": "bec965a8dcffae8c69a31793c28fc3f252143a5505e8ddd170b524a751bcd373"
+    },
+    {
+      "bytes": 1141,
+      "path": "holdout_results.json",
+      "sha256": "f95ef1b8b931310502e4f7ef97f505fc27c7cec72274c8dc2b648a668a32f792"
+    },
+    {
+      "bytes": 269,
+      "path": "incremental_option_value_report.json",
+      "sha256": "03425b5b7e210fe781893930fb35f72da10b652a1462147bf3a820f7d3d9c52a"
+    },
+    {
+      "bytes": 478,
+      "path": "independent_audit.json",
+      "sha256": "b2e3f3e85a77d745448a7c1f7fbf31d9e717b594c0b7d64ff6120a01e0f8d78b"
+    },
+    {
+      "bytes": 2837,
+      "path": "mechanism_contracts.json",
+      "sha256": "bec965a8dcffae8c69a31793c28fc3f252143a5505e8ddd170b524a751bcd373"
+    },
+    {
+      "bytes": 23278,
+      "path": "mechanism_results.json",
+      "sha256": "89d23319414c9ac24bb58dd710b4279485933072a325de6185c7f5335a3ebd50"
+    },
+    {
+      "bytes": 1033,
+      "path": "pre_change_manifest.json",
+      "sha256": "b12dc892bb22400972adb18ce4b6f95e89867433d7a22c0644b09f76fb575fe9"
+    },
+    {
+      "bytes": 180,
+      "path": "prior_artifact_verification.json",
+      "sha256": "6149fa96161f1b62f18b91b5de42e3e0b18b84340321883afa3490408d19a502"
+    },
+    {
+      "bytes": 10025,
+      "path": "robustness_report.json",
+      "sha256": "d824dae782cba14bde9482e53192f6b65b999674421858c70dde5db2ffcdd3b3"
+    },
+    {
+      "bytes": 44,
+      "path": "trade_ledger.json",
+      "sha256": "64e19090283f8478c485d5542719014f73eb44cbf67e6a5bdec3fbdb705db14f"
+    },
+    {
+      "bytes": 570,
+      "path": "trusted_input_manifest.json",
+      "sha256": "05ee590a201b9cade19e5cb506364219f5c6b33624a7f32fb562c131fa287410"
+    },
+    {
+      "bytes": 221,
+      "path": "walk_forward_results.json",
+      "sha256": "42a4bdacab1fbdeaa333a61fd3b48c50325ecc667d128a7df2a83654fc7c054b"
+    }
+  ]
+}

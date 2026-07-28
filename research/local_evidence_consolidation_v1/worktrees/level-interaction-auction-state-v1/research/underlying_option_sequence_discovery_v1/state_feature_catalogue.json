@@ -1,0 +1,140 @@
+{
+  "features": [
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "ret_abs",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "425f586d9d52942d9bdd5248b3a136054c5f0e27b2059baf7542e87319d57850",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "compression",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "e4fa23ea0d44cf01edc21fb9b30734a7e437dad274cc7812f3d83515bb7b8268",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "expansion",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "7d03454d2fc34adb6203dfff71a09ec5750709765d45ac1640c58f175a83410d",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "ce_ret",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "2e78f72bc6fd5a820a86e0bb6fa75efcc0e8b9a4f611f6415a239226137f4264",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "pe_ret",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "ee4c49c157c99cc5dd5d087858dd1190beda2893cb04dd9df031a68024cb5b65",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "ce_accel_low",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "e644ba91f2cca09903f2445d08bee73f672cf0590411a9bbae091d87236e5980",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "pe_accel_low",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "a30faf38f610a78501d47c53bb9adbcca3c06d75e16a46b7ba97cf8ba4c61ea5",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "dispersion",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "7c6fa5875454d6da4b07e13ed2836904dd6aeb9781aa1814b5f433bde46738e7",
+      "timestamp_availability": "current timestamp"
+    },
+    {
+      "causal_proof": "no future labels or outcomes",
+      "definition": "development-only quantile threshold event/state input",
+      "inputs": [
+        "joint warehouse"
+      ],
+      "lineage": [
+        "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet"
+      ],
+      "lookback": "current and trailing only",
+      "name": "vwap_abs",
+      "null_policy": "drop if sparse or missing",
+      "semantic_hash": "55e97bb5d34fdec1fc335fecc731574d54ba20452fbb779401d8d8f9afe49f54",
+      "timestamp_availability": "current timestamp"
+    }
+  ],
+  "semantic_hash": "6c1d4efaba7002f577b5d97e62f7d58b17c946d30be16a31df6aef692fa3123c"
+}

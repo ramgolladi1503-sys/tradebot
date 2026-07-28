@@ -1,0 +1,9 @@
+{
+  "bucket": "top_10",
+  "model": "xgboost",
+  "selection_procedure": "90th percentile of validation xgboost_score",
+  "semantic_hash": "0a1afb5c8ce45b04d854bb931cc56088d31e9e0173d27516b7178d6036676ce8",
+  "threshold": 0.27302074432373047,
+  "tie_breaking": "select score >= threshold",
+  "validation_trade_count": 240
+}

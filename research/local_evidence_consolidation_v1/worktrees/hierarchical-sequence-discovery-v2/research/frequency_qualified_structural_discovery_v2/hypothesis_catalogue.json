@@ -1,0 +1,203 @@
+[
+  {
+    "economic_mechanism": "directional option premium accelerates while the paired opposite option fails to respond proportionally",
+    "expected_failure_mode": "volatility-wide repricing makes both sides move similarly",
+    "expected_persistence_after_costs": "paired-side asymmetry should persist for at least one next observable bar if repricing is not complete",
+    "family": "relative_option_response_asymmetry",
+    "id": "FQSDV2_PAIR_ASYM_01",
+    "materially_distinct_from_prior": "uses CE/PE paired response imbalance, not ORB, pure momentum, delayed under-response, or parked compression release",
+    "observable_sequence": [
+      "underlying impulse",
+      "same-side option positive velocity",
+      "paired opposite-side response failure",
+      "same-side premium persistence"
+    ],
+    "participant_behaviour": "buyers reprice directional optionality faster than hedgers reprice the opposite leg",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "premium_acceleration",
+      "option_type",
+      "expiry",
+      "strike"
+    ],
+    "unsupported_assumptions": [
+      "bid/ask depth",
+      "IV decomposition"
+    ]
+  },
+  {
+    "economic_mechanism": "same-side premium expansion is confirmed by adjacent strikes in the option ladder",
+    "expected_failure_mode": "adjacent strikes are stale or wide relative to selected strike",
+    "expected_persistence_after_costs": "coordinated ladder repricing should be less noisy than one-contract movement",
+    "family": "cross_strike_confirmation",
+    "id": "FQSDV2_LADDER_CONFIRM_02",
+    "materially_distinct_from_prior": "requires cross-strike option confirmation; not a lookback tweak of prior candidates",
+    "observable_sequence": [
+      "underlying impulse",
+      "selected strike premium expands",
+      "adjacent strike premium also expands",
+      "next-bar entry"
+    ],
+    "participant_behaviour": "flow appears across nearby strikes rather than as isolated stale-price noise",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "premium_acceleration",
+      "strike",
+      "option_type",
+      "expiry"
+    ],
+    "unsupported_assumptions": [
+      "order-book sweep identity"
+    ]
+  },
+  {
+    "economic_mechanism": "expiry-week directional repricing from low vwap displacement into premium acceleration",
+    "expected_failure_mode": "theta decay dominates directional repricing",
+    "expected_persistence_after_costs": "near-expiry repricing can be abrupt enough to cover fixed point costs",
+    "family": "expiry_state_transition",
+    "id": "FQSDV2_EXPIRY_TRANSITION_03",
+    "materially_distinct_from_prior": "DTE is a state transition component, not a simple DTE filter or compression release",
+    "observable_sequence": [
+      "expiry-week state",
+      "underlying remains near VWAP",
+      "same-side premium acceleration",
+      "premium persistence"
+    ],
+    "participant_behaviour": "short-dated gamma demand reprices when balanced intraday state resolves",
+    "required_fields": [
+      "dte",
+      "vwap_distance",
+      "premium_acceleration",
+      "premium_velocity",
+      "ret_1"
+    ],
+    "unsupported_assumptions": [
+      "gamma exposure",
+      "dealer positioning"
+    ]
+  },
+  {
+    "economic_mechanism": "opposite side does not cheapen during an underlying displacement while the directional side strengthens",
+    "expected_failure_mode": "market-wide volatility expansion inflates both sides without direction",
+    "expected_persistence_after_costs": "failure of the opposite side may identify continuation rather than mean reversion",
+    "family": "failed_opposite_side_response",
+    "id": "FQSDV2_FAILED_OPPOSITE_04",
+    "materially_distinct_from_prior": "explicitly compares opposite side response rather than delayed same-side under-response",
+    "observable_sequence": [
+      "large underlying displacement",
+      "opposite option fails to fall",
+      "same-side option acceleration",
+      "next-bar entry"
+    ],
+    "participant_behaviour": "directional move is accompanied by asymmetric option repricing, not generic volatility shock",
+    "required_fields": [
+      "ret_1",
+      "opposite_premium_velocity",
+      "premium_acceleration",
+      "option_type"
+    ],
+    "unsupported_assumptions": [
+      "volatility surface cause"
+    ]
+  },
+  {
+    "economic_mechanism": "two-sided balance transitions to one-sided premium dominance after underlying move",
+    "expected_failure_mode": "balance metric is contaminated by stale opposite-side candles",
+    "expected_persistence_after_costs": "dominance transition should avoid isolated single-tick option noise",
+    "family": "intraday_state_transition",
+    "id": "FQSDV2_INTRADAY_DOMINANCE_05",
+    "materially_distinct_from_prior": "state transition uses paired CE/PE dominance, not parked compression",
+    "observable_sequence": [
+      "paired premiums near balance",
+      "underlying impulse",
+      "pair velocity spread widens",
+      "same-side premium persistence"
+    ],
+    "participant_behaviour": "option chain transitions from balanced response to directional dominance",
+    "required_fields": [
+      "premium_mean",
+      "premium_velocity",
+      "ret_1",
+      "option_type",
+      "expiry",
+      "strike"
+    ],
+    "unsupported_assumptions": [
+      "order flow labels"
+    ]
+  },
+  {
+    "economic_mechanism": "underlying initiation, option ladder confirmation, and persistence align before entry",
+    "expected_failure_mode": "too restrictive, insufficient event support",
+    "expected_persistence_after_costs": "distinct chain confirmation may lag underlying by one bar",
+    "family": "multi_stage_confirmation",
+    "id": "FQSDV2_MULTI_STAGE_06",
+    "materially_distinct_from_prior": "combines cross-strike option confirmation with underlying initiation, not a prior broad joint rule",
+    "observable_sequence": [
+      "underlying impulse",
+      "same-side option positive velocity",
+      "adjacent-strike confirmation",
+      "same-side persistence"
+    ],
+    "participant_behaviour": "multi-source confirmation reduces false positives from pure underlying moves",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "premium_acceleration",
+      "strike",
+      "option_type"
+    ],
+    "unsupported_assumptions": [
+      "participant identity"
+    ]
+  },
+  {
+    "economic_mechanism": "directional premium elasticity exceeds paired-side elasticity after modest underlying impulse",
+    "expected_failure_mode": "raw premium differences are not delta-normalized",
+    "expected_persistence_after_costs": "elasticity imbalance can persist while the chain catches up",
+    "family": "relative_option_response_asymmetry",
+    "id": "FQSDV2_ELASTICITY_07",
+    "materially_distinct_from_prior": "uses paired elasticity spread, not absolute premium compression or delayed convexity",
+    "observable_sequence": [
+      "moderate underlying move",
+      "same-side premium velocity exceeds paired opposite velocity",
+      "positive acceleration"
+    ],
+    "participant_behaviour": "option chain embeds directional information beyond underlying displacement",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "opposite_premium_velocity",
+      "premium_acceleration"
+    ],
+    "unsupported_assumptions": [
+      "delta-normalized option response"
+    ]
+  },
+  {
+    "economic_mechanism": "near/mid strikes confirm same-side repricing away from ATM only",
+    "expected_failure_mode": "non-ATM premiums are too sparse or noisy",
+    "expected_persistence_after_costs": "confirmation across non-ATM strikes may catch continuation before ATM noise fades",
+    "family": "cross_strike_confirmation",
+    "id": "FQSDV2_OTM_LADDER_08",
+    "materially_distinct_from_prior": "non-ATM cross-strike confirmation, not ORB or simple momentum",
+    "observable_sequence": [
+      "same-side underlying move",
+      "NEAR/MID option acceleration",
+      "adjacent strike confirms",
+      "next-bar entry"
+    ],
+    "participant_behaviour": "directional demand propagates across tradable non-ATM strikes",
+    "required_fields": [
+      "moneyness_bucket",
+      "strike",
+      "premium_acceleration",
+      "ret_1"
+    ],
+    "unsupported_assumptions": [
+      "true moneyness Greeks"
+    ]
+  }
+]

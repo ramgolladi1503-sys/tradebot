@@ -1,0 +1,18 @@
+{
+  "correct_expiry_parsing": true,
+  "identifier_source_legitimacy": "FAIL_NO_OFFICIAL_EXPIRED_IDENTIFIERS",
+  "immutable_raw_responses": true,
+  "no_back_adjustment": true,
+  "no_continuous_stitching": true,
+  "no_duplicate_inflation": true,
+  "no_forward_fill": true,
+  "no_inferred_or_synthetic_identifiers": true,
+  "official_provider_provenance": true,
+  "ohlc_validity": "NOT_APPLICABLE_NO_NEW_ROWS",
+  "overlap_calculations": true,
+  "result": "PASS_BLOCKED_NO_IDENTIFIERS",
+  "secret_scan": "PASS",
+  "semantic_hash": "a13cf78b31d6c06ff949dead4f7f1fb223b7f7dbdff78a0058ac6e17b4d1891a",
+  "semantic_hashes": true,
+  "two_directory_determinism": true
+}

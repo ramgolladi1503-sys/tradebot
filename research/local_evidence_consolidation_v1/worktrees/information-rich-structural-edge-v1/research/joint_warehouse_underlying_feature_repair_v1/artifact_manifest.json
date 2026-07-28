@@ -1,0 +1,70 @@
+{
+  "artifact_count": 13,
+  "artifacts": [
+    {
+      "bytes": 375,
+      "path": "causal_integrity_report.json",
+      "sha256": "6366170e5261230812a18d7b0af105dfe8c52bda35f480b35ed37353b4cc9df1"
+    },
+    {
+      "bytes": 1307,
+      "path": "determinism_report.json",
+      "sha256": "7cfb0a2abaf5595ea03ff10b06e35203602c7807107f866a74fb1eeb236f205e"
+    },
+    {
+      "bytes": 836,
+      "path": "downstream_event_feasibility_smoke_report.json",
+      "sha256": "4006211988c4853b193e5b4c986a4302d1b1b93fb2dbc9446e87bf6228bdb114"
+    },
+    {
+      "bytes": 28214,
+      "path": "field_lineage_report.json",
+      "sha256": "db168f099d7d4825134fc03c20082b9fb48c7236e22d16f53ec6ae06a3ba7e32"
+    },
+    {
+      "bytes": 780,
+      "path": "final_verdict.json",
+      "sha256": "efa38b96f4b9d7d369fdfad54f5331283fcbc4a66099eedf7c697cb14589b1f2"
+    },
+    {
+      "bytes": 416,
+      "path": "independent_audit.json",
+      "sha256": "7dff933cd61433ff6a722550aeae22096f90fa7ad594bdcac60b75b7a6e04624"
+    },
+    {
+      "bytes": 709,
+      "path": "join_defect_diagnosis.json",
+      "sha256": "9764cdd5d70ed2c04ba4fcfded46ac996d5d9ae7d039fa00f1b6755427d15226"
+    },
+    {
+      "bytes": 978,
+      "path": "pre_change_manifest.json",
+      "sha256": "3d24f4f754ee457ee45f143942015b1a751d1229559a8c9b4c09a145bfc3bffe"
+    },
+    {
+      "bytes": 38490997,
+      "path": "repaired_joint_underlying_option_warehouse.parquet",
+      "sha256": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0"
+    },
+    {
+      "bytes": 5566,
+      "path": "schema_null_rate_report.json",
+      "sha256": "f4a6b5a641f0b86b8c35c3623d13afa2e616daabcaaa481ccade261456ab0aa9"
+    },
+    {
+      "bytes": 998,
+      "path": "source_artifact_verification.json",
+      "sha256": "fb3adcfdd9648c3989b4420bd031ac6435923445753dd930fb3996995d047c40"
+    },
+    {
+      "bytes": 680,
+      "path": "source_feature_population_report.json",
+      "sha256": "be65d223c1e3763b0d2425d86bb0c1cdf415169624ce6223c4929a2827c0c98e"
+    },
+    {
+      "bytes": 191,
+      "path": "sparse_bar_governance_report.json",
+      "sha256": "03c67b036d62d12bd5f88a2d9fa6a3efd8fd74dbd16820709e2f5721f72ac695"
+    }
+  ]
+}

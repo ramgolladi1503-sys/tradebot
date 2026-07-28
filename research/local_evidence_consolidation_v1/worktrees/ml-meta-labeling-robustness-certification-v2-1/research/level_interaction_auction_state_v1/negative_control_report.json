@@ -1,0 +1,42 @@
+{
+  "controls": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "matched_dte_shift_expectancy": -62.74503562945368,
+      "matched_time_shift_expectancy": -62.74503562945368,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 62.52834123222748
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "matched_dte_shift_expectancy": -74.0450980392157,
+      "matched_time_shift_expectancy": -74.0450980392157,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 72.84902912621362
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "matched_dte_shift_expectancy": -74.34524606971975,
+      "matched_time_shift_expectancy": -74.34524606971975,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 74.31328664161256
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "matched_dte_shift_expectancy": -89.21601572739188,
+      "matched_time_shift_expectancy": -89.21601572739188,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 89.19950205915387
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "matched_dte_shift_expectancy": -136.86416971470376,
+      "matched_time_shift_expectancy": -136.86416971470376,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 136.7648538011696
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "matched_dte_shift_expectancy": -74.05629811629812,
+      "matched_time_shift_expectancy": -74.05629811629812,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 73.99344517184943
+    }
+  },
+  "semantic_hash": "7a83264c8b5444664259d6da78760b4eb34acd05a5508220e1c7ac802873c665",
+  "status": "RUN"
+}

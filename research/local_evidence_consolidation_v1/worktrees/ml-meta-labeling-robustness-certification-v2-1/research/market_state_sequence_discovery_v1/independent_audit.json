@@ -1,0 +1,18 @@
+{
+  "all_state_features_causal": true,
+  "constituent_weights_point_in_time_or_frozen_causal_proxy": false,
+  "controls_independent": "NOT_RUN",
+  "frequency_gate_preceded_outcomes": true,
+  "hashes_deterministic": true,
+  "motif_discovery_used_development_data_only": "NOT_RUN",
+  "motifs_frozen_before_pnl": "NO_MOTIFS",
+  "next_bar_execution_enforced": "NOT_RUN",
+  "no_closed_mechanism_reused": true,
+  "no_future_outcome_entered_motif_discovery": true,
+  "option_strikes_selected_causally": "NOT_RUN",
+  "prior_closeout_registry_honored": true,
+  "result": "PASS_BLOCKED_INPUTS",
+  "semantic_hash": "5b024603773f0ebf2f6c9e52b06bd60b70f6d49aebab1fa26d29c83ef628795d",
+  "sequence_order_preserved": "CONTRACT_ONLY",
+  "two_directory_determinism": true
+}

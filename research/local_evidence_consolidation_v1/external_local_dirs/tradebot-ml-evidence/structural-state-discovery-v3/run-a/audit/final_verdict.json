@@ -1,0 +1,9 @@
+{
+  "FINAL_VERDICT": "NO_STABLE_STATE_EDGE_FOUND",
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "research_only": true,
+  "v2_verdict_invalidated": true
+}

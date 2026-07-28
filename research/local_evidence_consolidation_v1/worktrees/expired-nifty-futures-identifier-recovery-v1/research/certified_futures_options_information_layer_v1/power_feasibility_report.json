@@ -1,0 +1,15 @@
+{
+  "do_not_proceed_to_future_discovery": true,
+  "minimum_reopen_target": {
+    "future_holdout_sessions": 30,
+    "independent_expiries": 12,
+    "overlapping_sessions": 100
+  },
+  "observed": {
+    "future_holdout_sessions_supportable": 0,
+    "independent_expiries": 0,
+    "overlapping_sessions": 0
+  },
+  "result": "FAIL",
+  "semantic_hash": "2c4e83ae6a5ac48214cb4feb3c5052f0bb3180db089349f9f52cf424db780916"
+}

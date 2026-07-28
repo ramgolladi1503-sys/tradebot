@@ -1,0 +1,18 @@
+{
+  "child_substitutions_frozen": false,
+  "closed_mechanisms_not_reintroduced": true,
+  "controls_independently_implemented": "NOT_RUN_NO_FROZEN_PARENT",
+  "event_ontology_frozen_before_outcome_evaluation": true,
+  "frequency_gate_unchanged": true,
+  "hashes_deterministic": true,
+  "hierarchy_mapping_used_no_future_labels": true,
+  "motifs_frozen_before_pnl": false,
+  "next_bar_execution_enforced": "NOT_RUN_NO_FROZEN_PARENT",
+  "parent_motifs_preserved_path_dependence": true,
+  "result": "PASS_NO_OUTCOME_RUN",
+  "semantic_hash": "e285965f510215e3cf26fa071c93a4932b3b385f24a94bd8975db7622ff213db",
+  "support_merging_semantic_not_economic": true,
+  "two_directory_determinism": true,
+  "v1_failed_motifs_not_individually_tested": true,
+  "v1_outcomes_never_computed": true
+}

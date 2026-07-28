@@ -1,0 +1,23 @@
+{
+  "expected_events": "approximately 63 using 50pct shrinkage research-grade target",
+  "expected_expiries": ">=18 if at least 18 weekly/monthly expiries are available",
+  "expected_sessions": ">=24 if provider expired-option range includes pre-2024-09-26 NIFTY weeklies",
+  "fallback_date_range": {
+    "from": "2026-07-22",
+    "rationale": "Post-holdout data is currently only seven calendar days old on 2026-07-28, so it cannot meet the 15-month planning estimate yet.",
+    "to": "prospective_accumulation_until_target"
+  },
+  "normalization_pipeline": "validate raw -> normalize 1-minute underlying/options -> apply sparse governance -> build repaired-style joint warehouse -> event counts only",
+  "plan_frozen_before_requests": true,
+  "primary_date_range": {
+    "from": "2023-04-01",
+    "rationale": "Unused earlier history before current certified start; enough calendar span to plausibly reach 24 sessions, 18 expiries, and 63 events.",
+    "to": "2024-09-25"
+  },
+  "provider": "UPSTOX expired options plus Upstox NIFTY underlying only",
+  "rate_limit_policy": "single-threaded or provider-documented throttled requests with backoff; never bypass limits",
+  "raw_immutable_storage": "research/premium_compression_historical_acquisition_v1/raw/",
+  "request_count": "bounded by discovered contracts x one-minute daily requests; exact count frozen after contract-discovery manifest and before candle fetch",
+  "retry_policy": "idempotent retries only for transient HTTP/network failures; preserve every failed response sidecar",
+  "stop_condition": "stop when certified unused evidence reaches >=24 sessions, >=18 expiries, and about 63 frozen detector events, or provider range is exhausted"
+}

@@ -1,0 +1,10 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "joint_adds_value": false,
+    "joint_minus_underlying": 0.0
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "joint_adds_value": false,
+    "joint_minus_underlying": 0.0
+  }
+}

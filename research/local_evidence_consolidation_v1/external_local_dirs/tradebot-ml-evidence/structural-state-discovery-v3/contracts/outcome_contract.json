@@ -1,0 +1,7 @@
+{
+  "ambiguous_same_bar": "unresolved and not optimistic",
+  "target_stop_labels": [
+    "30m_target_X_stop_Y_label",
+    "60m_target_X_stop_Y_label"
+  ]
+}

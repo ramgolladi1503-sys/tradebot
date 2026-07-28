@@ -1,0 +1,15 @@
+{
+  "event_count": 6062,
+  "event_families": [
+    "compression_expansion_down",
+    "compression_expansion_up",
+    "long_lower_wick",
+    "long_upper_wick",
+    "opening_range_high_break",
+    "opening_range_low_break",
+    "session_high_sweep_reject",
+    "session_low_sweep_reclaim",
+    "vwap_reclaim",
+    "vwap_rejection"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "artifact": "lane_authoritative_math_audit_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "backtest_performed": "NO",
+  "current_main_summary": "Entry point validates completed history, computes causal VWAP, requires ctx.vwap to match final causal VWAP, and tests establishment/reclaim/hold sequence.",
+  "design_ambiguities": [
+    "Decide whether rejection is in scope; if yes define an explicit rejection predicate, otherwise rename labels/spec."
+  ],
+  "forward_returns_calculated": "NO",
+  "mathematical_readiness": false,
+  "no_future_returns": true,
+  "objective_defects": [
+    "Candidate labels say reclaim_or_rejection, but source contains no distinct rejection predicate beyond bullish/bearish reclaim/cross sequence."
+  ],
+  "parameter_tuning_performed": "NO",
+  "repository_modified": "NO",
+  "source_refs": [
+    "strategies/movement/vwap_reclaim.py:88",
+    "strategies/movement/vwap_reclaim.py:246",
+    "strategies/movement/vwap_reclaim.py:279",
+    "strategies/movement/vwap_reclaim.py:405"
+  ],
+  "strategy": "vwap_reclaim",
+  "verdict": "VWAP_RECLAIM_OBJECTIVE_DEFECTS_REQUIRE_REPAIR"
+}

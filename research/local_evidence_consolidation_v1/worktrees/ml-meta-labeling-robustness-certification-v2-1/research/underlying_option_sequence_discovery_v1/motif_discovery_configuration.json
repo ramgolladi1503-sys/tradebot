@@ -1,0 +1,26 @@
+{
+  "development_only": true,
+  "hyperparameter_basis": [
+    "support",
+    "coverage",
+    "interpretability",
+    "chronological persistence"
+  ],
+  "methods": [
+    "frequent_sequence_mining_4gram",
+    "trailing_volatility_quantile_segmentation",
+    "prototype_event_set_clustering"
+  ],
+  "quantiles": {
+    "ce_accel_low": -4.79,
+    "ce_ret": 3.039999999999998,
+    "compression": 0.0,
+    "dispersion": 811.6340700123396,
+    "expansion": 1.4554405374506332,
+    "pe_accel_low": -4.066000000000002,
+    "pe_ret": 2.751125000000004,
+    "ret_abs": 0.0010628335518790282,
+    "vwap_abs": 0.0038817994635883253
+  },
+  "semantic_hash": "47fe4527e539e756c6b750fa0823f8ddf326b7da3e8c8623017efb9ecfbd2674"
+}

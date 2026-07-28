@@ -1,0 +1,124 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "joint_rule": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5910494493629884,
+        "t_stat": -2.109825419533104,
+        "total_net_points": -2737.1499999999996,
+        "trades": 4631,
+        "win_rate": 0.4318721658389117
+      },
+      "option_only": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.41806933031075816,
+        "t_stat": -2.2721976217275865,
+        "total_net_points": -4426.099999999997,
+        "trades": 10587,
+        "win_rate": 0.42996127325965805
+      },
+      "underlying_only": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -139.19999999999993,
+        "net_expectancy_points": -1.0785545258977327,
+        "t_stat": -5.570420407481022,
+        "total_net_points": -13035.409999999996,
+        "trades": 12086,
+        "win_rate": 0.41841800430249876
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "joint_rule": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5680588942307689,
+        "t_stat": -2.0207639815903238,
+        "total_net_points": -2835.7499999999986,
+        "trades": 4992,
+        "win_rate": 0.42908653846153844
+      },
+      "option_only": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.41806933031075816,
+        "t_stat": -2.2721976217275865,
+        "total_net_points": -4426.099999999997,
+        "trades": 10587,
+        "win_rate": 0.42996127325965805
+      },
+      "underlying_only": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -139.19999999999993,
+        "net_expectancy_points": -1.0296164362159204,
+        "t_stat": -5.534588224563611,
+        "total_net_points": -13180.119999999997,
+        "trades": 12801,
+        "win_rate": 0.41465510506991643
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "joint_rule": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -96.55000000000001,
+        "net_expectancy_points": -1.3760506465517244,
+        "t_stat": -4.494256249086046,
+        "total_net_points": -5107.900000000001,
+        "trades": 3712,
+        "win_rate": 0.4110991379310345
+      },
+      "option_only": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -230.45,
+        "net_expectancy_points": -1.0946509411484393,
+        "t_stat": -5.20516423324482,
+        "total_net_points": -9188.5,
+        "trades": 8394,
+        "win_rate": 0.40922087205146535
+      },
+      "underlying_only": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -139.19999999999993,
+        "net_expectancy_points": -1.0785545258977327,
+        "t_stat": -5.570420407481022,
+        "total_net_points": -13035.409999999996,
+        "trades": 12086,
+        "win_rate": 0.41841800430249876
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "joint_rule": {
+        "max_trade_points": 175.54999999999998,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5003614457831328,
+        "t_stat": -1.2916924907773406,
+        "total_net_points": -1453.5500000000006,
+        "trades": 2905,
+        "win_rate": 0.41686746987951806
+      },
+      "option_only": {
+        "max_trade_points": 176.8,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5938142698940041,
+        "t_stat": -2.335504917070878,
+        "total_net_points": -3753.5,
+        "trades": 6321,
+        "win_rate": 0.41385856668248694
+      },
+      "underlying_only": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -139.19999999999993,
+        "net_expectancy_points": -1.0785545258977327,
+        "t_stat": -5.570420407481022,
+        "total_net_points": -13035.409999999996,
+        "trades": 12086,
+        "win_rate": 0.41841800430249876
+      }
+    }
+  ]
+}

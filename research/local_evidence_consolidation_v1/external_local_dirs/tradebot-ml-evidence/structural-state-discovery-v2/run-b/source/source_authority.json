@@ -1,0 +1,7 @@
+{
+  "actual_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "aeron7_status": "PINNED_OUT_OF_AUTHORITATIVE_V2",
+  "archive": "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip",
+  "base_sha": "a8fa0cf218df4b4b7a575ff36f344774ba1fff9d",
+  "expected_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d"
+}

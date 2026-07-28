@@ -1,0 +1,22 @@
+{
+  "branch": "research/frozen-joint-mechanisms-repaired-warehouse-v2",
+  "clean_status": "",
+  "clean_status_note": "The isolated worktree was verified clean before V2 files were generated; this field is frozen to keep semantic hashes deterministic across reruns.",
+  "current_commit": "41c2c92fe40eedcf35a382463de96f21ac67ff0e",
+  "eligibility_framework_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "previous_invalid_zero_event_test_artifact_hashes": {
+    "effective_sample_size_report.json": "c5b0006671f8989afe265b467bef76079219dd4bdc40863f5a3890e801e3f79e",
+    "final_verdict.json": "94c6315aaa7b7934b94ce3f311722288c3213f89f896ae6f9176864d99549a92",
+    "holdout_results.json": "f95ef1b8b931310502e4f7ef97f505fc27c7cec72274c8dc2b648a668a32f792",
+    "independent_audit.json": "885c1275d4dbafff901fa65195e8b13fab837ed73957966a120737da004fd183"
+  },
+  "prior_mechanism_contract_hashes": {
+    "delayed_option_convexity_after_underlying_confirmation": "7262dbb88f2c9835a5fe6b41adffb41aa274c36b6f9215d5e4828a1e852007e3",
+    "premium_compression_release_with_underlying_state_filter": "d31b3f52a6ddcbb71d1e8744a3dbd9187fed12a9abeeefd03730bab118ec9b32"
+  },
+  "repaired_schema_hash": "f4a6b5a641f0b86b8c35c3623d13afa2e616daabcaaa481ccade261456ab0aa9",
+  "repaired_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "source_commit": "41c2c92fe40eedcf35a382463de96f21ac67ff0e",
+  "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+  "worktree": "/Users/madhuram/tradebot-frozen-joint-repaired-v2"
+}

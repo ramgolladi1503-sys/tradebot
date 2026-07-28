@@ -1,0 +1,275 @@
+[
+  {
+    "candidate_id": "tree_rule_edb855245d2f",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "operator": "<=",
+        "threshold": 0.13630171120166779
+      },
+      {
+        "feature": "distance_from_previous_high_atr",
+        "operator": "<=",
+        "threshold": 2.4608426094055176
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 53,
+    "discovery_sessions": 22,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "value": 0.4796926454445038
+      },
+      {
+        "feature": "distance_from_previous_high_atr",
+        "value": -10.167578319244365
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "LONG",
+    "leaf_node_id": 18,
+    "leaf_probability": 0.8811220665537113,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "f2fe950a81a7257adc944e9a85f3e80ff775cec52293ef1efab09243c7bd1468",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_a5a0709edd7e",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "operator": ">",
+        "threshold": 0.13630171120166779
+      },
+      {
+        "feature": "previous_day_range_position",
+        "operator": "<=",
+        "threshold": 0.5481449365615845
+      },
+      {
+        "feature": "gap_pct",
+        "operator": ">",
+        "threshold": 0.0009356187365483493
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 576,
+    "discovery_sessions": 17,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "value": 0.4796926454445038
+      },
+      {
+        "feature": "previous_day_range_position",
+        "value": 0.5527714502657622
+      },
+      {
+        "feature": "gap_pct",
+        "value": 0.0008985915952139933
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "LONG",
+    "leaf_node_id": 23,
+    "leaf_probability": 0.6474284663877822,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "f2fe950a81a7257adc944e9a85f3e80ff775cec52293ef1efab09243c7bd1468",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_eec6dfbfb211",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": "<=",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "operator": "<=",
+        "threshold": -0.06129738315939903
+      },
+      {
+        "feature": "close_location_value",
+        "operator": ">",
+        "threshold": 0.7396854758262634
+      },
+      {
+        "feature": "atr_14",
+        "operator": "<=",
+        "threshold": 6.3946428298950195
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 682,
+    "discovery_sessions": 129,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "value": 0.004101515290362837
+      },
+      {
+        "feature": "close_location_value",
+        "value": 0.01754385965015295
+      },
+      {
+        "feature": "atr_14",
+        "value": 8.432142857142546
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "LONG",
+    "leaf_node_id": 7,
+    "leaf_probability": 0.6179847074609689,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "f2fe950a81a7257adc944e9a85f3e80ff775cec52293ef1efab09243c7bd1468",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_cdb61b6c99cd",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "operator": "<=",
+        "threshold": 0.13630171120166779
+      },
+      {
+        "feature": "distance_from_previous_high_atr",
+        "operator": ">",
+        "threshold": 2.4608426094055176
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 53,
+    "discovery_sessions": 24,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "value": 0.4796926454445038
+      },
+      {
+        "feature": "distance_from_previous_high_atr",
+        "value": -10.167578319244365
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "LONG",
+    "leaf_node_id": 19,
+    "leaf_probability": 0.6163496034743203,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "f2fe950a81a7257adc944e9a85f3e80ff775cec52293ef1efab09243c7bd1468",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_dadbdc2cc6d9",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "operator": ">",
+        "threshold": 0.13630171120166779
+      },
+      {
+        "feature": "previous_day_range_position",
+        "operator": ">",
+        "threshold": 0.5481449365615845
+      },
+      {
+        "feature": "previous_day_range_position",
+        "operator": ">",
+        "threshold": 1.9700590372085571
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 3530,
+    "discovery_sessions": 26,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "value": 0.4796926454445038
+      },
+      {
+        "feature": "previous_day_range_position",
+        "value": 0.5527714502657622
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "LONG",
+    "leaf_node_id": 26,
+    "leaf_probability": 0.5562324061241826,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "f2fe950a81a7257adc944e9a85f3e80ff775cec52293ef1efab09243c7bd1468",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  }
+]

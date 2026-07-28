@@ -1,0 +1,33 @@
+{
+  "classification": "PARTIAL_IMPLEMENTATION_EVIDENCE",
+  "not_valid_for": [
+    "chronological WFA claims",
+    "matched-control claims",
+    "negative-control claims",
+    "mutation-oracle claims",
+    "parameter-neighbourhood claims",
+    "deterministic evidence-chain claims",
+    "structural-edge verdicts",
+    "production compatibility",
+    "option profitability"
+  ],
+  "reasons": [
+    "Aeron7 not parsed or evaluated",
+    "WFA train windows include future test-era sessions",
+    "session rows are treated as independent observations",
+    "matched controls are not actually constructed",
+    "most negative controls are not executed",
+    "parameter neighbourhood is not executed",
+    "mutation results are hard-coded as REJECTED",
+    "independent oracle is hard-coded PASS",
+    "determinism compares only three summary fields",
+    "verdict labels are not derived from certification gates",
+    "exact timestamp semantics are not independently proven"
+  ],
+  "valid_for": [
+    "Kite source hash verification",
+    "proof that non-empty Kite candidate generation was attempted",
+    "preliminary formula debugging",
+    "code provenance"
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "benchmark": "development median expected gross option response by side, moneyness, premium band, and underlying displacement bin",
+    "ce_pe_handling": "same-side CE for upward confirmation, PE for downward confirmation",
+    "concentration_limits": {
+      "single_expiry_share": 0.5,
+      "single_month_share": 0.5
+    },
+    "cost_model": {
+      "round_trip_points": 1.0
+    },
+    "daily_trade_limit": 3,
+    "development_split": [
+      "2024-09-26",
+      "2026-02-28"
+    ],
+    "duplicate_signal_suppression": "one signal per contract timestamp",
+    "eligible_dte_range": [
+      0,
+      14
+    ],
+    "entry_clock": "next_observable_bar",
+    "event_resolution_exit": "catch-up or fixed max hold",
+    "holdout_split": [
+      "2026-03-01",
+      "2026-07-21"
+    ],
+    "market_side": "buy_only",
+    "maximum_holding_period": 15,
+    "minimum_premium": 5.0,
+    "minimum_trade_count": 80,
+    "moneyness_range": [
+      "ATM",
+      "NEAR",
+      "MID"
+    ],
+    "random_seed": 29,
+    "robustness_neighbourhood": [
+      "loose",
+      "primary",
+      "strict"
+    ],
+    "sequence": [
+      "underlying_initiation",
+      "underlying_confirmation",
+      "option_under_response",
+      "state_persistence",
+      "next_bar_entry"
+    ],
+    "stop_points": 8.0,
+    "target_points": 12.0,
+    "time_of_day_scope": "09:20-15:00 IST"
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "ce_pe_handling": "CE/PE independently according to same-side underlying state",
+    "compression_definition": "5-observation premium range below frozen fraction of 20-observation median range, then release above frozen fraction",
+    "concentration_limits": {
+      "single_expiry_share": 0.5,
+      "single_month_share": 0.5
+    },
+    "cost_model": {
+      "round_trip_points": 1.0
+    },
+    "daily_trade_limit": 3,
+    "development_split": [
+      "2024-09-26",
+      "2026-02-28"
+    ],
+    "duplicate_signal_suppression": "one signal per contract timestamp",
+    "eligible_dte_range": [
+      0,
+      14
+    ],
+    "entry_clock": "next_observable_bar",
+    "event_resolution_exit": "release failure or fixed max hold",
+    "holdout_split": [
+      "2026-03-01",
+      "2026-07-21"
+    ],
+    "market_side": "buy_only",
+    "maximum_holding_period": 15,
+    "minimum_premium": 5.0,
+    "minimum_trade_count": 80,
+    "moneyness_range": [
+      "ATM",
+      "NEAR",
+      "MID"
+    ],
+    "random_seed": 29,
+    "robustness_neighbourhood": [
+      "loose",
+      "primary",
+      "strict"
+    ],
+    "sequence": [
+      "option_premium_compression",
+      "underlying_state_filter",
+      "release_trigger",
+      "next_bar_entry"
+    ],
+    "stop_points": 8.0,
+    "target_points": 12.0,
+    "time_of_day_scope": "09:20-15:00 IST"
+  }
+}

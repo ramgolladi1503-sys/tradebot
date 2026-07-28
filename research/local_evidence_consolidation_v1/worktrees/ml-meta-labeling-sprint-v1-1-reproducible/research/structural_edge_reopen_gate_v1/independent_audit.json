@@ -1,0 +1,15 @@
+{
+  "checks": {
+    "closeout_registry_honored": true,
+    "every_reopen_condition_tested": true,
+    "no_algotest": true,
+    "no_closed_mechanism_reused": true,
+    "no_outcome_or_pnl_inspected": true,
+    "no_production_modification": true,
+    "no_provider_acquisition": true,
+    "no_threshold_tuning": true,
+    "selection_not_outcome_based": true,
+    "weak_data_failed_closed": true
+  },
+  "status": "PASS"
+}

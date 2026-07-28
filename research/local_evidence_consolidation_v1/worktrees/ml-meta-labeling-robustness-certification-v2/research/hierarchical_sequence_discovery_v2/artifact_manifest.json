@@ -1,0 +1,28 @@
+{
+  "files": {
+    "ablation_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "algotest_specification_for_survivors.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "canonical_episode_compression_contract.json": "ba619ae94dc6558e2174a3f7c5f95fae8ca76798acc1b99dbf6581cc6338254b",
+    "child_coverage_report.json": "e26928fa540f097633bce6332f77ff8197587c6365aa0fe2fb70019462bb23b3",
+    "control_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "determinism_report.json": "05614ea2cce366ab225a7dd4978b43c2efd9965ee0df9db784dcc16697905c2a",
+    "event_to_parent_mapping.json": "8a8d90baee35e7bddf4065bbaba1995a37163e694b80ed88f17b55745649f253",
+    "final_verdict.json": "fcf3fb3bad7f1ad16473b514e16c3ab5814807175e07cc9d4fe07c221b637b54",
+    "frequency_gate_report.json": "03c9e889fdc629d58f1b789e77115be1e64afbaad2ad0783525f932323482783",
+    "frozen_event_ontology.json": "52f9be7a0c161b2bdcb4c17c3f88b6c85b8b62b6effa1cf52c6f851a4426df10",
+    "frozen_parent_motif_contracts.json": "648103a94d78f4a32ac99db31d54abb26336448948c0ae869651a460cda4ff80",
+    "hierarchy_determinism_report.json": "b2eae27df3d37d719b7fd7e2a76117b287ee7692db2f984f10b11e18042592c7",
+    "holdout_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "independent_audit.json": "de7716484038f5f4ed64be561b33aef22b04c02b0ce71977d40cee99aa836b91",
+    "outcome_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "parent_child_contribution_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "parent_motif_catalogue.json": "bf4c86039c7795d91723fdcdc9d141d83798a7251f6ecdcab82cd9aecdf3f048",
+    "pre_change_manifest.json": "0cf774410553df796ff7ed19e4c044986bb2f0815efdc891389378830ea4c93a",
+    "robustness_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "support_and_concentration_report.json": "37a9569fbd312001a16fc984157660e1fa0a488e5bdcce59c789512e02afc8a2",
+    "survivor_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0",
+    "v1_fragmentation_audit.json": "5e625cc3bb11ce58ef3f96a2c5910df31cab90f422025d30eab15b9032252f4b",
+    "wfa_report.json": "f956b3a60be53366092b1a208209f0e23a229a4109a0af7056ca8f1a77ec29e0"
+  },
+  "semantic_hash": "b3f090550238978c3f9790ec05e9f77ac98512c0a4b511610343c06feccfb644"
+}

@@ -1,0 +1,23 @@
+{
+  "current_prior_contract_reference": {
+    "contracts": [
+      {
+        "date_span": [
+          "2026-05-12",
+          "2026-07-21"
+        ],
+        "expiry": "2026-07-28",
+        "instrument_key": "NSE_FO|61093",
+        "provenance_status": "CERTIFIED",
+        "row_count": 18375,
+        "session_count": 49,
+        "symbol": "NIFTY FUT 28 JUL 26"
+      }
+    ],
+    "normalization_errors": [],
+    "semantic_hash": "4e910c8e0607e138b567931330537d6bfc3020345ed7a5b9579f0903f3a66c93"
+  },
+  "expired_contracts_normalized": [],
+  "normalization_errors": [],
+  "semantic_hash": "673968770b53221dfdfab02c4461acfdc65b56cbc6515eb42d8f01d27334ce58"
+}

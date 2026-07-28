@@ -1,0 +1,11 @@
+{
+  "NEEDS_ADDITIONAL_DATA": [
+    "paired_ce_pe_divergence_resolution",
+    "multi_strike_confirmation_of_premium_elasticity"
+  ],
+  "NOT_TESTABLE_WITH_CURRENT_EVIDENCE": [],
+  "READY_FOR_FROZEN_TEST": [
+    "delayed_option_convexity_after_underlying_confirmation",
+    "premium_compression_release_with_underlying_state_filter"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "blocking_gate": "NO_CERTIFIED_NIFTY_FUTURES_HISTORY",
+  "provenance_hashes": [],
+  "reason": "Futures certification gate failed; immutable warehouse rows were not fabricated.",
+  "row_count": 0,
+  "semantic_hash": "3b5818eaa88431ea979a3b5afb533ab1528cf644c1cab7879e0c95fffeb048a5",
+  "status": "NOT_BUILT",
+  "synthetic_values": false
+}

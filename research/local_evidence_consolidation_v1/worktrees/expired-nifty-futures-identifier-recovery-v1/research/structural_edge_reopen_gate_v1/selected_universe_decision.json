@@ -1,0 +1,27 @@
+{
+  "decision": "NO_UNIVERSE_SELECTED",
+  "outcome_inspected": false,
+  "priority_assessment": [
+    {
+      "priority": 1,
+      "status": "REJECTED_AT_DATA_AUTHORITY_GATE",
+      "universe": "NIFTY constituent lead-lag into index options"
+    },
+    {
+      "priority": 2,
+      "status": "REJECTED_AT_DATA_EXISTENCE_GATE",
+      "universe": "NIFTY futures-plus-options dislocation"
+    },
+    {
+      "priority": 3,
+      "status": "REJECTED_AS_UNDERPOWERED_OR_NOT_MATERIALLY_DISTINCT",
+      "universe": "cross-strike or cross-expiry option-surface dynamics"
+    },
+    {
+      "priority": 4,
+      "status": "REJECTED_AT_SAMPLE_AND_PROVENANCE_GATE",
+      "universe": "BANKNIFTY independent universe"
+    }
+  ],
+  "reason": "No reopen condition passes all existence, provenance, chronology, power, information-set, and distinctness requirements."
+}

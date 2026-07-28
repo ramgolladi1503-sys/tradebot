@@ -1,0 +1,60 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "read_only": true,
+  "reason": "v4 corrects Kite canonical entry at the decision cutoff and all-session occurrence denominators, but fails closed for final prove-or-kill certification because Aeron7 conflict-safe parsing, true independent reconstruction, real matched controls, and real option replay are not authoritative.",
+  "research_only": true,
+  "strategies": {
+    "GAP_GO_LEADER_V1": {
+      "30M_HORIZON_AVAILABLE": true,
+      "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
+      "UNDERLYING_30M_EDGE_COMPATIBILITY": "FAIL_30_MINUTE_EDGE_COMPATIBILITY",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RECURRENCE_ONLY",
+      "gates": {
+        "aggregate_net_mean_positive_5bps": false,
+        "aggregate_net_median_positive_5bps": false,
+        "concentration_not_tail_event_dependent": false,
+        "four_of_five_positive_net_median_folds": false,
+        "matched_control_lift_positive": true,
+        "negative_controls_do_not_reproduce": true
+      }
+    },
+    "LATE_DAY_PERSISTENCE_V1": {
+      "30M_HORIZON_AVAILABLE": true,
+      "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
+      "UNDERLYING_30M_EDGE_COMPATIBILITY": "FAIL_30_MINUTE_EDGE_COMPATIBILITY",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RECURRENCE_ONLY",
+      "gates": {
+        "aggregate_net_mean_positive_5bps": false,
+        "aggregate_net_median_positive_5bps": false,
+        "concentration_not_tail_event_dependent": true,
+        "four_of_five_positive_net_median_folds": false,
+        "matched_control_lift_positive": true,
+        "negative_controls_do_not_reproduce": true
+      }
+    },
+    "PRIOR_RANGE_LEADER_V1": {
+      "30M_HORIZON_AVAILABLE": true,
+      "OPTION_30M_COMPATIBILITY": "NOT_EVALUABLE",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "OVERALL_PRODUCTION_COMPATIBILITY": "NOT_EVALUABLE",
+      "UNDERLYING_30M_EDGE_COMPATIBILITY": "FAIL_30_MINUTE_EDGE_COMPATIBILITY",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RECURRENCE_ONLY",
+      "gates": {
+        "aggregate_net_mean_positive_5bps": false,
+        "aggregate_net_median_positive_5bps": false,
+        "concentration_not_tail_event_dependent": true,
+        "four_of_five_positive_net_median_folds": false,
+        "matched_control_lift_positive": true,
+        "negative_controls_do_not_reproduce": true
+      }
+    }
+  },
+  "suite_verdict": "CERTIFY_NONE"
+}

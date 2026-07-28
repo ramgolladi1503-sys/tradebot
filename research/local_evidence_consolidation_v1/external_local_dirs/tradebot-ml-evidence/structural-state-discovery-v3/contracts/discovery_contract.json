@@ -1,0 +1,9 @@
+{
+  "candidate_gates": "OOF only, controls required before freeze",
+  "lanes": [
+    "quantile",
+    "tree",
+    "sparse",
+    "cluster"
+  ]
+}

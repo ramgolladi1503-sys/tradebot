@@ -1,0 +1,41 @@
+{
+  "candidate_gates": "aggregated recurring OOF templates only",
+  "lanes": [
+    "quantile",
+    "tree",
+    "sparse",
+    "cluster"
+  ],
+  "target_families": {
+    "ABSOLUTE_EXPANSION": {
+      "column": "absolute_30m_move_bps",
+      "direction_semantics": "directionless absolute move over frozen 20 bps hurdle",
+      "hurdle_bps": 20.0,
+      "multiplier": 1.0
+    },
+    "CONTINUATION": {
+      "column": "continuation_30m_return_bps",
+      "direction_semantics": "follow cutoff direction",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    },
+    "RAW_LONG": {
+      "column": "raw_30m_return_bps",
+      "direction_semantics": "fixed long",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    },
+    "RAW_SHORT": {
+      "column": "raw_30m_return_bps",
+      "direction_semantics": "fixed short, raw return sign inverted",
+      "hurdle_bps": 5.0,
+      "multiplier": -1.0
+    },
+    "REVERSAL": {
+      "column": "reversal_30m_return_bps",
+      "direction_semantics": "against cutoff direction",
+      "hurdle_bps": 5.0,
+      "multiplier": 1.0
+    }
+  }
+}

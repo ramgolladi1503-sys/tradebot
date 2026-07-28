@@ -1,0 +1,8 @@
+{
+  "exact_next_action": "Do not test P&L on V1 or V2 failed motifs; only continue with a new pre-outcome representation if the unchanged frequency gate remains frozen.",
+  "final_verdict": "NO_HIERARCHICAL_MOTIF_PASSED_FREQUENCY_GATE",
+  "pnl_or_backtest_allowed": false,
+  "reason": "Hierarchical parent motifs increased pre-outcome support but none satisfied all unchanged frequency and over-generalization gates; outcomes were not run.",
+  "semantic_hash": "fc028aff6e1b205979c28ae79f87c6f694a7e9e64e2b5d34750aeee50e38e9ce",
+  "strategy_activation_allowed": false
+}

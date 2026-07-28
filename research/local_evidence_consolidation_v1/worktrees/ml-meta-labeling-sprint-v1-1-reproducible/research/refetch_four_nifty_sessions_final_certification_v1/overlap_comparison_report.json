@@ -1,0 +1,37 @@
+{
+  "comparisons": [
+    {
+      "date": "2024-12-12",
+      "mismatch_timestamps": [],
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "patch_decision": "REQUIRED_BAR_ABSENT_IN_AUTHORIZED_RESPONSE",
+      "required_missing_timestamp_found": false
+    },
+    {
+      "date": "2025-03-25",
+      "mismatch_timestamps": [],
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "patch_decision": "REQUIRED_BAR_ABSENT_IN_AUTHORIZED_RESPONSE",
+      "required_missing_timestamp_found": false
+    },
+    {
+      "date": "2025-04-04",
+      "mismatch_timestamps": [],
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "patch_decision": "REQUIRED_BAR_ABSENT_IN_AUTHORIZED_RESPONSE",
+      "required_missing_timestamp_found": false
+    },
+    {
+      "date": "2025-04-23",
+      "mismatch_timestamps": [],
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "patch_decision": "REQUIRED_BAR_ABSENT_IN_AUTHORIZED_RESPONSE",
+      "required_missing_timestamp_found": false
+    }
+  ],
+  "status": "PASS"
+}

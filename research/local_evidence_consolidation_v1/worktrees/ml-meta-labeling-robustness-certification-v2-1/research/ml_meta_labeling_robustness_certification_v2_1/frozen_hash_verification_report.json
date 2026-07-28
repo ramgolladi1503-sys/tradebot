@@ -1,0 +1,115 @@
+{
+  "checks": [
+    {
+      "artifact": "candidate_level_dataset.parquet",
+      "exists": true
+    },
+    {
+      "artifact": "candidate_level_dataset_schema.json",
+      "exists": true
+    },
+    {
+      "artifact": "feature_contract.json",
+      "exists": true
+    },
+    {
+      "artifact": "label_contract.json",
+      "exists": true
+    },
+    {
+      "artifact": "split_contract.json",
+      "exists": true
+    },
+    {
+      "artifact": "preprocessor.joblib",
+      "exists": true
+    },
+    {
+      "artifact": "trained_model.joblib",
+      "exists": true
+    },
+    {
+      "artifact": "calibration_object.joblib",
+      "exists": true
+    },
+    {
+      "artifact": "frozen_selection_threshold.json",
+      "exists": true
+    },
+    {
+      "artifact": "holdout_predictions.parquet",
+      "exists": true
+    },
+    {
+      "artifact": "model_contract.json",
+      "exists": true
+    },
+    {
+      "artifact": "tuning_ledger.json",
+      "exists": true
+    },
+    {
+      "artifact": "serialization_replay_report.json",
+      "exists": true
+    },
+    {
+      "artifact": "independent_audit.json",
+      "exists": true
+    },
+    {
+      "artifact": "determinism_report.json",
+      "exists": true
+    },
+    {
+      "actual": "b38a4e603dea60df7f9013b836a104d47663ecd0933585a0823f5a58bf17794d",
+      "artifact": "candidate_level_dataset_hash.json",
+      "expected": "b38a4e603dea60df7f9013b836a104d47663ecd0933585a0823f5a58bf17794d",
+      "field": "canonical_content_hash",
+      "match": true
+    },
+    {
+      "actual": "597906bcb36cd24bce21167bb02ef2b0d2adfef9809285946d7f75632dc17e92",
+      "artifact": "feature_contract_hash.json",
+      "expected": "597906bcb36cd24bce21167bb02ef2b0d2adfef9809285946d7f75632dc17e92",
+      "field": "semantic_hash",
+      "match": true
+    },
+    {
+      "actual": "b3f64db22b99ccac56605d4a659ab6c063d4f635ab1d1df1bc26c3ec3f607504",
+      "artifact": "label_contract_hash.json",
+      "expected": "b3f64db22b99ccac56605d4a659ab6c063d4f635ab1d1df1bc26c3ec3f607504",
+      "field": "semantic_hash",
+      "match": true
+    },
+    {
+      "actual": "4844697db50d9890ee83b63c3c7642e595411a31ce97531d0012a9c8b8402dad",
+      "artifact": "split_contract_hash.json",
+      "expected": "4844697db50d9890ee83b63c3c7642e595411a31ce97531d0012a9c8b8402dad",
+      "field": "semantic_hash",
+      "match": true
+    },
+    {
+      "actual": "a1bc239b917564dece9d425fcb0fe655b61fff12f61222548c0fbf43a5063b63",
+      "artifact": "trained_model_hash.json",
+      "expected": "a1bc239b917564dece9d425fcb0fe655b61fff12f61222548c0fbf43a5063b63",
+      "field": "sha256",
+      "match": true
+    },
+    {
+      "actual": "70a01f51fcfd10f5c90a9d608a505931ee5aa408367bddb564148da61b4a27bf",
+      "artifact": "calibration_object_hash.json",
+      "expected": "70a01f51fcfd10f5c90a9d608a505931ee5aa408367bddb564148da61b4a27bf",
+      "field": "sha256",
+      "match": true
+    },
+    {
+      "actual": "66fb4dcb41ec0eff731dd46d89f792090f37882467228aa5abd748192f66fadd",
+      "artifact": "frozen_selection_threshold_hash.json",
+      "expected": "66fb4dcb41ec0eff731dd46d89f792090f37882467228aa5abd748192f66fadd",
+      "field": "sha256",
+      "match": true
+    }
+  ],
+  "semantic_hash": "7c73f85e492c6d1143122c3ea822b3fd32a251c00afdb2318d6d81873461660c",
+  "status": "PASS"
+}

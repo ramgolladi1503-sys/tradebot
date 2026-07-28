@@ -1,0 +1,26 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+    "brokerage": "included_in_frozen_round_trip_points",
+    "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+    "forced_exit_degradation": -1.1826315789473687,
+    "spread_slippage": "included_in_frozen_round_trip_points",
+    "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+    "brokerage": "included_in_frozen_round_trip_points",
+    "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+    "forced_exit_degradation": -1.73352380952381,
+    "spread_slippage": "included_in_frozen_round_trip_points",
+    "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+    "brokerage": "included_in_frozen_round_trip_points",
+    "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+    "forced_exit_degradation": -1.823495702005731,
+    "spread_slippage": "included_in_frozen_round_trip_points",
+    "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+  }
+}

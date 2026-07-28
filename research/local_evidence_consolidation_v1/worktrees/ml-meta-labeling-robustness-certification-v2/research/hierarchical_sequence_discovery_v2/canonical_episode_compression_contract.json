@@ -1,0 +1,12 @@
+{
+  "canonical_simultaneous_precedence": [
+    "underlying",
+    "option",
+    "context"
+  ],
+  "child_lineage_preserved": true,
+  "collapse_one_bar_toggles": true,
+  "merge_repeated_identical_events": true,
+  "remove_context_from_core_when_possible": true,
+  "semantic_hash": "574998413db537414cfaf089d824eee06181dd255f89da666fe5b040b2e3df0f"
+}

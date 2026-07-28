@@ -1,0 +1,8 @@
+{
+  "family_lane_q_values": true,
+  "fold_specific_hypotheses": 486,
+  "global_q_values": true,
+  "pre_control_survivors": 0,
+  "stable_templates": 166,
+  "target_family_q_values": true
+}

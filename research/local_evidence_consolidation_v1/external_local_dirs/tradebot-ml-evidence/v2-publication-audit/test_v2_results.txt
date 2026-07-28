@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.2, pytest-9.0.2, pluggy-1.6.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /Users/madhuram/tradebot-ml-strategy-discovery-v2-stability
+configfile: pytest.ini
+plugins: anyio-4.14.1, timeout-2.4.0, hypothesis-6.151.5
+collecting ... collected 38 items
+
+tests/test_ml_strategy_discovery_v2.py::test_v1_validation_blocked PASSED [  2%]
+tests/test_ml_strategy_discovery_v2.py::test_v1_holdout_blocked PASSED   [  5%]
+tests/test_ml_strategy_discovery_v2.py::test_fresh_outcomes_blocked_before_freeze PASSED [  7%]
+tests/test_ml_strategy_discovery_v2.py::test_metadata_only_fresh_inventory_allowed PASSED [ 10%]
+tests/test_ml_strategy_discovery_v2.py::test_consumed_confirmation_cannot_be_relocked PASSED [ 13%]
+tests/test_ml_strategy_discovery_v2.py::test_candidate_bound_token_required PASSED [ 15%]
+tests/test_ml_strategy_discovery_v2.py::test_token_replay_rejected PASSED [ 18%]
+tests/test_ml_strategy_discovery_v2.py::test_wrong_candidate_hash_rejected PASSED [ 21%]
+tests/test_ml_strategy_discovery_v2.py::test_wrong_manifest_hash_rejected PASSED [ 23%]
+tests/test_ml_strategy_discovery_v2.py::test_source_delta_deterministic PASSED [ 26%]
+tests/test_ml_strategy_discovery_v2.py::test_manifest_sidecar_mismatch PASSED [ 28%]
+tests/test_ml_strategy_discovery_v2.py::test_source_byte_mismatch PASSED [ 31%]
+tests/test_ml_strategy_discovery_v2.py::test_path_escape PASSED          [ 34%]
+tests/test_ml_strategy_discovery_v2.py::test_duplicate_session PASSED    [ 36%]
+tests/test_ml_strategy_discovery_v2.py::test_incomplete_standard_session PASSED [ 39%]
+tests/test_ml_strategy_discovery_v2.py::test_special_session_policy PASSED [ 42%]
+tests/test_ml_strategy_discovery_v2.py::test_minimum_row_support PASSED  [ 44%]
+tests/test_ml_strategy_discovery_v2.py::test_minimum_session_support PASSED [ 47%]
+tests/test_ml_strategy_discovery_v2.py::test_fold_coverage PASSED        [ 50%]
+tests/test_ml_strategy_discovery_v2.py::test_concentration PASSED        [ 52%]
+tests/test_ml_strategy_discovery_v2.py::test_base_rate_lift PASSED       [ 55%]
+tests/test_ml_strategy_discovery_v2.py::test_nested_fold_determinism PASSED [ 57%]
+tests/test_ml_strategy_discovery_v2.py::test_purge_embargo PASSED        [ 60%]
+tests/test_ml_strategy_discovery_v2.py::test_exact_rule_oracle PASSED    [ 63%]
+tests/test_ml_strategy_discovery_v2.py::test_imputation_dependence PASSED [ 65%]
+tests/test_ml_strategy_discovery_v2.py::test_equivalent_rule_rejection PASSED [ 68%]
+tests/test_ml_strategy_discovery_v2.py::test_threshold_stability PASSED  [ 71%]
+tests/test_ml_strategy_discovery_v2.py::test_family_level_multiple_testing_correction PASSED [ 73%]
+tests/test_ml_strategy_discovery_v2.py::test_stability_recurrence PASSED [ 76%]
+tests/test_ml_strategy_discovery_v2.py::test_control_comparison PASSED   [ 78%]
+tests/test_ml_strategy_discovery_v2.py::test_one_bar_latency PASSED      [ 81%]
+tests/test_ml_strategy_discovery_v2.py::test_two_bar_latency PASSED      [ 84%]
+tests/test_ml_strategy_discovery_v2.py::test_at_most_one_freeze_per_side PASSED [ 86%]
+tests/test_ml_strategy_discovery_v2.py::test_no_token_when_no_candidate PASSED [ 89%]
+tests/test_ml_strategy_discovery_v2.py::test_verdict_changes_with_fixture PASSED [ 92%]
+tests/test_ml_strategy_discovery_v2.py::test_hard_coded_verdict_impossible PASSED [ 94%]
+tests/test_ml_strategy_discovery_v2.py::test_no_fresh_metric_access_in_dev_mode PASSED [ 97%]
+tests/test_ml_strategy_discovery_v2.py::test_no_option_claims PASSED     [100%]
+
+============================== 38 passed in 2.11s ==============================

@@ -1,0 +1,4 @@
+{
+  "30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY",
+  "reason": "real option replay not evaluable and retrospective-only governance cannot promote production compatibility"
+}

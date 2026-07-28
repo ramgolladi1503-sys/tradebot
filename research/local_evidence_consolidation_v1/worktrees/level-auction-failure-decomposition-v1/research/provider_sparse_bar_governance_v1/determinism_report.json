@@ -1,0 +1,21 @@
+{
+  "rerun_hashes": {
+    "audit": "a8f4a7ed58fb642cb89d934f6a426c5b43e7e8ea061a9f11abea06ffdfc94a1e",
+    "canonical_rules": "959f06ac55d2666dd46ba925ba1a696088256d105c730ca2a9bf7c5339fc9461",
+    "capability": "49bc2dcedee5d9b893208b6c96830107b1ade91530ea32ca1ab1bf6e70c83595",
+    "contract": "c2e833a839403392cb39e08b18d5985ead14fabd51f1a2edbc8c493818fff0de",
+    "eligibility_framework": "90b800310cc07df2ee5ea84bade7f672ce7f784eacbfe750fb6fdfe2856db2df",
+    "feature_report": "d75a2cf6ca43457dfb0b8725f7ade6f4d55802e49987596c0f699fc78d0ff152",
+    "joint_report": "35240df99bcce7e9d55df5f842a195f017a1f1a7996ce1f3e1fa1735b7db16ac"
+  },
+  "semantic_hashes": {
+    "audit": "a8f4a7ed58fb642cb89d934f6a426c5b43e7e8ea061a9f11abea06ffdfc94a1e",
+    "canonical_rules": "959f06ac55d2666dd46ba925ba1a696088256d105c730ca2a9bf7c5339fc9461",
+    "capability": "49bc2dcedee5d9b893208b6c96830107b1ade91530ea32ca1ab1bf6e70c83595",
+    "contract": "c2e833a839403392cb39e08b18d5985ead14fabd51f1a2edbc8c493818fff0de",
+    "eligibility_framework": "90b800310cc07df2ee5ea84bade7f672ce7f784eacbfe750fb6fdfe2856db2df",
+    "feature_report": "d75a2cf6ca43457dfb0b8725f7ade6f4d55802e49987596c0f699fc78d0ff152",
+    "joint_report": "35240df99bcce7e9d55df5f842a195f017a1f1a7996ce1f3e1fa1735b7db16ac"
+  },
+  "status": "PASS"
+}

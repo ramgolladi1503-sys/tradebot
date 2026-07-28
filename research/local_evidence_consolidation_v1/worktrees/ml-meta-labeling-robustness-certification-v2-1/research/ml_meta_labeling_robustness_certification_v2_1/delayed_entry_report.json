@@ -1,0 +1,21 @@
+{
+  "executable_rate": 1.0,
+  "expectancy": -1.2993333333333323,
+  "gate_passed": false,
+  "gross_loss": 2652.25,
+  "gross_profit": 2262.4500000000003,
+  "net_pnl": -389.79999999999967,
+  "profit_factor": 0.8530304458478651,
+  "semantic_hash": "4c2fced506d7fa2a8d2a48962806eaf44489f3c476f3628adc1f39dc2e535ef7",
+  "top_3_removal": {
+    "expectancy": -1.6053872053872045,
+    "gross_loss": 2652.25,
+    "gross_profit": 2175.450000000001,
+    "net_pnl": -476.7999999999997,
+    "profit_factor": 0.8202281082100108,
+    "trades": 297,
+    "win_rate": 0.367003367003367
+  },
+  "trades": 300,
+  "win_rate": 0.37333333333333335
+}

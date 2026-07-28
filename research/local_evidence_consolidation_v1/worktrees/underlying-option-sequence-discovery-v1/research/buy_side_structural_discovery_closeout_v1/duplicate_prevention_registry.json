@@ -1,0 +1,11 @@
+{
+  "decision": "REJECT_AS_DUPLICATE",
+  "gate": "Before accepting a hypothesis, compare normalized causal sequence, economic exposure, required data, and economic-family fingerprint against mechanism_status_registry.json.",
+  "registry_semantic_hash": "e443a91983132d246ca5126ecc976cc764f80403ed736c293a36304b22e52bd4",
+  "rules": [
+    "Alias changes do not establish novelty.",
+    "Threshold, lookback, stop, target, or indicator substitutions within the same causal mechanism are duplicates.",
+    "A parked underpowered family remains closed to redesign; it may only be rerun unchanged after its objective history gate passes.",
+    "Material novelty requires a new economic exposure or newly certified data capability that changes observable causal information."
+  ]
+}

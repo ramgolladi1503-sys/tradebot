@@ -1,0 +1,39 @@
+{
+  "ambiguous_source_policy": "excluded from certified replay and AlgoTest comparison",
+  "completed_bar_rule": "option bars are complete only after interval end; tick snapshots are causal at or after exchange timestamp only",
+  "duplicate_policy": "dedupe only exact contract identity plus timestamp after preserving count in audit",
+  "missing_bars_policy": "no forward-fill across missing option timestamps for certified replay",
+  "option_chain_snapshot_semantics": "chain snapshot rows require all contracts sharing a causal timestamp and provenance",
+  "optional_quality_fields": [
+    "volume",
+    "oi",
+    "iv",
+    "bid",
+    "ask",
+    "spread",
+    "depth"
+  ],
+  "required_contract_identity": [
+    "underlying",
+    "expiry_date",
+    "strike",
+    "option_type"
+  ],
+  "required_price_fields": [
+    "ltp_or_ohlc"
+  ],
+  "session_boundaries": {
+    "end": "15:30",
+    "start": "09:15",
+    "timezone": "Asia/Kolkata"
+  },
+  "source_precedence": [
+    "TRUSTED_RAW",
+    "TRUSTED_DERIVED",
+    "OBSERVATIONAL_ONLY"
+  ],
+  "strike_step": "must be explicit per underlying and date",
+  "timestamp_semantics": "exchange_timestamp required; local_ts may be audit-only",
+  "timezone": "Asia/Kolkata",
+  "weekly_monthly_expiry_semantics": "must come from source metadata or instrument master, never inferred from date alone"
+}

@@ -1,0 +1,34 @@
+{
+  "FQSDV2_ELASTICITY_07": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_FAILED_OPPOSITE_04": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_INTRADAY_DOMINANCE_05": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_MULTI_STAGE_06": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_OTM_LADDER_08": {
+    "passed": true,
+    "rejection_reason": ""
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "passed": true,
+    "rejection_reason": ""
+  }
+}

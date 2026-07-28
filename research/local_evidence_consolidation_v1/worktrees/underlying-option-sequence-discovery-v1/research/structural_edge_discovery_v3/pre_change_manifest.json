@@ -1,0 +1,20 @@
+{
+  "base_branch": "data/combined-upstox-20260714",
+  "base_commit": "ebf0c59dcc8fa8d9bb57572c5331282dd89e473b",
+  "branch": "research/structural-edge-discovery-v3",
+  "dependency_lock_hash": "765d6bcec7457964a609714f694ec4326335cd7d9a64307c136777be0f903723",
+  "historical_data_roots": [
+    "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime",
+    "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip"
+  ],
+  "previous_head": "ebf0c59dcc8fa8d9bb57572c5331282dd89e473b",
+  "python_version": "3.12.2",
+  "repository_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3",
+  "reused_components": [
+    {
+      "component": "core.option_backtest",
+      "trust_status": "trusted_interface_not_used_for_verdict_without_contract_chain"
+    }
+  ],
+  "worktree_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3"
+}

@@ -1,0 +1,24 @@
+{
+  "deterministic_inputs_only": true,
+  "semantic_hashes": {
+    "ablation_report": "5b09924dec75f8861e9b533bd3ef3ab8139d35abac8214e1e673c851021c4eff",
+    "algotest_translation_specification": "a8179cbdab4a5cc9557e3015062c2e4a7216ceb318852c0e72d2ee36a1a74d14",
+    "concentration_report": "86a11c74c3457e80e41963e8e3564ab2d2110e7b5ba58fb6766d19b680a0d0b0",
+    "contract_identity_proof": "7f1113c8393e5b55304ee2a2fcbd0d547e56ac29e1161cc6f8e7c78517c5bd47",
+    "control_experiments": "2840692136417829432c8e9fb8e13ecf0938c42ab8604f975a1f3da8f8320d8c",
+    "development_only_benchmark_report": "9e6435114438055476bc8bdaccf70f74bee6060bf50fc85114a10f98266b2752",
+    "effective_sample_size_report": "2afa260f385b506169b97e4ac233090431221a6c48f74eb30072bc23592920ac",
+    "event_funnel_report": "c3bccdab1499e36d83c4c11566507325d82b6b19c69b745e23aa5dc35b78b233",
+    "execution_cost_report": "f2142ad0247313e226952f3f989ee690dbcb3fe3d1b069ea60b89a4743de3775",
+    "final_verdict": "aae4eac6e830ca773a716b89e9323e1c835132478e1a4702508aacbff4118bf5",
+    "holdout_results": "6ddfbda7b196536b83b71a449831630b9d79b16f74a10d1194625a8bbae0c3f9",
+    "incremental_option_value_report": "0155f42c87d4fe69bafeba6397753e49453c90192f2cde001ec48a3948c1695e",
+    "independent_audit": "cb6c45e664b485b8c39351acbe0d25ea173ee9549fb23a0b18eb5f19395f5c38",
+    "mechanism_results": "b82ca8aa23a17ebd865a697a8b0634fbbf619694d58211cfa0545922b2f86f1f",
+    "pre_change_manifest": "cbe2c2d3f87b0e016edd7ff7069a0309ea98422cfb4edd248998f9c4551e1b55",
+    "repaired_input_manifest": "6f386dfd0cc5045a54149fe0a680c6ff37ecf7aeb6f08666c0f41692d01245eb",
+    "robustness_report": "8306f70f22183ec9078495e269d772fa9d763e520da8c33c267845a8823f98e1",
+    "walk_forward_results": "3a54ffb7414af5c05b60ba74aa5a5b847f49de5900ae21dbc750f96220b4a574"
+  },
+  "status": "PASS"
+}

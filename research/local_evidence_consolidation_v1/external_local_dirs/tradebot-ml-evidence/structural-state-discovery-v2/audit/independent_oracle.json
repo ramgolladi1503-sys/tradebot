@@ -1,0 +1,14 @@
+{
+  "imports_primary_modules": false,
+  "status": "PASS",
+  "verified": [
+    "source/session ownership",
+    "feature formulas",
+    "cutoff timestamps",
+    "entry timestamps",
+    "30m outcomes",
+    "hypothesis membership",
+    "fold ownership",
+    "candidate bundle hash"
+  ]
+}

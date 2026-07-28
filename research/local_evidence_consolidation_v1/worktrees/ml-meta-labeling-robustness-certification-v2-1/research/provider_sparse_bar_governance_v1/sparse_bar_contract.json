@@ -1,0 +1,32 @@
+{
+  "contract_name": "provider_authoritative_sparse_bar_contract_v1",
+  "forbidden_transformations": [
+    "synthetic_ohlc",
+    "interpolate_ohlc",
+    "forward_fill_underlying",
+    "backfill_underlying",
+    "assume_consecutive_minutes_across_provider_gap"
+  ],
+  "states": {
+    "Eligibility Metadata": {
+      "definition": "Row-level booleans and blocker reasons deciding whether the row can enter structural discovery.",
+      "warehouse_rule": "Strategies consume research_eligible=true rows only and do not implement sparse-bar handling."
+    },
+    "Gap Metadata": {
+      "definition": "Non-price record describing the absent timestamp, provider evidence hash, request hash, reason, and affected windows.",
+      "warehouse_rule": "Required for every provider-authoritative absence."
+    },
+    "Observed Bar": {
+      "definition": "A one-minute OHLC row emitted by the selected provider and present in the canonical observed warehouse.",
+      "warehouse_rule": "May carry OHLC values and may be eligible subject to feature and session validity."
+    },
+    "Provider-Authoritative Absence": {
+      "definition": "A timestamp absent from the selected provider after authorized HTTP 200 historical retrieval, with surrounding observed rows matching existing data.",
+      "warehouse_rule": "Must be represented only as metadata. No OHLC row may be inserted."
+    },
+    "Synthetic Bar": {
+      "definition": "Any OHLC row produced by interpolation, copy-forward, backfill, model estimation, or manual fabrication.",
+      "warehouse_rule": "Forbidden for research readiness and must fail audit."
+    }
+  }
+}

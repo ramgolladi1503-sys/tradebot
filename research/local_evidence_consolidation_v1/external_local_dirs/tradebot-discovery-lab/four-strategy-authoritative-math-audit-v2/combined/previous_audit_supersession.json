@@ -1,0 +1,7 @@
+{
+  "artifact": "previous_audit_supersession",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "superseded_workspace": "/Users/madhuram/tradebot-discovery-lab/four-strategy-authoritative-math-audit",
+  "superseding_workspace": "/Users/madhuram/tradebot-discovery-lab/four-strategy-authoritative-math-audit-v2",
+  "supersession_verdict": "PREVIOUS_AUDIT_SUPERSEDED_BASELINE_UNPROVEN"
+}

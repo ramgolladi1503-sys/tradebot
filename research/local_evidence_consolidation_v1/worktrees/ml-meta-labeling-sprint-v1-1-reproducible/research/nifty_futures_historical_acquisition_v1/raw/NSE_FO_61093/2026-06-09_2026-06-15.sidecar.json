@@ -1,0 +1,22 @@
+{
+  "contract_symbol": "NIFTY FUT 28 JUL 26",
+  "date_range": [
+    "2026-06-09",
+    "2026-06-15"
+  ],
+  "empty_response": false,
+  "endpoint_name": "v3_historical_candle_minutes_1",
+  "error_class": null,
+  "expiry": "2026-07-28",
+  "http_status": 200,
+  "instrument_key": "NSE_FO|61093",
+  "interval": "1minute",
+  "provider": "upstox",
+  "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-09_2026-06-15.json",
+  "request_timestamp": "2026-07-28T13:16:23+00:00",
+  "response_hash": "5e8749f59873efb67750cbdaa9ab4ab6d9019a1ab1142039d1324c02c1bdcd0d",
+  "result_status": "HTTP_OK",
+  "retry_count": 0,
+  "row_count": 1875,
+  "semantic_hash": "b0979256a8f23b58da1c1a3aa2a2f4f40515fbc1966706d6f741454319f8b5f6"
+}

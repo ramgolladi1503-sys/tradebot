@@ -1,0 +1,107 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "alpha_decay_classification": "next_bar_executable_expectancy_is_negative",
+    "event_resolution_exit": {
+      "STOP": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -13.881866197183099,
+        "net_expectancy_points": -14.8818661971831,
+        "session_count": 43,
+        "trades": 1136
+      },
+      "TARGET": {
+        "expiry_count": 18,
+        "gross_expectancy_points": 18.509697933227343,
+        "net_expectancy_points": 17.509697933227343,
+        "session_count": 44,
+        "trades": 629
+      },
+      "TIME": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -0.1826315789473686,
+        "net_expectancy_points": -1.1826315789473687,
+        "session_count": 31,
+        "trades": 380
+      }
+    },
+    "fixed_horizon_net_expectancy": -1.1826315789473687,
+    "maximum_favourable_excursion_mean": 20.847878787878788,
+    "next_bar_midpoint_proxy": "unsupported because bid/ask is missing",
+    "next_bar_open_proxy": "unsupported because option open is not present in repaired joint warehouse",
+    "one_bar_delay_net_expectancy": -2.91405693950178,
+    "same_bar_value_dominance": "cannot be traded or monetized from one-minute OHLC without same-bar hindsight",
+    "signal_bar_close_proxy": "not executable under frozen model; same-bar premium movement is represented by premium_velocity only",
+    "timing_barrier": true,
+    "two_bar_delay_net_expectancy": -2.7179129464285716
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "alpha_decay_classification": "next_bar_executable_expectancy_is_negative",
+    "event_resolution_exit": {
+      "STOP": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -14.805180139267332,
+        "net_expectancy_points": -15.805180139267332,
+        "session_count": 80,
+        "trades": 3303
+      },
+      "TARGET": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 20.840444546287813,
+        "net_expectancy_points": 19.840444546287813,
+        "session_count": 80,
+        "trades": 2182
+      },
+      "TIME": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.73352380952381,
+        "net_expectancy_points": -1.73352380952381,
+        "session_count": 57,
+        "trades": 525
+      }
+    },
+    "fixed_horizon_net_expectancy": -1.73352380952381,
+    "maximum_favourable_excursion_mean": 28.621480865224626,
+    "next_bar_midpoint_proxy": "unsupported because bid/ask is missing",
+    "next_bar_open_proxy": "unsupported because option open is not present in repaired joint warehouse",
+    "one_bar_delay_net_expectancy": -1.6266649607642447,
+    "same_bar_value_dominance": "cannot be traded or monetized from one-minute OHLC without same-bar hindsight",
+    "signal_bar_close_proxy": "not executable under frozen model; same-bar premium movement is represented by premium_velocity only",
+    "timing_barrier": true,
+    "two_bar_delay_net_expectancy": -1.6712565628281417
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "alpha_decay_classification": "next_bar_executable_expectancy_is_negative",
+    "event_resolution_exit": {
+      "STOP": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -14.47344,
+        "net_expectancy_points": -15.47344,
+        "session_count": 81,
+        "trades": 2750
+      },
+      "TARGET": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 20.17309711286089,
+        "net_expectancy_points": 19.17309711286089,
+        "session_count": 81,
+        "trades": 1905
+      },
+      "TIME": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.8234957020057306,
+        "net_expectancy_points": -1.823495702005731,
+        "session_count": 50,
+        "trades": 349
+      }
+    },
+    "fixed_horizon_net_expectancy": -1.823495702005731,
+    "maximum_favourable_excursion_mean": 30.6298860911271,
+    "next_bar_midpoint_proxy": "unsupported because bid/ask is missing",
+    "next_bar_open_proxy": "unsupported because option open is not present in repaired joint warehouse",
+    "one_bar_delay_net_expectancy": -1.346629891756869,
+    "same_bar_value_dominance": "cannot be traded or monetized from one-minute OHLC without same-bar hindsight",
+    "signal_bar_close_proxy": "not executable under frozen model; same-bar premium movement is represented by premium_velocity only",
+    "timing_barrier": true,
+    "two_bar_delay_net_expectancy": -1.3102432667245871
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "duplicate_rule": "suppress adjacent identical events per session",
+  "event_order": "preserved",
+  "max_sequence_length": 30,
+  "maximum_gap": "same session",
+  "semantic_hash": "69a2bc4baf43be8fb265232870da2931ec27d4943c2fc647b2bac94ffe99216e",
+  "sparse_option_bar_policy": "excluded",
+  "timestamps": "preserved"
+}

@@ -1,0 +1,16 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": true,
+  "blockers": [
+    "no_candidate_survived_full_validation"
+  ],
+  "broker_api_called": false,
+  "hypotheses_generated": 25000,
+  "hypotheses_replayed": 12,
+  "hypotheses_screened": 25000,
+  "is_order_action": false,
+  "read_only": true,
+  "recommended_next_discovery_family": "trend_continuation",
+  "surviving_candidates": 0,
+  "verdict": "NO_SURVIVING_EDGE_FOUND"
+}

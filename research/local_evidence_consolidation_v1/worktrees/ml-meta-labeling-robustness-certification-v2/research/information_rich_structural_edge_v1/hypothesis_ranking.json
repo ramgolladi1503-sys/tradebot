@@ -1,0 +1,32 @@
+{
+  "hypotheses": [
+    {
+      "closed_lane_equivalent": false,
+      "direction": "low",
+      "feature": "open_interest_sum",
+      "frozen_on": "development_pre_expansion_information_only",
+      "hypothesis_id": "IRSEV1_H1",
+      "rule": "open_interest_sum <= 1424475.0",
+      "threshold": 1424475.0
+    },
+    {
+      "closed_lane_equivalent": false,
+      "direction": "low",
+      "feature": "volume_sum",
+      "frozen_on": "development_pre_expansion_information_only",
+      "hypothesis_id": "IRSEV1_H2",
+      "rule": "volume_sum <= 21450.0",
+      "threshold": 21450.0
+    },
+    {
+      "closed_lane_equivalent": false,
+      "direction": "high",
+      "feature": "minutes_to_close",
+      "frozen_on": "development_pre_expansion_information_only",
+      "hypothesis_id": "IRSEV1_H3",
+      "rule": "minutes_to_close >= 290.0",
+      "threshold": 290.0
+    }
+  ],
+  "semantic_hash": "580e89e01e92159779ba806a675187307b3309c2ace3bb361e01a0b87851ea2e"
+}

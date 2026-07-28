@@ -1,0 +1,6 @@
+{
+  "model_family": "xgboost",
+  "selected_model_key": "xgb_{'max_depth': 3, 'learning_rate': 0.08, 'n_estimators': 140}",
+  "semantic_hash": "0859ec0eed752e3ba0494444d51751c560af3847ba858544b630fefb90bbea00",
+  "validation_pr_auc": 0.23789181102420173
+}

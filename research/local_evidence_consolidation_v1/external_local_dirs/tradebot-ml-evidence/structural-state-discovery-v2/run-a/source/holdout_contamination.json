@@ -1,0 +1,4 @@
+{
+  "latest_100_internal_holdout_status": "CONTAMINATED_BY_V1_OUTCOME_MATERIALIZATION",
+  "policy": "no archive row labelled untouched holdout"
+}

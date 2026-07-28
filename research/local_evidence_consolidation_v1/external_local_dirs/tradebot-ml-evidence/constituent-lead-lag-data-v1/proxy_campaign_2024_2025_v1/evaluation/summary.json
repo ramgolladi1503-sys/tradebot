@@ -1,0 +1,50 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "chronological_folds": {
+    "folds": [],
+    "positive_mean_folds": 0,
+    "positive_median_folds": 0
+  },
+  "commercial_use_allowed": false,
+  "concentration": {
+    "signals": 0,
+    "top_five_session_contribution": null
+  },
+  "control_signals": 0,
+  "delay_sensitivity": {
+    "one_bar_delayed_entry": true,
+    "same_bar_entry_allowed": false
+  },
+  "index_symbol": "NIFTY",
+  "is_order_action": false,
+  "official_weight_gate_passed": false,
+  "research_only": true,
+  "state_reason_counts": {
+    "dispersion_too_high": 658,
+    "frozen_entry_conditions_not_met": 8,
+    "index_already_caught_up": 3166,
+    "index_range_already_consumed": 98,
+    "insufficient_lead_gap_history": 200
+  },
+  "state_rows": 4130,
+  "status": "RESEARCH_EVALUATION_COMPLETE",
+  "unweighted_outcome_summary": {
+    "reason": "weighted proxy repair run",
+    "status": "SKIPPED_BY_REQUEST"
+  },
+  "unweighted_signals": 0,
+  "weighted_outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "net_mean_bps": null,
+    "net_median_bps": null,
+    "positive_rate": null,
+    "research_only": true,
+    "signals_evaluable": 0,
+    "signals_total": 0
+  },
+  "weighted_signals": 0
+}

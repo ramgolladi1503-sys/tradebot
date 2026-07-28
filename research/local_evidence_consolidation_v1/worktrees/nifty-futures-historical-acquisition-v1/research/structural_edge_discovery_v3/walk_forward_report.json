@@ -1,0 +1,1748 @@
+{
+  "development_end": "2024-07-22",
+  "embargo_sessions": 0,
+  "folds": [
+    {
+      "candidate_id": "SEDV3_57333935c823",
+      "development": {
+        "average_loss": -43.65593607305934,
+        "average_win": 43.76677419354842,
+        "charges": 561.0,
+        "gross_pnl": -2215.7999999999884,
+        "mae_mean": 48.39291443850274,
+        "max_drawdown": -3477.649999999958,
+        "mfe_mean": 44.773395721924985,
+        "month_breakdown": {
+          "2024-05": 193.99999999999636,
+          "2024-06": -549.8499999999985,
+          "2024-07": -2420.949999999986
+        },
+        "net_expectancy": -7.4245989304812525,
+        "net_pnl": -2776.7999999999884,
+        "profit_factor": 0.709559496477751,
+        "recovery_factor": -0.7984702313343844,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3337.7999999999884
+        },
+        "target_count": 155,
+        "timeout_count": 219,
+        "top10_trade_contribution": -0.675633823105733,
+        "top5_trade_contribution": -0.4272363872082986,
+        "trade_count": 374,
+        "win_rate": 0.4144385026737968
+      },
+      "walk_forward": {
+        "average_loss": -53.98686868686892,
+        "average_win": 79.84473684210514,
+        "charges": 262.5,
+        "gross_pnl": 985.9999999999673,
+        "mae_mean": 58.6882857142857,
+        "max_drawdown": -1289.3500000000204,
+        "mfe_mean": 71.80485714285705,
+        "month_breakdown": {
+          "2024-07": -257.80000000003565,
+          "2024-08": 981.3000000000029
+        },
+        "net_expectancy": 4.134285714285527,
+        "net_pnl": 723.4999999999673,
+        "profit_factor": 1.1353677474881592,
+        "recovery_factor": 0.5611354558498126,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 460.99999999996726
+        },
+        "target_count": 84,
+        "timeout_count": 91,
+        "top10_trade_contribution": 3.691568762958009,
+        "top5_trade_contribution": 2.123842432619296,
+        "trade_count": 175,
+        "win_rate": 0.4342857142857143
+      }
+    },
+    {
+      "candidate_id": "SEDV3_0623568b1adf",
+      "development": {
+        "average_loss": -41.69635416666684,
+        "average_win": 37.642215568862234,
+        "charges": 538.5,
+        "gross_pnl": -1180.9500000000407,
+        "mae_mean": 45.25083565459626,
+        "max_drawdown": -2109.400000000034,
+        "mfe_mean": 42.20515320334239,
+        "month_breakdown": {
+          "2024-05": -207.45000000000073,
+          "2024-06": -6.400000000012369,
+          "2024-07": -1505.6000000000276
+        },
+        "net_expectancy": -4.78955431754886,
+        "net_pnl": -1719.4500000000407,
+        "profit_factor": 0.7852217794821148,
+        "recovery_factor": -0.8151370057836412,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -2257.9500000000407
+        },
+        "target_count": 151,
+        "timeout_count": 208,
+        "top10_trade_contribution": -1.0412631946261606,
+        "top5_trade_contribution": -0.6514583151588983,
+        "trade_count": 359,
+        "win_rate": 0.46518105849582175
+      },
+      "walk_forward": {
+        "average_loss": -84.19939759036193,
+        "average_win": 52.19941860465109,
+        "charges": 253.5,
+        "gross_pnl": -2245.900000000045,
+        "mae_mean": 80.60917159763338,
+        "max_drawdown": -2870.7000000000335,
+        "mfe_mean": 58.9242603550295,
+        "month_breakdown": {
+          "2024-07": -1101.9500000000153,
+          "2024-08": -1397.4500000000298
+        },
+        "net_expectancy": -14.789349112426303,
+        "net_pnl": -2499.400000000045,
+        "profit_factor": 0.6423578567800143,
+        "recovery_factor": -0.8706587243529509,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -2752.900000000045
+        },
+        "target_count": 78,
+        "timeout_count": 91,
+        "top10_trade_contribution": -0.6104465071617137,
+        "top5_trade_contribution": -0.3522045290869786,
+        "trade_count": 169,
+        "win_rate": 0.5088757396449705
+      }
+    },
+    {
+      "candidate_id": "SEDV3_86d8f2db4a20",
+      "development": {
+        "average_loss": -41.69635416666684,
+        "average_win": 37.642215568862234,
+        "charges": 538.5,
+        "gross_pnl": -1180.9500000000407,
+        "mae_mean": 45.25083565459626,
+        "max_drawdown": -2109.400000000034,
+        "mfe_mean": 42.20515320334239,
+        "month_breakdown": {
+          "2024-05": -207.45000000000073,
+          "2024-06": -6.400000000012369,
+          "2024-07": -1505.6000000000276
+        },
+        "net_expectancy": -4.78955431754886,
+        "net_pnl": -1719.4500000000407,
+        "profit_factor": 0.7852217794821148,
+        "recovery_factor": -0.8151370057836412,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -2257.9500000000407
+        },
+        "target_count": 151,
+        "timeout_count": 208,
+        "top10_trade_contribution": -1.0412631946261606,
+        "top5_trade_contribution": -0.6514583151588983,
+        "trade_count": 359,
+        "win_rate": 0.46518105849582175
+      },
+      "walk_forward": {
+        "average_loss": -84.19939759036193,
+        "average_win": 52.19941860465109,
+        "charges": 253.5,
+        "gross_pnl": -2245.900000000045,
+        "mae_mean": 80.60917159763338,
+        "max_drawdown": -2870.7000000000335,
+        "mfe_mean": 58.9242603550295,
+        "month_breakdown": {
+          "2024-07": -1101.9500000000153,
+          "2024-08": -1397.4500000000298
+        },
+        "net_expectancy": -14.789349112426303,
+        "net_pnl": -2499.400000000045,
+        "profit_factor": 0.6423578567800143,
+        "recovery_factor": -0.8706587243529509,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -2752.900000000045
+        },
+        "target_count": 78,
+        "timeout_count": 91,
+        "top10_trade_contribution": -0.6104465071617137,
+        "top5_trade_contribution": -0.3522045290869786,
+        "trade_count": 169,
+        "win_rate": 0.5088757396449705
+      }
+    },
+    {
+      "candidate_id": "SEDV3_37359995325f",
+      "development": {
+        "average_loss": -60.58206521739125,
+        "average_win": 61.264062500000215,
+        "charges": 612.0,
+        "gross_pnl": 3188.0500000000575,
+        "mae_mean": 61.053186274509805,
+        "max_drawdown": -1912.849999999955,
+        "mfe_mean": 58.32205882352956,
+        "month_breakdown": {
+          "2024-05": -792.5499999999956,
+          "2024-06": 2727.3000000000175,
+          "2024-07": 641.3000000000357
+        },
+        "net_expectancy": 6.313848039215827,
+        "net_pnl": 2576.0500000000575,
+        "profit_factor": 1.2310959801203953,
+        "recovery_factor": 1.3467077920381203,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1964.0500000000575
+        },
+        "target_count": 200,
+        "timeout_count": 208,
+        "top10_trade_contribution": 1.2228217619999378,
+        "top5_trade_contribution": 0.6630888375613685,
+        "trade_count": 408,
+        "win_rate": 0.5490196078431373
+      },
+      "walk_forward": {
+        "average_loss": -97.20392156862769,
+        "average_win": 55.93166666666677,
+        "charges": 288.0,
+        "gross_pnl": -4592.950000000015,
+        "mae_mean": 89.65416666666671,
+        "max_drawdown": -5254.000000000004,
+        "mfe_mean": 61.270052083333475,
+        "month_breakdown": {
+          "2024-07": 476.79999999998836,
+          "2024-08": -5357.750000000004
+        },
+        "net_expectancy": -25.42161458333341,
+        "net_pnl": -4880.950000000015,
+        "profit_factor": 0.5077106951224429,
+        "recovery_factor": -0.9289969547011823,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -5168.950000000015
+        },
+        "target_count": 75,
+        "timeout_count": 117,
+        "top10_trade_contribution": -0.3394728485233406,
+        "top5_trade_contribution": -0.19433716796935022,
+        "trade_count": 192,
+        "win_rate": 0.46875
+      }
+    },
+    {
+      "candidate_id": "SEDV3_f577427e60ef",
+      "development": {
+        "average_loss": -60.58206521739125,
+        "average_win": 61.264062500000215,
+        "charges": 612.0,
+        "gross_pnl": 3188.0500000000575,
+        "mae_mean": 61.053186274509805,
+        "max_drawdown": -1912.849999999955,
+        "mfe_mean": 58.32205882352956,
+        "month_breakdown": {
+          "2024-05": -792.5499999999956,
+          "2024-06": 2727.3000000000175,
+          "2024-07": 641.3000000000357
+        },
+        "net_expectancy": 6.313848039215827,
+        "net_pnl": 2576.0500000000575,
+        "profit_factor": 1.2310959801203953,
+        "recovery_factor": 1.3467077920381203,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1964.0500000000575
+        },
+        "target_count": 200,
+        "timeout_count": 208,
+        "top10_trade_contribution": 1.2228217619999378,
+        "top5_trade_contribution": 0.6630888375613685,
+        "trade_count": 408,
+        "win_rate": 0.5490196078431373
+      },
+      "walk_forward": {
+        "average_loss": -97.20392156862769,
+        "average_win": 55.93166666666677,
+        "charges": 288.0,
+        "gross_pnl": -4592.950000000015,
+        "mae_mean": 89.65416666666671,
+        "max_drawdown": -5254.000000000004,
+        "mfe_mean": 61.270052083333475,
+        "month_breakdown": {
+          "2024-07": 476.79999999998836,
+          "2024-08": -5357.750000000004
+        },
+        "net_expectancy": -25.42161458333341,
+        "net_pnl": -4880.950000000015,
+        "profit_factor": 0.5077106951224429,
+        "recovery_factor": -0.9289969547011823,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -5168.950000000015
+        },
+        "target_count": 75,
+        "timeout_count": 117,
+        "top10_trade_contribution": -0.3394728485233406,
+        "top5_trade_contribution": -0.19433716796935022,
+        "trade_count": 192,
+        "win_rate": 0.46875
+      }
+    },
+    {
+      "candidate_id": "SEDV3_82706963c73a",
+      "development": {
+        "average_loss": -60.58206521739125,
+        "average_win": 61.264062500000215,
+        "charges": 612.0,
+        "gross_pnl": 3188.0500000000575,
+        "mae_mean": 61.053186274509805,
+        "max_drawdown": -1912.849999999955,
+        "mfe_mean": 58.32205882352956,
+        "month_breakdown": {
+          "2024-05": -792.5499999999956,
+          "2024-06": 2727.3000000000175,
+          "2024-07": 641.3000000000357
+        },
+        "net_expectancy": 6.313848039215827,
+        "net_pnl": 2576.0500000000575,
+        "profit_factor": 1.2310959801203953,
+        "recovery_factor": 1.3467077920381203,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1964.0500000000575
+        },
+        "target_count": 200,
+        "timeout_count": 208,
+        "top10_trade_contribution": 1.2228217619999378,
+        "top5_trade_contribution": 0.6630888375613685,
+        "trade_count": 408,
+        "win_rate": 0.5490196078431373
+      },
+      "walk_forward": {
+        "average_loss": -97.20392156862769,
+        "average_win": 55.93166666666677,
+        "charges": 288.0,
+        "gross_pnl": -4592.950000000015,
+        "mae_mean": 89.65416666666671,
+        "max_drawdown": -5254.000000000004,
+        "mfe_mean": 61.270052083333475,
+        "month_breakdown": {
+          "2024-07": 476.79999999998836,
+          "2024-08": -5357.750000000004
+        },
+        "net_expectancy": -25.42161458333341,
+        "net_pnl": -4880.950000000015,
+        "profit_factor": 0.5077106951224429,
+        "recovery_factor": -0.9289969547011823,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -5168.950000000015
+        },
+        "target_count": 75,
+        "timeout_count": 117,
+        "top10_trade_contribution": -0.3394728485233406,
+        "top5_trade_contribution": -0.19433716796935022,
+        "trade_count": 192,
+        "win_rate": 0.46875
+      }
+    },
+    {
+      "candidate_id": "SEDV3_c06e6b330a3d",
+      "development": {
+        "average_loss": -60.09618644067783,
+        "average_win": 63.68953488372111,
+        "charges": 612.0,
+        "gross_pnl": -2616.0999999999367,
+        "mae_mean": 60.0252450980391,
+        "max_drawdown": -3671.599999999966,
+        "mfe_mean": 59.43921568627466,
+        "month_breakdown": {
+          "2024-05": 302.79999999999563,
+          "2024-06": -946.5000000000036,
+          "2024-07": -2584.3999999999287
+        },
+        "net_expectancy": -7.912009803921413,
+        "net_pnl": -3228.0999999999367,
+        "profit_factor": 0.7723917166689034,
+        "recovery_factor": -0.8792079747249065,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3840.0999999999367
+        },
+        "target_count": 174,
+        "timeout_count": 234,
+        "top10_trade_contribution": -1.0019516124036,
+        "top5_trade_contribution": -0.6294879340788809,
+        "trade_count": 408,
+        "win_rate": 0.4215686274509804
+      },
+      "walk_forward": {
+        "average_loss": -54.13585858585885,
+        "average_win": 85.0198924731181,
+        "charges": 288.0,
+        "gross_pnl": 2835.399999999958,
+        "mae_mean": 61.92552083333347,
+        "max_drawdown": -2175.1500000000306,
+        "mfe_mean": 81.77578124999957,
+        "month_breakdown": {
+          "2024-07": -1378.4500000000226,
+          "2024-08": 3925.8499999999804
+        },
+        "net_expectancy": 13.267708333333113,
+        "net_pnl": 2547.399999999958,
+        "profit_factor": 1.4753099665077472,
+        "recovery_factor": 1.171137622692652,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2259.399999999958
+        },
+        "target_count": 104,
+        "timeout_count": 88,
+        "top10_trade_contribution": 1.0467142969302154,
+        "top5_trade_contribution": 0.5788058412499074,
+        "trade_count": 192,
+        "win_rate": 0.484375
+      }
+    },
+    {
+      "candidate_id": "SEDV3_01b2f82b2b69",
+      "development": {
+        "average_loss": -60.09618644067783,
+        "average_win": 63.68953488372111,
+        "charges": 612.0,
+        "gross_pnl": -2616.0999999999367,
+        "mae_mean": 60.0252450980391,
+        "max_drawdown": -3671.599999999966,
+        "mfe_mean": 59.43921568627466,
+        "month_breakdown": {
+          "2024-05": 302.79999999999563,
+          "2024-06": -946.5000000000036,
+          "2024-07": -2584.3999999999287
+        },
+        "net_expectancy": -7.912009803921413,
+        "net_pnl": -3228.0999999999367,
+        "profit_factor": 0.7723917166689034,
+        "recovery_factor": -0.8792079747249065,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3840.0999999999367
+        },
+        "target_count": 174,
+        "timeout_count": 234,
+        "top10_trade_contribution": -1.0019516124036,
+        "top5_trade_contribution": -0.6294879340788809,
+        "trade_count": 408,
+        "win_rate": 0.4215686274509804
+      },
+      "walk_forward": {
+        "average_loss": -54.13585858585885,
+        "average_win": 85.0198924731181,
+        "charges": 288.0,
+        "gross_pnl": 2835.399999999958,
+        "mae_mean": 61.92552083333347,
+        "max_drawdown": -2175.1500000000306,
+        "mfe_mean": 81.77578124999957,
+        "month_breakdown": {
+          "2024-07": -1378.4500000000226,
+          "2024-08": 3925.8499999999804
+        },
+        "net_expectancy": 13.267708333333113,
+        "net_pnl": 2547.399999999958,
+        "profit_factor": 1.4753099665077472,
+        "recovery_factor": 1.171137622692652,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2259.399999999958
+        },
+        "target_count": 104,
+        "timeout_count": 88,
+        "top10_trade_contribution": 1.0467142969302154,
+        "top5_trade_contribution": 0.5788058412499074,
+        "trade_count": 192,
+        "win_rate": 0.484375
+      }
+    },
+    {
+      "candidate_id": "SEDV3_f51c21952010",
+      "development": {
+        "average_loss": -60.09618644067783,
+        "average_win": 63.68953488372111,
+        "charges": 612.0,
+        "gross_pnl": -2616.0999999999367,
+        "mae_mean": 60.0252450980391,
+        "max_drawdown": -3671.599999999966,
+        "mfe_mean": 59.43921568627466,
+        "month_breakdown": {
+          "2024-05": 302.79999999999563,
+          "2024-06": -946.5000000000036,
+          "2024-07": -2584.3999999999287
+        },
+        "net_expectancy": -7.912009803921413,
+        "net_pnl": -3228.0999999999367,
+        "profit_factor": 0.7723917166689034,
+        "recovery_factor": -0.8792079747249065,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3840.0999999999367
+        },
+        "target_count": 174,
+        "timeout_count": 234,
+        "top10_trade_contribution": -1.0019516124036,
+        "top5_trade_contribution": -0.6294879340788809,
+        "trade_count": 408,
+        "win_rate": 0.4215686274509804
+      },
+      "walk_forward": {
+        "average_loss": -54.13585858585885,
+        "average_win": 85.0198924731181,
+        "charges": 288.0,
+        "gross_pnl": 2835.399999999958,
+        "mae_mean": 61.92552083333347,
+        "max_drawdown": -2175.1500000000306,
+        "mfe_mean": 81.77578124999957,
+        "month_breakdown": {
+          "2024-07": -1378.4500000000226,
+          "2024-08": 3925.8499999999804
+        },
+        "net_expectancy": 13.267708333333113,
+        "net_pnl": 2547.399999999958,
+        "profit_factor": 1.4753099665077472,
+        "recovery_factor": 1.171137622692652,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2259.399999999958
+        },
+        "target_count": 104,
+        "timeout_count": 88,
+        "top10_trade_contribution": 1.0467142969302154,
+        "top5_trade_contribution": 0.5788058412499074,
+        "trade_count": 192,
+        "win_rate": 0.484375
+      }
+    },
+    {
+      "candidate_id": "SEDV3_02e046f49f8d",
+      "development": {
+        "average_loss": -60.09618644067783,
+        "average_win": 63.68953488372111,
+        "charges": 612.0,
+        "gross_pnl": -2616.0999999999367,
+        "mae_mean": 60.0252450980391,
+        "max_drawdown": -3671.599999999966,
+        "mfe_mean": 59.43921568627466,
+        "month_breakdown": {
+          "2024-05": 302.79999999999563,
+          "2024-06": -946.5000000000036,
+          "2024-07": -2584.3999999999287
+        },
+        "net_expectancy": -7.912009803921413,
+        "net_pnl": -3228.0999999999367,
+        "profit_factor": 0.7723917166689034,
+        "recovery_factor": -0.8792079747249065,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3840.0999999999367
+        },
+        "target_count": 174,
+        "timeout_count": 234,
+        "top10_trade_contribution": -1.0019516124036,
+        "top5_trade_contribution": -0.6294879340788809,
+        "trade_count": 408,
+        "win_rate": 0.4215686274509804
+      },
+      "walk_forward": {
+        "average_loss": -54.13585858585885,
+        "average_win": 85.0198924731181,
+        "charges": 288.0,
+        "gross_pnl": 2835.399999999958,
+        "mae_mean": 61.92552083333347,
+        "max_drawdown": -2175.1500000000306,
+        "mfe_mean": 81.77578124999957,
+        "month_breakdown": {
+          "2024-07": -1378.4500000000226,
+          "2024-08": 3925.8499999999804
+        },
+        "net_expectancy": 13.267708333333113,
+        "net_pnl": 2547.399999999958,
+        "profit_factor": 1.4753099665077472,
+        "recovery_factor": 1.171137622692652,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2259.399999999958
+        },
+        "target_count": 104,
+        "timeout_count": 88,
+        "top10_trade_contribution": 1.0467142969302154,
+        "top5_trade_contribution": 0.5788058412499074,
+        "trade_count": 192,
+        "win_rate": 0.484375
+      }
+    },
+    {
+      "candidate_id": "SEDV3_e89abf6a9472",
+      "development": {
+        "average_loss": -60.09618644067783,
+        "average_win": 63.68953488372111,
+        "charges": 612.0,
+        "gross_pnl": -2616.0999999999367,
+        "mae_mean": 60.0252450980391,
+        "max_drawdown": -3671.599999999966,
+        "mfe_mean": 59.43921568627466,
+        "month_breakdown": {
+          "2024-05": 302.79999999999563,
+          "2024-06": -946.5000000000036,
+          "2024-07": -2584.3999999999287
+        },
+        "net_expectancy": -7.912009803921413,
+        "net_pnl": -3228.0999999999367,
+        "profit_factor": 0.7723917166689034,
+        "recovery_factor": -0.8792079747249065,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3840.0999999999367
+        },
+        "target_count": 174,
+        "timeout_count": 234,
+        "top10_trade_contribution": -1.0019516124036,
+        "top5_trade_contribution": -0.6294879340788809,
+        "trade_count": 408,
+        "win_rate": 0.4215686274509804
+      },
+      "walk_forward": {
+        "average_loss": -54.13585858585885,
+        "average_win": 85.0198924731181,
+        "charges": 288.0,
+        "gross_pnl": 2835.399999999958,
+        "mae_mean": 61.92552083333347,
+        "max_drawdown": -2175.1500000000306,
+        "mfe_mean": 81.77578124999957,
+        "month_breakdown": {
+          "2024-07": -1378.4500000000226,
+          "2024-08": 3925.8499999999804
+        },
+        "net_expectancy": 13.267708333333113,
+        "net_pnl": 2547.399999999958,
+        "profit_factor": 1.4753099665077472,
+        "recovery_factor": 1.171137622692652,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2259.399999999958
+        },
+        "target_count": 104,
+        "timeout_count": 88,
+        "top10_trade_contribution": 1.0467142969302154,
+        "top5_trade_contribution": 0.5788058412499074,
+        "trade_count": 192,
+        "win_rate": 0.484375
+      }
+    },
+    {
+      "candidate_id": "SEDV3_c490f16de022",
+      "development": {
+        "average_loss": -44.36769230769239,
+        "average_win": 56.86352459016416,
+        "charges": 378.0,
+        "gross_pnl": 1547.5500000000175,
+        "mae_mean": 42.819841269841376,
+        "max_drawdown": -1990.1500000000233,
+        "mfe_mean": 53.4656746031746,
+        "month_breakdown": {
+          "2024-05": -85.65000000000146,
+          "2024-06": 1178.4000000000196,
+          "2024-07": 76.79999999999927
+        },
+        "net_expectancy": 4.641071428571498,
+        "net_pnl": 1169.5500000000175,
+        "profit_factor": 1.2027722875273095,
+        "recovery_factor": 0.5876692711604672,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 791.5500000000175
+        },
+        "target_count": 126,
+        "timeout_count": 126,
+        "top10_trade_contribution": 1.723226882134139,
+        "top5_trade_contribution": 0.9159933307682392,
+        "trade_count": 252,
+        "win_rate": 0.48412698412698413
+      },
+      "walk_forward": {
+        "average_loss": -77.86923076923071,
+        "average_win": 24.424242424242316,
+        "charges": 147.0,
+        "gross_pnl": -4108.5,
+        "mae_mean": 100.59591836734666,
+        "max_drawdown": -4078.5999999999985,
+        "mfe_mean": 37.32959183673528,
+        "month_breakdown": {
+          "2024-07": -3459.799999999992,
+          "2024-08": -795.700000000008
+        },
+        "net_expectancy": -43.423469387755105,
+        "net_pnl": -4255.5,
+        "profit_factor": 0.15924133162106036,
+        "recovery_factor": -1.0433727259353704,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4402.5
+        },
+        "target_count": 16,
+        "timeout_count": 82,
+        "top10_trade_contribution": -0.14330865938197593,
+        "top5_trade_contribution": -0.08430266713664669,
+        "trade_count": 98,
+        "win_rate": 0.336734693877551
+      }
+    },
+    {
+      "candidate_id": "SEDV3_f124fafcbf1b",
+      "development": {
+        "average_loss": -44.36769230769239,
+        "average_win": 56.86352459016416,
+        "charges": 378.0,
+        "gross_pnl": 1547.5500000000175,
+        "mae_mean": 42.819841269841376,
+        "max_drawdown": -1990.1500000000233,
+        "mfe_mean": 53.4656746031746,
+        "month_breakdown": {
+          "2024-05": -85.65000000000146,
+          "2024-06": 1178.4000000000196,
+          "2024-07": 76.79999999999927
+        },
+        "net_expectancy": 4.641071428571498,
+        "net_pnl": 1169.5500000000175,
+        "profit_factor": 1.2027722875273095,
+        "recovery_factor": 0.5876692711604672,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 791.5500000000175
+        },
+        "target_count": 126,
+        "timeout_count": 126,
+        "top10_trade_contribution": 1.723226882134139,
+        "top5_trade_contribution": 0.9159933307682392,
+        "trade_count": 252,
+        "win_rate": 0.48412698412698413
+      },
+      "walk_forward": {
+        "average_loss": -77.86923076923071,
+        "average_win": 24.424242424242316,
+        "charges": 147.0,
+        "gross_pnl": -4108.5,
+        "mae_mean": 100.59591836734666,
+        "max_drawdown": -4078.5999999999985,
+        "mfe_mean": 37.32959183673528,
+        "month_breakdown": {
+          "2024-07": -3459.799999999992,
+          "2024-08": -795.700000000008
+        },
+        "net_expectancy": -43.423469387755105,
+        "net_pnl": -4255.5,
+        "profit_factor": 0.15924133162106036,
+        "recovery_factor": -1.0433727259353704,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4402.5
+        },
+        "target_count": 16,
+        "timeout_count": 82,
+        "top10_trade_contribution": -0.14330865938197593,
+        "top5_trade_contribution": -0.08430266713664669,
+        "trade_count": 98,
+        "win_rate": 0.336734693877551
+      }
+    },
+    {
+      "candidate_id": "SEDV3_79475d997fec",
+      "development": {
+        "average_loss": -44.36769230769239,
+        "average_win": 56.86352459016416,
+        "charges": 378.0,
+        "gross_pnl": 1547.5500000000175,
+        "mae_mean": 42.819841269841376,
+        "max_drawdown": -1990.1500000000233,
+        "mfe_mean": 53.4656746031746,
+        "month_breakdown": {
+          "2024-05": -85.65000000000146,
+          "2024-06": 1178.4000000000196,
+          "2024-07": 76.79999999999927
+        },
+        "net_expectancy": 4.641071428571498,
+        "net_pnl": 1169.5500000000175,
+        "profit_factor": 1.2027722875273095,
+        "recovery_factor": 0.5876692711604672,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 791.5500000000175
+        },
+        "target_count": 126,
+        "timeout_count": 126,
+        "top10_trade_contribution": 1.723226882134139,
+        "top5_trade_contribution": 0.9159933307682392,
+        "trade_count": 252,
+        "win_rate": 0.48412698412698413
+      },
+      "walk_forward": {
+        "average_loss": -77.86923076923071,
+        "average_win": 24.424242424242316,
+        "charges": 147.0,
+        "gross_pnl": -4108.5,
+        "mae_mean": 100.59591836734666,
+        "max_drawdown": -4078.5999999999985,
+        "mfe_mean": 37.32959183673528,
+        "month_breakdown": {
+          "2024-07": -3459.799999999992,
+          "2024-08": -795.700000000008
+        },
+        "net_expectancy": -43.423469387755105,
+        "net_pnl": -4255.5,
+        "profit_factor": 0.15924133162106036,
+        "recovery_factor": -1.0433727259353704,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4402.5
+        },
+        "target_count": 16,
+        "timeout_count": 82,
+        "top10_trade_contribution": -0.14330865938197593,
+        "top5_trade_contribution": -0.08430266713664669,
+        "trade_count": 98,
+        "win_rate": 0.336734693877551
+      }
+    },
+    {
+      "candidate_id": "SEDV3_403b20f5a528",
+      "development": {
+        "average_loss": -44.36769230769239,
+        "average_win": 56.86352459016416,
+        "charges": 378.0,
+        "gross_pnl": 1547.5500000000175,
+        "mae_mean": 42.819841269841376,
+        "max_drawdown": -1990.1500000000233,
+        "mfe_mean": 53.4656746031746,
+        "month_breakdown": {
+          "2024-05": -85.65000000000146,
+          "2024-06": 1178.4000000000196,
+          "2024-07": 76.79999999999927
+        },
+        "net_expectancy": 4.641071428571498,
+        "net_pnl": 1169.5500000000175,
+        "profit_factor": 1.2027722875273095,
+        "recovery_factor": 0.5876692711604672,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 791.5500000000175
+        },
+        "target_count": 126,
+        "timeout_count": 126,
+        "top10_trade_contribution": 1.723226882134139,
+        "top5_trade_contribution": 0.9159933307682392,
+        "trade_count": 252,
+        "win_rate": 0.48412698412698413
+      },
+      "walk_forward": {
+        "average_loss": -77.86923076923071,
+        "average_win": 24.424242424242316,
+        "charges": 147.0,
+        "gross_pnl": -4108.5,
+        "mae_mean": 100.59591836734666,
+        "max_drawdown": -4078.5999999999985,
+        "mfe_mean": 37.32959183673528,
+        "month_breakdown": {
+          "2024-07": -3459.799999999992,
+          "2024-08": -795.700000000008
+        },
+        "net_expectancy": -43.423469387755105,
+        "net_pnl": -4255.5,
+        "profit_factor": 0.15924133162106036,
+        "recovery_factor": -1.0433727259353704,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4402.5
+        },
+        "target_count": 16,
+        "timeout_count": 82,
+        "top10_trade_contribution": -0.14330865938197593,
+        "top5_trade_contribution": -0.08430266713664669,
+        "trade_count": 98,
+        "win_rate": 0.336734693877551
+      }
+    },
+    {
+      "candidate_id": "SEDV3_5d0b26312590",
+      "development": {
+        "average_loss": -52.317931034482925,
+        "average_win": 54.4545454545455,
+        "charges": 333.0,
+        "gross_pnl": -3060.1000000000204,
+        "mae_mean": 57.976351351351354,
+        "max_drawdown": -5003.250000000018,
+        "mfe_mean": 58.23536036035987,
+        "month_breakdown": {
+          "2024-05": 421.6499999999942,
+          "2024-06": -778.5499999999884,
+          "2024-07": -3036.200000000026
+        },
+        "net_expectancy": -15.284234234234326,
+        "net_pnl": -3393.1000000000204,
+        "profit_factor": 0.5527214247109833,
+        "recovery_factor": -0.6781791835307066,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3726.1000000000204
+        },
+        "target_count": 93,
+        "timeout_count": 129,
+        "top10_trade_contribution": -0.4451533995461321,
+        "top5_trade_contribution": -0.2602192685155133,
+        "trade_count": 222,
+        "win_rate": 0.34684684684684686
+      },
+      "walk_forward": {
+        "average_loss": -74.34999999999988,
+        "average_win": 119.4198717948719,
+        "charges": 207.0,
+        "gross_pnl": 5060.750000000015,
+        "mae_mean": 64.85579710144893,
+        "max_drawdown": -2469.2000000000044,
+        "mfe_mean": 100.36666666666689,
+        "month_breakdown": {
+          "2024-07": -1073.2999999999884,
+          "2024-08": 5927.050000000003
+        },
+        "net_expectancy": 35.172101449275466,
+        "net_pnl": 4853.750000000015,
+        "profit_factor": 2.088040798027353,
+        "recovery_factor": 1.9657176413413275,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 4646.750000000015
+        },
+        "target_count": 73,
+        "timeout_count": 65,
+        "top10_trade_contribution": 0.6171207828998175,
+        "top5_trade_contribution": 0.33456605717228727,
+        "trade_count": 138,
+        "win_rate": 0.5652173913043478
+      }
+    },
+    {
+      "candidate_id": "SEDV3_7c19230c528f",
+      "development": {
+        "average_loss": -52.317931034482925,
+        "average_win": 54.4545454545455,
+        "charges": 333.0,
+        "gross_pnl": -3060.1000000000204,
+        "mae_mean": 57.976351351351354,
+        "max_drawdown": -5003.250000000018,
+        "mfe_mean": 58.23536036035987,
+        "month_breakdown": {
+          "2024-05": 421.6499999999942,
+          "2024-06": -778.5499999999884,
+          "2024-07": -3036.200000000026
+        },
+        "net_expectancy": -15.284234234234326,
+        "net_pnl": -3393.1000000000204,
+        "profit_factor": 0.5527214247109833,
+        "recovery_factor": -0.6781791835307066,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -3726.1000000000204
+        },
+        "target_count": 93,
+        "timeout_count": 129,
+        "top10_trade_contribution": -0.4451533995461321,
+        "top5_trade_contribution": -0.2602192685155133,
+        "trade_count": 222,
+        "win_rate": 0.34684684684684686
+      },
+      "walk_forward": {
+        "average_loss": -74.34999999999988,
+        "average_win": 119.4198717948719,
+        "charges": 207.0,
+        "gross_pnl": 5060.750000000015,
+        "mae_mean": 64.85579710144893,
+        "max_drawdown": -2469.2000000000044,
+        "mfe_mean": 100.36666666666689,
+        "month_breakdown": {
+          "2024-07": -1073.2999999999884,
+          "2024-08": 5927.050000000003
+        },
+        "net_expectancy": 35.172101449275466,
+        "net_pnl": 4853.750000000015,
+        "profit_factor": 2.088040798027353,
+        "recovery_factor": 1.9657176413413275,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 4646.750000000015
+        },
+        "target_count": 73,
+        "timeout_count": 65,
+        "top10_trade_contribution": 0.6171207828998175,
+        "top5_trade_contribution": 0.33456605717228727,
+        "trade_count": 138,
+        "win_rate": 0.5652173913043478
+      }
+    },
+    {
+      "candidate_id": "SEDV3_269e552b15c4",
+      "development": {
+        "average_loss": -48.8936936936936,
+        "average_win": 58.576506024096936,
+        "charges": 291.0,
+        "gross_pnl": -274.349999999944,
+        "mae_mean": 50.90128865979384,
+        "max_drawdown": -2750.699999999979,
+        "mfe_mean": 52.47164948453625,
+        "month_breakdown": {
+          "2024-05": 87.8499999999949,
+          "2024-06": -1183.8000000000065,
+          "2024-07": 530.6000000000677
+        },
+        "net_expectancy": -2.91417525773167,
+        "net_pnl": -565.349999999944,
+        "profit_factor": 0.8958302623820856,
+        "recovery_factor": -0.20552950158139685,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -856.349999999944
+        },
+        "target_count": 84,
+        "timeout_count": 110,
+        "top10_trade_contribution": -3.094896966481262,
+        "top5_trade_contribution": -1.7898646855931626,
+        "trade_count": 194,
+        "win_rate": 0.42783505154639173
+      },
+      "walk_forward": {
+        "average_loss": -49.468421052631655,
+        "average_win": 71.52954545454469,
+        "charges": 123.0,
+        "gross_pnl": 1390.4999999999636,
+        "mae_mean": 54.067073170732726,
+        "max_drawdown": -562.25,
+        "mfe_mean": 77.96341463414595,
+        "month_breakdown": {
+          "2024-07": -104.10000000002037,
+          "2024-08": 1371.599999999984
+        },
+        "net_expectancy": 15.457317073170287,
+        "net_pnl": 1267.4999999999636,
+        "profit_factor": 1.6742738589211414,
+        "recovery_factor": 2.254335260115542,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1144.4999999999636
+        },
+        "target_count": 48,
+        "timeout_count": 34,
+        "top10_trade_contribution": 1.2721104536489471,
+        "top5_trade_contribution": 0.7939644970414418,
+        "trade_count": 82,
+        "win_rate": 0.5365853658536586
+      }
+    },
+    {
+      "candidate_id": "SEDV3_bf996ca978cc",
+      "development": {
+        "average_loss": -48.8936936936936,
+        "average_win": 58.576506024096936,
+        "charges": 291.0,
+        "gross_pnl": -274.349999999944,
+        "mae_mean": 50.90128865979384,
+        "max_drawdown": -2750.699999999979,
+        "mfe_mean": 52.47164948453625,
+        "month_breakdown": {
+          "2024-05": 87.8499999999949,
+          "2024-06": -1183.8000000000065,
+          "2024-07": 530.6000000000677
+        },
+        "net_expectancy": -2.91417525773167,
+        "net_pnl": -565.349999999944,
+        "profit_factor": 0.8958302623820856,
+        "recovery_factor": -0.20552950158139685,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -856.349999999944
+        },
+        "target_count": 84,
+        "timeout_count": 110,
+        "top10_trade_contribution": -3.094896966481262,
+        "top5_trade_contribution": -1.7898646855931626,
+        "trade_count": 194,
+        "win_rate": 0.42783505154639173
+      },
+      "walk_forward": {
+        "average_loss": -49.468421052631655,
+        "average_win": 71.52954545454469,
+        "charges": 123.0,
+        "gross_pnl": 1390.4999999999636,
+        "mae_mean": 54.067073170732726,
+        "max_drawdown": -562.25,
+        "mfe_mean": 77.96341463414595,
+        "month_breakdown": {
+          "2024-07": -104.10000000002037,
+          "2024-08": 1371.599999999984
+        },
+        "net_expectancy": 15.457317073170287,
+        "net_pnl": 1267.4999999999636,
+        "profit_factor": 1.6742738589211414,
+        "recovery_factor": 2.254335260115542,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1144.4999999999636
+        },
+        "target_count": 48,
+        "timeout_count": 34,
+        "top10_trade_contribution": 1.2721104536489471,
+        "top5_trade_contribution": 0.7939644970414418,
+        "trade_count": 82,
+        "win_rate": 0.5365853658536586
+      }
+    },
+    {
+      "candidate_id": "SEDV3_1c0b38601852",
+      "development": {
+        "average_loss": -48.8936936936936,
+        "average_win": 58.576506024096936,
+        "charges": 291.0,
+        "gross_pnl": -274.349999999944,
+        "mae_mean": 50.90128865979384,
+        "max_drawdown": -2750.699999999979,
+        "mfe_mean": 52.47164948453625,
+        "month_breakdown": {
+          "2024-05": 87.8499999999949,
+          "2024-06": -1183.8000000000065,
+          "2024-07": 530.6000000000677
+        },
+        "net_expectancy": -2.91417525773167,
+        "net_pnl": -565.349999999944,
+        "profit_factor": 0.8958302623820856,
+        "recovery_factor": -0.20552950158139685,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -856.349999999944
+        },
+        "target_count": 84,
+        "timeout_count": 110,
+        "top10_trade_contribution": -3.094896966481262,
+        "top5_trade_contribution": -1.7898646855931626,
+        "trade_count": 194,
+        "win_rate": 0.42783505154639173
+      },
+      "walk_forward": {
+        "average_loss": -49.468421052631655,
+        "average_win": 71.52954545454469,
+        "charges": 123.0,
+        "gross_pnl": 1390.4999999999636,
+        "mae_mean": 54.067073170732726,
+        "max_drawdown": -562.25,
+        "mfe_mean": 77.96341463414595,
+        "month_breakdown": {
+          "2024-07": -104.10000000002037,
+          "2024-08": 1371.599999999984
+        },
+        "net_expectancy": 15.457317073170287,
+        "net_pnl": 1267.4999999999636,
+        "profit_factor": 1.6742738589211414,
+        "recovery_factor": 2.254335260115542,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1144.4999999999636
+        },
+        "target_count": 48,
+        "timeout_count": 34,
+        "top10_trade_contribution": 1.2721104536489471,
+        "top5_trade_contribution": 0.7939644970414418,
+        "trade_count": 82,
+        "win_rate": 0.5365853658536586
+      }
+    },
+    {
+      "candidate_id": "SEDV3_a7c938523fea",
+      "development": {
+        "average_loss": -51.13289473684199,
+        "average_win": 62.7984375000004,
+        "charges": 258.0,
+        "gross_pnl": 2400.5500000000466,
+        "mae_mean": 56.43662790697678,
+        "max_drawdown": -1364.6499999999978,
+        "mfe_mean": 66.56162790697674,
+        "month_breakdown": {
+          "2024-05": -98.40000000000146,
+          "2024-06": 811.75,
+          "2024-07": 1429.200000000048
+        },
+        "net_expectancy": 12.456686046511898,
+        "net_pnl": 2142.5500000000466,
+        "profit_factor": 1.5513368158307947,
+        "recovery_factor": 1.5700362730370792,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1884.5500000000466
+        },
+        "target_count": 99,
+        "timeout_count": 73,
+        "top10_trade_contribution": 1.1719213087208902,
+        "top5_trade_contribution": 0.8656040699166686,
+        "trade_count": 172,
+        "win_rate": 0.5581395348837209
+      },
+      "walk_forward": {
+        "average_loss": -107.78712121212101,
+        "average_win": 59.45227272727218,
+        "charges": 165.0,
+        "gross_pnl": -4333.05000000001,
+        "mae_mean": 113.06863636363673,
+        "max_drawdown": -4924.350000000002,
+        "mfe_mean": 65.00409090909085,
+        "month_breakdown": {
+          "2024-07": -984.6000000000095,
+          "2024-08": -3513.4500000000007
+        },
+        "net_expectancy": -40.89136363636373,
+        "net_pnl": -4498.05000000001,
+        "profit_factor": 0.36771413912102013,
+        "recovery_factor": -0.9134301989095024,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4663.05000000001
+        },
+        "target_count": 40,
+        "timeout_count": 70,
+        "top10_trade_contribution": -0.2840119607385384,
+        "top5_trade_contribution": -0.1625593312657697,
+        "trade_count": 110,
+        "win_rate": 0.4
+      }
+    },
+    {
+      "candidate_id": "SEDV3_6547a0db0e28",
+      "development": {
+        "average_loss": -51.13289473684199,
+        "average_win": 62.7984375000004,
+        "charges": 258.0,
+        "gross_pnl": 2400.5500000000466,
+        "mae_mean": 56.43662790697678,
+        "max_drawdown": -1364.6499999999978,
+        "mfe_mean": 66.56162790697674,
+        "month_breakdown": {
+          "2024-05": -98.40000000000146,
+          "2024-06": 811.75,
+          "2024-07": 1429.200000000048
+        },
+        "net_expectancy": 12.456686046511898,
+        "net_pnl": 2142.5500000000466,
+        "profit_factor": 1.5513368158307947,
+        "recovery_factor": 1.5700362730370792,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1884.5500000000466
+        },
+        "target_count": 99,
+        "timeout_count": 73,
+        "top10_trade_contribution": 1.1719213087208902,
+        "top5_trade_contribution": 0.8656040699166686,
+        "trade_count": 172,
+        "win_rate": 0.5581395348837209
+      },
+      "walk_forward": {
+        "average_loss": -107.78712121212101,
+        "average_win": 59.45227272727218,
+        "charges": 165.0,
+        "gross_pnl": -4333.05000000001,
+        "mae_mean": 113.06863636363673,
+        "max_drawdown": -4924.350000000002,
+        "mfe_mean": 65.00409090909085,
+        "month_breakdown": {
+          "2024-07": -984.6000000000095,
+          "2024-08": -3513.4500000000007
+        },
+        "net_expectancy": -40.89136363636373,
+        "net_pnl": -4498.05000000001,
+        "profit_factor": 0.36771413912102013,
+        "recovery_factor": -0.9134301989095024,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4663.05000000001
+        },
+        "target_count": 40,
+        "timeout_count": 70,
+        "top10_trade_contribution": -0.2840119607385384,
+        "top5_trade_contribution": -0.1625593312657697,
+        "trade_count": 110,
+        "win_rate": 0.4
+      }
+    },
+    {
+      "candidate_id": "SEDV3_82161e8f353f",
+      "development": {
+        "average_loss": -51.13289473684199,
+        "average_win": 62.7984375000004,
+        "charges": 258.0,
+        "gross_pnl": 2400.5500000000466,
+        "mae_mean": 56.43662790697678,
+        "max_drawdown": -1364.6499999999978,
+        "mfe_mean": 66.56162790697674,
+        "month_breakdown": {
+          "2024-05": -98.40000000000146,
+          "2024-06": 811.75,
+          "2024-07": 1429.200000000048
+        },
+        "net_expectancy": 12.456686046511898,
+        "net_pnl": 2142.5500000000466,
+        "profit_factor": 1.5513368158307947,
+        "recovery_factor": 1.5700362730370792,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1884.5500000000466
+        },
+        "target_count": 99,
+        "timeout_count": 73,
+        "top10_trade_contribution": 1.1719213087208902,
+        "top5_trade_contribution": 0.8656040699166686,
+        "trade_count": 172,
+        "win_rate": 0.5581395348837209
+      },
+      "walk_forward": {
+        "average_loss": -107.78712121212101,
+        "average_win": 59.45227272727218,
+        "charges": 165.0,
+        "gross_pnl": -4333.05000000001,
+        "mae_mean": 113.06863636363673,
+        "max_drawdown": -4924.350000000002,
+        "mfe_mean": 65.00409090909085,
+        "month_breakdown": {
+          "2024-07": -984.6000000000095,
+          "2024-08": -3513.4500000000007
+        },
+        "net_expectancy": -40.89136363636373,
+        "net_pnl": -4498.05000000001,
+        "profit_factor": 0.36771413912102013,
+        "recovery_factor": -0.9134301989095024,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4663.05000000001
+        },
+        "target_count": 40,
+        "timeout_count": 70,
+        "top10_trade_contribution": -0.2840119607385384,
+        "top5_trade_contribution": -0.1625593312657697,
+        "trade_count": 110,
+        "win_rate": 0.4
+      }
+    },
+    {
+      "candidate_id": "SEDV3_653bac2e6a30",
+      "development": {
+        "average_loss": -51.13289473684199,
+        "average_win": 62.7984375000004,
+        "charges": 258.0,
+        "gross_pnl": 2400.5500000000466,
+        "mae_mean": 56.43662790697678,
+        "max_drawdown": -1364.6499999999978,
+        "mfe_mean": 66.56162790697674,
+        "month_breakdown": {
+          "2024-05": -98.40000000000146,
+          "2024-06": 811.75,
+          "2024-07": 1429.200000000048
+        },
+        "net_expectancy": 12.456686046511898,
+        "net_pnl": 2142.5500000000466,
+        "profit_factor": 1.5513368158307947,
+        "recovery_factor": 1.5700362730370792,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1884.5500000000466
+        },
+        "target_count": 99,
+        "timeout_count": 73,
+        "top10_trade_contribution": 1.1719213087208902,
+        "top5_trade_contribution": 0.8656040699166686,
+        "trade_count": 172,
+        "win_rate": 0.5581395348837209
+      },
+      "walk_forward": {
+        "average_loss": -107.78712121212101,
+        "average_win": 59.45227272727218,
+        "charges": 165.0,
+        "gross_pnl": -4333.05000000001,
+        "mae_mean": 113.06863636363673,
+        "max_drawdown": -4924.350000000002,
+        "mfe_mean": 65.00409090909085,
+        "month_breakdown": {
+          "2024-07": -984.6000000000095,
+          "2024-08": -3513.4500000000007
+        },
+        "net_expectancy": -40.89136363636373,
+        "net_pnl": -4498.05000000001,
+        "profit_factor": 0.36771413912102013,
+        "recovery_factor": -0.9134301989095024,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": -4663.05000000001
+        },
+        "target_count": 40,
+        "timeout_count": 70,
+        "top10_trade_contribution": -0.2840119607385384,
+        "top5_trade_contribution": -0.1625593312657697,
+        "trade_count": 110,
+        "win_rate": 0.4
+      }
+    },
+    {
+      "candidate_id": "SEDV3_7661e3dfbceb",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    },
+    {
+      "candidate_id": "SEDV3_e054e5877d59",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    },
+    {
+      "candidate_id": "SEDV3_0e76314586ad",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    },
+    {
+      "candidate_id": "SEDV3_3f58e94495bd",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    },
+    {
+      "candidate_id": "SEDV3_27f58ab5e984",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    },
+    {
+      "candidate_id": "SEDV3_10659dc9294a",
+      "development": {
+        "average_loss": -50.79717514124307,
+        "average_win": 65.67970588235305,
+        "charges": 520.5,
+        "gross_pnl": 2694.9499999999935,
+        "mae_mean": 47.97708933717597,
+        "max_drawdown": -1377.2499999999927,
+        "mfe_mean": 63.301440922190096,
+        "month_breakdown": {
+          "2024-05": 297.49999999999636,
+          "2024-06": 1248.1500000000015,
+          "2024-07": 628.7999999999956
+        },
+        "net_expectancy": 6.266426512968281,
+        "net_pnl": 2174.4499999999935,
+        "profit_factor": 1.2418447131051804,
+        "recovery_factor": 1.578834634234892,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 1653.9499999999935
+        },
+        "target_count": 165,
+        "timeout_count": 182,
+        "top10_trade_contribution": 1.5742141691002383,
+        "top5_trade_contribution": 0.9214514015038353,
+        "trade_count": 347,
+        "win_rate": 0.4899135446685879
+      },
+      "walk_forward": {
+        "average_loss": -66.03015873015944,
+        "average_win": 71.05105263157901,
+        "charges": 237.0,
+        "gross_pnl": 2826.9499999999607,
+        "mae_mean": 66.88734177215218,
+        "max_drawdown": -1589.4500000000262,
+        "mfe_mean": 96.48797468354414,
+        "month_breakdown": {
+          "2024-07": 427.9999999999527,
+          "2024-08": 2161.950000000008
+        },
+        "net_expectancy": 16.392088607594687,
+        "net_pnl": 2589.9499999999607,
+        "profit_factor": 1.6225991009399103,
+        "recovery_factor": 1.6294630217999422,
+        "slippage_sensitivity": {
+          "cost_points_per_trade": 1.5,
+          "net_at_2x_cost": 2352.9499999999607
+        },
+        "target_count": 100,
+        "timeout_count": 58,
+        "top10_trade_contribution": 0.9050753875557589,
+        "top5_trade_contribution": 0.49973937720806294,
+        "trade_count": 158,
+        "win_rate": 0.6012658227848101
+      }
+    }
+  ],
+  "holdout_start": "2024-08-08",
+  "status": "COMPLETE"
+}

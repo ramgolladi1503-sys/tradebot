@@ -1,0 +1,95 @@
+{
+  "features": [
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "underlying open",
+        "prior close"
+      ],
+      "lookback": "session open",
+      "name": "gap_direction_magnitude",
+      "null_policy": "null if prior session missing",
+      "required_inputs": [
+        "underlying open",
+        "prior close"
+      ],
+      "semantic_hash": "fdb01dd57a3e01954b42e3baded620febd2e8d9d3b5776d491b6ffc74997a334",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    },
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "underlying OHLCV"
+      ],
+      "lookback": "current minute",
+      "name": "distance_from_session_vwap",
+      "null_policy": "null if volume unsupported",
+      "required_inputs": [
+        "underlying OHLCV"
+      ],
+      "semantic_hash": "901c8acb7dcd2406a9cc21ccb10ac8c96f47e7ddb2b50c9d0ccd676315dd9558",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    },
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "underlying high low close"
+      ],
+      "lookback": "current minute",
+      "name": "range_position",
+      "null_policy": "null if session range zero",
+      "required_inputs": [
+        "underlying high low close"
+      ],
+      "semantic_hash": "7d6de5bd9d24f3d4ef957668293545380142d9193f47449985d0189bd2811060",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    },
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "underlying returns"
+      ],
+      "lookback": "trailing windows",
+      "name": "realized_volatility_transition",
+      "null_policy": "null until trailing windows full",
+      "required_inputs": [
+        "underlying returns"
+      ],
+      "semantic_hash": "dc8772547e823839b7f81d9becf34f661e2fb7bddcebdd98e040d8c89745c9eb",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    },
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "CE premium",
+        "PE premium"
+      ],
+      "lookback": "current and trailing",
+      "name": "option_ce_pe_response_asymmetry",
+      "null_policy": "null if paired strikes missing",
+      "required_inputs": [
+        "CE premium",
+        "PE premium"
+      ],
+      "semantic_hash": "ad3d70e8912984c34cae02008ae0219d04d1036cb1a2857312ae0cfb5dd2dde9",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    },
+    {
+      "causal_proof": "does not use future returns or outcomes",
+      "lineage": [
+        "multi-strike option premiums"
+      ],
+      "lookback": "current minute",
+      "name": "cross_strike_dispersion",
+      "null_policy": "null if strike set incomplete",
+      "required_inputs": [
+        "multi-strike option premiums"
+      ],
+      "semantic_hash": "1fd9a1d3867dbe442f0570252e942d57a0df7bfd154c2e0bedac336fc8de1516",
+      "timestamp_availability": "current timestamp plus trailing-only history"
+    }
+  ],
+  "reason": "constituent/breadth input certification failed before state-vector construction",
+  "semantic_hash": "3aa54f8825570db501759cf8e7cedb0fadd5d4476bb6dec0d89f41ed5051d9bf",
+  "status": "CONTRACT_ONLY_NOT_MATERIALIZED"
+}

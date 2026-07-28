@@ -1,0 +1,10 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "joint_adds_value": false,
+    "joint_minus_underlying_net_expectancy": -1.500794401105749
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "joint_adds_value": true,
+    "joint_minus_underlying_net_expectancy": 7.432921385679897
+  }
+}

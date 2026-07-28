@@ -1,0 +1,60 @@
+{
+  "mechanisms": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "ce_only_expectancy": -213.519689119171,
+      "pe_only_expectancy": 64.72637554585152,
+      "remove_best_expiry_expectancy": -91.21197007481297,
+      "remove_best_month_expectancy": -65.25817518248175,
+      "remove_best_session_expectancy": -87.50865707434053,
+      "remove_top_10_expectancy": -107.96155339805823,
+      "remove_top_5_expectancy": -97.48611510791369
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "ce_only_expectancy": -190.4686046511628,
+      "pe_only_expectancy": 11.444999999999999,
+      "remove_best_expiry_expectancy": -81.9015625,
+      "remove_best_month_expectancy": -73.70735294117648,
+      "remove_best_session_expectancy": -99.8725,
+      "remove_top_10_expectancy": -116.78924731182798,
+      "remove_top_5_expectancy": -106.9811224489796
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "ce_only_expectancy": -176.52662196679438,
+      "pe_only_expectancy": 43.29588537839823,
+      "remove_best_expiry_expectancy": -93.46332261521972,
+      "remove_best_month_expectancy": -89.11880460683082,
+      "remove_best_session_expectancy": -93.24510542689251,
+      "remove_top_10_expectancy": -88.37747343160781,
+      "remove_top_5_expectancy": -81.35405201916495
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "ce_only_expectancy": -207.32919874037793,
+      "pe_only_expectancy": 46.71622785829307,
+      "remove_best_expiry_expectancy": -104.71622979552093,
+      "remove_best_month_expectancy": -103.7906835388276,
+      "remove_best_session_expectancy": -102.18178787878787,
+      "remove_top_10_expectancy": -96.92458552138035,
+      "remove_top_5_expectancy": -93.06825744800446
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "ce_only_expectancy": -249.0270343137255,
+      "pe_only_expectancy": 29.1879347826087,
+      "remove_best_expiry_expectancy": -164.40227586206896,
+      "remove_best_month_expectancy": -164.58854098360655,
+      "remove_best_session_expectancy": -141.0716214233309,
+      "remove_top_10_expectancy": -166.30962444771723,
+      "remove_top_5_expectancy": -152.07143800440207
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "ce_only_expectancy": -167.856015625,
+      "pe_only_expectancy": 29.223127147766323,
+      "remove_best_expiry_expectancy": -95.24392327811682,
+      "remove_best_month_expectancy": -95.3499792746114,
+      "remove_best_session_expectancy": -76.07240983606557,
+      "remove_top_10_expectancy": -97.21352310231022,
+      "remove_top_5_expectancy": -89.29337715694331
+    }
+  },
+  "semantic_hash": "423d0120f97bae7b90beecbbbd7aa30ed81afe3cae102031abd494fce3d9a1c4",
+  "status": "RUN"
+}

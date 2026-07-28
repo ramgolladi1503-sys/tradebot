@@ -1,0 +1,24 @@
+{
+  "bar_timestamp_semantics": "bar open timestamp; completed only after interval end",
+  "completed_bar_rule": "features at timestamp use only current completed bar and prior bars",
+  "duplicate_handling": "fail audit on duplicate timestamp+symbol",
+  "exchange_symbol": "NSE_INDEX|Nifty 50 / NIFTY",
+  "five_minute_aggregation": "deterministic completed-bar aggregation from canonical 1-minute, right-labelled at last included minute to match recovered option 5-minute evidence",
+  "holiday_handling": "sessions inferred from recovered source files; no synthetic holiday filling",
+  "missing_bar_handling": "mark gaps; no filling in canonical warehouse",
+  "no_cross_session_forward_filling": true,
+  "no_future_filling": true,
+  "one_minute_source": "Upstox V3 historical-candle per-session files",
+  "session_boundaries": {
+    "end": "15:29",
+    "expected_1m_bars": 375,
+    "expected_5m_bars": 75,
+    "start": "09:15"
+  },
+  "source_precedence": [
+    "TRUSTED_RAW one-minute Upstox per-session files",
+    "TRUSTED_DERIVED five-minute from one-minute"
+  ],
+  "spot_futures_proxy_semantics": "NIFTY spot index historical candles, not futures",
+  "timezone": "Asia/Kolkata"
+}

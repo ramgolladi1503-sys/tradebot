@@ -1,0 +1,24 @@
+{
+  "semantic_hashes": {
+    "ablations": "6c54afd7382117f97c9da7ecd2ceffd58fb44d0ff80b29d431cb2b4da9185990",
+    "algotest_specifications": "a8179cbdab4a5cc9557e3015062c2e4a7216ceb318852c0e72d2ee36a1a74d14",
+    "concentration_report": "1295f63304de5e3fafe6c7bcbe19272576f171954cbacb367b254f64a51f6cc1",
+    "controls": "be6df7a3c0d45a80c1fa2bb990962f89f7e23150c607abac7635307dd116af2f",
+    "data_capability_matrix": "c5a2f29bb179f888c836315c9c8d28f14d797fc241858d20c681e5bce2e2c5ce",
+    "development_event_feasibility_report": "65e3796bc9d3566185c3c5e8fc854909cecb7398279c3296eda59ae3b0572e8c",
+    "final_verdict": "b7696a9287209fd8200c7a4e258ccc58df20a8234d6043de5aaa0e0d14853365",
+    "frequency_gate_report": "1c9c2c8ebdf7a94e8c2b772cbad3ea263fe46fb5b90090c269ce725c8f8198b6",
+    "frozen_candidate_contracts": "ddf3ce6d7de3941827650cff7b184ffdd8ada89c382ecc2d9e64d8dd617e56f5",
+    "holdout_report": "af0bea365a276a021daa8eda98bed2a05736fb51d3bac086fd5d30e8adafa638",
+    "hypothesis_catalogue": "b974fef542d8cd9ad93a2cf7ae49e24d4cce64117a52894f5c38629913a5538c",
+    "incremental_option_value_report": "ff8cdc35ccd4dce43714b213144b3e1dc29e60d99c1d966fea58e720029ac590",
+    "independent_audit": "5bc7dca429af2e4716573387dcb10972aa4d4ba65fc22b5ef84aed60ae37ed86",
+    "mechanism_quality_report": "85e101ac518cacd613f518770151300f44217a1d02c70cc0bf61f55f668f210b",
+    "outcome_report": "3cb9d9ab10fe9024eb3ae1d7af4d38e47ca933d3b7a53d649641b3022cb41736",
+    "pre_change_manifest": "7b8ba60575fa0d534dd16dc924a428729c7152e9390b64e9ca38e673ba03cf93",
+    "prior_mechanism_exclusion_manifest": "4b642f7ab78e12f17f9a7e394297b116738bfb7ad39e3c95016fb453fa22867d",
+    "robustness_report": "f5569019ae0ac8e3b35e5a5dd8442da769ffeba36c4072cda7aa4fb57a5f258a",
+    "walk_forward_report": "ae1d6cb6c1e5c829f907e5b27d24b1db61b71d5b6bb605a54f647b6362335c43"
+  },
+  "status": "PASS"
+}

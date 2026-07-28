@@ -1,0 +1,98 @@
+{
+  "25pct_observed": {
+    "additional_for_research_grade": {
+      "approx_calendar_months_at_observed_event_rate": 74.76,
+      "expiries": 89,
+      "sessions": 120,
+      "trades": 314
+    },
+    "assumed_effect_points": 1.4630952380952382,
+    "high_confidence_total_required": {
+      "expiries": 95,
+      "sessions": 128,
+      "trades": 335
+    },
+    "minimum_viability_total_required": {
+      "expiries": 95,
+      "sessions": 128,
+      "trades": 335
+    },
+    "research_grade_total_required": {
+      "expiries": 95,
+      "sessions": 128,
+      "trades": 335
+    }
+  },
+  "50pct_observed": {
+    "additional_for_research_grade": {
+      "approx_calendar_months_at_observed_event_rate": 15.0,
+      "expiries": 18,
+      "sessions": 24,
+      "trades": 63
+    },
+    "assumed_effect_points": 2.9261904761904765,
+    "high_confidence_total_required": {
+      "expiries": 38,
+      "sessions": 50,
+      "trades": 84
+    },
+    "minimum_viability_total_required": {
+      "expiries": 24,
+      "sessions": 32,
+      "trades": 84
+    },
+    "research_grade_total_required": {
+      "expiries": 24,
+      "sessions": 32,
+      "trades": 84
+    }
+  },
+  "75pct_observed": {
+    "additional_for_research_grade": {
+      "approx_calendar_months_at_observed_event_rate": 4.05,
+      "expiries": 13,
+      "sessions": 17,
+      "trades": 17
+    },
+    "assumed_effect_points": 4.389285714285714,
+    "high_confidence_total_required": {
+      "expiries": 38,
+      "sessions": 50,
+      "trades": 38
+    },
+    "minimum_viability_total_required": {
+      "expiries": 12,
+      "sessions": 15,
+      "trades": 38
+    },
+    "research_grade_total_required": {
+      "expiries": 19,
+      "sessions": 25,
+      "trades": 38
+    }
+  },
+  "full_observed": {
+    "additional_for_research_grade": {
+      "approx_calendar_months_at_observed_event_rate": 0.0,
+      "expiries": 13,
+      "sessions": 17,
+      "trades": 0
+    },
+    "assumed_effect_points": 5.852380952380953,
+    "high_confidence_total_required": {
+      "expiries": 38,
+      "sessions": 50,
+      "trades": 21
+    },
+    "minimum_viability_total_required": {
+      "expiries": 8,
+      "sessions": 10,
+      "trades": 21
+    },
+    "research_grade_total_required": {
+      "expiries": 19,
+      "sessions": 25,
+      "trades": 21
+    }
+  }
+}

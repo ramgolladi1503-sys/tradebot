@@ -1,0 +1,88 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "random_entry": {
+        "max_trade_points": 176.8,
+        "min_trade_points": -230.45,
+        "net_expectancy_points": -1.4364068235802199,
+        "t_stat": -4.646316350623189,
+        "total_net_points": -6651.999999999998,
+        "trades": 4631,
+        "win_rate": 0.39041243791837615
+      },
+      "side_swapped": {
+        "max_trade_points": 130.7,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -0.9681605718999177,
+        "t_stat": -3.1577167852589514,
+        "total_net_points": -3521.2000000000007,
+        "trades": 3637,
+        "win_rate": 0.4074786912290349
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "random_entry": {
+        "max_trade_points": 176.8,
+        "min_trade_points": -230.45,
+        "net_expectancy_points": -1.2853044871794868,
+        "t_stat": -4.338241283851892,
+        "total_net_points": -6416.239999999998,
+        "trades": 4992,
+        "win_rate": 0.3954326923076923
+      },
+      "side_swapped": {
+        "max_trade_points": 97.65,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.3271819137749739,
+        "t_stat": -4.586579224329401,
+        "total_net_points": -5048.6,
+        "trades": 3804,
+        "win_rate": 0.39957939011566773
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "random_entry": {
+        "max_trade_points": 176.8,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -1.411511314655172,
+        "t_stat": -4.07151178545534,
+        "total_net_points": -5239.529999999999,
+        "trades": 3712,
+        "win_rate": 0.39035560344827586
+      },
+      "side_swapped": {
+        "max_trade_points": 130.7,
+        "min_trade_points": -145.29999999999998,
+        "net_expectancy_points": -1.4985428281804363,
+        "t_stat": -5.078911825142488,
+        "total_net_points": -5913.250000000002,
+        "trades": 3946,
+        "win_rate": 0.4001520527116067
+      }
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "random_entry": {
+        "max_trade_points": 149.85000000000002,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -1.3855938037865745,
+        "t_stat": -3.4845357407565722,
+        "total_net_points": -4025.1499999999987,
+        "trades": 2905,
+        "win_rate": 0.38795180722891565
+      },
+      "side_swapped": {
+        "max_trade_points": 98.40000000000003,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.7840301576422208,
+        "t_stat": -5.298266241280435,
+        "total_net_points": -5205.8,
+        "trades": 2918,
+        "win_rate": 0.386223440712817
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "semantic_hashes": {
+    "candidate_space_coverage_map": "716c2a9fe373307ca5be2bd388ea5e1254e5b0e6a66ea1cf5acf05855039e254",
+    "execution_label_audit": "daf7d92d3b31455474c60bcb2af558f71234d90badd634d289c94dc3c8b0ddd2",
+    "failure_taxonomy": "b19f766a2533f9550f9bf8fe106f7a2308ff2dd6ed70a63ed7b42cb261bebdc0",
+    "final_verdict": "c47aef4f32b258345982ca496fc0dda1effa66d30689799bc18b353aac8a3560",
+    "four_candidate_failure_autopsy": "43d8eda3ac30c0cf88d908a81854ecc69be4e3e36a474391d53d16e69e8d522a",
+    "incremental_option_value_report": "7699667a6b906b48dc5e6ffe0f03f9e1ef741debd4a25a451bb804bcbeab4d49",
+    "independent_audit_report": "8afa20bbc7084dd1b6973290aa3e61ce52d90014367876b1bb8daad0e1baa62f",
+    "pre_change_manifest": "594d002d6ddf27ecb25240cb6de9560f0e46293e1371ebbf1d28ff770309cf5d",
+    "prior_artifact_verification": "803e693c2ed3b4bb5c2e89d8bd638864d457b7e3921a2e7f46db5917f0e6d256",
+    "redesigned_mechanisms": "3c1b998f2f2dd8725ef9c5c364952c88fd1562d79ab4a64aba8e01129ed5d0cb",
+    "search_design_blind_spot_report": "a80e53c884f746855f0d033df41e5100281827d92a02295a42d4dafc9c85e01e",
+    "statistical_power_report": "8d5abb2c8764ac878fb35f6e896e299e5b63b30f85c960842ae2c3dd4d42271d",
+    "testability_classification": "25c27065fc5bc5d817e7ec12236f1ae94a7e2ec3ab3dc1c9c8a81fe5c5abe341"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS_BY_STABLE_PAYLOAD_HASH"
+}

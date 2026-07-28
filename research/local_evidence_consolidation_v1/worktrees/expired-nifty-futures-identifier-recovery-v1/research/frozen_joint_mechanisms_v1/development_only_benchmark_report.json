@@ -1,0 +1,295 @@
+{
+  "benchmark_fit_end": "2026-02-28",
+  "compression_table": [
+    {
+      "median": -0.09999999999999432,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "std": 3.7829835279640744
+    },
+    {
+      "median": -0.05000000000000071,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "std": 18.55180228851186
+    },
+    {
+      "median": -0.05000000000000071,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "std": 4.400014649091712
+    },
+    {
+      "median": -0.05000000000000071,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "std": 3.8293836935029795
+    },
+    {
+      "median": -0.04999999999999716,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "std": 3.755809403406936
+    },
+    {
+      "median": 0.049999999999998934,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "std": 8.406849878581637
+    },
+    {
+      "median": 0.049999999999998934,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "std": 5.689176889003163
+    },
+    {
+      "median": -0.05000000000000071,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "std": 4.283369998002341
+    }
+  ],
+  "development_rows": 172981,
+  "expected_response_table": [
+    {
+      "expected_response_points": -8.849999999999994,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -5.4,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.549999999999997,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -9.150000000000006,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.899999999999977,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -0.5500000000000007,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -2.25,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.024999999999977,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.824999999999989,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.25,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -1.200000000000001,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -3.1499999999999986,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.949999999999989,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.75,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -2.9000000000000004,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -5.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -9.200000000000017,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.349999999999994,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -2.8999999999999995,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -9.75,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -7.789999999999964,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -1.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -1.1500000000000021,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": 0.9000000000000057,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.899999999999977,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.200000000000003,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -0.9000000000000004,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -3.210000000000001,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.75,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -8.449999999999989,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -2.1000000000000005,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -3.044999999999998,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "UNKNOWN"
+    },
+    {
+      "expected_response_points": -9.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "UNKNOWN"
+    }
+  ],
+  "holdout_start": "2026-03-01"
+}

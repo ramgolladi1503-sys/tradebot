@@ -1,0 +1,33 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "research_only": true,
+  "rules": [
+    {
+      "hypothesis_id": "quantile_single_expansion_00332",
+      "net_5_mean": 8.51024758279457,
+      "net_5_median": 4.464628818556253,
+      "q_value": 0.002976666666666667,
+      "rule": "previous_range_bps >= 63.73077185571674",
+      "target_family": "expansion"
+    },
+    {
+      "hypothesis_id": "quantile_single_expansion_00334",
+      "net_5_mean": 9.415138818768543,
+      "net_5_median": 5.428517958102624,
+      "q_value": 0.002976666666666667,
+      "rule": "previous_range_bps >= 88.2733456299456",
+      "target_family": "expansion"
+    },
+    {
+      "hypothesis_id": "quantile_single_expansion_00336",
+      "net_5_mean": 10.480127403224614,
+      "net_5_median": 6.228518428126888,
+      "q_value": 0.002976666666666667,
+      "rule": "previous_range_bps >= 115.04182590726275",
+      "target_family": "expansion"
+    }
+  ]
+}

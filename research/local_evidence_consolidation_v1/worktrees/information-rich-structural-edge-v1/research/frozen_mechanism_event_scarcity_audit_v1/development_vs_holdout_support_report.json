@@ -1,0 +1,126 @@
+{
+  "distribution_shift": [
+    {
+      "feature": "ret_1",
+      "mean": null,
+      "nonnull_rate": 0.0,
+      "nonnull_rows": 0,
+      "p10": null,
+      "p90": null,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "ret_1",
+      "mean": null,
+      "nonnull_rate": 0.0,
+      "nonnull_rows": 0,
+      "p10": null,
+      "p90": null,
+      "rows": 94722,
+      "split": "holdout"
+    },
+    {
+      "feature": "premium_mean",
+      "mean": 255.9728187524387,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 297284,
+      "p10": 0.6,
+      "p90": 496.7350000000006,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "premium_mean",
+      "mean": 266.3040168070775,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 94722,
+      "p10": 0.5,
+      "p90": 573.2950000000004,
+      "rows": 94722,
+      "split": "holdout"
+    },
+    {
+      "feature": "dte",
+      "mean": 2.677382570202231,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 297284,
+      "p10": 0.0,
+      "p90": 6.0,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "dte",
+      "mean": 3.2594539811237095,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 94722,
+      "p10": 0.0,
+      "p90": 6.0,
+      "rows": 94722,
+      "split": "holdout"
+    },
+    {
+      "feature": "abs_moneyness_points",
+      "mean": 895.7861916551176,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 297284,
+      "p10": 42.099999999998545,
+      "p90": 2481.9000000000015,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "abs_moneyness_points",
+      "mean": 1078.280185173455,
+      "nonnull_rate": 1.0,
+      "nonnull_rows": 94722,
+      "p10": 49.599999999998545,
+      "p90": 2952.945000000001,
+      "rows": 94722,
+      "split": "holdout"
+    },
+    {
+      "feature": "premium_range_5",
+      "mean": 14.134294471215243,
+      "nonnull_rate": 0.9877591797742227,
+      "nonnull_rows": 293645,
+      "p10": 0.04999999999999999,
+      "p90": 35.860000000000014,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "premium_range_5",
+      "mean": 17.85699341725619,
+      "nonnull_rate": 0.9879225523109731,
+      "nonnull_rows": 93578,
+      "p10": 0.05,
+      "p90": 44.0,
+      "rows": 94722,
+      "split": "holdout"
+    },
+    {
+      "feature": "premium_range_20",
+      "mean": 251.6060016844042,
+      "nonnull_rate": 0.9725481357893462,
+      "nonnull_rows": 289123,
+      "p10": 0.65,
+      "p90": 483.9,
+      "rows": 297284,
+      "split": "development"
+    },
+    {
+      "feature": "premium_range_20",
+      "mean": 262.90015272186713,
+      "nonnull_rate": 0.9729629864234286,
+      "nonnull_rows": 92161,
+      "p10": 0.55,
+      "p90": 560.8,
+      "rows": 94722,
+      "split": "holdout"
+    }
+  ],
+  "primary_shift_finding": "Underlying displacement ret_1 has zero non-null support in both development and holdout; both frozen mechanisms require it.",
+  "status": "PASS"
+}

@@ -1,0 +1,7 @@
+{
+  "base_estimator": "xgb_{'max_depth': 3, 'learning_rate': 0.08, 'n_estimators': 140}",
+  "calibration_used": true,
+  "fit_split": "validation",
+  "method": "sigmoid",
+  "semantic_hash": "86369e8ec688dd0703093ee8cb95879134e58e183b024869eb1b4d21049c8a83"
+}

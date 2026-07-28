@@ -1,0 +1,11 @@
+{
+  "by_strategy": {
+    "GAP_GO_LEADER_V1": 55,
+    "LATE_DAY_PERSISTENCE_V1": 305,
+    "PRIOR_RANGE_LEADER_V1": 141
+  },
+  "by_symbol": {
+    "BANKNIFTY": 265,
+    "NIFTY": 236
+  }
+}

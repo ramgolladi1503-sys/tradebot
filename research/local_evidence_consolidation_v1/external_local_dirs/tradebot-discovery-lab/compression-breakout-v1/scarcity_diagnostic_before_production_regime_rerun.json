@@ -1,0 +1,183 @@
+{
+  "adapter_corrected": true,
+  "adapter_defect_found": true,
+  "attrition_ledger": {
+    "01_source_sessions": 1549,
+    "02_complete_sessions": 1529,
+    "03_rows_after_opening_range": 460229,
+    "04_rows_with_valid_profile": 460229,
+    "05_rows_with_valid_spot_vwap": 454113,
+    "06_rows_with_valid_range_width": 454113,
+    "07_rows_with_valid_atr_pair": 454113,
+    "08_rows_with_atr_ratio_lte_max": 28397,
+    "09_rows_with_range_component": 35542,
+    "10_rows_with_compression_score_gte_min": 0,
+    "11_rows_with_upper_or_lower_breakout_level": 454113,
+    "12_rows_with_call_breakout_distance_pass": 105394,
+    "13_rows_with_put_breakout_distance_pass": 103823,
+    "14_rows_with_call_vwap_alignment_pass": 112367,
+    "15_rows_with_put_vwap_alignment_pass": 111183,
+    "16_raw_production_candidates": 0,
+    "17_independent_predicate_candidates": 0,
+    "18_production_predicate_agreements": 454113,
+    "19_production_predicate_mismatches": 0,
+    "20_candidates_after_one_per_symbol_session": 0,
+    "21_candidates_with_legal_15m_outcome": 0
+  },
+  "attrition_ledger_raw": {
+    "01_source_sessions": 1549,
+    "02_complete_sessions": 1529,
+    "03_rows_after_opening_range": 460229,
+    "04_rows_with_valid_profile": 460229,
+    "05_rows_with_valid_spot_vwap": 454113,
+    "06_rows_with_valid_range_width": 454113,
+    "07_rows_with_valid_atr_pair": 454113,
+    "08_rows_with_atr_ratio_lte_max": 28397,
+    "09_rows_with_range_component": 35542,
+    "11_rows_with_upper_or_lower_breakout_level": 454113,
+    "12_rows_with_call_breakout_distance_pass": 105394,
+    "13_rows_with_put_breakout_distance_pass": 103823,
+    "14_rows_with_call_vwap_alignment_pass": 112367,
+    "15_rows_with_put_vwap_alignment_pass": 111183,
+    "18_production_predicate_agreements": 454113,
+    "20_candidates_after_one_per_symbol_session": 0,
+    "21_candidates_with_legal_15m_outcome": 0
+  },
+  "corrected_result_summary": {
+    "bootstrap_95_ci_bps": {
+      "lower_bps": 0.0,
+      "replications": 2000,
+      "seed": 20260730,
+      "upper_bps": 0.0
+    },
+    "candidate_count": 0,
+    "matched_time": {
+      "advantage_bps": 0.0
+    },
+    "session_count": 0,
+    "session_equal_mean_bps": 0.0,
+    "verdict": "COMPRESSION_CAUSAL_PROXY_REJECTED"
+  },
+  "distributions": {
+    "absolute_vwap_alignment": {
+      "max": 0.017919393497202233,
+      "min": 0.0,
+      "p01": 6.806130586195493e-06,
+      "p05": 3.437084030664306e-05,
+      "p25": 0.00017646365700693718,
+      "p50": 0.00039207926826733037,
+      "p75": 0.0007493514602784124,
+      "p95": 0.0017075172460299913,
+      "p99": 0.00293430356431367
+    },
+    "atr_short_long_ratio": {
+      "max": 2.387107140203597,
+      "min": 0.3014723327053053,
+      "p01": 0.6346042428119211,
+      "p05": 0.7337204033901716,
+      "p25": 0.877220812182729,
+      "p50": 0.9798319327731281,
+      "p75": 1.092936802973961,
+      "p95": 1.2931427948562688,
+      "p99": 1.4874295899702614
+    },
+    "call_breakout_distance": {
+      "max": 0.021217383531497856,
+      "min": -0.08133911430358728,
+      "p01": -0.015883281108669406,
+      "p05": -0.010333836013364288,
+      "p25": -0.00474382548123308,
+      "p50": -0.0019156294477191348,
+      "p75": 0.000592471619688566,
+      "p95": 0.004781721828285902,
+      "p99": 0.008745673778620667
+    },
+    "compression_score": {
+      "max": 0.22140626376390052,
+      "min": 0.0,
+      "p01": 0.0,
+      "p05": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p95": 0.04357370224199849,
+      "p99": 0.10299671383217934
+    },
+    "put_breakout_distance": {
+      "max": 0.05272827566572074,
+      "min": -0.03501981236190418,
+      "p01": -0.014890788995786206,
+      "p05": -0.009968690752330998,
+      "p25": -0.004785545860652068,
+      "p50": -0.0019931998781542895,
+      "p75": 0.0005303777065433085,
+      "p95": 0.005076624095060514,
+      "p99": 0.009502375826521348
+    },
+    "range_width_pct": {
+      "max": 8.913501862018116,
+      "min": 0.1381877063808054,
+      "p01": 0.24954959341676,
+      "p05": 0.31987625270637415,
+      "p25": 0.49312815214583317,
+      "p50": 0.676113917333281,
+      "p75": 0.9549653182316362,
+      "p95": 1.517076692165017,
+      "p99": 2.1490836252872265
+    }
+  },
+  "final_verdict": "COMPRESSION_CORRECTED_DISCOVERY_REJECTED",
+  "first_20_mismatches": [],
+  "independent_candidates": 0,
+  "missing_authority_files": [
+    "core/session_bar_history.py",
+    "docs/agent_reviews/compression_breakout_input_provenance_v1.json"
+  ],
+  "predicate_mismatches": 0,
+  "primary_scarcity_cause": "Correct production compression score includes normalized COMPRESSION regime score 0.0; with range width in percentage-point units and rolling 20-bar VWAP, no row satisfies the full frozen predicate with legal outcome.",
+  "production_candidates": 0,
+  "source_files_inspected": [
+    "strategies/movement/compression_breakout.py",
+    "core/strategy_parameter_profiles.py",
+    "core/indicators_live.py",
+    "tests/test_compression_trend_movement_strategies.py",
+    "discovery.py",
+    "result.json"
+  ],
+  "source_universe": {
+    "bars_eligible_after_required_warmups": 454113,
+    "bars_with_legal_15m_terminal": 454113,
+    "bars_with_legal_next_bar_entry": 454113,
+    "complete_eligible_symbol_sessions": 1529,
+    "sessions_by_symbol_year": {
+      "BANKNIFTY": {
+        "2024": 124,
+        "2025": 244,
+        "2026": 126
+      },
+      "NIFTY": {
+        "2024": 145,
+        "2025": 244,
+        "2026": 126
+      },
+      "SENSEX": {
+        "2024": 145,
+        "2025": 244,
+        "2026": 131
+      }
+    },
+    "sessions_rejected": {
+      "partial_gapped_duplicate": 18,
+      "unreadable": 2
+    },
+    "source_sessions": 1549,
+    "total_completed_bars": 573398
+  },
+  "thresholds": {
+    "MAX_ATR_RATIO": 0.75,
+    "MAX_RANGE_WIDTH_PCT": 0.35,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+    "MIN_COMPRESSION_SCORE": 0.5,
+    "MIN_VWAP_ALIGNMENT_PCT": 0.0004
+  }
+}

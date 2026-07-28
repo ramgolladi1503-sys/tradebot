@@ -1,0 +1,39 @@
+Sun Jul 19 02:25:13 IST 2026
+{"autoMergeRequest":null,"baseRefName":"main","changedFiles":8,"headRefOid":"c9c653110d6558f750914914b566f3f4928ed2a9","mergeable":"UNKNOWN","number":673,"reviewDecision":"","state":"MERGED","title":"docs: classify Trend and Compression replay provenance","url":"https://github.com/ramgolladi1503-sys/tradebot/pull/673"}
+Analyze (actions)	pass	48s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759439/job/88120273544	
+Analyze (python)	pass	1m38s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759439/job/88120273545	
+CodeQL	pass	2s	https://github.com/ramgolladi1503-sys/tradebot/runs/88120342944	
+Documentation, architecture, runtime health, contract guard, stale feed, and portfolio quality gate	pass	24s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759505/job/88120273818	
+agent-review-evidence	pass	11s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759435/job/88120273558	
+code-excellence-gates	pass	2m0s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759437/job/88120273561	
+gitleaks	pass	18s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759404/job/88120298760	
+health_gate	pass	2m48s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659758934/job/88121315770	
+health_gate	pass	3m5s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659758935/job/88121253415	
+health_gate	pass	2m25s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759404/job/88121333164	
+health_gate	pass	2m27s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759427/job/88121290761	
+repo-forensics-pr-gate	pass	45s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759446/job/88120273670	
+gitleaks	skipping	0	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659758935/job/88120298598	
+unit_tests	pass	12m6s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659758934/job/88120297816	
+unit_tests	pass	11m25s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659758935/job/88120298154	
+unit_tests	pass	12m19s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759404/job/88120298792	
+unit_tests	pass	11m50s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759427/job/88120300314	
+verify	pass	2m28s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29659759462/job/88120273733	
+{"autoMergeRequest":null,"baseRefName":"main","changedFiles":21,"headRefOid":"2219b0a6aa7294e2ff4124a80b5c7b182bd220ca","mergeable":"UNKNOWN","number":674,"reviewDecision":"","state":"OPEN","title":"research: measure certified ORB underlying outcomes","url":"https://github.com/ramgolladi1503-sys/tradebot/pull/674"}
+Analyze (actions)	pass	50s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030021/job/88120994060	
+Analyze (python)	pass	1m37s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030021/job/88120994046	
+CodeQL	pass	2s	https://github.com/ramgolladi1503-sys/tradebot/runs/88121050584	
+Documentation, architecture, runtime health, contract guard, stale feed, and portfolio quality gate	pass	17s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030016/job/88120994064	
+agent-review-evidence	pass	14s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030027/job/88120994148	
+code-excellence-gates	pass	2m3s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030041/job/88120994093	
+gitleaks	pass	18s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030038/job/88120994117	
+health_gate	pass	2m47s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660019057/job/88121988988	
+health_gate	pass	2m26s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660019064/job/88121878083	
+health_gate	pass	3m11s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030038/job/88121918180	
+health_gate	pass	2m58s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030061/job/88121975694	
+repo-forensics-pr-gate	pass	46s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030031/job/88120994082	
+unit_tests	pass	12m16s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660019057/job/88120964126	
+unit_tests	pass	10m56s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660019064/job/88120964193	
+unit_tests	pass	11m2s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030038/job/88120994119	
+gitleaks	skipping	0	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660019064/job/88120973856	
+unit_tests	pass	11m42s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030061/job/88120994220	
+verify	pass	2m21s	https://github.com/ramgolladi1503-sys/tradebot/actions/runs/29660030019/job/88120994136	

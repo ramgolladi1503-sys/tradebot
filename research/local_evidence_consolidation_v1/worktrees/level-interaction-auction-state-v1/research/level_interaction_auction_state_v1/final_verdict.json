@@ -1,0 +1,8 @@
+{
+  "broker_orders_allowed": false,
+  "exact_next_action": "Do not run AlgoTest unless a local survivor exists; inspect reports for whether a new frozen mechanism family is justified.",
+  "final_verdict": "NO_LEVEL_AUCTION_STRATEGY_SURVIVED",
+  "production_activation_allowed": false,
+  "reason": "Six frozen auction-state mechanisms were evaluated under predeclared evidence lanes; no local survivor passed all required economic and robustness gates.",
+  "semantic_hash": "46f039dc19204c25c160a44e079dac2aaf125319eb47fa1ec7d4aa62a543c9ce"
+}

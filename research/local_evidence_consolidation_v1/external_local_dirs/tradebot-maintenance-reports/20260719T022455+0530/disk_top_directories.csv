@@ -1,0 +1,6 @@
+path,size_kib,classification,action
+"/Users/madhuram/tradebot/.venv",2709492,"virtualenv","manual_review"
+"/private/tmp/orb_owner_audit",276556,"registered_git_worktree","preserve"
+"/Users/madhuram/tradebot/.mypy_cache",113344,"protected_shared_checkout_cache","preserve"
+"/Users/madhuram/tradebot/ui/node_modules",66320,"dependency_directory","preserve"
+"/Users/madhuram/tradebot/tests/__pycache__",45192,"protected_shared_checkout_cache","preserve"

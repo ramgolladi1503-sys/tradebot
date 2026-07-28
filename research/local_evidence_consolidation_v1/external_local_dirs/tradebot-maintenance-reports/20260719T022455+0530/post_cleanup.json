@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-07-19T02:48:00+05:30",
+  "cleanup_performed": false,
+  "available_kib_after": 3771376,
+  "available_gib_after": 3.6,
+  "orb_outcome_release_gate_required_gib": 20.0,
+  "orb_outcome_release_gate_passed": false,
+  "maintenance_verdict": "CLEANUP_INSUFFICIENT_FOR_OUTCOME_RUN",
+  "outcome_verdict": "ORB_OUTCOMES_INCOMPLETE"
+}

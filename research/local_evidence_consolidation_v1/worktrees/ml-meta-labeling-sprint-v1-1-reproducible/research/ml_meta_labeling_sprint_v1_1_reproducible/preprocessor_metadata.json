@@ -1,0 +1,5 @@
+{
+  "fit_split": "training",
+  "object": "ColumnTransformer numeric median impute + scale, categorical most-frequent impute + one-hot",
+  "semantic_hash": "80d8071e347df3c6b1d94e58c33ef73aa3a9f5e9a4fc22bb01db00313232e74c"
+}

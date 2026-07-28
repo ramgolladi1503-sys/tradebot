@@ -1,0 +1,42 @@
+{
+  "categories": {
+    "breadth": [
+      "breadth_expansion",
+      "breadth_contraction",
+      "breadth_recovery",
+      "sector_fragmentation",
+      "heavyweight_concentration_rise"
+    ],
+    "context": [
+      "opening_auction_aftermath",
+      "mid_morning_continuation_window",
+      "lunchtime_compression",
+      "final_hour_acceleration"
+    ],
+    "option": [
+      "ce_elasticity_expansion",
+      "pe_elasticity_expansion",
+      "cross_strike_agreement",
+      "premium_non_confirmation"
+    ],
+    "underlying": [
+      "displacement",
+      "compression",
+      "expansion",
+      "rejection",
+      "reclaim",
+      "acceptance",
+      "failed_break",
+      "repeated_test"
+    ],
+    "volatility": [
+      "volatility_compression",
+      "volatility_expansion",
+      "volatility_shock",
+      "volatility_stabilization"
+    ]
+  },
+  "causal_only": true,
+  "semantic_hash": "d0c4c9b7469937f21e7ab01ea8a7754245819d1dd0e49bd235108aea1295bf4d",
+  "status": "FROZEN_BLOCKED"
+}

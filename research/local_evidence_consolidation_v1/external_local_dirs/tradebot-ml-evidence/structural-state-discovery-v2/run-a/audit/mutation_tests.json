@@ -1,0 +1,54 @@
+{
+  "mutations": [
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "future_bar_inserted_into_feature_window"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "entry_shifted_to_decision_bar_past"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "30m_outcome_altered"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "session_moved_across_fold_boundary"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "holdout_exposure_label_altered"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "feature_value_altered"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "candidate_rule_altered"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "ledger_row_removed"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "source_hash_altered"
+    },
+    {
+      "error": "oracle detected mutation",
+      "exit_code": 2,
+      "name": "canonical_ordering_changed"
+    }
+  ]
+}

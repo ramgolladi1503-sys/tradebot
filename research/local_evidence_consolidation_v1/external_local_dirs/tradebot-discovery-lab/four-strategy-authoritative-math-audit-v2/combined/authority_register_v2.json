@@ -1,0 +1,87 @@
+{
+  "artifact": "authority_register_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "authorities": [
+    {
+      "path": "tests/test_four_strategy_contract_freeze.py",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "7dc569579028a25850bf89a45bd64d5b6d0d5202e7e9879d4e2ee56a6eefcf5d"
+    },
+    {
+      "path": "tests/test_opening_range_retest_temporal_fixture_contract.py",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "74a10f74d4a336ff7d32e4cb1cb14e8ef04019eb0f42fb7bb8c0c354d1e1cf3e"
+    },
+    {
+      "path": "tests/vwap_reclaim_test_support.py",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "7e2b16d92c20a1cb73b4e30f6f2003b1130c3ca02828dcc3d188574500a88916"
+    },
+    {
+      "path": "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "8b7df7e030306b9699347f9b3ed1c421fd8dfc302c7902a178e8111cb177d8c2"
+    },
+    {
+      "path": "docs/agent_reviews/four_strategy_contract_bundle_v1.json.sha256",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "81f9f7615d03691d446e96480b73920247205889c3f91b6b5fc91d63657c78e6"
+    },
+    {
+      "path": "docs/agent_reviews/trend_pullback_input_provenance_v1.json",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "5b6cbd573d230e6a2fb56c225caf0b27557049bdfe2a7e2182800471e0572904"
+    },
+    {
+      "path": "docs/agent_reviews/trend_pullback_replay_provenance_boundary.md",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "061fa0b2c2f2f8d53dc8327a9b5de27782de5bba452e97dccf882aea06085682"
+    },
+    {
+      "path": "docs/agent_reviews/compression_breakout_input_provenance_v1.json",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "d2ffe4c3a1e3d8a0a0a6fdb746e336a18f5685098204213ba8a78eee077faf82"
+    },
+    {
+      "path": "core/session_bar_history.py",
+      "present_in_audit_worktree": true,
+      "present_in_shared_checkout_head": false,
+      "present_in_verified_origin_main": true,
+      "previous_audit_claim": "ABSENT_OR_UNAVAILABLE",
+      "reconciliation_verdict": "PRESENT_AND_PREVIOUSLY_MISREPORTED",
+      "sha256_at_audit_baseline": "0068bc71a93bca3cdc4d35709eb8fac2d9b644873c99c15de4e11ad6ef43680b"
+    }
+  ]
+}

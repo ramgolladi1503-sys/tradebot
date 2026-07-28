@@ -1,0 +1,59 @@
+{
+  "compared_artifacts": [
+    {
+      "artifact": "option_source_inventory.json",
+      "match": true,
+      "primary_sha256": "134aa8f6689c7437fa90cf4d62668736bbc4bb4d650629017677d7bb72726793",
+      "rerun_sha256": "134aa8f6689c7437fa90cf4d62668736bbc4bb4d650629017677d7bb72726793"
+    },
+    {
+      "artifact": "option_source_inventory.csv",
+      "match": true,
+      "primary_sha256": "5aa64fa25a3c8b597e59cec1c9c8fe82ca670f05c3b72a23d6977415ab0bc92a",
+      "rerun_sha256": "5aa64fa25a3c8b597e59cec1c9c8fe82ca670f05c3b72a23d6977415ab0bc92a"
+    },
+    {
+      "artifact": "source_classification_table.csv",
+      "match": true,
+      "primary_sha256": "2098a317a1c2a58363f9373c92879dc10571dc490b907f448e7119b711dc1003",
+      "rerun_sha256": "2098a317a1c2a58363f9373c92879dc10571dc490b907f448e7119b711dc1003"
+    },
+    {
+      "artifact": "data_contract.json",
+      "match": true,
+      "primary_sha256": "984217a451ab3cd660a591e7c72d545eab1b6222fd33d44e04e26c7cf092c74e",
+      "rerun_sha256": "984217a451ab3cd660a591e7c72d545eab1b6222fd33d44e04e26c7cf092c74e"
+    },
+    {
+      "artifact": "coverage_report.json",
+      "match": true,
+      "primary_sha256": "15d212f452b6557ece8435a60bb674e51f0fb88ef2b6892c7c810f94425a9f6e",
+      "rerun_sha256": "15d212f452b6557ece8435a60bb674e51f0fb88ef2b6892c7c810f94425a9f6e"
+    },
+    {
+      "artifact": "capability_support_matrix.json",
+      "match": true,
+      "primary_sha256": "31e4a5e3657df6c5e9e82c494f19b36ee87c761c9ff08bd94d69cfa8feb24c3a",
+      "rerun_sha256": "31e4a5e3657df6c5e9e82c494f19b36ee87c761c9ff08bd94d69cfa8feb24c3a"
+    },
+    {
+      "artifact": "joint_warehouse_schema.json",
+      "match": true,
+      "primary_sha256": "30b830bd6e1547f9bbd9bd7efcdbae376f71af900cf48355575b32ff81fc4398",
+      "rerun_sha256": "30b830bd6e1547f9bbd9bd7efcdbae376f71af900cf48355575b32ff81fc4398"
+    },
+    {
+      "artifact": "premium_lead_lag_diagnostic.json",
+      "match": true,
+      "primary_sha256": "dee0372db813e0b340c45d76af0d5eb7df05cf1185dc7d41db415f9a49a080a9",
+      "rerun_sha256": "dee0372db813e0b340c45d76af0d5eb7df05cf1185dc7d41db415f9a49a080a9"
+    },
+    {
+      "artifact": "final_verdict.json",
+      "match": true,
+      "primary_sha256": "6864e01aa53a2d382d30d2401875ffe6fe486822c26a9c235091323e5eea86a8",
+      "rerun_sha256": "6864e01aa53a2d382d30d2401875ffe6fe486822c26a9c235091323e5eea86a8"
+    }
+  ],
+  "two_directory_determinism": "PASS"
+}

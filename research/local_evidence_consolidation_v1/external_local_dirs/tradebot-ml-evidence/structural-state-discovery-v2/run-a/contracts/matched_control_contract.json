@@ -1,0 +1,7 @@
+{
+  "candidate_hypotheses": 20,
+  "matched_rows": 31259,
+  "outcome_fields_used_for_matching": false,
+  "replacement": "allowed_across_candidates",
+  "tie_break": "distance_then_session"
+}

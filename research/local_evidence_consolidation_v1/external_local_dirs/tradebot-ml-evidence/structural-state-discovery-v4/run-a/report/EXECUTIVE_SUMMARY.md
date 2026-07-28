@@ -1,0 +1,1 @@
+Structural-state discovery v4 invalidates the broad v3 no-edge verdict and executes all five target families across quantile, tree, sparse, and cluster lanes. Final verdict: NO_STABLE_STATE_EDGE_FOUND_IN_PREDECLARED_SEARCH.

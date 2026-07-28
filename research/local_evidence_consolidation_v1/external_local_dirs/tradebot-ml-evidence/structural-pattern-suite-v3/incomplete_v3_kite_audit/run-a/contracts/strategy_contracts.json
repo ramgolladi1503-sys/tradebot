@@ -1,0 +1,34 @@
+{
+  "contracts": {
+    "GAP_GO_LEADER_V1": {
+      "decision_bar_completion": "09:45",
+      "directed_leader_spread_bps_min": 20.0,
+      "entry": "next_legal_bar_open",
+      "gap_normalized_min": 0.33,
+      "opening_return_abs_bps_min": 5.0
+    },
+    "LATE_DAY_PERSISTENCE_V1": {
+      "decision_bar_completion": "14:00",
+      "directional_displacement_normalized_min": 0.5,
+      "entry": "next_legal_bar_open",
+      "long_close_location_min": 0.8,
+      "short_close_location_max": 0.2
+    },
+    "PRIOR_RANGE_LEADER_V1": {
+      "decision_bar_completion": "09:45",
+      "directed_leader_spread_bps_min": 20.0,
+      "entry": "next_legal_bar_open",
+      "forbidden_filters": [
+        "ADX",
+        "RSI",
+        "EMA",
+        "VWAP",
+        "volume",
+        "weekday",
+        "expiry",
+        "hand_selected_time_filters"
+      ]
+    }
+  },
+  "full_base_sha": "a8fa0cf218df4b4b7a575ff36f344774ba1fff9d"
+}

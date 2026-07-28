@@ -1,0 +1,376 @@
+{
+  "causal_rule": "Features whose lookback requires consecutiveness invalidate; stateful counts and opening-range style features restart at the first observed bar after a gap.",
+  "examples": [
+    {
+      "feature_rules": {
+        "atr": "invalidate",
+        "compression": "invalidate",
+        "continuation_counts": "restart",
+        "expansion": "invalidate",
+        "momentum": "invalidate",
+        "opening_range_state": "restart",
+        "rolling_volatility": "invalidate",
+        "trend_persistence": "restart",
+        "vwap_windows": "restart"
+      },
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20241212_0942",
+      "leakage_across_gap": false,
+      "rows": [
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 1,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:39:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 4,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:40:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 4,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:41:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 4,
+          "research_eligibility_blockers": [
+            "feature_invalid_crosses_provider_sparse_bar",
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:43:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 4,
+          "research_eligibility_blockers": [
+            "feature_invalid_crosses_provider_sparse_bar",
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:44:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "feature_invalid_crosses_provider_sparse_bar",
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:45:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2024-12-12 09:46:00"
+        }
+      ],
+      "session": "2024-12-12",
+      "timestamp_absent_from_observed_fixture": "2024-12-12 09:42"
+    },
+    {
+      "feature_rules": {
+        "atr": "invalidate",
+        "compression": "invalidate",
+        "continuation_counts": "restart",
+        "expansion": "invalidate",
+        "momentum": "invalidate",
+        "opening_range_state": "restart",
+        "rolling_volatility": "invalidate",
+        "trend_persistence": "restart",
+        "vwap_windows": "restart"
+      },
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250325_1042",
+      "leakage_across_gap": false,
+      "rows": [
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 1,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-03-25 09:39:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-03-25 09:40:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-03-25 09:41:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-03-25 09:42:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-03-25 09:43:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-03-25 09:44:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-03-25 09:45:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-03-25 09:46:00"
+        }
+      ],
+      "session": "2025-03-25",
+      "timestamp_absent_from_observed_fixture": "2025-03-25 10:42"
+    },
+    {
+      "feature_rules": {
+        "atr": "invalidate",
+        "compression": "invalidate",
+        "continuation_counts": "restart",
+        "expansion": "invalidate",
+        "momentum": "invalidate",
+        "opening_range_state": "restart",
+        "rolling_volatility": "invalidate",
+        "trend_persistence": "restart",
+        "vwap_windows": "restart"
+      },
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250404_1157",
+      "leakage_across_gap": false,
+      "rows": [
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 1,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-04 09:39:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-04 09:40:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-04 09:41:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-04 09:42:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-04 09:43:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-04 09:44:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-04 09:45:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-04 09:46:00"
+        }
+      ],
+      "session": "2025-04-04",
+      "timestamp_absent_from_observed_fixture": "2025-04-04 11:57"
+    },
+    {
+      "feature_rules": {
+        "atr": "invalidate",
+        "compression": "invalidate",
+        "continuation_counts": "restart",
+        "expansion": "invalidate",
+        "momentum": "invalidate",
+        "opening_range_state": "restart",
+        "rolling_volatility": "invalidate",
+        "trend_persistence": "restart",
+        "vwap_windows": "restart"
+      },
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250423_1036",
+      "leakage_across_gap": false,
+      "rows": [
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 1,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-23 09:39:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-23 09:40:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-23 09:41:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-23 09:42:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-23 09:43:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": true,
+          "observed_minutes": 5,
+          "research_eligibility_blockers": [],
+          "research_eligible": true,
+          "timestamp": "2025-04-23 09:44:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-23 09:45:00"
+        },
+        {
+          "expected_minutes": 5,
+          "five_minute_window_complete": false,
+          "observed_minutes": 2,
+          "research_eligibility_blockers": [
+            "partial_5minute_bucket"
+          ],
+          "research_eligible": false,
+          "timestamp": "2025-04-23 09:46:00"
+        }
+      ],
+      "session": "2025-04-23",
+      "timestamp_absent_from_observed_fixture": "2025-04-23 10:36"
+    }
+  ],
+  "features_governed": {
+    "atr": "invalidate",
+    "compression": "invalidate",
+    "continuation_counts": "restart",
+    "expansion": "invalidate",
+    "momentum": "invalidate",
+    "opening_range_state": "restart",
+    "rolling_volatility": "invalidate",
+    "trend_persistence": "restart",
+    "vwap_windows": "restart"
+  },
+  "status": "PASS"
+}

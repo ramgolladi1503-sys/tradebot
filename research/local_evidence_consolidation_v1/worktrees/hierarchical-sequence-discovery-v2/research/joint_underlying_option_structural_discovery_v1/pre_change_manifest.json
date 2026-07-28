@@ -1,0 +1,12 @@
+{
+  "branch": "research/joint-underlying-option-structural-discovery-v1",
+  "capability_matrix_hash": "8255eeda6d651c7866aa54d59c31dbece88c13b3a5377fe72fa6073e2e56753e",
+  "clean_status": "?? research/joint_underlying_option_structural_discovery_v1/\n?? scripts/run_joint_structural_discovery_v1.py\n?? tests/research/test_joint_structural_discovery_v1.py",
+  "current_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "joint_governance_hash": "27aec0fd5b05dec7d460c0e38dd9cc5cc585e2ce494f43434c7536cb8bc1ad26",
+  "source_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+  "warehouse_file_sha256": "4b804e196f3ae18fa79a4228f822177cde6476541278eda596525b0cffec11f3",
+  "warehouse_semantic_hash": "48ae9f351b6ca0f0f1a970ae8a10c863be90d5c127d841b29193a3e71d8cd954",
+  "worktree": "/Users/madhuram/tradebot-joint-structural-discovery-v1"
+}

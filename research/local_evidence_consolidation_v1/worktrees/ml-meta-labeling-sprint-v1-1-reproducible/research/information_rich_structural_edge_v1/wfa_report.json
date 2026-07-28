@@ -1,0 +1,138 @@
+{
+  "hypotheses": {
+    "IRSEV1_H1": {
+      "folds": [
+        {
+          "expiries": 25,
+          "fold": 1,
+          "gross_expectancy": -0.8195086705202311,
+          "max_drawdown": -14431.849999999966,
+          "max_expiry_share": 0.10944961045488816,
+          "max_month_share": 0.2700427243025886,
+          "net_expectancy": -1.8195086705202317,
+          "profit_factor": 0.8282443970497179,
+          "sessions": 39,
+          "trades": 7958,
+          "win_rate": 0.3616486554410656
+        },
+        {
+          "expiries": 25,
+          "fold": 2,
+          "gross_expectancy": -1.0802218794494542,
+          "max_drawdown": -25396.949999999928,
+          "max_expiry_share": 0.0926672994779307,
+          "max_month_share": 0.2197437114380636,
+          "net_expectancy": -2.0802218794494545,
+          "profit_factor": 0.8171457053394329,
+          "sessions": 38,
+          "trades": 8428,
+          "win_rate": 0.3440911248220218
+        },
+        {
+          "expiries": 25,
+          "fold": 3,
+          "gross_expectancy": 0.33628163454840987,
+          "max_drawdown": -10533.169999999996,
+          "max_expiry_share": 0.08428140236823775,
+          "max_month_share": 0.2771070350592059,
+          "net_expectancy": -0.6637183654515902,
+          "profit_factor": 0.9387015922788025,
+          "sessions": 38,
+          "trades": 8614,
+          "win_rate": 0.3925005804504295
+        }
+      ],
+      "positive_folds": 0
+    },
+    "IRSEV1_H2": {
+      "folds": [
+        {
+          "expiries": 25,
+          "fold": 1,
+          "gross_expectancy": -1.2225148040821472,
+          "max_drawdown": -17936.199999999913,
+          "max_expiry_share": 0.10482550081894923,
+          "max_month_share": 0.24555877535592793,
+          "net_expectancy": -2.2225148040821465,
+          "profit_factor": 0.7796807887482967,
+          "sessions": 39,
+          "trades": 7937,
+          "win_rate": 0.31850825248834574
+        },
+        {
+          "expiries": 25,
+          "fold": 2,
+          "gross_expectancy": -1.9710881406288687,
+          "max_drawdown": -28540.75999999988,
+          "max_expiry_share": 0.0856647685070562,
+          "max_month_share": 0.23929190393661798,
+          "net_expectancy": -2.971088140628868,
+          "profit_factor": 0.7247609679837639,
+          "sessions": 38,
+          "trades": 8078,
+          "win_rate": 0.2910373854914583
+        },
+        {
+          "expiries": 25,
+          "fold": 3,
+          "gross_expectancy": 0.9828313917841816,
+          "max_drawdown": -6952.059999999993,
+          "max_expiry_share": 0.08865726548129982,
+          "max_month_share": 0.28522378908645,
+          "net_expectancy": -0.01716860821581832,
+          "profit_factor": 0.9981673189018261,
+          "sessions": 38,
+          "trades": 8155,
+          "win_rate": 0.3518087063151441
+        }
+      ],
+      "positive_folds": 0
+    },
+    "IRSEV1_H3": {
+      "folds": [
+        {
+          "expiries": 25,
+          "fold": 1,
+          "gross_expectancy": 0.2403903496882624,
+          "max_drawdown": -8786.199999999992,
+          "max_expiry_share": 0.05394415830848468,
+          "max_month_share": 0.19463269178639198,
+          "net_expectancy": -0.7596096503117375,
+          "profit_factor": 0.9033948994630558,
+          "sessions": 39,
+          "trades": 7378,
+          "win_rate": 0.36134453781512604
+        },
+        {
+          "expiries": 25,
+          "fold": 2,
+          "gross_expectancy": 0.7646120986633597,
+          "max_drawdown": -5466.549999999999,
+          "max_expiry_share": 0.054016811354554224,
+          "max_month_share": 0.2206145790271462,
+          "net_expectancy": -0.23538790133664042,
+          "profit_factor": 0.9681494791644331,
+          "sessions": 38,
+          "trades": 7257,
+          "win_rate": 0.3469753341601213
+        },
+        {
+          "expiries": 25,
+          "fold": 3,
+          "gross_expectancy": 0.7044146646299125,
+          "max_drawdown": -6897.849999999993,
+          "max_expiry_share": 0.06151923343980003,
+          "max_month_share": 0.1953895292320511,
+          "net_expectancy": -0.2955853353700875,
+          "profit_factor": 0.9603814309374434,
+          "sessions": 38,
+          "trades": 7201,
+          "win_rate": 0.3641160949868074
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "semantic_hash": "b0d97847a9f963884a8ff5869036341e88b4d9692b85a1d87b0383054a9c9471",
+  "status": "RUN"
+}

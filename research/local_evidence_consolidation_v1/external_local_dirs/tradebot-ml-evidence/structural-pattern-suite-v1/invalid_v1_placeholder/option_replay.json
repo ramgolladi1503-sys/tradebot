@@ -1,0 +1,1 @@
+{"OPTION_EXECUTABILITY":"INSUFFICIENT_DATA","OPTION_NET_EDGE":"INSUFFICIENT_DATA","UNDERLYING_EDGE":"NOT_EVALUATED","mock_option_data_allowed":false,"real_historical_option_data_required":true,"reason":"real historical option quote corpus was not supplied to this runner","wrapper_set":["ATM","ONE_STEP_ITM"]}

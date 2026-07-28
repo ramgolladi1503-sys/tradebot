@@ -1,0 +1,55 @@
+{
+  "artifact_count": 10,
+  "artifacts": [
+    {
+      "bytes": 33,
+      "path": ".gitignore",
+      "sha256": "5463444a15e2c5ecd86aadf1d65f400748452af1252a3a47f5f70fd0947e2d2a"
+    },
+    {
+      "bytes": 2715,
+      "path": "api_request_ledger.json",
+      "sha256": "3fac0aeac948072ca44aabbfcfe86a46fffffb29681cbd5abf1feb2de3a2fda2"
+    },
+    {
+      "bytes": 4814,
+      "path": "final_verdict.json",
+      "sha256": "c649486068ead6144d8c18276b1850f43770c5ee5bd2cd247ac5c4665b2e36d2"
+    },
+    {
+      "bytes": 621,
+      "path": "independent_audit_report.json",
+      "sha256": "e72ea2456e5f93e7d23bb792a6e64a8d8d5e81ff011c7bd8f6a14f49b2e8145c"
+    },
+    {
+      "bytes": 575,
+      "path": "instrument_api_contract.json",
+      "sha256": "248a5ecb3c01767b2eb71a7b9c9801502283cfe2e69fecd932c18f73463385f0"
+    },
+    {
+      "bytes": 1054,
+      "path": "overlap_comparison_report.json",
+      "sha256": "76f55d29e8ee34338f81456d3531960b0941d9889d8725211b832c87f4bef1aa"
+    },
+    {
+      "bytes": 71,
+      "path": "patch_ledger.json",
+      "sha256": "48aa51f6922e5a90b9fb1855ae5221619c01b4194d7f510a19dc60a72088fc67"
+    },
+    {
+      "bytes": 1442,
+      "path": "post_change_manifest.json",
+      "sha256": "bea9372c5035e4fadc7d82bf374cee2132ad357c162b6e5c7a0cce0bbbf7e558"
+    },
+    {
+      "bytes": 2539,
+      "path": "pre_refetch_defect_manifest.json",
+      "sha256": "4047964cd7f0b48c0e3bb28ba01210ea3ee81b1174445f25384d1589f4e8aa29"
+    },
+    {
+      "bytes": 1721,
+      "path": "pre_refetch_manifest.json",
+      "sha256": "cba2edc6e3343a6cd1e70225e2fe07617434711abd0ae2353d19b18124764f3d"
+    }
+  ]
+}

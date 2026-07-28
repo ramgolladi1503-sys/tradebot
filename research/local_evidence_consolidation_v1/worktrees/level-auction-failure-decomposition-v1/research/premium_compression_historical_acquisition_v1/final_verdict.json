@@ -1,0 +1,9 @@
+{
+  "algotest_used": false,
+  "broker_order_api_called": false,
+  "exact_next_action": "Stop this acquisition path; Upstox authorized range does not expose enough earlier NIFTY expired-option history. Only a different already-authorized expired-option source or long prospective accumulation can extend the test.",
+  "final_verdict": "HISTORICAL_RANGE_INSUFFICIENT",
+  "mechanism_called_edge": false,
+  "pnl_tested": false,
+  "production_modified": false
+}

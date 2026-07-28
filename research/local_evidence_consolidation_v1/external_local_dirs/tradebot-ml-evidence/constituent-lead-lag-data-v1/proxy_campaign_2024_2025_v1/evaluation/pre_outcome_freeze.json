@@ -1,0 +1,52 @@
+{
+  "allowed_for_live_execution": false,
+  "bars": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v1/normalized/constituent_index_5m.parquet",
+  "bars_sha256": "67fc7fd118f5eaec6470e9b2ccb8b37fa3429a9159ab87b5b8c366c8ad3821b3",
+  "end_date": "2025-08-29",
+  "entry_causality": "one_bar_delayed_entry",
+  "folds": 5,
+  "index": "NIFTY",
+  "proxy_audit": {
+    "allowed_for_live_execution": false,
+    "commercial_use_allowed": false,
+    "evaluation_end": "2025-08-29",
+    "latest_raw_snapshot": "2025-08-31",
+    "official_weight_gate_passed": false,
+    "source_manifest": null,
+    "weights_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v1/normalized/point_in_time_weights_proxy.normalized.csv",
+    "weights_sha256": "aa403401627f0fb433026f23531b59d61b07c499b9fe6c9095eb04ca35c2c416"
+  },
+  "proxy_weights": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v1/normalized/point_in_time_weights_proxy.normalized.csv",
+  "proxy_weights_sha256": "aa403401627f0fb433026f23531b59d61b07c499b9fe6c9095eb04ca35c2c416",
+  "research_only": true,
+  "start_date": "2024-01-01",
+  "thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "max_hold_minutes": 20,
+    "minimum_history_sessions": 20,
+    "minimum_weight_coverage": 0.8,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "reward_risk": 1.5,
+    "stop_fraction_of_median_30m_move": 0.35,
+    "z_entry": 2.0
+  },
+  "unweighted_thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "max_hold_minutes": 20,
+    "minimum_constituent_count": 5,
+    "minimum_constituent_coverage": 0.8,
+    "minimum_history_sessions": 20,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "reward_risk": 1.5,
+    "stop_fraction_of_median_30m_move": 0.35,
+    "z_entry": 2.0
+  }
+}

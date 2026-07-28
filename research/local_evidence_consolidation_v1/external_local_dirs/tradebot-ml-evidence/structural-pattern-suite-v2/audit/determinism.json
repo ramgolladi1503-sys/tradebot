@@ -1,0 +1,83 @@
+{
+  "canonical_exclusions": [
+    "absolute output paths"
+  ],
+  "run_a": {
+    "artifact_hashes": {
+      "audit/artifact_index.json": "df01b94de5ca749c2fcab1758f77dd97716ffb5da453b029c6b80f5bbc981828",
+      "audit/final_verdict.json": "19234c4e268877c8922652e2a2cc08fb0ea8522b3519dea2c58e3310d19919d8",
+      "audit/independent_oracle.json": "6eacf719b87e9d12c0ac9b977c553d82a48ec98fb2d30a94178c7b9ad204ed0b",
+      "audit/mutation_test_results.json": "88cec425248ccef7fa14fdff63bd9efd49f3fea55a6446a99b2245aedf5dd6bd",
+      "candidates/candidate_bundle_hash.json": "8a66300c9df6ee10d6e634f9d915e3100221dc2678b265afe41ae4360f7be226",
+      "candidates/candidate_counts.json": "f47a71c12058cbda4182b3bfdd73e13e56529efd4e50ded42440d0bade87f46e",
+      "contracts/feature_contract.json": "ec6933667970c23a5c22c2c97bf89558085c6c0cb96b9062355789abd7782aa1",
+      "contracts/outcome_contract.json": "1b5b237592b4fb4b98621ee684e0645638b76b37f484dd00134895d6f62cc3dd",
+      "contracts/strategy_contracts.json": "3c768d3cd04432535abdc01ed4f333d050a222e15e41855884e07711ec417540",
+      "contracts/threshold_freeze.json": "a63eaa5a496598e58c8d0d100c92d8975245f4897bb8ed8935d4481a430a2644",
+      "contracts/timestamp_contract.json": "d71bca8edd1e56791ee08b03eadbed79cbbf90490a36a4fa5e0c3ba40d46fbce",
+      "evaluation/chronological_folds.json": "a871b737a665ef9cf04dbf2d0381935c139439f68dde459b728da1122c0a79fc",
+      "evaluation/concentration.json": "419c1bbc38c1775ca452f281cde978dd1b0a52a105c267045f83f12034fca819",
+      "evaluation/delay_sensitivity.json": "1c18f5ad8df2679bd19c36b94974256fb61e1a7573518a81faa61bfbbd4d5e6f",
+      "evaluation/era_matrix.json": "0dfdcc1e6585a6037e5efcf0aadce1c743067ba735e270cd9922260546edd1ef",
+      "evaluation/horizon_comparison.json": "0dfdcc1e6585a6037e5efcf0aadce1c743067ba735e270cd9922260546edd1ef",
+      "evaluation/matched_controls.json": "3bbf6ae50567e71f3bb3b3e53471576dfcc59ee49d2083f379bfbc61fed2ee06",
+      "evaluation/negative_controls.json": "20eef19f577bf0eef61228aeb432607ac5194d73f6585fbbb81fd0acf4f07fe4",
+      "evaluation/option_replay.json": "fca5094868bb4727707f9681f3d1f11a3f29bef732e27ed38f2d57b08fbd2a11",
+      "evaluation/parameter_neighbourhood.json": "8ef81e992810f50072b1a3fb70ba96d28c59b515d25b3074eaa00a95b2d1107c",
+      "evaluation/production_compatibility.json": "8a14f77428e817075bb7bdc3d6fc762c6ce33b555b5e9fd873eb1be8aa5b16a6",
+      "evaluation/router_comparison.json": "ee3333ffccb13a21cefd14c3b8a0f45754b7de5cec665578ef75671f2d76591e",
+      "evaluation/underlying_wfa.json": "2501929e97f90c3e49509eb4a9dfa37abf341c22521d5e2ce2180176e45ddcf2",
+      "source/accepted_file_manifest.json": "f149815d850dae171ea1222d99958aac2edaed45d9ecc50e5985dadd400feaa8",
+      "source/accepted_session_manifest.json": "4525ca28e82e8c68133bb8f7d0b2e9477a5d7db09941af1ebab3605032d7de3c",
+      "source/aeron7_source_authority.json": "8f9e0f6d3040c113c7a3a76c60b3f298c67eb6ae02ff5a906905a9be35c7d0b8",
+      "source/evidence_exposure_registry.json": "ad127f42a6a4b58cc5eec7c2e5b16cbb100a9e13ac7b02f11dcd4ed70a23f681",
+      "source/kite_source_authority.json": "0b8d99ab8659d345c47f156b75b7142c7ce9e07da71a9955a690af70f6b663e4",
+      "source/source_inventory.json": "b9620b60d9b4c2da6abc677f3f03e9204c9280f533553689422a672b37bb5066"
+    },
+    "candidate_bundle_hash": "b23183fed5e8d2716754089d90beacf82fca8df850a4c18c182159a894f5d50b",
+    "candidate_count": 501,
+    "source_manifest_hash": "f780da019ef6eb222797d51e727e7fa233fa0ddac17fb733ca95bbc1a470da0c"
+  },
+  "run_b": {
+    "artifact_hashes": {
+      "audit/artifact_index.json": "df01b94de5ca749c2fcab1758f77dd97716ffb5da453b029c6b80f5bbc981828",
+      "audit/final_verdict.json": "19234c4e268877c8922652e2a2cc08fb0ea8522b3519dea2c58e3310d19919d8",
+      "audit/independent_oracle.json": "6eacf719b87e9d12c0ac9b977c553d82a48ec98fb2d30a94178c7b9ad204ed0b",
+      "audit/mutation_test_results.json": "88cec425248ccef7fa14fdff63bd9efd49f3fea55a6446a99b2245aedf5dd6bd",
+      "candidates/candidate_bundle_hash.json": "8a66300c9df6ee10d6e634f9d915e3100221dc2678b265afe41ae4360f7be226",
+      "candidates/candidate_counts.json": "f47a71c12058cbda4182b3bfdd73e13e56529efd4e50ded42440d0bade87f46e",
+      "contracts/feature_contract.json": "ec6933667970c23a5c22c2c97bf89558085c6c0cb96b9062355789abd7782aa1",
+      "contracts/outcome_contract.json": "1b5b237592b4fb4b98621ee684e0645638b76b37f484dd00134895d6f62cc3dd",
+      "contracts/strategy_contracts.json": "3c768d3cd04432535abdc01ed4f333d050a222e15e41855884e07711ec417540",
+      "contracts/threshold_freeze.json": "a63eaa5a496598e58c8d0d100c92d8975245f4897bb8ed8935d4481a430a2644",
+      "contracts/timestamp_contract.json": "d71bca8edd1e56791ee08b03eadbed79cbbf90490a36a4fa5e0c3ba40d46fbce",
+      "evaluation/chronological_folds.json": "a871b737a665ef9cf04dbf2d0381935c139439f68dde459b728da1122c0a79fc",
+      "evaluation/concentration.json": "419c1bbc38c1775ca452f281cde978dd1b0a52a105c267045f83f12034fca819",
+      "evaluation/delay_sensitivity.json": "1c18f5ad8df2679bd19c36b94974256fb61e1a7573518a81faa61bfbbd4d5e6f",
+      "evaluation/era_matrix.json": "0dfdcc1e6585a6037e5efcf0aadce1c743067ba735e270cd9922260546edd1ef",
+      "evaluation/horizon_comparison.json": "0dfdcc1e6585a6037e5efcf0aadce1c743067ba735e270cd9922260546edd1ef",
+      "evaluation/matched_controls.json": "3bbf6ae50567e71f3bb3b3e53471576dfcc59ee49d2083f379bfbc61fed2ee06",
+      "evaluation/negative_controls.json": "20eef19f577bf0eef61228aeb432607ac5194d73f6585fbbb81fd0acf4f07fe4",
+      "evaluation/option_replay.json": "fca5094868bb4727707f9681f3d1f11a3f29bef732e27ed38f2d57b08fbd2a11",
+      "evaluation/parameter_neighbourhood.json": "8ef81e992810f50072b1a3fb70ba96d28c59b515d25b3074eaa00a95b2d1107c",
+      "evaluation/production_compatibility.json": "8a14f77428e817075bb7bdc3d6fc762c6ce33b555b5e9fd873eb1be8aa5b16a6",
+      "evaluation/router_comparison.json": "ee3333ffccb13a21cefd14c3b8a0f45754b7de5cec665578ef75671f2d76591e",
+      "evaluation/underlying_wfa.json": "2501929e97f90c3e49509eb4a9dfa37abf341c22521d5e2ce2180176e45ddcf2",
+      "source/accepted_file_manifest.json": "f149815d850dae171ea1222d99958aac2edaed45d9ecc50e5985dadd400feaa8",
+      "source/accepted_session_manifest.json": "4525ca28e82e8c68133bb8f7d0b2e9477a5d7db09941af1ebab3605032d7de3c",
+      "source/aeron7_source_authority.json": "8f9e0f6d3040c113c7a3a76c60b3f298c67eb6ae02ff5a906905a9be35c7d0b8",
+      "source/evidence_exposure_registry.json": "ad127f42a6a4b58cc5eec7c2e5b16cbb100a9e13ac7b02f11dcd4ed70a23f681",
+      "source/kite_source_authority.json": "0b8d99ab8659d345c47f156b75b7142c7ce9e07da71a9955a690af70f6b663e4",
+      "source/source_inventory.json": "b9620b60d9b4c2da6abc677f3f03e9204c9280f533553689422a672b37bb5066"
+    },
+    "candidate_bundle_hash": "b23183fed5e8d2716754089d90beacf82fca8df850a4c18c182159a894f5d50b",
+    "candidate_count": 501,
+    "source_manifest_hash": "f780da019ef6eb222797d51e727e7fa233fa0ddac17fb733ca95bbc1a470da0c"
+  },
+  "semantic_equality": {
+    "candidate_bundle_hash": true,
+    "candidate_count": true,
+    "source_manifest_hash": true
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,1 @@
+Structural Pattern Suite v3 executed as research only. It fixes Kite timestamp/horizon semantics and metric-derived verdicts, but fails closed for combined historical certification because Aeron7 parsing and option replay are not authoritative.

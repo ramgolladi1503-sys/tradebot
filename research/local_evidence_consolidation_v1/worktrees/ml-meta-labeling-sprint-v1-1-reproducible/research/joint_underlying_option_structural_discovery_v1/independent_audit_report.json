@@ -1,0 +1,28 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "changed_paths_from_source": [],
+  "checks": {
+    "candidate_freeze_boundary": true,
+    "concentration_metrics": true,
+    "controls": true,
+    "cost_application": true,
+    "determinism": true,
+    "development_holdout_separation": true,
+    "eligibility_filtering": true,
+    "feature_timestamps": true,
+    "final_verdict_consistency": true,
+    "frozen_universe": true,
+    "label_timestamps": true,
+    "multiple_testing_accounting": true,
+    "next_bar_execution": true,
+    "no_gap_crossing_leakage": true,
+    "no_production_modifications": true,
+    "no_synthetic_data": true,
+    "semantic_hashes": true
+  },
+  "is_order_action": false,
+  "production_touched": [],
+  "read_only": true,
+  "status": "PASS"
+}

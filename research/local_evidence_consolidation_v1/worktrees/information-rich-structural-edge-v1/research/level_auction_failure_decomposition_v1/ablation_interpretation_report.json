@@ -1,0 +1,55 @@
+{
+  "mechanisms": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "best_period_ablation": -91.21197007481297,
+      "ce_pe_ablation": {
+        "CE": -213.519689119171,
+        "PE": 64.72637554585152
+      },
+      "top_trade_ablation": -97.48611510791369
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "best_period_ablation": -81.9015625,
+      "ce_pe_ablation": {
+        "CE": -190.4686046511628,
+        "PE": 11.444999999999999
+      },
+      "top_trade_ablation": -106.9811224489796
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "best_period_ablation": -93.46332261521972,
+      "ce_pe_ablation": {
+        "CE": -176.52662196679438,
+        "PE": 43.29588537839823
+      },
+      "top_trade_ablation": -81.35405201916495
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "best_period_ablation": -104.71622979552093,
+      "ce_pe_ablation": {
+        "CE": -207.32919874037793,
+        "PE": 46.71622785829307
+      },
+      "top_trade_ablation": -93.06825744800446
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "best_period_ablation": -164.58854098360655,
+      "ce_pe_ablation": {
+        "CE": -249.0270343137255,
+        "PE": 29.1879347826087
+      },
+      "top_trade_ablation": -152.07143800440207
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "best_period_ablation": -95.3499792746114,
+      "ce_pe_ablation": {
+        "CE": -167.856015625,
+        "PE": 29.223127147766323
+      },
+      "top_trade_ablation": -89.29337715694331
+    }
+  },
+  "note": "Only ablations present in immutable artifacts were interpreted; missing tick/book/strike ablations are NOT_AVAILABLE.",
+  "semantic_hash": "ff026808879eb25b952068085d3fa3d1c020b72747df855ffd06bc76639606cb",
+  "status": "RUN"
+}

@@ -1,0 +1,42 @@
+{
+  "rule": "At provider-authoritative sparse timestamps, joint rows are not created with forward-filled underlying prices. If option rows exist at the absent underlying minute, they are marked research_eligible=false until the next observed underlying minute.",
+  "sparse_timestamp_rows": [
+    {
+      "eligibility_resumes_next_observed_minute": true,
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20241212_0942",
+      "joint_research_eligible_at_sparse_timestamp": false,
+      "session": "2024-12-12",
+      "timestamp_ist": "2024-12-12T09:42:00+05:30",
+      "underlying_forward_fill_allowed": false,
+      "underlying_price_invented": false
+    },
+    {
+      "eligibility_resumes_next_observed_minute": true,
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250325_1042",
+      "joint_research_eligible_at_sparse_timestamp": false,
+      "session": "2025-03-25",
+      "timestamp_ist": "2025-03-25T10:42:00+05:30",
+      "underlying_forward_fill_allowed": false,
+      "underlying_price_invented": false
+    },
+    {
+      "eligibility_resumes_next_observed_minute": true,
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250404_1157",
+      "joint_research_eligible_at_sparse_timestamp": false,
+      "session": "2025-04-04",
+      "timestamp_ist": "2025-04-04T11:57:00+05:30",
+      "underlying_forward_fill_allowed": false,
+      "underlying_price_invented": false
+    },
+    {
+      "eligibility_resumes_next_observed_minute": true,
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250423_1036",
+      "joint_research_eligible_at_sparse_timestamp": false,
+      "session": "2025-04-23",
+      "timestamp_ist": "2025-04-23T10:36:00+05:30",
+      "underlying_forward_fill_allowed": false,
+      "underlying_price_invented": false
+    }
+  ],
+  "status": "PASS"
+}

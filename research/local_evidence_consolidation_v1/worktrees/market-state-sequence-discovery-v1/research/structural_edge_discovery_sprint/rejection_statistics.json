@@ -1,0 +1,26 @@
+{
+  "family_counts_raw": {
+    "compression_expansion": 2868,
+    "failed_breakout_reversal": 2868,
+    "gap_continuation": 2863,
+    "gap_failure": 2075,
+    "liquidity_sweep_reversal": 5727,
+    "trend_continuation": 5727,
+    "vwap_reclaim": 2872
+  },
+  "family_counts_replayed": {
+    "gap_continuation": 2,
+    "liquidity_sweep_reversal": 8,
+    "trend_continuation": 2
+  },
+  "screen_rejections": {
+    "development_weak_premium_move_proxy": 4998,
+    "high_concentration": 2300,
+    "insufficient_sample": 17672,
+    "passed_screen": 12,
+    "single_month_dependence": 18
+  },
+  "validation_rejections": {
+    "failed_control_superiority:delayed_entry": 12
+  }
+}

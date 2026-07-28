@@ -1,0 +1,75 @@
+{
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "bytes": 151,
+      "path": "certification_report.json",
+      "sha256": "db3f935c74a9faad05e01533ecc4fdbadf3af0152b4bd429aaff430ecb91c599"
+    },
+    {
+      "bytes": 1276,
+      "path": "determinism_report.json",
+      "sha256": "ee175f17ce67ae24f47f70609a197fc4d380fa45bd0b92b2c70c11f55c1e152e"
+    },
+    {
+      "bytes": 229,
+      "path": "event_count_only_feasibility_report.json",
+      "sha256": "5acef20274fea231eced9a13fdfb32e8907fcda4a722582c6318f489fb542aee"
+    },
+    {
+      "bytes": 457,
+      "path": "final_verdict.json",
+      "sha256": "303f750a3bd8cf14eabba32764267d2df86808131595686d7663fc4044f1ee7d"
+    },
+    {
+      "bytes": 1708,
+      "path": "frozen_acquisition_plan.json",
+      "sha256": "351a45dadf8c17add27f0f69c33279963b6cf1d417d72792d1f8e613b3564d26"
+    },
+    {
+      "bytes": 331,
+      "path": "independent_audit.json",
+      "sha256": "fe0a382f2fb3e26e071d5a94f40f4fc9221f5fb3bedb472db2578ccb905a4b19"
+    },
+    {
+      "bytes": 800877,
+      "path": "local_recovery_inventory.json",
+      "sha256": "52888eea00b60e797c082dac9f924a05d7bedc66f2996b71c693e1d2e0796827"
+    },
+    {
+      "bytes": 95,
+      "path": "normalized_warehouse_manifest.json",
+      "sha256": "143cfdf34959949efe15f6a8297838f5326fe9b6e586ec9f5cc1a97873d38866"
+    },
+    {
+      "bytes": 106,
+      "path": "overlap_audit.json",
+      "sha256": "75c032f65f44560caf04038fa3c418e2048449164b4bd0aa25aa2ca92144ae14"
+    },
+    {
+      "bytes": 1185,
+      "path": "pre_change_manifest.json",
+      "sha256": "042f1473683762ccfe3e1b295d2a489407259aa80fb5435b0120620137d32c12"
+    },
+    {
+      "bytes": 1523,
+      "path": "provider_feasibility_report.json",
+      "sha256": "b1e8294dc1af6e047af03cf59d366f356ca95fbaa8cfcccab7d91585c34ef73b"
+    },
+    {
+      "bytes": 2687,
+      "path": "raw_evidence_manifest.json",
+      "sha256": "9c7f5c8106ea9941f569a630b3f89480018346d6195d940bf33558779a61cdf0"
+    },
+    {
+      "bytes": 2468,
+      "path": "upstox_authorized_probe_report.json",
+      "sha256": "66bf87f49f91d420ceaff2b449f3c46dfe304c20cdc8520e5d9f0eb9650a4435"
+    },
+    {
+      "bytes": 25703,
+      "path": "used_date_ledger.json",
+      "sha256": "777fac8fe3c0503061c3831f86e0eaaac115dfbb8a3efa95d530d0efabd18653"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "allowed_for_live_execution": false,
+  "bootstrap_95_ci_bps": {
+    "lower_bps": -12.82663162913201,
+    "replications": 2000,
+    "seed": 20260730,
+    "upper_bps": -1.5495467575725426
+  },
+  "broker_api_called": false,
+  "candidate_count": 3,
+  "candidates": [
+    {
+      "candidate_id": "20240711:SENSEX:BUY_PUT:12:17",
+      "direction": "BUY_PUT",
+      "entry_bucket": "12:00-12:30",
+      "entry_open": 79677.27,
+      "entry_ts": "2024-07-11T12:17:00",
+      "proxy_boundary": "CAUSAL_CORE_PROXY_DISCOVERY; option-side evidence absent; unit-weight VWAP allowed when volume missing/zero",
+      "return_15": -0.0005450738962315477,
+      "return_30": -0.0011658280962688532,
+      "session_date": "2024-07-11",
+      "signal_ts": "2024-07-11T12:16:00",
+      "source_path": "upstox_candidate_replay/20240711/underlying/BSE_INDEX|SENSEX_20240711.parquet",
+      "strategy_id": "compression_breakout_v1",
+      "symbol": "SENSEX",
+      "terminal_15_close": 79720.7,
+      "year": 2024
+    },
+    {
+      "candidate_id": "20241128:SENSEX:BUY_PUT:14:24",
+      "direction": "BUY_PUT",
+      "entry_bucket": "14:00-14:30",
+      "entry_open": 79054.27,
+      "entry_ts": "2024-11-28T14:24:00",
+      "proxy_boundary": "CAUSAL_CORE_PROXY_DISCOVERY; option-side evidence absent; unit-weight VWAP allowed when volume missing/zero",
+      "return_15": -0.001282663162913201,
+      "return_30": -0.0006413315814566005,
+      "session_date": "2024-11-28",
+      "signal_ts": "2024-11-28T14:23:00",
+      "source_path": "upstox_candidate_replay/20241128/underlying/BSE_INDEX|SENSEX_20241128.parquet",
+      "strategy_id": "compression_breakout_v1",
+      "symbol": "SENSEX",
+      "terminal_15_close": 79155.67,
+      "year": 2024
+    },
+    {
+      "candidate_id": "20250711:NIFTY:BUY_PUT:11:21",
+      "direction": "BUY_PUT",
+      "entry_bucket": "11:00-11:30",
+      "entry_open": 25168.65,
+      "entry_ts": "2025-07-11T11:21:00",
+      "proxy_boundary": "CAUSAL_CORE_PROXY_DISCOVERY; option-side evidence absent; unit-weight VWAP allowed when volume missing/zero",
+      "return_15": -0.00015495467575725425,
+      "return_30": -3.774536973564691e-05,
+      "session_date": "2025-07-11",
+      "signal_ts": "2025-07-11T11:20:00",
+      "source_path": "upstox_candidate_replay/20250711/underlying/NIFTY_20250711.parquet",
+      "strategy_id": "compression_breakout_v1",
+      "symbol": "NIFTY",
+      "terminal_15_close": 25172.55,
+      "year": 2025
+    }
+  ],
+  "direction_counts": {
+    "BUY_PUT": 3
+  },
+  "direction_means_bps": {
+    "BUY_PUT": -6.6089724496733435
+  },
+  "is_order_action": false,
+  "matched_time": {
+    "advantage_bps": -10.543820260756707,
+    "covered_candidates": 3,
+    "draws": 60,
+    "draws_per_candidate": 20,
+    "matched_session_equal_mean_bps": 3.9348478110833636,
+    "seed": 20260731
+  },
+  "mean_after_removing_five_strongest_sessions_bps": 0.0,
+  "mode": "CAUSAL_CORE_PROXY_DISCOVERY",
+  "profile_values": {
+    "MAX_ATR_RATIO": 0.75,
+    "MAX_RANGE_WIDTH_PCT": 0.35,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+    "MIN_COMPRESSION_SCORE": 0.5,
+    "MIN_VWAP_ALIGNMENT_PCT": 0.0004
+  },
+  "read_only": true,
+  "session_count": 3,
+  "session_equal_mean_bps": -6.6089724496733435,
+  "session_equal_median_bps": -5.450738962315477,
+  "strategy_id": "compression_breakout_v1",
+  "symbol_counts": {
+    "NIFTY": 1,
+    "SENSEX": 2
+  },
+  "symbol_means_bps": {
+    "NIFTY": -1.5495467575725426,
+    "SENSEX": -9.138685295723745
+  },
+  "verdict": "COMPRESSION_CAUSAL_PROXY_REJECTED",
+  "year_means_bps": {
+    "2024": -9.138685295723745,
+    "2025": -1.5495467575725426
+  }
+}

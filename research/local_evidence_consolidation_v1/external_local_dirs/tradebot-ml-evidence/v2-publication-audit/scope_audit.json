@@ -1,0 +1,38 @@
+{
+  "base_sha": "0b086be1ad0e9bf6410fb3ea30ff26645bd5529f",
+  "head_sha": "0d863909a57722a6f8e55b2925f4b2d9fccd6237",
+  "changed_paths": [
+    "docs/agent_reviews/ml_strategy_discovery_v2_1_source_manifest.json",
+    "docs/research/ml_strategy_discovery_v2_1_source_manifest.json",
+    "docs/research/ml_strategy_discovery_v2_1_source_manifest.json.sha256",
+    "docs/research/ml_strategy_discovery_v2_contract.md",
+    "research/ml_strategy_discovery/v2_validation_registry.json",
+    "research/ml_strategy_discovery_v2/__init__.py",
+    "research/ml_strategy_discovery_v2/controls.py",
+    "research/ml_strategy_discovery_v2/data.py",
+    "research/ml_strategy_discovery_v2/folds.py",
+    "research/ml_strategy_discovery_v2/freeze.py",
+    "research/ml_strategy_discovery_v2/gates.py",
+    "research/ml_strategy_discovery_v2/model.py",
+    "research/ml_strategy_discovery_v2/stability.py",
+    "scripts/generate_ml_strategy_discovery_v2_manifest.py",
+    "scripts/inventory_ml_strategy_discovery_v2_source.py",
+    "scripts/run_ml_strategy_discovery_v2.py",
+    "tests/test_ml_strategy_discovery_v2.py"
+  ],
+  "allowed_paths": [
+    "research/ml_strategy_discovery_v2/**",
+    "research/ml_strategy_discovery/v2_validation_registry.json",
+    "scripts/generate_ml_strategy_discovery_v2_manifest.py",
+    "scripts/run_ml_strategy_discovery_v2.py",
+    "tests/test_ml_strategy_discovery_v2.py",
+    "docs/research/ml_strategy_discovery_v2_contract.md",
+    "docs/research/ml_strategy_discovery_v2_1_source_manifest.json",
+    "docs/research/ml_strategy_discovery_v2_1_source_manifest.json.sha256",
+    "docs/agent_reviews/ml_strategy_discovery_v2.md",
+    "docs/agent_reviews/ml_strategy_discovery_v2_1_source_manifest.json",
+    "scripts/inventory_ml_strategy_discovery_v2_source.py"
+  ],
+  "prohibited_paths": [],
+  "result": "PASS"
+}

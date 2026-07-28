@@ -1,0 +1,153 @@
+[
+  {
+    "path": "manifests/file_inventory.parquet",
+    "exists": true,
+    "size_bytes": 476998,
+    "sha256": "b35cfb4f74991edb908104f24ec2cbc91616bf5110201bbd8cf28cec0d0d8805",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/file_hashes.json",
+    "exists": true,
+    "size_bytes": 1335115,
+    "sha256": "265bc8f2e9c1e879d6fabce8c06ab60c6991346d2fbc94e5d7e3e0bca47c7e43",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/contract_inventory.parquet",
+    "exists": true,
+    "size_bytes": 340166,
+    "sha256": "0c65627990d2ef3aaf59e3cc487381bb3103337caccaf338a80a4fed48c66530",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/request_manifest.jsonl",
+    "exists": true,
+    "size_bytes": 1475523,
+    "sha256": "9c0f537f0aadd54cce0ccda1dddfdab97fd52dba2520260adb9ca0947bbcf50f",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/failure_manifest.jsonl",
+    "exists": true,
+    "size_bytes": 105328,
+    "sha256": "99772f1bb79646e3583b68a71ad799ced5d212522a0f175d97486015344cdf6c",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/campaign_manifest.json",
+    "exists": true,
+    "size_bytes": 2068,
+    "sha256": "d7f843a980677ef52423530775c6f570ba1754050cd7112dcfbc8adb3abf505d",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/expiry_inventory.json",
+    "exists": true,
+    "size_bytes": 1522,
+    "sha256": "53dd98b350678d2c2492067acc348ad97cfd131a8393b75dc9b6324b04bd531a",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/atm_selection_ledger.parquet",
+    "exists": true,
+    "size_bytes": 12030,
+    "sha256": "84deba49afe9363b31f779bd7ae09e61c97444e4c26b597dc74df9862cdbe3b6",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/pre_resume_inventory.parquet",
+    "exists": true,
+    "size_bytes": 92926,
+    "sha256": "4f58d951d60c4cfe71b654dae30be0b7fa6647847eb66414942623c2c8e236cd",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/post_resume_inventory.parquet",
+    "exists": true,
+    "size_bytes": 243344,
+    "sha256": "2fa40eee86474a3ab4502f411aaf6710e3d038d8c71bb154f45b5c66673043b5",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "manifests/gap_analysis.parquet",
+    "exists": true,
+    "size_bytes": 24688,
+    "sha256": "a72ec21d5dac96bff3d18b85c84c4fbb506f402573d8546af22aa3b59eb60cdb",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "reports/data_quality_report.md",
+    "exists": false,
+    "status": "MISSING"
+  },
+  {
+    "path": "reports/data_quality_violations.parquet",
+    "exists": false,
+    "status": "MISSING"
+  },
+  {
+    "path": "reports/determinism_report.json",
+    "exists": true,
+    "size_bytes": 214,
+    "sha256": "729505a3ba9d2405a1d819e4f45e0969bc9de62ae77e16fea28bdb8c41f78842",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "reports/resume_test_report.json",
+    "exists": true,
+    "size_bytes": 245,
+    "sha256": "cd0243c3537d6653ae5cc3ba89216bf563a5f01bcf9768b5440c9080f9f5a2eb",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "reports/security_report.md",
+    "exists": true,
+    "size_bytes": 268,
+    "sha256": "58376818d480e3bc9c9606b0d8548a643c4901b0c9c5067ae6b961c396d19e9d",
+    "readable": true,
+    "required_fields_present": true,
+    "status": "VALID"
+  },
+  {
+    "path": "reports/coverage_report.md",
+    "exists": false,
+    "status": "MISSING"
+  },
+  {
+    "path": "reports/final_fetch_report.md",
+    "exists": false,
+    "status": "MISSING"
+  },
+  {
+    "path": "reports/reconciliation_report.json",
+    "exists": false,
+    "status": "MISSING"
+  }
+]

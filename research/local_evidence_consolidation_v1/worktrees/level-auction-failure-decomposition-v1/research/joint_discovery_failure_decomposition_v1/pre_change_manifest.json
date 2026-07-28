@@ -1,0 +1,31 @@
+{
+  "branch": "research/joint-discovery-failure-decomposition-v1",
+  "clean_status": "?? scripts/decompose_joint_discovery_failure_v1.py\n?? tests/research/test_joint_discovery_failure_decomposition_v1.py",
+  "current_commit": "37b49f85bb9d3f7791816289ccebfb063702b3a0",
+  "prior_campaign_artifact_hashes": {
+    "research/joint_underlying_option_structural_discovery_v1/ablation_report.json": "7b3a9d5b170d167b81cf0f8c969144770c44b8694612f6479a35aa4c58258fd5",
+    "research/joint_underlying_option_structural_discovery_v1/algotest_translation_specifications.json": "ad211a82dcba4781fae8ee4c73c0954b2b66a29db98c2f709c1bf01fc2ef98a0",
+    "research/joint_underlying_option_structural_discovery_v1/artifact_manifest.json": "03e59eb93197f9671756ccaead93e7051be29c91e1787de69ae6f8041bc3e6f6",
+    "research/joint_underlying_option_structural_discovery_v1/candidate_inventory.json": "91b750e72cc14102dc0dfb8f5f8b259262137ac12799d2905eaff2e30fa4a778",
+    "research/joint_underlying_option_structural_discovery_v1/concentration_report.json": "0b166ab683ec91149a6ec107f7da11946366976062cf22ee5330c019a0e30317",
+    "research/joint_underlying_option_structural_discovery_v1/control_experiments.json": "19a5cc3c635de3485828d694e33472cfb1e6480c990bc1a16eb28dfd69cb50e4",
+    "research/joint_underlying_option_structural_discovery_v1/determinism_report.json": "4667bf213f01a4f253ef2374e4e8081209aec01372770f8d219733ec64f32ea4",
+    "research/joint_underlying_option_structural_discovery_v1/development_results.json": "32464665e9c1b5b524fb757b3784f988aef391bbecf641eebb48d001ee907aaf",
+    "research/joint_underlying_option_structural_discovery_v1/discovery_contract.json": "a69a1cfa912f27358153a705566224d16628fd940fe92d37d2083aca34c6844e",
+    "research/joint_underlying_option_structural_discovery_v1/execution_cost_report.json": "595cdf1dff2931c38f29c36431d3105ff247ded4a5217d699695a13e20aa6d70",
+    "research/joint_underlying_option_structural_discovery_v1/feature_catalogue.json": "68097d9ceddd0540eb431bf46cb7a396ed5a2c5fde43db769092742b6c3d1894",
+    "research/joint_underlying_option_structural_discovery_v1/final_verdict.json": "dbd22126c608f834457d5b348f654613fc47d3ddba325aa3dd1fd9a0f76fe7e2",
+    "research/joint_underlying_option_structural_discovery_v1/frozen_candidate_specifications.json": "dfe282fa29f1c2d04e6b85fc82c68f09c7fc0426ba9942654240e670568d2743",
+    "research/joint_underlying_option_structural_discovery_v1/holdout_results.json": "e2d1acfab067ef6067b6149f6fbfb05216cc44af0c35f132b508755bbc8c46ca",
+    "research/joint_underlying_option_structural_discovery_v1/independent_audit_report.json": "b1f44e3f65e6d86cffadfec9cf00fb7e83d7760f9794adf86ac0781cac4da7ac",
+    "research/joint_underlying_option_structural_discovery_v1/multiple_testing_report.json": "bcb136847bf49432ca7e9dd886e48b744ec5f4d8406bbb6ec9794df8876be539",
+    "research/joint_underlying_option_structural_discovery_v1/outcome_label_contract.json": "fa3cda77c965b1cf0e5fa4344df0df6da9144dd85ba7b8b6f4ca1750dca956d4",
+    "research/joint_underlying_option_structural_discovery_v1/pre_change_manifest.json": "bae154e1a29aed1c7fd091def06f6879a824d7ee2fb6ac7c012a81f701837ed1",
+    "research/joint_underlying_option_structural_discovery_v1/robustness_report.json": "cba273c6e001ba7c2870759677a90824102db6c65e9ff8e7e90f4b341a14c068",
+    "research/joint_underlying_option_structural_discovery_v1/trusted_input_manifest.json": "1b33ac89d4715d7c3f88e929d350eb4d78f8cbd3d5f911c03940cb7a0a84c9b7",
+    "research/joint_underlying_option_structural_discovery_v1/walk_forward_results.json": "f901385a3b7df7cb193fe9e2a84f8a6bb492e7d8decbef6f40fb9f5ddf340384"
+  },
+  "prior_source_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "source_commit": "37b49f85bb9d3f7791816289ccebfb063702b3a0",
+  "worktree": "/Users/madhuram/tradebot-joint-failure-decomposition-v1"
+}

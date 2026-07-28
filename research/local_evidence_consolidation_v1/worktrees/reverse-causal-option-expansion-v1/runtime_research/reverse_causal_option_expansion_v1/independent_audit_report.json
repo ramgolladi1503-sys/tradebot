@@ -1,0 +1,11 @@
+{
+  "deep_families": 10,
+  "event_rows": 1997159,
+  "matched_control_rows": 178521,
+  "near_miss_rows": 100983,
+  "research_package_sha256": "e4e8fba0a19f19b89af2020081e452e5c7e6cebfc2891ef629e277043f116639",
+  "resolved_ticks_sessions": 1,
+  "temporal_sessions": 390,
+  "verdict": "PASS",
+  "violations": []
+}

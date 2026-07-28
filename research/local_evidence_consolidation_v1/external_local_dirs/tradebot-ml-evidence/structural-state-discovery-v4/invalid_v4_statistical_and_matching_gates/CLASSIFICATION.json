@@ -1,0 +1,34 @@
+{
+  "classification": "INVALID_FINAL_NO_EDGE_VERDICT",
+  "not_valid_for": [
+    "final no-edge verdict",
+    "statistical gate claims",
+    "matched-control gate claims",
+    "template recurrence claims",
+    "oracle claims",
+    "mutation-specific detection claims",
+    "production or prospective-shadow decisions"
+  ],
+  "reasons": [
+    "bootstrap sorted and rotated the complete session vector, making replicate means degenerate",
+    "permutation sorted outcomes and selected rotated slices instead of whole-session label permutations",
+    "inner-fold choices came from fold count/parity rather than inner-test scores",
+    "quantile cap 8 retained rules by list position and excluded declared search coverage",
+    "matched controls grouped candidates and matched only the first row per bucket",
+    "matching distance was not standardized with outer-training data",
+    "aggregate median used fold medians instead of concatenated OOF session effects",
+    "aggregate p-value averaged fold p-values",
+    "tree template identity used raw node numbers and did not reconstruct one-hot categorical paths",
+    "KMeans raw cluster IDs were treated as stable across independent fits",
+    "oracle remained limited",
+    "named mutations only changed a generic final_verdict field",
+    "tests did not prove final gates"
+  ],
+  "valid_for": [
+    "source authority",
+    "causal matrices",
+    "five-target/four-lane execution prototypes",
+    "preliminary OOF debugging",
+    "code provenance"
+  ]
+}

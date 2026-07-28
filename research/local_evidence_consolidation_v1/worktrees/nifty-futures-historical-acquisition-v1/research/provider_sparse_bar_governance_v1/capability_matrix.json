@@ -1,0 +1,15 @@
+{
+  "capabilities": {
+    "Gap interpolation": "FORBIDDEN",
+    "IV research": "NOT SUPPORTED",
+    "Joint warehouse": "SUPPORTED",
+    "Option replay": "SUPPORTED",
+    "Sparse-bar aware": "SUPPORTED",
+    "Spread simulation": "NOT SUPPORTED",
+    "Strike research": "SUPPORTED",
+    "Structural discovery": "SUPPORTED",
+    "Synthetic candles": "NOT SUPPORTED",
+    "Volume research": "LIMITED"
+  },
+  "status": "PASS"
+}

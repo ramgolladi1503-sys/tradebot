@@ -1,0 +1,16 @@
+{
+  "decision_times": [
+    "09:45",
+    "10:30",
+    "11:30",
+    "13:00",
+    "14:00"
+  ],
+  "lanes": [
+    "quantile_state_scan",
+    "shallow_tree_rules",
+    "sparse_model_prioritization",
+    "cluster_states"
+  ],
+  "max_interaction_depth": 3
+}

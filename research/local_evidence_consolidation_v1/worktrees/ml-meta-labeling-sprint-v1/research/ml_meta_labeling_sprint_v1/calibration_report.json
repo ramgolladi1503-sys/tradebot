@@ -1,0 +1,37 @@
+{
+  "best_model": "xgboost",
+  "brier": 0.11222526691535659,
+  "probability_buckets": [
+    {
+      "expectancy": 6.6155350637522785,
+      "prob_bucket": 0,
+      "rows": 549,
+      "target_rate": 0.052823315118397086
+    },
+    {
+      "expectancy": 9.988380822274268,
+      "prob_bucket": 1,
+      "rows": 549,
+      "target_rate": 0.12932604735883424
+    },
+    {
+      "expectancy": -1.1714467863648186,
+      "prob_bucket": 2,
+      "rows": 549,
+      "target_rate": 0.122040072859745
+    },
+    {
+      "expectancy": 3.545020817069999,
+      "prob_bucket": 3,
+      "rows": 549,
+      "target_rate": 0.12750455373406194
+    },
+    {
+      "expectancy": 8.383135679590598,
+      "prob_bucket": 4,
+      "rows": 549,
+      "target_rate": 0.2040072859744991
+    }
+  ],
+  "semantic_hash": "35b09a0c920aa595d72209831cdfbf49be1dc8feb6cc4c15bccc2da4a11120f3"
+}

@@ -1,0 +1,177 @@
+[
+  {
+    "feature": "distance_from_opening_high_atr",
+    "tree_importance": 0.17723692938547045,
+    "xgb_importance": 0.06376874446868896
+  },
+  {
+    "feature": "trend_slope_10_atr",
+    "tree_importance": 0.21120639522798307,
+    "xgb_importance": 0.060785453766584396
+  },
+  {
+    "feature": "gap_pct",
+    "tree_importance": 0.1458089091766271,
+    "xgb_importance": 0.04417799040675163
+  },
+  {
+    "feature": "lower_wick_ratio",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.04388491436839104
+  },
+  {
+    "feature": "close_location_value",
+    "tree_importance": 0.0685916169174393,
+    "xgb_importance": 0.04343435540795326
+  },
+  {
+    "feature": "previous_day_range_position",
+    "tree_importance": 0.11511622568038536,
+    "xgb_importance": 0.04299115762114525
+  },
+  {
+    "feature": "ret_15",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.042610667645931244
+  },
+  {
+    "feature": "true_range",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.04222922399640083
+  },
+  {
+    "feature": "ret_5",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.04121355339884758
+  },
+  {
+    "feature": "atr_14",
+    "tree_importance": 0.10660767910834901,
+    "xgb_importance": 0.039949432015419006
+  },
+  {
+    "feature": "minutes_since_open",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03740130737423897
+  },
+  {
+    "feature": "opening_range_width_atr",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.036671530455350876
+  },
+  {
+    "feature": "session_bar_index",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.036562640219926834
+  },
+  {
+    "feature": "range_norm_atr",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03588244318962097
+  },
+  {
+    "feature": "compression_ratio_5_20",
+    "tree_importance": 0.05906193374915546,
+    "xgb_importance": 0.03497876971960068
+  },
+  {
+    "feature": "distance_from_previous_high_atr",
+    "tree_importance": 0.07491909157418256,
+    "xgb_importance": 0.03496064990758896
+  },
+  {
+    "feature": "atr_pct_63",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03427540510892868
+  },
+  {
+    "feature": "ret_3",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03320510312914848
+  },
+  {
+    "feature": "distance_from_opening_low_atr",
+    "tree_importance": 0.041451219180407665,
+    "xgb_importance": 0.03304740786552429
+  },
+  {
+    "feature": "breakout_distance_atr",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03298665210604668
+  },
+  {
+    "feature": "ret_1",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03285412862896919
+  },
+  {
+    "feature": "day_of_week",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.03241570666432381
+  },
+  {
+    "feature": "distance_from_previous_low_atr",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.031036879867315292
+  },
+  {
+    "feature": "range_expansion_5_atr",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.028448324650526047
+  },
+  {
+    "feature": "directional_efficiency_10",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.023801373317837715
+  },
+  {
+    "feature": "upper_wick_ratio",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.019298188388347626
+  },
+  {
+    "feature": "trend_regime",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.01712796650826931
+  },
+  {
+    "feature": "session_bucket",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "breakout_up",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "breakout_down",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "retest_after_breakout",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "failed_breakout",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "volatility_regime",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "gap_regime",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  },
+  {
+    "feature": "time_regime",
+    "tree_importance": 0.0,
+    "xgb_importance": 0.0
+  }
+]

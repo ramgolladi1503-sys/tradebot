@@ -1,0 +1,31 @@
+{
+  "allowed_for_live_execution": false,
+  "api_calls": [],
+  "audit_pass": true,
+  "broker_api_called": false,
+  "determinism": "PASS",
+  "exact_next_action": "Authorize read-only Upstox historical refetch for only 2024-12-12, 2025-03-25, 2025-04-04, and 2025-04-23.",
+  "final_verdict": "REPAIR_REQUIRES_AUTHORIZED_REFETCH",
+  "is_order_action": false,
+  "locally_resolved_sessions": [
+    "2024-11-01",
+    "2025-04-25",
+    "2025-04-30",
+    "2025-05-08",
+    "2025-05-13",
+    "2025-05-21",
+    "2025-10-21"
+  ],
+  "option_joint_rows": 392006,
+  "option_joint_sessions": 382,
+  "read_only": true,
+  "requires_refetch_sessions": [
+    "2024-12-12",
+    "2025-03-25",
+    "2025-04-04",
+    "2025-04-23"
+  ],
+  "underlying_rows_1m": 164745,
+  "underlying_rows_5m": 32949,
+  "underlying_verdict_after_repair_scope": "UNDERLYING_WAREHOUSE_PARTIALLY_READY"
+}

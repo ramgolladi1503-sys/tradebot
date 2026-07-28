@@ -1,0 +1,19 @@
+{
+  "missing_required_artifacts": [
+    "candidate_dataset",
+    "trained_model",
+    "calibration_object"
+  ],
+  "no_retraining_performed": true,
+  "no_threshold_reselection_performed": true,
+  "semantic_hash": "8a04c00fff5ca61a24e03daf1f75c14abb2450094bf295ea0461749e089106a3",
+  "source_best_bucket": "top_10",
+  "source_best_model": "xgboost",
+  "source_required_incomplete_gates": {
+    "concrete_strike_level_candidate_selection": true,
+    "full_leave_feature_family_out": true,
+    "one_bar_delayed_entry_survival": true
+  },
+  "source_sprint_verdict": "ML_META_LABELING_SIGNAL_FOUND_NOT_YET_ROBUST",
+  "status": "FAIL"
+}

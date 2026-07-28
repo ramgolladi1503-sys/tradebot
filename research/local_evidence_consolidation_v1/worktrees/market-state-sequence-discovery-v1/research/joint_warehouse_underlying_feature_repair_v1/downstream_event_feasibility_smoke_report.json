@@ -1,0 +1,26 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "development_event_count": 7303,
+    "event_funnel_stage_counts": {
+      "final_event": 9256,
+      "research_eligible": 230785,
+      "same_side_underlying": 114792
+    },
+    "first_event_timestamp": "2024-09-27T09:39:00+05:30",
+    "holdout_event_count": 1953,
+    "last_event_timestamp": "2026-07-21T14:14:00+05:30",
+    "session_count": 347
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "development_event_count": 143,
+    "event_funnel_stage_counts": {
+      "final_event": 201,
+      "research_eligible": 230785,
+      "same_side_underlying": 114792
+    },
+    "first_event_timestamp": "2024-10-09T10:09:00+05:30",
+    "holdout_event_count": 58,
+    "last_event_timestamp": "2026-07-10T09:19:00+05:30",
+    "session_count": 59
+  }
+}

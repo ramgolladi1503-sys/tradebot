@@ -1,0 +1,10 @@
+{
+  "bootstrap": "session-block",
+  "p_value": "empirical session-label permutation",
+  "permutations": 1000,
+  "q_values": [
+    "family",
+    "global"
+  ],
+  "unit": "session"
+}

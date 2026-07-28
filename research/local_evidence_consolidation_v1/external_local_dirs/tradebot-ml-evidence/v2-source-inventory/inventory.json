@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-21T15:52:18.877539+00:00",
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "total_local_parquet": 1676,
+  "total_manifest_records": 1512,
+  "delta_count": 164,
+  "missing_count": 0,
+  "earliest_delta_date": "2024-11-01",
+  "latest_delta_date": "2026-07-09",
+  "verdict": "FRESH_NIFTY_OOS_AVAILABLE"
+}

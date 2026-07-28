@@ -1,0 +1,7 @@
+{
+  "cost_points": 1.0,
+  "entry": "next_observable_bar",
+  "horizon_minutes": 15,
+  "stop_points": 8.0,
+  "target_points": 12.0
+}

@@ -1,0 +1,8 @@
+{
+  "terminations": [],
+  "summary": {
+    "processes_terminated": 0,
+    "tradebot_processes_terminated": 0,
+    "reason": "No process termination was authorized or necessary for safe reporting."
+  }
+}

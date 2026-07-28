@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "count_sources": {
+    "raw": 1315,
+    "norm_1m": 1199,
+    "norm_5m": 1199,
+    "populated_raw": 1199
+  },
+  "count_differences": 0,
+  "orphan_raw_files": 0,
+  "orphan_normalized_files": 0,
+  "missing_raw_pairs": 0,
+  "missing_normalized_pairs": 0,
+  "unrepresented_requests": 0,
+  "unrepresented_failures": 0,
+  "inventory_manifest_mismatches": 0,
+  "report_manifest_mismatches": 0
+}

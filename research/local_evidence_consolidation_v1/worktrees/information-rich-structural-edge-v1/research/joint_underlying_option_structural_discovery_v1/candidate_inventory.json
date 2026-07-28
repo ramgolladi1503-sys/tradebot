@@ -1,0 +1,1430 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "holdout": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5910494493629884,
+        "t_stat": -2.109825419533104,
+        "total_net_points": -2737.1499999999996,
+        "trades": 4631,
+        "win_rate": 0.4318721658389117
+      },
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -87.8,
+      "net_expectancy_points": 0.6432924570479658,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "survived": false,
+      "t_stat": 2.644652235617745,
+      "total_net_points": 10072.03,
+      "trades": 15657,
+      "win_rate": 0.4353324391645909
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "holdout": {
+        "max_trade_points": 192.10000000000002,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5680588942307689,
+        "t_stat": -2.0207639815903238,
+        "total_net_points": -2835.7499999999986,
+        "trades": 4992,
+        "win_rate": 0.42908653846153844
+      },
+      "max_trade_points": 1087.0,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -87.8,
+      "net_expectancy_points": 0.3994954737477369,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "survived": false,
+      "t_stat": 1.8806322290829314,
+      "total_net_points": 6619.64,
+      "trades": 16570,
+      "win_rate": 0.43162341581170793
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "holdout": {
+        "max_trade_points": 181.35,
+        "min_trade_points": -96.55000000000001,
+        "net_expectancy_points": -1.3760506465517244,
+        "t_stat": -4.494256249086046,
+        "total_net_points": -5107.900000000001,
+        "trades": 3712,
+        "win_rate": 0.4110991379310345
+      },
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -102.0,
+      "net_expectancy_points": -0.008016960702657621,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": false,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "survived": false,
+      "t_stat": -0.031125268423699712,
+      "total_net_points": -105.8799999999992,
+      "trades": 13207,
+      "win_rate": 0.4160672370712501
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "holdout": {
+        "max_trade_points": 175.54999999999998,
+        "min_trade_points": -113.25,
+        "net_expectancy_points": -0.5003614457831328,
+        "t_stat": -1.2916924907773406,
+        "total_net_points": -1453.5500000000006,
+        "trades": 2905,
+        "win_rate": 0.41686746987951806
+      },
+      "max_trade_points": 171.5,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -87.8,
+      "net_expectancy_points": -0.055087519025875185,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "ATM"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": true,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "survived": false,
+      "t_stat": -0.3245395146327956,
+      "total_net_points": -579.0799999999999,
+      "trades": 10512,
+      "win_rate": 0.4223744292237443
+    },
+    {
+      "candidate_id": "JSEDV1_0070_27353b82",
+      "max_trade_points": 89.70000000000005,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.12074646546040588,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -0.7666566818799829,
+      "total_net_points": -1648.3100000000006,
+      "trades": 13651,
+      "win_rate": 0.4258296095524137
+    },
+    {
+      "candidate_id": "JSEDV1_0082_4ad852ad",
+      "max_trade_points": 1087.0,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -102.0,
+      "net_expectancy_points": -0.18831862814856984,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -0.8647928118235564,
+      "total_net_points": -2646.6300000000006,
+      "trades": 14054,
+      "win_rate": 0.41198235377828374
+    },
+    {
+      "candidate_id": "JSEDV1_0081_297ce885",
+      "max_trade_points": 169.55,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -87.8,
+      "net_expectancy_points": -0.1986998480922168,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "ATM"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -1.234669272494286,
+      "total_net_points": -2223.6499999999983,
+      "trades": 11191,
+      "win_rate": 0.41881869359306584
+    },
+    {
+      "candidate_id": "JSEDV1_0069_fafdc35d",
+      "max_trade_points": 116.15000000000009,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -107.25,
+      "net_expectancy_points": -0.21093387589013207,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -0.6692280775360385,
+      "total_net_points": -1036.739999999999,
+      "trades": 4915,
+      "win_rate": 0.43173957273652086
+    },
+    {
+      "candidate_id": "JSEDV1_0087_30a45a27",
+      "max_trade_points": 113.70000000000005,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -107.25,
+      "net_expectancy_points": -0.3528630941109639,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -1.2081994680109047,
+      "total_net_points": -1863.4700000000003,
+      "trades": 5281,
+      "win_rate": 0.42170043552357506
+    },
+    {
+      "candidate_id": "JSEDV1_0094_74ac71cf",
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -106.05,
+      "net_expectancy_points": -0.3605368212248945,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -1.8442951549820394,
+      "total_net_points": -5816.1799999999985,
+      "trades": 16132,
+      "win_rate": 0.4212124969005703
+    },
+    {
+      "candidate_id": "JSEDV1_0089_3949cb4f",
+      "max_trade_points": 104.84999999999991,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -88.16000000000008,
+      "net_expectancy_points": -0.36321387778412323,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "AFTERNOON"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -2.5494021723951805,
+      "total_net_points": -5087.899999999998,
+      "trades": 14008,
+      "win_rate": 0.4172615648201028
+    },
+    {
+      "candidate_id": "JSEDV1_0080_dfe8a806",
+      "max_trade_points": 104.60000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -74.70000000000005,
+      "net_expectancy_points": -0.48156913325471673,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "AFTERNOON"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.4111529418440285,
+      "total_net_points": -6533.929999999997,
+      "trades": 13568,
+      "win_rate": 0.4206957547169811
+    },
+    {
+      "candidate_id": "JSEDV1_0076_2d3ae72c",
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -106.05,
+      "net_expectancy_points": -0.5459824529336502,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.0005849703391116,
+      "total_net_points": -8961.210000000001,
+      "trades": 16413,
+      "win_rate": 0.4168646804362396
+    },
+    {
+      "candidate_id": "JSEDV1_0071_b3398eaa",
+      "max_trade_points": 101.0,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -88.16000000000008,
+      "net_expectancy_points": -0.5641570648878106,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "AFTERNOON"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.786979496212071,
+      "total_net_points": -7442.359999999997,
+      "trades": 13192,
+      "win_rate": 0.4183596118859915
+    },
+    {
+      "candidate_id": "JSEDV1_0090_5dfc5540",
+      "max_trade_points": 171.5,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -96.8,
+      "net_expectancy_points": -0.6657260833256006,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "ATM"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.9895513384969203,
+      "total_net_points": -7174.529999999998,
+      "trades": 10777,
+      "win_rate": 0.4133803470353531
+    },
+    {
+      "candidate_id": "JSEDV1_0098_e4f2ee11",
+      "max_trade_points": 104.60000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -74.70000000000005,
+      "net_expectancy_points": -0.6905854697715419,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "AFTERNOON"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.915274255058532,
+      "total_net_points": -9400.94,
+      "trades": 13613,
+      "win_rate": 0.4147506060383457
+    },
+    {
+      "candidate_id": "JSEDV1_0065_de6f03f4",
+      "max_trade_points": 1056.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.7001122297408809,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -2.929416822300479,
+      "total_net_points": -8483.959999999995,
+      "trades": 12118,
+      "win_rate": 0.4137646476316224
+    },
+    {
+      "candidate_id": "JSEDV1_0073_5095350f",
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -115.69999999999999,
+      "net_expectancy_points": -0.7274279106742793,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.829873250879993,
+      "total_net_points": -10065.420000000002,
+      "trades": 13837,
+      "win_rate": 0.4086145840861458
+    },
+    {
+      "candidate_id": "JSEDV1_0088_c143d8d6",
+      "max_trade_points": 89.70000000000005,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.7375239159276588,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.980293874308476,
+      "total_net_points": -10562.080000000002,
+      "trades": 14321,
+      "win_rate": 0.40444103065428394
+    },
+    {
+      "candidate_id": "JSEDV1_0091_882c7595",
+      "max_trade_points": 1125.3000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -115.69999999999999,
+      "net_expectancy_points": -0.7848005833029528,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.108553804463976,
+      "total_net_points": -10763.539999999997,
+      "trades": 13715,
+      "win_rate": 0.4093328472475392
+    },
+    {
+      "candidate_id": "JSEDV1_0097_4a45e7fe",
+      "max_trade_points": 89.35,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.16000000000008,
+      "net_expectancy_points": -0.8170301221543588,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -5.402364235029372,
+      "total_net_points": -11771.77,
+      "trades": 14408,
+      "win_rate": 0.40845363686840647
+    },
+    {
+      "candidate_id": "JSEDV1_0083_b3bea7e6",
+      "max_trade_points": 1056.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.8560226822111188,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.7168406567378867,
+      "total_net_points": -10793.589999999997,
+      "trades": 12609,
+      "win_rate": 0.39939725592830516
+    },
+    {
+      "candidate_id": "JSEDV1_0007_c865e2b3",
+      "max_trade_points": 207.20000000000005,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -131.39,
+      "net_expectancy_points": -0.863414009774261,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -5.435855586189902,
+      "total_net_points": -11130.269999999999,
+      "trades": 12891,
+      "win_rate": 0.3931425025211388
+    },
+    {
+      "candidate_id": "JSEDV1_0068_fe941a1a",
+      "max_trade_points": 144.09999999999997,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.8753555944321896,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "RICH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.612719065834312,
+      "total_net_points": -11508.299999999996,
+      "trades": 13147,
+      "win_rate": 0.43736213584848255
+    },
+    {
+      "candidate_id": "JSEDV1_0086_800a358d",
+      "max_trade_points": 141.15000000000003,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.5,
+      "net_expectancy_points": -0.9064812399294095,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "RICH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.7523248429469485,
+      "total_net_points": -11814.169999999995,
+      "trades": 13033,
+      "win_rate": 0.4341287500959104
+    },
+    {
+      "candidate_id": "JSEDV1_0072_a6bb42b2",
+      "max_trade_points": 170.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -96.8,
+      "net_expectancy_points": -0.9116037909458963,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "ATM"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -5.587200512806345,
+      "total_net_points": -9907.310000000001,
+      "trades": 10868,
+      "win_rate": 0.40679057784320943
+    },
+    {
+      "candidate_id": "JSEDV1_0096_313cf7f8",
+      "max_trade_points": 116.15000000000009,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -0.9342723196086423,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.12195859477427,
+      "total_net_points": -4583.539999999999,
+      "trades": 4906,
+      "win_rate": 0.41275988585405626
+    },
+    {
+      "candidate_id": "JSEDV1_0002_e822d656",
+      "max_trade_points": 569.35,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -120.05000000000001,
+      "net_expectancy_points": -0.9723373493975903,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -4.210196354278572,
+      "total_net_points": -9684.48,
+      "trades": 9960,
+      "win_rate": 0.38765060240963856
+    },
+    {
+      "candidate_id": "JSEDV1_0078_8a21ad87",
+      "max_trade_points": 94.14999999999998,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -0.9852695336159903,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -3.3780421688484736,
+      "total_net_points": -4880.04,
+      "trades": 4953,
+      "win_rate": 0.41429436705027256
+    },
+    {
+      "candidate_id": "JSEDV1_0006_cff42aff",
+      "max_trade_points": 197.0,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -94.0,
+      "net_expectancy_points": -1.0376391465677184,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -3.569835695055387,
+      "total_net_points": -4474.300000000002,
+      "trades": 4312,
+      "win_rate": 0.4076994434137291
+    },
+    {
+      "candidate_id": "JSEDV1_0066_93671ce1",
+      "max_trade_points": 1056.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -61.55,
+      "net_expectancy_points": -1.0416533732136923,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -4.180763362381267,
+      "total_net_points": -6268.67,
+      "trades": 6018,
+      "win_rate": 0.35360584911930876
+    },
+    {
+      "candidate_id": "JSEDV1_0020_608fdf34",
+      "max_trade_points": 538.1,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -115.94999999999999,
+      "net_expectancy_points": -1.0911914855235862,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -5.393662945231032,
+      "total_net_points": -12098.04,
+      "trades": 11087,
+      "win_rate": 0.37855145666095424
+    },
+    {
+      "candidate_id": "JSEDV1_0075_23b38559",
+      "max_trade_points": 170.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -57.150000000000006,
+      "net_expectancy_points": -1.1425695483099014,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -6.951524156736168,
+      "total_net_points": -7639.22,
+      "trades": 6686,
+      "win_rate": 0.35492072988333834
+    },
+    {
+      "candidate_id": "JSEDV1_0093_e73984d9",
+      "max_trade_points": 171.5,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -61.55,
+      "net_expectancy_points": -1.1598354525056096,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -7.009672152039096,
+      "total_net_points": -7753.5,
+      "trades": 6685,
+      "win_rate": 0.3537771129394166
+    },
+    {
+      "candidate_id": "JSEDV1_0003_8b560a27",
+      "max_trade_points": 600.95,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -57.55,
+      "net_expectancy_points": -1.1985433422698837,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -4.98053526017265,
+      "total_net_points": -9388.189999999999,
+      "trades": 7833,
+      "win_rate": 0.35912166475169155
+    },
+    {
+      "candidate_id": "JSEDV1_0084_aefc5b17",
+      "max_trade_points": 1056.75,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -54.7,
+      "net_expectancy_points": -1.2114956700425656,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -5.427908495688403,
+      "total_net_points": -8253.92,
+      "trades": 6813,
+      "win_rate": 0.35168061059738737
+    },
+    {
+      "candidate_id": "JSEDV1_0025_abcf509e",
+      "max_trade_points": 207.20000000000005,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -131.64,
+      "net_expectancy_points": -1.2671518392715184,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -8.479847618725213,
+      "total_net_points": -17533.58,
+      "trades": 13837,
+      "win_rate": 0.38346462383464625
+    },
+    {
+      "candidate_id": "JSEDV1_0024_724b38f8",
+      "max_trade_points": 197.0,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -82.0,
+      "net_expectancy_points": -1.2900808338651353,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -4.708820866807598,
+      "total_net_points": -6064.670000000001,
+      "trades": 4701,
+      "win_rate": 0.3865135077643055
+    },
+    {
+      "candidate_id": "JSEDV1_0092_2d02ed23",
+      "max_trade_points": 1054.8600000000001,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -1.3863797749247104,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -6.60768129646472,
+      "total_net_points": -17493.339999999997,
+      "trades": 12618,
+      "win_rate": 0.3938817562212712
+    },
+    {
+      "candidate_id": "JSEDV1_0079_04632108",
+      "max_trade_points": 86.50999999999999,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -114.16000000000008,
+      "net_expectancy_points": -1.448919092008824,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -9.658555403522643,
+      "total_net_points": -20361.660000000003,
+      "trades": 14053,
+      "win_rate": 0.3925852131217534
+    },
+    {
+      "candidate_id": "JSEDV1_0001_55d324dd",
+      "max_trade_points": 600.95,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -266.8,
+      "net_expectancy_points": -1.5093990403523954,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -8.40162481297739,
+      "total_net_points": -19188.99,
+      "trades": 12713,
+      "win_rate": 0.3827578069692441
+    },
+    {
+      "candidate_id": "JSEDV1_0021_26877651",
+      "max_trade_points": 600.95,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -57.55,
+      "net_expectancy_points": -1.5376635834189791,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -7.410716917478944,
+      "total_net_points": -13465.32,
+      "trades": 8757,
+      "win_rate": 0.3519470138175174
+    },
+    {
+      "candidate_id": "JSEDV1_0074_b0dc0f12",
+      "max_trade_points": 1054.8600000000001,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -1.5803539678655898,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -8.018293440218814,
+      "total_net_points": -19376.719999999998,
+      "trades": 12261,
+      "win_rate": 0.39132207813392056
+    },
+    {
+      "candidate_id": "JSEDV1_0095_cdf6786e",
+      "max_trade_points": 201.55,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -1.620522669540451,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "RICH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -8.75098091690979,
+      "total_net_points": -21052.21,
+      "trades": 12991,
+      "win_rate": 0.42544838734508506
+    },
+    {
+      "candidate_id": "JSEDV1_0011_838274cd",
+      "max_trade_points": 539.4000000000001,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -283.9,
+      "net_expectancy_points": -1.6404882847433373,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "MID"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -8.922436521073866,
+      "total_net_points": -18343.94,
+      "trades": 11182,
+      "win_rate": 0.36478268646038275
+    },
+    {
+      "candidate_id": "JSEDV1_0033_c91ab211",
+      "max_trade_points": 132.10000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -130.85000000000002,
+      "net_expectancy_points": -1.668148218347233,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -6.361976940322336,
+      "total_net_points": -8801.150000000001,
+      "trades": 5276,
+      "win_rate": 0.3826762699014405
+    },
+    {
+      "candidate_id": "JSEDV1_0005_a6fe9f40",
+      "max_trade_points": 132.7,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -266.8,
+      "net_expectancy_points": -1.686742674370615,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "RICH"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -7.766660265145846,
+      "total_net_points": -16347.910000000002,
+      "trades": 9692,
+      "win_rate": 0.41271151465125877
+    },
+    {
+      "candidate_id": "JSEDV1_0077_97ac61a0",
+      "max_trade_points": 201.55,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -121.14999999999998,
+      "net_expectancy_points": -1.7312024665981498,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "RICH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "side": "PE",
+      "t_stat": -9.217050367967495,
+      "total_net_points": -21897.979999999996,
+      "trades": 12649,
+      "win_rate": 0.42161435686615545
+    },
+    {
+      "candidate_id": "JSEDV1_0015_9d57e970",
+      "max_trade_points": 132.10000000000002,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -130.85000000000002,
+      "net_expectancy_points": -1.7319240598758674,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "FALLING"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "OPEN"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -6.751749086487897,
+      "total_net_points": -9487.480000000001,
+      "trades": 5478,
+      "win_rate": 0.3742241694048923
+    },
+    {
+      "candidate_id": "JSEDV1_0034_22728aff",
+      "max_trade_points": 127.64999999999998,
+      "mechanism": "conditional underlying-option premium response partition discovered from pre-entry state",
+      "min_trade_points": -132.95000000000005,
+      "net_expectancy_points": -1.7351921833465047,
+      "rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "DECEL"
+          },
+          {
+            "field": "time_bucket",
+            "operator": "==",
+            "value": "MIDDAY"
+          }
+        ],
+        "option_type": "CE"
+      },
+      "side": "CE",
+      "t_stat": -11.757980850967966,
+      "total_net_points": -24152.14,
+      "trades": 13919,
+      "win_rate": 0.36920755801422517
+    }
+  ]
+}

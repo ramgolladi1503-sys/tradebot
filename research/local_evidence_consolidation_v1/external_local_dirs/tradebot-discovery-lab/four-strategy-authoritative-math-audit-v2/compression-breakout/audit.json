@@ -1,0 +1,24 @@
+{
+  "artifact": "lane_authoritative_math_audit_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "backtest_performed": "NO",
+  "current_main_summary": "Entry point uses profile gates, session range-width fraction, ATR ratio, optional compression-regime boost, and nearest/ORB/day breakout levels.",
+  "design_ambiguities": [
+    "Strategy spec must approve relationship between measured compression range and traded breakout boundary hierarchy.",
+    "MAX_RANGE_WIDTH_PCT is a fraction threshold per current owner despite pct naming."
+  ],
+  "forward_returns_calculated": "NO",
+  "mathematical_readiness": false,
+  "no_future_returns": true,
+  "objective_defects": [],
+  "parameter_tuning_performed": "NO",
+  "repository_modified": "NO",
+  "source_refs": [
+    "strategies/movement/compression_breakout.py:41",
+    "strategies/movement/compression_breakout.py:186",
+    "core/session_bar_history.py:78",
+    "core/movement_regime.py:222"
+  ],
+  "strategy": "compression_breakout",
+  "verdict": "COMPRESSION_STRATEGY_INTENT_AMBIGUOUS"
+}

@@ -1,0 +1,16 @@
+{
+  "cost_policy": "Costs require explicit spread/slippage/depth authority. If absent, validation is blocked and no cost-adjusted edge can be claimed.",
+  "event_label_policy": "Development labels include maximum favorable premium excursion, adverse excursion, close-to-close change, percentage expansion, point expansion, time to favorable maximum, and net-after-cost feasibility. Labels are not strategy thresholds.",
+  "execution_semantics": "Research-only BUY evaluation. No same-candle execution is permitted; no order action or broker API is available to this runner.",
+  "horizons_minutes": [
+    3,
+    5,
+    10,
+    15,
+    20,
+    30
+  ],
+  "missing_data_policy": "Missing option identity, missing premium OHLCV, missing quote/spread/depth, or missing underlying provenance fails closed before holdout or AlgoTest claims.",
+  "overlap_policy": "Independent move clusters require one instrument/session/direction cluster with a cooldown at least as large as the selected forward horizon.",
+  "timestamp_semantics": "Each candidate timestamp is the close of a completed one-minute option candle. Forward outcomes begin at the next one-minute observation."
+}

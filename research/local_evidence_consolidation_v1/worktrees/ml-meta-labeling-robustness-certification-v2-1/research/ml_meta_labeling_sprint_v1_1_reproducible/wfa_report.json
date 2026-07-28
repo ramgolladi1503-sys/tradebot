@@ -1,0 +1,156 @@
+{
+  "best_bucket": "top_10",
+  "best_model": "xgboost",
+  "folds": [
+    {
+      "average_loser": -27.653688699360334,
+      "average_winner": 19.830172413793097,
+      "ce_pe_split": {
+        "CE": 125
+      },
+      "expectancy": -5.621177142857141,
+      "expiries": 12,
+      "expiry_distribution": {
+        "2026-03-30": 0.008,
+        "2026-04-07": 0.008,
+        "2026-04-21": 0.224,
+        "2026-05-05": 0.096,
+        "2026-05-12": 0.048,
+        "2026-05-19": 0.376,
+        "2026-05-26": 0.008,
+        "2026-06-09": 0.048,
+        "2026-06-16": 0.04,
+        "2026-06-23": 0.016,
+        "2026-06-30": 0.112,
+        "2026-07-07": 0.016
+      },
+      "fold": 1,
+      "gross_pnl": -577.6471428571426,
+      "mae": -18.739451428571428,
+      "max_drawdown": -903.77,
+      "mfe": 14.54464,
+      "month_distribution": {
+        "2026-03": 0.008,
+        "2026-04": 0.328,
+        "2026-05": 0.432,
+        "2026-06": 0.216,
+        "2026-07": 0.016
+      },
+      "net_pnl": -702.6471428571426,
+      "payoff_ratio": 0.7170895944254914,
+      "positive_label_rate": 0.184,
+      "profit_factor": 0.6207641265175896,
+      "sessions": 13,
+      "setup_family_split": {
+        "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": 5,
+        "M2_FAILED_AUCTION_RECLAIM": 2,
+        "M3_REPEATED_TEST_DEPLETION_PROXY": 38,
+        "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": 53,
+        "M5_COMPRESSION_NEAR_BOUNDARY": 13,
+        "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": 14
+      },
+      "trades": 125,
+      "win_rate": 0.464
+    },
+    {
+      "average_loser": -14.657612612612613,
+      "average_winner": 17.7042816091954,
+      "ce_pe_split": {
+        "CE": 90,
+        "PE": 5
+      },
+      "expectancy": 5.100175438596494,
+      "expiries": 12,
+      "expiry_distribution": {
+        "2026-04-07": 0.10526315789473684,
+        "2026-04-13": 0.010526315789473684,
+        "2026-04-21": 0.18947368421052632,
+        "2026-05-05": 0.021052631578947368,
+        "2026-05-12": 0.021052631578947368,
+        "2026-05-19": 0.021052631578947368,
+        "2026-05-26": 0.3263157894736842,
+        "2026-06-09": 0.021052631578947368,
+        "2026-06-16": 0.010526315789473684,
+        "2026-06-30": 0.12631578947368421,
+        "2026-07-07": 0.1368421052631579,
+        "2026-07-21": 0.010526315789473684
+      },
+      "fold": 2,
+      "gross_pnl": 579.5166666666669,
+      "mae": -10.395157894736839,
+      "max_drawdown": -143.80000000000018,
+      "mfe": 15.645035087719291,
+      "month_distribution": {
+        "2026-04": 0.3263157894736842,
+        "2026-05": 0.3684210526315789,
+        "2026-06": 0.15789473684210525,
+        "2026-07": 0.14736842105263157
+      },
+      "net_pnl": 484.51666666666694,
+      "payoff_ratio": 1.2078557454821246,
+      "positive_label_rate": 0.18947368421052632,
+      "profit_factor": 1.8933954929179253,
+      "sessions": 13,
+      "setup_family_split": {
+        "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": 2,
+        "M3_REPEATED_TEST_DEPLETION_PROXY": 26,
+        "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": 48,
+        "M5_COMPRESSION_NEAR_BOUNDARY": 9,
+        "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": 10
+      },
+      "trades": 95,
+      "win_rate": 0.6105263157894737
+    },
+    {
+      "average_loser": -19.997038288288273,
+      "average_winner": 137.6237984496124,
+      "ce_pe_split": {
+        "CE": 73,
+        "PE": 7
+      },
+      "expectancy": 64.72416145833333,
+      "expiries": 12,
+      "expiry_distribution": {
+        "2026-04-07": 0.05,
+        "2026-04-21": 0.2,
+        "2026-04-28": 0.0875,
+        "2026-05-05": 0.0125,
+        "2026-05-12": 0.0375,
+        "2026-05-19": 0.475,
+        "2026-05-26": 0.0125,
+        "2026-06-02": 0.025,
+        "2026-06-09": 0.025,
+        "2026-06-16": 0.025,
+        "2026-06-30": 0.0125,
+        "2026-07-07": 0.0375
+      },
+      "fold": 3,
+      "gross_pnl": 5257.932916666667,
+      "mae": 10.570458333333331,
+      "max_drawdown": -311.21000000000095,
+      "mfe": 80.63098958333333,
+      "month_distribution": {
+        "2026-04": 0.3375,
+        "2026-05": 0.5625,
+        "2026-06": 0.0625,
+        "2026-07": 0.0375
+      },
+      "net_pnl": 5177.932916666667,
+      "payoff_ratio": 6.882209078442129,
+      "positive_label_rate": 0.25,
+      "profit_factor": 7.998242983054366,
+      "sessions": 12,
+      "setup_family_split": {
+        "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": 3,
+        "M3_REPEATED_TEST_DEPLETION_PROXY": 24,
+        "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": 33,
+        "M5_COMPRESSION_NEAR_BOUNDARY": 6,
+        "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": 14
+      },
+      "trades": 80,
+      "win_rate": 0.5375
+    }
+  ],
+  "positive_folds": 2,
+  "semantic_hash": "81fa6a7e18f6fa4fb0d49c891eeb90f9de24042d5ccc31f5638f5dbb07b03460"
+}

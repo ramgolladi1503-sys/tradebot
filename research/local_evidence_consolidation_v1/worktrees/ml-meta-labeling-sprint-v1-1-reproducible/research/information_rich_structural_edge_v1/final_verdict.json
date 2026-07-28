@@ -1,0 +1,7 @@
+{
+  "exact_next_action": "Do not run AlgoTest or production wiring unless survivor_report contains a genuine survivor; otherwise keep this information-rich lane closed until newly certified information is added.",
+  "final_verdict": "NO_INFORMATION_RICH_STRUCTURAL_EDGE_FOUND",
+  "reason": "No frozen information-first hypothesis met all buy-side survivor gates.",
+  "semantic_hash": "f7a11edab8b25307f50b1a694150042f4b9a9f90f1437a6fb92716f3d5c0f097",
+  "survivor_count": 0
+}

@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-21T19:04:14.422428+00:00",
+  "code_commit_sha": "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01",
+  "input_hashes": {},
+  "deterministic_seeds": [
+    42
+  ],
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "candidates": [
+    {
+      "conditions": [
+        {
+          "feature": "mae_atr",
+          "operator": ">",
+          "threshold": -0.5999
+        },
+        {
+          "feature": "mfe_atr",
+          "operator": ">",
+          "threshold": 1.358
+        }
+      ],
+      "rule_hash": "92b46cb5d6f089eb4217772b4ede1181851c15f5a2a09ab26cbe976956ed1837",
+      "adjusted_fwer_p_value": 0.0,
+      "dev_expectancy_r": 1.1999999999999997,
+      "controls": {
+        "placebo": {
+          "rows": 15611,
+          "expectancy": 0.0023794878401937228,
+          "total_r": 37.14618467326421
+        },
+        "session_label_permutation": {
+          "rows": 15611,
+          "expectancy": 0.0023794878401937228,
+          "total_r": 37.14618467326421
+        },
+        "timestamp_shift": {
+          "rows": 15611,
+          "expectancy": 0.0023794878401937228,
+          "total_r": 37.14618467326421
+        },
+        "reversed_direction": {
+          "rows": 15611,
+          "expectancy": -1.1999999999999997,
+          "total_r": -18733.199999999997
+        },
+        "condition_0_ablation": {
+          "rows": 72781,
+          "expectancy": 0.25534686250532423,
+          "total_r": 18584.4
+        },
+        "condition_1_ablation": {
+          "rows": 15661,
+          "expectancy": 1.198007514531368,
+          "total_r": 18761.995685075755
+        },
+        "threshold_perturbation_-1_0.05": {
+          "rows": 14920,
+          "expectancy": 1.1999999999999997,
+          "total_r": 17903.999999999996
+        },
+        "threshold_perturbation_1_0.05": {
+          "rows": 16340,
+          "expectancy": 1.1421664626682981,
+          "total_r": 18662.999999999993
+        },
+        "threshold_perturbation_-1_0.1": {
+          "rows": 14254,
+          "expectancy": 1.1999999999999997,
+          "total_r": 17104.799999999996
+        },
+        "threshold_perturbation_1_0.1": {
+          "rows": 17002,
+          "expectancy": 1.094447712033878,
+          "total_r": 18607.799999999996
+        },
+        "threshold_perturbation_-1_0.2": {
+          "rows": 12901,
+          "expectancy": 1.1994780953481197,
+          "total_r": 15474.466908086093
+        },
+        "threshold_perturbation_1_0.2": {
+          "rows": 18310,
+          "expectancy": 1.007220098306936,
+          "total_r": 18442.199999999997
+        },
+        "loyo_2024": {
+          "rows": 8427,
+          "expectancy": 1.1999999999999997,
+          "total_r": 10112.399999999998
+        },
+        "loyo_2025": {
+          "rows": 7184,
+          "expectancy": 1.2,
+          "total_r": 8620.8
+        },
+        "loro_R1": {
+          "rows": 8427,
+          "expectancy": 1.1999999999999997,
+          "total_r": 10112.399999999998
+        },
+        "loro_R2": {
+          "rows": 7184,
+          "expectancy": 1.2,
+          "total_r": 8620.8
+        },
+        "one_bar_latency": {
+          "rows": 15611,
+          "expectancy": 0.7391040301453922,
+          "total_r": 11538.153014599717
+        },
+        "two_bar_latency": {
+          "rows": 15611,
+          "expectancy": 0.5553677247010966,
+          "total_r": 8669.845550308819
+        },
+        "stress": {
+          "rows": 15611,
+          "expectancy": 1.0999999999999999,
+          "total_r": 17172.1
+        }
+      }
+    }
+  ]
+}

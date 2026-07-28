@@ -1,0 +1,116 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "corresponding_underlying_move_after_entry_proxy": 4.509762312097223e-05,
+    "expected_option_response_proxy": 3.593379953379953,
+    "full_joint": {
+      "max_trade_points": 75.29999999999998,
+      "min_trade_points": -84.80000000000001,
+      "net_expectancy_points": -2.9564568764568757,
+      "t_stat": -8.657089375798435,
+      "total_net_points": -6341.5999999999985,
+      "trades": 2145,
+      "win_rate": 0.3561771561771562
+    },
+    "loss_source_classification": [
+      "no_underlying_directional_edge",
+      "option_response_too_noisy",
+      "option_translation_failure"
+    ],
+    "option_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.6406207045601904,
+      "t_stat": -13.34567272974985,
+      "total_net_points": -37955.76,
+      "trades": 23135,
+      "win_rate": 0.39221958072185004
+    },
+    "realized_option_response": -1.9564568764568762,
+    "residual_option_response": -5.5498368298368295,
+    "underlying_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.7249370947657692,
+      "t_stat": -14.14367171535663,
+      "total_net_points": -40172.06,
+      "trades": 23289,
+      "win_rate": 0.38936837133410623
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "corresponding_underlying_move_after_entry_proxy": -2.4035622835957877e-05,
+    "expected_option_response_proxy": 5.3859317803660565,
+    "full_joint": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.6344026622296173,
+      "t_stat": -6.31571015085773,
+      "total_net_points": -9822.76,
+      "trades": 6010,
+      "win_rate": 0.3886855241264559
+    },
+    "loss_source_classification": [
+      "no_underlying_directional_edge",
+      "option_response_too_noisy",
+      "option_translation_failure"
+    ],
+    "option_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.6406207045601904,
+      "t_stat": -13.34567272974985,
+      "total_net_points": -37955.76,
+      "trades": 23135,
+      "win_rate": 0.39221958072185004
+    },
+    "realized_option_response": -0.6344026622296175,
+    "residual_option_response": -6.020334442595674,
+    "underlying_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.7249370947657692,
+      "t_stat": -14.14367171535663,
+      "total_net_points": -40172.06,
+      "trades": 23289,
+      "win_rate": 0.38936837133410623
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "corresponding_underlying_move_after_entry_proxy": 1.3954700898737162e-05,
+    "expected_option_response_proxy": 5.326628697042366,
+    "full_joint": {
+      "max_trade_points": 149.8,
+      "min_trade_points": -92.85,
+      "net_expectancy_points": -1.3316566746602718,
+      "t_stat": -5.0128580738219215,
+      "total_net_points": -6663.61,
+      "trades": 5004,
+      "win_rate": 0.40367705835331735
+    },
+    "loss_source_classification": [
+      "no_underlying_directional_edge",
+      "option_response_too_noisy",
+      "option_translation_failure"
+    ],
+    "option_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.6406207045601904,
+      "t_stat": -13.34567272974985,
+      "total_net_points": -37955.76,
+      "trades": 23135,
+      "win_rate": 0.39221958072185004
+    },
+    "realized_option_response": -0.3316566746602718,
+    "residual_option_response": -5.658285371702638,
+    "underlying_only": {
+      "max_trade_points": 181.35,
+      "min_trade_points": -161.5,
+      "net_expectancy_points": -1.7249370947657692,
+      "t_stat": -14.14367171535663,
+      "total_net_points": -40172.06,
+      "trades": 23289,
+      "win_rate": 0.38936837133410623
+    }
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "feature_row_count": 4900,
+  "features": [
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_range_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_true_range_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_close_location",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_directional_efficiency",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "previous_inside_outside_state",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "rolling_5_session_realized_volatility",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "rolling_20_session_realized_volatility",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "rolling_volatility_percentile",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "gap_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "absolute_gap_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "gap_over_previous_range",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "gap_direction",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "open_to_cutoff_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "absolute_open_to_cutoff_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "range_over_previous_range",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "directional_efficiency",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "close_location",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "distance_from_high_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "distance_from_low_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "bar_overlap_ratio",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "mean_body_to_range",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "latest_body_to_range",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "direction_change_count",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "up_bar_fraction",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "range_expansion_slope",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "recent_15m_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "peer_recent_15m_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "peer_return_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "return_spread_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "absolute_return_spread_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "direction_agreement",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "leader_identity",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "leader_margin_bps",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "relative_range_expansion",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "relative_acceleration",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "broad_volatility_bucket",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "gap_bucket",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "prior_range_bucket",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "opening_range_bucket",
+      "normalization": "fit inside each outer training fold where used"
+    },
+    {
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "name": "causal_direction",
+      "normalization": "fit inside each outer training fold where used"
+    }
+  ],
+  "outcome_column_count": 37,
+  "outcomes": [
+    "raw_15m_return_bps",
+    "raw_30m_return_bps",
+    "raw_60m_return_bps",
+    "raw_close_return_bps",
+    "continuation_15m_return_bps",
+    "continuation_30m_return_bps",
+    "continuation_60m_return_bps",
+    "continuation_close_return_bps",
+    "reversal_15m_return_bps",
+    "reversal_30m_return_bps",
+    "reversal_60m_return_bps",
+    "reversal_close_return_bps",
+    "absolute_15m_move_bps",
+    "absolute_30m_move_bps",
+    "absolute_60m_move_bps",
+    "30m_MFE_long_bps",
+    "30m_MAE_long_bps",
+    "30m_MFE_short_bps",
+    "30m_MAE_short_bps",
+    "30m_target_10_stop_10_label",
+    "30m_target_10_stop_15_label",
+    "30m_target_10_stop_20_label",
+    "30m_target_15_stop_10_label",
+    "30m_target_15_stop_15_label",
+    "30m_target_15_stop_20_label",
+    "30m_target_20_stop_10_label",
+    "30m_target_20_stop_15_label",
+    "30m_target_20_stop_20_label",
+    "60m_target_10_stop_10_label",
+    "60m_target_10_stop_15_label",
+    "60m_target_10_stop_20_label",
+    "60m_target_15_stop_10_label",
+    "60m_target_15_stop_15_label",
+    "60m_target_15_stop_20_label",
+    "60m_target_20_stop_10_label",
+    "60m_target_20_stop_15_label",
+    "60m_target_20_stop_20_label"
+  ],
+  "predictor_feature_count": 41
+}

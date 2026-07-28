@@ -1,0 +1,168 @@
+{
+  "candidates": [
+    {
+      "algotest_translation": "NOT_ALGOTEST_TRANSLATABLE",
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "entry": "next observable option bar after causal state timestamp",
+      "expiry_dte_rule": "source expiry retained; no expiry inferred from date alone",
+      "forced_exit": "time_exit_at_15_minutes_or_session_end",
+      "frozen_rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "max_holding_minutes": 15,
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "premium_mean < 5.0",
+        "stale_price_flag=true"
+      ],
+      "status": "REJECTED",
+      "stop_points": 8.0,
+      "strike_selection_rule": "observed contract matching frozen moneyness_bucket condition",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "target_points": 12.0
+    },
+    {
+      "algotest_translation": "NOT_ALGOTEST_TRANSLATABLE",
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "entry": "next observable option bar after causal state timestamp",
+      "expiry_dte_rule": "source expiry retained; no expiry inferred from date alone",
+      "forced_exit": "time_exit_at_15_minutes_or_session_end",
+      "frozen_rule": {
+        "conditions": [
+          {
+            "field": "premium_accel_state",
+            "operator": "==",
+            "value": "ACCEL"
+          },
+          {
+            "field": "premium_band",
+            "operator": "==",
+            "value": "HIGH"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "max_holding_minutes": 15,
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "premium_mean < 5.0",
+        "stale_price_flag=true"
+      ],
+      "status": "REJECTED",
+      "stop_points": 8.0,
+      "strike_selection_rule": "observed contract matching frozen moneyness_bucket condition",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "target_points": 12.0
+    },
+    {
+      "algotest_translation": "NOT_ALGOTEST_TRANSLATABLE",
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "entry": "next observable option bar after causal state timestamp",
+      "expiry_dte_rule": "source expiry retained; no expiry inferred from date alone",
+      "forced_exit": "time_exit_at_15_minutes_or_session_end",
+      "frozen_rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "NEAR"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "max_holding_minutes": 15,
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "premium_mean < 5.0",
+        "stale_price_flag=true"
+      ],
+      "status": "REJECTED",
+      "stop_points": 8.0,
+      "strike_selection_rule": "observed contract matching frozen moneyness_bucket condition",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": false,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": false,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "target_points": 12.0
+    },
+    {
+      "algotest_translation": "NOT_ALGOTEST_TRANSLATABLE",
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "entry": "next observable option bar after causal state timestamp",
+      "expiry_dte_rule": "source expiry retained; no expiry inferred from date alone",
+      "forced_exit": "time_exit_at_15_minutes_or_session_end",
+      "frozen_rule": {
+        "conditions": [
+          {
+            "field": "premium_velocity_state",
+            "operator": "==",
+            "value": "RISING"
+          },
+          {
+            "field": "moneyness_bucket",
+            "operator": "==",
+            "value": "ATM"
+          }
+        ],
+        "option_type": "PE"
+      },
+      "max_holding_minutes": 15,
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "premium_mean < 5.0",
+        "stale_price_flag=true"
+      ],
+      "status": "REJECTED",
+      "stop_points": 8.0,
+      "strike_selection_rule": "observed contract matching frozen moneyness_bucket condition",
+      "survival_checks": {
+        "enough_trades": true,
+        "majority_positive_walk_forward_folds": true,
+        "not_dominated_by_one_month": false,
+        "option_information_adds_value": true,
+        "positive_net_expectancy_after_costs": false,
+        "random_controls_underperform": true,
+        "side_swap_not_equivalent": true
+      },
+      "target_points": 12.0
+    }
+  ]
+}

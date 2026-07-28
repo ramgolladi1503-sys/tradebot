@@ -1,0 +1,11 @@
+{
+  "causal": true,
+  "features": [
+    "ret_1",
+    "premium_velocity",
+    "premium_acceleration",
+    "moneyness_bucket",
+    "premium_band",
+    "time_bucket"
+  ]
+}

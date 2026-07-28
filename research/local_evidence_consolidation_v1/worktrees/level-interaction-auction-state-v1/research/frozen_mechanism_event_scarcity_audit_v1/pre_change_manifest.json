@@ -1,0 +1,14 @@
+{
+  "branch": "research/frozen-mechanism-event-scarcity-audit-v1",
+  "clean_status": "?? scripts/audit_frozen_mechanism_event_scarcity_v1.py\n?? tests/research/test_frozen_mechanism_event_scarcity_v1.py",
+  "contract_hashes": {
+    "delayed_option_convexity_after_underlying_confirmation": "7262dbb88f2c9835a5fe6b41adffb41aa274c36b6f9215d5e4828a1e852007e3",
+    "premium_compression_release_with_underlying_state_filter": "d31b3f52a6ddcbb71d1e8744a3dbd9187fed12a9abeeefd03730bab118ec9b32"
+  },
+  "current_commit": "cfb66855577e78a2131439f35cd77cdb888b1755",
+  "eligibility_contract_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "prior_verdict_hash": "94c6315aaa7b7934b94ce3f311722288c3213f89f896ae6f9176864d99549a92",
+  "source_commit": "cfb66855577e78a2131439f35cd77cdb888b1755",
+  "trusted_joint_warehouse_hash": "4b804e196f3ae18fa79a4228f822177cde6476541278eda596525b0cffec11f3",
+  "worktree": "/Users/madhuram/tradebot-frozen-event-scarcity-audit-v1"
+}

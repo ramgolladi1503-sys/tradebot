@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "one_minute_file_count_run_a": 1199,
+  "one_minute_file_count_run_b": 1199,
+  "one_minute_row_count_run_a": 1998358,
+  "one_minute_row_count_run_b": 1998358,
+  "five_minute_file_count_run_a": 1199,
+  "five_minute_file_count_run_b": 1199,
+  "five_minute_row_count_run_a": 399844,
+  "five_minute_row_count_run_b": 399844,
+  "one_minute_per_file_hash_count_run_a": 1199,
+  "one_minute_per_file_hash_count_run_b": 1199,
+  "five_minute_per_file_hash_count_run_a": 1199,
+  "five_minute_per_file_hash_count_run_b": 1199,
+  "aggregate_1m_hash_run_a": "ae4d1e99af2a408c957f62e07e31290d63525264336fb9c5f5b8fac09b637fb9",
+  "aggregate_1m_hash_run_b": "ae4d1e99af2a408c957f62e07e31290d63525264336fb9c5f5b8fac09b637fb9",
+  "aggregate_5m_hash_run_a": "8b899404d6ddf9836781054228db8a924f9a95d4cae58da7e7a371e3d24f858f",
+  "aggregate_5m_hash_run_b": "8b899404d6ddf9836781054228db8a924f9a95d4cae58da7e7a371e3d24f858f",
+  "per_file_mismatch_count_1m": 0,
+  "per_file_mismatch_count_5m": 0,
+  "empty_scope_guard": true,
+  "commands": [
+    "python audit_full_semantic.py"
+  ],
+  "exit_codes": [
+    0
+  ]
+}

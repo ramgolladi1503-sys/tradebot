@@ -1,0 +1,31 @@
+{
+  "columns": [
+    "timestamp",
+    "session",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "oi",
+    "provider",
+    "instrument_key",
+    "source_file_sha256",
+    "data_origin",
+    "synthetic",
+    "mock",
+    "fallback"
+  ],
+  "conflicting_duplicates_rejected": 0,
+  "end_date": "2025-08-29",
+  "identical_duplicates_collapsed": 0,
+  "invalid_ohlc_quarantined": 9,
+  "malformed": 0,
+  "normalized_accepted": 2532066,
+  "out_of_window": 0,
+  "output_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+  "raw_rows": 2532075,
+  "row_conservation_passed": true,
+  "start_date": "2024-01-01"
+}

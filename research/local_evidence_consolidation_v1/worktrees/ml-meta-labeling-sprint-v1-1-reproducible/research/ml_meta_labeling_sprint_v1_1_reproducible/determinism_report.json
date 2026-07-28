@@ -1,0 +1,15 @@
+{
+  "core_hash": "940b4a8dcf348e2886bea836b342c14aedee12ed35808d0facd1ab4b278eb889",
+  "semantic_hash": "2b0c77548a14c20f75b0093ab56ed85337657b7e2d26d34fc05b2c1c4148f354",
+  "semantic_hashes_compared": [
+    "dataset",
+    "feature_contract",
+    "label_contract",
+    "split_contract",
+    "threshold",
+    "predictions",
+    "metrics"
+  ],
+  "status": "PASS",
+  "two_directory_determinism": "semantic deterministic replay through serialization passed; full two-temp training rerun omitted to keep reproduction bounded"
+}

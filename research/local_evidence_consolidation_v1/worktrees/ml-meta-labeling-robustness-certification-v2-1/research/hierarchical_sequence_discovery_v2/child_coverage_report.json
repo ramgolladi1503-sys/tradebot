@@ -1,0 +1,311 @@
+{
+  "semantic_hash": "8adbbcbb4ac2b3c870cf8bef0b09bb105667928a82262670daa57405a2c1af5a",
+  "status": "EVALUATED_PRE_OUTCOME",
+  "top_parent_child_counts": [
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY_WEEK"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY_WEEK"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "EXPIRY"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "OPENING"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "COMPRESSION",
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    },
+    {
+      "child_motifs_covered": 3,
+      "largest_child_share": 0.5,
+      "parent_sequence": [
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ]
+    }
+  ]
+}

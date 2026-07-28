@@ -1,0 +1,18 @@
+{
+  "artifact": "design_decisions_required_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "decisions": [
+    {
+      "decision": "Approve or replace the four-bar trend/pullback/trigger definition and support/resistance anchor ownership.",
+      "strategy": "trend_pullback"
+    },
+    {
+      "decision": "Approve measured compression range versus traded breakout boundary hierarchy and threshold unit semantics.",
+      "strategy": "compression_breakout"
+    },
+    {
+      "decision": "Decide whether VWAP rejection is a real strategy behavior or naming-only legacy.",
+      "strategy": "vwap_reclaim"
+    }
+  ]
+}

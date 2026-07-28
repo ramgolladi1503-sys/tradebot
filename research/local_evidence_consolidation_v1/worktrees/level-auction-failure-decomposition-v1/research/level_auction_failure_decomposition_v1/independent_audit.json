@@ -1,0 +1,20 @@
+{
+  "algotest_called": false,
+  "all_values_from_immutable_campaign_artifacts": true,
+  "broker_calls": false,
+  "counts_reconcile": true,
+  "diagnostic_outputs_deterministic": true,
+  "failure_classes_follow_declared_rules": true,
+  "final_verdict_reconciles": true,
+  "mechanism_identities_reconcile": true,
+  "next_direction_follows_evidence": true,
+  "no_holdout_reopened_for_tuning": true,
+  "no_new_pnl_hypothesis_tested": true,
+  "no_strategy_parameters_changed": true,
+  "production_changes": false,
+  "provider_calls": false,
+  "result": "PASS",
+  "semantic_hash": "1a5b9a83c2f9705289384147fcdc03adda67f41dd650dd19d52b733bc186dcfd",
+  "survivor_count_reconciles": true,
+  "two_directory_determinism": true
+}

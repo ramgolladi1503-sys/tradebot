@@ -1,0 +1,25 @@
+{
+  "source": "cache_inventory.tsv",
+  "largest_entries": [
+    {
+      "path": "/Users/madhuram/tradebot/.venv",
+      "size_kib": 2709492,
+      "classification": "virtualenv",
+      "automatic_delete_allowed": false
+    },
+    {
+      "path": "/Users/madhuram/tradebot/.mypy_cache",
+      "size_kib": 113344,
+      "classification": "reproducible_cache_in_protected_shared_checkout",
+      "automatic_delete_allowed": false
+    },
+    {
+      "path": "/Users/madhuram/tradebot/ui/node_modules",
+      "size_kib": 66320,
+      "classification": "dependency_directory",
+      "automatic_delete_allowed": false
+    }
+  ],
+  "automatic_cache_deletion_performed": false,
+  "reason": "The largest entries are disallowed or in the protected shared checkout; allowed generated caches are too small to satisfy the outcome release gate."
+}

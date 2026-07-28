@@ -1,0 +1,35 @@
+{
+  "endpoint": "v3_historical_candle_minutes_1",
+  "failure_policy": "retain empty responses and errors; never synthesize rows",
+  "hash_method": "sha256",
+  "interval": "1minute",
+  "overwrite_policy": "fail_if_existing",
+  "provider": "upstox",
+  "rate_limit_policy": "serial requests only",
+  "raw_storage_layout": "research/nifty_futures_historical_acquisition_v1/raw/<instrument_key>/<start>_<end>.json",
+  "request_chunking": "7 calendar days",
+  "retry_policy": "2 retries on request errors or 429",
+  "semantic_hash": "5848b0664e01bfa27ab26f190f68d5fffd87c3023479b844b6b2b2a89cc1b976",
+  "sidecar_schema": [
+    "request_timestamp",
+    "provider",
+    "endpoint_name",
+    "instrument_key",
+    "contract_symbol",
+    "expiry",
+    "date_range",
+    "interval",
+    "http_status",
+    "row_count",
+    "response_hash",
+    "semantic_hash",
+    "empty_response",
+    "error_class",
+    "retry_count"
+  ],
+  "stop_conditions": [
+    "missing_authorized_credentials",
+    "no_official_contracts",
+    "provider_range_insufficient"
+  ]
+}

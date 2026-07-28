@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "candidate_definitions_unchanged": true,
+    "cost_model_not_modified": true,
+    "holdout_split_unchanged": true,
+    "no_algotest": true,
+    "no_new_mechanisms": true,
+    "no_production_modifications": true,
+    "no_provider_calls": true,
+    "no_threshold_tuning": true,
+    "prior_artifact_verified": true
+  },
+  "status": "PASS"
+}

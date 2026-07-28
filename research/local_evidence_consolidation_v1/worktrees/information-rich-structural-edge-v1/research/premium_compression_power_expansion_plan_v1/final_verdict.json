@@ -1,0 +1,8 @@
+{
+  "algotest_used": false,
+  "broker_api_called": false,
+  "exact_next_action": "Authorize a bounded historical acquisition/certification pass for post-2026-07-21 NIFTY expired options and underlying data, or certify a listed local archive before any outcome test.",
+  "final_campaign_verdict": "AUTHORIZED_HISTORICAL_ACQUISITION_REQUIRED",
+  "mechanism_called_edge": false,
+  "production_modified": false
+}

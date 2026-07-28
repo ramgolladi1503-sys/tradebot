@@ -1,0 +1,6 @@
+{
+  "INVALID_EXPANDED_TEST": "contract mutation, overlap, leakage, invalid costs, broken chronology, or failed audit",
+  "PREMIUM_COMPRESSION_MECHANISM_REJECTED": "adequately powered expanded test fails economic or robustness gates",
+  "PREMIUM_COMPRESSION_MECHANISM_SURVIVED": "positive net expectancy, sufficient clustered ESS, majority-positive folds, no concentration/top-trade dependence, stable neighbourhood, controls underperform, shuffled labels remove effect, joint adds value",
+  "PREMIUM_COMPRESSION_STILL_UNDERPOWERED": "planned expansion completes but independent clustered evidence remains insufficient"
+}

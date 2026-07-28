@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-21T18:38:55.827023+00:00",
+  "code_commit_sha": "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01",
+  "input_hashes": {},
+  "deterministic_seeds": [
+    42
+  ],
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "candidates": [
+    {
+      "conditions": [
+        {
+          "feature": "mae_atr",
+          "operator": ">",
+          "threshold": -0.5999
+        },
+        {
+          "feature": "mfe_atr",
+          "operator": ">",
+          "threshold": 1.358
+        }
+      ],
+      "rule_hash": "92b46cb5d6f089eb4217772b4ede1181851c15f5a2a09ab26cbe976956ed1837",
+      "adjusted_fwer_p_value": 0.0,
+      "dev_expectancy_r": 1.1999999999999997
+    }
+  ]
+}

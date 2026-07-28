@@ -1,0 +1,12 @@
+{
+  "accepted_candidate_count": 0,
+  "candidate_count": 0,
+  "errors": [
+    "ROOT_UNAVAILABLE"
+  ],
+  "root_id": "REGISTERED_WORKTREE_026",
+  "status": "UNAVAILABLE",
+  "timed_out": false,
+  "truncated": false,
+  "unresolved_candidate_count": 0
+}

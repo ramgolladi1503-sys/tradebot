@@ -1,0 +1,16 @@
+{
+  "candidate_contract_hashes": {
+    "FQSDV2_EXPIRY_TRANSITION_03": "de1cd10bc33f9d073c55667e8054c48716fcace8083ddd7d51a4f048e7069728",
+    "FQSDV2_LADDER_CONFIRM_02": "442ba6e95c05313177104df9c56ec1fb60484bb6ba91f6a8c281e7a34e93f23b",
+    "FQSDV2_PAIR_ASYM_01": "de0ed2c26576a97318ce8bf60e9de14c5c8ff4a5a4278947f4f6bc3165e98202"
+  },
+  "prior_final_verdict": {
+    "algotest_used": false,
+    "broker_api_called": false,
+    "exact_next_action": "Do not proceed to AlgoTest; no frequency-qualified candidate survived all local gates.",
+    "final_verdict": "NO_FREQUENCY_QUALIFIED_EDGE_FOUND",
+    "production_modified": false,
+    "surviving_candidates": []
+  },
+  "status": "PASS"
+}

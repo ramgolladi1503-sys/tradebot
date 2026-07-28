@@ -1,0 +1,40 @@
+{
+  "candidate_failures": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "failure_taxonomy": [
+        "COST_SENSITIVE",
+        "EXPIRY_CONCENTRATED",
+        "FALSE_POSITIVE_SELECTION",
+        "NON_STATIONARY",
+        "REGIME_CONCENTRATED"
+      ]
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "failure_taxonomy": [
+        "COST_SENSITIVE",
+        "EXPIRY_CONCENTRATED",
+        "FALSE_POSITIVE_SELECTION",
+        "NON_STATIONARY",
+        "REGIME_CONCENTRATED"
+      ]
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "failure_taxonomy": [
+        "EXPIRY_CONCENTRATED",
+        "NO_INCREMENTAL_OPTION_VALUE",
+        "REGIME_CONCENTRATED"
+      ]
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "failure_taxonomy": [
+        "COST_SENSITIVE",
+        "EXPIRY_CONCENTRATED",
+        "REGIME_CONCENTRATED"
+      ]
+    }
+  ]
+}

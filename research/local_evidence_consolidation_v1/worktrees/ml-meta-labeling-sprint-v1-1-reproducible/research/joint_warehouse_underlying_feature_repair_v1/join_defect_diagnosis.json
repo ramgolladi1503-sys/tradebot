@@ -1,0 +1,22 @@
+{
+  "current_rows": 392006,
+  "defect_classification": "JOINT_WAREHOUSE_PROPAGATION_FAILURE",
+  "failure_modes_checked": [
+    "timestamp_timezone",
+    "timestamp_precision",
+    "bar_end_semantics",
+    "session_date_mismatch",
+    "merge_suffix_collision",
+    "wrong_suffixed_column",
+    "schema_normalization_nulling",
+    "dtype_coercion",
+    "post_merge_masking",
+    "stale_cached_artifact",
+    "join_direction"
+  ],
+  "matched_rows": 392006,
+  "root_cause": "joint warehouse retained placeholder object-valued underlying feature columns instead of propagating canonical underlying feature values",
+  "underlying_rows": 164745,
+  "unmatched_option_rows": 0,
+  "unmatched_underlying_rows": 136158
+}

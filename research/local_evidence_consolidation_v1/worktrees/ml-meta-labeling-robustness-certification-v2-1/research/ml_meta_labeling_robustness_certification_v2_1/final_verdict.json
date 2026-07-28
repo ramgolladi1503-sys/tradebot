@@ -1,0 +1,6 @@
+{
+  "exact_next_action": "Close this ML signal without further tuning.",
+  "failed_gate": "concrete_economics",
+  "final_verdict": "ML_META_LABELING_SIGNAL_REJECTED_ON_CONCRETE_REPLAY",
+  "semantic_hash": "e84eae89f2eec51b107bcacb7ab4dadb899161b61e18c0ebab86c5eddd03c671"
+}

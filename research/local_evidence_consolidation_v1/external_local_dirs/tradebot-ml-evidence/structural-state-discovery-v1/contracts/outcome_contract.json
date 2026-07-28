@@ -1,0 +1,13 @@
+{
+  "primary": "signed 30-minute return from legal next-open",
+  "secondary": [
+    "15m",
+    "60m",
+    "close"
+  ],
+  "target_stop_diagnostics_bps": [
+    10,
+    15,
+    20
+  ]
+}

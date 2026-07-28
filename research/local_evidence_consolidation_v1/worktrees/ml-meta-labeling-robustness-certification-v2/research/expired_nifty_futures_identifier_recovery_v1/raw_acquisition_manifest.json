@@ -1,0 +1,6 @@
+{
+  "bulk_acquisition_attempted": false,
+  "raw_artifacts": [],
+  "reason": "no VERIFIED_RETRIEVABLE expired NIFTY futures identifiers",
+  "semantic_hash": "f45ba47fcc093c0aa192642114aec12af9b97ed752a2a8a5607addda843176b2"
+}

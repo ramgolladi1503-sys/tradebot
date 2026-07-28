@@ -1,0 +1,22 @@
+{
+  "earliest_date": "2008-01-31",
+  "latest_date": "2025-08-31",
+  "snapshot_count": 216,
+  "date_frequency_distribution": {
+    "month_end": 178,
+    "event_driven": 38
+  },
+  "duplicate_dates": 0,
+  "non_numeric_cells": 0,
+  "stock_columns": 100,
+  "row_sums": {
+    "minimum_sum": 99.99999999999996,
+    "maximum_sum": 100.00000000000004
+  },
+  "zero_weight_semantics": "0 means not in index",
+  "ticker_changes": "Present in headers",
+  "reconstructed_periods_disclosed": "Not explicitly disclosed",
+  "extrapolated_periods_disclosed": "Mentioned",
+  "licence_terms": "CC BY-NC-SA 4.0",
+  "classification": "COMMUNITY_PROXY_STRUCTURALLY_VALID"
+}

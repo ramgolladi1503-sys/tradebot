@@ -1,0 +1,364 @@
+{
+  "acceptance_rule": "Reject a future hypothesis before outcome testing when its economic-family fingerprint or substantive causal sequence is equivalent to a closed or parked family.",
+  "registry": [
+    {
+      "canonical_name": "bullish_ORB",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "opening_range_directional_breakout",
+      "economic_family_fingerprint": "07826c6bcccd37e37329174f2779ca6641e884713402f66f2a61688384509a19",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "0609efba5b61fd4730a21c276187498dd8414892bea0bc1eb848fd03265a4219",
+      "prohibited_rediscovery_aliases": [
+        "bullish ORB",
+        "opening range breakout CE"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "bullish ORB",
+        "opening range breakout CE"
+      ]
+    },
+    {
+      "canonical_name": "bearish_ORB",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "opening_range_directional_breakout",
+      "economic_family_fingerprint": "07826c6bcccd37e37329174f2779ca6641e884713402f66f2a61688384509a19",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "52baa09ff3c3d8823beb17576ff002fdbeb532a6f31c6db78f769949e0521b74",
+      "prohibited_rediscovery_aliases": [
+        "bearish ORB",
+        "opening range breakout PE"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "bearish ORB",
+        "opening range breakout PE"
+      ]
+    },
+    {
+      "canonical_name": "underlying_percentage_momentum",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "underlying_directional_momentum",
+      "economic_family_fingerprint": "3881f420d013b05359eb82828dd4dfaff58da93a385e0b2a9721082a874eb407",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "28a9a707221d5023ac861afd847281ae3207e37b8f8f4dc5c62bb853597a7b1d",
+      "prohibited_rediscovery_aliases": [
+        "underlying percentage momentum",
+        "index return momentum"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "underlying percentage momentum",
+        "index return momentum"
+      ]
+    },
+    {
+      "canonical_name": "ORB_plus_momentum_agreement",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "opening_range_directional_breakout",
+      "economic_family_fingerprint": "07826c6bcccd37e37329174f2779ca6641e884713402f66f2a61688384509a19",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "c9dd9bc0c0b2be775c726d282839e58bccd6c5db90bcba7aeb3fa12227c8329c",
+      "prohibited_rediscovery_aliases": [
+        "ORB plus momentum agreement",
+        "opening breakout momentum confirmation"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "ORB plus momentum agreement",
+        "opening breakout momentum confirmation"
+      ]
+    },
+    {
+      "canonical_name": "opening_state_momentum_variants",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "underlying_directional_momentum",
+      "economic_family_fingerprint": "3881f420d013b05359eb82828dd4dfaff58da93a385e0b2a9721082a874eb407",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "5b1849bca26a1f633a9080640c423eb7dd61e55db93b3b926abf0cf9623f9d9c",
+      "prohibited_rediscovery_aliases": [
+        "opening-state momentum",
+        "open-session directional continuation"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "opening-state momentum",
+        "open-session directional continuation"
+      ]
+    },
+    {
+      "canonical_name": "mean_reversion_variants",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "price_reversion",
+      "economic_family_fingerprint": "199e76bb6e7378c9b327564162617694876e07e0acdb58ffebd0db8e70f53141",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/prior_mechanism_exclusion_manifest.json",
+          "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "efc5d8cc7ff4339db6831137903377f973ceb8703fe420dd7b5e2602b95c2b8e",
+      "prohibited_rediscovery_aliases": [
+        "underlying mean reversion",
+        "option premium mean reversion"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "underlying mean reversion",
+        "option premium mean reversion"
+      ]
+    },
+    {
+      "canonical_name": "delayed_option_convexity_after_underlying_confirmation",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "delayed_option_response",
+      "economic_family_fingerprint": "a30a51cf057f74b0a88f7e2e974c50a0b9bfa0be291c7dcb36ce1ecd4fbcdf94",
+      "evidence_links": [
+        {
+          "path": "research/frozen_joint_mechanisms_repaired_v2/holdout_results.json",
+          "sha256": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2"
+        }
+      ],
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "mechanism_fingerprint": "bb4e6937377e6896571d5f97888f5a318da0b67af62322c999f34e622e616491",
+      "prohibited_rediscovery_aliases": [
+        "delayed option convexity",
+        "underlying confirmation then option catch-up"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "delayed option convexity",
+        "underlying confirmation then option catch-up"
+      ]
+    },
+    {
+      "canonical_name": "premium_compression_release_with_underlying_state_filter",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "premium_compression_release",
+      "economic_family_fingerprint": "b9d71349bbe4b2e5055e3c7b1a3606ad87aa4d8ca7d6b5caebd80304f0f8d96f",
+      "evidence_links": [
+        {
+          "path": "research/frozen_joint_mechanisms_repaired_v2/holdout_results.json",
+          "sha256": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2"
+        }
+      ],
+      "final_status": "UNRESOLVED_UNDERPOWERED",
+      "mechanism_fingerprint": "d8a6092b18063411be244001c75dc6abdef1a486d81149fef5d82cc1624bcb29",
+      "prohibited_rediscovery_aliases": [
+        "premium compression release",
+        "compression-release continuation"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "premium compression release",
+        "compression-release continuation"
+      ]
+    },
+    {
+      "canonical_name": "FQSDV2_PAIR_ASYM_01",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "relative_option_response_asymmetry",
+      "economic_family_fingerprint": "32a74fef3d5f754fef0ddfd1c1c01e97e2f13ae762ff6841e7762809a056a155",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+          "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+        }
+      ],
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "mechanism_fingerprint": "b095b5c7c10572bf057499ae6e311d677f78873418bc8694f0206fd25135c050",
+      "prohibited_rediscovery_aliases": [
+        "pair asymmetry",
+        "CE/PE response imbalance"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "pair asymmetry",
+        "CE/PE response imbalance"
+      ]
+    },
+    {
+      "canonical_name": "FQSDV2_LADDER_CONFIRM_02",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "cross_strike_confirmation",
+      "economic_family_fingerprint": "cf2749b181b171f4598a0234412adde193eefb098729fed27e23b124de77556f",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+          "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+        }
+      ],
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "mechanism_fingerprint": "48bc29a01cf55f8d74f4d503a5c216a917fab6efd609459ba03e6f195cc435f8",
+      "prohibited_rediscovery_aliases": [
+        "ladder confirmation",
+        "cross-strike confirmation"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "ladder confirmation",
+        "cross-strike confirmation"
+      ]
+    },
+    {
+      "canonical_name": "FQSDV2_EXPIRY_TRANSITION_03",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "expiry_state_transition",
+      "economic_family_fingerprint": "0c1102b842773763a94564ae4978d85c119981b58457fd121d1c789961be05fb",
+      "evidence_links": [
+        {
+          "path": "research/frequency_qualified_structural_discovery_v2/holdout_report.json",
+          "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+        }
+      ],
+      "final_status": "REJECTED_POWERED_NEGATIVE",
+      "mechanism_fingerprint": "19afd933acad4c52eeac30224d25dce81c30f816de77912efc2fbc3b698d8c8d",
+      "prohibited_rediscovery_aliases": [
+        "expiry transition",
+        "expiry-week premium acceleration"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "expiry transition",
+        "expiry-week premium acceleration"
+      ]
+    },
+    {
+      "canonical_name": "broad_joint_state_partition_candidates",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "joint_state_partition",
+      "economic_family_fingerprint": "f01ce22d88a287441b09af87dae72567c633d43bcc7c10ead58d4776ea2ac753",
+      "evidence_links": [
+        {
+          "path": "research/joint_underlying_option_structural_discovery_v1/final_verdict.json",
+          "sha256": "dbd22126c608f834457d5b348f654613fc47d3ddba325aa3dd1fd9a0f76fe7e2"
+        }
+      ],
+      "final_status": "REJECTED_ROBUSTNESS_FAILURE",
+      "mechanism_fingerprint": "8dbe4975171b7ee0fa4148931619caed1c01135d4f659ae247ad281357ea6e8c",
+      "prohibited_rediscovery_aliases": [
+        "previously rejected broad joint candidates",
+        "joint premium state partitions"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "previously rejected broad joint candidates",
+        "joint premium state partitions"
+      ]
+    },
+    {
+      "canonical_name": "zero_event_frozen_mechanism_test",
+      "data_requirements": [
+        "observed option OHLC",
+        "research_eligible underlying features",
+        "chronological next-bar execution"
+      ],
+      "economic_family": "invalid_evidence_artifact",
+      "economic_family_fingerprint": "5daf82022f472a389337dbf481d5d0fadc2500bb9fab05b2a21bfdcc81b8416f",
+      "evidence_links": [
+        {
+          "path": "research/frozen_joint_mechanisms_v1/effective_sample_size_report.json",
+          "sha256": "c5b0006671f8989afe265b467bef76079219dd4bdc40863f5a3890e801e3f79e"
+        }
+      ],
+      "final_status": "SUPERSEDED_BY_VALID_RERUN",
+      "mechanism_fingerprint": "33727c73d4e5b0b63a6cca6e74215527b296a205f6f9383787fd24b9a47c4aee",
+      "prohibited_rediscovery_aliases": [
+        "old zero-event frozen test",
+        "pre-repair frozen rerun"
+      ],
+      "tested_thresholds": "See immutable source campaign contract; no closeout tuning performed.",
+      "tested_variants": [
+        "old zero-event frozen test",
+        "pre-repair frozen rerun"
+      ]
+    }
+  ],
+  "status_values": [
+    "INVALID_PRIOR_TEST",
+    "NOT_MATERIALLY_DISTINCT",
+    "REJECTED_POWERED_NEGATIVE",
+    "REJECTED_ROBUSTNESS_FAILURE",
+    "SUPERSEDED_BY_VALID_RERUN",
+    "UNRESOLVED_UNDERPOWERED"
+  ]
+}

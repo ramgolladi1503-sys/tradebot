@@ -1,0 +1,16 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "candidate_current_implementation_hash": "6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b",
+  "generator_sha256": "6505aa49f008e98b395c81530c006e3712fdb575451b650be583fe89cdd0034b",
+  "holdout_outcomes_read": false,
+  "implementation_authority": "PROVEN_FOR_PLACEHOLDER_GENERATOR_ONLY",
+  "is_order_action": false,
+  "ledger_proven_implementation_blob_hash": "935bdbdf30a461e290ee3566ac7e5e3e859e271b",
+  "ledger_proven_implementation_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+  "ledger_proven_implementation_path": "research/option_e2e_recertification_v4/signal_ledgers_v4_2/build_signal_ledgers.py",
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true
+}

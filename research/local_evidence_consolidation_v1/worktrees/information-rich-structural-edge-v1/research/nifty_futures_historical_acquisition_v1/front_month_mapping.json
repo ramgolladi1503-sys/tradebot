@@ -1,0 +1,300 @@
+{
+  "causal": true,
+  "mapping": [
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-12"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-13"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-14"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-15"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-18"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-19"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-20"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-21"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-22"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-25"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-26"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-27"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-05-29"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-01"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-02"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-03"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-04"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-05"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-08"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-09"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-10"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-11"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-12"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-15"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-16"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-17"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-18"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-19"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-22"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-23"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-24"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-25"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-29"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-06-30"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-01"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-02"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-03"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-06"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-07"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-08"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-09"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-10"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-13"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-14"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-15"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-16"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-17"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-20"
+    },
+    {
+      "front_month_instrument_key": "NSE_FO|61093",
+      "front_month_symbol": "NIFTY FUT 28 JUL 26",
+      "selection_rule": "nearest_expiry_not_before_session_using_pre_frozen_contract_set",
+      "session": "2026-07-21"
+    }
+  ],
+  "semantic_hash": "fb313f3248ce79919f1d97711a927b67d88f1fc4f9e285a5c1f36e427568b4ca"
+}

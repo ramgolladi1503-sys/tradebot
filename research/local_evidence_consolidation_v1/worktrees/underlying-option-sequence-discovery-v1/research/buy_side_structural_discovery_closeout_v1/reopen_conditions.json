@@ -1,0 +1,60 @@
+{
+  "conditions": [
+    {
+      "id": "RICHER_MARKET_MICROSTRUCTURE",
+      "minimum": "synchronized point-in-time option bid/ask plus executable spread history; tick trades or depth optional extensions",
+      "required_proof": [
+        "timestamp alignment audit",
+        "quote staleness audit",
+        "crossed-market handling",
+        "point-in-time IV/Greeks provenance when used"
+      ]
+    },
+    {
+      "id": "LONGER_INDEPENDENT_HISTORY",
+      "minimum": {
+        "additional_independent_expiries": 18,
+        "additional_independent_sessions": 24,
+        "premium_compression_frozen_events": 63
+      },
+      "required_proof": [
+        "history unused by prior selection",
+        "same frozen mechanism contract",
+        "chronological holdout"
+      ]
+    },
+    {
+      "id": "MATERIALLY_DIFFERENT_INSTRUMENT_UNIVERSE",
+      "minimum": "independently justified BANKNIFTY/other index, futures-options structure, point-in-time constituent lead-lag, or cross-expiry term structure",
+      "required_proof": [
+        "independent data certification",
+        "new economic-family fingerprint"
+      ]
+    },
+    {
+      "id": "MATERIALLY_DIFFERENT_EXECUTION_HORIZON",
+      "minimum": "tick-to-seconds, quote-supported end-bar versus next-bar, or opening-auction microstructure",
+      "required_proof": [
+        "executable quote support",
+        "causal timestamp proof"
+      ]
+    },
+    {
+      "id": "DIFFERENT_ECONOMIC_EXPOSURE",
+      "minimum": "explicit user authorization changing the BUY-only constraint",
+      "required_proof": [
+        "new written scope",
+        "separate risk and cost contract"
+      ]
+    }
+  ],
+  "never_sufficient_alone": [
+    "new indicator combinations",
+    "threshold grids",
+    "stop/target tuning",
+    "one favourable month",
+    "social-media strategy ideas",
+    "renamed or lightly modified rejected mechanisms"
+  ],
+  "policy": "Reopen only when at least one materially new capability below is independently certified before hypothesis evaluation."
+}

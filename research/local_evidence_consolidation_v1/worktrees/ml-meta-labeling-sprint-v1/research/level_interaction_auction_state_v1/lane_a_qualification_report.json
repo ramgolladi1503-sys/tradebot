@@ -1,0 +1,89 @@
+{
+  "qualified": [
+    {
+      "development_expiries": 56,
+      "development_folds_with_support": 6,
+      "development_sessions": 164,
+      "development_trades": 744,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 320.44943820224717,
+      "lane": "A",
+      "max_expiry_share": 0.051075268817204304,
+      "max_month_share": 0.13172043010752688,
+      "mechanism_id": "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL",
+      "qualified": true
+    },
+    {
+      "development_expiries": 47,
+      "development_folds_with_support": 6,
+      "development_sessions": 84,
+      "development_trades": 410,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 176.59176029962546,
+      "lane": "A",
+      "max_expiry_share": 0.12926829268292683,
+      "max_month_share": 0.2146341463414634,
+      "mechanism_id": "M2_FAILED_AUCTION_RECLAIM",
+      "qualified": true
+    },
+    {
+      "development_expiries": 57,
+      "development_folds_with_support": 6,
+      "development_sessions": 259,
+      "development_trades": 6917,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 2979.232209737828,
+      "lane": "A",
+      "max_expiry_share": 0.02645655631053925,
+      "max_month_share": 0.10134451351742085,
+      "mechanism_id": "M3_REPEATED_TEST_DEPLETION_PROXY",
+      "qualified": true
+    },
+    {
+      "development_expiries": 57,
+      "development_folds_with_support": 6,
+      "development_sessions": 267,
+      "development_trades": 12475,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 5373.12734082397,
+      "lane": "A",
+      "max_expiry_share": 0.028537074148296593,
+      "max_month_share": 0.10180360721442885,
+      "mechanism_id": "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK",
+      "qualified": true
+    },
+    {
+      "development_expiries": 57,
+      "development_folds_with_support": 6,
+      "development_sessions": 229,
+      "development_trades": 3562,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 1534.194756554307,
+      "lane": "A",
+      "max_expiry_share": 0.045480067377877596,
+      "max_month_share": 0.1437394722066255,
+      "mechanism_id": "M5_COMPRESSION_NEAR_BOUNDARY",
+      "qualified": true
+    },
+    {
+      "development_expiries": 56,
+      "development_folds_with_support": 6,
+      "development_sessions": 199,
+      "development_trades": 2137,
+      "expected_holdout_expiries": 25,
+      "expected_holdout_sessions": 115,
+      "expected_holdout_trades": 920.4307116104869,
+      "lane": "A",
+      "max_expiry_share": 0.05474964904071128,
+      "max_month_share": 0.13476836686944316,
+      "mechanism_id": "M6_OPTION_CONFIRMATION_NON_CONFIRMATION",
+      "qualified": true
+    }
+  ],
+  "semantic_hash": "d3ba4d7e9cc91129858fc5d7730329e146aca8cf8c4e96ad7e5825c35d32df66"
+}

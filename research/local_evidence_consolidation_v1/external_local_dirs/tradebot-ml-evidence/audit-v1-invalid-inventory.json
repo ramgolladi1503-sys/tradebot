@@ -1,0 +1,11 @@
+{
+  "files": [
+    {
+      "byte_size": 405,
+      "path": "/Users/madhuram/tradebot-ml-evidence/audit-v1/audit.log",
+      "sha256": "6c11dc7380881c6f48562c3908de756eaa27e9944d707e6a5a0815c91b9ca9b8"
+    }
+  ],
+  "generated_at": "2026-07-21T14:06:12.443003+00:00",
+  "status": "INVALID_PLACEHOLDER_AUDIT_OUTPUT_DO_NOT_USE"
+}

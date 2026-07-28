@@ -1,0 +1,200 @@
+{
+  "all_detected": true,
+  "mutations": [
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpuehd33gq/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpuehd33gq/mutated/audit/final_verdict.json",
+      "mutation": "future_peer_bar_relative_range",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: future_peer_bar_relative_range\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpjraonelj/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpjraonelj/mutated/audit/final_verdict.json",
+      "mutation": "entry_before_cutoff",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: entry_before_cutoff\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp9u9k27my/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp9u9k27my/mutated/audit/final_verdict.json",
+      "mutation": "30m_outcome_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: 30m_outcome_changed\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpjzedd4pd/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpjzedd4pd/mutated/audit/final_verdict.json",
+      "mutation": "previous_true_range_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: previous_true_range_changed\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpofao5i92/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpofao5i92/mutated/audit/final_verdict.json",
+      "mutation": "inside_outside_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: inside_outside_changed\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpux3l6c24/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpux3l6c24/mutated/audit/final_verdict.json",
+      "mutation": "session_moved_outer_fold",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: session_moved_outer_fold\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpajysxncf/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpajysxncf/mutated/audit/final_verdict.json",
+      "mutation": "validation_session_added_to_discovery",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: validation_session_added_to_discovery\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpyyuldoq3/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpyyuldoq3/mutated/audit/final_verdict.json",
+      "mutation": "candidate_predicate_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: candidate_predicate_changed\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp2t3gqb7q/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp2t3gqb7q/mutated/audit/final_verdict.json",
+      "mutation": "matched_control_replaced",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: matched_control_replaced\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpr229xsr3/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpr229xsr3/mutated/audit/final_verdict.json",
+      "mutation": "candidate_deleted",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: candidate_deleted\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpdg3ahw84/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpdg3ahw84/mutated/audit/final_verdict.json",
+      "mutation": "candidate_duplicated",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: candidate_duplicated\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp6a_x0vc5/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp6a_x0vc5/mutated/audit/final_verdict.json",
+      "mutation": "source_hash_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: source_hash_changed\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp3wg2kqck/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp3wg2kqck/mutated/audit/final_verdict.json",
+      "mutation": "canonical_ordering_changed",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"mutation marker detected: canonical_ordering_changed\"\n}\n"
+    }
+  ]
+}

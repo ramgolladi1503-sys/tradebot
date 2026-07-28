@@ -1,0 +1,6 @@
+{
+  "ambiguous_ordering": "target before stop only if first passage index is earlier or equal",
+  "cost_points": 1.0,
+  "next_bar_execution": true,
+  "same_bar_hindsight": false
+}

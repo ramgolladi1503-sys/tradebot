@@ -1,0 +1,138 @@
+{
+  "semantic_hash": "3ae7635d71e78b77c9c4e2ff336335cc807418042cb3aa787872c3c573acdc84",
+  "status": "FROZEN_BEFORE_PROBES",
+  "targets": [
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 SEP 24",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2024-09-26"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 31 OCT 24",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2024-10-31"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 28 NOV 24",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2024-11-28"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 DEC 24",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2024-12-26"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 30 JAN 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-01-30"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 27 FEB 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-02-27"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 27 MAR 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-03-27"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 24 APR 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-04-24"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 29 MAY 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-05-29"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 JUN 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-06-26"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 31 JUL 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-07-31"
+    },
+    {
+      "acquisition_eligibility": "BLOCKED_IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 28 AUG 25",
+      "expected_synchronized_sessions": "NOT_COMPUTED_WITHOUT_OFFICIAL_IDENTIFIER",
+      "official_identifier_status": "UNRESOLVED",
+      "overlap_date_range": [
+        "2024-09-26",
+        "2026-07-21"
+      ],
+      "target_expiry": "2025-08-28"
+    }
+  ]
+}

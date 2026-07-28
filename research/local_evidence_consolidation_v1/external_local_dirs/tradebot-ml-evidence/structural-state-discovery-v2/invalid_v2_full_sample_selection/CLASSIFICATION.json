@@ -1,0 +1,38 @@
+{
+  "classification": "INVALID_CANDIDATE_VALIDATION_IMPLEMENTATION",
+  "not_valid_for": [
+    "RETROSPECTIVE_VALIDATED_STATE_CANDIDATE",
+    "out-of-fold performance",
+    "FDR-controlled survivor claims",
+    "matched-control survivor claims",
+    "negative-control survivor claims",
+    "independent-oracle claims",
+    "mutation-test claims",
+    "prospective-shadow promotion",
+    "production decisions"
+  ],
+  "reasons": [
+    "future leakage in relative_range_expansion",
+    "rules are scored on the full archive",
+    "no actual retrospective validation block",
+    "controls are not acceptance gates",
+    "shallow tree lane is not a fitted decision tree",
+    "sparse model lane is not a sparse model",
+    "cluster lane is not multivariate clustering",
+    "statistical tests are incorrectly labelled",
+    "negative controls are mostly hard-coded",
+    "mutation tests are hard-coded",
+    "independent oracle does not reconstruct evidence",
+    "source duplicate handling is not fail-closed",
+    "misdefined or misleading features",
+    "target-before-stop scans 60 minutes without a 30m/60m distinction",
+    "only four tests remain"
+  ],
+  "valid_for": [
+    "Kite archive hash verification",
+    "causal matrix prototype except the leaked relative_range_expansion feature",
+    "proof that 893 rule records were generated",
+    "code provenance",
+    "preliminary discovery-system debugging"
+  ]
+}

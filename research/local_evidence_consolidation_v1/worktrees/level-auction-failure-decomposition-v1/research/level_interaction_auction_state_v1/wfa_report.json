@@ -1,0 +1,145 @@
+{
+  "fold_method": "chronological_session_round_robin_holdout_thirds",
+  "mechanisms": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -52.389365079365064,
+          "profit_factor": 0.481346804627215,
+          "trades": 126
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -36.067251461988306,
+          "profit_factor": 0.7888760710239041,
+          "trades": 171
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -108.94720000000001,
+          "profit_factor": 0.3005246681339227,
+          "trades": 125
+        }
+      ],
+      "positive_folds": 0
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": 8.997826086956518,
+          "profit_factor": 1.5479216309240136,
+          "trades": 23
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -121.67125000000001,
+          "profit_factor": 0.08998522839887063,
+          "trades": 40
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -71.08875,
+          "profit_factor": 0.5235098949343968,
+          "trades": 40
+        }
+      ],
+      "positive_folds": 1
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -93.36160164271048,
+          "profit_factor": 0.5144350515458413,
+          "trades": 974
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -95.86345574387948,
+          "profit_factor": 0.35387819409296084,
+          "trades": 1062
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -27.804489337822673,
+          "profit_factor": 0.7700592742115877,
+          "trades": 891
+        }
+      ],
+      "positive_folds": 0
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -81.91260480715484,
+          "profit_factor": 0.5004633462204431,
+          "trades": 1789
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -135.91937089715535,
+          "profit_factor": 0.25490153094778056,
+          "trades": 1828
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -47.24723478260869,
+          "profit_factor": 0.6160031887646928,
+          "trades": 1725
+        }
+      ],
+      "positive_folds": 0
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -158.68571428571428,
+          "profit_factor": 0.18812530410322703,
+          "trades": 490
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -160.38240000000002,
+          "profit_factor": 0.12249700107443796,
+          "trades": 425
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -90.89580573951436,
+          "profit_factor": 0.588032720622076,
+          "trades": 453
+        }
+      ],
+      "positive_folds": 0
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -80.3085574572127,
+          "profit_factor": 0.5113623262141671,
+          "trades": 409
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -77.07002590673575,
+          "profit_factor": 0.32071915239426335,
+          "trades": 386
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -65.16337236533957,
+          "profit_factor": 0.3066130127120798,
+          "trades": 427
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "semantic_hash": "9a8c7a995bcf5e7fac5acbae5b0e362ccc9ee55d3bd7846b994fb5649b47a16d",
+  "status": "RUN"
+}

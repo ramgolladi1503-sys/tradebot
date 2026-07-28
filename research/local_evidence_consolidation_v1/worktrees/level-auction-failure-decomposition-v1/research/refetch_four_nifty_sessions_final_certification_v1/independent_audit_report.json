@@ -1,0 +1,20 @@
+{
+  "api_call_count": 4,
+  "audit_pass": false,
+  "only_four_authorized_dates": [
+    "2024-12-12",
+    "2025-03-25",
+    "2025-04-04",
+    "2025-04-23"
+  ],
+  "original_runtime_files_changed": false,
+  "patch_rows_inserted": 0,
+  "raw_response_hashes": [
+    "152feeee4c40ce1bb56aa70b40528472adbf7687bbb7b24c7b40e82361dbbff9",
+    "90d7e44cf75a6ac77942993cd06246c2cb8ec2a351989d8294ef78f94bd887aa",
+    "f8e0ac54f0837da759cefbc28d14781a4702d3ad93ffc2b72a65e85a659d23cb",
+    "dff7ee08e91859f847412d2da7f94dae7ef3b222d6b403abb7cdf34c5775ec90"
+  ],
+  "safety_flags_verified": true,
+  "unrelated_sessions_changed": false
+}

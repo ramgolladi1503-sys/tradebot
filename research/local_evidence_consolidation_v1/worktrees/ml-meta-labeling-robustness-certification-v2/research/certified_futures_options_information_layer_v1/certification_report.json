@@ -1,0 +1,10 @@
+{
+  "audit_passes": false,
+  "chronology_causal": "PARTIALLY_ESTABLISHED_FOR_PRIOR_UNDERLYING_OPTIONS",
+  "coverage_meets_reopen_target": false,
+  "determinism_passes": true,
+  "final_verdict": "FUTURES_DATA_INSUFFICIENT",
+  "materially_different_information_set": "NOT_ESTABLISHED",
+  "semantic_hash": "36dca37f2295320102c9ed8da44a944c008f6b6158027186325bbaf18f2ef466",
+  "status": "NOT_CERTIFIED"
+}

@@ -1,0 +1,5 @@
+{
+  "kite_archive_status": "DISCOVERY_CONSUMED_RETROSPECTIVE_DATA",
+  "latest_100_internal_holdout_status": "CONTAMINATED_BY_V1_OUTCOME_MATERIALIZATION",
+  "true_prospective_holdout_available": false
+}

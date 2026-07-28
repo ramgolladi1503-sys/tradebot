@@ -1,0 +1,108 @@
+{
+  "allowed_for_live_execution": false,
+  "api_calls": [
+    {
+      "date": "2024-12-12",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2024-12-12/2024-12-12",
+      "first_timestamp": "2024-12-12T09:15:00",
+      "http_status": 200,
+      "last_timestamp": "2024-12-12T15:29:00",
+      "parsing_status": "PARSED",
+      "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2024-12-12.json",
+      "response_row_count": 374,
+      "response_sha256": "152feeee4c40ce1bb56aa70b40528472adbf7687bbb7b24c7b40e82361dbbff9",
+      "retry_count": 0,
+      "reused_existing_raw_response": true
+    },
+    {
+      "date": "2025-03-25",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-03-25/2025-03-25",
+      "first_timestamp": "2025-03-25T09:15:00",
+      "http_status": 200,
+      "last_timestamp": "2025-03-25T15:29:00",
+      "parsing_status": "PARSED",
+      "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-03-25.json",
+      "response_row_count": 374,
+      "response_sha256": "90d7e44cf75a6ac77942993cd06246c2cb8ec2a351989d8294ef78f94bd887aa",
+      "retry_count": 0,
+      "reused_existing_raw_response": true
+    },
+    {
+      "date": "2025-04-04",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-04-04/2025-04-04",
+      "first_timestamp": "2025-04-04T09:15:00",
+      "http_status": 200,
+      "last_timestamp": "2025-04-04T15:29:00",
+      "parsing_status": "PARSED",
+      "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-04-04.json",
+      "response_row_count": 374,
+      "response_sha256": "f8e0ac54f0837da759cefbc28d14781a4702d3ad93ffc2b72a65e85a659d23cb",
+      "retry_count": 0,
+      "reused_existing_raw_response": true
+    },
+    {
+      "date": "2025-04-23",
+      "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-04-23/2025-04-23",
+      "first_timestamp": "2025-04-23T09:15:00",
+      "http_status": 200,
+      "last_timestamp": "2025-04-23T15:29:00",
+      "parsing_status": "PARSED",
+      "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-04-23.json",
+      "response_row_count": 374,
+      "response_sha256": "dff7ee08e91859f847412d2da7f94dae7ef3b222d6b403abb7cdf34c5775ec90",
+      "retry_count": 0,
+      "reused_existing_raw_response": true
+    }
+  ],
+  "authorized_dates": [
+    "2024-12-12",
+    "2025-03-25",
+    "2025-04-04",
+    "2025-04-23"
+  ],
+  "broker_api_called": true,
+  "broker_api_scope": "historical_market_data_only",
+  "exact_next_action": "Manual data-provider review is required: authenticated Upstox historical responses did not contain the four missing one-minute bars.",
+  "existing_manifest_hashes": [
+    {
+      "bytes": 858,
+      "path": "research/repair_11_nifty_sessions_v1/final_verdict.json",
+      "sha256": "cbce6a41dbceef2998125f093a9b42d4e8e95082a0675b4aa7b7270a338e205e"
+    },
+    {
+      "bytes": 54267,
+      "path": "research/repair_11_nifty_sessions_v1/repair_report.json",
+      "sha256": "db235c35b82233c43c5fc93ef907f7c910b479e15df5eb3616de8bbf3df21b7d"
+    },
+    {
+      "bytes": 10789,
+      "path": "research/repair_11_nifty_sessions_v1/defect_ledger.csv",
+      "sha256": "7c387fcb518a48b4749de8cd4c11d9c356dc6a1c0ca5fe7c06d25e180f89d1b4"
+    },
+    {
+      "bytes": 1149,
+      "path": "research/unified_nifty_underlying_feature_warehouse_v1/final_verdict.json",
+      "sha256": "4aa181d04ba6cb786b7a18127b897ed43b7cf07b3ec039f9d323199deff7fe20"
+    },
+    {
+      "bytes": 987,
+      "path": "research/unified_nifty_underlying_feature_warehouse_v1/coverage_integrity_report.json",
+      "sha256": "0c6ceefa3919d6a75bcbf00d22f8b3556a16ed6729d86a775260c7b5d4021937"
+    },
+    {
+      "bytes": 812,
+      "path": "research/trusted_option_data_joint_warehouse_v1/final_verdict.json",
+      "sha256": "623ce1f8ff9397d66858f1879e8260c9384574dd2e2fb0ab694dd92e5f8e5c14"
+    },
+    {
+      "bytes": 498,
+      "path": "research/trusted_option_data_joint_warehouse_v1/independent_audit_report.json",
+      "sha256": "a9ef07bed6608109031313f8a162df7b609ee617ffcce85cbe6847b8d1597b67"
+    }
+  ],
+  "final_verdict": "REPAIR_FAILED",
+  "is_order_action": false,
+  "pre_refetch_defects_verified": true,
+  "read_only": true,
+  "token_present": true
+}

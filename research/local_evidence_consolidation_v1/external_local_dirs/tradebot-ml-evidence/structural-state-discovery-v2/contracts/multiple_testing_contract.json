@@ -1,0 +1,6 @@
+{
+  "ci": "session-block bootstrap",
+  "fdr_q_threshold": 0.1,
+  "p_value": "session-level deterministic permutation",
+  "q_value": "Benjamini-Hochberg FDR"
+}

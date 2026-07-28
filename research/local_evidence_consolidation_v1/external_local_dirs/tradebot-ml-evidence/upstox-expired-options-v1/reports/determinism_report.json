@@ -1,0 +1,25 @@
+{
+  "commands": [
+    "python audit_phase6_determinism.py"
+  ],
+  "start_time": "2026-07-27T04:18:24.202483",
+  "end_time": "2026-07-27T04:18:29.333331",
+  "exit_codes": [
+    0
+  ],
+  "contract_count": 15,
+  "mismatch_count": 0,
+  "hash_A": "16c8c7bae90931b81061e8f94ed003c7e6fb21e38780e3072dbb3bc865ee534b",
+  "hash_B": "16c8c7bae90931b81061e8f94ed003c7e6fb21e38780e3072dbb3bc865ee534b",
+  "hash_5m_A": "4bb3b6c7cce3961a89bded4fd00b07860a788af456b8ed315a38c661750072fb",
+  "hash_5m_B": "4bb3b6c7cce3961a89bded4fd00b07860a788af456b8ed315a38c661750072fb",
+  "file_count_1m_A": 15,
+  "file_count_1m_B": 15,
+  "row_count_1m_A": 22645,
+  "row_count_1m_B": 22645,
+  "file_count_5m_A": 15,
+  "file_count_5m_B": 15,
+  "row_count_5m_A": 4531,
+  "row_count_5m_B": 4531,
+  "status": "PASS"
+}

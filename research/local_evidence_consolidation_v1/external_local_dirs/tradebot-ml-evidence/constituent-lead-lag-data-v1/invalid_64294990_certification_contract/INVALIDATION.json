@@ -1,0 +1,25 @@
+{
+  "allowed_as_current_evidence": false,
+  "allowed_for_live_execution": false,
+  "branch": "research/constituent-lead-lag-v1",
+  "broker_api_called": false,
+  "classification": "INVALID_INCOMPLETE_CERTIFICATION_CONTRACT",
+  "created_at_asia_kolkata": "2026-07-23T20:34:53.714220+05:30",
+  "created_at_utc": "2026-07-23T15:04:53.714201+00:00",
+  "head": "ae6f2b97739883f924cdffc1924476a7fcc74bf4",
+  "historical_bundle_preserved": true,
+  "invalidated_bundle": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2",
+  "invalidated_commit": "64294990e4ecda3fa3d345e388faa78f890c5eaf",
+  "is_order_action": false,
+  "reason": "The previous certification did not enforce the repaired exact-bar, coverage-identity, session-policy, control, sensitivity, freeze-ownership and independent-oracle contracts.",
+  "research_only": true,
+  "v2_file_count": 39,
+  "v2_key_hashes": {
+    "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/evaluation/summary.json": "8d482799487ac6f052b4a86cad116b577a4c0f8c330dd6ba946f608a6599b3d1",
+    "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/campaign_summary.json": "e1abf263a1d5db4ca3acf8b17296175b19ee611f675d1d84349d0ef5723f78af",
+    "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/normalization_report.json": "3608e67cd87d6db901bcc4c4d65f8068019eec9da4f8002ab8b417c1d6216167",
+    "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/oracle/oracle_report.json": "cd5650af925909afb9e4e42f873a67d0b548294ba2c46a1de779fd22933b262d",
+    "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/pre_fetch/window_freeze.json": "07876504c2d5fb6e343917ba86f062611dc3e8b84380c968c5f74dd6ddde2c22"
+  },
+  "v2_total_bytes": 53877922
+}

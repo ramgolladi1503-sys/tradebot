@@ -1,0 +1,109 @@
+=== WORKTREE ===
+/Users/madhuram/tradebot-ml-strategy-discovery-v2-stability
+research/ml-strategy-discovery-v2-stability
+0d863909a57722a6f8e55b2925f4b2d9fccd6237
+=== REMOTES ===
+origin	https://github.com/ramgolladi1503-sys/tradebot (fetch)
+origin	https://github.com/ramgolladi1503-sys/tradebot (push)
+https://github.com/ramgolladi1503-sys/tradebot
+=== UPSTREAM ===
+## research/ml-strategy-discovery-v2-stability
+=== RECENT COMMITS ===
+0d863909 (HEAD -> research/ml-strategy-discovery-v2-stability, origin/research/ml-strategy-discovery-v2-stability) feat: complete ML strategy discovery v2 with strict gates and negative controls
+6f9fec9d fix(ml): replace pandas fillna(None) with fallback check
+0b086be1 (origin/main, origin/HEAD, audit/upstream-backtest-integrity-codex-validation) Merge pull request #686 from ramgolladi1503-sys/research/ml-strategy-discovery-core
+99e107b0 (origin/research/ml-strategy-discovery-core) Merge branch 'main' into research/ml-strategy-discovery-core
+9303ee43 Merge pull request #687 from ramgolladi1503-sys/audit/ml-strategy-discovery-real-run-v1
+a5dfced7 (origin/audit/ml-strategy-discovery-real-run-v1, audit/ml-strategy-discovery-real-run-v1) audit: replace placeholder real-run audit
+4b63e12e docs: publish exact real-run audit evidence
+075ad8fa test: replace placeholder audit tests with behavioral proof
+4dc25b2f audit: add folds concentration and negative controls
+d5933740 audit: implement independent rule and metric calculations
+65b76fed audit: replace placeholder loaders and provenance checks
+69f6b947 tests and final evidence report
+da479afd audit contract and independent provenance audit
+8e2e6577 (research/ml-strategy-discovery-local-run) docs: remove weak-evidence false positives from ML discovery review
+906e5fba test: keep source adapter proof behavior-focused for Minerva
+=== DIFF AGAINST MAIN ===
+A	docs/agent_reviews/ml_strategy_discovery_v2_1_source_manifest.json
+A	docs/research/ml_strategy_discovery_v2_1_source_manifest.json
+A	docs/research/ml_strategy_discovery_v2_1_source_manifest.json.sha256
+A	docs/research/ml_strategy_discovery_v2_contract.md
+A	research/ml_strategy_discovery/v2_validation_registry.json
+A	research/ml_strategy_discovery_v2/__init__.py
+A	research/ml_strategy_discovery_v2/controls.py
+A	research/ml_strategy_discovery_v2/data.py
+A	research/ml_strategy_discovery_v2/folds.py
+A	research/ml_strategy_discovery_v2/freeze.py
+A	research/ml_strategy_discovery_v2/gates.py
+A	research/ml_strategy_discovery_v2/model.py
+A	research/ml_strategy_discovery_v2/stability.py
+M	scripts/audit_ml_strategy_discovery_real_run.py
+A	scripts/generate_ml_strategy_discovery_v2_manifest.py
+A	scripts/inventory_ml_strategy_discovery_v2_source.py
+A	scripts/run_ml_strategy_discovery_v2.py
+A	tests/test_ml_strategy_discovery_v2.py
+ ...ml_strategy_discovery_v2_1_source_manifest.json |   1 +
+ ...ml_strategy_discovery_v2_1_source_manifest.json |   1 +
+ ...tegy_discovery_v2_1_source_manifest.json.sha256 |   1 +
+ docs/research/ml_strategy_discovery_v2_contract.md |  21 ++
+ .../v2_validation_registry.json                    |  26 +++
+ research/ml_strategy_discovery_v2/__init__.py      |   0
+ research/ml_strategy_discovery_v2/controls.py      |  83 +++++++
+ research/ml_strategy_discovery_v2/data.py          |  92 ++++++++
+ research/ml_strategy_discovery_v2/folds.py         |  43 ++++
+ research/ml_strategy_discovery_v2/freeze.py        |  59 +++++
+ research/ml_strategy_discovery_v2/gates.py         | 126 ++++++++++
+ research/ml_strategy_discovery_v2/model.py         |  58 +++++
+ research/ml_strategy_discovery_v2/stability.py     |  87 +++++++
+ scripts/audit_ml_strategy_discovery_real_run.py    |   6 +-
+ .../generate_ml_strategy_discovery_v2_manifest.py  | 108 +++++++++
+ .../inventory_ml_strategy_discovery_v2_source.py   | 124 ++++++++++
+ scripts/run_ml_strategy_discovery_v2.py            | 256 +++++++++++++++++++++
+ tests/test_ml_strategy_discovery_v2.py             | 195 ++++++++++++++++
+ 18 files changed, 1286 insertions(+), 1 deletion(-)
+=== COMMITTED FILES IN HEAD ===
+0d863909 (HEAD -> research/ml-strategy-discovery-v2-stability, origin/research/ml-strategy-discovery-v2-stability) feat: complete ML strategy discovery v2 with strict gates and negative controls
+ ...ml_strategy_discovery_v2_1_source_manifest.json |   1 +
+ ...ml_strategy_discovery_v2_1_source_manifest.json |   1 +
+ ...tegy_discovery_v2_1_source_manifest.json.sha256 |   1 +
+ docs/research/ml_strategy_discovery_v2_contract.md |  21 ++
+ .../v2_validation_registry.json                    |  26 +++
+ research/ml_strategy_discovery_v2/__init__.py      |   0
+ research/ml_strategy_discovery_v2/controls.py      |  83 +++++++
+ research/ml_strategy_discovery_v2/data.py          |  92 ++++++++
+ research/ml_strategy_discovery_v2/folds.py         |  43 ++++
+ research/ml_strategy_discovery_v2/freeze.py        |  59 +++++
+ research/ml_strategy_discovery_v2/gates.py         | 126 ++++++++++
+ research/ml_strategy_discovery_v2/model.py         |  58 +++++
+ research/ml_strategy_discovery_v2/stability.py     |  87 +++++++
+ .../generate_ml_strategy_discovery_v2_manifest.py  | 108 +++++++++
+ .../inventory_ml_strategy_discovery_v2_source.py   | 124 ++++++++++
+ scripts/run_ml_strategy_discovery_v2.py            | 256 +++++++++++++++++++++
+ tests/test_ml_strategy_discovery_v2.py             | 195 ++++++++++++++++
+ 17 files changed, 1281 insertions(+)
+commit 0d863909a57722a6f8e55b2925f4b2d9fccd6237
+Author:     Ramgolladi <ramgolladi1503@gmail.com>
+AuthorDate: Wed Jul 22 00:09:04 2026 +0530
+Commit:     Ramgolladi <ramgolladi1503@gmail.com>
+CommitDate: Wed Jul 22 00:09:04 2026 +0530
+
+    feat: complete ML strategy discovery v2 with strict gates and negative controls
+
+A	docs/agent_reviews/ml_strategy_discovery_v2_1_source_manifest.json
+A	docs/research/ml_strategy_discovery_v2_1_source_manifest.json
+A	docs/research/ml_strategy_discovery_v2_1_source_manifest.json.sha256
+A	docs/research/ml_strategy_discovery_v2_contract.md
+A	research/ml_strategy_discovery/v2_validation_registry.json
+A	research/ml_strategy_discovery_v2/__init__.py
+A	research/ml_strategy_discovery_v2/controls.py
+A	research/ml_strategy_discovery_v2/data.py
+A	research/ml_strategy_discovery_v2/folds.py
+A	research/ml_strategy_discovery_v2/freeze.py
+A	research/ml_strategy_discovery_v2/gates.py
+A	research/ml_strategy_discovery_v2/model.py
+A	research/ml_strategy_discovery_v2/stability.py
+A	scripts/generate_ml_strategy_discovery_v2_manifest.py
+A	scripts/inventory_ml_strategy_discovery_v2_source.py
+A	scripts/run_ml_strategy_discovery_v2.py
+A	tests/test_ml_strategy_discovery_v2.py

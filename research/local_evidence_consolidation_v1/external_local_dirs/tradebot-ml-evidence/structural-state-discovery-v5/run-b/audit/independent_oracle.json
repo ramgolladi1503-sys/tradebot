@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/opt/anaconda3/bin/python",
+    "-m",
+    "research.structural_state_discovery.oracle",
+    "/Users/madhuram/tradebot-ml-evidence/structural-state-discovery-v5/run-b",
+    "--archive",
+    "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+  ],
+  "exit_code": 0,
+  "status": "PASS",
+  "stderr": "",
+  "stdout": "{\n  \"status\": \"PASS\",\n  \"feature_rows\": 4900,\n  \"outcome_rows\": 4900,\n  \"validation_sessions\": 98\n}\n"
+}

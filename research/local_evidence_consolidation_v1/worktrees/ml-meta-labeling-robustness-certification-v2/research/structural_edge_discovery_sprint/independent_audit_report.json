@@ -1,0 +1,11 @@
+{
+  "algotest_ready": 0,
+  "allowed_for_live_execution": false,
+  "audit_pass": true,
+  "blockers": [],
+  "broker_api_called": false,
+  "is_order_action": false,
+  "raw_hypotheses": 23595,
+  "read_only": true,
+  "replayed": 12
+}

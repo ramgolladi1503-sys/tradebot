@@ -1,0 +1,14 @@
+{
+  "deterministic_seed": 20260728,
+  "semantic_hash": "2b3e3601c7048d7090c8d0eecdc02b2638d1739a75ab575729d371b7d62e855c",
+  "semantic_inputs": [
+    "calibration_object_hash.json",
+    "candidate_level_dataset_hash.json",
+    "feature_contract_hash.json",
+    "frozen_selection_threshold_hash.json",
+    "label_contract_hash.json",
+    "split_contract_hash.json",
+    "trained_model_hash.json"
+  ],
+  "status": "PASS"
+}

@@ -1,0 +1,38 @@
+{
+  "GAP_GO_LEADER_V1": {
+    "side_contribution": {
+      "LONG": 91.9578082641759,
+      "SHORT": 106.92329085174146
+    },
+    "symbol_contribution": {
+      "BANKNIFTY": 183.17771781450776,
+      "NIFTY": 15.703381301409582
+    },
+    "top_1_session_share": 0.10845271967159982,
+    "top_5_session_share": 0.3851418958983976
+  },
+  "LATE_DAY_PERSISTENCE_V1": {
+    "side_contribution": {
+      "LONG": -89.03445886759398,
+      "SHORT": 36.80793007518779
+    },
+    "symbol_contribution": {
+      "BANKNIFTY": -146.04928402268348,
+      "NIFTY": 93.82275523027728
+    },
+    "top_1_session_share": 0.035734101192537865,
+    "top_5_session_share": 0.14320953283749396
+  },
+  "PRIOR_RANGE_LEADER_V1": {
+    "side_contribution": {
+      "LONG": 220.6659628347396,
+      "SHORT": 7.023094345341974
+    },
+    "symbol_contribution": {
+      "BANKNIFTY": 100.37147141016443,
+      "NIFTY": 127.31758576991713
+    },
+    "top_1_session_share": 0.04639195724007384,
+    "top_5_session_share": 0.18477724121019065
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "historical_range": "HISTORICAL_RANGE_INSUFFICIENT",
+  "parked_not_reusable": [
+    "premium_compression_release_with_underlying_state_filter"
+  ],
+  "premium_status": "UNRESOLVED_POSITIVE_UNDERPOWERED",
+  "rejected": [
+    "bullish ORB",
+    "bearish ORB",
+    "underlying percentage momentum",
+    "ORB plus momentum agreement",
+    "delayed_option_convexity_after_underlying_confirmation",
+    "previously rejected broad joint candidates"
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "bytes": 2645,
+      "path": "candidate_space_coverage_map.json",
+      "sha256": "db1996deb8f4e49cc51990c48dbf80103a7bf525bc328a4a03a08f1daa36675c"
+    },
+    {
+      "bytes": 1411,
+      "path": "determinism_report.json",
+      "sha256": "c41162ca14820710123b4712e5304a6bf2b199040a92f8f107c6e58631959c97"
+    },
+    {
+      "bytes": 508,
+      "path": "execution_label_audit.json",
+      "sha256": "035a57f2caf2f07402e40ffa989f8c17059f3da489aa24e766a9c5669911175c"
+    },
+    {
+      "bytes": 898,
+      "path": "failure_taxonomy.json",
+      "sha256": "fc7d0d29ab9f827d754c7908ee71fd2b0b0bcab9b182af992b4c1e4da86e4eb3"
+    },
+    {
+      "bytes": 670,
+      "path": "final_verdict.json",
+      "sha256": "1cda070f8a45e7d136dee99f044701940e79f4d4995edd3bd963b04940fe44fc"
+    },
+    {
+      "bytes": 66898,
+      "path": "four_candidate_failure_autopsy.json",
+      "sha256": "06d7f74b45ebec6508f88b57af115d252aae24e9b8c0fd71e5677a1f535991e4"
+    },
+    {
+      "bytes": 1604,
+      "path": "incremental_option_value_report.json",
+      "sha256": "be695041ff52d4eca51241bc8a31f1d59d3702152656cb12e05c3c476a1d9ab6"
+    },
+    {
+      "bytes": 366,
+      "path": "independent_audit_report.json",
+      "sha256": "e95527798f1ba49b89bb4f8a844271e39ecf05a717fc17f995d2314d691dce5d"
+    },
+    {
+      "bytes": 3841,
+      "path": "pre_change_manifest.json",
+      "sha256": "f0edf66e4b0fe7f120227a7f614bfc75ec567efbbf24fd011e61efb804b1f58f"
+    },
+    {
+      "bytes": 3363,
+      "path": "prior_artifact_verification.json",
+      "sha256": "4bd63d845ff8da9083ebe8ae37297a5e8a3ed29e85c4727858d402d7e23cb000"
+    },
+    {
+      "bytes": 5270,
+      "path": "redesigned_mechanisms.json",
+      "sha256": "59e587d1e2c55c387830c7b9eedf5ce6cd5625589619a980a6101cc41d78ec6b"
+    },
+    {
+      "bytes": 3111,
+      "path": "search_design_blind_spot_report.json",
+      "sha256": "f12ce375cf65e4c0709e808aeeb06e1e7b20d7a058b8b3b83b7050e0ef1a6112"
+    },
+    {
+      "bytes": 8620,
+      "path": "statistical_power_report.json",
+      "sha256": "0326a79a1e4ccbf3987b3024e1458bda1e1e7a51465a04b6fe83aeccab9c07aa"
+    },
+    {
+      "bytes": 336,
+      "path": "testability_classification.json",
+      "sha256": "0d4f8ca4809726aed3824473c361cff5761ca3972b56b006b71675e69944bdc8"
+    }
+  ]
+}

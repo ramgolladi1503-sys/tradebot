@@ -1,0 +1,29 @@
+{
+  "branch": "research/buy-side-structural-discovery-closeout-v1",
+  "candidate_contract_hashes": {
+    "FQSDV2_EXPIRY_TRANSITION_03": "7a0d1d58685829147bc272b2f3691aae9a45171919579f1c0a05bf41405356c7",
+    "FQSDV2_LADDER_CONFIRM_02": "66da07020c240c70596d5d93fecfce52f5fb435a71257574df194f42dc7e199c",
+    "FQSDV2_PAIR_ASYM_01": "92526dc62234a04796ad206c6a0697355b80c6abfd666c50fc5770fe17d646fb"
+  },
+  "clean_status_before_generation": "",
+  "current_commit": "4de05576f49313ea28e5ea353759e1dd0bf6388b",
+  "evidence_hashes": {
+    "research/buy_side_option_economic_barrier_decomposition_v1/determinism_report.json": "d282259d1a63f0d4c603823ffbb949575ab73f8aa90e89abf1ece382c6a570ff",
+    "research/buy_side_option_economic_barrier_decomposition_v1/final_verdict.json": "7c5c0ad67719bef3d47512e01f6affcf029011eba982b5b9800fa52c41afe390",
+    "research/buy_side_option_economic_barrier_decomposition_v1/independent_audit.json": "8e0b2ad416eb9f98b6ae9e9e2b92a0fa06427255fc14bc4ac58ef4267f2a14da",
+    "research/frequency_qualified_structural_discovery_v2/determinism_report.json": "652ba74969bd03b86879104ee7c8ceb65b2ef157909801d1548c4abb68b3d806",
+    "research/frequency_qualified_structural_discovery_v2/final_verdict.json": "ac62f0a361161f49bad3d6c783eec00fd7839fa1bb1a48b18907577277a63f5f",
+    "research/frequency_qualified_structural_discovery_v2/independent_audit.json": "87b6b69a2c95c211332d0f9ed3c5602644c0fc48bc45b0ff4b3b371c94619292",
+    "research/frozen_joint_mechanisms_repaired_v2/final_verdict.json": "d93423516f64c77c6ebb0f155e9a8c37d31189e5542caa38760c57c51a7e5605",
+    "research/joint_underlying_option_structural_discovery_v1/final_verdict.json": "dbd22126c608f834457d5b348f654613fc47d3ddba325aa3dd1fd9a0f76fe7e2",
+    "research/provider_sparse_bar_governance_v1/final_verdict.json": "8194255fc1c4c170761c317e355f33f81b498b2211f6552e9620b08ba85fd0da"
+  },
+  "source_commit": "4de05576f49313ea28e5ea353759e1dd0bf6388b",
+  "warehouse_hashes": {
+    "research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+    "research/joint_warehouse_underlying_feature_repair_v1/schema_null_rate_report.json": "f4a6b5a641f0b86b8c35c3623d13afa2e616daabcaaa481ccade261456ab0aa9",
+    "research/provider_sparse_bar_governance_v1/eligibility_framework.json": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+    "research/provider_sparse_bar_governance_v1/sparse_bar_contract.json": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0"
+  },
+  "worktree": "/Users/madhuram/tradebot-buy-side-closeout-v1"
+}

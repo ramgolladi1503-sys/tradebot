@@ -1,0 +1,30 @@
+{
+  "conditions": [
+    {
+      "id": "RICHER_MARKET_MICROSTRUCTURE",
+      "pass": false,
+      "reason": "One scalar-price snapshot session has no bid/ask, depth, spread, exchange-time, IV, or Greeks."
+    },
+    {
+      "id": "LONGER_INDEPENDENT_HISTORY",
+      "pass": false,
+      "reason": "The certified NIFTY option range is the already-consumed 2024-09-26 through 2026-07-21 campaign range; no 24 new sessions/18 new expiries/63 frozen events exist."
+    },
+    {
+      "id": "MATERIALLY_DIFFERENT_INSTRUMENT_UNIVERSE",
+      "pass": false,
+      "reason": "Constituent and futures authority are absent; BANKNIFTY has only one option session/expiry; surface evidence is either one session or equivalent to a closed cross-strike family."
+    },
+    {
+      "id": "MATERIALLY_DIFFERENT_EXECUTION_HORIZON",
+      "pass": false,
+      "reason": "No quote-aware fills, latency evidence, exchange event sequence, or same-timestamp disambiguation."
+    },
+    {
+      "id": "DIFFERENT_ECONOMIC_EXPOSURE",
+      "pass": false,
+      "reason": "The user did not authorize changing the BUY-only exposure."
+    }
+  ],
+  "gate_passed": false
+}

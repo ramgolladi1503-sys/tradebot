@@ -1,0 +1,78 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "chronological_folds": {
+    "folds": [],
+    "positive_mean_folds": 0,
+    "positive_median_folds": 0
+  },
+  "commercial_use_allowed": false,
+  "concentration": {
+    "result": "NOT_APPLICABLE_ZERO_SIGNALS",
+    "signals": 0,
+    "top_five_session_contribution": null
+  },
+  "control_result": "NOT_APPLICABLE_ZERO_SIGNALS",
+  "control_signals": 0,
+  "delay_sensitivity": {
+    "one_bar_delayed_entry": true,
+    "result": "NOT_APPLICABLE_ZERO_SIGNALS",
+    "same_bar_entry_allowed": false
+  },
+  "index_symbol": "NIFTY",
+  "is_order_action": false,
+  "official_weight_gate_passed": false,
+  "research_only": true,
+  "state_reason_counts": {
+    "dispersion_too_high": 651,
+    "frozen_entry_conditions_not_met": 8,
+    "index_already_caught_up": 3153,
+    "index_range_already_consumed": 98,
+    "insufficient_lead_gap_history": 200
+  },
+  "state_rows": 4110,
+  "status": "RESEARCH_EVALUATION_COMPLETE",
+  "unweighted_outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "chronological_fold_summary": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_mean_bps": 2.5000000000013944,
+          "net_median_bps": 2.5000000000013944,
+          "positive_rate": 1.0,
+          "session_end": "2025-05-30",
+          "session_start": "2025-05-30",
+          "sessions": 1,
+          "signals": 1
+        }
+      ],
+      "positive_mean_folds": 1,
+      "positive_median_folds": 1
+    },
+    "is_order_action": false,
+    "net_mean_bps": 2.5000000000013944,
+    "net_median_bps": 2.5000000000013944,
+    "positive_rate": 1.0,
+    "research_lane": "UNWEIGHTED_CONSTITUENT_BREADTH",
+    "research_only": true,
+    "signals_evaluable": 1,
+    "signals_total": 1
+  },
+  "unweighted_signals": 1,
+  "weighted_outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "net_mean_bps": null,
+    "net_median_bps": null,
+    "positive_rate": null,
+    "research_only": true,
+    "signals_evaluable": 0,
+    "signals_total": 0
+  },
+  "weighted_signals": 0
+}

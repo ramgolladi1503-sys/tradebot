@@ -1,0 +1,111 @@
+{
+  "files": {
+    "auction_state_grammar.json": {
+      "bytes": 403,
+      "exists": true,
+      "sha256": "81ba89d1edbd01573b023249ddf00a00c585bb16db6825257219bfe5e2b3017c"
+    },
+    "concentration_report.json": {
+      "bytes": 6231,
+      "exists": true,
+      "sha256": "12f4c38bd636e31097ca03e995e55fc0600a3493e1cb1e2af546fbaed8c5d0bf"
+    },
+    "determinism_report.json": {
+      "bytes": 198,
+      "exists": true,
+      "sha256": "db2b1dfa4e75709a9de5c368b1db1ca2585fc994edd9cf38be5f2110e810d782"
+    },
+    "final_verdict.json": {
+      "bytes": 542,
+      "exists": true,
+      "sha256": "d99f265191bd55b368aefbc88021268031e148ac6185ed43bac16f286910ea1f"
+    },
+    "frozen_evidence_lane_contract.json": {
+      "bytes": 547,
+      "exists": true,
+      "sha256": "97e13590da29f2cd89b04399aa1100ee28a424ac97475192dccfeeff2b4296de"
+    },
+    "holdout_option_outcome_rows.csv": {
+      "bytes": 1516897,
+      "exists": true,
+      "sha256": "442fbdab6f8301a3ffae72782faa0d22ab575410757335ad88822974b43963fc"
+    },
+    "holdout_report.json": {
+      "bytes": 2844,
+      "exists": true,
+      "sha256": "43944da0771f751124297088e8b83ac1f21ac6361be8d13c109c2266b272f33a"
+    },
+    "incremental_information_report.json": {
+      "bytes": 166,
+      "exists": true,
+      "sha256": "60d2a5cc8a97eaa6cb1efd9dcb61a2c30129d68cca5a15e1d7e410cb99201cb4"
+    },
+    "independent_audit.json": {
+      "bytes": 795,
+      "exists": true,
+      "sha256": "d4d05f7449d1637bf34f9b10ea6b3f2336b8d34294a5e00cba01fb546646d2b9"
+    },
+    "lane_a_qualification_report.json": {
+      "bytes": 3015,
+      "exists": true,
+      "sha256": "0507dead37f428153779e5c83b443e4daa78ed9e96d847d534918a175f5ee37e"
+    },
+    "lane_b_qualification_report.json": {
+      "bytes": 3015,
+      "exists": true,
+      "sha256": "10340b67de7c778615fd6df93a6c875f91e53f9dc415db89eb29a5d451ad70b2"
+    },
+    "negative_control_report.json": {
+      "bytes": 2103,
+      "exists": true,
+      "sha256": "00db0fa5dc27da68537ae7c77f8d6f312c208089c8543dfa4f45b6cc511818a2"
+    },
+    "option_monetization_report.json": {
+      "bytes": 2871,
+      "exists": true,
+      "sha256": "645e2e1fed11f11825a6ddde15de769fac39b6199ffab4939c0e247b39562a7b"
+    },
+    "pre_outcome_frequency_report.json": {
+      "bytes": 7091,
+      "exists": true,
+      "sha256": "fa453491bcc7048713dbe9780e207f993b669182f5a44b4caefe5e5a0e970d1b"
+    },
+    "pre_outcome_signals.csv": {
+      "bytes": 5169109,
+      "exists": true,
+      "sha256": "ac3c9d751fcc0cf1ee26f3a4d4949d04ab3e1ee2fb59f19aae3a4c546ad6e928"
+    },
+    "reference_level_catalogue.json": {
+      "bytes": 387,
+      "exists": true,
+      "sha256": "1d21552accbe13b66f9d20378c88b58f1baab086631f81e53815d2b26b63203c"
+    },
+    "robustness_report.json": {
+      "bytes": 2681,
+      "exists": true,
+      "sha256": "0b4f55ef4789482c82bd59ced8fcaaab890ad4aeebba71bdd7fd80aa24bb8052"
+    },
+    "six_frozen_mechanism_contracts.json": {
+      "bytes": 1743,
+      "exists": true,
+      "sha256": "fd5521913b3c3c641420351409a67576501542c6711cb3be1eb27569f1cd8711"
+    },
+    "survivor_report.json": {
+      "bytes": 123,
+      "exists": true,
+      "sha256": "60b6745648a1279e550a3884e3b821a34f9772c8bbc3a5fd0d1d66057ca1ecfb"
+    },
+    "underlying_first_outcome_report.json": {
+      "bytes": 2844,
+      "exists": true,
+      "sha256": "43944da0771f751124297088e8b83ac1f21ac6361be8d13c109c2266b272f33a"
+    },
+    "wfa_report.json": {
+      "bytes": 3700,
+      "exists": true,
+      "sha256": "619c76b0af5fb0ef56099ecdba89978e6ffc37d8422ffd2c310b4b1e817ce01f"
+    }
+  },
+  "input_dir": "/Users/madhuram/tradebot-level-auction-failure-decomposition-v1/research/level_interaction_auction_state_v1",
+  "semantic_hash": "9fd331c1908f6d7039d78e70dbb3ce6237b21cb74a4d00b5ec2f742be299837a"
+}

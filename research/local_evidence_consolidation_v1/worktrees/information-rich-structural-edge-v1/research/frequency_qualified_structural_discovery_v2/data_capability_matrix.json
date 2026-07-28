@@ -1,0 +1,35 @@
+{
+  "adjacent_strike_support": true,
+  "ce_pe_pairing_support": true,
+  "dte_support": true,
+  "expiry_metadata": true,
+  "five_minute_aggregation_support": true,
+  "missing_bid_ask": true,
+  "missing_iv_greeks": true,
+  "one_minute_chronology": true,
+  "option_fields": [
+    "premium_mean",
+    "premium_velocity",
+    "premium_acceleration",
+    "volume_sum",
+    "open_interest_sum",
+    "stale_price_flag"
+  ],
+  "sparse_bar_constraints": "DISCOVERY_READY",
+  "underlying_fields": [
+    "close",
+    "ret_1",
+    "ret_5",
+    "atr_14",
+    "vwap_distance",
+    "rolling_range_15",
+    "opening_range_state",
+    "momentum_15"
+  ],
+  "unsupported_microstructure_claims": [
+    "bid_ask_edge",
+    "IV",
+    "Greeks",
+    "order_book_depth"
+  ]
+}

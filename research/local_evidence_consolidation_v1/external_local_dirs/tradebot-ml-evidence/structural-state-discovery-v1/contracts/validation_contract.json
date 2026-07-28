@@ -1,0 +1,5 @@
+{
+  "holdout_sessions": 100,
+  "no_tuning_after_freeze": true,
+  "top_non_overlapping_hypotheses": 3
+}

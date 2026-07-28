@@ -1,0 +1,7 @@
+{
+  "forward_fill": false,
+  "provider_sparse_bar_contract": "provider_authoritative_sparse_bar_contract_v1",
+  "sparse_bar_affected_rows": 0,
+  "status": "PASS",
+  "synthetic_ohlc": false
+}

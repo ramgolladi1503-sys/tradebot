@@ -1,0 +1,1 @@
+Structural Pattern Suite v2 executed as research only. It reconstructed non-empty Kite candidates, calculated causal outcomes, and failed closed on certification because retrospective-only evidence and option replay are insufficient for production readiness.

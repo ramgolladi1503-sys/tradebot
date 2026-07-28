@@ -1,0 +1,147 @@
+{
+  "attrition_ledger": {
+    "01_complete_sessions": 1529,
+    "02_eligible_rows": 460229,
+    "03_profile_valid": 460229,
+    "04_context_valid": 438823,
+    "05_regime_compression_gte_0_25": 22582,
+    "06_regime_compression_gte_0_50": 2,
+    "07_strategy_compression_score_gte_0_50": 0,
+    "08_breakout_level_available": 438823,
+    "09_call_distance_pass": 104551,
+    "10_put_distance_pass": 102758,
+    "11_call_vwap_alignment_pass": 185175,
+    "12_put_vwap_alignment_pass": 176351,
+    "13_raw_candidates": 0,
+    "14_candidates_after_one_per_session": 0,
+    "15_candidates_with_legal_15m_outcome": 0
+  },
+  "distributions": {
+    "absolute_vwap_alignment": {
+      "max": 0.04754504065277872,
+      "min": 0.0,
+      "p01": 2.276495024165777e-05,
+      "p05": 0.00011418091721312077,
+      "p25": 0.0005702244503814013,
+      "p50": 0.001234885773653908,
+      "p75": 0.0023063761221678593,
+      "p95": 0.005107775086798299,
+      "p99": 0.008155946810559485
+    },
+    "atr_short_long_ratio": {
+      "max": 4.198143193615474,
+      "min": 0.29793335842698926,
+      "p01": 0.586060581124132,
+      "p05": 0.6836141057470666,
+      "p25": 0.8343742251659862,
+      "p50": 0.9526659412404828,
+      "p75": 1.0918092307602576,
+      "p95": 1.370587395715105,
+      "p99": 1.6932498811360694
+    },
+    "breakout_distance": {
+      "max": 0.05272827566572074,
+      "min": -0.01528505791755643,
+      "p01": -0.00405949980050988,
+      "p05": -0.0022737853243088996,
+      "p25": -0.000737779303107812,
+      "p50": 0.0006304751161726731,
+      "p75": 0.002544004997620806,
+      "p95": 0.006856783226129151,
+      "p99": 0.011088916046043468
+    },
+    "range_width_pct": {
+      "max": 8.913501862018116,
+      "min": 0.14703202925386852,
+      "p01": 0.2605806795878569,
+      "p05": 0.3289737163845674,
+      "p25": 0.5009679663041775,
+      "p50": 0.687660391192774,
+      "p75": 0.9654069470049088,
+      "p95": 1.5227881653159443,
+      "p99": 2.1525772333276785
+    },
+    "regime_compression": {
+      "max": 0.508501309826789,
+      "min": 0.0,
+      "p01": 0.0,
+      "p05": 0.0,
+      "p25": 0.0,
+      "p50": 0.2,
+      "p75": 0.2,
+      "p95": 0.2512767333819565,
+      "p99": 0.32748062923968324
+    },
+    "strategy_compression": {
+      "max": 0.424179259495566,
+      "min": 0.0,
+      "p01": 0.0,
+      "p05": 0.0,
+      "p25": 0.0,
+      "p50": 0.06666666666666667,
+      "p75": 0.06666666666666667,
+      "p95": 0.128681646846346,
+      "p99": 0.20644232200891824
+    }
+  },
+  "eligible_rows": 460229,
+  "final_verdict": "COMPRESSION_PRODUCTION_REGIME_PROXY_UNDERPOWERED",
+  "first_20_mismatches": [],
+  "independent_candidates": 0,
+  "predicate_mismatches": 0,
+  "previous_flaw_confirmed": true,
+  "production_candidates": 0,
+  "production_classifier_invoked": true,
+  "result_summary": {
+    "bootstrap_95_ci_bps": {
+      "lower_bps": 0.0,
+      "replications": 2000,
+      "seed": 20260803,
+      "upper_bps": 0.0
+    },
+    "candidate_count": 0,
+    "direction_means_bps": {},
+    "matched_time": {
+      "advantage_bps": 0.0
+    },
+    "mean_after_removing_five_strongest_sessions_bps": 0.0,
+    "session_count": 0,
+    "session_equal_mean_bps": 0.0,
+    "symbol_means_bps": {},
+    "verdict": "COMPRESSION_PRODUCTION_REGIME_PROXY_UNDERPOWERED",
+    "year_means_bps": {}
+  },
+  "source_sessions": {
+    "complete_sessions": 1529,
+    "sessions_by_symbol_year": {
+      "BANKNIFTY": {
+        "2024": 124,
+        "2025": 244,
+        "2026": 126
+      },
+      "NIFTY": {
+        "2024": 145,
+        "2025": 244,
+        "2026": 126
+      },
+      "SENSEX": {
+        "2024": 145,
+        "2025": 244,
+        "2026": 131
+      }
+    },
+    "sessions_rejected": {
+      "partial_gapped_duplicate": 18,
+      "unreadable": 2
+    },
+    "source_symbol_sessions": 1549
+  },
+  "structural_edge_conclusion": "UNDERPOWERED_SAMPLE_NOT_NO_EDGE",
+  "thresholds": {
+    "MAX_ATR_RATIO": 0.75,
+    "MAX_RANGE_WIDTH_PCT": 0.35,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+    "MIN_COMPRESSION_SCORE": 0.5,
+    "MIN_VWAP_ALIGNMENT_PCT": 0.0004
+  }
+}

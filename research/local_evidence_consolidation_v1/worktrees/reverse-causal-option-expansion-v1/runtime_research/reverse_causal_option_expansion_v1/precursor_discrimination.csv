@@ -1,0 +1,4 @@
+precursor,event_occurrence_rate,matched_control_occurrence_rate,near_miss_occurrence_rate,lift,independent_event_clusters,event_count,matched_control_count,accepted_for_freeze
+transition_compression_to_lift,0.06851900914028348,0.06496714672223436,0.06848677500173296,1.0546716701786987,2143,60392,178521,False
+transition_put_call_selloff_or_lift,0.2153927672539409,0.2394956335669193,0.1932206410980066,0.8993598924790267,4263,60392,178521,False
+transition_volume_participation,0.27233739568154725,0.350804667238028,0.2596674687818742,0.776322042194384,6983,60392,178521,False

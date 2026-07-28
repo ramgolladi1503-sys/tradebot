@@ -1,0 +1,20 @@
+{
+  "all_features_causal": true,
+  "controls_independently_implemented": "NOT_RUN_NO_FROZEN_MOTIF",
+  "discovery_used_development_data_only": true,
+  "expiry_mapping_causal": true,
+  "hashes_deterministic": true,
+  "motif_definitions_frozen_before_pnl": true,
+  "motifs_passed_frequency_gate_before_outcomes": false,
+  "next_bar_execution_enforced": "NOT_RUN_NO_FROZEN_MOTIF",
+  "no_outcome_entered_discovery": true,
+  "prior_closed_mechanisms_not_reused": true,
+  "result": "PASS_NO_OUTCOME_RUN",
+  "semantic_hash": "4bb0e3fee17d71fdc53a3f00d1751062f2d6197c33bec9294a80b120d5d23999",
+  "sequence_order_preserved": true,
+  "sparse_bars_handled_by_frozen_policy": true,
+  "strikes_selected_causally": true,
+  "two_directory_determinism": true,
+  "unsupported_breadth_claims_excluded": true,
+  "unsupported_microstructure_claims_excluded": true
+}

@@ -1,0 +1,148 @@
+{
+  "samples": [
+    {
+      "decision_cutoff": "2024-07-09T09:45:00+05:30",
+      "interval_end": "2024-07-09T09:45:00+05:30",
+      "interval_start": "2024-07-09T09:40:00+05:30",
+      "raw_timestamp": "2024-07-09T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-09T09:45:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-09T14:00:00+05:30",
+      "interval_end": "2024-07-09T14:00:00+05:30",
+      "interval_start": "2024-07-09T13:55:00+05:30",
+      "raw_timestamp": "2024-07-09T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-09T14:00:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-09T09:45:00+05:30",
+      "interval_end": "2024-07-09T09:45:00+05:30",
+      "interval_start": "2024-07-09T09:40:00+05:30",
+      "raw_timestamp": "2024-07-09T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-09T09:45:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-09T14:00:00+05:30",
+      "interval_end": "2024-07-09T14:00:00+05:30",
+      "interval_start": "2024-07-09T13:55:00+05:30",
+      "raw_timestamp": "2024-07-09T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-09T14:00:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-09T09:45:00+05:30",
+      "interval_end": "2024-07-09T09:45:00+05:30",
+      "interval_start": "2024-07-09T09:40:00+05:30",
+      "raw_timestamp": "2024-07-09T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-09T09:45:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "SENSEX"
+    },
+    {
+      "decision_cutoff": "2024-07-09T14:00:00+05:30",
+      "interval_end": "2024-07-09T14:00:00+05:30",
+      "interval_start": "2024-07-09T13:55:00+05:30",
+      "raw_timestamp": "2024-07-09T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-09T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-09T14:00:00+05:30",
+      "session": "2024-07-09",
+      "source": "KITE",
+      "symbol": "SENSEX"
+    },
+    {
+      "decision_cutoff": "2024-07-10T09:45:00+05:30",
+      "interval_end": "2024-07-10T09:45:00+05:30",
+      "interval_start": "2024-07-10T09:40:00+05:30",
+      "raw_timestamp": "2024-07-10T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-10T09:45:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-10T14:00:00+05:30",
+      "interval_end": "2024-07-10T14:00:00+05:30",
+      "interval_start": "2024-07-10T13:55:00+05:30",
+      "raw_timestamp": "2024-07-10T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-10T14:00:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-10T09:45:00+05:30",
+      "interval_end": "2024-07-10T09:45:00+05:30",
+      "interval_start": "2024-07-10T09:40:00+05:30",
+      "raw_timestamp": "2024-07-10T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-10T09:45:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-10T14:00:00+05:30",
+      "interval_end": "2024-07-10T14:00:00+05:30",
+      "interval_start": "2024-07-10T13:55:00+05:30",
+      "raw_timestamp": "2024-07-10T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-10T14:00:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_cutoff": "2024-07-10T09:45:00+05:30",
+      "interval_end": "2024-07-10T09:45:00+05:30",
+      "interval_start": "2024-07-10T09:40:00+05:30",
+      "raw_timestamp": "2024-07-10T09:40:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T09:40:00+05:30",
+      "selected_entry_bar": "2024-07-10T09:45:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "SENSEX"
+    },
+    {
+      "decision_cutoff": "2024-07-10T14:00:00+05:30",
+      "interval_end": "2024-07-10T14:00:00+05:30",
+      "interval_start": "2024-07-10T13:55:00+05:30",
+      "raw_timestamp": "2024-07-10T13:55:00+05:30",
+      "reason_legal": "decision interval_end <= cutoff and canonical entry interval_start == cutoff",
+      "selected_decision_bar": "2024-07-10T13:55:00+05:30",
+      "selected_entry_bar": "2024-07-10T14:00:00+05:30",
+      "session": "2024-07-10",
+      "source": "KITE",
+      "symbol": "SENSEX"
+    }
+  ]
+}

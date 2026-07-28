@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "candidate_space_reconstructed": true,
+    "determinism": true,
+    "four_candidate_autopsy": true,
+    "holdout_not_used_for_threshold_changes": true,
+    "no_algotest": true,
+    "no_broker_calls": true,
+    "no_candidate_tuning": true,
+    "no_production_modifications": true,
+    "prior_artifact_verification": true
+  },
+  "status": "PASS"
+}

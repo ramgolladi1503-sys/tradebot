@@ -1,0 +1,87 @@
+{
+  "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+    "cost_impact": 1.0,
+    "decomposition_label": "NO_UNDERLYING_EDGE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": false
+  },
+  "M2_FAILED_AUCTION_RECLAIM": {
+    "cost_impact": 1.0,
+    "decomposition_label": "UNDERLYING_EDGE_OPTION_FAILURE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": true
+  },
+  "M3_REPEATED_TEST_DEPLETION_PROXY": {
+    "cost_impact": 1.0,
+    "decomposition_label": "NO_UNDERLYING_EDGE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": false
+  },
+  "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+    "cost_impact": 1.0,
+    "decomposition_label": "NO_UNDERLYING_EDGE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": false
+  },
+  "M5_COMPRESSION_NEAR_BOUNDARY": {
+    "cost_impact": 1.0,
+    "decomposition_label": "NO_UNDERLYING_EDGE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": false
+  },
+  "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+    "cost_impact": 1.0,
+    "decomposition_label": "NO_UNDERLYING_EDGE",
+    "entry_lag": "next_observable_option_bar_from_campaign_artifact",
+    "option_monetization_preserved_value": false,
+    "unavailable_fields": [
+      "MFE horizons",
+      "MAE horizons",
+      "strike relation",
+      "ATM/ITM/OTM",
+      "true raw touch/crossing baselines"
+    ],
+    "underlying_incremental_predictive_value": false
+  },
+  "semantic_hash": "aa2f2094cf64df8fb8642ae83fec62d3420304894a839cdf0ef56c3a2b94eb2b"
+}

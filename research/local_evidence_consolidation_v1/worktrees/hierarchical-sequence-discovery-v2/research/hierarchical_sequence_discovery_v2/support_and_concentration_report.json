@@ -1,0 +1,370 @@
+{
+  "semantic_hash": "260b0d72b091774756331630fadc5e01317f5628ca7e55e80aea313e74768201",
+  "top": [
+    {
+      "expected_holdout_trades": 97.34082397003745,
+      "max_expiry_share": 0.023887565732072534,
+      "max_month_share": 0.09960619709010304,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 226
+    },
+    {
+      "expected_holdout_trades": 85.28089887640449,
+      "max_expiry_share": 0.02703784764853467,
+      "max_month_share": 0.10646986601185074,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ],
+      "support": 198
+    },
+    {
+      "expected_holdout_trades": 82.69662921348315,
+      "max_expiry_share": 0.027894809307448712,
+      "max_month_share": 0.11089081646702464,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION"
+      ],
+      "support": 192
+    },
+    {
+      "expected_holdout_trades": 80.97378277153558,
+      "max_expiry_share": 0.028520750042232108,
+      "max_month_share": 0.11337913170786644,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ],
+      "support": 188
+    },
+    {
+      "expected_holdout_trades": 80.97378277153558,
+      "max_expiry_share": 0.028520750042232108,
+      "max_month_share": 0.11337913170786644,
+      "parent_sequence": [
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ],
+      "support": 188
+    },
+    {
+      "expected_holdout_trades": 74.9438202247191,
+      "max_expiry_share": 0.030754751351023134,
+      "max_month_share": 0.10996417511688628,
+      "parent_sequence": [
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 174
+    },
+    {
+      "expected_holdout_trades": 74.51310861423221,
+      "max_expiry_share": 0.025502652029110645,
+      "max_month_share": 0.09692241272973973,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 173
+    },
+    {
+      "expected_holdout_trades": 73.65168539325843,
+      "max_expiry_share": 0.03127798190632044,
+      "max_month_share": 0.11183499552289498,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 171
+    },
+    {
+      "expected_holdout_trades": 72.35955056179775,
+      "max_expiry_share": 0.03168199161818978,
+      "max_month_share": 0.10120723087508601,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 168
+    },
+    {
+      "expected_holdout_trades": 71.92883895131087,
+      "max_expiry_share": 0.03132279796008311,
+      "max_month_share": 0.10202732481269282,
+      "parent_sequence": [
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ],
+      "support": 167
+    },
+    {
+      "expected_holdout_trades": 71.49812734082397,
+      "max_expiry_share": 0.03149730927508705,
+      "max_month_share": 0.1025957581513137,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION"
+      ],
+      "support": 166
+    },
+    {
+      "expected_holdout_trades": 70.2059925093633,
+      "max_expiry_share": 0.032407703627871265,
+      "max_month_share": 0.11581035254974727,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 163
+    },
+    {
+      "expected_holdout_trades": 69.34456928838951,
+      "max_expiry_share": 0.03252909637766444,
+      "max_month_share": 0.10595658428141755,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION",
+        "ELASTICITY_EXPANSION",
+        "COMPRESSION"
+      ],
+      "support": 161
+    },
+    {
+      "expected_holdout_trades": 68.05243445692884,
+      "max_expiry_share": 0.032390831520829846,
+      "max_month_share": 0.09646980090346327,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ],
+      "support": 158
+    },
+    {
+      "expected_holdout_trades": 66.76029962546816,
+      "max_expiry_share": 0.0337758359939506,
+      "max_month_share": 0.11423290203327172,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY"
+      ],
+      "support": 155
+    },
+    {
+      "expected_holdout_trades": 66.76029962546816,
+      "max_expiry_share": 0.03351409612987975,
+      "max_month_share": 0.1241537269695847,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 155
+    },
+    {
+      "expected_holdout_trades": 65.89887640449439,
+      "max_expiry_share": 0.03392491467576792,
+      "max_month_share": 0.1046075085324232,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY"
+      ],
+      "support": 153
+    },
+    {
+      "expected_holdout_trades": 65.89887640449439,
+      "max_expiry_share": 0.033923152978077804,
+      "max_month_share": 0.12566908731376358,
+      "parent_sequence": [
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY"
+      ],
+      "support": 153
+    },
+    {
+      "expected_holdout_trades": 64.6067415730337,
+      "max_expiry_share": 0.034037765040964875,
+      "max_month_share": 0.101374872534196,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 150
+    },
+    {
+      "expected_holdout_trades": 64.6067415730337,
+      "max_expiry_share": 0.034037765040964875,
+      "max_month_share": 0.101374872534196,
+      "parent_sequence": [
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 150
+    },
+    {
+      "expected_holdout_trades": 60.73033707865169,
+      "max_expiry_share": 0.030516958015837443,
+      "max_month_share": 0.10559539817720005,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 141
+    },
+    {
+      "expected_holdout_trades": 59.00749063670412,
+      "max_expiry_share": 0.03150956336203612,
+      "max_month_share": 0.11495084965328049,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 137
+    },
+    {
+      "expected_holdout_trades": 55.1310861423221,
+      "max_expiry_share": 0.03367812347287832,
+      "max_month_share": 0.11463593419123635,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_EXPANSION",
+        "EXPIRY_WEEK"
+      ],
+      "support": 128
+    },
+    {
+      "expected_holdout_trades": 54.70037453183521,
+      "max_expiry_share": 0.033051056482775634,
+      "max_month_share": 0.1091835895749404,
+      "parent_sequence": [
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION",
+        "CALL_ELASTICITY_COLLAPSE",
+        "EXPIRY_WEEK"
+      ],
+      "support": 127
+    },
+    {
+      "expected_holdout_trades": 52.11610486891386,
+      "max_expiry_share": 0.04165764517386221,
+      "max_month_share": 0.13385008444117266,
+      "parent_sequence": [
+        "COMPRESSION",
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE"
+      ],
+      "support": 121
+    },
+    {
+      "expected_holdout_trades": 50.823970037453186,
+      "max_expiry_share": 0.03637370753323486,
+      "max_month_share": 0.13090841949778434,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "EXPIRY",
+        "RANGE_COMPRESSION",
+        "EXPIRY"
+      ],
+      "support": 118
+    },
+    {
+      "expected_holdout_trades": 50.39325842696629,
+      "max_expiry_share": 0.037101294541572134,
+      "max_month_share": 0.12215845900618355,
+      "parent_sequence": [
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION",
+        "OPENING"
+      ],
+      "support": 117
+    },
+    {
+      "expected_holdout_trades": 50.39325842696629,
+      "max_expiry_share": 0.03654085810931102,
+      "max_month_share": 0.1475431725120171,
+      "parent_sequence": [
+        "RANGE_COMPRESSION",
+        "OPENING_DISPLACEMENT",
+        "EXPIRY_WEEK",
+        "RANGE_COMPRESSION"
+      ],
+      "support": 117
+    },
+    {
+      "expected_holdout_trades": 49.9625468164794,
+      "max_expiry_share": 0.04349398679808301,
+      "max_month_share": 0.13084365675015824,
+      "parent_sequence": [
+        "COMPRESSION",
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 116
+    },
+    {
+      "expected_holdout_trades": 49.9625468164794,
+      "max_expiry_share": 0.04349398679808301,
+      "max_month_share": 0.13084365675015824,
+      "parent_sequence": [
+        "OPENING",
+        "COMPRESSION",
+        "ELASTICITY_COLLAPSE",
+        "COMPRESSION"
+      ],
+      "support": 116
+    }
+  ]
+}

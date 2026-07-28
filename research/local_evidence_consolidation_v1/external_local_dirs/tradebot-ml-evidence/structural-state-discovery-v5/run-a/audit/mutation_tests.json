@@ -1,0 +1,215 @@
+{
+  "all_detected": true,
+  "mutations": [
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpa2al13dz/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "source/source_authority.json",
+      "mutation": "source_hash",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: source/source_authority.json\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpqfds2z1q/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "source/duplicate_reconciliation.json",
+      "mutation": "duplicate_disposition",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: source/duplicate_reconciliation.json\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp2zp46cse/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "features/feature_matrix.parquet",
+      "mutation": "feature_value",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: features/feature_matrix.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpxcbfi3bl/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "features/outcome_matrix.parquet",
+      "mutation": "30m_outcome",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: features/outcome_matrix.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmppgg7h5sx/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "folds/discovery_validation_split.json",
+      "mutation": "validation_row_added_to_discovery",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: folds/discovery_validation_split.json\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpb1_89b7y/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "folds/outer_folds.json",
+      "mutation": "outer_fold_ownership",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: folds/outer_folds.json\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpwc3vgyg3/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/outer_test_memberships.parquet",
+      "mutation": "quantile_membership",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/outer_test_memberships.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpdrw6x172/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/tree_rules.parquet",
+      "mutation": "tree_semantic_path",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/tree_rules.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp4ao5ogis/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/sparse_model_results.parquet",
+      "mutation": "sparse_tail_membership",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/sparse_model_results.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp15ixr5ct/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/cluster_states.parquet",
+      "mutation": "cluster_profile_assignment",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/cluster_states.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpuxbtyl2l/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "evaluation/matched_controls.parquet",
+      "mutation": "matched_control_row",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: evaluation/matched_controls.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpdle0_ry0/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/aggregated_template_metrics.parquet",
+      "mutation": "aggregated_support",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/aggregated_template_metrics.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmp1z62s2fd/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "discovery/aggregated_template_metrics.parquet",
+      "mutation": "q_value",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: discovery/aggregated_template_metrics.parquet\"\n}\n"
+    },
+    {
+      "actual_command": [
+        "/opt/anaconda3/bin/python",
+        "-m",
+        "research.structural_state_discovery.oracle",
+        "/var/folders/7h/d5fnr_sn43q_cxnd8vk1m2vm0000gn/T/tmpa8z6eyh1/mutated",
+        "--archive",
+        "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip"
+      ],
+      "detected": true,
+      "exit_code": 2,
+      "mutated_file": "freeze/pre_validation_candidate_bundle.json",
+      "mutation": "freeze_bundle",
+      "stderr": "{\n  \"status\": \"FAIL\",\n  \"error\": \"sidecar hash mismatch: freeze/pre_validation_candidate_bundle.json\"\n}\n"
+    }
+  ]
+}

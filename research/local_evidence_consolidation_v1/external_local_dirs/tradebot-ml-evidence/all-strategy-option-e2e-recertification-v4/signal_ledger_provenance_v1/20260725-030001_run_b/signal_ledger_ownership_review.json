@@ -1,0 +1,46 @@
+{
+  "aliases": [],
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "canonical_strategy_id": null,
+  "canonical_strategy_ids": [
+    "COMPRESSION_BREAKOUT",
+    "Constituent Breadth unweighted",
+    "Constituent Lead-Lag weighted",
+    "EVENT_VOLATILITY_EXPANSION",
+    "EXHAUSTION_REVERSAL",
+    "FAILED_BREAKOUT_TRAP",
+    "HTF_OPENING_DRIVE_CONT",
+    "LATE_DAY_MOMENTUM",
+    "MEAN_REVERSION_EXTENSION",
+    "ML-discovered campaigns",
+    "NO_TRADE_CHOP",
+    "OPENING_DRIVE",
+    "OPENING_RANGE_BREAKOUT",
+    "OPTION_PRESSURE",
+    "Opening-State Momentum",
+    "PAIRS_ARBITRAGE",
+    "RSI2 research",
+    "Residual Mean Reversion",
+    "SIMPLE_ORB",
+    "TREND_PULLBACK",
+    "VOLATILITY_TREND",
+    "VWAP_ORB",
+    "VWAP_RECLAIM",
+    "ZERO_HERO"
+  ],
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "outcomes_read": false,
+  "ownership_evidence": [
+    "HASH_PROTECTED_EMBEDDED_ROW_OWNER"
+  ],
+  "ownership_reason_codes": [
+    "AGGREGATE_MULTI_OWNER_BLOCKER_LEDGER",
+    "NOT_EXECUTED_SIGNALS"
+  ],
+  "ownership_status": "PROVEN_WITH_LIMITATIONS",
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true
+}
