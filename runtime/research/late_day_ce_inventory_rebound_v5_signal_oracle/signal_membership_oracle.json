@@ -1,7 +1,7 @@
 {
   "allowed_for_live_execution": false,
   "event_source_sha256": "c484f70c1235e819a97ee311554baf863e5fa61173718ff07eceb464149afbfc",
-  "exact_membership_match": false,
+  "exact_membership_match": true,
   "extra_in_oracle": 0,
   "final_thresholds": {
     "accel_p10": -5.6106492995639305,
@@ -67,14 +67,15 @@
   "holdout_sessions": 98,
   "missing_from_oracle": 0,
   "oracle_signals": 52,
+  "ordered_values_equal_after_normalization": true,
   "outcome_bearing_ledger_opened": true,
   "outcome_columns_requested": false,
   "outcome_values_used": false,
   "pnl_columns_requested": false,
-  "principal_verdict": "FAIL_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE",
+  "principal_verdict": "PASS_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE",
   "published_ledger_sha256": "46a94560fb0bb2665848d76922e4e27d94fc6b2e0acead0bd70fa5f02d2a1dc8",
   "published_primary_signals": 52,
   "research_only": true,
   "research_sessions": 292,
-  "semantic_sha256": "579849b16857114a4bd4de54340e85a9f92c3ab943e43cb057a9a99e6df41e44"
+  "semantic_sha256": "be6241301481096ae2b76337ad5aa48eddf20cde4f9a6d8e14246671b4de011e"
 }

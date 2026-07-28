@@ -1,6 +1,6 @@
 # Late-Day CE Inventory Rebound V5 Signal Oracle
 
-Principal verdict: `FAIL_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE`
+Principal verdict: `PASS_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE`
 
 Oracle signals: `52`
 
