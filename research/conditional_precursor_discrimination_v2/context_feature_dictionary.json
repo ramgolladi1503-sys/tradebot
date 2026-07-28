@@ -1,0 +1,47 @@
+{
+  "auction_acceptance_quality": [
+    "extension_immediate_rejection",
+    "extension_sustained_acceptance",
+    "reclaim_close_persistence",
+    "reentry_into_prior_range",
+    "post_displacement_overlap_ratio"
+  ],
+  "compression_quality": [
+    "compression_duration",
+    "range_contraction_monotonicity",
+    "volume_contraction_consistency",
+    "option_decay_consistency",
+    "cross_strike_contraction_breadth",
+    "first_vs_repeated_break_attempt"
+  ],
+  "cross_strike_confirmation_topology": [
+    "adjacent_strike_breadth",
+    "atm_outward_expansion",
+    "same_option_type_synchrony",
+    "opposite_option_weakening",
+    "participation_dispersion"
+  ],
+  "expiry_intraday_context": [
+    "causal_dte_bucket",
+    "opening_mid_late_session",
+    "expiry_vs_non_expiry",
+    "ce_vs_pe",
+    "causal_realized_volatility_regime"
+  ],
+  "sequence_maturity": [
+    "directional_impulse_ordinal",
+    "bars_since_compression_start",
+    "bars_since_directional_break",
+    "failed_prior_attempt_count",
+    "latest_vs_previous_impulse_ratio",
+    "pullback_depth_change"
+  ],
+  "underlying_option_response_quality": [
+    "option_return_per_underlying_unit",
+    "consecutive_impulse_elasticity_change",
+    "option_response_during_underlying_pause",
+    "underlying_continuation_nonconfirmation",
+    "option_lead_before_underlying_acceleration",
+    "underlying_option_response_lag"
+  ]
+}
