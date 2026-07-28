@@ -90,6 +90,7 @@ build/
 runtime/live_observation/
 runtime/feed_soak/
 runtime/analytics/
+runtime/research/
 
 # Upstox Replay Data
 runtime/upstox_candidate_replay/
