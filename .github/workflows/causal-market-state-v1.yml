@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - research/causal-market-state-representation-v1
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'core/market_state/**'
+      - 'core/causal_market_state/**'
+      - 'scripts/*causal_market_state*'
+      - 'tests/market_state/**'
+      - '.github/workflows/causal-market-state-v1.yml'
   workflow_dispatch:
 
 jobs:
@@ -35,8 +44,10 @@ jobs:
       - name: Install research dependencies
         run: python -m pip install --upgrade pip pandas numpy pyarrow pytest
 
-      - name: Run causal prefix-invariance tests
+      - name: Run causal behavioural and prefix-invariance tests
         working-directory: feature
+        env:
+          PYTHONPATH: .
         run: pytest -q tests/market_state/test_representation.py
 
       - name: Execute chronological NIFTY state validation
