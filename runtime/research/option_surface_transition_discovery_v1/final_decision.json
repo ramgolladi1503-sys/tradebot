@@ -1,0 +1,16 @@
+{
+  "allowed_for_live_execution": false,
+  "contract_semantic_sha256": "7f377ef443d4361e36b4cd7746f90f0b3b4610301081bc62fd2de885e2ac923f",
+  "development_survivors": [
+    "opposing_wing_decay",
+    "oi_volume_confirmation",
+    "second_push_surface_acceleration",
+    "surface_mass_migration"
+  ],
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_outcomes_materialized": false,
+  "holdout_sessions": 98,
+  "principal_verdict": "DEVELOPMENT_SURVIVORS_FAILED_VALIDATION",
+  "research_only": true,
+  "validation_survivors": []
+}
