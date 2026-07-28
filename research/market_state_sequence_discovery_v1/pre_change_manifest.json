@@ -1,0 +1,20 @@
+{
+  "branch": "research/market-state-sequence-discovery-v1",
+  "broker_calls": false,
+  "clean_status_at_start": false,
+  "input_hashes": {
+    "closeout_registry_hash": null,
+    "eligibility_contract_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+    "joint_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+    "option_data_hash": "15d212f452b6557ece8435a60bb674e51f0fb88ef2b6892c7c810f94425a9f6e",
+    "prior_mechanism_registry_hash": "c2194fd6db4d6e10fab43bb9f9f5a46ed3e0375e814bf1f218a021df2ff4579a",
+    "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+    "underlying_data_hash": "fbf74e66664b92712c451769c94da47ef54f73acbadb208e01d3449bd50be192"
+  },
+  "pnl_or_outcome_inspection": false,
+  "provider_acquisition": false,
+  "semantic_hash": "d05f4a4208a18faf15de0a6694e4469f5da12457c78283cdce4c0e3d9234f976",
+  "source_commit": "65a3316bbf64d7f97fff2817996e24a375ab696a",
+  "strategy_discovery": false,
+  "worktree": "/Users/madhuram/tradebot-market-state-sequence-discovery-v1"
+}
