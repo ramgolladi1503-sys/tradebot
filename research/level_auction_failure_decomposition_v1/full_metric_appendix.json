@@ -1,0 +1,315 @@
+{
+  "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+    "controls": {
+      "matched_dte_shift_expectancy": -62.74503562945368,
+      "matched_time_shift_expectancy": -62.74503562945368,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 62.52834123222748
+    },
+    "option_metrics": {
+      "expiries": 24,
+      "max_expiry_share": 0.0971563981042654,
+      "max_month_share": 0.2559241706161137,
+      "net_expectancy": -62.52834123222748,
+      "profit_factor": 0.5703111540143815,
+      "sessions": 82,
+      "top5_removed_expectancy": -97.48611510791369,
+      "trades": 422,
+      "underlying_mean_directional_ret_5": -4.0250170762728186e-05,
+      "win_rate": 0.4028436018957346
+    },
+    "robustness": {
+      "ce_only_expectancy": -213.519689119171,
+      "pe_only_expectancy": 64.72637554585152,
+      "remove_best_expiry_expectancy": -91.21197007481297,
+      "remove_best_month_expectancy": -65.25817518248175,
+      "remove_best_session_expectancy": -87.50865707434053,
+      "remove_top_10_expectancy": -107.96155339805823,
+      "remove_top_5_expectancy": -97.48611510791369
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -52.389365079365064,
+          "profit_factor": 0.481346804627215,
+          "trades": 126
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -36.067251461988306,
+          "profit_factor": 0.7888760710239041,
+          "trades": 171
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -108.94720000000001,
+          "profit_factor": 0.3005246681339227,
+          "trades": 125
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "M2_FAILED_AUCTION_RECLAIM": {
+    "controls": {
+      "matched_dte_shift_expectancy": -74.0450980392157,
+      "matched_time_shift_expectancy": -74.0450980392157,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 72.84902912621362
+    },
+    "option_metrics": {
+      "expiries": 13,
+      "max_expiry_share": 0.1650485436893204,
+      "max_month_share": 0.30097087378640774,
+      "net_expectancy": -72.84902912621362,
+      "profit_factor": 0.3583229999572411,
+      "sessions": 30,
+      "top5_removed_expectancy": -106.9811224489796,
+      "trades": 103,
+      "underlying_mean_directional_ret_5": 0.00011766237286151324,
+      "win_rate": 0.42718446601941745
+    },
+    "robustness": {
+      "ce_only_expectancy": -190.4686046511628,
+      "pe_only_expectancy": 11.444999999999999,
+      "remove_best_expiry_expectancy": -81.9015625,
+      "remove_best_month_expectancy": -73.70735294117648,
+      "remove_best_session_expectancy": -99.8725,
+      "remove_top_10_expectancy": -116.78924731182798,
+      "remove_top_5_expectancy": -106.9811224489796
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": 8.997826086956518,
+          "profit_factor": 1.5479216309240136,
+          "trades": 23
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -121.67125000000001,
+          "profit_factor": 0.08998522839887063,
+          "trades": 40
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -71.08875,
+          "profit_factor": 0.5235098949343968,
+          "trades": 40
+        }
+      ],
+      "positive_folds": 1
+    }
+  },
+  "M3_REPEATED_TEST_DEPLETION_PROXY": {
+    "controls": {
+      "matched_dte_shift_expectancy": -74.34524606971975,
+      "matched_time_shift_expectancy": -74.34524606971975,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 74.31328664161256
+    },
+    "option_metrics": {
+      "expiries": 25,
+      "max_expiry_share": 0.0550051247010591,
+      "max_month_share": 0.19883840109326956,
+      "net_expectancy": -74.31328664161256,
+      "profit_factor": 0.5193901762255988,
+      "sessions": 115,
+      "top5_removed_expectancy": -81.35405201916495,
+      "trades": 2927,
+      "underlying_mean_directional_ret_5": -2.307640976673175e-05,
+      "win_rate": 0.3928937478647079
+    },
+    "robustness": {
+      "ce_only_expectancy": -176.52662196679438,
+      "pe_only_expectancy": 43.29588537839823,
+      "remove_best_expiry_expectancy": -93.46332261521972,
+      "remove_best_month_expectancy": -89.11880460683082,
+      "remove_best_session_expectancy": -93.24510542689251,
+      "remove_top_10_expectancy": -88.37747343160781,
+      "remove_top_5_expectancy": -81.35405201916495
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -93.36160164271048,
+          "profit_factor": 0.5144350515458413,
+          "trades": 974
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -95.86345574387948,
+          "profit_factor": 0.35387819409296084,
+          "trades": 1062
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -27.804489337822673,
+          "profit_factor": 0.7700592742115877,
+          "trades": 891
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+    "controls": {
+      "matched_dte_shift_expectancy": -89.21601572739188,
+      "matched_time_shift_expectancy": -89.21601572739188,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 89.19950205915387
+    },
+    "option_metrics": {
+      "expiries": 25,
+      "max_expiry_share": 0.054848371396480716,
+      "max_month_share": 0.19299887682515912,
+      "net_expectancy": -89.19950205915387,
+      "profit_factor": 0.43209843819953614,
+      "sessions": 115,
+      "top5_removed_expectancy": -93.06825744800446,
+      "trades": 5342,
+      "underlying_mean_directional_ret_5": 2.5084159409992e-05,
+      "win_rate": 0.3858105578435043
+    },
+    "robustness": {
+      "ce_only_expectancy": -207.32919874037793,
+      "pe_only_expectancy": 46.71622785829307,
+      "remove_best_expiry_expectancy": -104.71622979552093,
+      "remove_best_month_expectancy": -103.7906835388276,
+      "remove_best_session_expectancy": -102.18178787878787,
+      "remove_top_10_expectancy": -96.92458552138035,
+      "remove_top_5_expectancy": -93.06825744800446
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -81.91260480715484,
+          "profit_factor": 0.5004633462204431,
+          "trades": 1789
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -135.91937089715535,
+          "profit_factor": 0.25490153094778056,
+          "trades": 1828
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -47.24723478260869,
+          "profit_factor": 0.6160031887646928,
+          "trades": 1725
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "M5_COMPRESSION_NEAR_BOUNDARY": {
+    "controls": {
+      "matched_dte_shift_expectancy": -136.86416971470376,
+      "matched_time_shift_expectancy": -136.86416971470376,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 136.7648538011696
+    },
+    "option_metrics": {
+      "expiries": 25,
+      "max_expiry_share": 0.09283625730994152,
+      "max_month_share": 0.25511695906432746,
+      "net_expectancy": -136.7648538011696,
+      "profit_factor": 0.31567654504700465,
+      "sessions": 98,
+      "top5_removed_expectancy": -152.07143800440207,
+      "trades": 1368,
+      "underlying_mean_directional_ret_5": -2.4958201765384887e-05,
+      "win_rate": 0.3567251461988304
+    },
+    "robustness": {
+      "ce_only_expectancy": -249.0270343137255,
+      "pe_only_expectancy": 29.1879347826087,
+      "remove_best_expiry_expectancy": -164.40227586206896,
+      "remove_best_month_expectancy": -164.58854098360655,
+      "remove_best_session_expectancy": -141.0716214233309,
+      "remove_top_10_expectancy": -166.30962444771723,
+      "remove_top_5_expectancy": -152.07143800440207
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -158.68571428571428,
+          "profit_factor": 0.18812530410322703,
+          "trades": 490
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -160.38240000000002,
+          "profit_factor": 0.12249700107443796,
+          "trades": 425
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -90.89580573951436,
+          "profit_factor": 0.588032720622076,
+          "trades": 453
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+    "controls": {
+      "matched_dte_shift_expectancy": -74.05629811629812,
+      "matched_time_shift_expectancy": -74.05629811629812,
+      "raw_touch_and_crossing_controls": "unsupported_by_reduced_warehouse_without_tick_or_book_state",
+      "reversed_event_order_expectancy": 73.99344517184943
+    },
+    "option_metrics": {
+      "expiries": 24,
+      "max_expiry_share": 0.09001636661211129,
+      "max_month_share": 0.21685761047463176,
+      "net_expectancy": -73.99344517184943,
+      "profit_factor": 0.40176104049394085,
+      "sessions": 89,
+      "top5_removed_expectancy": -89.29337715694331,
+      "trades": 1222,
+      "underlying_mean_directional_ret_5": -5.421509076053294e-05,
+      "win_rate": 0.4157119476268412
+    },
+    "robustness": {
+      "ce_only_expectancy": -167.856015625,
+      "pe_only_expectancy": 29.223127147766323,
+      "remove_best_expiry_expectancy": -95.24392327811682,
+      "remove_best_month_expectancy": -95.3499792746114,
+      "remove_best_session_expectancy": -76.07240983606557,
+      "remove_top_10_expectancy": -97.21352310231022,
+      "remove_top_5_expectancy": -89.29337715694331
+    },
+    "wfa": {
+      "folds": [
+        {
+          "fold": 1,
+          "net_expectancy": -80.3085574572127,
+          "profit_factor": 0.5113623262141671,
+          "trades": 409
+        },
+        {
+          "fold": 2,
+          "net_expectancy": -77.07002590673575,
+          "profit_factor": 0.32071915239426335,
+          "trades": 386
+        },
+        {
+          "fold": 3,
+          "net_expectancy": -65.16337236533957,
+          "profit_factor": 0.3066130127120798,
+          "trades": 427
+        }
+      ],
+      "positive_folds": 0
+    }
+  },
+  "semantic_hash": "d8e5b318d6b7d9c84e0c3c4b656dcce5a0319d93ac0a07e913e4ebb4f683a410"
+}
