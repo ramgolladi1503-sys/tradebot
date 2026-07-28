@@ -1,0 +1,337 @@
+{
+  "checks": {
+    "definition_count": {
+      "actual": 10,
+      "expected": 10,
+      "match": true
+    },
+    "event_clusters_from_parquet": {
+      "actual": 11261,
+      "expected": 11261,
+      "match": true
+    },
+    "event_sessions_from_parquet": {
+      "actual": 390,
+      "expected": 385,
+      "match": false
+    },
+    "family_count": {
+      "actual": 10,
+      "expected": 10,
+      "match": true
+    },
+    "matched_control_rows": {
+      "actual": 178521,
+      "match": true,
+      "published": 178521
+    },
+    "near_miss_rows": {
+      "actual": 100983,
+      "match": true,
+      "published": 100983
+    },
+    "summary": {
+      "accepted_precursors": {
+        "actual": 0,
+        "expected": 0,
+        "match": true
+      },
+      "definitions_tested": {
+        "actual": 10,
+        "expected": 10,
+        "match": true
+      },
+      "event_clusters": {
+        "actual": 11261,
+        "expected": 11261,
+        "match": true
+      },
+      "event_sessions": {
+        "actual": 385,
+        "expected": 385,
+        "match": true
+      },
+      "families_tested": {
+        "actual": 10,
+        "expected": 10,
+        "match": true
+      },
+      "holdout_status": {
+        "actual": "NOT_OPENED_NO_FROZEN_MECHANISM",
+        "expected": "NOT_OPENED_NO_FROZEN_MECHANISM",
+        "match": true
+      },
+      "principal_verdict": {
+        "actual": "NO_DISCRIMINATIVE_PRECURSOR_IN_TESTED_FAMILIES",
+        "expected": "NO_DISCRIMINATIVE_PRECURSOR_IN_TESTED_FAMILIES",
+        "match": true
+      }
+    }
+  },
+  "family_records": [
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.00625,
+      "event_cluster_occurrence_rate": 0.0054169256726756,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "sweep_reclaim_transition",
+      "interpretation": "Breach/reclaim proxy using prior range compression and close recovery.",
+      "lift": 3.212740823959209,
+      "matched_control_occurrence_rate": 0.0016860761479041,
+      "near_miss_occurrence_rate": 1.980531376568333e-05,
+      "pe_event_rate": 0.0047223579221625,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.1265625,
+      "event_cluster_occurrence_rate": 0.1289405914217209,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "first_push_second_push_response",
+      "interpretation": "Two-window option response acceleration or weakening.",
+      "lift": 37.79737819572586,
+      "matched_control_occurrence_rate": 0.0034113633690154,
+      "near_miss_occurrence_rate": 0.2078072546864323,
+      "pe_event_rate": 0.1309233023937469,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.13046875,
+      "event_cluster_occurrence_rate": 0.1340911109137732,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "option_elasticity_transition",
+      "interpretation": "Change in option response per robust prior option movement denominator.",
+      "lift": 2.7113013038212377,
+      "matched_control_occurrence_rate": 0.0494563664778933,
+      "near_miss_occurrence_rate": 0.1712961587593951,
+      "pe_event_rate": 0.1371112196710633,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.1330078125,
+      "event_cluster_occurrence_rate": 0.1531835538584495,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "cross_strike_acceleration_breadth",
+      "interpretation": "Same timestamp/expiry/type breadth of positive option acceleration.",
+      "lift": 0.7987172503757306,
+      "matched_control_occurrence_rate": 0.191786960637684,
+      "near_miss_occurrence_rate": 0.2758484101284374,
+      "pe_event_rate": 0.1700048851978505,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.2974609375,
+      "event_cluster_occurrence_rate": 0.3265251753840689,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "opposing_option_response_decay",
+      "interpretation": "Same strike/expiry mirror option response decay proxy.",
+      "lift": 5.756058145032029,
+      "matched_control_occurrence_rate": 0.0567272197668621,
+      "near_miss_occurrence_rate": 0.3222621629383163,
+      "pe_event_rate": 0.3507572056668295,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.0041015625,
+      "event_cluster_occurrence_rate": 0.0025752597460261,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "failed_extension_directional_reversal",
+      "interpretation": "Prior extension followed by close recovery through recent midpoint.",
+      "lift": 1.831625279363852,
+      "matched_control_occurrence_rate": 0.0014059970535679,
+      "near_miss_occurrence_rate": 6.931859817989166e-05,
+      "pe_event_rate": 0.0013027194268034,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.038671875,
+      "event_cluster_occurrence_rate": 0.0343663973004173,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "compression_to_expansion_sequence",
+      "interpretation": "Multi-step compression, muted response, displacement, participation.",
+      "lift": 5.771517979743941,
+      "matched_control_occurrence_rate": 0.0059544815455884,
+      "near_miss_occurrence_rate": 0.0034956378796431,
+      "pe_event_rate": 0.0307767464582315,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.0037109375,
+      "event_cluster_occurrence_rate": 0.008702601900364,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "underlying_option_divergence_catchup",
+      "interpretation": "Muted prior option movement followed by recent catch-up.",
+      "lift": 31.70606518071219,
+      "matched_control_occurrence_rate": 0.0002744775124495,
+      "near_miss_occurrence_rate": 0.0196171632849093,
+      "pe_event_rate": 0.012864354339684,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.1298828125,
+      "event_cluster_occurrence_rate": 0.1522955332563715,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "acceptance_state_transition",
+      "interpretation": "Local range acceptance, attempted extension, re-entry proxy.",
+      "lift": 26.89213738126677,
+      "matched_control_occurrence_rate": 0.0056631992874787,
+      "near_miss_occurrence_rate": 0.1713951853282235,
+      "pe_event_rate": 0.1709819247679531,
+      "tested_definitions": 1
+    },
+    {
+      "accepted_for_freeze": false,
+      "ce_event_rate": 0.15,
+      "event_cluster_occurrence_rate": 0.1589556877719563,
+      "event_clusters": 11261,
+      "event_sessions": 385,
+      "family": "time_to_expiry_session_interaction",
+      "interpretation": "Expiry/session strata interaction diagnostics only.",
+      "lift": 0.8785970752596883,
+      "matched_control_occurrence_rate": 0.1809198917774379,
+      "near_miss_occurrence_rate": 0.1348345761167721,
+      "pe_event_rate": 0.166422406774141,
+      "tested_definitions": 1
+    }
+  ],
+  "rows": {
+    "discrimination": 10,
+    "event_universe": 1997159,
+    "matched_controls": 178521,
+    "near_miss_controls": 100983
+  },
+  "schemas": {
+    "discrimination": [
+      "family",
+      "tested_definitions",
+      "event_cluster_occurrence_rate",
+      "matched_control_occurrence_rate",
+      "near_miss_occurrence_rate",
+      "lift",
+      "event_clusters",
+      "event_sessions",
+      "ce_event_rate",
+      "pe_event_rate",
+      "accepted_for_freeze",
+      "interpretation"
+    ],
+    "event_universe": [
+      "close",
+      "expired_instrument_key",
+      "expiry",
+      "high",
+      "low",
+      "open",
+      "open_interest",
+      "option_type",
+      "strike",
+      "timestamp",
+      "trading_symbol",
+      "volume",
+      "session",
+      "minute_of_day",
+      "days_to_expiry",
+      "premium_band",
+      "entry_price_next_open",
+      "forward_mfe_points",
+      "forward_mae_points",
+      "forward_close_change_points",
+      "forward_expansion_pct",
+      "label_horizon_minutes",
+      "is_expansion_event",
+      "move_cluster_id",
+      "prior_5m_return_pct",
+      "prior_10m_range_pct",
+      "prior_5m_volume_ratio",
+      "transition_compression_to_lift",
+      "transition_put_call_selloff_or_lift",
+      "transition_volume_participation"
+    ],
+    "matched_controls": [
+      "close",
+      "expired_instrument_key",
+      "expiry",
+      "high",
+      "low",
+      "open",
+      "open_interest",
+      "option_type",
+      "strike",
+      "timestamp",
+      "trading_symbol",
+      "volume",
+      "session",
+      "minute_of_day",
+      "days_to_expiry",
+      "premium_band",
+      "entry_price_next_open",
+      "forward_mfe_points",
+      "forward_mae_points",
+      "forward_close_change_points",
+      "forward_expansion_pct",
+      "label_horizon_minutes",
+      "is_expansion_event",
+      "move_cluster_id",
+      "prior_5m_return_pct",
+      "prior_10m_range_pct",
+      "prior_5m_volume_ratio",
+      "transition_compression_to_lift",
+      "transition_put_call_selloff_or_lift",
+      "transition_volume_participation",
+      "control_bucket",
+      "matched_event_index",
+      "control_type"
+    ],
+    "near_miss_controls": [
+      "close",
+      "expired_instrument_key",
+      "expiry",
+      "high",
+      "low",
+      "open",
+      "open_interest",
+      "option_type",
+      "strike",
+      "timestamp",
+      "trading_symbol",
+      "volume",
+      "session",
+      "minute_of_day",
+      "days_to_expiry",
+      "premium_band",
+      "entry_price_next_open",
+      "forward_mfe_points",
+      "forward_mae_points",
+      "forward_close_change_points",
+      "forward_expansion_pct",
+      "label_horizon_minutes",
+      "is_expansion_event",
+      "move_cluster_id",
+      "prior_5m_return_pct",
+      "prior_10m_range_pct",
+      "prior_5m_volume_ratio",
+      "transition_compression_to_lift",
+      "transition_put_call_selloff_or_lift",
+      "transition_volume_participation",
+      "control_bucket",
+      "control_type"
+    ]
+  },
+  "verdict": "PRIOR_CAMPAIGN_NOT_REPRODUCIBLE"
+}
