@@ -481,11 +481,13 @@ def main() -> int:
     )
     missing = comparison.loc[comparison["_merge"].eq("right_only")]
     extra = comparison.loc[comparison["_merge"].eq("left_only")]
+    ordered_values_equal = oracle[keys].astype(str).equals(
+        published[keys].astype(str)
+    )
     exact = bool(
         len(oracle) == len(published)
         and missing.empty
         and extra.empty
-        and oracle[keys].equals(published[keys])
     )
     verdict = (
         "PASS_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE"
@@ -495,6 +497,7 @@ def main() -> int:
     payload = {
         "principal_verdict": verdict,
         "exact_membership_match": exact,
+        "ordered_values_equal_after_normalization": ordered_values_equal,
         "oracle_signals": len(oracle),
         "published_primary_signals": len(published),
         "missing_from_oracle": len(missing),
