@@ -8,6 +8,7 @@ on:
     paths:
       - 'scripts/run_conditional_precursor_discrimination_v2.py'
       - 'scripts/run_option_surface_transition_discovery_v1.py'
+      - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'research/conditional_precursor_discrimination_v2/**'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'scripts/run_conditional_precursor_discrimination_v2.py'
       - 'scripts/run_option_surface_transition_discovery_v1.py'
+      - 'scripts/run_option_surface_transition_discovery_v1_cli.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'research/conditional_precursor_discrimination_v2/**'
@@ -69,7 +71,7 @@ jobs:
 
       - name: Run frozen option-surface economic discovery
         run: |
-          python -m scripts.run_option_surface_transition_discovery_v1 --repo-root "$GITHUB_WORKSPACE"
+          python -m scripts.run_option_surface_transition_discovery_v1_cli --repo-root "$GITHUB_WORKSPACE"
 
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
