@@ -12,16 +12,20 @@ on:
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
       - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
       - 'scripts/audit_late_day_ce_inventory_rebound_v4.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v5_signal_oracle.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v4.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v5_signal_oracle.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
       - 'research/late_day_ce_inventory_rebound_v3/**'
       - 'research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
+      - 'research/late_day_ce_inventory_rebound_v5_signal_oracle/**'
+      - 'research/late_day_ce_inventory_rebound_v6_final/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
   pull_request:
     paths:
@@ -31,16 +35,20 @@ on:
       - 'scripts/run_extreme_option_pressure_discovery_v2.py'
       - 'scripts/run_late_day_ce_inventory_rebound_v3.py'
       - 'scripts/audit_late_day_ce_inventory_rebound_v4.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v5_signal_oracle.py'
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'tests/research/test_option_surface_transition_discovery_v1.py'
       - 'tests/research/test_extreme_option_pressure_discovery_v2.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v3.py'
       - 'tests/research/test_late_day_ce_inventory_rebound_v4.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v5_signal_oracle.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - 'research/option_surface_transition_discovery_v1/**'
       - 'research/extreme_option_pressure_discovery_v2/**'
       - 'research/late_day_ce_inventory_rebound_v3/**'
       - 'research/late_day_ce_inventory_rebound_v4_horizon_audit/**'
+      - 'research/late_day_ce_inventory_rebound_v5_signal_oracle/**'
+      - 'research/late_day_ce_inventory_rebound_v6_final/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
@@ -84,7 +92,8 @@ jobs:
             tests/research/test_option_surface_transition_discovery_v1.py \
             tests/research/test_extreme_option_pressure_discovery_v2.py \
             tests/research/test_late_day_ce_inventory_rebound_v3.py \
-            tests/research/test_late_day_ce_inventory_rebound_v4.py
+            tests/research/test_late_day_ce_inventory_rebound_v4.py \
+            tests/research/test_late_day_ce_inventory_rebound_v5_signal_oracle.py
 
       - name: Verify corpus and reproduce prior campaign
         run: |
@@ -107,6 +116,12 @@ jobs:
         continue-on-error: true
         run: |
           python -m scripts.audit_late_day_ce_inventory_rebound_v4 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Run independent signal-membership oracle V5
+        id: signal_oracle
+        continue-on-error: true
+        run: |
+          python -m scripts.audit_late_day_ce_inventory_rebound_v5_signal_oracle --repo-root "$GITHUB_WORKSPACE"
 
       - name: Invalidate mismatched V3 publication
         if: always()
@@ -157,6 +172,106 @@ jobs:
           )
           PY
 
+      - name: Publish combined structural-edge research verdict V6
+        if: always()
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          horizon_path = Path("runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/independent_horizon_audit.json")
+          oracle_path = Path("runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/signal_membership_oracle.json")
+          output_dir = Path("runtime/research/late_day_ce_inventory_rebound_v6_final")
+          research_dir = Path("research/late_day_ce_inventory_rebound_v6_final")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          research_dir.mkdir(parents=True, exist_ok=True)
+
+          horizon = json.loads(horizon_path.read_text(encoding="utf-8")) if horizon_path.exists() else {}
+          oracle = json.loads(oracle_path.read_text(encoding="utf-8")) if oracle_path.exists() else {}
+          hash_binding = bool(
+              horizon.get("v3_ledger_sha256")
+              and horizon.get("v3_ledger_sha256") == oracle.get("published_ledger_sha256")
+              and horizon.get("event_source_sha256") == oracle.get("event_source_sha256")
+          )
+          edge_found = bool(
+              horizon.get("structural_edge_found_5m_candle_proxy") is True
+              and horizon.get("v3_publication_status") == "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH"
+              and oracle.get("exact_membership_match") is True
+              and hash_binding
+          )
+          verdict = (
+              "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_5M_CANDLE_PROXY_RESEARCH_GATE"
+              if edge_found
+              else "NO_STRUCTURAL_EDGE_AFTER_INDEPENDENT_ECONOMIC_AND_SIGNAL_AUDIT"
+          )
+          five = horizon.get("horizons", {}).get("5", {})
+          payload = {
+              "principal_verdict": verdict,
+              "structural_edge_found": edge_found,
+              "claim_boundary": "HISTORICAL_CANDLE_PROXY_RESEARCH_EDGE_NOT_EXECUTION_CERTIFIED",
+              "candidate_id": "late_day_ce_inventory_rebound_5m_v6",
+              "mechanism": "late_day_ce_capitulation_with_volume_and_same_strike_pe_expansion_then_ce_rebound",
+              "side": "BUY_CE_ONLY",
+              "entry": "first_option_open_exactly_one_minute_after_completed_signal",
+              "exit": "same_contract_close_exactly_five_minutes_after_signal",
+              "normal_cost_pct": 0.10,
+              "stress_cost_pct": 1.00,
+              "oof_metrics": five.get("oof"),
+              "holdout_primary_metrics": five.get("holdout_primary"),
+              "holdout_mirror_control": five.get("holdout_mirror"),
+              "holdout_delayed_control": five.get("holdout_delayed"),
+              "oof_gate": five.get("oof_gate"),
+              "holdout_gate": five.get("holdout_gate"),
+              "control_gate": five.get("control_gate"),
+              "signal_membership_oracle": oracle.get("principal_verdict"),
+              "oracle_signals": oracle.get("oracle_signals"),
+              "published_primary_signals": oracle.get("published_primary_signals"),
+              "signal_membership_exact": oracle.get("exact_membership_match"),
+              "evidence_hash_binding": hash_binding,
+              "event_source_sha256": horizon.get("event_source_sha256"),
+              "trade_ledger_sha256": horizon.get("v3_ledger_sha256"),
+              "v3_status": horizon.get("v3_publication_status"),
+              "holdout_trade_count": (five.get("holdout_primary") or {}).get("trades"),
+              "holdout_bootstrap_ci_low": (five.get("holdout_primary") or {}).get("bootstrap_mean_ci_low"),
+              "known_limitations": [
+                  "only_12_untouched_holdout_trades",
+                  "holdout_bootstrap_mean_ci_crosses_zero",
+                  "historical_ohlcv_candle_proxy_not_bid_ask_execution",
+                  "source_archive_has_no_authoritative_timestamp_aligned_spread",
+                  "paper_and_live_trading_remain_unauthorized",
+              ],
+              "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+              "production_or_live_edge_certified": False,
+              "paper_or_live_authorized": False,
+              "research_only": True,
+              "allowed_for_live_execution": False,
+          }
+          payload["semantic_sha256"] = hashlib.sha256(
+              json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+          ).hexdigest()
+          (output_dir / "final_decision.json").write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          (research_dir / "RESULT.md").write_text(
+              "# Late-Day CE Inventory Rebound V6 — Final Research Verdict\n\n"
+              f"Principal verdict: `{verdict}`\n\n"
+              f"Structural edge found: `{edge_found}`\n\n"
+              f"OOF metrics: `{json.dumps(payload['oof_metrics'], sort_keys=True)}`\n\n"
+              f"Untouched holdout metrics: `{json.dumps(payload['holdout_primary_metrics'], sort_keys=True)}`\n\n"
+              f"Mirror PE control: `{json.dumps(payload['holdout_mirror_control'], sort_keys=True)}`\n\n"
+              f"Five-minute delayed CE control: `{json.dumps(payload['holdout_delayed_control'], sort_keys=True)}`\n\n"
+              f"Signal oracle: `{payload['signal_membership_oracle']}` with "
+              f"`{payload['oracle_signals']}` exact identities.\n\n"
+              "Claim boundary: historical OHLCV candle-proxy research edge only. "
+              "The holdout has 12 trades and its bootstrap mean CI crosses zero. "
+              "No bid/ask execution certification, paper authorization, or live authorization is claimed.\n",
+              encoding="utf-8",
+          )
+          print(verdict)
+          PY
+
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
         run: |
@@ -164,7 +279,9 @@ jobs:
              [ ! -d runtime/research/option_surface_transition_discovery_v1 ] && \
              [ ! -d runtime/research/extreme_option_pressure_discovery_v2 ] && \
              [ ! -d runtime/research/late_day_ce_inventory_rebound_v3 ] && \
-             [ ! -d runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit ]; then
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit ] && \
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle ] && \
+             [ ! -d runtime/research/late_day_ce_inventory_rebound_v6_final ]; then
             echo "No runtime research evidence directory was produced."
             exit 0
           fi
@@ -179,10 +296,15 @@ jobs:
           git add -f runtime/research/late_day_ce_inventory_rebound_v3/*.csv || true
           git add -f runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/*.json || true
           git add -f runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/*.csv || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/*.json || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/*.csv || true
+          git add -f runtime/research/late_day_ce_inventory_rebound_v6_final/*.json || true
           git add -f research/option_surface_transition_discovery_v1/RESULT.md || true
           git add -f research/extreme_option_pressure_discovery_v2/RESULT.md || true
           git add -f research/late_day_ce_inventory_rebound_v3/RESULT.md || true
           git add -f research/late_day_ce_inventory_rebound_v4_horizon_audit/RESULT.md || true
+          git add -f research/late_day_ce_inventory_rebound_v5_signal_oracle/RESULT.md || true
+          git add -f research/late_day_ce_inventory_rebound_v6_final/RESULT.md || true
           if git diff --cached --quiet; then
             echo "No deterministic diagnostic changes to preserve."
             exit 0
@@ -201,30 +323,38 @@ jobs:
             runtime/research/extreme_option_pressure_discovery_v2/**
             runtime/research/late_day_ce_inventory_rebound_v3/**
             runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/**
+            runtime/research/late_day_ce_inventory_rebound_v5_signal_oracle/**
+            runtime/research/late_day_ce_inventory_rebound_v6_final/**
             research/conditional_precursor_discrimination_v2/prior_campaign_reproduction.md
             research/option_surface_transition_discovery_v1/RESULT.md
             research/extreme_option_pressure_discovery_v2/RESULT.md
             research/late_day_ce_inventory_rebound_v3/RESULT.md
             research/late_day_ce_inventory_rebound_v4_horizon_audit/RESULT.md
+            research/late_day_ce_inventory_rebound_v5_signal_oracle/RESULT.md
+            research/late_day_ce_inventory_rebound_v6_final/RESULT.md
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Enforce independent horizon-audit verdict
+      - name: Enforce final independent structural-edge verdict
         if: always()
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          path = Path("runtime/research/late_day_ce_inventory_rebound_v4_horizon_audit/independent_horizon_audit.json")
+          path = Path("runtime/research/late_day_ce_inventory_rebound_v6_final/final_decision.json")
           if not path.exists():
-              raise SystemExit("Independent horizon audit evidence is missing.")
+              raise SystemExit("Final independent edge evidence is missing.")
           payload = json.loads(path.read_text(encoding="utf-8"))
-          if payload.get("structural_edge_found_5m_candle_proxy") is not True:
+          if payload.get("structural_edge_found") is not True:
               raise SystemExit(
-                  "Independent audit did not establish the five-minute candle-proxy edge."
+                  "Independent economic and signal audits did not establish the research edge."
               )
-          if payload.get("v3_publication_status") != "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH":
-              raise SystemExit("V3 horizon mismatch was not detected.")
+          if payload.get("signal_membership_exact") is not True:
+              raise SystemExit("Signal membership oracle did not match exactly.")
+          if payload.get("evidence_hash_binding") is not True:
+              raise SystemExit("Economic and signal evidence are not hash-bound.")
+          if payload.get("paper_or_live_authorized") is not False:
+              raise SystemExit("Research evidence must not authorize paper or live trading.")
           print(payload["principal_verdict"])
           PY
