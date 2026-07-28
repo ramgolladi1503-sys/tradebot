@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from scripts.audit_late_day_ce_inventory_rebound_v5_signal_oracle import (
     expanding_folds,
@@ -76,11 +77,11 @@ def test_thresholds_use_only_supplied_training_rows() -> None:
 
     cut = thresholds(training)
 
-    assert cut["ret_p10"] == -8.0
-    assert cut["ret_p80"] == 6.0
-    assert cut["volume_p90"] == 4.6
-    assert cut["accel_p10"] == -6.4
-    assert cut["asym_p10"] == -16.0
+    assert cut["ret_p10"] == pytest.approx(-8.0)
+    assert cut["ret_p80"] == pytest.approx(6.0)
+    assert cut["volume_p90"] == pytest.approx(4.6)
+    assert cut["accel_p10"] == pytest.approx(-6.4)
+    assert cut["asym_p10"] == pytest.approx(-16.0)
 
 
 def test_identities_stamp_role_and_fold() -> None:
