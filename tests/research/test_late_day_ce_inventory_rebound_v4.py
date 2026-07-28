@@ -57,7 +57,8 @@ def test_exact_future_price_attachment_uses_timestamp_offsets(
 
 
 def test_oof_gate_accepts_distributed_positive_economics() -> None:
-    net = np.asarray(([2.0] * 30) + ([-1.0] * 10), dtype=float)
+    per_fold = np.asarray(([2.0] * 8) + ([-1.0] * 2), dtype=float)
+    net = np.tile(per_fold, 4)
     frame = pd.DataFrame(
         {
             "net_5m_pct": net,
