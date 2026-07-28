@@ -59,8 +59,13 @@ class DecisionRecord:
     evidence: LayerEvidence
     research_only: bool = True
     allowed_for_live_execution: bool = False
-    broker_api_called: bool = False
-    is_order_action: bool = False
+
+    broker_api_called = False
+    is_order_action = False
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return {
+            **asdict(self),
+            "broker_api_called": False,
+            "is_order_action": False,
+        }
