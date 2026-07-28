@@ -1,0 +1,38 @@
+{
+  "development_sessions": 267,
+  "holdout_sessions": 115,
+  "rows": 278343,
+  "semantic_hash": "94d90bfade13f2f85d7031f308e42505e03a2f90716d0b08eb03a21e011eca56",
+  "unavailable_or_not_certified": {
+    "Greeks": "available only in unsynchronized local live tick archive, not certified for historical holdout",
+    "IV": "available only in unsynchronized local live tick archive, not certified for historical holdout",
+    "bid_ask": "available only in unsynchronized local live tick archive, not certified for historical holdout",
+    "depth": "not present in certified historical joint warehouse",
+    "futures": "local futures warehouse exists but has only one instrument file and is not joined into certified historical option rows for this campaign"
+  },
+  "usable_certified_information": [
+    "atr_14",
+    "ce_minus_pe_velocity",
+    "chain_snapshot_count",
+    "dte",
+    "expansion_ratio",
+    "expiry_day",
+    "minutes_to_close",
+    "near_expiry",
+    "oi_change_3",
+    "open_interest_sum",
+    "option_snapshot_count",
+    "premium_acceleration",
+    "premium_elasticity",
+    "premium_range_pct",
+    "premium_velocity",
+    "rolling_range_15",
+    "same_side_accel_agreement",
+    "same_side_velocity_agreement",
+    "session_progress",
+    "true_range",
+    "volatility_compression",
+    "volume_sum",
+    "volume_z_session"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "cost_points": 1.0,
+  "development_expansion_threshold_points": 19.350000000000023,
+  "entry": "next minute premium_mean",
+  "exit": "five minutes after entry",
+  "labels_frozen_before_hypotheses": true,
+  "large_option_expansion": "development rows with future_gross_5 at or above development 90th percentile",
+  "semantic_hash": "cc06697ed0e3c519d30edbd3da214e9b8234738c1295e699afcd3283641cb48c"
+}
