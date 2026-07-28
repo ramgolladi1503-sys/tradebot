@@ -1,0 +1,180 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "folds": [
+      {
+        "confidence_interval": {
+          "ci95_high": -0.3398956261014887,
+          "ci95_low": -6.061675054526784,
+          "mean": -3.200785340314136,
+          "n": 191,
+          "std": 20.172593103958874
+        },
+        "expiry_count": 4,
+        "fold": "2026-03",
+        "gross_expectancy_points": -2.200785340314136,
+        "gross_pct_mean": -0.018501746735521133,
+        "mae_points_mean": -37.367015706806285,
+        "max_trade_points": 48.05000000000001,
+        "mfe_points_mean": 34.32984293193717,
+        "min_trade_points": -66.94999999999999,
+        "net_expectancy_points": -3.200785340314136,
+        "net_pct_mean": -0.02472889576805063,
+        "session_count": 14,
+        "t_stat": -2.192863022943289,
+        "total_net_points": -611.35,
+        "trades": 191,
+        "win_rate": 0.3769633507853403
+      },
+      {
+        "confidence_interval": {
+          "ci95_high": -0.6560572686716584,
+          "ci95_low": -5.383870788882296,
+          "mean": -3.0199640287769776,
+          "n": 278,
+          "std": 20.109286851806356
+        },
+        "expiry_count": 5,
+        "fold": "2026-04",
+        "gross_expectancy_points": -2.0199640287769776,
+        "gross_pct_mean": -0.0065483221720637605,
+        "mae_points_mean": -27.689208633093525,
+        "max_trade_points": 148.4,
+        "mfe_points_mean": 25.784892086330938,
+        "min_trade_points": -36.599999999999966,
+        "net_expectancy_points": -3.0199640287769776,
+        "net_pct_mean": -0.012518996709424102,
+        "session_count": 16,
+        "t_stat": -2.5039606452748417,
+        "total_net_points": -839.5499999999997,
+        "trades": 278,
+        "win_rate": 0.34532374100719426
+      },
+      {
+        "confidence_interval": {
+          "ci95_high": -3.1489245517708415,
+          "ci95_low": -6.497950448229158,
+          "mean": -4.8234375,
+          "n": 352,
+          "std": 16.028901882453958
+        },
+        "expiry_count": 5,
+        "fold": "2026-05",
+        "gross_expectancy_points": -3.8234375,
+        "gross_pct_mean": -0.02612529436563009,
+        "mae_points_mean": -33.49900568181818,
+        "max_trade_points": 42.19999999999999,
+        "mfe_points_mean": 16.42244318181818,
+        "min_trade_points": -70.35,
+        "net_expectancy_points": -4.8234375,
+        "net_pct_mean": -0.03618273206715952,
+        "session_count": 18,
+        "t_stat": -5.645783456017935,
+        "total_net_points": -1697.85,
+        "trades": 352,
+        "win_rate": 0.32670454545454547
+      },
+      {
+        "confidence_interval": {
+          "ci95_high": -2.6414857186715923,
+          "ci95_low": -6.317954840768968,
+          "mean": -4.47972027972028,
+          "n": 286,
+          "std": 15.860901655485755
+        },
+        "expiry_count": 5,
+        "fold": "2026-06",
+        "gross_expectancy_points": -3.4797202797202798,
+        "gross_pct_mean": -0.04665534138030448,
+        "mae_points_mean": -27.634965034965035,
+        "max_trade_points": 47.55000000000007,
+        "mfe_points_mean": 28.200349650349654,
+        "min_trade_points": -52.04999999999998,
+        "net_expectancy_points": -4.47972027972028,
+        "net_pct_mean": -0.06430345127405707,
+        "session_count": 19,
+        "t_stat": -4.776458855850657,
+        "total_net_points": -1281.2,
+        "trades": 286,
+        "win_rate": 0.2867132867132867
+      },
+      {
+        "confidence_interval": {
+          "ci95_high": 3.1256006672158616,
+          "ci95_low": -1.3965408381560336,
+          "mean": 0.8645299145299139,
+          "n": 234,
+          "std": 17.646801871774855
+        },
+        "expiry_count": 3,
+        "fold": "2026-07",
+        "gross_expectancy_points": 1.864529914529914,
+        "gross_pct_mean": 0.0042779916332999325,
+        "mae_points_mean": -19.61260683760684,
+        "max_trade_points": 93.04999999999998,
+        "mfe_points_mean": 21.24017094017094,
+        "min_trade_points": -37.10000000000002,
+        "net_expectancy_points": 0.8645299145299139,
+        "net_pct_mean": -0.007328859517011834,
+        "session_count": 13,
+        "t_stat": 0.7494142456469989,
+        "total_net_points": 202.29999999999984,
+        "trades": 234,
+        "win_rate": 0.45726495726495725
+      }
+    ],
+    "positive_folds": 1
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "folds": [
+      {
+        "confidence_interval": {
+          "ci95_high": 21.205625834286877,
+          "ci95_low": 3.727707499046458,
+          "mean": 12.466666666666669,
+          "n": 9,
+          "std": 13.375957909622771
+        },
+        "expiry_count": 2,
+        "fold": "2026-05",
+        "gross_expectancy_points": 13.466666666666669,
+        "gross_pct_mean": 0.23562668355026042,
+        "mae_points_mean": -7.355555555555558,
+        "max_trade_points": 27.400000000000006,
+        "mfe_points_mean": 44.333333333333336,
+        "min_trade_points": -9.649999999999999,
+        "net_expectancy_points": 12.466666666666669,
+        "net_pct_mean": 0.21363841025310187,
+        "session_count": 4,
+        "t_stat": 2.7960614299701216,
+        "total_net_points": 112.20000000000002,
+        "trades": 9,
+        "win_rate": 0.7777777777777778
+      },
+      {
+        "confidence_interval": {
+          "ci95_high": 17.01778999598199,
+          "ci95_low": 6.0422100040180124,
+          "mean": 11.530000000000001,
+          "n": 5,
+          "std": 6.260750753703584
+        },
+        "expiry_count": 1,
+        "fold": "2026-07",
+        "gross_expectancy_points": 12.530000000000001,
+        "gross_pct_mean": 0.14224405622555913,
+        "mae_points_mean": 0.0,
+        "max_trade_points": 16.75,
+        "mfe_points_mean": 16.03,
+        "min_trade_points": 0.8500000000000014,
+        "net_expectancy_points": 11.530000000000001,
+        "net_pct_mean": 0.12881599711596045,
+        "session_count": 1,
+        "t_stat": 4.118014722966119,
+        "total_net_points": 57.650000000000006,
+        "trades": 5,
+        "win_rate": 1.0
+      }
+    ],
+    "positive_folds": 2
+  }
+}
