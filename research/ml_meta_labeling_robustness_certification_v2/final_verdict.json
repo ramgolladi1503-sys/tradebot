@@ -1,0 +1,11 @@
+{
+  "exact_next_action": "Rerun the ML sprint with persisted candidate dataset, serialized trained model, serialized calibration object, and frozen threshold artifacts before attempting certification.",
+  "final_verdict": "INVALID_ML_META_LABELING_CERTIFICATION_INPUTS",
+  "missing_required_artifacts": [
+    "candidate_dataset",
+    "trained_model",
+    "calibration_object"
+  ],
+  "reason": "Required frozen certification artifacts are absent; retraining or reconstructing a materially equivalent model would violate the task.",
+  "semantic_hash": "1e1cd491c5b3ba365a30f4f25e311da697fd51202342b4bd29f586af07ede5fb"
+}

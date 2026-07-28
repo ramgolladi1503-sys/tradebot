@@ -1,0 +1,16 @@
+{
+  "algotest_called": false,
+  "broker_calls": false,
+  "calibration_object_available": false,
+  "candidate_dataset_available": false,
+  "failure_reason": "Required frozen certification artifacts are absent; retraining or reconstructing a materially equivalent model would violate the task.",
+  "frozen_model_available": false,
+  "holdout_predictions_available": true,
+  "no_holdout_reopened": true,
+  "no_retraining": true,
+  "no_retuning": true,
+  "production_changes": false,
+  "provider_calls": false,
+  "result": "FAIL",
+  "semantic_hash": "6fd555e1cdc6341ce7ee9e8b271a3ee06e1dd955c91c61ef58fa8d15c6422d04"
+}

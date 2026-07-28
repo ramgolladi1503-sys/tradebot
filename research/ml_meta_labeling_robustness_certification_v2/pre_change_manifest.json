@@ -1,0 +1,11 @@
+{
+  "algotest_called": false,
+  "branch": "research/ml-meta-labeling-robustness-certification-v2",
+  "broker_calls": false,
+  "current_commit": "2eead6378ffa6bad1127bd1d815e204ac5af0a77",
+  "production_changes": false,
+  "provider_calls": false,
+  "semantic_hash": "6f2621dd1b1cec0d7cc011ca903c9c891b1c9af368ed100ffa33703712b02c98",
+  "source_commit": "2eead6378ffa6bad1127bd1d815e204ac5af0a77",
+  "worktree": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2"
+}

@@ -1,0 +1,25 @@
+{
+  "files": {
+    "aggregate_vs_concrete_label_comparison.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "artifact_manifest.json": "cf3af279686c43e130c42511a527fe5242f5ad4f4bbac0441d2bf321df26fc46",
+    "certification_input_reconciliation.json": "e4f535462a1ef1429358b36abf0dd29f42786e8920eb865b627730a6e889d09d",
+    "concentration_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "concrete_holdout_economic_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "concrete_strike_coverage_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "concrete_strike_selection_contract.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "determinism_report.json": "a8cdd9c91b5ede12560a2f7e9ec28d5e8e42922c73a2b28f4474f5bb51e7ba09",
+    "equal_count_random_selector_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "expiry_side_setup_time_stability_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "final_verdict.json": "a5bf347f720d0d401fdadca577117895c4cb93c20711fa7c07d3c34decdea4e1",
+    "frozen_artifact_hashes.json": "4b16afcab17b5e2e599cbbed01a31905b118f3c3fa4f264be426cb7a9f10dc6b",
+    "independent_audit.json": "e5ccbc9484a4c2b278e6f454780b7d273c33be61d6673378f74292dce520eb6d",
+    "leave_feature_family_out_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "one_bar_delayed_entry_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "pre_change_manifest.json": "ae08322c6b44b35c7a527bba635ad23891c84c785d12f0c5e19735a055ac51f4",
+    "probability_bin_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "shuffled_label_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "time_of_day_matched_selector_report.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82",
+    "wfa_reconciliation.json": "01c55535d3b192f18cfc5992d8a1409089b2c3970bbecdc690afea9759027a82"
+  },
+  "semantic_hash": "62b2e5e943eb6a78f43771bbf70927edbce3da6111c4db891f9c1ca991921010"
+}
