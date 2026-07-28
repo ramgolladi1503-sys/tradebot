@@ -1,0 +1,80 @@
+{
+  "allowed_for_live_execution": false,
+  "event_source_sha256": "c484f70c1235e819a97ee311554baf863e5fa61173718ff07eceb464149afbfc",
+  "exact_membership_match": false,
+  "extra_in_oracle": 0,
+  "final_thresholds": {
+    "accel_p10": -5.6106492995639305,
+    "asym_p10": -14.863275187296637,
+    "ret_p10": -8.407482109605729,
+    "ret_p80": 3.4688480159588675,
+    "volume_p90": 2.727272727272727
+  },
+  "folds": [
+    {
+      "fold_id": "fold_1",
+      "selected": 5,
+      "testing_sessions": 44,
+      "thresholds": {
+        "accel_p10": -5.993792606989339,
+        "asym_p10": -15.980174564559782,
+        "ret_p10": -9.090909090909093,
+        "ret_p80": 3.729172765568952,
+        "volume_p90": 2.7473394951730885
+      },
+      "training_sessions": 116
+    },
+    {
+      "fold_id": "fold_2",
+      "selected": 15,
+      "testing_sessions": 44,
+      "thresholds": {
+        "accel_p10": -5.918631568697358,
+        "asym_p10": -15.40517564189014,
+        "ret_p10": -9.01800028628686,
+        "ret_p80": 3.644037101928531,
+        "volume_p90": 2.777762438001742
+      },
+      "training_sessions": 160
+    },
+    {
+      "fold_id": "fold_3",
+      "selected": 12,
+      "testing_sessions": 44,
+      "thresholds": {
+        "accel_p10": -5.839416058394166,
+        "asym_p10": -14.974302103552006,
+        "ret_p10": -8.63309352517987,
+        "ret_p80": 3.487437128986153,
+        "volume_p90": 2.8149012231799477
+      },
+      "training_sessions": 204
+    },
+    {
+      "fold_id": "fold_4",
+      "selected": 8,
+      "testing_sessions": 44,
+      "thresholds": {
+        "accel_p10": -5.774347154768177,
+        "asym_p10": -15.043855768768594,
+        "ret_p10": -8.618668966510178,
+        "ret_p80": 3.524332096150453,
+        "volume_p90": 2.7783657318764474
+      },
+      "training_sessions": 248
+    }
+  ],
+  "holdout_sessions": 98,
+  "missing_from_oracle": 0,
+  "oracle_signals": 52,
+  "outcome_bearing_ledger_opened": true,
+  "outcome_columns_requested": false,
+  "outcome_values_used": false,
+  "pnl_columns_requested": false,
+  "principal_verdict": "FAIL_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE",
+  "published_ledger_sha256": "46a94560fb0bb2665848d76922e4e27d94fc6b2e0acead0bd70fa5f02d2a1dc8",
+  "published_primary_signals": 52,
+  "research_only": true,
+  "research_sessions": 292,
+  "semantic_sha256": "579849b16857114a4bd4de54340e85a9f92c3ab943e43cb057a9a99e6df41e44"
+}
