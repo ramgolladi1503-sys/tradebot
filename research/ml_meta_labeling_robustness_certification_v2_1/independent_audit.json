@@ -1,0 +1,11 @@
+{
+  "broker_api_called": false,
+  "failed_gate": "concrete_economics",
+  "frozen_artifacts_verified": true,
+  "no_holdout_retuning": true,
+  "no_retraining_of_frozen_winner": true,
+  "production_files_modified": false,
+  "provider_api_called": false,
+  "semantic_hash": "48f3e985c607ca2211aca570f5d76c0c7d7d170ae71c42aaf7d68fed1ee45dbf",
+  "status": "PASS"
+}

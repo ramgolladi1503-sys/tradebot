@@ -1,0 +1,24 @@
+{
+  "aggregate_economics": {
+    "expectancy": 5.121264087301592,
+    "gross_loss": 2779.0445833333324,
+    "gross_profit": 4315.423809523811,
+    "net_pnl": 1536.3792261904775,
+    "profit_factor": 1.5528443967414385,
+    "trades": 300,
+    "win_rate": 0.44333333333333336
+  },
+  "matched_count": 300,
+  "model_concrete_economics": {
+    "expectancy": -1.097166666666667,
+    "expiries": 16,
+    "gross_loss": 2636.3,
+    "gross_profit": 2307.15,
+    "net_pnl": -329.1500000000001,
+    "profit_factor": 0.875146986306566,
+    "sessions": 38,
+    "trades": 300,
+    "win_rate": 0.38333333333333336
+  },
+  "semantic_hash": "16090ea581196d838bc0fa47c4e1347558a4c624592286f9de396f8582be4c69"
+}
