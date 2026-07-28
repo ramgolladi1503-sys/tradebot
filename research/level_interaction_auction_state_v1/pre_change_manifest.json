@@ -1,0 +1,15 @@
+{
+  "branch": "research/level-interaction-auction-state-v1",
+  "broker_calls": false,
+  "clean_status_at_start": false,
+  "input_hashes": {
+    "joint": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+    "previous_closeout_registry": "c2194fd6db4d6e10fab43bb9f9f5a46ed3e0375e814bf1f218a021df2ff4579a",
+    "v1_motif_hash": "5558d8750241dd2961b46a0b1e51c89e9274695b57b5366ca1491b249310248c",
+    "v2_hierarchy_hash": "52f9be7a0c161b2bdcb4c17c3f88b6c85b8b62b6effa1cf52c6f851a4426df10"
+  },
+  "provider_calls": false,
+  "semantic_hash": "5cef71c8a5cc87143848508cc62d6e85bed880cbc9c4b621b2e956760f034c02",
+  "source_commit": "2e29fa5a1d8619c6ee5ed69f6b1bf42cb6ca586b",
+  "worktree": "/Users/madhuram/tradebot-level-interaction-auction-state-v1"
+}
