@@ -1,0 +1,12 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/frozen-mechanism-event-scarcity-audit-v1",
+  "broker_api_called": false,
+  "current_commit": "cfb66855577e78a2131439f35cd77cdb888b1755",
+  "exact_next_action": "Do not redesign thresholds or rerun profitability tests; first repair or rebuild the joint warehouse so causal underlying state fields are populated and audited.",
+  "final_verdict": "ADDITIONAL_MICROSTRUCTURE_DATA_REQUIRED",
+  "is_order_action": false,
+  "read_only": true,
+  "source_commit": "cfb66855577e78a2131439f35cd77cdb888b1755",
+  "worktree": "/Users/madhuram/tradebot-frozen-event-scarcity-audit-v1"
+}

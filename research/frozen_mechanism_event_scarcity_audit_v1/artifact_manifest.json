@@ -1,0 +1,65 @@
+{
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "bytes": 7941,
+      "path": "condition_compatibility_matrix.json",
+      "sha256": "dbe5fab87c06bc8fc75b98b0ee083fe6077ce28335b0507e02df637b7d212596"
+    },
+    {
+      "bytes": 1230,
+      "path": "determinism_report.json",
+      "sha256": "cdb0134b3ce20e63ea2518c1c46b0b96190d66000110dcf4b071e4f672c55703"
+    },
+    {
+      "bytes": 3003,
+      "path": "development_vs_holdout_support_report.json",
+      "sha256": "f29f94203c62aa33542cb8f5207527e279a70fea817a56f07ff9c6ef3fa90df1"
+    },
+    {
+      "bytes": 490,
+      "path": "eligibility_loss_report.json",
+      "sha256": "5cf72a82f5fe1337b9b4fc72d4a07bd7d59ca24ee2c15d1e453e36a20cbe6572"
+    },
+    {
+      "bytes": 9712,
+      "path": "event_funnel_report.json",
+      "sha256": "072a471ddbf654e83be858b47bd001296531cb638549603c7c8e7ee69a920806"
+    },
+    {
+      "bytes": 636,
+      "path": "final_verdict.json",
+      "sha256": "7fc8ff996d1b13351891e3c859968bdeed8a8bf709cf42b23301775fdbc83ec9"
+    },
+    {
+      "bytes": 328,
+      "path": "independent_audit.json",
+      "sha256": "c40670ad73f49825e04d324cd9be8017be76fa1a8a1081fce10afd15f3d18999"
+    },
+    {
+      "bytes": 377,
+      "path": "independent_detector_results.json",
+      "sha256": "b872fa4e1265608350bfdb0ec1a76a93287f9cb45cce5c72cd5ea3e0ed106e21"
+    },
+    {
+      "bytes": 338,
+      "path": "per_mechanism_feasibility_classification.json",
+      "sha256": "579a1c45071890e6ecfe3708657eb50612c34afd597302a31e030492836e3a8d"
+    },
+    {
+      "bytes": 988,
+      "path": "pre_change_manifest.json",
+      "sha256": "ebe6715b875b115b07d0e239b2531048bb477e9b5e3e14348a3fd4997bfb56cf"
+    },
+    {
+      "bytes": 92,
+      "path": "prior_artifact_verification.json",
+      "sha256": "141bf11d7fed5c5e2ecb0a7f21350205013a84b22558074a24618477d4794469"
+    },
+    {
+      "bytes": 51,
+      "path": "redesigned_contract_proposals.json",
+      "sha256": "899aefe25250e9524374199f91edc678eac44d4dca77e655ddd360864687690b"
+    }
+  ]
+}
