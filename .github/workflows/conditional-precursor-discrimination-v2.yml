@@ -69,7 +69,7 @@ jobs:
 
       - name: Run frozen option-surface economic discovery
         run: |
-          python scripts/run_option_surface_transition_discovery_v1.py --repo-root "$GITHUB_WORKSPACE"
+          python -m scripts.run_option_surface_transition_discovery_v1 --repo-root "$GITHUB_WORKSPACE"
 
       - name: Preserve deterministic research diagnostics on branch
         if: always() && github.event_name == 'push'
