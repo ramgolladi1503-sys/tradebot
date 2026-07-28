@@ -1,0 +1,20 @@
+{
+  "allowed_for_live_execution": false,
+  "base_merge_commit": "fce3e365dc4f4a1a20b4dae4ebb9dbbfab1e40ed",
+  "campaign": "conditional_precursor_discrimination_v2",
+  "holdout_policy": "session_level_chronological_untouched_until_candidate_freeze",
+  "max_conditional_mechanisms": 12,
+  "max_holdout_candidates": 4,
+  "primary_comparison": "successful_precursor_occurrence_vs_same_precursor_near_miss",
+  "primary_family": "compression_to_expansion_sequence",
+  "research_only": true,
+  "verdicts": [
+    "INVALID_CONSOLIDATED_EVIDENCE",
+    "PRIOR_CAMPAIGN_NOT_REPRODUCIBLE",
+    "INSUFFICIENT_SUCCESS_NEAR_MISS_SAMPLE",
+    "NO_CONDITIONAL_DISCRIMINATOR_IN_TESTED_CONTEXTS",
+    "CONDITIONAL_PRECURSOR_FAILED_HOLDOUT",
+    "PROMISING_CONDITIONAL_PRECURSOR_EXECUTION_UNCERTIFIED",
+    "EXECUTION_CERTIFICATION_BLOCKED_AUTHORITATIVE_SPREAD_MISSING"
+  ]
+}
