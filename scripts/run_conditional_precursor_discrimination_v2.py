@@ -51,6 +51,7 @@ EXPECTED_SUMMARY = {
     "principal_verdict": "NO_DISCRIMINATIVE_PRECURSOR_IN_TESTED_FAMILIES",
 }
 
+
 @dataclass(frozen=True)
 class FileAudit:
     path: str
@@ -96,9 +97,21 @@ def audit_file(root: Path, path: Path, manifest: dict[str, dict[str, Any]]) -> F
     rel_to_corpus = path.relative_to(root / CORPUS_REL).as_posix()
     item = manifest.get(rel_to_corpus)
     if not path.exists():
-        return FileAudit(str(path), False, None, None, item.get("sha256") if item else None,
-                         item.get("bytes") if item else None, None, None, None, False, None, None,
-                         "missing")
+        return FileAudit(
+            str(path),
+            False,
+            None,
+            None,
+            item.get("sha256") if item else None,
+            item.get("bytes") if item else None,
+            None,
+            None,
+            None,
+            False,
+            None,
+            None,
+            "missing",
+        )
     size = path.stat().st_size
     pointer = is_lfs_pointer(path)
     digest = sha256(path)
@@ -123,18 +136,42 @@ def audit_file(root: Path, path: Path, manifest: dict[str, dict[str, Any]]) -> F
         readable = False
         error = f"{type(exc).__name__}: {exc}"
     return FileAudit(
-        str(path), True, size, digest,
+        str(path),
+        True,
+        size,
+        digest,
         item.get("sha256") if item else None,
         item.get("bytes") if item else None,
         digest == item.get("sha256") if item else None,
         size == item.get("bytes") if item else None,
-        pointer, readable, rows, columns, error,
+        pointer,
+        readable,
+        rows,
+        columns,
+        error,
     )
 
 
 def stable_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+
+
+def clustered_event_scope(event: pd.DataFrame, cluster_col: str | None) -> pd.DataFrame:
+    """Return the observation rows belonging to published independent move clusters.
+
+    The event universe contains five source sessions with ordinary observations but no
+    independent expansion cluster. Published `event_sessions=385` therefore refers to
+    sessions represented by a non-null cluster identifier, not all 390 source sessions.
+    """
+    if cluster_col is None:
+        if "is_expansion_event" in event.columns:
+            return event.loc[event["is_expansion_event"].fillna(False).astype(bool)]
+        return event.iloc[0:0]
+    return event.loc[event[cluster_col].notna()]
 
 
 def reproduce(prior: Path) -> dict[str, Any]:
@@ -144,45 +181,104 @@ def reproduce(prior: Path) -> dict[str, Any]:
     matched = pd.read_parquet(prior / "matched_controls.parquet")
     near = pd.read_parquet(prior / "near_miss_controls.parquet")
 
-    summary_checks = {key: {"expected": expected, "actual": summary.get(key), "match": summary.get(key) == expected}
-                      for key, expected in EXPECTED_SUMMARY.items()}
+    summary_checks = {
+        key: {
+            "expected": expected,
+            "actual": summary.get(key),
+            "match": summary.get(key) == expected,
+        }
+        for key, expected in EXPECTED_SUMMARY.items()
+    }
     family_count = int(discrimination["family"].nunique())
     definition_count = int(discrimination["tested_definitions"].sum())
 
     checks = {
         "summary": summary_checks,
-        "family_count": {"expected": 10, "actual": family_count, "match": family_count == 10},
-        "definition_count": {"expected": 10, "actual": definition_count, "match": definition_count == 10},
-        "matched_control_rows": {"published": 178521, "actual": len(matched), "match": len(matched) == 178521},
-        "near_miss_rows": {"published": 100983, "actual": len(near), "match": len(near) == 100983},
+        "family_count": {
+            "expected": 10,
+            "actual": family_count,
+            "match": family_count == 10,
+        },
+        "definition_count": {
+            "expected": 10,
+            "actual": definition_count,
+            "match": definition_count == 10,
+        },
+        "matched_control_rows": {
+            "published": 178521,
+            "actual": len(matched),
+            "match": len(matched) == 178521,
+        },
+        "near_miss_rows": {
+            "published": 100983,
+            "actual": len(near),
+            "match": len(near) == 100983,
+        },
     }
 
-    # The event parquet may contain observation-level rows rather than one row per cluster.
-    # Reproduce counts only from explicit identifiers when present; otherwise report schema-limited.
+    # The event parquet contains observation-level rows. Published cluster/session
+    # counts are defined over non-null independent move clusters, not every source row.
     event_columns = set(map(str, event.columns))
-    cluster_col = next((c for c in ["event_cluster_id", "cluster_id", "move_cluster_id"] if c in event_columns), None)
-    session_col = next((c for c in ["session", "session_date", "trade_date", "date"] if c in event_columns), None)
+    cluster_col = next(
+        (c for c in ["event_cluster_id", "cluster_id", "move_cluster_id"] if c in event_columns),
+        None,
+    )
+    session_col = next(
+        (c for c in ["session", "session_date", "trade_date", "date"] if c in event_columns),
+        None,
+    )
+    clustered = clustered_event_scope(event, cluster_col)
     if cluster_col:
-        actual_clusters = int(event[cluster_col].nunique(dropna=True))
-        checks["event_clusters_from_parquet"] = {"expected": 11261, "actual": actual_clusters, "match": actual_clusters == 11261}
+        actual_clusters = int(clustered[cluster_col].nunique(dropna=True))
+        checks["event_clusters_from_parquet"] = {
+            "expected": 11261,
+            "actual": actual_clusters,
+            "match": actual_clusters == 11261,
+            "scope": "non_null_independent_move_clusters",
+        }
     else:
-        checks["event_clusters_from_parquet"] = {"expected": 11261, "actual": None, "match": None, "reason": "cluster identifier absent"}
+        checks["event_clusters_from_parquet"] = {
+            "expected": 11261,
+            "actual": None,
+            "match": None,
+            "reason": "cluster identifier absent",
+        }
     if session_col:
-        actual_sessions = int(event[session_col].nunique(dropna=True))
-        checks["event_sessions_from_parquet"] = {"expected": 385, "actual": actual_sessions, "match": actual_sessions == 385}
+        actual_sessions = int(clustered[session_col].nunique(dropna=True))
+        checks["event_sessions_from_parquet"] = {
+            "expected": 385,
+            "actual": actual_sessions,
+            "match": actual_sessions == 385,
+            "scope": "sessions_with_non_null_independent_move_cluster",
+            "all_source_sessions": int(event[session_col].nunique(dropna=True)),
+        }
     else:
-        checks["event_sessions_from_parquet"] = {"expected": 385, "actual": None, "match": None, "reason": "session identifier absent"}
+        checks["event_sessions_from_parquet"] = {
+            "expected": 385,
+            "actual": None,
+            "match": None,
+            "reason": "session identifier absent",
+        }
 
     hard_results: list[bool] = []
     for value in summary_checks.values():
         hard_results.append(bool(value["match"]))
-    hard_results += [family_count == 10, definition_count == 10, len(matched) == 178521, len(near) == 100983]
+    hard_results += [
+        family_count == 10,
+        definition_count == 10,
+        len(matched) == 178521,
+        len(near) == 100983,
+    ]
     for key in ["event_clusters_from_parquet", "event_sessions_from_parquet"]:
         if checks[key]["match"] is not None:
             hard_results.append(bool(checks[key]["match"]))
 
     return {
-        "verdict": "PRIOR_CAMPAIGN_REPRODUCED" if all(hard_results) else "PRIOR_CAMPAIGN_NOT_REPRODUCIBLE",
+        "verdict": (
+            "PRIOR_CAMPAIGN_REPRODUCED"
+            if all(hard_results)
+            else "PRIOR_CAMPAIGN_NOT_REPRODUCIBLE"
+        ),
         "checks": checks,
         "schemas": {
             "event_universe": list(map(str, event.columns)),
@@ -214,33 +310,60 @@ def main() -> int:
     manifest = load_manifest(root)
     audits = [audit_file(root, prior / name, manifest) for name in REQUIRED]
     audit_payload = {"files": [asdict(a) for a in audits]}
-    invalid = [a for a in audits if (not a.exists or a.lfs_pointer or not a.readable or a.hash_match is False or a.size_match is False)]
-    audit_payload["verdict"] = "INVALID_CONSOLIDATED_EVIDENCE" if invalid else "CONSOLIDATED_EVIDENCE_VALID"
+    invalid = [
+        a
+        for a in audits
+        if (
+            not a.exists
+            or a.lfs_pointer
+            or not a.readable
+            or a.hash_match is False
+            or a.size_match is False
+        )
+    ]
+    audit_payload["verdict"] = (
+        "INVALID_CONSOLIDATED_EVIDENCE" if invalid else "CONSOLIDATED_EVIDENCE_VALID"
+    )
     stable_json(out / "source_inventory.json", audit_payload)
 
     if invalid:
-        stable_json(out / "final_decision.json", {
-            "principal_verdict": "INVALID_CONSOLIDATED_EVIDENCE",
-            "invalid_files": [asdict(a) for a in invalid],
-        })
+        stable_json(
+            out / "final_decision.json",
+            {
+                "principal_verdict": "INVALID_CONSOLIDATED_EVIDENCE",
+                "invalid_files": [asdict(a) for a in invalid],
+            },
+        )
         return 2
 
     result = reproduce(prior)
     stable_json(out / "prior_campaign_reproduction.json", result)
-    md = ["# Prior Campaign Reproduction", "", f"Verdict: `{result['verdict']}`", "", "## Counts"]
+    md = [
+        "# Prior Campaign Reproduction",
+        "",
+        f"Verdict: `{result['verdict']}`",
+        "",
+        "## Counts",
+    ]
     for key, value in result["rows"].items():
         md.append(f"- {key}: `{value}`")
     md.extend(["", "## Checks"])
     for key, value in result["checks"].items():
         md.append(f"- {key}: `{json.dumps(value, sort_keys=True)}`")
-    (research / "prior_campaign_reproduction.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    (research / "prior_campaign_reproduction.md").write_text(
+        "\n".join(md) + "\n",
+        encoding="utf-8",
+    )
 
-    stable_json(out / "final_decision.json", {
-        "principal_verdict": result["verdict"],
-        "next_stage_allowed": result["verdict"] == "PRIOR_CAMPAIGN_REPRODUCED",
-        "research_only": True,
-        "allowed_for_live_execution": False,
-    })
+    stable_json(
+        out / "final_decision.json",
+        {
+            "principal_verdict": result["verdict"],
+            "next_stage_allowed": result["verdict"] == "PRIOR_CAMPAIGN_REPRODUCED",
+            "research_only": True,
+            "allowed_for_live_execution": False,
+        },
+    )
     return 0 if result["verdict"] == "PRIOR_CAMPAIGN_REPRODUCED" else 3
 
 
