@@ -1,0 +1,9 @@
+{
+  "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+  "inventoried_roots": [
+    "/Users/madhuram/tradebot/runtime",
+    "/Users/madhuram/tradebot/.runtime",
+    "/Users/madhuram/tradebot-ml-evidence"
+  ],
+  "rejected_mock_sources": true
+}

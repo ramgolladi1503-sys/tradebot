@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "audit_passed": true,
+    "contracts_have_survival_gates": true,
+    "exactly_two_contracts": true,
+    "holdout_for_each_mechanism": true,
+    "no_broker_calls": true,
+    "no_live_enablement": true,
+    "no_production_modifications": true,
+    "no_survivor_without_translation": true
+  },
+  "production_touched": [],
+  "status": "PASS"
+}

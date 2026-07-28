@@ -1,0 +1,14 @@
+{
+  "atm_only_eligible_sessions": 382,
+  "ce_pe_paired_sessions": 378,
+  "development_sessions": 267,
+  "holdout_expiries": 25,
+  "holdout_sessions": 115,
+  "multi_strike_eligible_sessions": 376,
+  "reduced_universe_supports_campaign": true,
+  "semantic_hash": "866263f368e17bad652485d07d2f3b12649f0e70afe43523a237c638704367d1",
+  "sparse_bar_exclusions": 0,
+  "synchronized_expiries": 82,
+  "synchronized_sessions": 382,
+  "synchronized_timestamps": 28587
+}

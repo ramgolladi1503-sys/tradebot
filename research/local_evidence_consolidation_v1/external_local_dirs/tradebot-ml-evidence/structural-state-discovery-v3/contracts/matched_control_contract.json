@@ -1,0 +1,5 @@
+{
+  "matching": "same source/symbol/decision/fold/buckets/direction plus nearest causal distance",
+  "quality_threshold": 0.8,
+  "replacement": "allowed"
+}

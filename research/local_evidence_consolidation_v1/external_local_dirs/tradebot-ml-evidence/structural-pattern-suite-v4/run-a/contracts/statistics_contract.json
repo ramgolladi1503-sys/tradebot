@@ -1,0 +1,5 @@
+{
+  "bootstrap": "session-block",
+  "primary_unit": "source/session/strategy",
+  "row_metrics": "diagnostic_only"
+}

@@ -1,0 +1,37 @@
+{
+  "bars_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+  "bars_sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+  "classification_counts": {
+    "REGULAR_SESSION_COMPLETE": 409,
+    "SPECIAL_SESSION_OUT_OF_FROZEN_CONTRACT": 5
+  },
+  "completed_regular_sessions": 409,
+  "decision_times": [
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "12:30",
+    "13:00",
+    "13:30",
+    "14:00",
+    "14:15"
+  ],
+  "missing_policy_sessions": [],
+  "nifty_sessions_present": 414,
+  "regular_partial_sessions": [],
+  "session_contract": "explicit_regular_special_calendar_v1",
+  "session_policy_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3/pre_fetch/session_policy.json",
+  "session_policy_sha256": "c53a016f5da7791944241efafbe64d945ace83c80297996948f1062aeef59765",
+  "session_policy_source": "Codex explicit frozen NSE session policy for PR709 v3 certification; derived from preserved NIFTY sessions and special-session exclusion rule, not from outcomes",
+  "session_policy_version": "pr709_proxy_campaign_2024_2025_v3_session_policy_v1",
+  "special_sessions_excluded": [
+    "2024-01-20",
+    "2024-03-02",
+    "2024-05-18",
+    "2024-11-01",
+    "2025-02-01"
+  ],
+  "theoretical_max_state_rows": 4090
+}

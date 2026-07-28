@@ -1,0 +1,54 @@
+[
+  {
+    "date": "2024-12-12",
+    "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2024-12-12/2024-12-12",
+    "first_timestamp": "2024-12-12T09:15:00",
+    "http_status": 200,
+    "last_timestamp": "2024-12-12T15:29:00",
+    "parsing_status": "PARSED",
+    "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2024-12-12.json",
+    "response_row_count": 374,
+    "response_sha256": "152feeee4c40ce1bb56aa70b40528472adbf7687bbb7b24c7b40e82361dbbff9",
+    "retry_count": 0,
+    "reused_existing_raw_response": true
+  },
+  {
+    "date": "2025-03-25",
+    "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-03-25/2025-03-25",
+    "first_timestamp": "2025-03-25T09:15:00",
+    "http_status": 200,
+    "last_timestamp": "2025-03-25T15:29:00",
+    "parsing_status": "PARSED",
+    "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-03-25.json",
+    "response_row_count": 374,
+    "response_sha256": "90d7e44cf75a6ac77942993cd06246c2cb8ec2a351989d8294ef78f94bd887aa",
+    "retry_count": 0,
+    "reused_existing_raw_response": true
+  },
+  {
+    "date": "2025-04-04",
+    "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-04-04/2025-04-04",
+    "first_timestamp": "2025-04-04T09:15:00",
+    "http_status": 200,
+    "last_timestamp": "2025-04-04T15:29:00",
+    "parsing_status": "PARSED",
+    "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-04-04.json",
+    "response_row_count": 374,
+    "response_sha256": "f8e0ac54f0837da759cefbc28d14781a4702d3ad93ffc2b72a65e85a659d23cb",
+    "retry_count": 0,
+    "reused_existing_raw_response": true
+  },
+  {
+    "date": "2025-04-23",
+    "endpoint": "/v3/historical-candle/NSE_INDEX%7CNifty%2050/minutes/1/2025-04-23/2025-04-23",
+    "first_timestamp": "2025-04-23T09:15:00",
+    "http_status": 200,
+    "last_timestamp": "2025-04-23T15:29:00",
+    "parsing_status": "PARSED",
+    "raw_response_path": "/Users/madhuram/tradebot-refetch-four-nifty-sessions-final-certification-v1/research/refetch_four_nifty_sessions_final_certification_v1/raw_responses/upstox_nifty_1minute_2025-04-23.json",
+    "response_row_count": 374,
+    "response_sha256": "dff7ee08e91859f847412d2da7f94dae7ef3b222d6b403abb7cdf34c5775ec90",
+    "retry_count": 0,
+    "reused_existing_raw_response": true
+  }
+]

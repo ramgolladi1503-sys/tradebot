@@ -1,0 +1,22 @@
+[
+  {
+    "decision": "Approved Level-1 temporal ORB retest contract absent; ORB duration and retest confirmation details require human approval if not already accepted elsewhere.",
+    "repair_authority": "DESIGN_DECISION_REQUIRED",
+    "strategy": "opening_range_retest_v1"
+  },
+  {
+    "decision": "Trend-establishment equation, minimum duration, impulse magnitude, support/resistance owner, and continuation trigger are not defined by available Level-1 artifacts; named provenance files are absent.",
+    "repair_authority": "DESIGN_DECISION_REQUIRED",
+    "strategy": "trend_pullback_v1"
+  },
+  {
+    "decision": "No approved spec defines compression range owner as session-prefix, rolling local range, ORB range, or nearest level. ATR short/long periods vary by owner unless the ORB research proxy 5/30 convention is explicitly selected.",
+    "repair_authority": "DESIGN_DECISION_REQUIRED",
+    "strategy": "compression_breakout_v1"
+  },
+  {
+    "decision": "Intended VWAP owner and whether metadata flags are authoritative are unresolved because test support/provenance files are absent. Rejection sequence semantics require design approval.",
+    "repair_authority": "DESIGN_DECISION_REQUIRED",
+    "strategy": "vwap_reclaim_rejection_v1"
+  }
+]

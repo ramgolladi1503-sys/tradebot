@@ -1,0 +1,416 @@
+{
+  "feature_row_count": 4900,
+  "features": [
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_range_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_true_range_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_close_location",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_directional_efficiency",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "previous_inside_outside_state",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "rolling_5_session_realized_volatility",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "rolling_20_session_realized_volatility",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "rolling_volatility_percentile",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "gap_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "absolute_gap_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "gap_over_previous_range",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "gap_direction",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "open_to_cutoff_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "absolute_open_to_cutoff_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "range_over_previous_range",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "directional_efficiency",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "close_location",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "distance_from_high_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "distance_from_low_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "bar_overlap_ratio",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "mean_body_to_range",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "latest_body_to_range",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "direction_change_count",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "up_bar_fraction",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "range_expansion_slope",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "recent_15m_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "recent_30m_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "peer_return_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "return_spread_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "absolute_return_spread_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "direction_agreement",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "leader_identity",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "leader_margin_bps",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "relative_range_expansion",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "rolling_completed_bar_correlation",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "relative_acceleration",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "broad_volatility_bucket",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "gap_bucket",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "prior_range_bucket",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "opening_range_bucket",
+      "normalization": "training-only inside folds where used"
+    },
+    {
+      "categorical_encoding": "direct state for categoricals",
+      "formula": "see runner implementation",
+      "inputs": "completed bars only",
+      "latest_permitted_timestamp": "decision cutoff interval_end",
+      "missing_value_rule": "row omitted when legal entry/horizon unavailable",
+      "name": "causal_direction",
+      "normalization": "training-only inside folds where used"
+    }
+  ],
+  "metadata_column_count": 8,
+  "outcome_column_count": 28,
+  "outcomes": [
+    "raw_15m_return_bps",
+    "raw_30m_return_bps",
+    "raw_60m_return_bps",
+    "raw_close_return_bps",
+    "continuation_15m_return_bps",
+    "continuation_30m_return_bps",
+    "continuation_60m_return_bps",
+    "continuation_close_return_bps",
+    "reversal_15m_return_bps",
+    "reversal_30m_return_bps",
+    "reversal_60m_return_bps",
+    "reversal_close_return_bps",
+    "absolute_15m_move_bps",
+    "absolute_30m_move_bps",
+    "absolute_60m_move_bps",
+    "30m_MFE_long_bps",
+    "30m_MAE_long_bps",
+    "30m_MFE_short_bps",
+    "30m_MAE_short_bps",
+    "target_10_stop_10_label",
+    "target_10_stop_15_label",
+    "target_10_stop_20_label",
+    "target_15_stop_10_label",
+    "target_15_stop_15_label",
+    "target_15_stop_20_label",
+    "target_20_stop_10_label",
+    "target_20_stop_15_label",
+    "target_20_stop_20_label"
+  ],
+  "predictor_feature_count": 42
+}

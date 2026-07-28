@@ -1,0 +1,22 @@
+{
+  "files": {
+    "artifact_manifest.json": "0d13d8086a0876bd7c942e7b6daab37ff4be34daa2434b61729ee2d0567cb1f2",
+    "controls.json": "10563590e71f58124034db5019ebc09762a87f8f576c815c5bc6c47a246de27c",
+    "determinism_report.json": "35f44487dcf90ae041fcaa202c939bba8b8b5cf1b85d5c1372a7869fa138197e",
+    "expansion_label_contract.json": "17a48dab8b94a03b0f30911c2ff1b693c06e06db80e1cde87204cea2ee781b80",
+    "feature_ranking.csv": "57e0e936a20e61c8d47969d27f6c56fb88fc9490283304d9fe837a1ad603bc7a",
+    "final_verdict.json": "26533bac84948683cf82be0c522c81a6ebea68838a6741b7553ed6ea184ef0f9",
+    "frozen_hypotheses.json": "3dccf07d8de51ad51a3bc94b34be476ca4ed82bd2b455ac290234175ec62f704",
+    "holdout_report.json": "e5730eeb20beb4736d347e2be1e264821e85c37924afe765d589107bbab2baa8",
+    "holdout_trade_rows.csv": "d91d8e33fcd2a5b0bc4ace999b5fc247ade3d45d87dc03f4d4581fabadaf7021",
+    "hypothesis_ranking.json": "878536156d9aaab1a1159ea9f6845497a2bcfab91f39ae59b0e53a359d1590f8",
+    "independent_audit.json": "d629dfc2dcdca9945e025a4e4d5c977661ff8e834c628d02efcbc8c74c7e2e1b",
+    "information_capability_report.json": "b2dafb192010f4a0dc72dc2dcf8f0332a60a761401bae2b33ceda354ecad7e14",
+    "input_inventory.json": "1094954aca71fb6cf6010099aae715c50785d229c9fe192bf15fce4e3d8ec629",
+    "pre_change_manifest.json": "8a16db1f23d09c293ebb61b3c885bc9dc53d1d01ad4b905eb2d4ba4ef12d4cbc",
+    "robustness.json": "f1765e55153fd3833c76d7acc096acb39442936544c4830e78fc9f3306806cc2",
+    "survivor_report.json": "88183db3db96bff0d1d191585c6d967b1a290d586a26c34e1ae2de142863a1a8",
+    "wfa_report.json": "ec7aa142802c4be6225085ac92436971da391a25ff7e36b4f8a78e5c4ea91afa"
+  },
+  "semantic_hash": "612b441e61570b9fef9f6c37555a8480306c34931ec5a7d3d169ae7887709b21"
+}

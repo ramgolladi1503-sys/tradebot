@@ -1,0 +1,10 @@
+{
+  "accepted_candidate_count": 7587,
+  "candidate_count": 66521,
+  "conclusion": "SIGNAL_SOURCE_RESOLVED",
+  "output_dir": "/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/vwap_source_search/20260724-114907",
+  "reason_codes": [],
+  "semantic_sha256": "2f919953ff19381543cc793390eaaa37f67b344d6a37de1eaeef8932e1cf9ef2",
+  "truncated": false,
+  "unresolved_candidate_count": 28
+}

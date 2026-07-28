@@ -1,0 +1,93 @@
+{
+  "hypotheses": {
+    "IRSEV1_H1": {
+      "all_holdout_baseline": {
+        "expiries": 25,
+        "gross_expectancy": -0.2178150432722753,
+        "max_drawdown": -103800.16000000169,
+        "max_expiry_share": 0.04723596875952811,
+        "max_month_share": 0.1936111827755236,
+        "net_expectancy": -1.2178150432722754,
+        "profit_factor": 0.8407495752676302,
+        "sessions": 115,
+        "trades": 85274,
+        "win_rate": 0.3509275980955508
+      },
+      "matched_time_ordinary": {
+        "expiries": 25,
+        "gross_expectancy": -0.006218848829854403,
+        "max_drawdown": -16207.829999999953,
+        "max_expiry_share": 0.04775458570524984,
+        "max_month_share": 0.18311195445920303,
+        "net_expectancy": -1.0062188488298545,
+        "profit_factor": 0.8352771167572653,
+        "sessions": 115,
+        "trades": 15810,
+        "win_rate": 0.27280202403542064
+      },
+      "same_rule_prior_row_shift": {
+        "net_expectancy": -1.5666448478033894
+      }
+    },
+    "IRSEV1_H2": {
+      "all_holdout_baseline": {
+        "expiries": 25,
+        "gross_expectancy": -0.2178150432722753,
+        "max_drawdown": -103800.16000000169,
+        "max_expiry_share": 0.04723596875952811,
+        "max_month_share": 0.1936111827755236,
+        "net_expectancy": -1.2178150432722754,
+        "profit_factor": 0.8407495752676302,
+        "sessions": 115,
+        "trades": 85274,
+        "win_rate": 0.3509275980955508
+      },
+      "matched_time_ordinary": {
+        "expiries": 25,
+        "gross_expectancy": -0.006218848829854403,
+        "max_drawdown": -16207.829999999953,
+        "max_expiry_share": 0.04775458570524984,
+        "max_month_share": 0.18311195445920303,
+        "net_expectancy": -1.0062188488298545,
+        "profit_factor": 0.8352771167572653,
+        "sessions": 115,
+        "trades": 15810,
+        "win_rate": 0.27280202403542064
+      },
+      "same_rule_prior_row_shift": {
+        "net_expectancy": -1.7270421716752447
+      }
+    },
+    "IRSEV1_H3": {
+      "all_holdout_baseline": {
+        "expiries": 25,
+        "gross_expectancy": -0.2178150432722753,
+        "max_drawdown": -103800.16000000169,
+        "max_expiry_share": 0.04723596875952811,
+        "max_month_share": 0.1936111827755236,
+        "net_expectancy": -1.2178150432722754,
+        "profit_factor": 0.8407495752676302,
+        "sessions": 115,
+        "trades": 85274,
+        "win_rate": 0.3509275980955508
+      },
+      "matched_time_ordinary": {
+        "expiries": 25,
+        "gross_expectancy": -0.006218848829854403,
+        "max_drawdown": -16207.829999999953,
+        "max_expiry_share": 0.04775458570524984,
+        "max_month_share": 0.18311195445920303,
+        "net_expectancy": -1.0062188488298545,
+        "profit_factor": 0.8352771167572653,
+        "sessions": 115,
+        "trades": 15810,
+        "win_rate": 0.27280202403542064
+      },
+      "same_rule_prior_row_shift": {
+        "net_expectancy": -0.47704616950407114
+      }
+    }
+  },
+  "semantic_hash": "e6925a8bc6838a818d6c9c047c597a7dcd697aa7a9c9c96f7e5aff263d664404",
+  "status": "RUN"
+}

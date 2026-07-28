@@ -1,0 +1,8 @@
+{
+  "exact_next_action": "Obtain an official Upstox expired-derivatives instrument archive or explicitly authorize another official provider that exposes expired NIFTY futures identifiers.",
+  "final_verdict": "OFFICIAL_EXPIRED_IDENTIFIERS_UNAVAILABLE",
+  "pnl_or_backtest_allowed": false,
+  "reason": "Official Upstox current instrument master exposes no expired NIFTY futures identifiers, and local evidence contains no trusted official expired futures snapshot. Symbol-only targets were rejected.",
+  "semantic_hash": "be41ef0d3ae94823da471a6257f1cfd0b41069d0b2ec9f40c642c1fff58abf32",
+  "strategy_discovery_allowed": false
+}

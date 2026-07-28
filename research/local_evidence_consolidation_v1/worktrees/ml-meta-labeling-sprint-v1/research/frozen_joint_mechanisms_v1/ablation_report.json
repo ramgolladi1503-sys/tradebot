@@ -1,0 +1,190 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "joint": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    },
+    "option_only": {
+      "confidence_interval": {
+        "ci95_high": 0.9249691257782804,
+        "ci95_low": -1.030567285287482,
+        "mean": -0.05279907975460083,
+        "n": 2608,
+        "std": 25.4761403750786
+      },
+      "expiry_count": 21,
+      "gross_expectancy_points": 0.9472009202453991,
+      "gross_pct_mean": 0.005504337059729275,
+      "mae_points_mean": -38.81200153374233,
+      "max_trade_points": 95.54999999999995,
+      "mfe_points_mean": 44.712453987730065,
+      "min_trade_points": -162.75,
+      "net_expectancy_points": -0.05279907975460083,
+      "net_pct_mean": -0.001415607022871715,
+      "session_count": 89,
+      "t_stat": -0.10583919147035253,
+      "total_net_points": -137.69999999999897,
+      "trades": 2608,
+      "win_rate": 0.46050613496932513
+    },
+    "sequence_order_ablation": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    },
+    "underlying_only": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    }
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "joint": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    },
+    "option_only": {
+      "confidence_interval": {
+        "ci95_high": 10.940357326571938,
+        "ci95_low": -6.668928755143366,
+        "mean": 2.1357142857142857,
+        "n": 14,
+        "std": 16.808141669251434
+      },
+      "expiry_count": 4,
+      "gross_expectancy_points": 3.1357142857142857,
+      "gross_pct_mean": -0.18346229801146247,
+      "mae_points_mean": -9.475,
+      "max_trade_points": 27.400000000000006,
+      "mfe_points_mean": 34.38571428571428,
+      "min_trade_points": -21.65,
+      "net_expectancy_points": 2.1357142857142857,
+      "net_pct_mean": -0.24127823458016748,
+      "session_count": 5,
+      "t_stat": 0.4754309721103976,
+      "total_net_points": 29.9,
+      "trades": 14,
+      "win_rate": 0.42857142857142855
+    },
+    "sequence_order_ablation": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    },
+    "underlying_only": {
+      "confidence_interval": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "mean": 0.0,
+        "n": 0,
+        "std": 0.0
+      },
+      "expiry_count": 0,
+      "gross_expectancy_points": 0.0,
+      "gross_pct_mean": 0.0,
+      "mae_points_mean": 0.0,
+      "max_trade_points": 0.0,
+      "mfe_points_mean": 0.0,
+      "min_trade_points": 0.0,
+      "net_expectancy_points": 0.0,
+      "net_pct_mean": 0.0,
+      "session_count": 0,
+      "t_stat": 0.0,
+      "total_net_points": 0.0,
+      "trades": 0,
+      "win_rate": 0.0
+    }
+  }
+}

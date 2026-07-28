@@ -1,0 +1,105 @@
+{
+  "artifact_count": 20,
+  "artifacts": [
+    {
+      "bytes": 9290,
+      "path": "ablations.json",
+      "sha256": "f63623778e16250d9ac92793625bcee6a9ad4718381b5ae60b0fb7a7257b6d6c"
+    },
+    {
+      "bytes": 46,
+      "path": "algotest_specifications.json",
+      "sha256": "7dff1e578e616af4ee8ae4f797a74a36133f6a3dba9cc5ef3420dda2359e18fa"
+    },
+    {
+      "bytes": 463,
+      "path": "concentration_report.json",
+      "sha256": "3fb37a780969b35925652530f15cc47fffab3963965d9db1244af53cfc6a774a"
+    },
+    {
+      "bytes": 2413,
+      "path": "controls.json",
+      "sha256": "d8063e1d545872e702b6407e6211372cf28ce2ca9a7758fca928f69ae3979028"
+    },
+    {
+      "bytes": 750,
+      "path": "data_capability_matrix.json",
+      "sha256": "a61fcc9866425e7d9e2335e913f7c885b97d91fc2f19251043b5960d1a67d274"
+    },
+    {
+      "bytes": 1881,
+      "path": "determinism_report.json",
+      "sha256": "652ba74969bd03b86879104ee7c8ceb65b2ef157909801d1548c4abb68b3d806"
+    },
+    {
+      "bytes": 10334,
+      "path": "development_event_feasibility_report.json",
+      "sha256": "77aff13e622057d639d6e42282c36d8bb2af4ffc4c3c239b2030488f4e024ad9"
+    },
+    {
+      "bytes": 290,
+      "path": "final_verdict.json",
+      "sha256": "ac62f0a361161f49bad3d6c783eec00fd7839fa1bb1a48b18907577277a63f5f"
+    },
+    {
+      "bytes": 667,
+      "path": "frequency_gate_report.json",
+      "sha256": "ffa6ad2453e821673f2fdd29504768ced1ca457836adb191f0aff6567dac4985"
+    },
+    {
+      "bytes": 5708,
+      "path": "frozen_candidate_contracts.json",
+      "sha256": "8f0a3be1745c49ba0ed3ececddc7e45e3cd0b32ac02b93b64c0e8d39ad678549"
+    },
+    {
+      "bytes": 2183,
+      "path": "holdout_report.json",
+      "sha256": "f1e78639d72bccbcd3d128b62f55c9825030db7d057a5f49e71466b8ab9c12f7"
+    },
+    {
+      "bytes": 8311,
+      "path": "hypothesis_catalogue.json",
+      "sha256": "82e1ffc7dfffffa51c1824873c76b1442dc8f59bfb3019f0bbf058af6676aef5"
+    },
+    {
+      "bytes": 334,
+      "path": "incremental_option_value_report.json",
+      "sha256": "53be69b4d3557b9348e8604bee059223ed78afb2329e37327aa8affb3963fe67"
+    },
+    {
+      "bytes": 385,
+      "path": "independent_audit.json",
+      "sha256": "87b6b69a2c95c211332d0f9ed3c5602644c0fc48bc45b0ff4b3b371c94619292"
+    },
+    {
+      "bytes": 5339,
+      "path": "mechanism_quality_report.json",
+      "sha256": "c43c6d30b7b08ba4b0edb468a480994767d9c4dfc6918039aee628317ef35b25"
+    },
+    {
+      "bytes": 4716,
+      "path": "outcome_report.json",
+      "sha256": "7bd2069999b7750d1ba202cba0d87e2a6b27107643aab966491e8d2436c71f4a"
+    },
+    {
+      "bytes": 977,
+      "path": "pre_change_manifest.json",
+      "sha256": "a80f12911bbe108f00f72226cf9e0421c767f12b1987229f9634c5c58a9e0f01"
+    },
+    {
+      "bytes": 452,
+      "path": "prior_mechanism_exclusion_manifest.json",
+      "sha256": "a1dbe77d173b9cbf2be5f0af8e34a0586c91babd13f8b4853558529f4e56cb7a"
+    },
+    {
+      "bytes": 17464,
+      "path": "robustness_report.json",
+      "sha256": "6642c031eb104f1d49eea9d38af235bb4ab290a6ae3021f896d23e07e4d49494"
+    },
+    {
+      "bytes": 12745,
+      "path": "walk_forward_report.json",
+      "sha256": "83a747ae11d15c2addec03995ddd7be9e692c4f19d25d91db67c5746c8036af7"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "branch": "research/buy-side-option-economic-barrier-decomposition-v1",
+  "candidate_contract_hashes": {
+    "FQSDV2_EXPIRY_TRANSITION_03": "de1cd10bc33f9d073c55667e8054c48716fcace8083ddd7d51a4f048e7069728",
+    "FQSDV2_LADDER_CONFIRM_02": "442ba6e95c05313177104df9c56ec1fb60484bb6ba91f6a8c281e7a34e93f23b",
+    "FQSDV2_PAIR_ASYM_01": "de0ed2c26576a97318ce8bf60e9de14c5c8ff4a5a4278947f4f6bc3165e98202"
+  },
+  "clean_status": "",
+  "clean_status_note": "Sparse isolated worktree was created from source commit before generated V1 files were added; frozen for deterministic semantic hashes.",
+  "cost_model_hash": "f375a0f6087b6669faa357fb3852afb96d5cd35081e37dc0051a507349c4de2e",
+  "current_commit": "fc64f618538d447efb16d794c39709a2be2cc997",
+  "eligibility_contract_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "execution_model_hash": "0de29f783b94a378d8bc15bbdb0b54aa3449ba9392b68ccbad8f77a80cbd6c39",
+  "repaired_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "source_commit": "fc64f618538d447efb16d794c39709a2be2cc997",
+  "trade_ledger_hashes": {
+    "frequency_discovery_event_ledger": "3830df52b3e8594d02bcffaaad5b0d8860748902d98123d1464a670334819f51"
+  },
+  "worktree": "/Users/madhuram/tradebot-buy-side-economic-barrier-v1"
+}

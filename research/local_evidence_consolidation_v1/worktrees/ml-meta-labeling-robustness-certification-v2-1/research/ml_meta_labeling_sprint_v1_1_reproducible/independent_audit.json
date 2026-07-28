@@ -1,0 +1,31 @@
+{
+  "algotest_called": false,
+  "broker_calls": false,
+  "candidate_dataset_hash_stable": true,
+  "candidate_timestamps_causal": true,
+  "economic_metrics_from_row_predictions": true,
+  "feature_list_frozen": true,
+  "final_verdict_follows_gates": true,
+  "holdout_used_once_for_final_evaluation": true,
+  "labels_begin_after_next_bar_entry": true,
+  "model_configurations_within_budget": true,
+  "model_hash_stable": true,
+  "no_future_derived_features": true,
+  "preprocessing_training_only": true,
+  "production_changes": false,
+  "provider_calls": false,
+  "reproduction_acceptance_passed": true,
+  "required_gates_incomplete": {
+    "concrete_strike_level_candidate_selection": true,
+    "full_leave_feature_family_out": true,
+    "one_bar_delayed_entry_survival": true
+  },
+  "result": "PASS",
+  "semantic_hash": "a3f5087c6608d609fdd8c98ad59f448dd38c12d0e943c5444b12f49334da0476",
+  "serialization_replay_passed": true,
+  "session_group_split": true,
+  "stored_model_reproduces_predictions": true,
+  "stored_predictions_reproduce_metrics": true,
+  "threshold_hash_stable": true,
+  "validation_selected_thresholds": true
+}

@@ -1,0 +1,21 @@
+{
+  "status": "PRE_REPAIR_UNVERIFIED_V2_OUTPUT_DO_NOT_USE",
+  "branch": "research/ml-strategy-discovery-v2-stability",
+  "commit": "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01",
+  "inventory": {
+    "report.md": "c378cf2d726ea1b69f2110705aab6dcce826936d21070e44d330b6d9fe4238dc",
+    "ml_strategy_discovery_v2_1_source_manifest.json": "ba5a8c83ddfac554ca4747484ec89ab667804db7b95b94403d253db7aebe3e69",
+    "research/ml_strategy_discovery_v2/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "research/ml_strategy_discovery_v2/controls.py": "93ca3c7799827b5d6cda96043ff340c9b753c56de472f1120505fcbd6288c4f3",
+    "research/ml_strategy_discovery_v2/data.py": "863e00df8442e73af3bd39275b4e99b4d6e23816e6ff6f1d3a7b4068c832269e",
+    "research/ml_strategy_discovery_v2/folds.py": "15853c33d7f989bc257cb2bbe7601e1d8d9c8a5e48abeb155e3ec25a463e4e7d",
+    "research/ml_strategy_discovery_v2/freeze.py": "641e375993c8e541f1fc1c7ff7ff94efaf0afd137edda855b94f68cc6dd5db50",
+    "research/ml_strategy_discovery_v2/gates.py": "cffd7ec5daa7592679c67538fa0f7eaf8ec1a450a697a373f7a7124cac7ae6bb",
+    "research/ml_strategy_discovery_v2/model.py": "1023a4a616f3390f4803e041eb3bd33444a0c314cb391b0230b046895b3ef3e7",
+    "research/ml_strategy_discovery_v2/stability.py": "a9f552afa2983f91d45524a3dbf8fe7e9ed752c41c4a007235a5aebd75eb928c",
+    "scripts/generate_ml_strategy_discovery_v2_manifest.py": "b25ffaa13d3b529bf6c001c893c2137ac55821788543645cdf7810cdacdfffe3",
+    "scripts/inventory_ml_strategy_discovery_v2_source.py": "9f4c707b40f0dae1b95077ca27e42fb5945a5321cb45ebd646c323c485a7cad0",
+    "scripts/run_ml_strategy_discovery_v2.py": "dbbca1008e0feddb0d653adff19907eec26d3a84e9b0f5f53c1c5144d0126be8",
+    "tests/test_ml_strategy_discovery_v2.py": "04545e1636ea5bbb7376ad798f4560a7a24c5bc08d180eb1b5d0cf5e58a52d31"
+  }
+}

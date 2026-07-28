@@ -1,0 +1,18 @@
+{
+  "families": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": 476,
+    "M2_FAILED_AUCTION_RECLAIM": 93,
+    "M3_REPEATED_TEST_DEPLETION_PROXY": 3266,
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": 5662,
+    "M5_COMPRESSION_NEAR_BOUNDARY": 1299,
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": 1689
+  },
+  "positive_rate": 0.12687224669603525,
+  "rows": 12485,
+  "semantic_hash": "fe429c91a9eff7856e478f1be885c99376802ce46f646f670d399ac1f789b7f3",
+  "splits": {
+    "holdout": 2745,
+    "train": 7354,
+    "validation": 2386
+  }
+}

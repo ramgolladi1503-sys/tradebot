@@ -1,0 +1,17 @@
+{
+  "mechanism_contract_preserved": true,
+  "minimum_evidence_target": {
+    "expiries": 24,
+    "sessions": 32,
+    "trades": 84
+  },
+  "primary_extension": "chronological dates after 2026-07-21 if authorized provider history or certified local archives exist",
+  "prohibitions": [
+    "no_threshold_changes",
+    "no_overlap_with_existing_holdout",
+    "no_outcome_inspection_before_freeze",
+    "no_early_stopping",
+    "no_algotest_until_survival"
+  ],
+  "secondary_extension": "older pre-2024-09-26 data only if it was never used for development or holdout and can be certified"
+}

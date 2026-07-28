@@ -1,0 +1,101 @@
+{
+  "accepted_source_row_changed": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "sha256",
+    "mutated_artifact_hash": "e18766c38cd45cf749592ee94986e11652d5b8670c99f7e05ad412c645e117ba",
+    "mutation_id": "accepted_source_row_changed",
+    "oracle_error": "detected mutation in accepted_file_manifest.sha256",
+    "oracle_exit_status": 2
+  },
+  "candidate_deleted": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "row_count",
+    "mutated_artifact_hash": "bed6652083cb4c9ebee72d17af1cd6242586f23508a79614864a90cc2b857d41",
+    "mutation_id": "candidate_deleted",
+    "oracle_error": "detected mutation in candidate_manifest.row_count",
+    "oracle_exit_status": 2
+  },
+  "candidate_duplicated": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "candidate_fingerprint",
+    "mutated_artifact_hash": "c1e77423590b80fd0c8dfe0f2e55683270fac24d85d80ae8f6be38e5ff99a535",
+    "mutation_id": "candidate_duplicated",
+    "oracle_error": "detected mutation in candidate_manifest.candidate_fingerprint",
+    "oracle_exit_status": 2
+  },
+  "candidate_side_flipped": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "side",
+    "mutated_artifact_hash": "62c4b8261b54222e1a272a19b42f61516814527cd22bd1d85f9063240e26ad0d",
+    "mutation_id": "candidate_side_flipped",
+    "oracle_error": "detected mutation in candidate_manifest.side",
+    "oracle_exit_status": 2
+  },
+  "canonical_candidate_ordering_changed": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "canonical_order",
+    "mutated_artifact_hash": "4476afb84f9657becb3b4b6858380b8b1758424e892dcea940c43735acb17a08",
+    "mutation_id": "canonical_candidate_ordering_changed",
+    "oracle_error": "detected mutation in candidate_manifest.canonical_order",
+    "oracle_exit_status": 2
+  },
+  "entry_changed_to_same_decision_bar": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "entry_timestamp",
+    "mutated_artifact_hash": "d2115a536e49438073ac963c79ab300a703561626f586d0740e8e1223e85f3e9",
+    "mutation_id": "entry_changed_to_same_decision_bar",
+    "oracle_error": "detected mutation in candidate_manifest.entry_timestamp",
+    "oracle_exit_status": 2
+  },
+  "future_bar_inserted_into_feature_input": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "decision_timestamp",
+    "mutated_artifact_hash": "b6770e25bbb8a20ef82185ba326575b8c16f6e1869b3e80124416b20659742f7",
+    "mutation_id": "future_bar_inserted_into_feature_input",
+    "oracle_error": "detected mutation in candidate_manifest.decision_timestamp",
+    "oracle_exit_status": 2
+  },
+  "modified_outcome": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "30m_return_bps",
+    "mutated_artifact_hash": "150dd75ccb9138feb2e11c1792fd342eb239a1ef85b7ded8ed3da9986c0ebe3f",
+    "mutation_id": "modified_outcome",
+    "oracle_error": "detected mutation in outcome_manifest.30m_return_bps",
+    "oracle_exit_status": 2
+  },
+  "peer_leader_changed": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "leader_spread_bps",
+    "mutated_artifact_hash": "52e458fa6303233c3f6ad18b5175f9f977746e7233e9f3dc01f1cc7387abef32",
+    "mutation_id": "peer_leader_changed",
+    "oracle_error": "detected mutation in candidate_manifest.leader_spread_bps",
+    "oracle_exit_status": 2
+  },
+  "previous_high_low_changed": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "previous_high",
+    "mutated_artifact_hash": "676e7c398538b93ef899512db9c5ad7c248768d1047a3ee4622404a46331cedb",
+    "mutation_id": "previous_high_low_changed",
+    "oracle_error": "detected mutation in candidate_manifest.previous_high",
+    "oracle_exit_status": 2
+  },
+  "source_manifest_hash_changed": {
+    "baseline_artifact_hash": "6a3f98ef7aec3e4320526603a34c1ea033188e9f682569ddf0ac807b6b83b156",
+    "detected": true,
+    "exact_changed_field": "source_manifest_hash",
+    "mutated_artifact_hash": "0c323785c780329998a386c6742218d363b393c952b86630080d6f608806b266",
+    "mutation_id": "source_manifest_hash_changed",
+    "oracle_error": "detected mutation in accepted_file_manifest.source_manifest_hash",
+    "oracle_exit_status": 2
+  }
+}

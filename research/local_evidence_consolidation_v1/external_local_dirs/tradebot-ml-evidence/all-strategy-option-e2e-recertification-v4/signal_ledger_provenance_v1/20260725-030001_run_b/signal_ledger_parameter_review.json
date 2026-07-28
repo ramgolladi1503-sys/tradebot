@@ -1,0 +1,20 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "missing_parameter_fields": [
+    "names",
+    "values",
+    "types",
+    "owner",
+    "ledger_binding"
+  ],
+  "outcomes_read": false,
+  "parameter_authority": "UNRESOLVED",
+  "parameter_manifest": null,
+  "parameter_manifest_sha256": null,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true
+}

@@ -1,0 +1,8 @@
+{
+  "diagnostic_branch": "audit/level-auction-failure-decomposition-v1",
+  "diagnostic_worktree": "/Users/madhuram/tradebot-level-auction-failure-decomposition-v1",
+  "exact_next_action": "Close this data lane; do not start a new strategy campaign from these level-auction mechanisms.",
+  "final_verdict": "FAILURE_DECOMPOSITION_COMPLETE_CLOSE_DATA_LANE",
+  "semantic_hash": "9d67c0c70bb9826b07e984d699d8d1404d6e7e1b4da8490ddf3290767a5e00d7",
+  "source_commit": "d4eccb96da755aed7686b85e0d68c41b6793c745"
+}

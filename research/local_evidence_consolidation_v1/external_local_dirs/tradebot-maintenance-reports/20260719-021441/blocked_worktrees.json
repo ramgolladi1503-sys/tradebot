@@ -1,0 +1,342 @@
+[
+  {
+    "path": "/Users/madhuram/tradebot",
+    "branch": "data/combined-upstox-20260714",
+    "status_rc": 0,
+    "status_count": 21,
+    "unique_rc": 0,
+    "unique_count": 0,
+    "in_main": true,
+    "open_pr": null
+  },
+  {
+    "path": "/private/tmp/orb_owner_audit",
+    "branch": "fix/opening-range-retest-owner-integration",
+    "status_rc": 0,
+    "status_count": 4,
+    "unique_rc": 0,
+    "unique_count": 51,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/private/tmp/tradebot-four-strategy-baseline",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 4,
+    "unique_rc": 0,
+    "unique_count": 84,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/private/tmp/tradebot-main-review",
+    "branch": "",
+    "status_rc": 128,
+    "status_count": null,
+    "unique_rc": 128,
+    "unique_count": null,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/private/tmp/tradebot-vwap-final-focused-verification.haa5su",
+    "branch": "audit/vwap-final-focused-verification",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 69,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/private/tmp/tradebot-vwap-final-frozen-controls.pjBm9i",
+    "branch": "audit/vwap-final-frozen-controls",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 69,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/.antigravity/worktrees/tradebot/feed-reconnect-resource-soak",
+    "branch": "agent/antigravity-feed-reconnect-resource-soak",
+    "status_rc": 0,
+    "status_count": 24,
+    "unique_rc": 0,
+    "unique_count": 0,
+    "in_main": true,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/.codex/worktrees/tradebot-orb-owner-main-compat",
+    "branch": "audit/orb-owner-main-compat",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 0,
+    "in_main": true,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/.codex/worktrees/tradebot/feed-websocket-reconnect-854c",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 17,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/.codex/worktrees/tradebot/feed-websocket-reconnect-baseline",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 16,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/.codex/worktrees/tradebot/orb-context-cycle-cutoff",
+    "branch": "fix/orb-context-cycle-cutoff",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 3,
+    "in_main": false,
+    "open_pr": 659
+  },
+  {
+    "path": "/Users/madhuram/.config/superpowers/worktrees/tradebot/candidate-lineage-ledger-hardening",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 9,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-opening-range-retest-causal-replay",
+    "branch": "research/opening-range-retest-causal-replay",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 8,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-opening-state-momentum-research",
+    "branch": "research/opening-state-momentum-edge",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 27,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-certifying-merge",
+    "branch": "agent/orb-certifying-merge",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 3,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-full-suite-baseline-audit-1784222170",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 50,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-main-baseline-check",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 0,
+    "in_main": true,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-oracle-hardening",
+    "branch": "agent/orb-oracle-hardening",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 3,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-owner-caller-audit-1784222170",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 51,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-owner-caller-inventory",
+    "branch": "ram/orb-owner-caller-inventory",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 1,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-owner-evidence-audit-1784222170",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 51,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-owner-exactly-once-audit-1784222170",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 51,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-postmerge-audit-fix",
+    "branch": "fix/orb-postmerge-audit-metadata",
+    "status_rc": 0,
+    "status_count": 2,
+    "unique_rc": 0,
+    "unique_count": 4,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-postmerge-final-verification",
+    "branch": "docs/orb-postmerge-final-verification",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 1,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-orb-postmerge-verification",
+    "branch": "fix/orb-merged-partition-assignments",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 1,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-restart-persistence",
+    "branch": "fix/restart-persistence-signal-id",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 25,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-strategy-atr-contract",
+    "branch": "fix/strategy-truth-atr-contract",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 21,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-strategy-outcomes-foundation",
+    "branch": "research/strategy-outcomes-foundation",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 1,
+    "in_main": false,
+    "open_pr": 674
+  },
+  {
+    "path": "/Users/madhuram/tradebot-strategy-phase3b",
+    "branch": "fix/strategy-truth-phase3b",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 24,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-strategy-phase3b-integrated",
+    "branch": "fix/strategy-truth-phase3b-integrated",
+    "status_rc": 0,
+    "status_count": 1,
+    "unique_rc": 0,
+    "unique_count": 27,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-strategy-replay-foundation",
+    "branch": "research/strategy-replay-foundation",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 3,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot-trend-provenance-boundary",
+    "branch": "docs/trend-pullback-provenance-boundary",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 2,
+    "in_main": false,
+    "open_pr": 673
+  },
+  {
+    "path": "/Users/madhuram/tradebot-trend-pullback-causal-replay",
+    "branch": "research/trend-pullback-causal-replay",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 6,
+    "in_main": false,
+    "open_pr": null
+  },
+  {
+    "path": "/Users/madhuram/tradebot_isolated",
+    "branch": "",
+    "status_rc": 0,
+    "status_count": 0,
+    "unique_rc": 0,
+    "unique_count": 8,
+    "in_main": false,
+    "open_pr": null
+  }
+]

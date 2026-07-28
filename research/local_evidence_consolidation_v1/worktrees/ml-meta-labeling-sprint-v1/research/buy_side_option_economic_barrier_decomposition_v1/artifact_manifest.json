@@ -1,0 +1,75 @@
+{
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "bytes": 1348,
+      "path": "cost_attribution.json",
+      "sha256": "a4544d54a1abdde82fe9865b753f223f97218369f946c592bd22b5743fa591e6"
+    },
+    {
+      "bytes": 911,
+      "path": "cost_model_audit.json",
+      "sha256": "0fb8838b8c0b688f2e500e426d381c27cf041a992556f8cb943a150fb10c15ac"
+    },
+    {
+      "bytes": 1341,
+      "path": "determinism_report.json",
+      "sha256": "d282259d1a63f0d4c603823ffbb949575ab73f8aa90e89abf1ece382c6a570ff"
+    },
+    {
+      "bytes": 290,
+      "path": "final_verdict.json",
+      "sha256": "7c5c0ad67719bef3d47512e01f6affcf029011eba982b5b9800fa52c41afe390"
+    },
+    {
+      "bytes": 3873,
+      "path": "gross_versus_net_decomposition.json",
+      "sha256": "b29cc98bab5be49d748d571a000d0add70e4e69eaf5103f9c2250199234348b3"
+    },
+    {
+      "bytes": 358,
+      "path": "independent_audit.json",
+      "sha256": "8e0b2ad416eb9f98b6ae9e9e2b92a0fa06427255fc14bc4ac58ef4267f2a14da"
+    },
+    {
+      "bytes": 20398,
+      "path": "option_selection_decomposition.json",
+      "sha256": "28b166f0ca851fd20b8e803011df53f41d1441c16ab69dbe7d1f27872f41eeb0"
+    },
+    {
+      "bytes": 169,
+      "path": "per_candidate_classification.json",
+      "sha256": "c8676ca5aa8e10f19aec25611711089a42ab1491da3eec8711aa6e3edadd2ae2"
+    },
+    {
+      "bytes": 1312,
+      "path": "pre_change_manifest.json",
+      "sha256": "23d5c5285190cb5271195c6b41b170f5539aa8f18c04e86e09abd797ef1ec0ec"
+    },
+    {
+      "bytes": 688,
+      "path": "prior_artifact_verification.json",
+      "sha256": "4bef38fb1bc8cfc5d92e4d5a5bd6474653917d8ce24a2828329bd2a6e120b245"
+    },
+    {
+      "bytes": 3365,
+      "path": "structural_episode_report.json",
+      "sha256": "512042e21f0e201f7a3c54c8b96ce4f19c8b6d961d3c3048c60f09e737181248"
+    },
+    {
+      "bytes": 4409,
+      "path": "timing_decay_report.json",
+      "sha256": "1a56cde5e07165d1d0b16915592541840a2d97c0fff1dd17fe4c69a66991b952"
+    },
+    {
+      "bytes": 5760,
+      "path": "trade_frequency_drag_report.json",
+      "sha256": "e96f3858d99bf2746817b27d6737a49690bbd44b3ed16319ba2aa5a699f964c6"
+    },
+    {
+      "bytes": 3865,
+      "path": "underlying_versus_option_attribution.json",
+      "sha256": "2380d37c096ed82e5146134edc6cee8e94209e019e91ea0de9c98182b9331f49"
+    }
+  ]
+}

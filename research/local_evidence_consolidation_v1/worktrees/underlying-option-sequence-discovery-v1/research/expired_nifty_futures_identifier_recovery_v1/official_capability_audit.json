@@ -1,0 +1,21 @@
+{
+  "semantic_hash": "d6be014fe550f737a0f6c27c57e383720f2bf5a3c71e3bee5a499b747afe1c90",
+  "upstox": {
+    "contract_specific_historical_candle_availability": "VERIFIED_FOR_CURRENT_CONTRACT_ONLY",
+    "date_range_limits": "current July 2026 contract returned roughly May 2026 onward in prior task",
+    "expired_derivatives_contract_discovery": "UNAVAILABLE_FROM_CURRENT_MASTER",
+    "expired_futures_keys_remain_queryable": "NOT_TESTABLE_WITHOUT_OFFICIAL_EXPIRED_IDENTIFIER",
+    "expired_instruments_endpoint_availability": "NOT_EXPOSED_IN_LOCAL_OFFICIAL_MASTER_CACHE",
+    "expired_nifty_futures_contracts_in_current_master": 0,
+    "interval_support": "1minute verified for current contract",
+    "metadata_completeness": "current contracts include instrument_key, symbol, expiry, lot_size; expired contracts absent",
+    "nifty_futures_contracts_in_current_master": 3,
+    "official_master_hash": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40",
+    "official_master_path": "/Users/madhuram/tradebot-expired-nifty-futures-identifier-recovery-v1/runtime/upstox_instruments/complete.json",
+    "timestamp_semantics": "provider candle timestamp"
+  },
+  "zerodha_kite": {
+    "assessed": false,
+    "reason": "not explicitly authorized for this task; user previously instructed not to go for Kite"
+  }
+}

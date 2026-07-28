@@ -1,0 +1,1358 @@
+{
+  "SESPRINT_0084a39dfd9698": {
+    "count_matched_random": {
+      "expectancy": 5.429374999999982,
+      "gross_pnl": 1108.699999999997,
+      "max_month_share": 0.59375,
+      "max_weekday_share": 0.2625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 628.6999999999971,
+      "net_pnl": 868.6999999999971,
+      "profit_factor": 1.208548896277712,
+      "sample": 160,
+      "stop20_rate": 0.63125,
+      "target30_rate": 0.53125,
+      "top10_contribution": 2.5433981811902897,
+      "top5_contribution": 1.6337055370093263,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.525
+    },
+    "delayed_entry": {
+      "expectancy": 17.023334669555403,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2723.7335471288648,
+      "profit_factor": 2.8981865272063576,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6332486889111077,
+      "top5_contribution": 0.3831966239791829,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.55
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 17.406090431316947,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2784.9744690107113,
+      "profit_factor": 2.9770937425964976,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6210700373000676,
+      "top5_contribution": 0.3760798994341963,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.55625
+    },
+    "feature_label_permutation": {
+      "expectancy": 17.379687499999953,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2780.7499999999927,
+      "profit_factor": 2.965194346289737,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6237346039737512,
+      "top5_contribution": 0.37808145284545713,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5625
+    }
+  },
+  "SESPRINT_0e0fd3c6f2a865": {
+    "count_matched_random": {
+      "expectancy": -1.0749116607774134,
+      "gross_pnl": 120.299999999992,
+      "max_month_share": 0.6183745583038869,
+      "max_weekday_share": 0.2508833922261484,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -728.700000000008,
+      "net_pnl": -304.200000000008,
+      "profit_factor": 0.9632302280886237,
+      "sample": 283,
+      "stop20_rate": 0.6289752650176679,
+      "target30_rate": 0.48056537102473496,
+      "top10_contribution": -9.985207100591452,
+      "top5_contribution": -6.596482577251639,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.4840989399293286
+    },
+    "delayed_entry": {
+      "expectancy": 8.05482231263702,
+      "gross_pnl": 2732.899999999998,
+      "max_month_share": 0.519434628975265,
+      "max_weekday_share": 0.22614840989399293,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1883.8999999999978,
+      "net_pnl": 2279.514714476277,
+      "profit_factor": 1.510643067707556,
+      "sample": 283,
+      "stop20_rate": 0.5724381625441696,
+      "target30_rate": 0.4628975265017668,
+      "top10_contribution": 0.7099952664162515,
+      "top5_contribution": 0.43938608254892353,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5759717314487632
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 8.08783858219009,
+      "gross_pnl": 2732.899999999998,
+      "max_month_share": 0.519434628975265,
+      "max_weekday_share": 0.22614840989399293,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1883.8999999999978,
+      "net_pnl": 2288.8583187597956,
+      "profit_factor": 1.5134678778175243,
+      "sample": 283,
+      "stop20_rate": 0.5724381625441696,
+      "target30_rate": 0.4628975265017668,
+      "top10_contribution": 0.7074475048282431,
+      "top5_contribution": 0.43877395910407,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5795053003533569
+    },
+    "feature_label_permutation": {
+      "expectancy": 8.15689045936395,
+      "gross_pnl": 2732.899999999998,
+      "max_month_share": 0.519434628975265,
+      "max_weekday_share": 0.22614840989399293,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1883.8999999999978,
+      "net_pnl": 2308.399999999998,
+      "profit_factor": 1.5185609506800994,
+      "sample": 283,
+      "stop20_rate": 0.5724381625441696,
+      "target30_rate": 0.4628975265017668,
+      "top10_contribution": 0.7019797262172959,
+      "top5_contribution": 0.43430514642176565,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5759717314487632
+    }
+  },
+  "SESPRINT_2dfadfd1a8c98e": {
+    "count_matched_random": {
+      "expectancy": -0.8889679715302594,
+      "gross_pnl": 171.6999999999971,
+      "max_month_share": 0.6156583629893239,
+      "max_weekday_share": 0.2526690391459075,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -671.3000000000029,
+      "net_pnl": -249.8000000000029,
+      "profit_factor": 0.9695997955470634,
+      "sample": 281,
+      "stop20_rate": 0.6298932384341637,
+      "target30_rate": 0.48398576512455516,
+      "top10_contribution": -12.159727782225639,
+      "top5_contribution": -8.033026421136821,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.48398576512455516
+    },
+    "delayed_entry": {
+      "expectancy": 5.617703612347767,
+      "gross_pnl": 2028.449999999997,
+      "max_month_share": 0.5160142348754448,
+      "max_weekday_share": 0.2277580071174377,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1185.449999999997,
+      "net_pnl": 1578.5747150697225,
+      "profit_factor": 1.3546873606313032,
+      "sample": 281,
+      "stop20_rate": 0.5729537366548043,
+      "target30_rate": 0.4555160142348754,
+      "top10_contribution": 0.7604309410146616,
+      "top5_contribution": 0.42039032054280095,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5729537366548043
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 5.52938657223023,
+      "gross_pnl": 2028.449999999997,
+      "max_month_share": 0.5160142348754448,
+      "max_weekday_share": 0.2277580071174377,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1185.449999999997,
+      "net_pnl": 1553.7576267966947,
+      "profit_factor": 1.3483170316529858,
+      "sample": 281,
+      "stop20_rate": 0.5729537366548043,
+      "target30_rate": 0.4555160142348754,
+      "top10_contribution": 0.7719149533775307,
+      "top5_contribution": 0.42742967189680287,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5800711743772242
+    },
+    "feature_label_permutation": {
+      "expectancy": 5.718683274021342,
+      "gross_pnl": 2028.449999999997,
+      "max_month_share": 0.5160142348754448,
+      "max_weekday_share": 0.2277580071174377,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1185.449999999997,
+      "net_pnl": 1606.949999999997,
+      "profit_factor": 1.36207654090105,
+      "sample": 281,
+      "stop20_rate": 0.5729537366548043,
+      "target30_rate": 0.4555160142348754,
+      "top10_contribution": 0.7481564454401254,
+      "top5_contribution": 0.41329848470705766,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5729537366548043
+    }
+  },
+  "SESPRINT_5d384b3d38f561": {
+    "count_matched_random": {
+      "expectancy": 5.429374999999982,
+      "gross_pnl": 1108.699999999997,
+      "max_month_share": 0.59375,
+      "max_weekday_share": 0.2625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 628.6999999999971,
+      "net_pnl": 868.6999999999971,
+      "profit_factor": 1.208548896277712,
+      "sample": 160,
+      "stop20_rate": 0.63125,
+      "target30_rate": 0.53125,
+      "top10_contribution": 2.5433981811902897,
+      "top5_contribution": 1.6337055370093263,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.525
+    },
+    "delayed_entry": {
+      "expectancy": 17.023334669555403,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2723.7335471288648,
+      "profit_factor": 2.8981865272063576,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6332486889111077,
+      "top5_contribution": 0.3831966239791829,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.55
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 17.347174377355906,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2775.547900376945,
+      "profit_factor": 2.9540334259333405,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6263485841266575,
+      "top5_contribution": 0.37987270672528584,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.55
+    },
+    "feature_label_permutation": {
+      "expectancy": 17.379687499999953,
+      "gross_pnl": 3020.7499999999927,
+      "max_month_share": 0.50625,
+      "max_weekday_share": 0.20625,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2540.7499999999927,
+      "net_pnl": 2780.7499999999927,
+      "profit_factor": 2.965194346289737,
+      "sample": 160,
+      "stop20_rate": 0.4375,
+      "target30_rate": 0.50625,
+      "top10_contribution": 0.6237346039737512,
+      "top5_contribution": 0.37808145284545713,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5625
+    }
+  },
+  "SESPRINT_72ab792f2c4f89": {
+    "count_matched_random": {
+      "expectancy": -1.007321428571439,
+      "gross_pnl": 137.9499999999971,
+      "max_month_share": 0.6178571428571429,
+      "max_weekday_share": 0.25357142857142856,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -702.0500000000029,
+      "net_pnl": -282.0500000000029,
+      "profit_factor": 0.9656750293596847,
+      "sample": 280,
+      "stop20_rate": 0.6321428571428571,
+      "target30_rate": 0.48214285714285715,
+      "top10_contribution": -10.76936713348686,
+      "top5_contribution": -7.11451870235767,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.48214285714285715
+    },
+    "delayed_entry": {
+      "expectancy": 7.374925033754078,
+      "gross_pnl": 2513.4999999999927,
+      "max_month_share": 0.5142857142857142,
+      "max_weekday_share": 0.22857142857142856,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1673.4999999999927,
+      "net_pnl": 2064.979009451142,
+      "profit_factor": 1.481779872641228,
+      "sample": 280,
+      "stop20_rate": 0.575,
+      "target30_rate": 0.45714285714285713,
+      "top10_contribution": 0.7191949214730263,
+      "top5_contribution": 0.44710809742991076,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5714285714285714
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 7.51396617121872,
+      "gross_pnl": 2513.4999999999927,
+      "max_month_share": 0.5142857142857142,
+      "max_weekday_share": 0.22857142857142856,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1673.4999999999927,
+      "net_pnl": 2103.9105279412415,
+      "profit_factor": 1.4915021401067654,
+      "sample": 280,
+      "stop20_rate": 0.575,
+      "target30_rate": 0.45714285714285713,
+      "top10_contribution": 0.7066931018806282,
+      "top5_contribution": 0.4389296479438537,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5785714285714286
+    },
+    "feature_label_permutation": {
+      "expectancy": 7.476785714285688,
+      "gross_pnl": 2513.4999999999927,
+      "max_month_share": 0.5142857142857142,
+      "max_weekday_share": 0.22857142857142856,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1673.4999999999927,
+      "net_pnl": 2093.4999999999927,
+      "profit_factor": 1.489822180627045,
+      "sample": 280,
+      "stop20_rate": 0.575,
+      "target30_rate": 0.45714285714285713,
+      "top10_contribution": 0.7104370671124932,
+      "top5_contribution": 0.44143778361595465,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5714285714285714
+    }
+  },
+  "SESPRINT_754699a391ceab": {
+    "count_matched_random": {
+      "expectancy": 5.6305194805194,
+      "gross_pnl": 1098.0999999999876,
+      "max_month_share": 0.5974025974025974,
+      "max_weekday_share": 0.2662337662337662,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 636.0999999999876,
+      "net_pnl": 867.0999999999876,
+      "profit_factor": 1.215675057208234,
+      "sample": 154,
+      "stop20_rate": 0.6168831168831169,
+      "target30_rate": 0.5324675324675324,
+      "top10_contribution": 2.518798293161147,
+      "top5_contribution": 1.6367201014877377,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5324675324675324
+    },
+    "delayed_entry": {
+      "expectancy": 18.08729067748285,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2785.4427643323593,
+      "profit_factor": 3.0284255740007193,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.6192195796476797,
+      "top5_contribution": 0.37470721468182655,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5714285714285714
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 18.37258690996657,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2829.3783841348522,
+      "profit_factor": 3.0672735082723555,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.6137809788359933,
+      "top5_contribution": 0.3721662660555109,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.577922077922078
+    },
+    "feature_label_permutation": {
+      "expectancy": 18.451298701298608,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2841.4999999999854,
+      "profit_factor": 3.0982093409636,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.610399436917126,
+      "top5_contribution": 0.36999824036600654,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5844155844155844
+    }
+  },
+  "SESPRINT_8e53bf1733bd92": {
+    "count_matched_random": {
+      "expectancy": -0.636559139784954,
+      "gross_pnl": 240.89999999999782,
+      "max_month_share": 0.6200716845878136,
+      "max_weekday_share": 0.25448028673835127,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -596.1000000000022,
+      "net_pnl": -177.60000000000218,
+      "profit_factor": 0.9781081280970341,
+      "sample": 279,
+      "stop20_rate": 0.6308243727598566,
+      "target30_rate": 0.4838709677419355,
+      "top10_contribution": -17.10304054054033,
+      "top5_contribution": -11.298704954954824,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.4838709677419355
+    },
+    "delayed_entry": {
+      "expectancy": 5.8209178046128445,
+      "gross_pnl": 2070.399999999994,
+      "max_month_share": 0.5125448028673835,
+      "max_weekday_share": 0.22939068100358423,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1233.3999999999942,
+      "net_pnl": 1624.0360674869835,
+      "profit_factor": 1.3806598848231348,
+      "sample": 279,
+      "stop20_rate": 0.5734767025089605,
+      "target30_rate": 0.4551971326164875,
+      "top10_contribution": 0.7130244363792241,
+      "top5_contribution": 0.39551105336852393,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5734767025089605
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 5.96078563111444,
+      "gross_pnl": 2070.399999999994,
+      "max_month_share": 0.5125448028673835,
+      "max_weekday_share": 0.22939068100358423,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1233.3999999999942,
+      "net_pnl": 1663.059191080929,
+      "profit_factor": 1.3901092784218496,
+      "sample": 279,
+      "stop20_rate": 0.5734767025089605,
+      "target30_rate": 0.4551971326164875,
+      "top10_contribution": 0.6993153117994004,
+      "top5_contribution": 0.38854153273868053,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5663082437275986
+    },
+    "feature_label_permutation": {
+      "expectancy": 5.920788530465929,
+      "gross_pnl": 2070.399999999994,
+      "max_month_share": 0.5125448028673835,
+      "max_weekday_share": 0.22939068100358423,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1233.3999999999942,
+      "net_pnl": 1651.8999999999942,
+      "profit_factor": 1.388280368559607,
+      "sample": 279,
+      "stop20_rate": 0.5734767025089605,
+      "target30_rate": 0.4551971326164875,
+      "top10_contribution": 0.7025243658817166,
+      "top5_contribution": 0.38921847569465645,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5734767025089605
+    }
+  },
+  "SESPRINT_ce86b5a724e389": {
+    "count_matched_random": {
+      "expectancy": -0.8723591549296159,
+      "gross_pnl": 178.2499999999891,
+      "max_month_share": 0.6197183098591549,
+      "max_weekday_share": 0.25,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -673.7500000000109,
+      "net_pnl": -247.7500000000109,
+      "profit_factor": 0.9700535470379894,
+      "sample": 284,
+      "stop20_rate": 0.6302816901408451,
+      "target30_rate": 0.4823943661971831,
+      "top10_contribution": -12.26034308778957,
+      "top5_contribution": -8.09949545913184,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.4859154929577465
+    },
+    "delayed_entry": {
+      "expectancy": 8.106596510278118,
+      "gross_pnl": 2757.449999999997,
+      "max_month_share": 0.5211267605633803,
+      "max_weekday_share": 0.22535211267605634,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1905.449999999997,
+      "net_pnl": 2302.2734089189853,
+      "profit_factor": 1.5172940318032657,
+      "sample": 284,
+      "stop20_rate": 0.573943661971831,
+      "target30_rate": 0.4612676056338028,
+      "top10_contribution": 0.7029767406140862,
+      "top5_contribution": 0.43504261336912486,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5774647887323944
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 8.212629161884644,
+      "gross_pnl": 2757.449999999997,
+      "max_month_share": 0.5211267605633803,
+      "max_weekday_share": 0.22535211267605634,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1905.449999999997,
+      "net_pnl": 2332.386681975239,
+      "profit_factor": 1.5259046421175853,
+      "sample": 284,
+      "stop20_rate": 0.573943661971831,
+      "target30_rate": 0.4612676056338028,
+      "top10_contribution": 0.6936915908675101,
+      "top5_contribution": 0.4286208774649574,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5809859154929577
+    },
+    "feature_label_permutation": {
+      "expectancy": 8.209330985915482,
+      "gross_pnl": 2757.449999999997,
+      "max_month_share": 0.5211267605633803,
+      "max_weekday_share": 0.22535211267605634,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1905.449999999997,
+      "net_pnl": 2331.449999999997,
+      "profit_factor": 1.5253202347825094,
+      "sample": 284,
+      "stop20_rate": 0.573943661971831,
+      "target30_rate": 0.4612676056338028,
+      "top10_contribution": 0.6950395676510354,
+      "top5_contribution": 0.4300113663171006,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5774647887323944
+    }
+  },
+  "SESPRINT_cee69e2347bc69": {
+    "count_matched_random": {
+      "expectancy": 1.1611627906976643,
+      "gross_pnl": 572.1499999999978,
+      "max_month_share": 0.6186046511627907,
+      "max_weekday_share": 0.26046511627906976,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -72.85000000000218,
+      "net_pnl": 249.64999999999782,
+      "profit_factor": 1.041959040984226,
+      "sample": 215,
+      "stop20_rate": 0.6325581395348837,
+      "target30_rate": 0.5023255813953489,
+      "top10_contribution": 9.814540356499172,
+      "top5_contribution": 6.316242739835819,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.4930232558139535
+    },
+    "delayed_entry": {
+      "expectancy": 10.805818184753885,
+      "gross_pnl": 2674.000000000022,
+      "max_month_share": 0.5069767441860465,
+      "max_weekday_share": 0.24651162790697675,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2029.0000000000218,
+      "net_pnl": 2323.2509097220855,
+      "profit_factor": 1.6343337840402463,
+      "sample": 215,
+      "stop20_rate": 0.6,
+      "target30_rate": 0.5209302325581395,
+      "top10_contribution": 0.6966293008782047,
+      "top5_contribution": 0.4311144510113082,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.586046511627907
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 10.88263438116481,
+      "gross_pnl": 2674.000000000022,
+      "max_month_share": 0.5069767441860465,
+      "max_weekday_share": 0.24651162790697675,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2029.0000000000218,
+      "net_pnl": 2339.766391950434,
+      "profit_factor": 1.6397645701927888,
+      "sample": 215,
+      "stop20_rate": 0.6,
+      "target30_rate": 0.5209302325581395,
+      "top10_contribution": 0.6904475524163594,
+      "top5_contribution": 0.42679054234449076,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5813953488372093
+    },
+    "feature_label_permutation": {
+      "expectancy": 10.937209302325684,
+      "gross_pnl": 2674.000000000022,
+      "max_month_share": 0.5069767441860465,
+      "max_weekday_share": 0.24651162790697675,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2029.0000000000218,
+      "net_pnl": 2351.500000000022,
+      "profit_factor": 1.6443613246194604,
+      "sample": 215,
+      "stop20_rate": 0.6,
+      "target30_rate": 0.5209302325581395,
+      "top10_contribution": 0.6891133319157939,
+      "top5_contribution": 0.426344886242821,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.586046511627907
+    }
+  },
+  "SESPRINT_e8e66ba6e7fe73": {
+    "count_matched_random": {
+      "expectancy": -0.42985611510792676,
+      "gross_pnl": 297.49999999999636,
+      "max_month_share": 0.6223021582733813,
+      "max_weekday_share": 0.25539568345323743,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -536.5000000000036,
+      "net_pnl": -119.50000000000364,
+      "profit_factor": 0.9851635731578616,
+      "sample": 278,
+      "stop20_rate": 0.6294964028776978,
+      "target30_rate": 0.48201438848920863,
+      "top10_contribution": -25.41841004184023,
+      "top5_contribution": -16.792050209204522,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.4856115107913669
+    },
+    "delayed_entry": {
+      "expectancy": 5.794554199593462,
+      "gross_pnl": 2055.7499999999927,
+      "max_month_share": 0.5107913669064749,
+      "max_weekday_share": 0.2302158273381295,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1221.7499999999927,
+      "net_pnl": 1610.8860674869825,
+      "profit_factor": 1.3775776395543027,
+      "sample": 278,
+      "stop20_rate": 0.5719424460431655,
+      "target30_rate": 0.45323741007194246,
+      "top10_contribution": 0.7188450040330338,
+      "top5_contribution": 0.3987396928463674,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5719424460431655
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 5.823252167488394,
+      "gross_pnl": 2055.7499999999927,
+      "max_month_share": 0.5107913669064749,
+      "max_weekday_share": 0.2302158273381295,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1221.7499999999927,
+      "net_pnl": 1618.8641025617735,
+      "profit_factor": 1.3786494344902913,
+      "sample": 278,
+      "stop20_rate": 0.5719424460431655,
+      "target30_rate": 0.45323741007194246,
+      "top10_contribution": 0.7173751614694784,
+      "top5_contribution": 0.3991074372618951,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.579136690647482
+    },
+    "feature_label_permutation": {
+      "expectancy": 5.894784172661844,
+      "gross_pnl": 2055.7499999999927,
+      "max_month_share": 0.5107913669064749,
+      "max_weekday_share": 0.2302158273381295,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 1221.7499999999927,
+      "net_pnl": 1638.7499999999927,
+      "profit_factor": 1.385189450921397,
+      "sample": 278,
+      "stop20_rate": 0.5719424460431655,
+      "target30_rate": 0.45323741007194246,
+      "top10_contribution": 0.7081617086193799,
+      "top5_contribution": 0.39234172387490684,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5719424460431655
+    }
+  },
+  "SESPRINT_f910461ad2b787": {
+    "count_matched_random": {
+      "expectancy": 0.20454545454541972,
+      "gross_pnl": 356.2499999999927,
+      "max_month_share": 0.6220095693779905,
+      "max_weekday_share": 0.2631578947368421,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": -270.7500000000073,
+      "net_pnl": 42.749999999992724,
+      "profit_factor": 1.0076588883414686,
+      "sample": 209,
+      "stop20_rate": 0.6363636363636364,
+      "target30_rate": 0.5023923444976076,
+      "top10_contribution": 51.68304093568124,
+      "top5_contribution": 33.19766081871903,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.49282296650717705
+    },
+    "delayed_entry": {
+      "expectancy": 11.316717855194124,
+      "gross_pnl": 2706.250000000011,
+      "max_month_share": 0.5215311004784688,
+      "max_weekday_share": 0.2535885167464115,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2079.250000000011,
+      "net_pnl": 2365.194031735572,
+      "profit_factor": 1.654915830927821,
+      "sample": 209,
+      "stop20_rate": 0.5980861244019139,
+      "target30_rate": 0.5358851674641149,
+      "top10_contribution": 0.6842756388222153,
+      "top5_contribution": 0.42346929134240957,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5933014354066986
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 11.481967332833651,
+      "gross_pnl": 2706.250000000011,
+      "max_month_share": 0.5215311004784688,
+      "max_weekday_share": 0.2535885167464115,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2079.250000000011,
+      "net_pnl": 2399.731172562233,
+      "profit_factor": 1.6684971285497467,
+      "sample": 209,
+      "stop20_rate": 0.5980861244019139,
+      "target30_rate": 0.5358851674641149,
+      "top10_contribution": 0.6770535860309607,
+      "top5_contribution": 0.41759202390126876,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.6076555023923444
+    },
+    "feature_label_permutation": {
+      "expectancy": 11.448564593301487,
+      "gross_pnl": 2706.250000000011,
+      "max_month_share": 0.5215311004784688,
+      "max_weekday_share": 0.2535885167464115,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2079.250000000011,
+      "net_pnl": 2392.750000000011,
+      "profit_factor": 1.664874402578642,
+      "sample": 209,
+      "stop20_rate": 0.5980861244019139,
+      "target30_rate": 0.5358851674641149,
+      "top10_contribution": 0.677233308954131,
+      "top5_contribution": 0.418994880367777,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5933014354066986
+    }
+  },
+  "SESPRINT_f9dfc958cf0b25": {
+    "count_matched_random": {
+      "expectancy": 5.6305194805194,
+      "gross_pnl": 1098.0999999999876,
+      "max_month_share": 0.5974025974025974,
+      "max_weekday_share": 0.2662337662337662,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 636.0999999999876,
+      "net_pnl": 867.0999999999876,
+      "profit_factor": 1.215675057208234,
+      "sample": 154,
+      "stop20_rate": 0.6168831168831169,
+      "target30_rate": 0.5324675324675324,
+      "top10_contribution": 2.518798293161147,
+      "top5_contribution": 1.6367201014877377,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5324675324675324
+    },
+    "delayed_entry": {
+      "expectancy": 18.08729067748285,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2785.4427643323593,
+      "profit_factor": 3.0284255740007193,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.6192195796476797,
+      "top5_contribution": 0.37470721468182655,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5714285714285714
+    },
+    "direction_inversion": {
+      "sample": 0
+    },
+    "event_time_jitter": {
+      "expectancy": 18.310186114224024,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2819.7686615904995,
+      "profit_factor": 3.074767122282073,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.612141365105146,
+      "top5_contribution": 0.37014939832948146,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5714285714285714
+    },
+    "feature_label_permutation": {
+      "expectancy": 18.451298701298608,
+      "gross_pnl": 3072.4999999999854,
+      "max_month_share": 0.525974025974026,
+      "max_weekday_share": 0.21428571428571427,
+      "months": [
+        "2024-05",
+        "2024-06",
+        "2024-07"
+      ],
+      "net_2x_cost": 2610.4999999999854,
+      "net_pnl": 2841.4999999999854,
+      "profit_factor": 3.0982093409636,
+      "sample": 154,
+      "stop20_rate": 0.4155844155844156,
+      "target30_rate": 0.525974025974026,
+      "top10_contribution": 0.610399436917126,
+      "top5_contribution": 0.36999824036600654,
+      "weekdays": [
+        "Friday",
+        "Monday",
+        "Thursday",
+        "Tuesday",
+        "Wednesday"
+      ],
+      "win_rate": 0.5844155844155844
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "accepted_feature_rows": 4900,
+  "accepted_sessions": 491,
+  "aligned_symbols": [
+    "NIFTY",
+    "BANKNIFTY",
+    "SENSEX"
+  ],
+  "conflicting_duplicates_rejected": 0,
+  "excluded_unaligned_sessions": 0,
+  "feature_sessions": 490,
+  "identical_duplicates_collapsed": 0,
+  "invalid_ohlc_rows": 0,
+  "raw_rows": 110475
+}

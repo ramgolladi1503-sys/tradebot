@@ -1,0 +1,18 @@
+{
+  "repaired_file_sha256": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "semantic_hashes": {
+    "causal_integrity_report": "041f13c1d9babc464176d4400b2db90ed5480113b05c7e4f4a4e1ff79392b3f0",
+    "downstream_event_feasibility_smoke_report": "39421e9ba2f4b620d061bd5956425343264a97e084c60933c7aa7595d3245563",
+    "field_lineage_report": "de5e220076aabc1248e0f6a13d16664450f488b549e4c9c1a161a493469ec77b",
+    "final_verdict": "7d06c1f1d674d1840443c5b666d79214fbbf5672ab377e4c4298d79d533bf2ed",
+    "independent_audit": "c85b57e513ffb9ecbfacc90b7563a764dbd8cbc87ba21479d0051b69cf395e37",
+    "join_defect_diagnosis": "920841d9ec5f7e2b83322721b78acb1ae588fa5188fcf9abfef3b267cf31df02",
+    "pre_change_manifest": "4cec8ad1fafffffa57e5a11db75f953642d67bf93b5dadbc7eb6e32721735336",
+    "schema_null_rate_report": "093c62fb11641b3667ba30d4762157b497534bd3fa1c35d48f33d91c0ad6c1d9",
+    "source_artifact_verification": "e6dfde0c8d42d19002a876651646b36d112fbf66f0ed5063b058d8e3744b53f8",
+    "source_feature_population_report": "13d244c18698e2427c82f756649328303df5e595b390d2f33ffa8a580d19b5f0",
+    "sparse_bar_governance_report": "70e5442483f95ac6a29bcd012b6454af6f0e03ddf913a444e9c6783a8603364c"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS_BY_STABLE_PAYLOAD_HASH"
+}

@@ -1,0 +1,10 @@
+{
+  "levels": [
+    "economic_family",
+    "directional_family",
+    "exact_v1_event"
+  ],
+  "mapping_hash": "ff269d6d7ec082cdc679ef541ffc4f0bac5ac657c136c5962117adc393f527cc",
+  "outcome_informed": false,
+  "semantic_hash": "75cdcabd67addb113d2015f4ba0a5e65c3afd6adfd149453bdab92a90bd1ca30"
+}

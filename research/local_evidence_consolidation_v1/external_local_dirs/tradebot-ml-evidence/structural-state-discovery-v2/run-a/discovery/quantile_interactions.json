@@ -1,0 +1,5 @@
+{
+  "interaction_depth_cap": 3,
+  "three_feature": 100,
+  "two_feature": 225
+}

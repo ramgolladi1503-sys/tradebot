@@ -1,0 +1,95 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "distinct_episodes": 589,
+    "episode_level_gross_expectancy": -1.9689119977362757,
+    "episode_level_net_expectancy": -2.968911997736276,
+    "expiry_day_episode_share": 0.24787775891341257,
+    "expiry_level_expectancy": {
+      "ci95_high": -1.6906873935963778,
+      "ci95_low": -5.046553104307417,
+      "mean": -3.3686202489518973,
+      "n": 18,
+      "std": 3.6320745930538596
+    },
+    "first_entry_expectancy": -2.5565365025466886,
+    "high_volatility_episode_share": 0.25127334465195245,
+    "independence_warning": "raw trade count overstates independent evidence when many trades occur inside the same 5-minute side episode",
+    "later_entry_expectancy": -3.1078406169665813,
+    "session_level_expectancy": {
+      "ci95_high": -0.5598297387281204,
+      "ci95_low": -4.319414851078041,
+      "mean": -2.4396222949030806,
+      "n": 45,
+      "std": 6.43368970286526
+    },
+    "trades_per_episode": {
+      "ci95_high": 3.7657307722485354,
+      "ci95_low": 3.5178006369195463,
+      "mean": 3.641765704584041,
+      "n": 589,
+      "std": 1.5349735553945576
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "distinct_episodes": 1844,
+    "episode_level_gross_expectancy": -0.6251465822229109,
+    "episode_level_net_expectancy": -1.6251465822229108,
+    "expiry_day_episode_share": 0.1442516268980477,
+    "expiry_level_expectancy": {
+      "ci95_high": -0.5925760234664748,
+      "ci95_low": -2.769750852119203,
+      "mean": -1.6811634377928388,
+      "n": 20,
+      "std": 2.4838320998821213
+    },
+    "first_entry_expectancy": -1.3600867678958781,
+    "high_volatility_episode_share": 0.25,
+    "independence_warning": "raw trade count overstates independent evidence when many trades occur inside the same 5-minute side episode",
+    "later_entry_expectancy": -1.7558233317330776,
+    "session_level_expectancy": {
+      "ci95_high": 0.06823868448520853,
+      "ci95_low": -2.6851497375922855,
+      "mean": -1.3084555265535385,
+      "n": 81,
+      "std": 6.321555050688125
+    },
+    "trades_per_episode": {
+      "ci95_high": 3.304900526833352,
+      "ci95_low": 3.213537651040834,
+      "mean": 3.259219088937093,
+      "n": 1844,
+      "std": 1.0008388439078328
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "distinct_episodes": 1197,
+    "episode_level_gross_expectancy": -0.26490405908952236,
+    "episode_level_net_expectancy": -1.2649040590895224,
+    "expiry_day_episode_share": 0.14369256474519632,
+    "expiry_level_expectancy": {
+      "ci95_high": 0.17239280256479916,
+      "ci95_low": -2.058503890965932,
+      "mean": -0.9430555442005664,
+      "n": 20,
+      "std": 2.545120743629709
+    },
+    "first_entry_expectancy": -1.056808688387635,
+    "high_volatility_episode_share": 0.2506265664160401,
+    "independence_warning": "raw trade count overstates independent evidence when many trades occur inside the same 5-minute side episode",
+    "later_entry_expectancy": -1.4180745994221173,
+    "session_level_expectancy": {
+      "ci95_high": 0.3719028994283805,
+      "ci95_low": -2.2768552587825335,
+      "mean": -0.9524761796770765,
+      "n": 81,
+      "std": 6.081332506096486
+    },
+    "trades_per_episode": {
+      "ci95_high": 4.26874247851184,
+      "ci95_low": 4.092159777127258,
+      "mean": 4.180451127819549,
+      "n": 1197,
+      "std": 1.5585084618778762
+    }
+  }
+}

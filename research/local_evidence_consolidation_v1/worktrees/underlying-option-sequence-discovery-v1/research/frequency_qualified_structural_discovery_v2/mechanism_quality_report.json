@@ -1,0 +1,162 @@
+{
+  "FQSDV2_ELASTICITY_07": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 24900,
+        "option_component": 24900,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 9894,
+        "option_component": 9894,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_FAILED_OPPOSITE_04": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 1324,
+        "option_component": 1324,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_INTRADAY_DOMINANCE_05": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 4408,
+        "option_component": 4408,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 18513,
+        "option_component": 18513,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_MULTI_STAGE_06": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 8625,
+        "option_component": 8625,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_OTM_LADDER_08": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 24935,
+        "option_component": 24935,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "checks": {
+      "component_marginal_frequencies": {
+        "joint_condition": 15017,
+        "option_component": 15017,
+        "underlying_component": 79337
+      },
+      "joint_condition_compatible": true,
+      "next_bar_executable": true,
+      "no_feature_duplication_as_confirmation": true,
+      "no_same_bar_hindsight": true,
+      "no_timestamp_leakage": true,
+      "not_pure_underlying_signal": true,
+      "option_components_add_selection_information": true,
+      "parameter_neighbourhood_event_stability": true,
+      "sequence_order_necessary": true,
+      "state_persistence": true
+    },
+    "passed": true
+  }
+}

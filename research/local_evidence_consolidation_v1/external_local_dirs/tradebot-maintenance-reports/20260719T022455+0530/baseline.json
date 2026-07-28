@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-07-19T02:24:55+05:30",
+  "cwd": "/Users/madhuram/tradebot",
+  "phase": "maintenance-before-orb-outcomes",
+  "filesystem": {
+    "mount": "/",
+    "initial_available_kib": 2699432,
+    "latest_available_kib": 3771376,
+    "latest_available_gib": 3.6,
+    "release_gate_required_gib": 20.0,
+    "release_gate_passed": false
+  },
+  "protected_boundaries": {
+    "shared_checkout": "/Users/madhuram/tradebot",
+    "shared_checkout_write_allowed": false,
+    "production_file_writes_allowed": false,
+    "authoritative_data_deletion_allowed": false,
+    "open_pr_worktree_deletion_allowed": false
+  },
+  "prs": {
+    "673": {
+      "state": "MERGED",
+      "head": "c9c653110d6558f750914914b566f3f4928ed2a9",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/673"
+    },
+    "674": {
+      "state": "OPEN",
+      "head": "2219b0a6aa7294e2ff4124a80b5c7b182bd220ca",
+      "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/674"
+    }
+  },
+  "orb_outcome_gate": {
+    "allowed_to_start": false,
+    "blockers": [
+      "free_space_below_20_gib",
+      "shared_checkout_has_running_main_py_process",
+      "safe_automatic_reclaim_insufficient"
+    ]
+  }
+}

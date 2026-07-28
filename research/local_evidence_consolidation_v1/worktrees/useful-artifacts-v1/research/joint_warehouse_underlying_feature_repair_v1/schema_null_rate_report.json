@@ -1,0 +1,215 @@
+{
+  "ce_pe_coverage": {
+    "CE": 162678,
+    "PE": 229328
+  },
+  "dte_coverage": {
+    "max": 7,
+    "min": 0
+  },
+  "duplicate_key_count": 0,
+  "eligible_rows": 392006,
+  "expected_null_boundary": "ret_1 and multi-lookback fields may be null at causal session starts or governed affected windows only; broad all-null fields fail audit",
+  "feature_null_rates": {
+    "acceleration": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "atr_14": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "body_expansion": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "breakout_failed_state": {
+      "dtype": "object",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "close_location": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "continuation_count": {
+      "dtype": "int64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "directional_persistence": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "dist_session_high": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "dist_session_low": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "expansion_ratio": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "gap_state": {
+      "dtype": "object",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "higher_high_state": {
+      "dtype": "bool",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "inside_bar": {
+      "dtype": "bool",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "lower_low_state": {
+      "dtype": "bool",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "minutes_to_close": {
+      "dtype": "int64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "momentum_15": {
+      "dtype": "float64",
+      "eligible_non_null_count": 376859,
+      "non_null_count": 376859,
+      "null_rate": 0.03863971469824441
+    },
+    "opening_range_state": {
+      "dtype": "object",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "outside_bar": {
+      "dtype": "bool",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "pullback_count": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "rejection_acceptance_proxy": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "ret_1": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "ret_5": {
+      "dtype": "float64",
+      "eligible_non_null_count": 386987,
+      "non_null_count": 386987,
+      "null_rate": 0.0128033754585389
+    },
+    "rolling_range_15": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "session_progress": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "slope_15": {
+      "dtype": "float64",
+      "eligible_non_null_count": 376859,
+      "non_null_count": 376859,
+      "null_rate": 0.03863971469824441
+    },
+    "time_since_open": {
+      "dtype": "int64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "trend_strength_proxy": {
+      "dtype": "float64",
+      "eligible_non_null_count": 376859,
+      "non_null_count": 376859,
+      "null_rate": 0.03863971469824441
+    },
+    "true_range": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "volatility_compression": {
+      "dtype": "float64",
+      "eligible_non_null_count": 381935,
+      "non_null_count": 381935,
+      "null_rate": 0.025690933302041294
+    },
+    "volatility_transition": {
+      "dtype": "object",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "vwap_cross_reclaim": {
+      "dtype": "bool",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    },
+    "vwap_distance": {
+      "dtype": "float64",
+      "eligible_non_null_count": 392006,
+      "non_null_count": 392006,
+      "null_rate": 0.0
+    }
+  },
+  "ret_1_eligible_non_null_count": 392006,
+  "ret_1_non_null_count": 392006,
+  "session_coverage": 382,
+  "timestamp_span": [
+    "2024-09-26T09:19:00+05:30",
+    "2026-07-21T15:29:00+05:30"
+  ],
+  "total_rows": 392006
+}

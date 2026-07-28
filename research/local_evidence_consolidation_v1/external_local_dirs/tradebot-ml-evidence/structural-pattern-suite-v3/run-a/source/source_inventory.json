@@ -1,0 +1,29 @@
+{
+  "aeron7": {
+    "cache": "/Users/madhuram/tradebot-ml-evidence/source-cache/aeron7-nifty-banknifty-intraday-data",
+    "candidate_generation_status": "FAIL_CLOSED_NOT_INCLUDED_CONFLICT_SAFE_1M_PARSER_REQUIRED",
+    "parser_blocker": "Existing repository converter uses drop_duplicates keep=last and cannot prove identical versus conflicting duplicate semantics required for authoritative v3.",
+    "relevant_tree_file_count": 29622,
+    "repo": "https://github.com/aeron7/nifty-banknifty-intraday-data.git",
+    "source_commit_sha": "906fc2378b82e50de78f62844a3ecb3f9306a85d",
+    "source_id": "AERON7",
+    "status": "INVENTORIED_TREE",
+    "tree_file_count": 338996,
+    "usable_for": "RETROSPECTIVE_PREHISTORY_RECURRENCE_AFTER_PARSER_COMPLETION"
+  },
+  "kite": {
+    "accepted_file_count": 1473,
+    "accepted_session_count": 491,
+    "allowed_for_live_execution": false,
+    "archive": "/Users/madhuram/tradebot/runtime/kite_candidate_replay.zip",
+    "archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+    "broker_api_called": false,
+    "execution_eligibility": false,
+    "hash_verified": true,
+    "is_order_action": false,
+    "read_only": true,
+    "rejected_entry_count": 3615,
+    "research_only": true,
+    "source_id": "KITE"
+  }
+}

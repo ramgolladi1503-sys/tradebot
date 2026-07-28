@@ -1,0 +1,75 @@
+{
+  "absent_expected_paths": [
+    "tests/test_four_strategy_contract_freeze.py",
+    "tests/test_opening_range_retest_temporal_fixture_contract.py",
+    "tests/vwap_reclaim_test_support.py",
+    "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+    "docs/agent_reviews/trend_pullback_input_provenance_v1.json",
+    "docs/agent_reviews/trend_pullback_replay_provenance_boundary.md",
+    "docs/agent_reviews/compression_breakout_input_provenance_v1.json"
+  ],
+  "actual_thesis": "Production score averages range-width component, ATR short/long component, and regime COMPRESSION, then breaks nearest_resistance/orb_high/day_high or nearest_support/orb_low/day_low. Available proxy owner uses session-prefix range, not local contracted range; breakout fallback can trade ORB/day anchors rather than the measured compression range.",
+  "approved_spec_found": false,
+  "authority_register": [
+    {
+      "authority_id": "A_PROFILE",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "frozen strategy profile thresholds",
+      "limitations": "thresholds only, not full thesis",
+      "source_path": "core/strategy_parameter_profiles.py:106",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "all four"
+      ]
+    },
+    {
+      "authority_id": "A_REGIME",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "movement regime scoring from StrategyContext",
+      "limitations": "heuristic production owner, not approved thesis",
+      "source_path": "core/movement_regime.py:183",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "trend_pullback_v1",
+        "compression_breakout_v1",
+        "vwap_reclaim_rejection_v1"
+      ]
+    },
+    {
+      "authority_id": "A_ORB_REPLAY",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "expanding typical-price VWAP proxy, TR, ATR 14, ATR short 5, ATR long 30, first-15 ORB",
+      "limitations": "research proxy, not exact live tick/option truth",
+      "source_path": "core/orb_ohlcv_validation.py:129",
+      "source_type": "replay_owner",
+      "strategies_affected": [
+        "opening_range_retest_v1",
+        "compression_breakout_v1"
+      ]
+    },
+    {
+      "authority_id": "A_TR",
+      "authority_level": "LEVEL_3",
+      "exact_formula": "max(high-low, abs(high-prev_close), abs(low-prev_close))",
+      "limitations": "ATR smoothing variant still owner-defined",
+      "source_path": "task canonical TRUE RANGE formula",
+      "source_type": "canonical_indicator_definition",
+      "strategies_affected": [
+        "compression_breakout_v1",
+        "movement_regime"
+      ]
+    }
+  ],
+  "design_ambiguities": [
+    "No approved spec defines compression range owner as session-prefix, rolling local range, ORB range, or nearest level. ATR short/long periods vary by owner unless the ORB research proxy 5/30 convention is explicitly selected."
+  ],
+  "distribution_source": "/Users/madhuram/tradebot-discovery-lab/compression-breakout-v1/production_regime_rerun.json",
+  "no_forward_returns_calculated": true,
+  "no_pnl_used": true,
+  "objective_defects": [],
+  "reachability": "Theoretically reachable: all three compression components can reach 1. Empirically under production-regime proxy, strategy score max was 0.4242 and pass count was zero: THEORETICALLY_REACHABLE_BUT_EMPIRICALLY_ZERO / REACHABLE_ONLY_UNDER_EXTREME_COMBINATIONS.",
+  "repository_modified": false,
+  "strategy": "compression_breakout_v1",
+  "variable_matrix_note": "See production line citations in findings; all _pct consumer gates use FRACTION except range_width_pct in regime/profile uses PERCENTAGE_POINTS.",
+  "verdict": "COMPRESSION_STRATEGY_INTENT_AMBIGUOUS"
+}

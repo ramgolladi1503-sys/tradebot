@@ -1,0 +1,15 @@
+{
+  "algotest_used": false,
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "exact_next_action": "Keep the BUY-side campaign closed and do not begin discovery. Return only after independently certified data satisfies at least one canonical reopen condition.",
+  "final_commit": null,
+  "final_verdict": "REOPEN_CONDITION_NOT_MET",
+  "is_order_action": false,
+  "outcome_or_pnl_inspected": false,
+  "production_modified": false,
+  "provider_acquisition_performed": false,
+  "read_only": true,
+  "selected_universe": null,
+  "source_commit": "d7ed6391c874197da32939852f818c974b2b0afc"
+}

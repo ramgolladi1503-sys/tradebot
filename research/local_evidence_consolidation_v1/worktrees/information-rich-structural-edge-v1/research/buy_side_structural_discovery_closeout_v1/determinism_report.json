@@ -1,0 +1,15 @@
+{
+  "canonicalization": "sorted-key compact JSON encoded as ASCII UTF-8",
+  "semantic_hashes": {
+    "campaign_evidence_ledger.json": "374e05c6ce29ca5e89568c995c0a0d3d265eb4804ebb703af96ff9daec061aba",
+    "duplicate_prevention_registry.json": "99cf2a52397e6b6fdb5fe43bdfd128ae03101de9ea369eb99ecda3035e9dc393",
+    "independent_audit.json": "ddadbb52365aa1abb52e7dab190fa548cb09da645fe65327530fad4a3cef68f5",
+    "mechanism_status_registry.json": "e443a91983132d246ca5126ecc976cc764f80403ed736c293a36304b22e52bd4",
+    "operational_recommendation.json": "f31a7999ed3c4463bf25902ee72b21bed324cc617ef11c730f02bd9ab6143406",
+    "reopen_conditions.json": "1b66ee5c27080e3d979b044fad599c6fad9528019991e05307653a1484cf4db9",
+    "search_space_boundary_statement.json": "0c13e4bfd3a33b3943c1f748b59206455df06c98d0f6e8b9fa8f84cce3b74c47",
+    "superseded_evidence_map.json": "4538d45488e0b26a3846f1b4a9945a5e2ce4855f8febfae890dde2fb183610fe"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS when a second invocation emits identical semantic hashes; verified by focused test"
+}

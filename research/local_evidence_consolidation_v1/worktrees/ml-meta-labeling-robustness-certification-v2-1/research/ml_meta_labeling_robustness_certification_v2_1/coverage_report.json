@@ -1,0 +1,10 @@
+{
+  "concrete_trades": 300,
+  "coverage": 1.0,
+  "coverage_gate_passed": true,
+  "expiries": 16,
+  "frozen_selected_candidates": 300,
+  "mapped_candidates": 300,
+  "semantic_hash": "d20953d1261e6dd8caa3a544891afc817082eabfb739b1f8c6c4e787b2815fa9",
+  "sessions": 38
+}

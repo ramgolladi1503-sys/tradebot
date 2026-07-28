@@ -1,0 +1,90 @@
+{
+  "probes": [
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 SEP 24",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2024-09-26"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 31 OCT 24",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2024-10-31"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 28 NOV 24",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2024-11-28"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 DEC 24",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2024-12-26"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 30 JAN 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-01-30"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 27 FEB 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-02-27"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 27 MAR 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-03-27"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 24 APR 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-04-24"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 29 MAY 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-05-29"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 26 JUN 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-06-26"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 31 JUL 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-07-31"
+    },
+    {
+      "classification": "IDENTIFIER_UNRESOLVED",
+      "expected_contract_symbol": "NIFTY FUT 28 AUG 25",
+      "probe_status": "NOT_SENT",
+      "reason": "no official expired instrument key/token recovered; probing by inferred symbol is forbidden",
+      "target_expiry": "2025-08-28"
+    }
+  ],
+  "raw_response_hashes": {},
+  "semantic_hash": "9e567224951ef908d0f266c66781b4210a29467c29a0425af31db661e7e2a6ae"
+}

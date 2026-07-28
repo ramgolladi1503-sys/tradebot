@@ -1,0 +1,36 @@
+{
+  "allowed_for_live_execution": false,
+  "bootstrap_95_ci_bps": {
+    "lower_bps": 0.0,
+    "replications": 2000,
+    "seed": 20260730,
+    "upper_bps": 0.0
+  },
+  "broker_api_called": false,
+  "candidate_count": 0,
+  "candidates": [],
+  "direction_counts": {},
+  "direction_means_bps": {},
+  "is_order_action": false,
+  "matched_time": {
+    "advantage_bps": 0.0
+  },
+  "mean_after_removing_five_strongest_sessions_bps": 0.0,
+  "mode": "CAUSAL_CORE_PROXY_DISCOVERY",
+  "profile_values": {
+    "MAX_ATR_RATIO": 0.75,
+    "MAX_RANGE_WIDTH_PCT": 0.35,
+    "MIN_BREAKOUT_DISTANCE_PCT": 0.0008,
+    "MIN_COMPRESSION_SCORE": 0.5,
+    "MIN_VWAP_ALIGNMENT_PCT": 0.0004
+  },
+  "read_only": true,
+  "session_count": 0,
+  "session_equal_mean_bps": 0.0,
+  "session_equal_median_bps": 0.0,
+  "strategy_id": "compression_breakout_v1",
+  "symbol_counts": {},
+  "symbol_means_bps": {},
+  "verdict": "COMPRESSION_CAUSAL_PROXY_REJECTED",
+  "year_means_bps": {}
+}

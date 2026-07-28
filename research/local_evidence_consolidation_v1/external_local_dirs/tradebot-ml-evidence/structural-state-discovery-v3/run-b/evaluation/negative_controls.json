@@ -1,0 +1,110 @@
+{
+  "best_month_removal": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "direction_inversion": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "false_previous_session_ownership": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "feature_column_permutation_before_training": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "leave_one_quarter_out": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "matched_random_sessions": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "matched_random_timestamps": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "one_bar_delayed_entry": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "post_outcome_mutation_invariance": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "session_level_outcome_permutation": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "top_five_session_removal": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  },
+  "two_bar_delayed_entry": {
+    "control_lift": 0.0,
+    "effect": 0.0,
+    "input_hash": "564662bad0f2884eaf54f1a9a2f9e6d9c20a8f9d0b7543d46f72b0f9bb7d8388",
+    "median": 0.0,
+    "output_row_ids": [],
+    "pass": true,
+    "session_count": 0
+  }
+}

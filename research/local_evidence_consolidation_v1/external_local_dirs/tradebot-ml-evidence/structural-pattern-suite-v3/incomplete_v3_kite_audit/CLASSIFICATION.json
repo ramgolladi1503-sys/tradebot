@@ -1,0 +1,19 @@
+{
+  "classification": "PARTIAL_KITE_HISTORICAL_EVALUATION",
+  "not_valid_for": [
+    "final strategy decisions",
+    "structural-edge claims",
+    "production compatibility",
+    "option profitability"
+  ],
+  "reason": [
+    "Aeron7 candidate evaluation incomplete",
+    "true matched controls incomplete",
+    "several negative controls incomplete",
+    "parameter-neighbourhood recomputation incomplete",
+    "independent candidate reconstruction incomplete",
+    "real mutation execution incomplete",
+    "authoritative timestamp-label proof incomplete",
+    "all-session fold and occurrence ownership incomplete"
+  ]
+}

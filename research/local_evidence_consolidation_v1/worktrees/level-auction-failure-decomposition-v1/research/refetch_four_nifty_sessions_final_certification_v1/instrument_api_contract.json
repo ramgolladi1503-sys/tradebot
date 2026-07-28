@@ -1,0 +1,16 @@
+{
+  "authorized_dates": [
+    "2024-12-12",
+    "2025-03-25",
+    "2025-04-04",
+    "2025-04-23"
+  ],
+  "candle_timestamp_semantics": "Upstox one-minute historical candle timestamp interpreted as Asia/Kolkata completed/open minute per existing certified source",
+  "endpoint_template": "/v3/historical-candle/{instrument_key}/minutes/1/{date}/{date}",
+  "exchange": "NSE_INDEX",
+  "instrument_key": "NSE_INDEX|Nifty 50",
+  "requested_interval": "1minute",
+  "semantics": "NIFTY spot index historical candles, not futures",
+  "symbol": "NIFTY",
+  "timezone": "Asia/Kolkata"
+}

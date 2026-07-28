@@ -1,0 +1,17 @@
+{
+  "best_bucket": "top_10",
+  "best_model": "xgboost",
+  "elapsed_seconds": 47.18410110473633,
+  "exact_next_action": "Do not promote. Run a longer preregistered rerun only if concrete strike-level candidate data and delayed-entry robustness can be certified.",
+  "final_verdict": "ML_META_LABELING_SIGNAL_FOUND_NOT_YET_ROBUST",
+  "finish_time": "2026-07-28T22:15:10.833050+05:30",
+  "required_incomplete_gates": {
+    "concrete_strike_level_candidate_selection": true,
+    "full_leave_feature_family_out": true,
+    "one_bar_delayed_entry_survival": true
+  },
+  "semantic_hash": "02603c000e6084a856425db9ec0b4d8e961b3fc5dbb2007238f45990d4c62ba9",
+  "start_time": "2026-07-28T22:14:23.681142+05:30",
+  "survivor_useful_case": false,
+  "useful_economic_gates_passed": true
+}

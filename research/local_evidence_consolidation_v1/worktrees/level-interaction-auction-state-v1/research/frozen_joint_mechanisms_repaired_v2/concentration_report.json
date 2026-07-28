@@ -1,0 +1,10 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "single_expiry_share": 1.0,
+    "single_month_share": 1.0
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "single_expiry_share": 0.9780309194467045,
+    "single_month_share": 0.9129373474369405
+  }
+}

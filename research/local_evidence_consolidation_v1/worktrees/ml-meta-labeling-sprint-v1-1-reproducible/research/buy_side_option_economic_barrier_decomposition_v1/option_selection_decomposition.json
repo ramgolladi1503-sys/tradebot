@@ -1,0 +1,695 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "ce_vs_pe": {
+      "CE": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.7761316872427986,
+        "net_expectancy_points": -3.7761316872427986,
+        "session_count": 42,
+        "trades": 1215
+      },
+      "PE": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -0.8855913978494621,
+        "net_expectancy_points": -1.885591397849462,
+        "session_count": 42,
+        "trades": 930
+      }
+    },
+    "dte": {
+      "0": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -4.195127118644068,
+        "net_expectancy_points": -5.195127118644068,
+        "session_count": 16,
+        "trades": 472
+      },
+      "1": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -0.21277322404371568,
+        "net_expectancy_points": -1.2127732240437157,
+        "session_count": 14,
+        "trades": 732
+      },
+      "3": {
+        "expiry_count": 1,
+        "gross_expectancy_points": -11.782075471698114,
+        "net_expectancy_points": -12.782075471698114,
+        "session_count": 1,
+        "trades": 53
+      },
+      "4": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -1.6174549549549544,
+        "net_expectancy_points": -2.617454954954954,
+        "session_count": 14,
+        "trades": 888
+      }
+    },
+    "expiry_week": {
+      "True": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.9564568764568762,
+        "net_expectancy_points": -2.9564568764568757,
+        "session_count": 45,
+        "trades": 2145
+      }
+    },
+    "moneyness_bucket": {
+      "ATM": {
+        "expiry_count": 13,
+        "gross_expectancy_points": -1.8531189083820663,
+        "net_expectancy_points": -2.853118908382066,
+        "session_count": 21,
+        "trades": 513
+      },
+      "MID": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.237139689578714,
+        "net_expectancy_points": -3.237139689578714,
+        "session_count": 38,
+        "trades": 902
+      },
+      "NEAR": {
+        "expiry_count": 15,
+        "gross_expectancy_points": -1.682260273972602,
+        "net_expectancy_points": -2.6822602739726022,
+        "session_count": 31,
+        "trades": 730
+      }
+    },
+    "option_liquidity_proxy_volume_sum": {
+      "HIGH": {
+        "expiry_count": 15,
+        "gross_expectancy_points": -1.038881118881119,
+        "net_expectancy_points": -2.0388811188811187,
+        "session_count": 33,
+        "trades": 715
+      },
+      "LOW": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.50979020979021,
+        "net_expectancy_points": -4.50979020979021,
+        "session_count": 41,
+        "trades": 715
+      },
+      "MID": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.3206993006993004,
+        "net_expectancy_points": -2.320699300699301,
+        "session_count": 39,
+        "trades": 715
+      }
+    },
+    "option_response_elasticity": {
+      "HIGH": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.05,
+        "net_expectancy_points": -3.05,
+        "session_count": 43,
+        "trades": 715
+      },
+      "LOW": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -0.8822377622377622,
+        "net_expectancy_points": -1.8822377622377624,
+        "session_count": 40,
+        "trades": 715
+      },
+      "MID": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.9371328671328674,
+        "net_expectancy_points": -3.9371328671328674,
+        "session_count": 41,
+        "trades": 715
+      }
+    },
+    "post_hoc_warning": "Favourable subgroups are descriptive only and are not candidates.",
+    "premium_bucket": {
+      "DEEP": {
+        "expiry_count": 4,
+        "gross_expectancy_points": -5.450000000000009,
+        "net_expectancy_points": -6.450000000000009,
+        "session_count": 5,
+        "trades": 11
+      },
+      "HIGH": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -0.9637384412153236,
+        "net_expectancy_points": -1.9637384412153238,
+        "session_count": 29,
+        "trades": 757
+      },
+      "LOW": {
+        "expiry_count": 15,
+        "gross_expectancy_points": -0.9194736842105262,
+        "net_expectancy_points": -1.9194736842105267,
+        "session_count": 19,
+        "trades": 190
+      },
+      "MID": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -0.6322170900692842,
+        "net_expectancy_points": -1.632217090069284,
+        "session_count": 28,
+        "trades": 433
+      },
+      "RICH": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.92393899204244,
+        "net_expectancy_points": -4.92393899204244,
+        "session_count": 43,
+        "trades": 754
+      }
+    },
+    "time_of_day": {
+      "AFTERNOON": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.325917767988252,
+        "net_expectancy_points": -4.325917767988252,
+        "session_count": 37,
+        "trades": 681
+      },
+      "CLOSE": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -3.1791443850267385,
+        "net_expectancy_points": -4.179144385026738,
+        "session_count": 22,
+        "trades": 187
+      },
+      "MIDDAY": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -0.5400537634408599,
+        "net_expectancy_points": -1.54005376344086,
+        "session_count": 42,
+        "trades": 930
+      },
+      "OPEN": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.4060518731988476,
+        "net_expectancy_points": -3.4060518731988476,
+        "session_count": 38,
+        "trades": 347
+      }
+    },
+    "underlying_volatility_state": {
+      "HIGH": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.1269230769230774,
+        "net_expectancy_points": -3.1269230769230774,
+        "session_count": 42,
+        "trades": 715
+      },
+      "LOW": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -2.1430769230769235,
+        "net_expectancy_points": -3.1430769230769235,
+        "session_count": 29,
+        "trades": 715
+      },
+      "MID": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.5993706293706285,
+        "net_expectancy_points": -2.5993706293706285,
+        "session_count": 39,
+        "trades": 715
+      }
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "ce_vs_pe": {
+      "CE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.3074894810659192,
+        "net_expectancy_points": -2.3074894810659194,
+        "session_count": 78,
+        "trades": 2852
+      },
+      "PE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.026535782140595193,
+        "net_expectancy_points": -1.0265357821405952,
+        "session_count": 78,
+        "trades": 3158
+      }
+    },
+    "dte": {
+      "0": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -4.115894465894466,
+        "net_expectancy_points": -5.115894465894466,
+        "session_count": 16,
+        "trades": 777
+      },
+      "1": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -1.1622754491017968,
+        "net_expectancy_points": -2.162275449101797,
+        "session_count": 14,
+        "trades": 1002
+      },
+      "3": {
+        "expiry_count": 1,
+        "gross_expectancy_points": -4.09360902255639,
+        "net_expectancy_points": -5.093609022556391,
+        "session_count": 1,
+        "trades": 133
+      },
+      "4": {
+        "expiry_count": 14,
+        "gross_expectancy_points": 0.23586934673366924,
+        "net_expectancy_points": -0.7641306532663309,
+        "session_count": 14,
+        "trades": 995
+      },
+      "5": {
+        "expiry_count": 17,
+        "gross_expectancy_points": 0.49729136163982485,
+        "net_expectancy_points": -0.5027086383601751,
+        "session_count": 17,
+        "trades": 1366
+      },
+      "6": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.10382843983880156,
+        "net_expectancy_points": -0.8961715601611986,
+        "session_count": 20,
+        "trades": 1737
+      }
+    },
+    "expiry_week": {
+      "False": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.2770383499838863,
+        "net_expectancy_points": -0.7229616500161136,
+        "session_count": 37,
+        "trades": 3103
+      },
+      "True": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.6072961816305469,
+        "net_expectancy_points": -2.607296181630547,
+        "session_count": 45,
+        "trades": 2907
+      }
+    },
+    "moneyness_bucket": {
+      "ATM": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.5994551282051278,
+        "net_expectancy_points": -0.40054487179487247,
+        "session_count": 51,
+        "trades": 1560
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.7043196829590486,
+        "net_expectancy_points": -2.7043196829590483,
+        "session_count": 66,
+        "trades": 2271
+      },
+      "NEAR": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.4026617714547961,
+        "net_expectancy_points": -1.402661771454796,
+        "session_count": 61,
+        "trades": 2179
+      }
+    },
+    "option_liquidity_proxy_volume_sum": {
+      "HIGH": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.4254990019960077,
+        "net_expectancy_points": -1.4254990019960077,
+        "session_count": 68,
+        "trades": 2004
+      },
+      "LOW": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6610084872690961,
+        "net_expectancy_points": -1.6610084872690962,
+        "session_count": 75,
+        "trades": 2003
+      },
+      "MID": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.8168047928107843,
+        "net_expectancy_points": -1.8168047928107844,
+        "session_count": 76,
+        "trades": 2003
+      }
+    },
+    "option_response_elasticity": {
+      "HIGH": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.0425449101796406,
+        "net_expectancy_points": -1.042544910179641,
+        "session_count": 77,
+        "trades": 2004
+      },
+      "LOW": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6880179730404393,
+        "net_expectancy_points": -1.6880179730404394,
+        "session_count": 80,
+        "trades": 2003
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.172940589116326,
+        "net_expectancy_points": -2.172940589116326,
+        "session_count": 79,
+        "trades": 2003
+      }
+    },
+    "post_hoc_warning": "Favourable subgroups are descriptive only and are not candidates.",
+    "premium_bucket": {
+      "DEEP": {
+        "expiry_count": 10,
+        "gross_expectancy_points": 3.280000000000004,
+        "net_expectancy_points": 2.280000000000004,
+        "session_count": 15,
+        "trades": 95
+      },
+      "HIGH": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.21892368769298662,
+        "net_expectancy_points": -1.2189236876929863,
+        "session_count": 62,
+        "trades": 2267
+      },
+      "LOW": {
+        "expiry_count": 15,
+        "gross_expectancy_points": -1.4305944055944055,
+        "net_expectancy_points": -2.4305944055944053,
+        "session_count": 19,
+        "trades": 286
+      },
+      "MID": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -1.9974552429667516,
+        "net_expectancy_points": -2.9974552429667516,
+        "session_count": 47,
+        "trades": 782
+      },
+      "RICH": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6422093023255816,
+        "net_expectancy_points": -1.6422093023255817,
+        "session_count": 77,
+        "trades": 2580
+      }
+    },
+    "time_of_day": {
+      "AFTERNOON": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.1934027777777783,
+        "net_expectancy_points": -2.1934027777777785,
+        "session_count": 81,
+        "trades": 1872
+      },
+      "CLOSE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.6260619872379217,
+        "net_expectancy_points": -0.37393801276207833,
+        "session_count": 75,
+        "trades": 1097
+      },
+      "MIDDAY": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.7817449027975345,
+        "net_expectancy_points": -1.7817449027975347,
+        "session_count": 77,
+        "trades": 2109
+      },
+      "OPEN": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6618025751072959,
+        "net_expectancy_points": -1.6618025751072958,
+        "session_count": 75,
+        "trades": 932
+      }
+    },
+    "underlying_volatility_state": {
+      "HIGH": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 1.3291866267465071,
+        "net_expectancy_points": 0.3291866267465071,
+        "session_count": 74,
+        "trades": 2004
+      },
+      "LOW": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.9742136794807791,
+        "net_expectancy_points": -1.974213679480779,
+        "session_count": 72,
+        "trades": 2003
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -2.2591612581128304,
+        "net_expectancy_points": -3.259161258112831,
+        "session_count": 79,
+        "trades": 2003
+      }
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "ce_vs_pe": {
+      "CE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.4568997310795236,
+        "net_expectancy_points": -1.4568997310795235,
+        "session_count": 78,
+        "trades": 2603
+      },
+      "PE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.19587671803415194,
+        "net_expectancy_points": -1.195876718034152,
+        "session_count": 79,
+        "trades": 2401
+      }
+    },
+    "dte": {
+      "0": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -3.2687196110210692,
+        "net_expectancy_points": -4.268719611021068,
+        "session_count": 16,
+        "trades": 617
+      },
+      "1": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -0.4623609394313966,
+        "net_expectancy_points": -1.4623609394313966,
+        "session_count": 14,
+        "trades": 809
+      },
+      "3": {
+        "expiry_count": 1,
+        "gross_expectancy_points": -4.774761904761904,
+        "net_expectancy_points": -5.774761904761904,
+        "session_count": 1,
+        "trades": 105
+      },
+      "4": {
+        "expiry_count": 14,
+        "gross_expectancy_points": -1.4738498212157325,
+        "net_expectancy_points": -2.4738498212157323,
+        "session_count": 14,
+        "trades": 839
+      },
+      "5": {
+        "expiry_count": 17,
+        "gross_expectancy_points": 1.8701532912533814,
+        "net_expectancy_points": 0.8701532912533815,
+        "session_count": 17,
+        "trades": 1109
+      },
+      "6": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.2591147540983599,
+        "net_expectancy_points": -0.7408852459016402,
+        "session_count": 20,
+        "trades": 1525
+      }
+    },
+    "expiry_week": {
+      "False": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.9374145785876988,
+        "net_expectancy_points": -0.06258542141230108,
+        "session_count": 37,
+        "trades": 2634
+      },
+      "True": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.742092827004219,
+        "net_expectancy_points": -2.742092827004219,
+        "session_count": 45,
+        "trades": 2370
+      }
+    },
+    "moneyness_bucket": {
+      "ATM": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.44063467492260094,
+        "net_expectancy_points": -1.4406346749226009,
+        "session_count": 55,
+        "trades": 1292
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.5732976554536181,
+        "net_expectancy_points": -1.573297655453618,
+        "session_count": 68,
+        "trades": 1962
+      },
+      "NEAR": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.01971428571428565,
+        "net_expectancy_points": -0.9802857142857143,
+        "session_count": 64,
+        "trades": 1750
+      }
+    },
+    "option_liquidity_proxy_volume_sum": {
+      "HIGH": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.6563549160671462,
+        "net_expectancy_points": -1.656354916067146,
+        "session_count": 70,
+        "trades": 1668
+      },
+      "LOW": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.43684052757793784,
+        "net_expectancy_points": -0.563159472422062,
+        "session_count": 78,
+        "trades": 1668
+      },
+      "MID": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -0.775455635491607,
+        "net_expectancy_points": -1.7754556354916067,
+        "session_count": 77,
+        "trades": 1668
+      }
+    },
+    "option_response_elasticity": {
+      "HIGH": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.3549220623501195,
+        "net_expectancy_points": -2.35492206235012,
+        "session_count": 73,
+        "trades": 1668
+      },
+      "LOW": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.03339328537170205,
+        "net_expectancy_points": -1.033393285371702,
+        "session_count": 80,
+        "trades": 1668
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.39334532374100667,
+        "net_expectancy_points": -0.6066546762589932,
+        "session_count": 79,
+        "trades": 1668
+      }
+    },
+    "post_hoc_warning": "Favourable subgroups are descriptive only and are not candidates.",
+    "premium_bucket": {
+      "DEEP": {
+        "expiry_count": 12,
+        "gross_expectancy_points": 3.736470588235299,
+        "net_expectancy_points": 2.736470588235299,
+        "session_count": 19,
+        "trades": 85
+      },
+      "HIGH": {
+        "expiry_count": 19,
+        "gross_expectancy_points": 0.03607921928817472,
+        "net_expectancy_points": -0.9639207807118253,
+        "session_count": 64,
+        "trades": 1742
+      },
+      "LOW": {
+        "expiry_count": 16,
+        "gross_expectancy_points": -1.8743243243243244,
+        "net_expectancy_points": -2.8743243243243244,
+        "session_count": 20,
+        "trades": 185
+      },
+      "MID": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.3018750000000001,
+        "net_expectancy_points": -2.301875,
+        "session_count": 46,
+        "trades": 592
+      },
+      "RICH": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.384416666666667,
+        "net_expectancy_points": -1.384416666666667,
+        "session_count": 80,
+        "trades": 2400
+      }
+    },
+    "time_of_day": {
+      "AFTERNOON": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.3021140294682893,
+        "net_expectancy_points": -1.3021140294682894,
+        "session_count": 77,
+        "trades": 1561
+      },
+      "CLOSE": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.4682613390928721,
+        "net_expectancy_points": -1.4682613390928723,
+        "session_count": 75,
+        "trades": 926
+      },
+      "MIDDAY": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.5474884526558894,
+        "net_expectancy_points": -1.5474884526558894,
+        "session_count": 77,
+        "trades": 1732
+      },
+      "OPEN": {
+        "expiry_count": 20,
+        "gross_expectancy_points": 0.24694267515923585,
+        "net_expectancy_points": -0.7530573248407642,
+        "session_count": 68,
+        "trades": 785
+      }
+    },
+    "underlying_volatility_state": {
+      "HIGH": {
+        "expiry_count": 19,
+        "gross_expectancy_points": 0.4080575539568344,
+        "net_expectancy_points": -0.5919424460431656,
+        "session_count": 65,
+        "trades": 1668
+      },
+      "LOW": {
+        "expiry_count": 19,
+        "gross_expectancy_points": 0.15842326139088728,
+        "net_expectancy_points": -0.8415767386091129,
+        "session_count": 70,
+        "trades": 1668
+      },
+      "MID": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -1.5614508393285367,
+        "net_expectancy_points": -2.561450839328537,
+        "session_count": 73,
+        "trades": 1668
+      }
+    }
+  }
+}

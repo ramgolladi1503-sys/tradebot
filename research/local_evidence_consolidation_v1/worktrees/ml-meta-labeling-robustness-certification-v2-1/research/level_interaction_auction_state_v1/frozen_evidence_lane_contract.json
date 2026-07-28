@@ -1,0 +1,21 @@
+{
+  "frozen_before_outcomes": true,
+  "lane_a": {
+    "expected_holdout_trades": 100,
+    "holdout_expiries": 12,
+    "holdout_sessions": 30,
+    "max_expiry_share": 0.2,
+    "max_month_share": 0.35,
+    "profit_factor": 1.15
+  },
+  "lane_b": {
+    "expected_holdout_trades": 30,
+    "holdout_expiries": 10,
+    "holdout_sessions": 20,
+    "max_expiry_share": 0.15,
+    "max_month_share": 0.25,
+    "profit_factor": 1.3,
+    "shadow_test_required": true
+  },
+  "semantic_hash": "99cb1dc3893927d957ac0de752c22ec79d7f70ce701eef0626d2aa5f95a63ec4"
+}

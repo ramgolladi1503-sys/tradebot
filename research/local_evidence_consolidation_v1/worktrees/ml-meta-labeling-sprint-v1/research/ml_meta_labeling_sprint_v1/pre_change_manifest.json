@@ -1,0 +1,15 @@
+{
+  "algotest_called": false,
+  "branch": "research/ml-meta-labeling-sprint-v1",
+  "broker_calls": false,
+  "input_hashes": {
+    "joint": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+    "signals": "ac3c9d751fcc0cf1ee26f3a4d4949d04ab3e1ee2fb59f19aae3a4c546ad6e928"
+  },
+  "production_changes": false,
+  "provider_calls": false,
+  "semantic_hash": "cb5ae0bd1cc134f2bc04e5b199cbff9620884d080800fd1a1762c284a9448695",
+  "source_commit": "c533a6d5332c6c6183c9128cc4f1e7a8a4057aff",
+  "start_time": "2026-07-28T22:14:23.681142+05:30",
+  "worktree": "/Users/madhuram/tradebot-ml-meta-labeling-sprint-v1"
+}

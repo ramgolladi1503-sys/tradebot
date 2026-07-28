@@ -1,0 +1,36 @@
+{
+  "date_span": [
+    "2024-09-26",
+    "2026-07-21"
+  ],
+  "development_period": [
+    "2024-09-26",
+    "2026-02-28"
+  ],
+  "entry_clock": "next_observable_bar",
+  "holdout_period": [
+    "2026-03-01",
+    "2026-07-21"
+  ],
+  "instruments": [
+    "NIFTY"
+  ],
+  "max_holding_minutes": 15,
+  "minimum_premium": 5.0,
+  "multiple_testing_control": "freeze at most four development-ranked interpretable candidates; holdout untouched until frozen specification",
+  "option_sides": [
+    "BUY_CE",
+    "BUY_PE"
+  ],
+  "random_seed": 17,
+  "round_trip_cost_points": 1.0,
+  "stop_points": 8.0,
+  "target_points": 12.0,
+  "unsupported": [
+    "true bid/ask spread",
+    "full IV surface",
+    "complete volume research",
+    "market-impact modelling",
+    "AlgoTest discovery"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "contract_unchanged": true,
+    "delayed_not_retested": true,
+    "final_verdict_allowed": true,
+    "no_production_modifications": true,
+    "no_provider_calls": true,
+    "only_premium_mechanism_planned": true,
+    "prior_ledger_only_for_power": true
+  },
+  "status": "PASS"
+}

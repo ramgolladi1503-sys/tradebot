@@ -1,0 +1,17 @@
+[
+  {
+    "authority_level": "LEVEL_4",
+    "baseline": "provisional thesis requires break -> retest same boundary -> hold -> resume causal stages",
+    "current_rule": "candidate if current spot is on/just outside ORB boundary and aligned with VWAP inside minute window",
+    "defect_classification": "IMPLEMENTATION_DIVERGES_FROM_INTENT",
+    "difference": "no stored breakout time, retest time, hold candle, or continuation candle",
+    "line_range": "26-53,56-79",
+    "production_file": "strategies/movement/opening_range_breakout.py",
+    "proof_no_pnl_used": true,
+    "repair_authority": "OBJECTIVE_REPAIR",
+    "smallest_proposed_correction": "add explicit causal stage identity inputs or rename strategy as snapshot breakout-near-boundary variant",
+    "strategy": "opening_range_retest_v1",
+    "variable_or_equation": "temporal ORB retest stages",
+    "why_changes_meaning": "a snapshot near ORB can be labelled retest without proving a prior breakout and later retest sequence"
+  }
+]

@@ -1,0 +1,15 @@
+research/ml_strategy_discovery_v2/stability.py:10:    pass
+research/ml_strategy_discovery_v2/stability.py:72:        pass
+research/ml_strategy_discovery_v2/gates.py:5:    pass
+research/ml_strategy_discovery_v2/freeze.py:42:        "status": "FRESH_CONFIRMATION_REQUIRES_EXPLICIT_ACKNOWLEDGEMENT"
+research/ml_strategy_discovery_v2/freeze.py:54:                pass
+research/ml_strategy_discovery_v2/data.py:7:    pass
+research/ml_strategy_discovery_v2/data.py:10:    pass
+research/ml_strategy_discovery_v2/data.py:21:        return "FRESH_CONFIRMATION_V2_CONSUMED_INVALID"
+research/ml_strategy_discovery_v2/data.py:24:        return "FRESH_CONFIRMATION_V2_LOCKED"
+research/ml_strategy_discovery_v2/data.py:44:    fresh_df = _enforce_no_leakage(df, ["FRESH_CONFIRMATION_V2_LOCKED", "FRESH_CONFIRMATION_V2_CONSUMED_INVALID", "DEVELOPMENT_V1"])
+research/ml_strategy_discovery_v2/data.py:58:    Allows loading FRESH_CONFIRMATION_V2_LOCKED ONLY if exactly one frozen candidate is supplied,
+research/ml_strategy_discovery_v2/data.py:75:    fresh_df = df[df["session_date"].apply(map_dataset) == "FRESH_CONFIRMATION_V2_LOCKED"].copy()
+research/ml_strategy_discovery_v2/data.py:79:        consumed_df = df[df["session_date"].apply(map_dataset) == "FRESH_CONFIRMATION_V2_CONSUMED_INVALID"]
+research/ml_strategy_discovery_v2/data.py:91:                pass
+scripts/run_ml_strategy_discovery_v2.py:252:            f.write(f"- Verdict: NO_STABLE_CANDIDATE\n")

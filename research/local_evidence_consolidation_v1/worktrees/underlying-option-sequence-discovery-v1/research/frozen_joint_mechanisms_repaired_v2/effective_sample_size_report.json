@@ -1,0 +1,14 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "expiry_count": 20,
+    "holdout_trades": 1341,
+    "session_count": 80,
+    "sufficient": true
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "expiry_count": 6,
+    "holdout_trades": 21,
+    "session_count": 8,
+    "sufficient": false
+  }
+}

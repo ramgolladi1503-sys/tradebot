@@ -1,0 +1,5 @@
+{
+  "candidate_freeze_limit": 3,
+  "no_untouched_holdout_claim": true,
+  "validation_policy": "outer chronological folds plus final retrospective block only"
+}

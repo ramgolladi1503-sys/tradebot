@@ -1,0 +1,14 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "adds_value": false,
+    "joint_minus_underlying": -1.2315197816911065
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "adds_value": true,
+    "joint_minus_underlying": 0.0905344325361519
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "adds_value": true,
+    "joint_minus_underlying": 0.39328042010549735
+  }
+}

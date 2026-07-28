@@ -1,0 +1,38 @@
+{
+  "allowed_for_live_execution": false,
+  "bars_sha256": "d31102b506175d3d585376577bfda84ebbdb055860a9f4f6b56f0fd266615367",
+  "broker_api_called": false,
+  "index_symbol": "NIFTY",
+  "is_order_action": false,
+  "outcome_summary": {
+    "allowed_for_live_execution": false,
+    "ambiguous_same_bar": 0,
+    "broker_api_called": false,
+    "is_order_action": false,
+    "net_mean_bps": null,
+    "net_median_bps": null,
+    "positive_rate": null,
+    "research_only": true,
+    "signals_evaluable": 0,
+    "signals_total": 0
+  },
+  "qualifying_signals": 0,
+  "research_only": true,
+  "state_rows": 5710,
+  "status": "RESEARCH_EVALUATION_COMPLETE",
+  "thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "max_hold_minutes": 20,
+    "minimum_history_sessions": 20,
+    "minimum_weight_coverage": 0.8,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "reward_risk": 1.5,
+    "stop_fraction_of_median_30m_move": 0.35,
+    "z_entry": 2.0
+  },
+  "weights_sha256": "55acaac25dbfdd18ead9af20afe3315c12c2f8b7ddf230096266f3c0500f1ca7"
+}

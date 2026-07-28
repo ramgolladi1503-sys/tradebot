@@ -1,0 +1,11 @@
+{
+  "audit_pass": true,
+  "blockers": [],
+  "checks": {
+    "candidate_freeze_hashes": true,
+    "control_count_matching": true,
+    "fold_boundaries": true,
+    "verdict_consistency": true
+  },
+  "source": "independent_audit_no_candidate_generator_helpers"
+}

@@ -1,0 +1,3 @@
+# INVALID_INCOMPLETE_PROXY_CONTRACT
+
+Head 8ffdc6c5 did not prove NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT. Evidence was superseded by proxy_campaign_2024_2025_v2.

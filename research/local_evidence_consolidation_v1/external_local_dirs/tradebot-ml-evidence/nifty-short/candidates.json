@@ -1,0 +1,175 @@
+[
+  {
+    "candidate_id": "tree_rule_7a6855962eee",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": "<=",
+        "threshold": -0.7935418784618378
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "operator": "<=",
+        "threshold": 0.06959715485572815
+      },
+      {
+        "feature": "distance_from_opening_low_atr",
+        "operator": ">",
+        "threshold": 26.538219451904297
+      },
+      {
+        "feature": "ret_3",
+        "operator": "<=",
+        "threshold": -6.273878534557298e-05
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 59,
+    "discovery_sessions": 6,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "value": 0.004101515290362837
+      },
+      {
+        "feature": "distance_from_opening_low_atr",
+        "value": 4.702000905670637
+      },
+      {
+        "feature": "ret_3",
+        "value": 2.0609675452920584e-06
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "SHORT",
+    "leaf_node_id": 7,
+    "leaf_probability": 0.8612130128392048,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "9ceba57f2c965f62389e294cd7e66fc9d0e324eec4ae180411404eec98278d08",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_0621f88fbfd8",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.7935418784618378
+      },
+      {
+        "feature": "close_location_value",
+        "operator": "<=",
+        "threshold": -0.810435563325882
+      },
+      {
+        "feature": "directional_efficiency_10",
+        "operator": "<=",
+        "threshold": 0.04849907383322716
+      },
+      {
+        "feature": "close_location_value",
+        "operator": "<=",
+        "threshold": -0.832697182893753
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 317,
+    "discovery_sessions": 132,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "close_location_value",
+        "value": 0.01754385965015295
+      },
+      {
+        "feature": "directional_efficiency_10",
+        "value": 0.28180961357207546
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "SHORT",
+    "leaf_node_id": 19,
+    "leaf_probability": 0.6371668516398964,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "9ceba57f2c965f62389e294cd7e66fc9d0e324eec4ae180411404eec98278d08",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  },
+  {
+    "candidate_id": "tree_rule_cecf92ad19f1",
+    "candidate_schema_version": "ml_strategy_candidate_v2",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": "<=",
+        "threshold": -0.7935418784618378
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "operator": "<=",
+        "threshold": 0.06959715485572815
+      },
+      {
+        "feature": "distance_from_opening_low_atr",
+        "operator": ">",
+        "threshold": 26.538219451904297
+      },
+      {
+        "feature": "ret_3",
+        "operator": ">",
+        "threshold": -6.273878534557298e-05
+      }
+    ],
+    "discovery_end": "2025-09-05 09:30:00+00:00",
+    "discovery_rows": 43,
+    "discovery_sessions": 6,
+    "discovery_start": "2024-05-30 04:48:00+00:00",
+    "feature_schema_version": "ml_strategy_discovery_features_v2",
+    "imputation_values": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "value": -5.084183335140228
+      },
+      {
+        "feature": "trend_slope_10_atr",
+        "value": 0.004101515290362837
+      },
+      {
+        "feature": "distance_from_opening_low_atr",
+        "value": 4.702000905670637
+      },
+      {
+        "feature": "ret_3",
+        "value": 2.0609675452920584e-06
+      }
+    ],
+    "label_entry_semantics": "NEXT_LEGAL_BAR_OPEN",
+    "label_schema_version": "ml_strategy_discovery_labels_v2",
+    "label_side": "SHORT",
+    "leaf_node_id": 8,
+    "leaf_probability": 0.5815871864780247,
+    "maximum_holding_bars": 30,
+    "source_dataset_hash": "9ceba57f2c965f62389e294cd7e66fc9d0e324eec4ae180411404eec98278d08",
+    "status": "RESEARCH_CANDIDATE",
+    "stop_atr": 0.6,
+    "target_atr": 1.2
+  }
+]

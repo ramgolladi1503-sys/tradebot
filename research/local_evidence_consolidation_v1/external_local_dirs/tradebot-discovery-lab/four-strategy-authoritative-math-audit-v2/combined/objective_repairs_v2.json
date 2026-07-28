@@ -1,0 +1,18 @@
+{
+  "artifact": "objective_repairs_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "repairs": [
+    {
+      "production_change_made": false,
+      "repair": "Compute retest_distance_pct from retest_bar.close against retest_level, or rename the field if the intended value is breakout-bar boundary distance.",
+      "severity": "OBJECTIVE_DEFECT",
+      "strategy": "opening_range_retest"
+    },
+    {
+      "production_change_made": false,
+      "repair": "Either add an approved explicit VWAP rejection predicate with tests or remove rejection wording from candidate labels/spec.",
+      "severity": "OBJECTIVE_DEFECT",
+      "strategy": "vwap_reclaim"
+    }
+  ]
+}

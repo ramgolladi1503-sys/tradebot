@@ -1,0 +1,4 @@
+{
+  "guard": "discovery code receives only discovery_sessions before freeze",
+  "validation_outcomes_materialized_but_access_blocked_until_freeze": true
+}

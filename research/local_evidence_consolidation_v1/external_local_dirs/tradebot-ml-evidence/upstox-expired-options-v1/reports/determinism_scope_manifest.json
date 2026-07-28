@@ -1,0 +1,20 @@
+{
+  "scope_type": "FIXTURE_SCOPE",
+  "selection_rule": "First discovered single expiry directory (e.g., expiry=2024-10-03)",
+  "selected_file_count": 15,
+  "selected_contract_count": 15,
+  "selected_expiry_count": 1,
+  "selected_expiries": [
+    "2024-10-03"
+  ],
+  "CE_contract_count": 7,
+  "PE_contract_count": 8,
+  "one_minute_row_count": 22645,
+  "five_minute_row_count": 4531,
+  "earliest_timestamp": "2024-09-26T03:49:00.000Z",
+  "latest_timestamp": "2024-10-03T10:00:00.000Z",
+  "relative_paths": [
+    "raw/responses/NIFTY/expiry=2024-10-03"
+  ],
+  "selection_manifest_hash": "b2685959146dfa996f0e4708ff73ffbfca50fbc16b9b3cc865ee534b"
+}

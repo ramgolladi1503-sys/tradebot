@@ -1,0 +1,50 @@
+{
+  "conclusion": {
+    "earliest_expired_option_expiry_reported": "2024-10-03",
+    "historical_range_conclusion": "UPSTOX_EXPIRED_OPTION_RANGE_STARTS_AT_2024_10_03_FOR_NIFTY_IN_THIS_AUTHORIZED_PROBE",
+    "pre_2024_09_26_expired_option_contract_count": 0,
+    "pre_2024_09_26_expired_option_probe_date": "2024-09-19",
+    "pre_2024_09_26_underlying_available": true,
+    "provider": "UPSTOX_ONLY",
+    "provider_calls_made": true,
+    "token_logged": false
+  },
+  "requests": [
+    {
+      "endpoint": "/v2/expired-instruments/expiries?instrument_key=NSE_INDEX%7CNifty%2050",
+      "first_value_or_timestamp": "2024-10-03",
+      "http_status": 200,
+      "last_value_or_timestamp": "2026-07-21",
+      "name": "expired_expiries_nifty",
+      "parsed_status": "success",
+      "raw_bytes": 1264,
+      "raw_response_path": "/Users/madhuram/tradebot-premium-compression-historical-acquisition-v1/research/premium_compression_historical_acquisition_v1/raw/upstox_range_probe/expired_expiries_nifty.json",
+      "raw_sha256": "53712fcbbcd588e1c6d767fb1267e9580d9ce66a0d351e24be7a9b4b4a47f740",
+      "row_count": 95
+    },
+    {
+      "endpoint": "/v2/expired-instruments/option/contract?instrument_key=NSE_INDEX%7CNifty%2050&expiry_date=2024-09-19",
+      "first_value_or_timestamp": null,
+      "http_status": 200,
+      "last_value_or_timestamp": null,
+      "name": "expired_contracts_2024_09_19",
+      "parsed_status": "success",
+      "raw_bytes": 30,
+      "raw_response_path": "/Users/madhuram/tradebot-premium-compression-historical-acquisition-v1/research/premium_compression_historical_acquisition_v1/raw/upstox_range_probe/expired_contracts_2024_09_19.json",
+      "raw_sha256": "20bc1392a17b383b46fffc33c8e796755452883bfcfc2d33c90342ea70227639",
+      "row_count": 0
+    },
+    {
+      "endpoint": "/v2/historical-candle/NSE_INDEX%7CNifty%2050/1minute/2024-09-19/2024-09-19",
+      "first_value_or_timestamp": "2024-09-19T09:15:00+05:30",
+      "http_status": 200,
+      "last_value_or_timestamp": "2024-09-19T15:29:00+05:30",
+      "name": "underlying_2024_09_19",
+      "parsed_status": "success",
+      "raw_bytes": 25530,
+      "raw_response_path": "/Users/madhuram/tradebot-premium-compression-historical-acquisition-v1/research/premium_compression_historical_acquisition_v1/raw/upstox_range_probe/underlying_2024_09_19.json",
+      "raw_sha256": "6f97bc4a6252e8c1ff741296d3bd8b14af304d2989bbd55e2119958f7b50a8f8",
+      "row_count": 375
+    }
+  ]
+}

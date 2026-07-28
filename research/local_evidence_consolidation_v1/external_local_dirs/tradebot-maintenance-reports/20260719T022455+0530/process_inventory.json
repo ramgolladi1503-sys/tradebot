@@ -1,0 +1,26 @@
+{
+  "source": "process_memory_raw.txt and top RSS ps sample",
+  "memory": {
+    "system_wide_free_percent": 31,
+    "swapins": 223285326,
+    "swapouts": 233437539,
+    "ram_gate_passed_for_light_audit": true,
+    "ram_gate_passed_for_full_orb_outcome_run": false
+  },
+  "active_tradebot_processes": [
+    {
+      "pid": 25513,
+      "command": "/opt/anaconda3/bin/python /Users/madhuram/tradebot/main.py",
+      "action": "preserve",
+      "reason": "shared checkout is protected and process termination was not authorized"
+    }
+  ],
+  "deleted_open_files": {
+    "count_over_100_mib": 1,
+    "bytes_over_100_mib": 467039502,
+    "largest": "/Users/madhuram/Library/Application Support/com.apple.wallpaper/aerials/videos/4C108785-A7BA-422E-9C79-B0129F1D5550.mov",
+    "action": "manual_review",
+    "reason": "system application file, not TradeBot generated evidence"
+  },
+  "processes_terminated": 0
+}

@@ -1,0 +1,29 @@
+{
+  "blocking_field": "synchronized_nifty_futures_ohlc",
+  "gate_result": "FAIL",
+  "mandatory": {
+    "causal_timestamps": "PARTIALLY_SUPPORTED",
+    "contract_specific_futures_expiry": "UNSUPPORTED",
+    "enough_overlapping_expiries": "UNSUPPORTED",
+    "enough_overlapping_sessions": "UNSUPPORTED",
+    "option_expiry": "SUPPORTED",
+    "option_right": "SUPPORTED",
+    "option_strike": "SUPPORTED",
+    "synchronized_nifty_futures_ohlc": "UNSUPPORTED",
+    "synchronized_nifty_option_ohlc": "SUPPORTED",
+    "synchronized_nifty_underlying_ohlc": "SUPPORTED"
+  },
+  "preferred": {
+    "ask": "UNSUPPORTED",
+    "bid": "UNSUPPORTED",
+    "exchange_timestamp": "UNSUPPORTED",
+    "open_interest": "PARTIALLY_SUPPORTED",
+    "point_in_time_greeks": "UNSUPPORTED",
+    "point_in_time_iv": "UNSUPPORTED",
+    "quote_depth": "UNSUPPORTED",
+    "trade_price": "UNSUPPORTED",
+    "trade_quantity": "UNSUPPORTED",
+    "volume": "LIMITED"
+  },
+  "semantic_hash": "42ff96b4ca19c930140a13fb32063bbdf8c728e05a850737faeec5e3a4f296a4"
+}

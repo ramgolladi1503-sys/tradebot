@@ -1,0 +1,55 @@
+{
+  "artifact_count": 10,
+  "artifacts": [
+    {
+      "bytes": 3439,
+      "path": "canonical_warehouse_rules.json",
+      "sha256": "bb4bcb83e21e91da4717f2aa8a3db52620c4067424a22654941df479d62e2fda"
+    },
+    {
+      "bytes": 423,
+      "path": "capability_matrix.json",
+      "sha256": "8255eeda6d651c7866aa54d59c31dbece88c13b3a5377fe72fa6073e2e56753e"
+    },
+    {
+      "bytes": 1308,
+      "path": "determinism_report.json",
+      "sha256": "0c220cacd717f92c1fe534a3c7ebe4da7c8c3b32aa6d1fc4424609793f1a0181"
+    },
+    {
+      "bytes": 494,
+      "path": "eligibility_framework.json",
+      "sha256": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569"
+    },
+    {
+      "bytes": 12065,
+      "path": "feature_governance_report.json",
+      "sha256": "e8e275b11d4b6fcff37a18ca41d6dfcead68b823eb1f7544695d1c8721f8b777"
+    },
+    {
+      "bytes": 779,
+      "path": "final_verdict.json",
+      "sha256": "8194255fc1c4c170761c317e355f33f81b498b2211f6552e9620b08ba85fd0da"
+    },
+    {
+      "bytes": 3078,
+      "path": "gap_metadata.json",
+      "sha256": "20b4b0f0ecfcfc2cc532524d00e4bd9899a61056c84b7e93803da5c4f9846d6d"
+    },
+    {
+      "bytes": 557,
+      "path": "independent_audit_report.json",
+      "sha256": "71386a56b4aec57d9c88db5fad1395ee282bd5e4c9cc72d094f6814c2e1ccfca"
+    },
+    {
+      "bytes": 1741,
+      "path": "joint_governance_report.json",
+      "sha256": "27aec0fd5b05dec7d460c0e38dd9cc5cc585e2ce494f43434c7536cb8bc1ad26"
+    },
+    {
+      "bytes": 1622,
+      "path": "sparse_bar_contract.json",
+      "sha256": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0"
+    }
+  ]
+}

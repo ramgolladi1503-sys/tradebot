@@ -1,0 +1,17 @@
+{
+  "completed_bar_required": true,
+  "microstructure_claim": false,
+  "semantic_hash": "c81d3c02ca9ecd94b3be83c3b94e8a0b7ea77262ef239c9ae2050c687e740aa5",
+  "states": [
+    "touch",
+    "wick_breach",
+    "close_breach",
+    "acceptance",
+    "rejection",
+    "reclaim",
+    "failed_auction",
+    "repeated_test_depletion_proxy",
+    "compression_near_boundary",
+    "expansion_after_acceptance"
+  ]
+}

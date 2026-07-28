@@ -1,0 +1,24 @@
+{
+  "kite_excluded_by_user": true,
+  "official_reference_urls": {
+    "upstox_expired_historical_candles": "https://upstox.com/developer/api-documentation/get-expired-historical-candle-data/",
+    "upstox_historical_candle_v3": "https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/"
+  },
+  "provider_call_scope": "UPSTOX_ONLY_AUTHORIZED_RANGE_PROBE",
+  "provider_calls_made": true,
+  "upstox_expired_options": {
+    "contract_discovery_process": "Use official expired option contracts API to discover expired_instrument_key, then expired historical candle endpoint.",
+    "earliest_obtainable_date": "2024-10-03",
+    "historical_api_limits": "Authorized probe captured status codes and response hashes for bounded range discovery; broader limits were not probed.",
+    "missing_field_limitations": "OHLC candles only; no bid/ask, IV, or unsupported microstructure claims.",
+    "one_minute_availability": "DOCUMENTED_FOR_EXPIRED_CONTRACTS",
+    "provenance_capture_requirements": "request URL parameters, HTTP status, response headers where safe, response hash, empty-response ledger.",
+    "read_only_credential_present": true
+  },
+  "upstox_underlying": {
+    "compatibility": "Underlying-only availability cannot complete joint evidence without expired options.",
+    "nifty_underlying_historical_range": "Authorized probe confirmed NIFTY 1-minute underlying candles exist for 2024-09-19.",
+    "one_minute_support": "AUTHORIZED_PROBE_CONFIRMED",
+    "read_only_credential_present": true
+  }
+}

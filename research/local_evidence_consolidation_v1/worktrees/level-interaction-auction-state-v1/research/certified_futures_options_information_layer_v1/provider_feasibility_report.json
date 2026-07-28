@@ -1,0 +1,42 @@
+{
+  "policy": {
+    "kite_usage": "NOT_USED",
+    "provider_calls_made": false,
+    "secrets_read_or_stored": false,
+    "upstox_usage": "LOCAL_ARTIFACTS_ONLY"
+  },
+  "semantic_hash": "cbb312e2929c981629d5e87cb799c6e57383d6689a7f24f06962398a61b3cc95",
+  "upstox": {
+    "assessed": true,
+    "called": false,
+    "expired_futures_support": "REQUIRES_AUTHORIZED_READ_ONLY_PROBE",
+    "nifty_futures_historical_availability": "FEASIBLE_TO_PROBE_READ_ONLY",
+    "one_minute_support": "FEASIBLE_TO_PROBE_READ_ONLY",
+    "provenance_requirements": [
+      "instrument master hash",
+      "request hash",
+      "response hash",
+      "expiry map hash"
+    ],
+    "request_limits": "REQUIRES_PROVIDER_DOC_OR_AUTHORIZED_PROBE",
+    "status": "AUTHORIZED_PROVIDER_CANDIDATE_NOT_CALLED_IN_THIS_TASK",
+    "timestamp_semantics": "REQUIRES_AUTHORIZED_READ_ONLY_PROBE"
+  },
+  "zerodha_kite": {
+    "assessed": true,
+    "called": false,
+    "contract_token_discovery": "REQUIRES_AUTHORIZED_PROVIDER_PROBE",
+    "expired_futures_access": "REQUIRES_AUTHORIZED_PROVIDER_PROBE",
+    "nifty_futures_historical_availability": "REQUIRES_AUTHORIZED_PROVIDER_PROBE",
+    "one_minute_support": "REQUIRES_AUTHORIZED_PROVIDER_PROBE",
+    "provenance_requirements": [
+      "request URL hash",
+      "instrument token hash",
+      "HTTP status",
+      "raw response hash"
+    ],
+    "request_limits": "REQUIRES_PROVIDER_DOC_OR_AUTHORIZED_PROBE",
+    "status": "NOT_USED_BY_USER_CONSTRAINT_AND_NO_LOCAL_AUTHORITY",
+    "timestamp_semantics": "REQUIRES_PROVIDER_DOC_OR_AUTHORIZED_PROBE"
+  }
+}

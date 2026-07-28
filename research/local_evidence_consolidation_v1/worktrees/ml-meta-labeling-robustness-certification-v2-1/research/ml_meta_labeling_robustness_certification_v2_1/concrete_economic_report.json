@@ -1,0 +1,12 @@
+{
+  "expectancy": -1.097166666666667,
+  "expiries": 16,
+  "gross_loss": 2636.3,
+  "gross_profit": 2307.15,
+  "net_pnl": -329.1500000000001,
+  "profit_factor": 0.875146986306566,
+  "semantic_hash": "cbb47b8c57ca4aae73a794a21e268307616e7027d93dbca59b6d45a9ecfadc9d",
+  "sessions": 38,
+  "trades": 300,
+  "win_rate": 0.38333333333333336
+}

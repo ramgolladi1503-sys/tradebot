@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "contract_identity_preserved": true,
+    "final_verdict_allowed": true,
+    "no_overlap": true,
+    "no_pnl_or_strategy_rerun": true,
+    "no_production_modifications": true,
+    "provider_calls_are_authorized_upstox_only": true,
+    "raw_artifacts_match_authorized_probe_state": true
+  },
+  "status": "PASS"
+}

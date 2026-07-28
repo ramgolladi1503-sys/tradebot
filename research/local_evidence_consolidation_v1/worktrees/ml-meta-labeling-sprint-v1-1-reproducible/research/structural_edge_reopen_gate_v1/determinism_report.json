@@ -1,0 +1,15 @@
+{
+  "canonicalization": "sorted-key compact JSON encoded as ASCII UTF-8",
+  "semantic_hashes": {
+    "event_feasibility_report.json": "6bc0c50261136267a1cc51edddc0d04cad855169372816f17ac0dea89d2268c0",
+    "frozen_research_contract.json": "cae9c7647cd7d2a4c69e92d34df5deb751958004a64b19951fb112df3fb3b45a",
+    "hypothesis_catalogue.json": "b67868893e2bed5d716ae12fb3c94527247db98ae4e63a6e7001a76a0a254852",
+    "independent_audit.json": "3d4827ff5d87a28e4656fd40efa3da443e1906208a33fa36695368751c933d57",
+    "local_data_capability_inventory.json": "09f71067acebe22718f6d13858652a1b4d1e5be5bc55e7bc2a2862f6a7390454",
+    "material_distinctness_proof.json": "ebb59ffafc36c8474261e62b09f994323d0a615d63888d9648b1fb9720091203",
+    "reopen_condition_matrix.json": "ca6daf4d80c96111c20555b12bce8e7e87e4168a82f52816f1716464f35aaf63",
+    "selected_universe_decision.json": "80d97c9dbbae35c8619a0d60465988c0c554e227bc206c00c7fcf21c9f1711e7"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS when regenerated reports have identical semantic hashes; focused test enforces this."
+}

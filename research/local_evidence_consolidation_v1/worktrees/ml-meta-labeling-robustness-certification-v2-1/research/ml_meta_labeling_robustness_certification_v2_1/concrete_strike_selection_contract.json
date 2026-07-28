@@ -1,0 +1,7 @@
+{
+  "broker_api_called": false,
+  "causal": true,
+  "provider_api_called": false,
+  "rule": "same session, same expiry, same option side; latest certified option candle at or before candidate timestamp; choose strike with minimum absolute distance to underlying close; tie by lower strike then instrument key; enter next observable completed bar for that contract",
+  "semantic_hash": "28a4d55750873a1230d131641c388b47f5995b91ac463643f1c16fa39a01611e"
+}

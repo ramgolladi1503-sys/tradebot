@@ -1,0 +1,14 @@
+{
+  "base_commit": "2eead6378ffa6bad1127bd1d815e204ac5af0a77",
+  "field_mapping": {
+    "candidate_universe": "load_frames + build_dataset",
+    "economics": "econ",
+    "features": "FEATURES_NUMERIC + FEATURES_CATEGORICAL",
+    "label": "LABEL_CONTRACT + build_dataset path scan",
+    "models": "logistic and xgboost loops",
+    "selection": "validation quantile thresholds",
+    "split": "split_dataset chronological session split"
+  },
+  "prior_source_inspected": "/Users/madhuram/tradebot-ml-meta-labeling-sprint-v1/scripts/run_ml_meta_labeling_sprint_v1.py",
+  "semantic_hash": "b3aee7309d5cbfb8fde5ce66d5c3a0007539a8dd9af345ccce8ab60a48fd6e21"
+}

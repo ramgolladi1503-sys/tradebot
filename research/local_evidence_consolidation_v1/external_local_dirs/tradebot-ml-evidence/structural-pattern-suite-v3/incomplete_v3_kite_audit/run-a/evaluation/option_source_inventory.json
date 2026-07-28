@@ -1,0 +1,41 @@
+{
+  "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+  "sources": [
+    {
+      "accepted": false,
+      "bid_ask_availability": false,
+      "classification": "REJECT_NO_AUTHORITATIVE_BID_ASK_PROVENANCE",
+      "date_range": "NOT_DERIVED",
+      "file_count": 36,
+      "path": "/Users/madhuram/tradebot/runtime",
+      "provenance": "LOCAL_INVENTORY_ONLY",
+      "reason": "no source passed real bid/ask/provenance/expiry mapping gates",
+      "symbol_expiry_coverage": "NOT_PROVEN",
+      "timestamp_semantics": "NOT_PROVEN"
+    },
+    {
+      "accepted": false,
+      "bid_ask_availability": false,
+      "classification": "REJECT_NO_AUTHORITATIVE_BID_ASK_PROVENANCE",
+      "date_range": "NOT_DERIVED",
+      "file_count": 3,
+      "path": "/Users/madhuram/tradebot/.runtime",
+      "provenance": "LOCAL_INVENTORY_ONLY",
+      "reason": "no source passed real bid/ask/provenance/expiry mapping gates",
+      "symbol_expiry_coverage": "NOT_PROVEN",
+      "timestamp_semantics": "NOT_PROVEN"
+    },
+    {
+      "accepted": false,
+      "bid_ask_availability": false,
+      "classification": "REJECT_NO_AUTHORITATIVE_BID_ASK_PROVENANCE",
+      "date_range": "NOT_DERIVED",
+      "file_count": 12,
+      "path": "/Users/madhuram/tradebot-ml-evidence",
+      "provenance": "LOCAL_INVENTORY_ONLY",
+      "reason": "no source passed real bid/ask/provenance/expiry mapping gates",
+      "symbol_expiry_coverage": "NOT_PROVEN",
+      "timestamp_semantics": "NOT_PROVEN"
+    }
+  ]
+}

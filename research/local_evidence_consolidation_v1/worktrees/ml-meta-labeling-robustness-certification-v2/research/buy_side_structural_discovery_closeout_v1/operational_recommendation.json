@@ -1,0 +1,9 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "is_order_action": false,
+  "production_trade_recommendations_allowed": false,
+  "read_only": true,
+  "reason": "No BUY-only mechanism has a validated positive edge; one mechanism remains parked and underpowered.",
+  "recommendation": "NO_STRATEGY_ACTIVATION"
+}

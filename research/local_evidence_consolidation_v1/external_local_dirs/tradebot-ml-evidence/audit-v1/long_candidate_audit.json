@@ -1,0 +1,4410 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "base_development_metrics": {
+    "average_bars_to_event": 2.5910991438567215,
+    "barrier_outcome_counts": {
+      "AMBIGUOUS_SAME_BAR": 360,
+      "NEITHER": 35,
+      "STOP_FIRST": 69241,
+      "TARGET_FIRST": 35872
+    },
+    "by_expiry_context": {
+      "nan": {
+        "expectancy_r": 0.01228907462065206,
+        "rows": 105508,
+        "sessions": 306,
+        "total_r": 1296.5956850757575
+      }
+    },
+    "by_month": {
+      "2024-05": {
+        "expectancy_r": -0.03821656050955415,
+        "rows": 628,
+        "sessions": 2,
+        "total_r": -24.000000000000007
+      },
+      "2024-06": {
+        "expectancy_r": 0.03929586807088485,
+        "rows": 6555,
+        "sessions": 19,
+        "total_r": 257.5844152046502
+      },
+      "2024-07": {
+        "expectancy_r": 0.04627297096195199,
+        "rows": 7590,
+        "sessions": 22,
+        "total_r": 351.2118496012156
+      },
+      "2024-08": {
+        "expectancy_r": -0.01142857142857143,
+        "rows": 7245,
+        "sessions": 21,
+        "total_r": -82.80000000000001
+      },
+      "2024-09": {
+        "expectancy_r": -0.0009646117272301072,
+        "rows": 7245,
+        "sessions": 21,
+        "total_r": -6.988611963782127
+      },
+      "2024-10": {
+        "expectancy_r": -0.029809461834879557,
+        "rows": 7590,
+        "sessions": 22,
+        "total_r": -226.25381532673583
+      },
+      "2024-11": {
+        "expectancy_r": 0.001240656762534191,
+        "rows": 6210,
+        "sessions": 18,
+        "total_r": 7.704478495337327
+      },
+      "2024-12": {
+        "expectancy_r": -0.032400502165433595,
+        "rows": 6900,
+        "sessions": 20,
+        "total_r": -223.56346494149182
+      },
+      "2025-01": {
+        "expectancy_r": -0.0037080303684666653,
+        "rows": 7935,
+        "sessions": 23,
+        "total_r": -29.42322097378299
+      },
+      "2025-02": {
+        "expectancy_r": 0.019221967963386724,
+        "rows": 6555,
+        "sessions": 19,
+        "total_r": 125.99999999999997
+      },
+      "2025-03": {
+        "expectancy_r": 0.06724637681159419,
+        "rows": 6210,
+        "sessions": 18,
+        "total_r": 417.59999999999997
+      },
+      "2025-04": {
+        "expectancy_r": 0.02192315478410661,
+        "rows": 5175,
+        "sessions": 15,
+        "total_r": 113.45232600775171
+      },
+      "2025-05": {
+        "expectancy_r": 0.013254202655467668,
+        "rows": 6210,
+        "sessions": 18,
+        "total_r": 82.30859849045422
+      },
+      "2025-06": {
+        "expectancy_r": 0.03747463386034551,
+        "rows": 7245,
+        "sessions": 21,
+        "total_r": 271.50372231820324
+      },
+      "2025-07": {
+        "expectancy_r": 0.004339957839638422,
+        "rows": 7935,
+        "sessions": 23,
+        "total_r": 34.43756545753088
+      },
+      "2025-08": {
+        "expectancy_r": 0.02032036613272311,
+        "rows": 6555,
+        "sessions": 19,
+        "total_r": 133.2
+      },
+      "2025-09": {
+        "expectancy_r": 0.054853242148641804,
+        "rows": 1725,
+        "sessions": 5,
+        "total_r": 94.62184270640711
+      }
+    },
+    "by_regime": {
+      "-1.0": {
+        "expectancy_r": 0.032475755210949614,
+        "rows": 8845,
+        "sessions": 306,
+        "total_r": 287.2480548408493
+      },
+      "0.0": {
+        "expectancy_r": 0.01553808501534662,
+        "rows": 55734,
+        "sessions": 306,
+        "total_r": 865.9996302453285
+      },
+      "1.0": {
+        "expectancy_r": -0.015896467445369038,
+        "rows": 9363,
+        "sessions": 306,
+        "total_r": -148.8386246909903
+      },
+      "nan": {
+        "expectancy_r": 0.00925637156055788,
+        "rows": 31566,
+        "sessions": 306,
+        "total_r": 292.18662468057005
+      }
+    },
+    "by_time_bucket": {
+      "0.0": {
+        "expectancy_r": 0.010692697171727234,
+        "rows": 18605,
+        "sessions": 305,
+        "total_r": 198.9376308799852
+      },
+      "1.0": {
+        "expectancy_r": 0.018261780687132155,
+        "rows": 55079,
+        "sessions": 306,
+        "total_r": 1005.840618466552
+      },
+      "2.0": {
+        "expectancy_r": 0.00288516326449285,
+        "rows": 31824,
+        "sessions": 306,
+        "total_r": 91.81743572922046
+      }
+    },
+    "by_year": {
+      "2024": {
+        "expectancy_r": 0.0010586804449130992,
+        "rows": 49963,
+        "sessions": 145,
+        "total_r": 52.89485106919318
+      },
+      "2025": {
+        "expectancy_r": 0.022390869277280845,
+        "rows": 55545,
+        "sessions": 161,
+        "total_r": 1243.7008340065645
+      }
+    },
+    "gross_negative_r": 41762.70780021476,
+    "gross_positive_r": 43059.30348529052,
+    "label_expectancy_r": 0.01228907462065206,
+    "label_profit_factor": 1.031046734116917,
+    "mae_atr_mean": -3.1195795056062874,
+    "maximum_drawdown_r": -732.512801773096,
+    "mean_label_return_r": 0.01228907462065206,
+    "median_bars_to_event": 2.0,
+    "median_label_return_r": -0.6,
+    "metric_name": "underlying research-label metrics",
+    "mfe_atr_mean": 2.9566048078278686,
+    "row_support_rate": 1.0,
+    "rows": 105508,
+    "session_support_rate": 1.0,
+    "sessions": 306,
+    "total_label_r": 1296.5956850757575,
+    "win_rate": 0.3402301247298783
+  },
+  "base_rate_lift_validation_expectancy_r": 0.234749450320844,
+  "base_validation_metrics": {
+    "average_bars_to_event": 2.587186993718557,
+    "barrier_outcome_counts": {
+      "AMBIGUOUS_SAME_BAR": 148,
+      "NEITHER": 7,
+      "STOP_FIRST": 22871,
+      "TARGET_FIRST": 12164
+    },
+    "by_expiry_context": {
+      "nan": {
+        "expectancy_r": 0.022393406822013226,
+        "rows": 35190,
+        "sessions": 102,
+        "total_r": 788.0239860666454
+      }
+    },
+    "by_month": {
+      "2025-09": {
+        "expectancy_r": -0.006751918158567778,
+        "rows": 5865,
+        "sessions": 17,
+        "total_r": -39.600000000000016
+      },
+      "2025-10": {
+        "expectancy_r": 0.028956521739130433,
+        "rows": 6900,
+        "sessions": 20,
+        "total_r": 199.79999999999998
+      },
+      "2025-11": {
+        "expectancy_r": 0.07218327741858808,
+        "rows": 6555,
+        "sessions": 19,
+        "total_r": 473.1613834788449
+      },
+      "2025-12": {
+        "expectancy_r": 0.002657439685004357,
+        "rows": 7590,
+        "sessions": 22,
+        "total_r": 20.16996720918307
+      },
+      "2026-01": {
+        "expectancy_r": 0.009391304347826094,
+        "rows": 6900,
+        "sessions": 20,
+        "total_r": 64.80000000000005
+      },
+      "2026-02": {
+        "expectancy_r": 0.050501909694650585,
+        "rows": 1380,
+        "sessions": 4,
+        "total_r": 69.69263537861781
+      }
+    },
+    "by_regime": {
+      "-1.0": {
+        "expectancy_r": 0.020398457785705936,
+        "rows": 3026,
+        "sessions": 102,
+        "total_r": 61.72573325954617
+      },
+      "0.0": {
+        "expectancy_r": 0.020663065014409083,
+        "rows": 18311,
+        "sessions": 102,
+        "total_r": 378.3613834788447
+      },
+      "1.0": {
+        "expectancy_r": 0.07471460897180635,
+        "rows": 3434,
+        "sessions": 102,
+        "total_r": 256.569967209183
+      },
+      "nan": {
+        "expectancy_r": 0.008769258289574009,
+        "rows": 10419,
+        "sessions": 102,
+        "total_r": 91.3669021190716
+      }
+    },
+    "by_time_bucket": {
+      "0.0": {
+        "expectancy_r": 0.037328364504592426,
+        "rows": 6222,
+        "sessions": 102,
+        "total_r": 232.25708394757407
+      },
+      "1.0": {
+        "expectancy_r": 0.03301562647707361,
+        "rows": 18360,
+        "sessions": 102,
+        "total_r": 606.1669021190714
+      },
+      "2.0": {
+        "expectancy_r": -0.004751131221719463,
+        "rows": 10608,
+        "sessions": 102,
+        "total_r": -50.40000000000006
+      }
+    },
+    "by_year": {
+      "2025": {
+        "expectancy_r": 0.024285817565515715,
+        "rows": 26910,
+        "sessions": 78,
+        "total_r": 653.5313506880279
+      },
+      "2026": {
+        "expectancy_r": 0.016243071905630176,
+        "rows": 8280,
+        "sessions": 24,
+        "total_r": 134.49263537861785
+      }
+    },
+    "gross_negative_r": 13811.757565789512,
+    "gross_positive_r": 14599.781551856158,
+    "label_expectancy_r": 0.022393406822013226,
+    "label_profit_factor": 1.057054577037937,
+    "mae_atr_mean": -3.124961519265186,
+    "maximum_drawdown_r": -222.60000000000844,
+    "mean_label_return_r": 0.022393406822013226,
+    "median_bars_to_event": 2.0,
+    "median_label_return_r": -0.6,
+    "metric_name": "underlying research-label metrics",
+    "mfe_atr_mean": 2.9554062916108754,
+    "row_support_rate": 1.0,
+    "rows": 35190,
+    "session_support_rate": 1.0,
+    "sessions": 102,
+    "total_label_r": 788.0239860666454,
+    "win_rate": 0.34578005115089516
+  },
+  "broker_api_called": false,
+  "candidate": {
+    "all_support_rate": 0.0005514873101064313,
+    "all_support_rows": 97,
+    "candidate_id": "tree_rule_edb855245d2f",
+    "conditions": [
+      {
+        "feature": "distance_from_opening_high_atr",
+        "operator": ">",
+        "threshold": -0.8024527728557587
+      },
+      {
+        "feature": "compression_ratio_5_20",
+        "operator": "<=",
+        "threshold": 0.13630171120166779
+      },
+      {
+        "feature": "distance_from_previous_high_atr",
+        "operator": "<=",
+        "threshold": 2.4608426094055176
+      }
+    ],
+    "development_rows": 53,
+    "development_sessions": 22,
+    "extremely_rare": true,
+    "imputation_dependent_values": {
+      "compression_ratio_5_20": 0,
+      "distance_from_opening_high_atr": 0,
+      "distance_from_previous_high_atr": 0
+    },
+    "near_universal": false
+  },
+  "candidate_development_metrics": {
+    "average_bars_to_event": 4.056603773584905,
+    "barrier_outcome_counts": {
+      "STOP_FIRST": 11,
+      "TARGET_FIRST": 42
+    },
+    "by_expiry_context": {
+      "nan": {
+        "expectancy_r": 0.8264150943396229,
+        "rows": 53,
+        "sessions": 22,
+        "total_r": 43.80000000000001
+      }
+    },
+    "by_month": {
+      "2024-07": {
+        "expectancy_r": 0.6857142857142858,
+        "rows": 7,
+        "sessions": 2,
+        "total_r": 4.800000000000001
+      },
+      "2024-09": {
+        "expectancy_r": 1.2,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": 1.2
+      },
+      "2024-10": {
+        "expectancy_r": 1.2,
+        "rows": 8,
+        "sessions": 3,
+        "total_r": 9.6
+      },
+      "2025-01": {
+        "expectancy_r": 1.2,
+        "rows": 8,
+        "sessions": 1,
+        "total_r": 9.6
+      },
+      "2025-02": {
+        "expectancy_r": -0.6,
+        "rows": 2,
+        "sessions": 1,
+        "total_r": -1.2
+      },
+      "2025-03": {
+        "expectancy_r": 0.7499999999999999,
+        "rows": 4,
+        "sessions": 2,
+        "total_r": 2.9999999999999996
+      },
+      "2025-04": {
+        "expectancy_r": 0.39999999999999997,
+        "rows": 9,
+        "sessions": 4,
+        "total_r": 3.5999999999999996
+      },
+      "2025-05": {
+        "expectancy_r": 1.2,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": 1.2
+      },
+      "2025-06": {
+        "expectancy_r": 0.47999999999999987,
+        "rows": 5,
+        "sessions": 3,
+        "total_r": 2.3999999999999995
+      },
+      "2025-07": {
+        "expectancy_r": 1.2,
+        "rows": 5,
+        "sessions": 2,
+        "total_r": 6.0
+      },
+      "2025-08": {
+        "expectancy_r": 1.2,
+        "rows": 3,
+        "sessions": 2,
+        "total_r": 3.5999999999999996
+      }
+    },
+    "by_regime": {
+      "-1.0": {
+        "expectancy_r": 1.2,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": 1.2
+      },
+      "0.0": {
+        "expectancy_r": 1.0,
+        "rows": 18,
+        "sessions": 6,
+        "total_r": 18.0
+      },
+      "1.0": {
+        "expectancy_r": 0.7714285714285712,
+        "rows": 21,
+        "sessions": 10,
+        "total_r": 16.199999999999996
+      },
+      "nan": {
+        "expectancy_r": 0.6461538461538462,
+        "rows": 13,
+        "sessions": 12,
+        "total_r": 8.4
+      }
+    },
+    "by_time_bucket": {
+      "0.0": {
+        "expectancy_r": 0.42857142857142866,
+        "rows": 21,
+        "sessions": 11,
+        "total_r": 9.000000000000002
+      },
+      "1.0": {
+        "expectancy_r": 1.0363636363636362,
+        "rows": 22,
+        "sessions": 9,
+        "total_r": 22.799999999999997
+      },
+      "2.0": {
+        "expectancy_r": 1.1999999999999997,
+        "rows": 10,
+        "sessions": 4,
+        "total_r": 11.999999999999998
+      }
+    },
+    "by_year": {
+      "2024": {
+        "expectancy_r": 0.975,
+        "rows": 16,
+        "sessions": 6,
+        "total_r": 15.6
+      },
+      "2025": {
+        "expectancy_r": 0.762162162162162,
+        "rows": 37,
+        "sessions": 16,
+        "total_r": 28.199999999999996
+      }
+    },
+    "gross_negative_r": 6.599999999999999,
+    "gross_positive_r": 50.400000000000006,
+    "label_expectancy_r": 0.8264150943396229,
+    "label_profit_factor": 7.6363636363636385,
+    "mae_atr_mean": -1.7980738705568218,
+    "maximum_drawdown_r": -1.8000000000000078,
+    "mean_label_return_r": 0.8264150943396229,
+    "median_bars_to_event": 3.0,
+    "median_label_return_r": 1.2,
+    "metric_name": "underlying research-label metrics",
+    "mfe_atr_mean": 3.0268296399966936,
+    "row_support_rate": 0.0005023315767524738,
+    "rows": 53,
+    "session_support_rate": 0.0718954248366013,
+    "sessions": 22,
+    "total_label_r": 43.80000000000001,
+    "win_rate": 0.7924528301886793
+  },
+  "candidate_validation_metrics": {
+    "average_bars_to_event": 2.7142857142857144,
+    "barrier_outcome_counts": {
+      "STOP_FIRST": 11,
+      "TARGET_FIRST": 10
+    },
+    "by_expiry_context": {
+      "nan": {
+        "expectancy_r": 0.25714285714285723,
+        "rows": 21,
+        "sessions": 12,
+        "total_r": 5.400000000000001
+      }
+    },
+    "by_month": {
+      "2025-09": {
+        "expectancy_r": 1.2,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": 1.2
+      },
+      "2025-10": {
+        "expectancy_r": 0.17142857142857146,
+        "rows": 7,
+        "sessions": 4,
+        "total_r": 1.2000000000000002
+      },
+      "2025-11": {
+        "expectancy_r": 0.42857142857142855,
+        "rows": 7,
+        "sessions": 3,
+        "total_r": 3.0
+      },
+      "2025-12": {
+        "expectancy_r": 0.6,
+        "rows": 3,
+        "sessions": 2,
+        "total_r": 1.7999999999999998
+      },
+      "2026-01": {
+        "expectancy_r": -0.6,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": -0.6
+      },
+      "2026-02": {
+        "expectancy_r": -0.6,
+        "rows": 2,
+        "sessions": 1,
+        "total_r": -1.2
+      }
+    },
+    "by_regime": {
+      "-1.0": {
+        "expectancy_r": 1.2,
+        "rows": 1,
+        "sessions": 1,
+        "total_r": 1.2
+      },
+      "0.0": {
+        "expectancy_r": 0.3,
+        "rows": 8,
+        "sessions": 6,
+        "total_r": 2.4
+      },
+      "1.0": {
+        "expectancy_r": 0.6,
+        "rows": 6,
+        "sessions": 5,
+        "total_r": 3.5999999999999996
+      },
+      "nan": {
+        "expectancy_r": -0.3,
+        "rows": 6,
+        "sessions": 5,
+        "total_r": -1.7999999999999998
+      }
+    },
+    "by_time_bucket": {
+      "0.0": {
+        "expectancy_r": 0.09230769230769229,
+        "rows": 13,
+        "sessions": 9,
+        "total_r": 1.1999999999999997
+      },
+      "1.0": {
+        "expectancy_r": 0.3,
+        "rows": 6,
+        "sessions": 2,
+        "total_r": 1.7999999999999998
+      },
+      "2.0": {
+        "expectancy_r": 1.2,
+        "rows": 2,
+        "sessions": 1,
+        "total_r": 2.4
+      }
+    },
+    "by_year": {
+      "2025": {
+        "expectancy_r": 0.4,
+        "rows": 18,
+        "sessions": 10,
+        "total_r": 7.2
+      },
+      "2026": {
+        "expectancy_r": -0.6,
+        "rows": 3,
+        "sessions": 2,
+        "total_r": -1.7999999999999998
+      }
+    },
+    "gross_negative_r": 6.599999999999999,
+    "gross_positive_r": 11.999999999999998,
+    "label_expectancy_r": 0.25714285714285723,
+    "label_profit_factor": 1.8181818181818183,
+    "mae_atr_mean": -3.2601072496432937,
+    "maximum_drawdown_r": -1.7999999999999998,
+    "mean_label_return_r": 0.25714285714285723,
+    "median_bars_to_event": 2.0,
+    "median_label_return_r": -0.6,
+    "metric_name": "underlying research-label metrics",
+    "mfe_atr_mean": 3.5386090962653456,
+    "row_support_rate": 0.0005967604433077579,
+    "rows": 21,
+    "session_support_rate": 0.11764705882352941,
+    "sessions": 12,
+    "total_label_r": 5.400000000000001,
+    "win_rate": 0.47619047619047616
+  },
+  "code_commit_sha": "4b63e12ed01428797763f959edef527a4da308c3",
+  "concentration": {
+    "best_5pct_trade_contribution": 0.2,
+    "best_year_contribution": 1.3333333333333328,
+    "largest_regime_contribution": 0.6666666666666664,
+    "longest_losing_sequence": 3,
+    "top_10_session_contribution": 1.5555555555555554,
+    "top_10_trade_contribution": 2.2222222222222214,
+    "top_1_session_contribution": 0.4444444444444443,
+    "top_1_trade_contribution": 0.22222222222222215,
+    "top_5_session_contribution": 1.333333333333333,
+    "top_5_trade_contribution": 1.111111111111111,
+    "worst_year_result": -1.7999999999999998
+  },
+  "deterministic_seed": 68742,
+  "fold_screen": {
+    "best_fold_total_r": 3.0,
+    "folds": [
+      {
+        "drawdown_r": 0.0,
+        "end": "2025-10-07",
+        "expectancy_r": 1.2,
+        "fold": 1,
+        "label_pf": null,
+        "sessions": 21,
+        "start": "2025-09-08",
+        "support": 1,
+        "total_r": 1.2,
+        "trades": 1,
+        "win_rate": 1.0
+      },
+      {
+        "drawdown_r": -1.1999999999999997,
+        "end": "2025-11-10",
+        "expectancy_r": 0.17142857142857146,
+        "fold": 2,
+        "label_pf": 1.5,
+        "sessions": 21,
+        "start": "2025-10-08",
+        "support": 7,
+        "total_r": 1.2000000000000002,
+        "trades": 7,
+        "win_rate": 0.42857142857142855
+      },
+      {
+        "drawdown_r": -1.2,
+        "end": "2025-12-08",
+        "expectancy_r": 0.42857142857142855,
+        "fold": 3,
+        "label_pf": 2.666666666666667,
+        "sessions": 20,
+        "start": "2025-11-11",
+        "support": 7,
+        "total_r": 3.0,
+        "trades": 7,
+        "win_rate": 0.5714285714285714
+      },
+      {
+        "drawdown_r": -0.6,
+        "end": "2026-01-06",
+        "expectancy_r": 0.6,
+        "fold": 4,
+        "label_pf": 4.0,
+        "sessions": 20,
+        "start": "2025-12-09",
+        "support": 3,
+        "total_r": 1.7999999999999998,
+        "trades": 3,
+        "win_rate": 0.6666666666666666
+      },
+      {
+        "drawdown_r": -1.1999999999999997,
+        "end": "2026-02-05",
+        "expectancy_r": -0.6,
+        "fold": 5,
+        "label_pf": 0.0,
+        "sessions": 20,
+        "start": "2026-01-07",
+        "support": 3,
+        "total_r": -1.7999999999999998,
+        "trades": 3,
+        "win_rate": 0.0
+      }
+    ],
+    "largest_fold_contribution": 0.5555555555555555,
+    "median_expectancy": 0.42857142857142855,
+    "positive_expectancy_fold_percentage": 0.8,
+    "positive_total_r_fold_percentage": 0.8,
+    "screen_name": "FROZEN_RULE_VALIDATION_FOLD_SCREEN",
+    "trade_bearing_fold_percentage": 1.0,
+    "worst_fold_total_r": -1.7999999999999998
+  },
+  "generated_at": "2026-07-21T14:16:52+00:00",
+  "input_hashes": {
+    "certified_manifest": "3390fad00ae40f0ab77eb05386fb8e04af3127081843dba63b8a3af050b40926",
+    "certified_sidecar": "ae5a035a0bf824ec25e0e08a5fc5298c522031e0695a32fef36356b7e725402f",
+    "long": {
+      "candidates": "374ca9dcf1951c383a619efb4b45525c7be53441010561ccba33496840064f61",
+      "discovery_dataset": "996f138c54c022a9a5481a4d2d04ffd3e13ade28529646f313eca6406c9fa13e",
+      "evidence_manifest": "92e5ed3bc596d85bce530b1c3bc4e71cceb78e46ad0b82156966fcc16433f508",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    },
+    "short": {
+      "candidates": "e0e2f837acaf207716af80fbf57321c5b07cac29902b94f599f7acfc60660caf",
+      "discovery_dataset": "0a45dbd2733d23f65c49ffaf88574bcf0108054acf97976f03983b230b465ceb",
+      "evidence_manifest": "b5536fdda700ac0b121e57f8bdc9a6b05d378a11414c53c36732bd42db48ba6f",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    }
+  },
+  "is_order_action": false,
+  "negative_controls": {
+    "items": {
+      "abstract_label_cost_stress": {
+        "label_expectancy_r": 0.6148648648648649,
+        "label_profit_factor": 4.181818181818181,
+        "rows": 74,
+        "total_label_r": 45.5,
+        "win_rate": 0.7027027027027027
+      },
+      "condition_0_ablation": {
+        "average_bars_to_event": 4.226470588235294,
+        "barrier_outcome_counts": {
+          "AMBIGUOUS_SAME_BAR": 2,
+          "NEITHER": 5,
+          "STOP_FIRST": 190,
+          "TARGET_FIRST": 148
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.182596697105251,
+            "rows": 345,
+            "sessions": 111,
+            "total_r": 62.9958605013116
+          }
+        },
+        "by_month": {
+          "2024-06": {
+            "expectancy_r": -0.43636363636363634,
+            "rows": 11,
+            "sessions": 2,
+            "total_r": -4.8
+          },
+          "2024-07": {
+            "expectancy_r": 0.6857142857142857,
+            "rows": 14,
+            "sessions": 5,
+            "total_r": 9.6
+          },
+          "2024-08": {
+            "expectancy_r": -0.01764705882352939,
+            "rows": 34,
+            "sessions": 5,
+            "total_r": -0.5999999999999993
+          },
+          "2024-09": {
+            "expectancy_r": 0.12,
+            "rows": 10,
+            "sessions": 2,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.1216365420790075,
+            "rows": 16,
+            "sessions": 3,
+            "total_r": 17.94618467326412
+          },
+          "2024-11": {
+            "expectancy_r": 0.12000000000000002,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 0.6000000000000001
+          },
+          "2024-12": {
+            "expectancy_r": 0.0857142857142857,
+            "rows": 21,
+            "sessions": 7,
+            "total_r": 1.7999999999999998
+          },
+          "2025-01": {
+            "expectancy_r": 0.25263157894736843,
+            "rows": 19,
+            "sessions": 5,
+            "total_r": 4.8
+          },
+          "2025-02": {
+            "expectancy_r": 0.09999999999999999,
+            "rows": 18,
+            "sessions": 7,
+            "total_r": 1.7999999999999998
+          },
+          "2025-03": {
+            "expectancy_r": 0.4,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.6
+          },
+          "2025-04": {
+            "expectancy_r": 0.08253667345554673,
+            "rows": 26,
+            "sessions": 5,
+            "total_r": 2.145953509844215
+          },
+          "2025-05": {
+            "expectancy_r": -0.2823529411764706,
+            "rows": 17,
+            "sessions": 5,
+            "total_r": -4.8
+          },
+          "2025-06": {
+            "expectancy_r": -0.14331642094768404,
+            "rows": 23,
+            "sessions": 8,
+            "total_r": -3.296277681796733
+          },
+          "2025-07": {
+            "expectancy_r": -0.11538461538461535,
+            "rows": 26,
+            "sessions": 8,
+            "total_r": -2.999999999999999
+          },
+          "2025-08": {
+            "expectancy_r": 0.20000000000000004,
+            "rows": 18,
+            "sessions": 8,
+            "total_r": 3.6000000000000005
+          },
+          "2025-09": {
+            "expectancy_r": 0.0,
+            "rows": 9,
+            "sessions": 6,
+            "total_r": 0.0
+          },
+          "2025-10": {
+            "expectancy_r": 0.3,
+            "rows": 8,
+            "sessions": 5,
+            "total_r": 2.4
+          },
+          "2025-11": {
+            "expectancy_r": 0.5076923076923076,
+            "rows": 26,
+            "sessions": 7,
+            "total_r": 13.199999999999998
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 18,
+            "sessions": 9,
+            "total_r": 10.799999999999999
+          },
+          "2026-01": {
+            "expectancy_r": -0.08571428571428572,
+            "rows": 7,
+            "sessions": 6,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": 0.66,
+            "rows": 10,
+            "sessions": 1,
+            "total_r": 6.6000000000000005
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 0.08853707382762127,
+            "rows": 58,
+            "sessions": 28,
+            "total_r": 5.135150282002034
+          },
+          "0.0": {
+            "expectancy_r": 0.193440929970707,
+            "rows": 135,
+            "sessions": 63,
+            "total_r": 26.114525546045446
+          },
+          "1.0": {
+            "expectancy_r": 0.36478413551975186,
+            "rows": 64,
+            "sessions": 32,
+            "total_r": 23.34618467326412
+          },
+          "nan": {
+            "expectancy_r": 0.09545454545454546,
+            "rows": 88,
+            "sessions": 58,
+            "total_r": 8.4
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.14202392041351672,
+            "rows": 245,
+            "sessions": 75,
+            "total_r": 34.795860501311594
+          },
+          "1.0": {
+            "expectancy_r": 0.28656716417910444,
+            "rows": 67,
+            "sessions": 34,
+            "total_r": 19.199999999999996
+          },
+          "2.0": {
+            "expectancy_r": 0.2727272727272727,
+            "rows": 33,
+            "sessions": 14,
+            "total_r": 9.0
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.23194760966904607,
+            "rows": 111,
+            "sessions": 27,
+            "total_r": 25.746184673264114
+          },
+          "2025": {
+            "expectancy_r": 0.1440077227098962,
+            "rows": 217,
+            "sessions": 77,
+            "total_r": 31.249675828047476
+          },
+          "2026": {
+            "expectancy_r": 0.35294117647058826,
+            "rows": 17,
+            "sessions": 7,
+            "total_r": 6.0
+          }
+        },
+        "gross_negative_r": 115.53928978069041,
+        "gross_positive_r": 178.535150282002,
+        "label_expectancy_r": 0.182596697105251,
+        "label_profit_factor": 1.5452332329624534,
+        "mae_atr_mean": -2.169796677611348,
+        "maximum_drawdown_r": -17.096277681796778,
+        "mean_label_return_r": 0.182596697105251,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": -0.6,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.4449241190524784,
+        "row_support_rate": 0.002452060441513028,
+        "rows": 345,
+        "session_support_rate": 0.27205882352941174,
+        "sessions": 111,
+        "total_label_r": 62.9958605013116,
+        "win_rate": 0.43478260869565216
+      },
+      "condition_1_ablation": {
+        "average_bars_to_event": 2.624380023943903,
+        "barrier_outcome_counts": {
+          "AMBIGUOUS_SAME_BAR": 83,
+          "STOP_FIRST": 14992,
+          "TARGET_FIRST": 8313
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.03978963571062083,
+            "rows": 23388,
+            "sessions": 232,
+            "total_r": 930.5999999999999
+          }
+        },
+        "by_month": {
+          "2024-05": {
+            "expectancy_r": -0.5999999999999999,
+            "rows": 10,
+            "sessions": 1,
+            "total_r": -5.999999999999999
+          },
+          "2024-06": {
+            "expectancy_r": 0.10866141732283462,
+            "rows": 1143,
+            "sessions": 9,
+            "total_r": 124.19999999999996
+          },
+          "2024-07": {
+            "expectancy_r": 0.0858889454915945,
+            "rows": 1963,
+            "sessions": 13,
+            "total_r": 168.6
+          },
+          "2024-08": {
+            "expectancy_r": -0.01118359739049395,
+            "rows": 1073,
+            "sessions": 11,
+            "total_r": -12.000000000000009
+          },
+          "2024-09": {
+            "expectancy_r": 0.02076923076923076,
+            "rows": 1560,
+            "sessions": 13,
+            "total_r": 32.399999999999984
+          },
+          "2024-10": {
+            "expectancy_r": 0.04694656488549617,
+            "rows": 1572,
+            "sessions": 13,
+            "total_r": 73.79999999999998
+          },
+          "2024-11": {
+            "expectancy_r": 0.06407766990291262,
+            "rows": 927,
+            "sessions": 9,
+            "total_r": 59.4
+          },
+          "2024-12": {
+            "expectancy_r": -0.06335403726708075,
+            "rows": 1288,
+            "sessions": 15,
+            "total_r": -81.60000000000001
+          },
+          "2025-01": {
+            "expectancy_r": 0.10197628458498025,
+            "rows": 759,
+            "sessions": 17,
+            "total_r": 77.4
+          },
+          "2025-02": {
+            "expectancy_r": 0.04585274930102517,
+            "rows": 1073,
+            "sessions": 8,
+            "total_r": 49.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.001496259351620929,
+            "rows": 1203,
+            "sessions": 9,
+            "total_r": 1.7999999999999776
+          },
+          "2025-04": {
+            "expectancy_r": 0.03166226912928758,
+            "rows": 1137,
+            "sessions": 9,
+            "total_r": 35.99999999999998
+          },
+          "2025-05": {
+            "expectancy_r": -0.09754601226993864,
+            "rows": 326,
+            "sessions": 10,
+            "total_r": -31.799999999999997
+          },
+          "2025-06": {
+            "expectancy_r": 0.06474164133738598,
+            "rows": 1316,
+            "sessions": 11,
+            "total_r": 85.19999999999996
+          },
+          "2025-07": {
+            "expectancy_r": 0.050759219088937074,
+            "rows": 1383,
+            "sessions": 14,
+            "total_r": 70.19999999999997
+          },
+          "2025-08": {
+            "expectancy_r": 0.10387243735763096,
+            "rows": 1317,
+            "sessions": 11,
+            "total_r": 136.79999999999998
+          },
+          "2025-09": {
+            "expectancy_r": -0.013751507840772,
+            "rows": 829,
+            "sessions": 9,
+            "total_r": -11.399999999999988
+          },
+          "2025-10": {
+            "expectancy_r": 0.10547550432276655,
+            "rows": 1041,
+            "sessions": 12,
+            "total_r": 109.79999999999998
+          },
+          "2025-11": {
+            "expectancy_r": 0.07058823529411763,
+            "rows": 1122,
+            "sessions": 12,
+            "total_r": 79.19999999999999
+          },
+          "2025-12": {
+            "expectancy_r": -0.008612440191387566,
+            "rows": 1254,
+            "sessions": 11,
+            "total_r": -10.800000000000008
+          },
+          "2026-01": {
+            "expectancy_r": -0.008695652173913042,
+            "rows": 828,
+            "sessions": 13,
+            "total_r": -7.199999999999999
+          },
+          "2026-02": {
+            "expectancy_r": -0.04772727272727273,
+            "rows": 264,
+            "sessions": 2,
+            "total_r": -12.600000000000001
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 0.005199306759098774,
+            "rows": 1154,
+            "sessions": 134,
+            "total_r": 5.999999999999986
+          },
+          "0.0": {
+            "expectancy_r": 0.035769042570543134,
+            "rows": 12262,
+            "sessions": 213,
+            "total_r": 438.5999999999999
+          },
+          "1.0": {
+            "expectancy_r": 0.04014290354011042,
+            "rows": 3079,
+            "sessions": 204,
+            "total_r": 123.6
+          },
+          "nan": {
+            "expectancy_r": 0.05257507616422457,
+            "rows": 6893,
+            "sessions": 216,
+            "total_r": 362.4
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.04918032786885246,
+            "rows": 3050,
+            "sessions": 171,
+            "total_r": 150.0
+          },
+          "1.0": {
+            "expectancy_r": 0.04365584718123933,
+            "rows": 12878,
+            "sessions": 176,
+            "total_r": 562.2
+          },
+          "2.0": {
+            "expectancy_r": 0.029276139410187668,
+            "rows": 7460,
+            "sessions": 125,
+            "total_r": 218.4
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.03762583892617449,
+            "rows": 9536,
+            "sessions": 84,
+            "total_r": 358.79999999999995
+          },
+          "2025": {
+            "expectancy_r": 0.046363636363636364,
+            "rows": 12760,
+            "sessions": 133,
+            "total_r": 591.6
+          },
+          "2026": {
+            "expectancy_r": -0.01813186813186814,
+            "rows": 1092,
+            "sessions": 15,
+            "total_r": -19.800000000000008
+          }
+        },
+        "gross_negative_r": 9044.999999999996,
+        "gross_positive_r": 9975.599999999999,
+        "label_expectancy_r": 0.03978963571062083,
+        "label_profit_factor": 1.1028855721393038,
+        "mae_atr_mean": -3.189691477710259,
+        "maximum_drawdown_r": -96.60000000003288,
+        "mean_label_return_r": 0.03978963571062083,
+        "median_bars_to_event": 2.0,
+        "median_label_return_r": -0.6,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.9379684866417084,
+        "row_support_rate": 0.16622837566987447,
+        "rows": 23388,
+        "session_support_rate": 0.5686274509803921,
+        "sessions": 232,
+        "total_label_r": 930.5999999999999,
+        "win_rate": 0.35543868650590044
+      },
+      "condition_2_ablation": {
+        "average_bars_to_event": 3.5172413793103448,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 61,
+          "TARGET_FIRST": 84
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.4427586206896552,
+            "rows": 145,
+            "sessions": 63,
+            "total_r": 64.2
+          }
+        },
+        "by_month": {
+          "2024-06": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-07": {
+            "expectancy_r": 0.66,
+            "rows": 10,
+            "sessions": 3,
+            "total_r": 6.6000000000000005
+          },
+          "2024-08": {
+            "expectancy_r": -0.6,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": -2.4
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 8.4
+          },
+          "2024-10": {
+            "expectancy_r": 0.8400000000000001,
+            "rows": 10,
+            "sessions": 4,
+            "total_r": 8.4
+          },
+          "2024-11": {
+            "expectancy_r": 0.29999999999999993,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 1.1999999999999997
+          },
+          "2024-12": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2025-01": {
+            "expectancy_r": 0.6,
+            "rows": 18,
+            "sessions": 6,
+            "total_r": 10.799999999999999
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.2999999999999999,
+            "rows": 6,
+            "sessions": 4,
+            "total_r": 1.7999999999999994
+          },
+          "2025-04": {
+            "expectancy_r": 0.48,
+            "rows": 10,
+            "sessions": 4,
+            "total_r": 4.8
+          },
+          "2025-05": {
+            "expectancy_r": 0.23076923076923084,
+            "rows": 13,
+            "sessions": 4,
+            "total_r": 3.000000000000001
+          },
+          "2025-06": {
+            "expectancy_r": 0.1714285714285714,
+            "rows": 7,
+            "sessions": 5,
+            "total_r": 1.1999999999999997
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": 6.0
+          },
+          "2025-08": {
+            "expectancy_r": 0.75,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 6.0
+          },
+          "2025-09": {
+            "expectancy_r": 0.3,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 0.6
+          },
+          "2025-10": {
+            "expectancy_r": 0.19999999999999998,
+            "rows": 9,
+            "sessions": 6,
+            "total_r": 1.7999999999999998
+          },
+          "2025-11": {
+            "expectancy_r": 0.3692307692307692,
+            "rows": 13,
+            "sessions": 4,
+            "total_r": 4.8
+          },
+          "2025-12": {
+            "expectancy_r": 0.12,
+            "rows": 10,
+            "sessions": 4,
+            "total_r": 1.2
+          },
+          "2026-01": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.34909090909090895,
+            "rows": 55,
+            "sessions": 28,
+            "total_r": 19.199999999999992
+          },
+          "1.0": {
+            "expectancy_r": 0.5853658536585366,
+            "rows": 41,
+            "sessions": 25,
+            "total_r": 23.999999999999996
+          },
+          "nan": {
+            "expectancy_r": 0.39574468085106357,
+            "rows": 47,
+            "sessions": 30,
+            "total_r": 18.599999999999987
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.2129032258064516,
+            "rows": 62,
+            "sessions": 31,
+            "total_r": 13.2
+          },
+          "1.0": {
+            "expectancy_r": 0.4421052631578947,
+            "rows": 57,
+            "sessions": 29,
+            "total_r": 25.2
+          },
+          "2.0": {
+            "expectancy_r": 0.9923076923076922,
+            "rows": 26,
+            "sessions": 9,
+            "total_r": 25.799999999999997
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.616216216216216,
+            "rows": 37,
+            "sessions": 15,
+            "total_r": 22.799999999999994
+          },
+          "2025": {
+            "expectancy_r": 0.3961165048543689,
+            "rows": 103,
+            "sessions": 45,
+            "total_r": 40.8
+          },
+          "2026": {
+            "expectancy_r": 0.11999999999999995,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 0.5999999999999998
+          }
+        },
+        "gross_negative_r": 36.60000000000001,
+        "gross_positive_r": 100.8,
+        "label_expectancy_r": 0.4427586206896552,
+        "label_profit_factor": 2.7540983606557368,
+        "mae_atr_mean": -2.0607146481162943,
+        "maximum_drawdown_r": -4.800000000000011,
+        "mean_label_return_r": 0.4427586206896552,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.361487718261105,
+        "row_support_rate": 0.0010305761275924321,
+        "rows": 145,
+        "session_support_rate": 0.15441176470588236,
+        "sessions": 63,
+        "total_label_r": 64.2,
+        "win_rate": 0.5793103448275863
+      },
+      "delayed_features": {
+        "label_expectancy_r": 0.3972972972972973,
+        "label_profit_factor": 2.484848484848485,
+        "rows": 74,
+        "total_label_r": 29.4,
+        "win_rate": 0.5540540540540541
+      },
+      "deterministic_label_permutation": {
+        "label_expectancy_r": 0.664864864864865,
+        "label_profit_factor": 4.727272727272729,
+        "rows": 74,
+        "total_label_r": 49.2,
+        "win_rate": 0.7027027027027027
+      },
+      "leave_one_regime_out_-1.0": {
+        "average_bars_to_event": 3.7083333333333335,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 22,
+          "TARGET_FIRST": 50
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.6499999999999999,
+            "rows": 72,
+            "sessions": 34,
+            "total_r": 46.8
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.6857142857142858,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 4.800000000000001
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 9.6
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.5999999999999996
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 1.850371707708594e-17,
+            "rows": 6,
+            "sessions": 4,
+            "total_r": 1.1102230246251565e-16
+          },
+          "2025-11": {
+            "expectancy_r": 0.42857142857142855,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "0.0": {
+            "expectancy_r": 0.7846153846153844,
+            "rows": 26,
+            "sessions": 12,
+            "total_r": 20.399999999999995
+          },
+          "1.0": {
+            "expectancy_r": 0.7333333333333333,
+            "rows": 27,
+            "sessions": 15,
+            "total_r": 19.799999999999997
+          },
+          "nan": {
+            "expectancy_r": 0.34736842105263166,
+            "rows": 19,
+            "sessions": 17,
+            "total_r": 6.600000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.30000000000000004,
+            "rows": 34,
+            "sessions": 20,
+            "total_r": 10.200000000000001
+          },
+          "1.0": {
+            "expectancy_r": 0.8666666666666665,
+            "rows": 27,
+            "sessions": 11,
+            "total_r": 23.399999999999995
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 11,
+            "sessions": 5,
+            "total_r": 13.199999999999998
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.975,
+            "rows": 16,
+            "sessions": 6,
+            "total_r": 15.6
+          },
+          "2025": {
+            "expectancy_r": 0.6226415094339622,
+            "rows": 53,
+            "sessions": 26,
+            "total_r": 33.0
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 13.199999999999998,
+        "gross_positive_r": 60.00000000000001,
+        "label_expectancy_r": 0.6499999999999999,
+        "label_profit_factor": 4.545454545454547,
+        "mae_atr_mean": -2.205959293685052,
+        "maximum_drawdown_r": -1.8000000000000078,
+        "mean_label_return_r": 0.6499999999999999,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.110291189168228,
+        "row_support_rate": 0.0005588890527606791,
+        "rows": 72,
+        "session_support_rate": 0.08333333333333333,
+        "sessions": 34,
+        "total_label_r": 46.8,
+        "win_rate": 0.6944444444444444
+      },
+      "leave_one_regime_out_0.0": {
+        "average_bars_to_event": 3.1666666666666665,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 16,
+          "TARGET_FIRST": 32
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.6000000000000001,
+            "rows": 48,
+            "sessions": 29,
+            "total_r": 28.800000000000004
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.3,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 0.6
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 9.6
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.5999999999999996
+          },
+          "2025-06": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 3,
+            "total_r": 1.7999999999999998
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 0.48,
+            "rows": 5,
+            "sessions": 4,
+            "total_r": 2.4
+          },
+          "2025-11": {
+            "expectancy_r": -0.15,
+            "rows": 4,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2025-12": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "1.0": {
+            "expectancy_r": 0.7333333333333333,
+            "rows": 27,
+            "sessions": 15,
+            "total_r": 19.799999999999997
+          },
+          "nan": {
+            "expectancy_r": 0.34736842105263166,
+            "rows": 19,
+            "sessions": 17,
+            "total_r": 6.600000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.3,
+            "rows": 24,
+            "sessions": 17,
+            "total_r": 7.2
+          },
+          "1.0": {
+            "expectancy_r": 0.6461538461538462,
+            "rows": 13,
+            "sessions": 8,
+            "total_r": 8.4
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 11,
+            "sessions": 4,
+            "total_r": 13.199999999999998
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 1.02,
+            "rows": 10,
+            "sessions": 5,
+            "total_r": 10.2
+          },
+          "2025": {
+            "expectancy_r": 0.5499999999999999,
+            "rows": 36,
+            "sessions": 22,
+            "total_r": 19.799999999999997
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          }
+        },
+        "gross_negative_r": 9.6,
+        "gross_positive_r": 38.4,
+        "label_expectancy_r": 0.6000000000000001,
+        "label_profit_factor": 4.0,
+        "mae_atr_mean": -2.659437282531632,
+        "maximum_drawdown_r": -1.8000000000000043,
+        "mean_label_return_r": 0.6000000000000001,
+        "median_bars_to_event": 2.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.157513179963511,
+        "row_support_rate": 0.0007201476302642042,
+        "rows": 48,
+        "session_support_rate": 0.07107843137254902,
+        "sessions": 29,
+        "total_label_r": 28.800000000000004,
+        "win_rate": 0.6666666666666666
+      },
+      "leave_one_regime_out_1.0": {
+        "average_bars_to_event": 3.978723404255319,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 15,
+          "TARGET_FIRST": 32
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.6255319148936168,
+            "rows": 47,
+            "sessions": 24,
+            "total_r": 29.39999999999999
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.9,
+            "rows": 6,
+            "sessions": 1,
+            "total_r": 5.4
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-03": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2025-04": {
+            "expectancy_r": 0.48,
+            "rows": 5,
+            "sessions": 4,
+            "total_r": 2.4
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "2025-10": {
+            "expectancy_r": 0.12,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 0.6
+          },
+          "2025-11": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-12": {
+            "expectancy_r": 0.3,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 0.6
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.7846153846153844,
+            "rows": 26,
+            "sessions": 12,
+            "total_r": 20.399999999999995
+          },
+          "nan": {
+            "expectancy_r": 0.34736842105263166,
+            "rows": 19,
+            "sessions": 17,
+            "total_r": 6.600000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.15789473684210525,
+            "rows": 19,
+            "sessions": 13,
+            "total_r": 3.0
+          },
+          "1.0": {
+            "expectancy_r": 0.8869565217391302,
+            "rows": 23,
+            "sessions": 10,
+            "total_r": 20.399999999999995
+          },
+          "2.0": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 6.0
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.975,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 7.8
+          },
+          "2025": {
+            "expectancy_r": 0.6499999999999998,
+            "rows": 36,
+            "sessions": 19,
+            "total_r": 23.39999999999999
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 8.999999999999998,
+        "gross_positive_r": 38.4,
+        "label_expectancy_r": 0.6255319148936168,
+        "label_profit_factor": 4.2666666666666675,
+        "mae_atr_mean": -1.7300567033352048,
+        "maximum_drawdown_r": -2.4000000000000057,
+        "mean_label_return_r": 0.6255319148936168,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.4642779828375065,
+        "row_support_rate": 0.0003674717164056575,
+        "rows": 47,
+        "session_support_rate": 0.058823529411764705,
+        "sessions": 24,
+        "total_label_r": 29.39999999999999,
+        "win_rate": 0.6808510638297872
+      },
+      "leave_one_regime_out_nan": {
+        "average_bars_to_event": 3.675675675675676,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 22,
+          "TARGET_FIRST": 52
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.664864864864865,
+            "rows": 74,
+            "sessions": 34,
+            "total_r": 49.2
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.6857142857142858,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 4.800000000000001
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 9.6
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.5999999999999996
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": 6.0
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 0.17142857142857146,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 1.2000000000000002
+          },
+          "2025-11": {
+            "expectancy_r": 0.42857142857142855,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.7846153846153844,
+            "rows": 26,
+            "sessions": 12,
+            "total_r": 20.399999999999995
+          },
+          "1.0": {
+            "expectancy_r": 0.7333333333333333,
+            "rows": 27,
+            "sessions": 15,
+            "total_r": 19.799999999999997
+          },
+          "nan": {
+            "expectancy_r": 0.34736842105263166,
+            "rows": 19,
+            "sessions": 17,
+            "total_r": 6.600000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.30000000000000004,
+            "rows": 34,
+            "sessions": 20,
+            "total_r": 10.200000000000001
+          },
+          "1.0": {
+            "expectancy_r": 0.8785714285714283,
+            "rows": 28,
+            "sessions": 11,
+            "total_r": 24.599999999999994
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 12,
+            "sessions": 5,
+            "total_r": 14.399999999999997
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.975,
+            "rows": 16,
+            "sessions": 6,
+            "total_r": 15.6
+          },
+          "2025": {
+            "expectancy_r": 0.6436363636363638,
+            "rows": 55,
+            "sessions": 26,
+            "total_r": 35.400000000000006
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 13.199999999999998,
+        "gross_positive_r": 62.40000000000001,
+        "label_expectancy_r": 0.664864864864865,
+        "label_profit_factor": 4.727272727272729,
+        "mae_atr_mean": -2.212975234892172,
+        "maximum_drawdown_r": -1.8000000000000078,
+        "mean_label_return_r": 0.664864864864865,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.1720643505594195,
+        "row_support_rate": 0.0005259491961506204,
+        "rows": 74,
+        "session_support_rate": 0.08333333333333333,
+        "sessions": 34,
+        "total_label_r": 49.2,
+        "win_rate": 0.7027027027027027
+      },
+      "leave_one_year_out_2024": {
+        "average_bars_to_event": 3.5689655172413794,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 20,
+          "TARGET_FIRST": 38
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.5793103448275861,
+            "rows": 58,
+            "sessions": 28,
+            "total_r": 33.599999999999994
+          }
+        },
+        "by_month": {
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.5999999999999996
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": 6.0
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 0.17142857142857146,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 1.2000000000000002
+          },
+          "2025-11": {
+            "expectancy_r": 0.42857142857142855,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.75,
+            "rows": 20,
+            "sessions": 10,
+            "total_r": 15.0
+          },
+          "1.0": {
+            "expectancy_r": 0.6315789473684209,
+            "rows": 19,
+            "sessions": 12,
+            "total_r": 11.999999999999998
+          },
+          "nan": {
+            "expectancy_r": 0.24705882352941178,
+            "rows": 17,
+            "sessions": 15,
+            "total_r": 4.2
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.16153846153846155,
+            "rows": 26,
+            "sessions": 16,
+            "total_r": 4.2
+          },
+          "1.0": {
+            "expectancy_r": 0.8538461538461537,
+            "rows": 26,
+            "sessions": 10,
+            "total_r": 22.199999999999996
+          },
+          "2.0": {
+            "expectancy_r": 1.2,
+            "rows": 6,
+            "sessions": 3,
+            "total_r": 7.2
+          }
+        },
+        "by_year": {
+          "2025": {
+            "expectancy_r": 0.6436363636363638,
+            "rows": 55,
+            "sessions": 26,
+            "total_r": 35.400000000000006
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 11.999999999999998,
+        "gross_positive_r": 45.600000000000016,
+        "label_expectancy_r": 0.5793103448275861,
+        "label_profit_factor": 3.800000000000002,
+        "mae_atr_mean": -2.3534490112790745,
+        "maximum_drawdown_r": -1.8000000000000043,
+        "mean_label_return_r": 0.5793103448275861,
+        "median_bars_to_event": 2.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.373842516067643,
+        "row_support_rate": 0.0006392241141786521,
+        "rows": 58,
+        "session_support_rate": 0.10646387832699619,
+        "sessions": 28,
+        "total_label_r": 33.599999999999994,
+        "win_rate": 0.6551724137931034
+      },
+      "leave_one_year_out_2025": {
+        "average_bars_to_event": 3.789473684210526,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 5,
+          "TARGET_FIRST": 14
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.7263157894736842,
+            "rows": 19,
+            "sessions": 8,
+            "total_r": 13.8
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.6857142857142858,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 4.800000000000001
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 9.6
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "0.0": {
+            "expectancy_r": 0.6857142857142858,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 4.800000000000001
+          },
+          "1.0": {
+            "expectancy_r": 0.975,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 7.8
+          },
+          "nan": {
+            "expectancy_r": 0.29999999999999993,
+            "rows": 4,
+            "sessions": 4,
+            "total_r": 1.1999999999999997
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.3818181818181819,
+            "rows": 11,
+            "sessions": 6,
+            "total_r": 4.200000000000001
+          },
+          "1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 2.4
+          },
+          "2.0": {
+            "expectancy_r": 1.2,
+            "rows": 6,
+            "sessions": 2,
+            "total_r": 7.2
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.975,
+            "rows": 16,
+            "sessions": 6,
+            "total_r": 15.6
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 3.0,
+        "gross_positive_r": 16.799999999999997,
+        "label_expectancy_r": 0.7263157894736842,
+        "label_profit_factor": 5.599999999999999,
+        "mae_atr_mean": -1.8054154484483842,
+        "maximum_drawdown_r": -1.799999999999999,
+        "mean_label_return_r": 0.7263157894736842,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.282418638003899,
+        "row_support_rate": 0.00032621945984925225,
+        "rows": 19,
+        "session_support_rate": 0.047337278106508875,
+        "sessions": 8,
+        "total_label_r": 13.8,
+        "win_rate": 0.7368421052631579
+      },
+      "leave_one_year_out_2026": {
+        "average_bars_to_event": 3.732394366197183,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 19,
+          "TARGET_FIRST": 52
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.7183098591549297,
+            "rows": 71,
+            "sessions": 32,
+            "total_r": 51.000000000000014
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.6857142857142858,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 4.800000000000001
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 3,
+            "total_r": 9.6
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.5999999999999996
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.47999999999999987,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 2.3999999999999995
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": 6.0
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 0.17142857142857146,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 1.2000000000000002
+          },
+          "2025-11": {
+            "expectancy_r": 0.42857142857142855,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.8399999999999999,
+            "rows": 25,
+            "sessions": 11,
+            "total_r": 20.999999999999996
+          },
+          "1.0": {
+            "expectancy_r": 0.7333333333333333,
+            "rows": 27,
+            "sessions": 15,
+            "total_r": 19.799999999999997
+          },
+          "nan": {
+            "expectancy_r": 0.45882352941176474,
+            "rows": 17,
+            "sessions": 15,
+            "total_r": 7.800000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.3870967741935483,
+            "rows": 31,
+            "sessions": 18,
+            "total_r": 11.999999999999998
+          },
+          "1.0": {
+            "expectancy_r": 0.8785714285714283,
+            "rows": 28,
+            "sessions": 11,
+            "total_r": 24.599999999999994
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 12,
+            "sessions": 5,
+            "total_r": 14.399999999999997
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.975,
+            "rows": 16,
+            "sessions": 6,
+            "total_r": 15.6
+          },
+          "2025": {
+            "expectancy_r": 0.6436363636363638,
+            "rows": 55,
+            "sessions": 26,
+            "total_r": 35.400000000000006
+          }
+        },
+        "gross_negative_r": 11.399999999999999,
+        "gross_positive_r": 62.40000000000001,
+        "label_expectancy_r": 0.7183098591549297,
+        "label_profit_factor": 5.473684210526318,
+        "mae_atr_mean": -2.2072873040751526,
+        "maximum_drawdown_r": -1.8000000000000078,
+        "mean_label_return_r": 0.7183098591549297,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.245305687729531,
+        "row_support_rate": 0.000536180881753236,
+        "rows": 71,
+        "session_support_rate": 0.08333333333333333,
+        "sessions": 32,
+        "total_label_r": 51.000000000000014,
+        "win_rate": 0.7323943661971831
+      },
+      "one_additional_bar_latency_proxy": {
+        "label_expectancy_r": 0.3972972972972973,
+        "label_profit_factor": 2.484848484848485,
+        "rows": 74,
+        "total_label_r": 29.4,
+        "win_rate": 0.5540540540540541
+      },
+      "placebo_decision_times": {
+        "label_expectancy_r": 0.0737083939505586,
+        "label_profit_factor": 1.1976239547949754,
+        "rows": 74,
+        "total_label_r": 5.454421152341337,
+        "win_rate": 0.3783783783783784
+      },
+      "reversed_direction_comparison": {
+        "label_expectancy_r": -0.664864864864865,
+        "label_profit_factor": 0.21153846153846145,
+        "rows": 74,
+        "total_label_r": -49.2,
+        "win_rate": 0.2972972972972973
+      },
+      "session_aware_label_permutation": {
+        "label_expectancy_r": 0.664864864864865,
+        "label_profit_factor": 4.727272727272729,
+        "rows": 74,
+        "total_label_r": 49.20000000000001,
+        "win_rate": 0.7027027027027027
+      },
+      "strongest_condition_removal": {
+        "average_bars_to_event": 4.226470588235294,
+        "barrier_outcome_counts": {
+          "AMBIGUOUS_SAME_BAR": 2,
+          "NEITHER": 5,
+          "STOP_FIRST": 190,
+          "TARGET_FIRST": 148
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.182596697105251,
+            "rows": 345,
+            "sessions": 111,
+            "total_r": 62.9958605013116
+          }
+        },
+        "by_month": {
+          "2024-06": {
+            "expectancy_r": -0.43636363636363634,
+            "rows": 11,
+            "sessions": 2,
+            "total_r": -4.8
+          },
+          "2024-07": {
+            "expectancy_r": 0.6857142857142857,
+            "rows": 14,
+            "sessions": 5,
+            "total_r": 9.6
+          },
+          "2024-08": {
+            "expectancy_r": -0.01764705882352939,
+            "rows": 34,
+            "sessions": 5,
+            "total_r": -0.5999999999999993
+          },
+          "2024-09": {
+            "expectancy_r": 0.12,
+            "rows": 10,
+            "sessions": 2,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.1216365420790075,
+            "rows": 16,
+            "sessions": 3,
+            "total_r": 17.94618467326412
+          },
+          "2024-11": {
+            "expectancy_r": 0.12000000000000002,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 0.6000000000000001
+          },
+          "2024-12": {
+            "expectancy_r": 0.0857142857142857,
+            "rows": 21,
+            "sessions": 7,
+            "total_r": 1.7999999999999998
+          },
+          "2025-01": {
+            "expectancy_r": 0.25263157894736843,
+            "rows": 19,
+            "sessions": 5,
+            "total_r": 4.8
+          },
+          "2025-02": {
+            "expectancy_r": 0.09999999999999999,
+            "rows": 18,
+            "sessions": 7,
+            "total_r": 1.7999999999999998
+          },
+          "2025-03": {
+            "expectancy_r": 0.4,
+            "rows": 9,
+            "sessions": 4,
+            "total_r": 3.6
+          },
+          "2025-04": {
+            "expectancy_r": 0.08253667345554673,
+            "rows": 26,
+            "sessions": 5,
+            "total_r": 2.145953509844215
+          },
+          "2025-05": {
+            "expectancy_r": -0.2823529411764706,
+            "rows": 17,
+            "sessions": 5,
+            "total_r": -4.8
+          },
+          "2025-06": {
+            "expectancy_r": -0.14331642094768404,
+            "rows": 23,
+            "sessions": 8,
+            "total_r": -3.296277681796733
+          },
+          "2025-07": {
+            "expectancy_r": -0.11538461538461535,
+            "rows": 26,
+            "sessions": 8,
+            "total_r": -2.999999999999999
+          },
+          "2025-08": {
+            "expectancy_r": 0.20000000000000004,
+            "rows": 18,
+            "sessions": 8,
+            "total_r": 3.6000000000000005
+          },
+          "2025-09": {
+            "expectancy_r": 0.0,
+            "rows": 9,
+            "sessions": 6,
+            "total_r": 0.0
+          },
+          "2025-10": {
+            "expectancy_r": 0.3,
+            "rows": 8,
+            "sessions": 5,
+            "total_r": 2.4
+          },
+          "2025-11": {
+            "expectancy_r": 0.5076923076923076,
+            "rows": 26,
+            "sessions": 7,
+            "total_r": 13.199999999999998
+          },
+          "2025-12": {
+            "expectancy_r": 0.6,
+            "rows": 18,
+            "sessions": 9,
+            "total_r": 10.799999999999999
+          },
+          "2026-01": {
+            "expectancy_r": -0.08571428571428572,
+            "rows": 7,
+            "sessions": 6,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": 0.66,
+            "rows": 10,
+            "sessions": 1,
+            "total_r": 6.6000000000000005
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 0.08853707382762127,
+            "rows": 58,
+            "sessions": 28,
+            "total_r": 5.135150282002034
+          },
+          "0.0": {
+            "expectancy_r": 0.193440929970707,
+            "rows": 135,
+            "sessions": 63,
+            "total_r": 26.114525546045446
+          },
+          "1.0": {
+            "expectancy_r": 0.36478413551975186,
+            "rows": 64,
+            "sessions": 32,
+            "total_r": 23.34618467326412
+          },
+          "nan": {
+            "expectancy_r": 0.09545454545454546,
+            "rows": 88,
+            "sessions": 58,
+            "total_r": 8.4
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.14202392041351672,
+            "rows": 245,
+            "sessions": 75,
+            "total_r": 34.795860501311594
+          },
+          "1.0": {
+            "expectancy_r": 0.28656716417910444,
+            "rows": 67,
+            "sessions": 34,
+            "total_r": 19.199999999999996
+          },
+          "2.0": {
+            "expectancy_r": 0.2727272727272727,
+            "rows": 33,
+            "sessions": 14,
+            "total_r": 9.0
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.23194760966904607,
+            "rows": 111,
+            "sessions": 27,
+            "total_r": 25.746184673264114
+          },
+          "2025": {
+            "expectancy_r": 0.1440077227098962,
+            "rows": 217,
+            "sessions": 77,
+            "total_r": 31.249675828047476
+          },
+          "2026": {
+            "expectancy_r": 0.35294117647058826,
+            "rows": 17,
+            "sessions": 7,
+            "total_r": 6.0
+          }
+        },
+        "gross_negative_r": 115.53928978069041,
+        "gross_positive_r": 178.535150282002,
+        "label_expectancy_r": 0.182596697105251,
+        "label_profit_factor": 1.5452332329624534,
+        "mae_atr_mean": -2.169796677611348,
+        "maximum_drawdown_r": -17.096277681796778,
+        "mean_label_return_r": 0.182596697105251,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": -0.6,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.4449241190524784,
+        "row_support_rate": 0.002452060441513028,
+        "rows": 345,
+        "session_support_rate": 0.27205882352941174,
+        "sessions": 111,
+        "total_label_r": 62.9958605013116,
+        "win_rate": 0.43478260869565216
+      },
+      "threshold_+10%": {
+        "average_bars_to_event": 3.76,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 52,
+          "TARGET_FIRST": 73
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.45120000000000005,
+            "rows": 125,
+            "sessions": 50,
+            "total_r": 56.400000000000006
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.3692307692307693,
+            "rows": 13,
+            "sessions": 4,
+            "total_r": 4.800000000000001
+          },
+          "2024-08": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2024-09": {
+            "expectancy_r": 0.3,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 0.6
+          },
+          "2024-10": {
+            "expectancy_r": 0.8999999999999999,
+            "rows": 12,
+            "sessions": 5,
+            "total_r": 10.799999999999999
+          },
+          "2024-11": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": 3.5999999999999996
+          },
+          "2024-12": {
+            "expectancy_r": -0.6,
+            "rows": 4,
+            "sessions": 3,
+            "total_r": -2.4
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 9,
+            "sessions": 2,
+            "total_r": 10.799999999999999
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": -1.7999999999999998
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.6,
+            "rows": 12,
+            "sessions": 4,
+            "total_r": 7.2
+          },
+          "2025-05": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2025-06": {
+            "expectancy_r": 0.12,
+            "rows": 10,
+            "sessions": 6,
+            "total_r": 1.2
+          },
+          "2025-07": {
+            "expectancy_r": 0.8,
+            "rows": 9,
+            "sessions": 2,
+            "total_r": 7.2
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": 3.5999999999999996
+          },
+          "2025-10": {
+            "expectancy_r": -0.18461538461538454,
+            "rows": 13,
+            "sessions": 5,
+            "total_r": -2.399999999999999
+          },
+          "2025-11": {
+            "expectancy_r": 0.45,
+            "rows": 12,
+            "sessions": 3,
+            "total_r": 5.4
+          },
+          "2025-12": {
+            "expectancy_r": 0.3,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 1.2
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 0.75,
+            "rows": 4,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "0.0": {
+            "expectancy_r": 0.4883720930232556,
+            "rows": 43,
+            "sessions": 22,
+            "total_r": 20.999999999999993
+          },
+          "1.0": {
+            "expectancy_r": 0.5302325581395348,
+            "rows": 43,
+            "sessions": 21,
+            "total_r": 22.799999999999997
+          },
+          "nan": {
+            "expectancy_r": 0.27428571428571424,
+            "rows": 35,
+            "sessions": 27,
+            "total_r": 9.599999999999998
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.18545454545454548,
+            "rows": 55,
+            "sessions": 28,
+            "total_r": 10.200000000000001
+          },
+          "1.0": {
+            "expectancy_r": 0.525,
+            "rows": 48,
+            "sessions": 20,
+            "total_r": 25.2
+          },
+          "2.0": {
+            "expectancy_r": 0.9545454545454543,
+            "rows": 22,
+            "sessions": 9,
+            "total_r": 20.999999999999993
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.4499999999999999,
+            "rows": 36,
+            "sessions": 16,
+            "total_r": 16.199999999999996
+          },
+          "2025": {
+            "expectancy_r": 0.48837209302325596,
+            "rows": 86,
+            "sessions": 32,
+            "total_r": 42.000000000000014
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 31.200000000000006,
+        "gross_positive_r": 87.6,
+        "label_expectancy_r": 0.45120000000000005,
+        "label_profit_factor": 2.807692307692307,
+        "mae_atr_mean": -2.280369262414337,
+        "maximum_drawdown_r": -4.800000000000011,
+        "mean_label_return_r": 0.45120000000000005,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.212515151086212,
+        "row_support_rate": 0.0008884276962003724,
+        "rows": 125,
+        "session_support_rate": 0.12254901960784313,
+        "sessions": 50,
+        "total_label_r": 56.400000000000006,
+        "win_rate": 0.584
+      },
+      "threshold_+20%": {
+        "average_bars_to_event": 3.3317073170731706,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 105,
+          "TARGET_FIRST": 100
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.2780487804878048,
+            "rows": 205,
+            "sessions": 70,
+            "total_r": 56.999999999999986
+          }
+        },
+        "by_month": {
+          "2024-06": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2024-07": {
+            "expectancy_r": 0.24705882352941178,
+            "rows": 17,
+            "sessions": 5,
+            "total_r": 4.2
+          },
+          "2024-08": {
+            "expectancy_r": -0.24,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": -1.2
+          },
+          "2024-09": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2024-10": {
+            "expectancy_r": 0.72,
+            "rows": 15,
+            "sessions": 5,
+            "total_r": 10.799999999999999
+          },
+          "2024-11": {
+            "expectancy_r": 1.2,
+            "rows": 5,
+            "sessions": 1,
+            "total_r": 6.0
+          },
+          "2024-12": {
+            "expectancy_r": -0.24,
+            "rows": 10,
+            "sessions": 3,
+            "total_r": -2.4
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 9,
+            "sessions": 2,
+            "total_r": 10.799999999999999
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": -2.4
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.45882352941176474,
+            "rows": 17,
+            "sessions": 6,
+            "total_r": 7.800000000000001
+          },
+          "2025-05": {
+            "expectancy_r": 0.0,
+            "rows": 6,
+            "sessions": 3,
+            "total_r": 0.0
+          },
+          "2025-06": {
+            "expectancy_r": 0.29999999999999993,
+            "rows": 14,
+            "sessions": 6,
+            "total_r": 4.199999999999999
+          },
+          "2025-07": {
+            "expectancy_r": 0.5700000000000001,
+            "rows": 20,
+            "sessions": 6,
+            "total_r": 11.4
+          },
+          "2025-08": {
+            "expectancy_r": 0.525,
+            "rows": 8,
+            "sessions": 2,
+            "total_r": 4.2
+          },
+          "2025-09": {
+            "expectancy_r": 0.8400000000000001,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": 4.2
+          },
+          "2025-10": {
+            "expectancy_r": -0.1714285714285714,
+            "rows": 21,
+            "sessions": 6,
+            "total_r": -3.5999999999999996
+          },
+          "2025-11": {
+            "expectancy_r": 0.30000000000000004,
+            "rows": 18,
+            "sessions": 5,
+            "total_r": 5.4
+          },
+          "2025-12": {
+            "expectancy_r": -0.10909090909090909,
+            "rows": 11,
+            "sessions": 4,
+            "total_r": -1.2
+          },
+          "2026-01": {
+            "expectancy_r": -0.3,
+            "rows": 6,
+            "sessions": 3,
+            "total_r": -1.7999999999999998
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 6,
+            "sessions": 1,
+            "total_r": -3.6
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 0.75,
+            "rows": 4,
+            "sessions": 3,
+            "total_r": 3.0
+          },
+          "0.0": {
+            "expectancy_r": 0.27631578947368424,
+            "rows": 76,
+            "sessions": 33,
+            "total_r": 21.0
+          },
+          "1.0": {
+            "expectancy_r": 0.4105263157894737,
+            "rows": 57,
+            "sessions": 27,
+            "total_r": 23.4
+          },
+          "nan": {
+            "expectancy_r": 0.14117647058823532,
+            "rows": 68,
+            "sessions": 41,
+            "total_r": 9.600000000000001
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.056470588235294154,
+            "rows": 85,
+            "sessions": 37,
+            "total_r": 4.800000000000003
+          },
+          "1.0": {
+            "expectancy_r": 0.3333333333333333,
+            "rows": 81,
+            "sessions": 31,
+            "total_r": 27.0
+          },
+          "2.0": {
+            "expectancy_r": 0.646153846153846,
+            "rows": 39,
+            "sessions": 16,
+            "total_r": 25.199999999999992
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.33214285714285713,
+            "rows": 56,
+            "sessions": 20,
+            "total_r": 18.599999999999998
+          },
+          "2025": {
+            "expectancy_r": 0.31970802919708025,
+            "rows": 137,
+            "sessions": 46,
+            "total_r": 43.8
+          },
+          "2026": {
+            "expectancy_r": -0.44999999999999996,
+            "rows": 12,
+            "sessions": 4,
+            "total_r": -5.3999999999999995
+          }
+        },
+        "gross_negative_r": 62.999999999999986,
+        "gross_positive_r": 119.99999999999999,
+        "label_expectancy_r": 0.2780487804878048,
+        "label_profit_factor": 1.9047619047619049,
+        "mae_atr_mean": -2.5706981826132993,
+        "maximum_drawdown_r": -7.8000000000000185,
+        "mean_label_return_r": 0.2780487804878048,
+        "median_bars_to_event": 2.0,
+        "median_label_return_r": -0.6,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.8417738428972825,
+        "row_support_rate": 0.0014570214217686109,
+        "rows": 205,
+        "session_support_rate": 0.1715686274509804,
+        "sessions": 70,
+        "total_label_r": 56.999999999999986,
+        "win_rate": 0.4878048780487805
+      },
+      "threshold_+5%": {
+        "average_bars_to_event": 3.5784313725490198,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 38,
+          "TARGET_FIRST": 64
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.5294117647058824,
+            "rows": 102,
+            "sessions": 43,
+            "total_r": 54.0
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.38181818181818183,
+            "rows": 11,
+            "sessions": 4,
+            "total_r": 4.2
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 0.8999999999999999,
+            "rows": 12,
+            "sessions": 5,
+            "total_r": 10.799999999999999
+          },
+          "2024-11": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-12": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 8,
+            "sessions": 1,
+            "total_r": 9.6
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": -1.7999999999999998
+          },
+          "2025-03": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2025-04": {
+            "expectancy_r": 0.5454545454545454,
+            "rows": 11,
+            "sessions": 4,
+            "total_r": 6.0
+          },
+          "2025-05": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2025-06": {
+            "expectancy_r": 0.42857142857142855,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 3.0
+          },
+          "2025-07": {
+            "expectancy_r": 0.942857142857143,
+            "rows": 7,
+            "sessions": 2,
+            "total_r": 6.6000000000000005
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": 3.5999999999999996
+          },
+          "2025-10": {
+            "expectancy_r": -0.06,
+            "rows": 10,
+            "sessions": 4,
+            "total_r": -0.6
+          },
+          "2025-11": {
+            "expectancy_r": 0.39999999999999997,
+            "rows": 9,
+            "sessions": 3,
+            "total_r": 3.5999999999999996
+          },
+          "2025-12": {
+            "expectancy_r": 0.3,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 1.2
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.6545454545454544,
+            "rows": 33,
+            "sessions": 16,
+            "total_r": 21.599999999999998
+          },
+          "1.0": {
+            "expectancy_r": 0.525,
+            "rows": 40,
+            "sessions": 20,
+            "total_r": 21.0
+          },
+          "nan": {
+            "expectancy_r": 0.3333333333333334,
+            "rows": 27,
+            "sessions": 21,
+            "total_r": 9.000000000000002
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.20816326530612245,
+            "rows": 49,
+            "sessions": 24,
+            "total_r": 10.2
+          },
+          "1.0": {
+            "expectancy_r": 0.6923076923076922,
+            "rows": 39,
+            "sessions": 16,
+            "total_r": 26.999999999999993
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 14,
+            "sessions": 6,
+            "total_r": 16.799999999999997
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 0.5999999999999998,
+            "rows": 27,
+            "sessions": 13,
+            "total_r": 16.199999999999992
+          },
+          "2025": {
+            "expectancy_r": 0.55,
+            "rows": 72,
+            "sessions": 28,
+            "total_r": 39.6
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "gross_negative_r": 22.800000000000008,
+        "gross_positive_r": 76.8,
+        "label_expectancy_r": 0.5294117647058824,
+        "label_profit_factor": 3.368421052631578,
+        "mae_atr_mean": -2.1499762587541276,
+        "maximum_drawdown_r": -3.6000000000000085,
+        "mean_label_return_r": 0.5294117647058824,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.3752053445386045,
+        "row_support_rate": 0.0007249570000995039,
+        "rows": 102,
+        "session_support_rate": 0.1053921568627451,
+        "sessions": 43,
+        "total_label_r": 54.0,
+        "win_rate": 0.6274509803921569
+      },
+      "threshold_-10%": {
+        "average_bars_to_event": 3.6578947368421053,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 15,
+          "TARGET_FIRST": 23
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.48947368421052606,
+            "rows": 38,
+            "sessions": 23,
+            "total_r": 18.59999999999999
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 2.4
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 6,
+            "sessions": 1,
+            "total_r": 7.2
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.3,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 0.6
+          },
+          "2025-04": {
+            "expectancy_r": -0.24,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": -1.2
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 2.4
+          },
+          "2025-10": {
+            "expectancy_r": 0.0,
+            "rows": 3,
+            "sessions": 3,
+            "total_r": 0.0
+          },
+          "2025-11": {
+            "expectancy_r": 0.0,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 0.0
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.9230769230769229,
+            "rows": 13,
+            "sessions": 8,
+            "total_r": 11.999999999999998
+          },
+          "1.0": {
+            "expectancy_r": 0.6,
+            "rows": 12,
+            "sessions": 6,
+            "total_r": 7.2
+          },
+          "nan": {
+            "expectancy_r": -0.2727272727272727,
+            "rows": 11,
+            "sessions": 10,
+            "total_r": -3.0
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": -0.0375,
+            "rows": 16,
+            "sessions": 11,
+            "total_r": -0.6
+          },
+          "1.0": {
+            "expectancy_r": 0.72,
+            "rows": 15,
+            "sessions": 8,
+            "total_r": 10.799999999999999
+          },
+          "2.0": {
+            "expectancy_r": 1.2,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 8.4
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 1.2,
+            "rows": 7,
+            "sessions": 4,
+            "total_r": 8.4
+          },
+          "2025": {
+            "expectancy_r": 0.393103448275862,
+            "rows": 29,
+            "sessions": 17,
+            "total_r": 11.399999999999999
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          }
+        },
+        "gross_negative_r": 8.999999999999998,
+        "gross_positive_r": 27.599999999999994,
+        "label_expectancy_r": 0.48947368421052606,
+        "label_profit_factor": 3.0666666666666664,
+        "mae_atr_mean": -2.5694302264247324,
+        "maximum_drawdown_r": -2.4000000000000057,
+        "mean_label_return_r": 0.48947368421052606,
+        "median_bars_to_event": 2.5,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 2.6055619156042615,
+        "row_support_rate": 0.00027008201964491324,
+        "rows": 38,
+        "session_support_rate": 0.056372549019607844,
+        "sessions": 23,
+        "total_label_r": 18.59999999999999,
+        "win_rate": 0.6052631578947368
+      },
+      "threshold_-20%": {
+        "average_bars_to_event": 3.2941176470588234,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 9,
+          "TARGET_FIRST": 8
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.24705882352941178,
+            "rows": 17,
+            "sessions": 10,
+            "total_r": 4.2
+          }
+        },
+        "by_month": {
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 1,
+            "total_r": 3.5999999999999996
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-04": {
+            "expectancy_r": -0.15,
+            "rows": 4,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2025-06": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 2.4
+          },
+          "2025-11": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          }
+        },
+        "by_regime": {
+          "0.0": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "1.0": {
+            "expectancy_r": 0.17142857142857143,
+            "rows": 7,
+            "sessions": 3,
+            "total_r": 1.2
+          },
+          "nan": {
+            "expectancy_r": -0.3,
+            "rows": 6,
+            "sessions": 6,
+            "total_r": -1.7999999999999998
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": -0.24,
+            "rows": 10,
+            "sessions": 6,
+            "total_r": -2.4
+          },
+          "1.0": {
+            "expectancy_r": 0.8400000000000001,
+            "rows": 5,
+            "sessions": 3,
+            "total_r": 4.2
+          },
+          "2.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": 2.4
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025": {
+            "expectancy_r": 0.3,
+            "rows": 14,
+            "sessions": 7,
+            "total_r": 4.2
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          }
+        },
+        "gross_negative_r": 5.3999999999999995,
+        "gross_positive_r": 9.6,
+        "label_expectancy_r": 0.24705882352941178,
+        "label_profit_factor": 1.777777777777778,
+        "mae_atr_mean": -3.1574315281913234,
+        "maximum_drawdown_r": -2.4,
+        "mean_label_return_r": 0.24705882352941178,
+        "median_bars_to_event": 2.0,
+        "median_label_return_r": -0.6,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 1.7747272013468545,
+        "row_support_rate": 0.00012082616668325066,
+        "rows": 17,
+        "session_support_rate": 0.024509803921568627,
+        "sessions": 10,
+        "total_label_r": 4.2,
+        "win_rate": 0.47058823529411764
+      },
+      "threshold_-5%": {
+        "average_bars_to_event": 3.7777777777777777,
+        "barrier_outcome_counts": {
+          "STOP_FIRST": 18,
+          "TARGET_FIRST": 36
+        },
+        "by_expiry_context": {
+          "nan": {
+            "expectancy_r": 0.6,
+            "rows": 54,
+            "sessions": 27,
+            "total_r": 32.4
+          }
+        },
+        "by_month": {
+          "2024-07": {
+            "expectancy_r": 0.7499999999999999,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 2.9999999999999996
+          },
+          "2024-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2024-10": {
+            "expectancy_r": 1.2,
+            "rows": 6,
+            "sessions": 2,
+            "total_r": 7.2
+          },
+          "2025-01": {
+            "expectancy_r": 1.2,
+            "rows": 7,
+            "sessions": 1,
+            "total_r": 8.4
+          },
+          "2025-02": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 1,
+            "total_r": -1.2
+          },
+          "2025-03": {
+            "expectancy_r": 0.6,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2025-04": {
+            "expectancy_r": -0.24,
+            "rows": 5,
+            "sessions": 2,
+            "total_r": -1.2
+          },
+          "2025-05": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-06": {
+            "expectancy_r": 0.29999999999999993,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 1.1999999999999997
+          },
+          "2025-07": {
+            "expectancy_r": 1.2,
+            "rows": 4,
+            "sessions": 2,
+            "total_r": 4.8
+          },
+          "2025-08": {
+            "expectancy_r": 1.2,
+            "rows": 3,
+            "sessions": 2,
+            "total_r": 3.5999999999999996
+          },
+          "2025-09": {
+            "expectancy_r": 1.2,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": 1.2
+          },
+          "2025-10": {
+            "expectancy_r": 0.29999999999999993,
+            "rows": 4,
+            "sessions": 3,
+            "total_r": 1.1999999999999997
+          },
+          "2025-11": {
+            "expectancy_r": 0.3,
+            "rows": 6,
+            "sessions": 2,
+            "total_r": 1.7999999999999998
+          },
+          "2025-12": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-01": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          },
+          "2026-02": {
+            "expectancy_r": -0.6,
+            "rows": 1,
+            "sessions": 1,
+            "total_r": -0.6
+          }
+        },
+        "by_regime": {
+          "-1.0": {
+            "expectancy_r": 1.2,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": 2.4
+          },
+          "0.0": {
+            "expectancy_r": 0.8999999999999999,
+            "rows": 18,
+            "sessions": 10,
+            "total_r": 16.2
+          },
+          "1.0": {
+            "expectancy_r": 0.6599999999999999,
+            "rows": 20,
+            "sessions": 10,
+            "total_r": 13.199999999999998
+          },
+          "nan": {
+            "expectancy_r": 0.04285714285714281,
+            "rows": 14,
+            "sessions": 13,
+            "total_r": 0.5999999999999993
+          }
+        },
+        "by_time_bucket": {
+          "0.0": {
+            "expectancy_r": 0.02999999999999999,
+            "rows": 20,
+            "sessions": 14,
+            "total_r": 0.5999999999999998
+          },
+          "1.0": {
+            "expectancy_r": 0.8249999999999998,
+            "rows": 24,
+            "sessions": 10,
+            "total_r": 19.799999999999997
+          },
+          "2.0": {
+            "expectancy_r": 1.1999999999999997,
+            "rows": 10,
+            "sessions": 4,
+            "total_r": 11.999999999999998
+          }
+        },
+        "by_year": {
+          "2024": {
+            "expectancy_r": 1.0363636363636362,
+            "rows": 11,
+            "sessions": 5,
+            "total_r": 11.399999999999999
+          },
+          "2025": {
+            "expectancy_r": 0.5414634146341463,
+            "rows": 41,
+            "sessions": 20,
+            "total_r": 22.199999999999996
+          },
+          "2026": {
+            "expectancy_r": -0.6,
+            "rows": 2,
+            "sessions": 2,
+            "total_r": -1.2
+          }
+        },
+        "gross_negative_r": 10.799999999999999,
+        "gross_positive_r": 43.20000000000001,
+        "label_expectancy_r": 0.6,
+        "label_profit_factor": 4.000000000000001,
+        "mae_atr_mean": -2.2886114533892354,
+        "maximum_drawdown_r": -2.4000000000000057,
+        "mean_label_return_r": 0.6,
+        "median_bars_to_event": 3.0,
+        "median_label_return_r": 1.2,
+        "metric_name": "underlying research-label metrics",
+        "mfe_atr_mean": 3.0960996308989213,
+        "row_support_rate": 0.0003838007647585609,
+        "rows": 54,
+        "session_support_rate": 0.0661764705882353,
+        "sessions": 27,
+        "total_label_r": 32.4,
+        "win_rate": 0.6666666666666666
+      },
+      "timestamp_shift": {
+        "label_expectancy_r": 0.6162162162162163,
+        "label_profit_factor": 4.166666666666668,
+        "rows": 74,
+        "total_label_r": 45.6,
+        "win_rate": 0.6756756756756757
+      }
+    },
+    "original": {
+      "average_bars_to_event": 3.675675675675676,
+      "barrier_outcome_counts": {
+        "STOP_FIRST": 22,
+        "TARGET_FIRST": 52
+      },
+      "by_expiry_context": {
+        "nan": {
+          "expectancy_r": 0.664864864864865,
+          "rows": 74,
+          "sessions": 34,
+          "total_r": 49.2
+        }
+      },
+      "by_month": {
+        "2024-07": {
+          "expectancy_r": 0.6857142857142858,
+          "rows": 7,
+          "sessions": 2,
+          "total_r": 4.800000000000001
+        },
+        "2024-09": {
+          "expectancy_r": 1.2,
+          "rows": 1,
+          "sessions": 1,
+          "total_r": 1.2
+        },
+        "2024-10": {
+          "expectancy_r": 1.2,
+          "rows": 8,
+          "sessions": 3,
+          "total_r": 9.6
+        },
+        "2025-01": {
+          "expectancy_r": 1.2,
+          "rows": 8,
+          "sessions": 1,
+          "total_r": 9.6
+        },
+        "2025-02": {
+          "expectancy_r": -0.6,
+          "rows": 2,
+          "sessions": 1,
+          "total_r": -1.2
+        },
+        "2025-03": {
+          "expectancy_r": 0.7499999999999999,
+          "rows": 4,
+          "sessions": 2,
+          "total_r": 2.9999999999999996
+        },
+        "2025-04": {
+          "expectancy_r": 0.39999999999999997,
+          "rows": 9,
+          "sessions": 4,
+          "total_r": 3.5999999999999996
+        },
+        "2025-05": {
+          "expectancy_r": 1.2,
+          "rows": 1,
+          "sessions": 1,
+          "total_r": 1.2
+        },
+        "2025-06": {
+          "expectancy_r": 0.47999999999999987,
+          "rows": 5,
+          "sessions": 3,
+          "total_r": 2.3999999999999995
+        },
+        "2025-07": {
+          "expectancy_r": 1.2,
+          "rows": 5,
+          "sessions": 2,
+          "total_r": 6.0
+        },
+        "2025-08": {
+          "expectancy_r": 1.2,
+          "rows": 3,
+          "sessions": 2,
+          "total_r": 3.5999999999999996
+        },
+        "2025-09": {
+          "expectancy_r": 1.2,
+          "rows": 1,
+          "sessions": 1,
+          "total_r": 1.2
+        },
+        "2025-10": {
+          "expectancy_r": 0.17142857142857146,
+          "rows": 7,
+          "sessions": 4,
+          "total_r": 1.2000000000000002
+        },
+        "2025-11": {
+          "expectancy_r": 0.42857142857142855,
+          "rows": 7,
+          "sessions": 3,
+          "total_r": 3.0
+        },
+        "2025-12": {
+          "expectancy_r": 0.6,
+          "rows": 3,
+          "sessions": 2,
+          "total_r": 1.7999999999999998
+        },
+        "2026-01": {
+          "expectancy_r": -0.6,
+          "rows": 1,
+          "sessions": 1,
+          "total_r": -0.6
+        },
+        "2026-02": {
+          "expectancy_r": -0.6,
+          "rows": 2,
+          "sessions": 1,
+          "total_r": -1.2
+        }
+      },
+      "by_regime": {
+        "-1.0": {
+          "expectancy_r": 1.2,
+          "rows": 2,
+          "sessions": 2,
+          "total_r": 2.4
+        },
+        "0.0": {
+          "expectancy_r": 0.7846153846153844,
+          "rows": 26,
+          "sessions": 12,
+          "total_r": 20.399999999999995
+        },
+        "1.0": {
+          "expectancy_r": 0.7333333333333333,
+          "rows": 27,
+          "sessions": 15,
+          "total_r": 19.799999999999997
+        },
+        "nan": {
+          "expectancy_r": 0.34736842105263166,
+          "rows": 19,
+          "sessions": 17,
+          "total_r": 6.600000000000001
+        }
+      },
+      "by_time_bucket": {
+        "0.0": {
+          "expectancy_r": 0.30000000000000004,
+          "rows": 34,
+          "sessions": 20,
+          "total_r": 10.200000000000001
+        },
+        "1.0": {
+          "expectancy_r": 0.8785714285714283,
+          "rows": 28,
+          "sessions": 11,
+          "total_r": 24.599999999999994
+        },
+        "2.0": {
+          "expectancy_r": 1.1999999999999997,
+          "rows": 12,
+          "sessions": 5,
+          "total_r": 14.399999999999997
+        }
+      },
+      "by_year": {
+        "2024": {
+          "expectancy_r": 0.975,
+          "rows": 16,
+          "sessions": 6,
+          "total_r": 15.6
+        },
+        "2025": {
+          "expectancy_r": 0.6436363636363638,
+          "rows": 55,
+          "sessions": 26,
+          "total_r": 35.400000000000006
+        },
+        "2026": {
+          "expectancy_r": -0.6,
+          "rows": 3,
+          "sessions": 2,
+          "total_r": -1.7999999999999998
+        }
+      },
+      "gross_negative_r": 13.199999999999998,
+      "gross_positive_r": 62.40000000000001,
+      "label_expectancy_r": 0.664864864864865,
+      "label_profit_factor": 4.727272727272729,
+      "mae_atr_mean": -2.212975234892172,
+      "maximum_drawdown_r": -1.8000000000000078,
+      "mean_label_return_r": 0.664864864864865,
+      "median_bars_to_event": 3.0,
+      "median_label_return_r": 1.2,
+      "metric_name": "underlying research-label metrics",
+      "mfe_atr_mean": 3.1720643505594195,
+      "row_support_rate": 0.0005259491961506204,
+      "rows": 74,
+      "session_support_rate": 0.08333333333333333,
+      "sessions": 34,
+      "total_label_r": 49.2,
+      "win_rate": 0.7027027027027027
+    }
+  },
+  "read_only": true,
+  "reasons": [],
+  "schema_version": "ml_strategy_discovery_real_run_audit_v1",
+  "session_block_uncertainty": {
+    "expectancy_ci": [
+      -0.10909090909090909,
+      0.72
+    ],
+    "label_pf_ci": [
+      0.75,
+      5.499999999999999
+    ],
+    "seed": 68742,
+    "win_rate_ci": [
+      0.2727272727272727,
+      0.7333333333333333
+    ]
+  },
+  "side": "LONG",
+  "status": "OK"
+}

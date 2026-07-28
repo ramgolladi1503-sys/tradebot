@@ -1,0 +1,20 @@
+{
+  "AERON7": {
+    "authoritative_candidate_generation": false,
+    "fail_closed_reason": "duplicate/conflict-safe parser not completed",
+    "source_timestamp": "one_minute_bar_timestamp_requires_conflict_safe_parser"
+  },
+  "KITE": {
+    "bar_interval_end": "timestamp + 5 minutes",
+    "bar_interval_minutes": 5,
+    "bar_interval_start": "timestamp",
+    "late_decision_information_cutoff": "14:00 IST",
+    "late_first_legal_entry": "first bar with interval_start > 14:00",
+    "late_selected_decision_bar": "latest bar with interval_end <= 14:00",
+    "opening_decision_information_cutoff": "09:45 IST",
+    "opening_first_legal_entry": "first bar with interval_start > 09:45",
+    "opening_selected_decision_bar": "latest bar with interval_end <= 09:45",
+    "source_timestamp": "bar_start"
+  },
+  "timezone": "Asia/Kolkata"
+}

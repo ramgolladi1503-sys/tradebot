@@ -1,0 +1,149 @@
+{
+  "atr_14": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "body": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "body_range_ratio": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "compression_duration": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "dist_session_high": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "dist_session_low": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "gap_pct": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "lower_wick_ratio": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "minute_index": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "opening_range_width": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "prior_failed_breaks": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "prior_session_range": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "prior_session_return": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "range": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "realized_vol_15": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "ret_1": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "rolling_range_15": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "rolling_range_5": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "upper_wick_ratio": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "volume": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  },
+  "vwap_distance": {
+    "completion_semantics": "bar_completed_ts <= causal_trigger_timestamp",
+    "leakage_risk": "LOW",
+    "lookback_window": "session causal rolling",
+    "null_policy": "bounded fill or zero only for unavailable prior session",
+    "source_columns": "completed bars at or before causal timestamp"
+  }
+}

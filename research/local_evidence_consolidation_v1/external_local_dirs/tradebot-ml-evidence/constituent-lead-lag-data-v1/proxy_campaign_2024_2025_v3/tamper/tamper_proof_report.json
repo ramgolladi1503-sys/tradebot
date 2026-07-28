@@ -1,0 +1,43 @@
+{
+  "allowed_for_live_execution": false,
+  "authoritative_bundle": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3",
+  "created_at_utc": "2026-07-23T15:38:38.455144+00:00",
+  "research_only": true,
+  "results": [
+    {
+      "case": "baseline_authoritative_copy",
+      "result": {
+        "errors": [],
+        "exit_code": 0,
+        "failed_checks": [],
+        "verdict": "PASS"
+      }
+    },
+    {
+      "case": "artifact_hash_mutation",
+      "mutation": "mutated persisted coverage summary states without updating artifact_manifest",
+      "result": {
+        "errors": [],
+        "exit_code": 0,
+        "failed_checks": [
+          "artifact:reports/membership_coverage_summary.json"
+        ],
+        "verdict": "FAIL"
+      }
+    },
+    {
+      "case": "summary_prerequisite_mutation",
+      "mutation": "mutated persisted summary weighted_signals final prerequisite without updating artifact_manifest",
+      "result": {
+        "errors": [],
+        "exit_code": 0,
+        "failed_checks": [
+          "artifact:evaluation/summary.json",
+          "weighted_signal_count"
+        ],
+        "verdict": "FAIL"
+      }
+    }
+  ],
+  "tampered_copies_cleaned_up": true
+}

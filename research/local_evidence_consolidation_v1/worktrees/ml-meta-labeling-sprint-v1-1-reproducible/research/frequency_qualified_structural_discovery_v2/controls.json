@@ -1,0 +1,83 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "matched_random": {
+      "expiry_count": 21,
+      "gross_expectancy_points": -0.7345920745920743,
+      "mae_points_mean": -24.94310955710956,
+      "max_trade_points": 114.4,
+      "mfe_points_mean": 26.443832167832163,
+      "min_trade_points": -100.29999999999995,
+      "net_expectancy_points": -1.7345920745920744,
+      "net_points_ci": {
+        "ci95_high": -0.9627751405379338,
+        "ci95_low": -2.506409008646215,
+        "mean": -1.7345920745920744,
+        "n": 2145,
+        "std": 18.237776107953415
+      },
+      "session_count": 92,
+      "side_counts": {
+        "CE": 1071,
+        "PE": 1074
+      },
+      "t_stat": -4.404931164625082,
+      "total_net_points": -3720.7,
+      "trades": 2145,
+      "win_rate": 0.37622377622377623
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "matched_random": {
+      "expiry_count": 21,
+      "gross_expectancy_points": -0.22967387687188057,
+      "mae_points_mean": -25.76649084858569,
+      "max_trade_points": 114.4,
+      "mfe_points_mean": 28.519658901830283,
+      "min_trade_points": -162.75,
+      "net_expectancy_points": -1.2296738768718805,
+      "net_points_ci": {
+        "ci95_high": -0.7528538485471441,
+        "ci95_low": -1.7064939051966168,
+        "mean": -1.2296738768718805,
+        "n": 6010,
+        "std": 18.859737940579976
+      },
+      "session_count": 92,
+      "side_counts": {
+        "CE": 3011,
+        "PE": 2999
+      },
+      "t_stat": -5.054655122472027,
+      "total_net_points": -7390.340000000002,
+      "trades": 6010,
+      "win_rate": 0.39018302828618967
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "matched_random": {
+      "expiry_count": 21,
+      "gross_expectancy_points": -0.2772661870503599,
+      "mae_points_mean": -25.32721422861711,
+      "max_trade_points": 114.4,
+      "mfe_points_mean": 28.137204236610714,
+      "min_trade_points": -102.0,
+      "net_expectancy_points": -1.2772661870503599,
+      "net_points_ci": {
+        "ci95_high": -0.7571494389261119,
+        "ci95_low": -1.7973829351746078,
+        "mean": -1.2772661870503599,
+        "n": 5004,
+        "std": 18.771691909628107
+      },
+      "session_count": 92,
+      "side_counts": {
+        "CE": 2494,
+        "PE": 2510
+      },
+      "t_stat": -4.813230367311054,
+      "total_net_points": -6391.4400000000005,
+      "trades": 5004,
+      "win_rate": 0.3904876099120703
+    }
+  }
+}

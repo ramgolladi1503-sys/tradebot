@@ -1,0 +1,15 @@
+{
+  "fixed_target_stop_geometry": {
+    "risk": "may misalign delayed-convexity mechanisms",
+    "stop_points": 8.0,
+    "target_points": 12.0
+  },
+  "max_holding_period": 15,
+  "missing_bid_ask": "spread simulation unsupported; costs not weakened",
+  "next_bar_execution": true,
+  "percentage_exits_not_tested": true,
+  "same_bar_hindsight": false,
+  "status": "PASS",
+  "strike_migration_not_modelled": true,
+  "timestamp_risk": "warehouse is minute aligned; true asynchronous tick ordering unavailable"
+}

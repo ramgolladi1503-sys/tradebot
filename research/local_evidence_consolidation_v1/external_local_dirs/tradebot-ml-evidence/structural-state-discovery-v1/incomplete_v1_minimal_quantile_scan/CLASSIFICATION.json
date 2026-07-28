@@ -1,0 +1,42 @@
+{
+  "classification": "INCOMPLETE_DISCOVERY_IMPLEMENTATION",
+  "latest_100_internal_holdout_status": "CONTAMINATED_BY_V1_OUTCOME_MATERIALIZATION",
+  "not_valid_for": [
+    "NO_STABLE_STATE_EDGE_FOUND",
+    "exhaustive or representative state discovery",
+    "multiple-testing claims",
+    "untouched holdout claims",
+    "validation claims",
+    "matched-control claims",
+    "negative-control claims",
+    "prospective-shadow decisions",
+    "production decisions"
+  ],
+  "reasons": [
+    "only 14 hypotheses were tested",
+    "only seven features were scanned at lower/upper quantiles",
+    "no two-feature or three-feature interactions were tested",
+    "shallow decision trees were not executed",
+    "sparse-model prioritization was not executed",
+    "clustering was not executed",
+    "FDR was described as planned but not calculated",
+    "adjusted_significance is always null",
+    "chronological stability is not part of the discovery gate",
+    "matched controls are not executed",
+    "negative controls are not executed",
+    "delay sensitivity is not executed",
+    "boundary sensitivity is not executed",
+    "concentration is not calculated",
+    "secondary outcomes, MFE, MAE and target-before-stop labels are not calculated",
+    "the feature hash covers only the first 1,000 rows",
+    "determinism is not a two-directory rerun",
+    "the independent oracle is skipped",
+    "the full feature matrix contains outcome labels for all sessions, including the claimed latest-100-session unopened holdout"
+  ],
+  "valid_for": [
+    "Kite archive hash verification",
+    "proof that a causal feature-row prototype was generated",
+    "proof that fourteen single-feature quantile rules were scanned",
+    "code provenance"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "accepted_sessions": 491,
+  "all_source_sessions": 491,
+  "bar_rows": 110475,
+  "reason_counts": {
+    "ACCEPTED": 491
+  },
+  "rejected_sessions": 0,
+  "row_conservation": true,
+  "symbol_date_alignment": "accepted sessions require NIFTY/BANKNIFTY/SENSEX"
+}

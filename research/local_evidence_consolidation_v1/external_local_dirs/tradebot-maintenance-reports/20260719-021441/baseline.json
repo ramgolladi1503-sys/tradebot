@@ -1,0 +1,81 @@
+{
+  "task_date_anchor": "2026-07-18",
+  "report_dir": "/Users/madhuram/tradebot-maintenance-reports/20260719-021441",
+  "disk_before": {
+    "data_avail_h": "1.9Gi",
+    "data_used_h": "183Gi"
+  },
+  "disk_after": {
+    "data_avail_h": "2.8Gi",
+    "data_used_h": "182Gi"
+  },
+  "swap_before": {
+    "used_mib": 6395.31,
+    "total_mib": 7168.0
+  },
+  "swap_after": {
+    "used_mib": 6398.56,
+    "total_mib": 7168.0
+  },
+  "ram_physical_bytes": 8589934592,
+  "codex_worktrees_before_kb": 2620984,
+  "codex_worktrees_after_kb": 1843200,
+  "codex_total_before_kb": 4300800,
+  "codex_total_after_kb": 3584000,
+  "private_tmp_kb": 2662400,
+  "canonical_repo_kb": 27262976,
+  "removed_registered_worktrees_count": 37,
+  "removed_registered_worktrees_kb": 774228,
+  "git_object_store": {
+    "count": 99347,
+    "size": "8.84 GiB",
+    "size_pack": "387.19 MiB",
+    "garbage_count": 19,
+    "garbage_size": "38.00 MiB"
+  },
+  "active_tradebot_pids_preserved": [
+    25513,
+    25519,
+    25516,
+    25094,
+    1041,
+    886
+  ],
+  "open_prs": [
+    {
+      "number": 674,
+      "headRefName": "research/strategy-outcomes-foundation",
+      "title": "research: measure certified ORB underlying outcomes"
+    },
+    {
+      "number": 673,
+      "headRefName": "docs/trend-pullback-provenance-boundary",
+      "title": "docs: classify Trend and Compression replay provenance"
+    },
+    {
+      "number": 665,
+      "headRefName": "agent/tradebot-agentic-qa-70-controls-v1",
+      "title": "feat: add 70-control Agentic QA evidence auditor"
+    },
+    {
+      "number": 663,
+      "headRefName": "test/ai-cert-agent-evals-v2-main",
+      "title": "test: add AI certification agent evaluation matrix v1"
+    },
+    {
+      "number": 659,
+      "headRefName": "fix/orb-context-cycle-cutoff",
+      "title": "fix: propagate cycle cutoff to ORB context"
+    },
+    {
+      "number": 655,
+      "headRefName": "docs/openwiki-evaluation",
+      "title": "docs: add review-gated OpenWiki evaluation lane"
+    },
+    {
+      "number": 642,
+      "headRefName": "update-scripts",
+      "title": "Update scripts"
+    }
+  ]
+}

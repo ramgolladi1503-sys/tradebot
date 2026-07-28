@@ -1,0 +1,33 @@
+{
+  "features": [
+    "source_id",
+    "session",
+    "symbol",
+    "peer_symbol",
+    "decision_time",
+    "entry_timestamp",
+    "decision_timestamp",
+    "previous_range",
+    "previous_close_location",
+    "gap_bps",
+    "gap_over_previous_range",
+    "open_to_cutoff_return_bps",
+    "open_to_cutoff_range_over_previous_range",
+    "directional_efficiency",
+    "close_location",
+    "distance_from_high_bps",
+    "distance_from_low_bps",
+    "peer_return_bps",
+    "return_spread_bps",
+    "direction_agreement",
+    "signed_30m_return_bps",
+    "absolute_30m_move_bps",
+    "side",
+    "execution_eligibility",
+    "research_only",
+    "allowed_for_live_execution",
+    "broker_api_called",
+    "is_order_action",
+    "feature_row_hash"
+  ]
+}

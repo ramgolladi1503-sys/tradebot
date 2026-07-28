@@ -1,0 +1,20 @@
+{
+  "branch": "research/premium-compression-historical-acquisition-v1",
+  "clean_status": "",
+  "clean_status_note": "Sparse isolated worktree was created from source commit and verified before generated V1 files were added; frozen here to avoid generated-file self-reference.",
+  "credential_presence": {
+    "KITE_ACCESS_TOKEN": false,
+    "KITE_API_KEY": true,
+    "KITE_API_SECRET": true,
+    "UPSTOX_ACCESS_TOKEN": false,
+    "UPSTOX_API_KEY": false
+  },
+  "current_commit": "4571fd0f3dae92d01755f4a66922483ae2a48ec2",
+  "current_eligibility_framework_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "current_used_date_manifest_hash": "369ae8ca501a4833f4597aaaf7225e45eb64fd0006728aa84c66681d13f04b82",
+  "frozen_mechanism_contract_hash": "d31b3f52a6ddcbb71d1e8744a3dbd9187fed12a9abeeefd03730bab118ec9b32",
+  "prior_power_plan_hash": "81bf7ee3c1042e5b8d400f6f42825beff14efa86c2de9db12f01366a8b4f9eb8",
+  "repaired_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "source_commit": "4571fd0f3dae92d01755f4a66922483ae2a48ec2",
+  "worktree": "/Users/madhuram/tradebot-premium-compression-historical-acquisition-v1"
+}

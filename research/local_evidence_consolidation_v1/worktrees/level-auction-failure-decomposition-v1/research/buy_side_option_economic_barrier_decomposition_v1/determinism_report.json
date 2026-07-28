@@ -1,0 +1,18 @@
+{
+  "semantic_hashes": {
+    "cost_attribution": "d3302053109b5358998e3d07e4fc8630b6232058542291af98804eae2af3674a",
+    "cost_model_audit": "37db96423538803bb547711eeb13338c3689103a482002bee5baacce73cc884c",
+    "final_verdict": "5aafd0ea157efb8508367c224dbb58d0ed02b4dd671e7772fc0c3a156670162b",
+    "gross_versus_net_decomposition": "637be8030e2b82faaf4b2e2449d92ff572ad56d8a8d66a1dc585d03303b70290",
+    "independent_audit": "ca2cae0277567518fc8d2cac65ff650bdcdd06b6b93d021122a979da0168f16f",
+    "option_selection_decomposition": "919bd6d452d4a7a93c192b96336bf1ff6ea55bd544933dc8b7f8c05e599beaad",
+    "per_candidate_classification": "0dd0e022d51d81652277c1ffb85fce8815de3500687955d9219d999a8ea27f4b",
+    "pre_change_manifest": "d84d48cec801da1416c8260dcd4d99d252fc7ac70364d34d9b4bbbf222355e68",
+    "prior_artifact_verification": "b8a238c1e76513e9ad0b5bc8913f3dd3f2684fdcee88463566f4327c7a57a128",
+    "structural_episode_report": "dc8077108d9fc38a4e01ecf82b19dc3e9e9796b9b5c8a293774ff6af0fc659ec",
+    "timing_decay_report": "640632807c31b4207e0d8d929702e776936647d3ab7e4d12efec0cbe220747cd",
+    "trade_frequency_drag_report": "c1011d0a6aeae4d555edd67feae13d690ea0823a59b8b4ac19704f3bd8361892",
+    "underlying_versus_option_attribution": "0d626ee4b68dce466c10a3c3413ae2c434eb3161374ecf0c23806f21b391f525"
+  },
+  "status": "PASS"
+}

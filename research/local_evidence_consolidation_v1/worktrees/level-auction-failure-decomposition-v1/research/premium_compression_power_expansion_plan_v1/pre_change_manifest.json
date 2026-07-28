@@ -1,0 +1,14 @@
+{
+  "branch": "research/premium-compression-power-expansion-plan-v1",
+  "clean_status": "",
+  "clean_status_note": "Sparse isolated worktree was created from source commit and verified before generated V1 files were added; frozen here to avoid generated-file self-reference.",
+  "cost_model_hash": "f375a0f6087b6669faa357fb3852afb96d5cd35081e37dc0051a507349c4de2e",
+  "current_commit": "76877523c2cb32f50393a0d420b316e306ec6a47",
+  "eligibility_framework_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "frozen_mechanism_contract_hash": "d31b3f52a6ddcbb71d1e8744a3dbd9187fed12a9abeeefd03730bab118ec9b32",
+  "prior_holdout_result_hash": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2",
+  "prior_trade_ledger_hash": "77502f6452b2bccfbdd1e6c0508bdb50dadcf35c9762038cb1486387b283e53b",
+  "repaired_warehouse_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+  "source_commit": "76877523c2cb32f50393a0d420b316e306ec6a47",
+  "worktree": "/Users/madhuram/tradebot-premium-compression-power-plan-v1"
+}

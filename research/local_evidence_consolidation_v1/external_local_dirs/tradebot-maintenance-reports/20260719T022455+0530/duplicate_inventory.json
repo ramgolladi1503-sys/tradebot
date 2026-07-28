@@ -1,0 +1,4 @@
+{
+  "performed": false,
+  "reason": "Duplicate scanning was intentionally skipped because broad content hashing would add disk and IO pressure while the release gate was already impossible to satisfy safely."
+}

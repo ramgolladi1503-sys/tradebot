@@ -1,0 +1,8 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "candidates": [],
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "research_only": true
+}

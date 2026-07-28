@@ -1,0 +1,17 @@
+{
+  "contract_parsing": "BLOCKED_NO_FUTURES_CONTRACTS",
+  "deterministic_normalization": true,
+  "expiry_mapping": "BLOCKED_NO_FUTURES_CONTRACTS",
+  "no_duplicate_inflation": true,
+  "no_future_aware_features": true,
+  "no_overlap_defects": true,
+  "no_pnl_or_outcome_inspection": true,
+  "no_synthetic_values": true,
+  "provider_provenance": "PASS_FOR_PRIOR_UNDERLYING_OPTIONS_FAIL_FOR_FUTURES",
+  "raw_artifact_hashes": "PASS",
+  "result": "PASS_WITH_BLOCKING_FUTURES_GAP",
+  "rollover_causality": "BLOCKED_NO_FUTURES_CONTRACTS",
+  "semantic_hash": "af004111ee6d8b8146b603e292a60df8bd4769f3524978338d78e169bfd5d844",
+  "semantic_hashes": true,
+  "timestamp_ordering": "PASS_FOR_PRIOR_INPUTS_BLOCKED_FOR_FUTURES"
+}

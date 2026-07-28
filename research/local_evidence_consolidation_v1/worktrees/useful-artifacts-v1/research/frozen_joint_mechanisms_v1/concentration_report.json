@@ -1,0 +1,10 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": {
+    "expiry_share": 1.0,
+    "month_share": 1.0
+  },
+  "premium_compression_release_with_underlying_state_filter": {
+    "expiry_share": 1.0,
+    "month_share": 1.0
+  }
+}

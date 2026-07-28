@@ -1,0 +1,77 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "average_absolute_move": 13.393379953379952,
+    "average_cost_per_trade": 1.0,
+    "average_entry_premium": 173.1818648018648,
+    "average_exit_premium": 171.22540792540792,
+    "average_gross_move_captured": -1.9564568764568762,
+    "break_even_cost_threshold_points": -1.9564568764568762,
+    "break_even_gross_expectancy_required": 1.0,
+    "break_even_slippage_threshold_points": -1.9564568764568762,
+    "cost_as_percentage_of_entry_premium": 0.005774276660804452,
+    "cost_as_percentage_of_gross_opportunity": 0.07466375205368829,
+    "cost_components": {
+      "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+      "brokerage": "included_in_frozen_round_trip_points",
+      "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+      "forced_exit_degradation": -1.1826315789473687,
+      "spread_slippage": "included_in_frozen_round_trip_points",
+      "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+    },
+    "gross_expectancy_before_costs": -1.9564568764568762,
+    "gross_positive_to_net_negative_fraction": 0.03656998738965952,
+    "gross_positive_trades_turned_net_negative": 29,
+    "net_expectancy_after_costs": -2.9564568764568757,
+    "trades": 2145
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "average_absolute_move": 16.006599001663893,
+    "average_cost_per_trade": 1.0,
+    "average_entry_premium": 203.2426705490849,
+    "average_exit_premium": 202.60826788685523,
+    "average_gross_move_captured": -0.6344026622296175,
+    "break_even_cost_threshold_points": -0.6344026622296175,
+    "break_even_gross_expectancy_required": 1.0,
+    "break_even_slippage_threshold_points": -0.6344026622296175,
+    "cost_as_percentage_of_entry_premium": 0.004920226630059416,
+    "cost_as_percentage_of_gross_opportunity": 0.062474233276915946,
+    "cost_components": {
+      "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+      "brokerage": "included_in_frozen_round_trip_points",
+      "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+      "forced_exit_degradation": -1.73352380952381,
+      "spread_slippage": "included_in_frozen_round_trip_points",
+      "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+    },
+    "gross_expectancy_before_costs": -0.6344026622296175,
+    "gross_positive_to_net_negative_fraction": 0.014761703922395614,
+    "gross_positive_trades_turned_net_negative": 35,
+    "net_expectancy_after_costs": -1.6344026622296173,
+    "trades": 6010
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "average_absolute_move": 15.895045963229416,
+    "average_cost_per_trade": 1.0,
+    "average_entry_premium": 216.21694644284574,
+    "average_exit_premium": 215.8852897681854,
+    "average_gross_move_captured": -0.3316566746602718,
+    "break_even_cost_threshold_points": -0.3316566746602718,
+    "break_even_gross_expectancy_required": 1.0,
+    "break_even_slippage_threshold_points": -0.3316566746602718,
+    "cost_as_percentage_of_entry_premium": 0.004624984380048756,
+    "cost_as_percentage_of_gross_opportunity": 0.06291268375777813,
+    "cost_components": {
+      "adverse_execution": "not separately observable without bid_ask_or_tick_fill_data",
+      "brokerage": "included_in_frozen_round_trip_points",
+      "duplicate_overlapping_trade_drag": "diagnosed_in_trade_frequency_report",
+      "forced_exit_degradation": -1.823495702005731,
+      "spread_slippage": "included_in_frozen_round_trip_points",
+      "taxes_and_statutory_charges": "included_in_frozen_round_trip_points"
+    },
+    "gross_expectancy_before_costs": -0.3316566746602718,
+    "gross_positive_to_net_negative_fraction": 0.00980392156862745,
+    "gross_positive_trades_turned_net_negative": 20,
+    "net_expectancy_after_costs": -1.3316566746602718,
+    "trades": 5004
+  }
+}

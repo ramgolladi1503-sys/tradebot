@@ -1,0 +1,14 @@
+{
+  "best_bucket": "top_10",
+  "best_model": "xgboost",
+  "elapsed_seconds": 34.46546292304993,
+  "exact_next_action": "rerun the previously prepared ML Meta-Labeling Robustness Certification V2 using this new frozen evidence package as its certification source.",
+  "final_verdict": "ML_META_LABELING_SPRINT_REPRODUCED_AND_FROZEN",
+  "finish_time": "2026-07-28T22:29:16.787233+05:30",
+  "reproduction_acceptance_passed": true,
+  "semantic_hash": "75c810391d5d0b6dd705ec0b0a6cf40bad71031cb001d9ad279c4a50fba014a3",
+  "serialization_replay_passed": true,
+  "source_sprint_verdict_reproduced": "ML_META_LABELING_SIGNAL_FOUND_NOT_YET_ROBUST",
+  "start_time": "2026-07-28T22:28:42.383053+05:30",
+  "survivor_useful_case": false
+}

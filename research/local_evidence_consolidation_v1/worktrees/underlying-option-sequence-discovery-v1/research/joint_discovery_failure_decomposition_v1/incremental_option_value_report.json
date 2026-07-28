@@ -1,0 +1,42 @@
+{
+  "comparisons": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "joint_hit_rate": 0.4318721658389117,
+      "joint_minus_option_expectancy": -0.17298011905223026,
+      "joint_minus_underlying_expectancy": 0.4875050765347443,
+      "option_hit_rate": 0.42996127325965805,
+      "stable_incremental_value": false,
+      "underlying_hit_rate": 0.41841800430249876
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "joint_hit_rate": 0.42908653846153844,
+      "joint_minus_option_expectancy": -0.14998956392001078,
+      "joint_minus_underlying_expectancy": 0.4615575419851514,
+      "option_hit_rate": 0.42996127325965805,
+      "stable_incremental_value": false,
+      "underlying_hit_rate": 0.41465510506991643
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "joint_hit_rate": 0.4110991379310345,
+      "joint_minus_option_expectancy": -0.28139970540328507,
+      "joint_minus_underlying_expectancy": -0.29749612065399167,
+      "option_hit_rate": 0.40922087205146535,
+      "stable_incremental_value": false,
+      "underlying_hit_rate": 0.41841800430249876
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "joint_hit_rate": 0.41686746987951806,
+      "joint_minus_option_expectancy": 0.0934528241108713,
+      "joint_minus_underlying_expectancy": 0.5781930801145999,
+      "option_hit_rate": 0.41385856668248694,
+      "stable_incremental_value": false,
+      "underlying_hit_rate": 0.41841800430249876
+    }
+  ],
+  "status": "PASS",
+  "summary": "No frozen candidate showed stable positive out-of-sample incremental value after costs."
+}

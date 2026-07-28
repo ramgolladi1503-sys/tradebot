@@ -1,0 +1,18 @@
+{
+  "causal_front_month_mapping": true,
+  "contract_parsing": true,
+  "expiry_mapping": true,
+  "no_back_adjustment": true,
+  "no_forward_fill": true,
+  "no_synthetic_rows": true,
+  "official_provider_provenance": true,
+  "ohlc_validity": true,
+  "overlap_counts": true,
+  "raw_immutability": true,
+  "request_freeze_before_acquisition": true,
+  "result": "PASS",
+  "semantic_hash": "37b04d2d57c0f5f0c890ee09ada1e57a5ebb803c7b82c72e5247c564f025f999",
+  "semantic_hashes": true,
+  "timestamp_order": true,
+  "two_directory_determinism": false
+}

@@ -1,0 +1,37 @@
+{
+  "contracts": [
+    {
+      "exchange_token": "61093",
+      "expiry": "2026-07-28",
+      "instrument_key": "NSE_FO|61093",
+      "lot_size": 65,
+      "source": "official_upstox_instrument_master_cache",
+      "symbol": "NIFTY FUT 28 JUL 26"
+    },
+    {
+      "exchange_token": "58072",
+      "expiry": "2026-08-25",
+      "instrument_key": "NSE_FO|58072",
+      "lot_size": 65,
+      "source": "official_upstox_instrument_master_cache",
+      "symbol": "NIFTY FUT 25 AUG 26"
+    },
+    {
+      "exchange_token": "68407",
+      "expiry": "2026-09-29",
+      "instrument_key": "NSE_FO|68407",
+      "lot_size": 65,
+      "source": "official_upstox_instrument_master_cache",
+      "symbol": "NIFTY FUT 29 SEP 26"
+    }
+  ],
+  "expired_contracts_in_master": [],
+  "nifty_futures_contract_count": 3,
+  "official_source": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/runtime/upstox_instruments/complete.json",
+  "official_source_hash": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40",
+  "one_minute_support": "PROBED_BY_HISTORICAL_CANDLE_ENDPOINT",
+  "provider": "upstox",
+  "request_limits": "rate-limited by conservative one request per frozen chunk with retries",
+  "semantic_hash": "5e4a71cdaa73de3cfe380b33f387bfbade7ff5106e0de31af3f89783f0caa71c",
+  "timestamp_semantics": "provider candle timestamp from historical-candle response"
+}

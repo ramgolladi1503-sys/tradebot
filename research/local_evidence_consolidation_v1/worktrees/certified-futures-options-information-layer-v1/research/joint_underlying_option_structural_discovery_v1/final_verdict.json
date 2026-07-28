@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/joint-underlying-option-structural-discovery-v1",
+  "broker_api_called": false,
+  "current_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "exact_next_action": "Do not proceed to AlgoTest; no candidate survived every required local gate.",
+  "final_verdict": "NO_JOINT_STRUCTURAL_EDGE_FOUND",
+  "is_order_action": false,
+  "read_only": true,
+  "source_commit": "f7f40ce1824c3dfa10f1d94975a3f2da01c721e4",
+  "surviving_candidate_count": 0,
+  "worktree": "/Users/madhuram/tradebot-joint-structural-discovery-v1"
+}

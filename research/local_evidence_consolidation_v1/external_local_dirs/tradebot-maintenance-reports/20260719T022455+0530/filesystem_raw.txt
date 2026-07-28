@@ -1,0 +1,107 @@
+Sun Jul 19 02:25:13 IST 2026
+Filesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1   228Gi    17Gi   2.6Gi    87%    453k   27M    2%   /
+Filesystem     1024-blocks      Used Available Capacity iused    ifree %iused  Mounted on
+/dev/disk3s1s1   239362496  17350452   2699432    87%  453127 26994320    2%   /
+   Device Identifier:         disk3s1s1
+   Device Node:               /dev/disk3s1s1
+   Whole:                     No
+   Part of Whole:             disk3
+
+   Volume Name:               Macintosh HD
+   Mounted:                   Yes
+   Mount Point:               /
+
+   Partition Type:            41504653-0000-11AA-AA11-00306543ECAC
+   File System Personality:   APFS
+   Type (Bundle):             apfs
+   Name (User Visible):       APFS
+   Owners:                    Enabled
+
+   OS Can Be Installed:       No
+   Booter Disk:               disk3s2
+   Recovery Disk:             disk3s3
+   Media Type:                Generic
+   Protocol:                  Apple Fabric
+   SMART Status:              Verified
+   Volume UUID:               0A7847C8-3E66-46D9-904C-F53498476968
+   Disk / Partition UUID:     0A7847C8-3E66-46D9-904C-F53498476968
+
+   Disk Size:                 245.1 GB (245107195904 Bytes) (exactly 478724992 512-Byte-Units)
+   Device Block Size:         4096 Bytes
+
+   Volume Used Space:         17.8 GB (17766862848 Bytes) (exactly 34700904 512-Byte-Units)
+   Container Total Space:     245.1 GB (245107195904 Bytes) (exactly 478724992 512-Byte-Units)
+   Container Free Space:      2.8 GB (2763251712 Bytes) (exactly 5396976 512-Byte-Units)
+   Allocation Block Size:     4096 Bytes
+
+   Media OS Use Only:         No
+   Media Read-Only:           Yes
+   Volume Read-Only:          Yes (read-only mount flag set)
+
+   Device Location:           Internal
+   Removable Media:           Fixed
+
+   Solid State:               Yes
+   Hardware AES Support:      Yes
+
+   This disk is an APFS Volume Snapshot.  APFS Information:
+   APFS Snapshot Name:        com.apple.os.update-CF9513BCD92B3766A60BDBD4D2EDBAE4750AF74781836A8C6C16E37CA65CAE0F
+   APFS Snapshot UUID:        0A7847C8-3E66-46D9-904C-F53498476968
+   APFS Container:            disk3
+   APFS Physical Store:       disk0s2
+   APFS Volume Group:         C08C5C11-A565-491A-8C31-C6ED15707011
+   EFI Driver In macOS:       2632080001000001
+   Encrypted:                 No
+   FileVault:                 Yes
+   Sealed:                    Broken
+   Locked:                    No
+
+   APFS Snapshots are defined upon this APFS Volume.  Snapshot list:
+   Snapshot UUID:             0A7847C8-3E66-46D9-904C-F53498476968
+   Name:                      com.apple.os.update-CF9513BCD92B3766A60BDBD4D2EDBAE4750AF74781836A8C6C16E37CA65CAE0F
+   XID:                       4680615
+   Snapshot UUID:             8F1AEADF-2DFA-427A-8AD2-D8A9EA395F8E
+   Name:                      com.apple.os.update-2C6F6F9F3E88FA229254DCD00F80D1155AF1848FC3B452CE0ADBCF40B76E31CA38B0777B745AAFBAA3C16012212FFC3C
+   XID:                       8353316
+   Snapshot UUID:             8E2B8929-A499-4E5C-8053-E98B0C4EEE8F
+   Name:                      com.apple.os.update-MSUPrepareUpdate
+   XID:                       8353348
+
+---tmutil---
+Snapshots for volume group containing disk /:
+com.apple.os.update-2C6F6F9F3E88FA229254DCD00F80D1155AF1848FC3B452CE0ADBCF40B76E31CA38B0777B745AAFBAA3C16012212FFC3C
+com.apple.os.update-CF9513BCD92B3766A60BDBD4D2EDBAE4750AF74781836A8C6C16E37CA65CAE0F
+com.apple.os.update-MSUPrepareUpdate
+---apfs snapshots---
+Snapshots for disk3s1s1 (3 found)
+|
++-- 0A7847C8-3E66-46D9-904C-F53498476968
+|   Name:        com.apple.os.update-CF9513BCD92B3766A60BDBD4D2EDBAE4750AF74781836A8C6C16E37CA65CAE0F
+|   XID:         4680615
+|   Purgeable:   No
+|
++-- 8F1AEADF-2DFA-427A-8AD2-D8A9EA395F8E
+|   Name:        com.apple.os.update-2C6F6F9F3E88FA229254DCD00F80D1155AF1848FC3B452CE0ADBCF40B76E31CA38B0777B745AAFBAA3C16012212FFC3C
+|   XID:         8353316
+|   Purgeable:   No
+|   NOTE:        This snapshot limits the minimum size of APFS Container disk3
+|
++-- 8E2B8929-A499-4E5C-8053-E98B0C4EEE8F
+    Name:        com.apple.os.update-MSUPrepareUpdate
+    XID:         8353348
+    Purgeable:   No
+---mount---
+/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)
+devfs on /dev (devfs, local, nobrowse)
+/dev/disk3s6 on /System/Volumes/VM (apfs, local, noexec, journaled, noatime, nobrowse)
+/dev/disk3s2 on /System/Volumes/Preboot (apfs, local, journaled, nobrowse)
+/dev/disk3s4 on /System/Volumes/Update (apfs, local, journaled, nobrowse)
+/dev/disk1s2 on /System/Volumes/xarts (apfs, local, noexec, journaled, noatime, nobrowse)
+/dev/disk1s1 on /System/Volumes/iSCPreboot (apfs, local, journaled, nobrowse)
+/dev/disk1s3 on /System/Volumes/Hardware (apfs, local, journaled, nobrowse)
+/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse, protect, root data)
+map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)
+/dev/disk5s1 on /Volumes/Obsidian 1.12.7-universal (apfs, local, nodev, nosuid, read-only, journaled, noowners, quarantine, mounted by madhuram)
+/dev/disk2s1 on /System/Volumes/Update/SFR/mnt1 (apfs, local, journaled, nobrowse)
+/dev/disk3s1 on /System/Volumes/Update/mnt1 (apfs, sealed, local, journaled, nobrowse)

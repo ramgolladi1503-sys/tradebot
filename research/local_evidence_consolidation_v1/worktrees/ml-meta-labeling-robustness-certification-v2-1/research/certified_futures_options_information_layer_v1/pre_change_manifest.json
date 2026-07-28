@@ -1,0 +1,45 @@
+{
+  "branch": "research/certified-futures-options-information-layer-v1",
+  "broker_api_called": false,
+  "clean_status_at_start": false,
+  "orders_placed": false,
+  "pnl_or_outcome_inspection": false,
+  "prior_artifact_hashes": {
+    "closeout_registry": {
+      "exists": false,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/buy_side_structural_discovery_closeout_v1/campaign_closeout_report.json",
+      "sha256": null
+    },
+    "option_coverage": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/trusted_option_data_joint_warehouse_v1/coverage_report.json",
+      "sha256": "15d212f452b6557ece8435a60bb674e51f0fb88ef2b6892c7c810f94425a9f6e"
+    },
+    "reopen_conditions": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/structural_edge_reopen_gate_v1/reopen_condition_matrix.json",
+      "sha256": "c2194fd6db4d6e10fab43bb9f9f5a46ed3e0375e814bf1f218a021df2ff4579a"
+    },
+    "reopen_inventory": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/structural_edge_reopen_gate_v1/local_data_capability_inventory.json",
+      "sha256": "5cb3438964ba185e726df29b252be212ed0b56934e2460c8179f560159cb07bb"
+    },
+    "sparse_contract": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/provider_sparse_bar_governance_v1/sparse_bar_contract.json",
+      "sha256": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0"
+    },
+    "underlying_manifest": {
+      "exists": true,
+      "path": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1/research/unified_nifty_underlying_feature_warehouse_v1/selected_source_manifest.json",
+      "sha256": "fbf74e66664b92712c451769c94da47ef54f73acbadb208e01d3449bd50be192"
+    }
+  },
+  "semantic_hash": "9623950e84f2c305073e27e20266f54f5f223e6d6c2e69ade81f2c282e4774b9",
+  "source_commit": "f6ee5b009438b093b62e2c4dac91a76d7d1bbd78",
+  "source_data_hash": "e21d612ae0d6652a86e58d48fbab47322d1f99d067f1f4f53b837caed18316dd",
+  "strategy_discovery": false,
+  "task": "Certified Futures-Options Information Layer V1",
+  "worktree": "/Users/madhuram/tradebot-certified-futures-options-information-layer-v1"
+}

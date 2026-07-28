@@ -1,0 +1,10 @@
+{
+  "mapping_hash": "ff269d6d7ec082cdc679ef541ffc4f0bac5ac657c136c5962117adc393f527cc",
+  "semantic_hash": "b39cac6a0cc3c86a329decf23c774eca96b32bf1f5efab1c34bbc85ec51f4ed3",
+  "sequence_counts": {
+    "level1": 267,
+    "level2": 267,
+    "mixed": 267
+  },
+  "status": "PASS"
+}

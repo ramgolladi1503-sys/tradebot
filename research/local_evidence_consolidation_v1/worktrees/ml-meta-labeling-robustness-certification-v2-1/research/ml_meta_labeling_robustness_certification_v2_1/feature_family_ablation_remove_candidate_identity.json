@@ -1,0 +1,9 @@
+{
+  "holdout_expectancy_aggregate": 8.840619496855346,
+  "holdout_pf_aggregate": 1.7948099195002905,
+  "overlap_with_frozen_model_candidates": 169,
+  "selected_trades": 265,
+  "semantic_hash": "724ad8a42bd22adcb14e77294320cdaf621fd8079bf13af560fa0d9ced54463b",
+  "validation_auc": 0.7113734215866891,
+  "validation_pr_auc": 0.24602443690626086
+}

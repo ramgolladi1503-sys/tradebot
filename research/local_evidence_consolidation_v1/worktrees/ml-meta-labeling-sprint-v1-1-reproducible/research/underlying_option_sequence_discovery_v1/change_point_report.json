@@ -1,0 +1,9 @@
+{
+  "method": "trailing volatility-state segmentation proxy",
+  "segments": {
+    "(0.178, 2.305]": 28231,
+    "(2.305, 4.426]": 345,
+    "(4.426, 6.547]": 11
+  },
+  "semantic_hash": "47fe42ba6e1ad3ca326f1653b3615c4e19c6abeff7f45b6ad4bcd4dd9263c177"
+}

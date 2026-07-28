@@ -1,0 +1,35 @@
+{
+  "event_count_by_category": {
+    "call_elasticity_collapse": 1997,
+    "call_elasticity_expansion": 1997,
+    "call_non_confirmation": 798,
+    "compression": 19962,
+    "cross_strike_dispersion": 1909,
+    "expiry_day": 4029,
+    "expiry_week": 15084,
+    "opening_displacement": 676,
+    "put_elasticity_collapse": 1263,
+    "put_elasticity_expansion": 1130,
+    "put_non_confirmation": 336,
+    "underlying_above_vwap_extension": 282,
+    "underlying_below_vwap_extension": 353,
+    "volatility_expansion": 553
+  },
+  "fragmentation_matrix": {
+    "duration_bucket": "PRESENT",
+    "exact_wording": "HIGH",
+    "one_bar_ordering": "PRESENT",
+    "repeated_event_count": "PRESENT",
+    "shared_economic_interpretation": "candle-derived underlying-option interaction",
+    "strike_scope": "PRESENT",
+    "time_bucket_labels": "PRESENT"
+  },
+  "mirrored_ce_pe_motif_pairs": "present_by_label_family_not_outcome_tested",
+  "motif_count_by_length": {
+    "4": 20
+  },
+  "semantic_hash": "bc817c2f5cebf861272304f039e8032c960e52b2573e939a84cd2a618ee7599f",
+  "support_by_motif_length": {
+    "4": 1698
+  }
+}

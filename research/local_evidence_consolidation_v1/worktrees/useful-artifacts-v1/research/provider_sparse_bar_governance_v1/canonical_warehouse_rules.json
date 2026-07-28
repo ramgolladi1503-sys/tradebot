@@ -1,0 +1,83 @@
+{
+  "gap_metadata": [
+    {
+      "absence_reason": "PROVIDER_AUTHORITATIVE_ABSENCE_HTTP_200_REQUIRED_BAR_ABSENT",
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20241212_0942",
+      "http_status": 200,
+      "instrument_key": "NSE_INDEX|Nifty 50",
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "provider": "upstox",
+      "provider_evidence_hash": "152feeee4c40ce1bb56aa70b40528472adbf7687bbb7b24c7b40e82361dbbff9",
+      "provider_response_rows": 374,
+      "required_missing_timestamp_found": false,
+      "session": "2024-12-12",
+      "source_request_hash": "d76856a6c2b32f83efa000efda5665060e7f42e9d47a8a782d8005c8fdbca02e",
+      "synthetic_ohlc_allowed": false,
+      "timestamp": "2024-12-12 09:42",
+      "timestamp_ist": "2024-12-12T09:42:00+05:30"
+    },
+    {
+      "absence_reason": "PROVIDER_AUTHORITATIVE_ABSENCE_HTTP_200_REQUIRED_BAR_ABSENT",
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250325_1042",
+      "http_status": 200,
+      "instrument_key": "NSE_INDEX|Nifty 50",
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "provider": "upstox",
+      "provider_evidence_hash": "90d7e44cf75a6ac77942993cd06246c2cb8ec2a351989d8294ef78f94bd887aa",
+      "provider_response_rows": 374,
+      "required_missing_timestamp_found": false,
+      "session": "2025-03-25",
+      "source_request_hash": "14762d9796a299c412d01d062fc5ade7f0b3362d712433acc91284e9585919d4",
+      "synthetic_ohlc_allowed": false,
+      "timestamp": "2025-03-25 10:42",
+      "timestamp_ist": "2025-03-25T10:42:00+05:30"
+    },
+    {
+      "absence_reason": "PROVIDER_AUTHORITATIVE_ABSENCE_HTTP_200_REQUIRED_BAR_ABSENT",
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250404_1157",
+      "http_status": 200,
+      "instrument_key": "NSE_INDEX|Nifty 50",
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "provider": "upstox",
+      "provider_evidence_hash": "f8e0ac54f0837da759cefbc28d14781a4702d3ad93ffc2b72a65e85a659d23cb",
+      "provider_response_rows": 374,
+      "required_missing_timestamp_found": false,
+      "session": "2025-04-04",
+      "source_request_hash": "dd5bfbac5880a0223ea4912f29ba11f578ee6827b4e55ebced2354e67b48a6ca",
+      "synthetic_ohlc_allowed": false,
+      "timestamp": "2025-04-04 11:57",
+      "timestamp_ist": "2025-04-04T11:57:00+05:30"
+    },
+    {
+      "absence_reason": "PROVIDER_AUTHORITATIVE_ABSENCE_HTTP_200_REQUIRED_BAR_ABSENT",
+      "gap_id": "NIFTY_PROVIDER_SPARSE_20250423_1036",
+      "http_status": 200,
+      "instrument_key": "NSE_INDEX|Nifty 50",
+      "ohlc_mismatch_count": 0,
+      "overlap_count": 374,
+      "provider": "upstox",
+      "provider_evidence_hash": "dff7ee08e91859f847412d2da7f94dae7ef3b222d6b403abb7cdf34c5775ec90",
+      "provider_response_rows": 374,
+      "required_missing_timestamp_found": false,
+      "session": "2025-04-23",
+      "source_request_hash": "82bf44ad9f78627b9179c5200e489f40220397bcaec24b24834a6a78c1714ce6",
+      "synthetic_ohlc_allowed": false,
+      "timestamp": "2025-04-23 10:36",
+      "timestamp_ist": "2025-04-23T10:36:00+05:30"
+    }
+  ],
+  "metadata_required_fields": [
+    "session",
+    "timestamp",
+    "gap_id",
+    "provider_evidence_hash",
+    "source_request_hash",
+    "absence_reason"
+  ],
+  "observed_warehouse_rule": "Canonical one-minute warehouse contains observed OHLC rows only.",
+  "sparse_bar_rule": "Provider-authoritative absences are represented by gap metadata records only.",
+  "status": "PASS"
+}

@@ -1,0 +1,77 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "expiry_count": 18,
+    "gross_expectancy_points": -1.9564568764568762,
+    "mae_points_mean": -21.322564102564105,
+    "max_trade_points": 75.29999999999998,
+    "mfe_points_mean": 20.847878787878788,
+    "min_trade_points": -84.80000000000001,
+    "net_expectancy_points": -2.9564568764568757,
+    "net_points_ci": {
+      "ci95_high": -2.2871030987247334,
+      "ci95_low": -3.625810654189018,
+      "mean": -2.9564568764568757,
+      "n": 2145,
+      "std": 15.816605980862429
+    },
+    "session_count": 45,
+    "side_counts": {
+      "CE": 1215,
+      "PE": 930
+    },
+    "t_stat": -8.657089375798435,
+    "total_net_points": -6341.5999999999985,
+    "trades": 2145,
+    "win_rate": 0.3561771561771562
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "expiry_count": 20,
+    "gross_expectancy_points": -0.6344026622296175,
+    "mae_points_mean": -27.507980033277867,
+    "max_trade_points": 181.35,
+    "mfe_points_mean": 28.621480865224626,
+    "min_trade_points": -161.5,
+    "net_expectancy_points": -1.6344026622296173,
+    "net_points_ci": {
+      "ci95_high": -1.1271866656983334,
+      "ci95_low": -2.141618658760901,
+      "mean": -1.6344026622296173,
+      "n": 6010,
+      "std": 20.061994475062775
+    },
+    "session_count": 81,
+    "side_counts": {
+      "CE": 2852,
+      "PE": 3158
+    },
+    "t_stat": -6.31571015085773,
+    "total_net_points": -9822.76,
+    "trades": 6010,
+    "win_rate": 0.3886855241264559
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "expiry_count": 20,
+    "gross_expectancy_points": -0.3316566746602718,
+    "mae_points_mean": -28.50818345323741,
+    "max_trade_points": 149.8,
+    "mfe_points_mean": 30.6298860911271,
+    "min_trade_points": -92.85,
+    "net_expectancy_points": -1.3316566746602718,
+    "net_points_ci": {
+      "ci95_high": -0.8109862220168418,
+      "ci95_low": -1.8523271273037019,
+      "mean": -1.3316566746602718,
+      "n": 5004,
+      "std": 18.791675828009005
+    },
+    "session_count": 81,
+    "side_counts": {
+      "CE": 2603,
+      "PE": 2401
+    },
+    "t_stat": -5.0128580738219215,
+    "total_net_points": -6663.61,
+    "trades": 5004,
+    "win_rate": 0.40367705835331735
+  }
+}

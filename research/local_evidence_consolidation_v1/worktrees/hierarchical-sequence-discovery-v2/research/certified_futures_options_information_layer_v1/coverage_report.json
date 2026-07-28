@@ -1,0 +1,17 @@
+{
+  "ce_pe_coverage": "PARTIALLY_SUPPORTED",
+  "dte_distribution": {},
+  "front_month_continuity": "UNSUPPORTED",
+  "futures_contracts": 0,
+  "missing_bar_rates": "NOT_EVALUATED_WITHOUT_FUTURES_OVERLAP",
+  "month_distribution": {},
+  "option_contracts": "available in prior option corpus but not counted for futures overlap",
+  "overlapping_expiries": 0,
+  "overlapping_sessions": 0,
+  "rollover_coverage": "UNSUPPORTED",
+  "semantic_hash": "439e0ecbc2efe2520818a22ad656e108175cbed0e88490a0c88f6541e1a0f8bb",
+  "sparse_bar_rates": "governed by prior sparse bar contract; no futures sparse audit possible",
+  "strikes_per_timestamp": "NOT_EVALUATED_WITHOUT_FUTURES_OVERLAP",
+  "synchronized_row_counts": 0,
+  "time_of_day_distribution": {}
+}

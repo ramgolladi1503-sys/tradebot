@@ -1,0 +1,15 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": true,
+  "blockers": [],
+  "broker_api_called": false,
+  "diagnostic_metrics_verified": true,
+  "feature_causality": "TRUSTED_DERIVED_COMPLETED_BARS",
+  "is_order_action": false,
+  "raw_hashes_verified": true,
+  "read_only": true,
+  "row_counts_verified": true,
+  "strike_expiry_mapping_verified": true,
+  "timestamp_alignment_verified": true,
+  "warehouse_semantic_hash": "48ae9f351b6ca0f0f1a970ae8a10c863be90d5c127d841b29193a3e71d8cd954"
+}

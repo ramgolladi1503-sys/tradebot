@@ -1,0 +1,4 @@
+{
+  "canonical": "interval_start == decision cutoff",
+  "conservative_delay": "interval_start > decision cutoff"
+}

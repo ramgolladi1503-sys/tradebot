@@ -1,0 +1,6 @@
+{
+  "passed_motifs": 0,
+  "rejection": "CONSTITUENT_OR_OPTION_INPUTS_INSUFFICIENT",
+  "semantic_hash": "9bbaf9a3ecd8033fe3c3c7096d0f8b9e1f172041e29673a84c55406b3b981442",
+  "status": "BLOCKED_BEFORE_GATE"
+}

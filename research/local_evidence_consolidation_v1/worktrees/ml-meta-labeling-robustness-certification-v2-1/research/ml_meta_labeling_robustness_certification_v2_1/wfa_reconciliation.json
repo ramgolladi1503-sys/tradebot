@@ -1,0 +1,46 @@
+{
+  "aggregate": {
+    "expectancy": -1.097166666666667,
+    "gross_loss": 2636.3,
+    "gross_profit": 2307.15,
+    "net_pnl": -329.1500000000001,
+    "profit_factor": 0.875146986306566,
+    "trades": 300,
+    "win_rate": 0.38333333333333336
+  },
+  "folds": [
+    {
+      "expectancy": -2.9695000000000005,
+      "fold": 0,
+      "gross_loss": 872.0500000000002,
+      "gross_profit": 575.1000000000001,
+      "net_pnl": -296.95000000000005,
+      "profit_factor": 0.6594805343730291,
+      "trades": 100,
+      "win_rate": 0.33
+    },
+    {
+      "expectancy": 1.0430000000000006,
+      "fold": 1,
+      "gross_loss": 879.95,
+      "gross_profit": 984.25,
+      "net_pnl": 104.30000000000007,
+      "profit_factor": 1.1185294619012442,
+      "trades": 100,
+      "win_rate": 0.41
+    },
+    {
+      "expectancy": -1.3650000000000018,
+      "fold": 2,
+      "gross_loss": 884.3,
+      "gross_profit": 747.7999999999998,
+      "net_pnl": -136.50000000000017,
+      "profit_factor": 0.845640619699197,
+      "trades": 100,
+      "win_rate": 0.41
+    }
+  ],
+  "majority_positive": false,
+  "semantic_hash": "d99495589deb2825d756fb4a8ad75c0658dc52d095477f9e2ef8f44a3e4e4be6",
+  "single_fold_domination": 0.9021722618866775
+}

@@ -1,0 +1,18 @@
+{
+  "additional_microstructure_fields_needed": false,
+  "existing_archived_upstox_options": {
+    "status": "SEE_LOCAL_INVENTORY",
+    "trust_requirement": "MUST_PASS_EXISTING_CERTIFICATION_AND_SPARSE_BAR_GOVERNANCE"
+  },
+  "provider_calls_made": false,
+  "upstox_historical_options": {
+    "compatibility": "COMPATIBLE_IF_CERTIFIED_TO_REPAIRED_WAREHOUSE_SCHEMA",
+    "expired_option_access": "LIKELY_REQUIRED_BUT_NOT_CALLED",
+    "one_minute_coverage": "REQUIRES_AUTHORIZED_FETCH"
+  },
+  "zerodha_kite_historical_underlying": {
+    "compatibility": "UNDERLYING_ONLY_CANNOT_COMPLETE_JOINT_TEST",
+    "expired_option_access": "NOT_ASSUMED",
+    "underlying_access": "LIKELY_AVAILABLE_WITH_AUTHORIZATION"
+  }
+}

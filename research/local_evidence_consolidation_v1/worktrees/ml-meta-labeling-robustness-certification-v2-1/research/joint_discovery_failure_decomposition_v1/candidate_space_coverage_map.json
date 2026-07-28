@@ -1,0 +1,66 @@
+{
+  "all_candidate_definitions": 126,
+  "development_evaluable_candidates": 72,
+  "entry_clock": "next_observable_bar",
+  "expiry_dte_rule": "source expiry retained, DTE not explored as candidate grammar dimension",
+  "explored_fields": {
+    "moneyness_bucket": [
+      "ATM",
+      "MID",
+      "NEAR"
+    ],
+    "premium_accel_state": [
+      "ACCEL",
+      "DECEL"
+    ],
+    "premium_band": [
+      "HIGH",
+      "MID",
+      "RICH"
+    ],
+    "premium_velocity_state": [
+      "FALLING",
+      "RISING"
+    ],
+    "ret_state": [
+      "DOWN",
+      "FLAT",
+      "UP"
+    ],
+    "time_bucket": [
+      "AFTERNOON",
+      "MIDDAY",
+      "OPEN"
+    ]
+  },
+  "frozen_candidates": 4,
+  "not_explored": {
+    "ce_pe_asymmetry": "PARTIAL: CE and PE separate, but no paired simultaneous asymmetry feature.",
+    "delayed_option_response": "UNCOVERED: no lagged confirmation entry sequence.",
+    "dte_interactions": "UNCOVERED: DTE calculated but not in candidate grammar.",
+    "entry_after_confirmation": "UNCOVERED: entry at detection next bar, not post-confirmation.",
+    "event_sequence_patterns": "UNCOVERED: static snapshot grammar only.",
+    "expiry_day_vs_non_expiry": "UNCOVERED: no expiry-day interaction.",
+    "failed_underlying_breakout_opposite_side_response": "UNCOVERED: no failed-breakout event state.",
+    "lead_lag_states": "UNCOVERED: no explicit premium-before-underlying or underlying-before-premium timing variable.",
+    "moneyness_transitions": "UNCOVERED: static moneyness bucket only.",
+    "multi_strike_confirmation": "UNCOVERED: candidate rows are per contract, no multi-strike confirmation.",
+    "path_dependent_premium_states": "PARTIAL: only instantaneous velocity and acceleration bins; no sequence shapes.",
+    "premium_acceleration_vs_simple_return": "PARTIAL: acceleration used, simple premium return not separately compared.",
+    "premium_compression_followed_by_expansion": "UNCOVERED: no compression-to-expansion sequence.",
+    "same_side_vs_opposite_side_divergence": "UNCOVERED: no paired CE/PE divergence state.",
+    "time_of_day_interactions": "PARTIAL: time bucket used only as one of coarse paired conditions.",
+    "underlying_move_vs_premium_elasticity_residual": "UNCOVERED: no elasticity residual feature."
+  },
+  "selection_criteria": "development net expectancy then t-stat, then trade count; freeze top four before holdout",
+  "sides": [
+    "CE",
+    "PE"
+  ],
+  "stop_target_holding": {
+    "max_hold_minutes": 15,
+    "stop_points": 8.0,
+    "target_points": 12.0
+  },
+  "strike_rule": "observed contract matching moneyness bucket when present; otherwise raw observed contract"
+}

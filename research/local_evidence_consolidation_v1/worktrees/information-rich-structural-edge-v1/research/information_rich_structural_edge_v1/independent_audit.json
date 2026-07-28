@@ -1,0 +1,15 @@
+{
+  "algotest_called": false,
+  "broker_calls": false,
+  "closed_lanes_not_reopened": true,
+  "deterministic_outputs": true,
+  "hypotheses_frozen_before_holdout": true,
+  "hypothesis_count_at_most_three": true,
+  "information_first_strategy_second": true,
+  "no_threshold_tuning_after_outcomes": true,
+  "production_changes": false,
+  "provider_calls": false,
+  "result": "PASS",
+  "semantic_hash": "104b1a93429a85ce81cba5b07520eb0478ebfbc7bf67de0415d09a06b72ec792",
+  "survivor_requires_positive_net_wfa_robust_control_concentration": true
+}

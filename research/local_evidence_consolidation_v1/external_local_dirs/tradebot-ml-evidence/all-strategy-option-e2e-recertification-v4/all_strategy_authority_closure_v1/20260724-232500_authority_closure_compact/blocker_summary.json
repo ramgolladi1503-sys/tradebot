@@ -1,0 +1,1 @@
+{"blocked_lane_count":16,"blocked_lane_count_by_class":{"INSUFFICIENT_SIGNAL_PROVENANCE":7,"NO_TRADE_FILTER":1,"SOURCE_SEARCH_INCOMPLETE":8},"schema_version":"authority_compact_publication_v1","source":{"artifact":"authority_blocker_ledger.json","semantic_sha256":"ec5eb1b2aced1832ce86626990ab74b7adea52d8ddc5b2fa9f4845096a185101"},"summary_kind":"authority_blockers"}

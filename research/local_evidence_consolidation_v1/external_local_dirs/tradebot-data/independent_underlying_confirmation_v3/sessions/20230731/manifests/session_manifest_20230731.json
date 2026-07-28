@@ -1,0 +1,43 @@
+{
+  "fallback": false,
+  "file_sha256_hashes": {
+    "BANKNIFTY": "5037fc72a065792e3496a4c6f5ab77d2c7143a1fbc5fce883ea5ea3744c48259",
+    "NIFTY": "b42ae2d053f42b3d5dd59592e0a4c17e7ad1959211c39548d6023d3cea2b3eb6",
+    "SENSEX": "039aa7f31048dbfd3d46a4defcb63da948cc786814a06b00be949e8f909a8cb5"
+  },
+  "first_timestamp": "2023-07-31 09:15:00+05:30",
+  "instrument_key_hashes": {
+    "BANKNIFTY": "9f6e61eabf284aa652a53dd1674a874e2c1c179e8b87ea3d7f4dd61f7072bb18",
+    "NIFTY": "121a6957c5aa7cf4f820929c690a803774e4554bf96e8142ee60c6acd0dca6e9",
+    "SENSEX": "0a9b68bcb533a5d0c2b024693aa13e298caf169407065bf77c56cb19e441c403"
+  },
+  "last_timestamp": "2023-07-31 15:29:00+05:30",
+  "minute_grid_hash": "0ade8f131d2c64808bd6618b747e81245546bdfebb7e2a4f09f2875d7a6d5540",
+  "mock": false,
+  "novelty_classification": "ELIGIBLE_INDEPENDENT_SESSION",
+  "provider": "upstox",
+  "row_counts": {
+    "BANKNIFTY": 375,
+    "NIFTY": 375,
+    "SENSEX": 375
+  },
+  "schema_hash": "444ac3dc34de0f73b6a28c93c68bf3823dda6ca5701ca03bd2be55c31d87641c",
+  "session_date": "2023-07-31",
+  "source_chunk_identities": {
+    "BANKNIFTY": [
+      "cb3609f8a65745d03bf7a121afc7515e64b61424074103dc1e77245e36754898"
+    ],
+    "NIFTY": [
+      "7f42a5a9abc8126b2d5359f8b1b2c647825f167dd1aa1e1eba0cc3e23bc37337"
+    ],
+    "SENSEX": [
+      "42ff11da92f8f6722e5ffbcf704df47b94d687d4c253b6a34bcf5d439d9c4e98"
+    ]
+  },
+  "symbol_file_paths": {
+    "BANKNIFTY": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3/sessions/20230731/underlying/BANKNIFTY_20230731.parquet",
+    "NIFTY": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3/sessions/20230731/underlying/NIFTY_20230731.parquet",
+    "SENSEX": "/Users/madhuram/tradebot-data/independent_underlying_confirmation_v3/sessions/20230731/underlying/SENSEX_20230731.parquet"
+  },
+  "synthetic": false
+}

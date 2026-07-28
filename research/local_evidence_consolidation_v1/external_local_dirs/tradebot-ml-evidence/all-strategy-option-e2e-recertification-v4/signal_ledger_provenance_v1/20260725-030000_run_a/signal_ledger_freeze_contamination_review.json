@@ -1,0 +1,24 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "freeze_authority": "UNRESOLVED",
+  "historical_invalidation": {
+    "binding_verified": true,
+    "decision": "INVALID_INCOMPLETE_EVIDENCE_IMPLEMENTATION_PLACEHOLDER_SIGNAL_AND_RECONSTRUCTION",
+    "invalidated_commit": "686af0feff7a4485ebe4e249cb498b33d649a5cd",
+    "invalidation_path": "research/option_e2e_recertification_v4/v4_3_supersession/v4_2_evidence_implementation_invalidation.json",
+    "invalidation_sha256": "8d1b8d7cc264b92bf1499ede393b5ed3ec1220419c2fc031039717b67400a1b0",
+    "ledger_sha256": "b9736aa6af68a07c32a01dbc2bc60220acf8337181e3878940abfab540398bed"
+  },
+  "historical_invalidation_authority": "CONFIRMED",
+  "holdout_contamination_authority": "UNRESOLVED",
+  "holdout_outcomes_read": false,
+  "is_order_action": false,
+  "option_price_contamination_authority": "UNRESOLVED",
+  "outcome_contamination_authority": "UNRESOLVED",
+  "outcomes_read": false,
+  "pnl_read": false,
+  "read_only": true,
+  "research_only": true,
+  "tuning_contamination_authority": "UNRESOLVED"
+}

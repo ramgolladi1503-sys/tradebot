@@ -1,0 +1,19 @@
+{
+  "classifications": [
+    "INVALID_UNSUPPORTED_POSITIVE_PROXY_RESULT",
+    "INVALID_INCOMPLETE_ZERO_SIGNAL_DIAGNOSIS",
+    "INVALID_MIXED_FETCH_CAMPAIGN"
+  ],
+  "invalidated_claims": [
+    "125 eligible sessions",
+    "160 weighted signals",
+    "155 unweighted signals",
+    "160 control signals",
+    "PROXY_SUPPORTS_PURCHASING_AUTHORITATIVE_DATA",
+    "3.5M+ bars",
+    "5710 states",
+    "0 signals",
+    "PROXY_DOES_NOT_SUPPORT_PURCHASING_AUTHORITATIVE_DATA"
+  ],
+  "reason": "Prior claims were not accepted without campaign isolation and independent oracle reproduction. Shared raw folder contains multiple fetch campaigns."
+}

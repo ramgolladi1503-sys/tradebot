@@ -1,0 +1,18 @@
+{
+  "semantic_hashes": {
+    "certification_report": "e5c10b427c150a06be2c31d9735e71d08a20417213becc2b2e45583e48b9139e",
+    "event_count_only_feasibility_report": "d5f0bd9a628191716ef47abc97694a7c6bf3396e83d7b5649e54a6d8eb4817c8",
+    "final_verdict": "418116555e254e0048aa1b36ada5b53131c2072ea251eb7ed947586fec79cad8",
+    "frozen_acquisition_plan": "0868833226feb666aeadbfb4f41606ea8f124f9b3f401eacca2534b0f3d4bf78",
+    "independent_audit": "e3fd3e472f456a977f04a41920a83a80703a129e2f7f10c154b5078734ba12db",
+    "local_recovery_inventory": "dd6d3540810d8419a1b61c3d2487379a8f300157ceeca58c483a6289f6070ee5",
+    "normalized_warehouse_manifest": "9212a37ce87cc4f640785ab158c333fafcfc92cd2bac25cf383987d782d0e4f8",
+    "overlap_audit": "8978ecf06f8435e03e9f529f05adbc2c55d65c93b7e413a814b904ad1a6043e1",
+    "pre_change_manifest": "db5706cec7057173fae3270691bf4879e4e59be091a96056eee0a7680f3c42b0",
+    "provider_feasibility_report": "556c2fc1dcc8a32600a53efb381e423a53db30b77fefd783244c07d12ac3ee53",
+    "raw_evidence_manifest": "61c45652dfa5be197a96d9137dc2b55bbf70c107068783f4aaa007d0e5ba5681",
+    "used_date_ledger": "369ae8ca501a4833f4597aaaf7225e45eb64fd0006728aa84c66681d13f04b82"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "NOT_RUN_NO_ACQUISITION"
+}

@@ -1,0 +1,44 @@
+{
+  "allowed_for_live_execution": false,
+  "bars_sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0",
+  "checks": {
+    "bars_hash_matches_freeze": true,
+    "coverage_gate_pass_rate": true,
+    "coverage_rows_match_states": true,
+    "reason_count_sum_matches_states": true,
+    "state_count_bound": true,
+    "summary_state_rows_match": true,
+    "summary_unweighted_signals_match": true,
+    "summary_weighted_signals_match": true
+  },
+  "control_count": 0,
+  "coverage_summary": {
+    "both_gates_pass_rate": 1.0,
+    "count_coverage_median": 0.96,
+    "count_coverage_min": 0.94,
+    "low_count_coverage_states": 0,
+    "low_weight_coverage_states": 0,
+    "states": 4110,
+    "weight_coverage_median": 0.9712971,
+    "weight_coverage_min": 0.9632108
+  },
+  "date_range": [
+    "2024-01-01",
+    "2025-08-29"
+  ],
+  "oracle_imports_strategy": false,
+  "reason_counts": {
+    "dispersion_too_high": 651,
+    "frozen_entry_conditions_not_met": 8,
+    "index_already_caught_up": 3153,
+    "index_range_already_consumed": 98,
+    "insufficient_lead_gap_history": 200
+  },
+  "research_only": true,
+  "sessions": 414,
+  "state_rows": 4110,
+  "summary_sha256": "8d482799487ac6f052b4a86cad116b577a4c0f8c330dd6ba946f608a6599b3d1",
+  "unweighted_signals": 1,
+  "verdict": "PASS",
+  "weighted_signals": 0
+}

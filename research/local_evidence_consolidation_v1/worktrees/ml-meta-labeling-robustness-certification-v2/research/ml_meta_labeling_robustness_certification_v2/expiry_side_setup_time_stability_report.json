@@ -1,0 +1,10 @@
+{
+  "missing_required_artifacts": [
+    "candidate_dataset",
+    "trained_model",
+    "calibration_object"
+  ],
+  "reason": "blocked by missing frozen certification inputs",
+  "semantic_hash": "00caebfcbf7144986c086e1abd1734d8b4c42deea16a9fcc54eeb4218366fcd1",
+  "status": "NOT_RUN"
+}

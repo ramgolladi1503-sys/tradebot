@@ -1,0 +1,17 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "expiry_share": 0.17623312728648927,
+    "month_share": 0.4607827677557716,
+    "side_share": 0.5664335664335665
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "expiry_share": 0.20586372872797462,
+    "month_share": 0.4029468296079717,
+    "side_share": 0.5254575707154742
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "expiry_share": 0.27155700888857537,
+    "month_share": 0.4608613049083004,
+    "side_share": 0.5201838529176659
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "frozen_candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "classification": "ENOUGH_TRADES_BUT_FAILED_SIGN",
+      "holdout_ci": {
+        "ci95_high": -0.041972302966762354,
+        "ci95_low": -1.1401265957592144,
+        "mean": -0.5910494493629884,
+        "n": 4631,
+        "std": 19.064028872937097
+      },
+      "holdout_trades": 4631
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "classification": "ENOUGH_TRADES_BUT_FAILED_SIGN",
+      "holdout_ci": {
+        "ci95_high": -0.0170814209406549,
+        "ci95_low": -1.119036367520883,
+        "mean": -0.5680588942307689,
+        "n": 4992,
+        "std": 19.861637905436027
+      },
+      "holdout_trades": 4992
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "classification": "ENOUGH_TRADES_BUT_FAILED_SIGN",
+      "holdout_ci": {
+        "ci95_high": -0.7759381656957752,
+        "ci95_low": -1.9761631274076734,
+        "mean": -1.3760506465517244,
+        "n": 3712,
+        "std": 18.65436935590207
+      },
+      "holdout_trades": 3712
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "classification": "ENOUGH_TRADES_BUT_FAILED_SIGN",
+      "holdout_ci": {
+        "ci95_high": 0.25888151702510487,
+        "ci95_low": -1.2596044085913705,
+        "mean": -0.5003614457831328,
+        "n": 2905,
+        "std": 20.878426848929852
+      },
+      "holdout_trades": 2905
+    }
+  ],
+  "independent_expiry_count": 82,
+  "independent_session_count": 375,
+  "power_by_candidate_family": [
+    {
+      "bucket": "CE",
+      "ci95_high": -1.81462367937138,
+      "ci95_low": -2.042831725130515,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 364,
+      "family": "option_type",
+      "independent_expiry_count": 82,
+      "independent_session_count": 364,
+      "mean_net_points": -1.9287277022509473,
+      "minimum_detectable_expectancy_points": 2.0030800408262897,
+      "raw_trade_count": 112175
+    },
+    {
+      "bucket": "PE",
+      "ci95_high": -0.6542763511354955,
+      "ci95_low": -0.907053229326691,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 365,
+      "family": "option_type",
+      "independent_expiry_count": 82,
+      "independent_session_count": 365,
+      "mean_net_points": -0.7806647902310933,
+      "minimum_detectable_expectancy_points": 2.2583194844789714,
+      "raw_trade_count": 116533
+    },
+    {
+      "bucket": "DEEP",
+      "ci95_high": -0.8903300278467208,
+      "ci95_low": -1.8191514156504904,
+      "effective_sample_size_expiry_cluster": 70,
+      "effective_sample_size_session_cluster": 207,
+      "family": "premium_band",
+      "independent_expiry_count": 70,
+      "independent_session_count": 207,
+      "mean_net_points": -1.3547407217486056,
+      "minimum_detectable_expectancy_points": 4.031746868501074,
+      "raw_trade_count": 15601
+    },
+    {
+      "bucket": "HIGH",
+      "ci95_high": -0.820002653075248,
+      "ci95_low": -1.118874927406923,
+      "effective_sample_size_expiry_cluster": 81,
+      "effective_sample_size_session_cluster": 297,
+      "family": "premium_band",
+      "independent_expiry_count": 81,
+      "independent_session_count": 297,
+      "mean_net_points": -0.9694387902410855,
+      "minimum_detectable_expectancy_points": 2.5000035476636033,
+      "raw_trade_count": 83124
+    },
+    {
+      "bucket": "LOW",
+      "ci95_high": -1.1519057144828553,
+      "ci95_low": -1.5931748997205997,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 185,
+      "family": "premium_band",
+      "independent_expiry_count": 82,
+      "independent_session_count": 185,
+      "mean_net_points": -1.3725403071017275,
+      "minimum_detectable_expectancy_points": 2.3417288057127434,
+      "raw_trade_count": 20840
+    },
+    {
+      "bucket": "MID",
+      "ci95_high": -1.4581509731869278,
+      "ci95_low": -1.7528965747576386,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 286,
+      "family": "premium_band",
+      "independent_expiry_count": 82,
+      "independent_session_count": 286,
+      "mean_net_points": -1.6055237739722832,
+      "minimum_detectable_expectancy_points": 1.8041412513060981,
+      "raw_trade_count": 42862
+    },
+    {
+      "bucket": "RICH",
+      "ci95_high": -1.4718084578220512,
+      "ci95_low": -1.792765100211171,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 350,
+      "family": "premium_band",
+      "independent_expiry_count": 82,
+      "independent_session_count": 350,
+      "mean_net_points": -1.6322867790166111,
+      "minimum_detectable_expectancy_points": 2.208395615941349,
+      "raw_trade_count": 66281
+    },
+    {
+      "bucket": "ATM",
+      "ci95_high": -1.2070186710384538,
+      "ci95_low": -1.4886071323577985,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 257,
+      "family": "moneyness_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 257,
+      "mean_net_points": -1.3478129016981262,
+      "minimum_detectable_expectancy_points": 2.1355030770288197,
+      "raw_trade_count": 59124
+    },
+    {
+      "bucket": "FAR",
+      "ci95_high": -1.1600653248834132,
+      "ci95_low": -1.7924594517931787,
+      "effective_sample_size_expiry_cluster": 70,
+      "effective_sample_size_session_cluster": 209,
+      "family": "moneyness_bucket",
+      "independent_expiry_count": 70,
+      "independent_session_count": 209,
+      "mean_net_points": -1.476262388338296,
+      "minimum_detectable_expectancy_points": 3.28084413857318,
+      "raw_trade_count": 22501
+    },
+    {
+      "bucket": "MID",
+      "ci95_high": -1.2300639950379857,
+      "ci95_low": -1.5480198490003763,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 320,
+      "family": "moneyness_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 320,
+      "mean_net_points": -1.389041922019181,
+      "minimum_detectable_expectancy_points": 2.378583546538304,
+      "raw_trade_count": 71633
+    },
+    {
+      "bucket": "NEAR",
+      "ci95_high": -1.1061185641487237,
+      "ci95_low": -1.4100253722329859,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 303,
+      "family": "moneyness_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 303,
+      "mean_net_points": -1.2580719681908548,
+      "minimum_detectable_expectancy_points": 2.397831942660977,
+      "raw_trade_count": 75450
+    },
+    {
+      "bucket": "AFTERNOON",
+      "ci95_high": -1.2443275602923058,
+      "ci95_low": -1.471776682437141,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 375,
+      "family": "time_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 375,
+      "mean_net_points": -1.3580521213647234,
+      "minimum_detectable_expectancy_points": 1.655125450301325,
+      "raw_trade_count": 79430
+    },
+    {
+      "bucket": "CLOSE",
+      "ci95_high": -1.6403582646490964,
+      "ci95_low": -2.2969098041845557,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 375,
+      "family": "time_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 375,
+      "mean_net_points": -1.968634034416826,
+      "minimum_detectable_expectancy_points": 3.3574122496851477,
+      "raw_trade_count": 39225
+    },
+    {
+      "bucket": "MIDDAY",
+      "ci95_high": -1.0050292669599696,
+      "ci95_low": -1.2403090144431266,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 375,
+      "family": "time_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 375,
+      "mean_net_points": -1.122669140701548,
+      "minimum_detectable_expectancy_points": 1.7358479918548675,
+      "raw_trade_count": 81648
+    },
+    {
+      "bucket": "OPEN",
+      "ci95_high": -0.8501245174308346,
+      "ci95_low": -1.3026514023016071,
+      "effective_sample_size_expiry_cluster": 82,
+      "effective_sample_size_session_cluster": 375,
+      "family": "time_bucket",
+      "independent_expiry_count": 82,
+      "independent_session_count": 375,
+      "mean_net_points": -1.076387959866221,
+      "minimum_detectable_expectancy_points": 1.9692286846010998,
+      "raw_trade_count": 28405
+    }
+  ],
+  "raw_label_count": 228708
+}

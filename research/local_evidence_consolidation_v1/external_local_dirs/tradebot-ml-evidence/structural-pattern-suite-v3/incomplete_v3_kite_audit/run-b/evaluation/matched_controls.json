@@ -1,0 +1,38 @@
+{
+  "GAP_GO_LEADER_V1": {
+    "candidate_count": 39,
+    "candidate_effect_30m_bps": 6.244886979792869,
+    "control_effect_30m_bps": -6.244886979792869,
+    "control_rows": 39,
+    "control_universe_hash": "d1d1bb501c5f927aec00bad44937511994812ee0b5790c4c20767bc1eff084dd",
+    "lift_30m_bps": 12.489773959585738,
+    "matched_candidate_count": 39,
+    "matching_policy": "deterministic same source/symbol/decision-time synthetic direction-inversion control; no replacement; tie-break candidate_fingerprint",
+    "minimum_control_quality_met": true,
+    "unmatched_count": 0
+  },
+  "LATE_DAY_PERSISTENCE_V1": {
+    "candidate_count": 296,
+    "candidate_effect_30m_bps": 0.6617979953447232,
+    "control_effect_30m_bps": -0.6617979953447232,
+    "control_rows": 296,
+    "control_universe_hash": "dd47b8aa7949616662a6f4efd353c286b1fa584f7b140cea99fdd9675b07510e",
+    "lift_30m_bps": 1.3235959906894463,
+    "matched_candidate_count": 296,
+    "matching_policy": "deterministic same source/symbol/decision-time synthetic direction-inversion control; no replacement; tie-break candidate_fingerprint",
+    "minimum_control_quality_met": true,
+    "unmatched_count": 0
+  },
+  "PRIOR_RANGE_LEADER_V1": {
+    "candidate_count": 113,
+    "candidate_effect_30m_bps": 2.3341744195370935,
+    "control_effect_30m_bps": -2.3341744195370935,
+    "control_rows": 113,
+    "control_universe_hash": "3cd04620c9b86b94ca2035c3397025b668bfbc5a6b327a829417b4f185b08a7b",
+    "lift_30m_bps": 4.668348839074187,
+    "matched_candidate_count": 113,
+    "matching_policy": "deterministic same source/symbol/decision-time synthetic direction-inversion control; no replacement; tie-break candidate_fingerprint",
+    "minimum_control_quality_met": true,
+    "unmatched_count": 0
+  }
+}

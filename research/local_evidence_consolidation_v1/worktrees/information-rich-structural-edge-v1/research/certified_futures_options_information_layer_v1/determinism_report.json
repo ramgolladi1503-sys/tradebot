@@ -1,0 +1,23 @@
+{
+  "aggregate_semantic_hash": "87e79f531fbd6488f4ff655f9cd58921e0d273d16dc84099624357cd0581ac5f",
+  "generated_files": [
+    "capability_gate_matrix.json",
+    "certification_report.json",
+    "coverage_report.json",
+    "feature_catalogue.json",
+    "final_verdict.json",
+    "frozen_information_contract.json",
+    "futures_warehouse_manifest.json",
+    "independent_audit.json",
+    "joint_warehouse_manifest.json",
+    "local_data_inventory.json",
+    "options_warehouse_manifest.json",
+    "power_feasibility_report.json",
+    "pre_change_manifest.json",
+    "provider_feasibility_report.json",
+    "underlying_warehouse_manifest.json"
+  ],
+  "semantic_hash": "06b2b615228966ae1cf8c21da6039e26ef1e1398dd47e90a73c86313596d9779",
+  "status": "PASS",
+  "two_directory_determinism_supported": true
+}

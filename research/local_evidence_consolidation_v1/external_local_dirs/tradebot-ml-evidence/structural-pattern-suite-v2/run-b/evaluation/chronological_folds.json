@@ -1,0 +1,99 @@
+{
+  "folds": [
+    {
+      "candidate_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 7,
+        "LATE_DAY_PERSISTENCE_V1": 64,
+        "PRIOR_RANGE_LEADER_V1": 32
+      },
+      "fold": 1,
+      "outcome_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 7,
+        "LATE_DAY_PERSISTENCE_V1": 64,
+        "PRIOR_RANGE_LEADER_V1": 32
+      },
+      "test_end": "2024-12-20",
+      "test_sessions": 60,
+      "test_start": "2024-07-10",
+      "train_end": "2026-07-08",
+      "train_sessions": 236,
+      "train_start": "2024-12-30"
+    },
+    {
+      "candidate_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 14,
+        "LATE_DAY_PERSISTENCE_V1": 47,
+        "PRIOR_RANGE_LEADER_V1": 38
+      },
+      "fold": 2,
+      "outcome_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 14,
+        "LATE_DAY_PERSISTENCE_V1": 47,
+        "PRIOR_RANGE_LEADER_V1": 38
+      },
+      "test_end": "2025-05-09",
+      "test_sessions": 59,
+      "test_start": "2024-12-30",
+      "train_end": "2026-07-08",
+      "train_sessions": 237,
+      "train_start": "2024-07-10"
+    },
+    {
+      "candidate_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 4,
+        "LATE_DAY_PERSISTENCE_V1": 68,
+        "PRIOR_RANGE_LEADER_V1": 16
+      },
+      "fold": 3,
+      "outcome_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 4,
+        "LATE_DAY_PERSISTENCE_V1": 68,
+        "PRIOR_RANGE_LEADER_V1": 16
+      },
+      "test_end": "2025-10-07",
+      "test_sessions": 59,
+      "test_start": "2025-05-12",
+      "train_end": "2026-07-08",
+      "train_sessions": 237,
+      "train_start": "2024-07-10"
+    },
+    {
+      "candidate_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 12,
+        "LATE_DAY_PERSISTENCE_V1": 65,
+        "PRIOR_RANGE_LEADER_V1": 23
+      },
+      "fold": 4,
+      "outcome_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 12,
+        "LATE_DAY_PERSISTENCE_V1": 65,
+        "PRIOR_RANGE_LEADER_V1": 23
+      },
+      "test_end": "2026-03-09",
+      "test_sessions": 59,
+      "test_start": "2025-10-09",
+      "train_end": "2026-07-08",
+      "train_sessions": 237,
+      "train_start": "2024-07-10"
+    },
+    {
+      "candidate_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 18,
+        "LATE_DAY_PERSISTENCE_V1": 61,
+        "PRIOR_RANGE_LEADER_V1": 32
+      },
+      "fold": 5,
+      "outcome_count_by_strategy": {
+        "GAP_GO_LEADER_V1": 18,
+        "LATE_DAY_PERSISTENCE_V1": 61,
+        "PRIOR_RANGE_LEADER_V1": 32
+      },
+      "test_end": "2026-07-08",
+      "test_sessions": 59,
+      "test_start": "2026-03-10",
+      "train_end": "2026-03-09",
+      "train_sessions": 237,
+      "train_start": "2024-07-10"
+    }
+  ]
+}

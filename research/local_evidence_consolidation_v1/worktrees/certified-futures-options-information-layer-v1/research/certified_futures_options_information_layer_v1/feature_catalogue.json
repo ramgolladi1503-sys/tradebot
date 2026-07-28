@@ -1,0 +1,52 @@
+{
+  "features": [
+    {
+      "causal_proof": "same-minute observed inputs only",
+      "definition": "futures_close - underlying_close",
+      "lineage": [
+        "futures warehouse",
+        "underlying warehouse"
+      ],
+      "lookback": 0,
+      "name": "futures_spot_basis",
+      "null_policy": "null if either leg missing",
+      "required_inputs": [
+        "futures_close",
+        "underlying_close"
+      ],
+      "semantic_hash": "87539ef048235f15432365c6c7db0af0a82d98c4833adcabb8e926cd86ce7670"
+    },
+    {
+      "causal_proof": "uses rows strictly <= current timestamp",
+      "definition": "trailing z-score of futures_spot_basis",
+      "lineage": [
+        "joint warehouse"
+      ],
+      "lookback": "trailing-only fixed window",
+      "name": "basis_zscore_trailing",
+      "null_policy": "null until full valid trailing window exists",
+      "required_inputs": [
+        "futures_spot_basis"
+      ],
+      "semantic_hash": "2d4b20ac29daf0ecf64414aa58c94dcb7e5c508027aed9f86eaaa960809c66e9"
+    },
+    {
+      "causal_proof": "current and immediately previous observed minute only",
+      "definition": "option_return / futures_return when both are observed",
+      "lineage": [
+        "joint warehouse"
+      ],
+      "lookback": 1,
+      "name": "option_response_elasticity",
+      "null_policy": "null across missing bars or zero denominator",
+      "required_inputs": [
+        "option_close",
+        "futures_close"
+      ],
+      "semantic_hash": "8839f81bc41f652e4dfa5c0729c7a0bac3d174fd5c5635f619ceaea8cf1e5c6b"
+    }
+  ],
+  "reason": "Feature materialization requires certified futures rows.",
+  "semantic_hash": "2f1fdf2947c852738d10fb6184d2300c61e442539165171708f23281e86011f6",
+  "status": "CATALOGUE_FROZEN_NOT_MATERIALIZED"
+}

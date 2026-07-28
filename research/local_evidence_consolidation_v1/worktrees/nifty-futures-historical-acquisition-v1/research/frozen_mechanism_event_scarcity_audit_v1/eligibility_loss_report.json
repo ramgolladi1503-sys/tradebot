@@ -1,0 +1,16 @@
+{
+  "classification": {
+    "missing_next_bar_execution": "required execution chronology",
+    "missing_underlying_ret_1": "unsupported-data limitation",
+    "research_eligible_false": "required governance"
+  },
+  "losses": {
+    "dte_restriction_removed": 0,
+    "missing_next_bar_execution": 1198,
+    "missing_underlying_ret_1": 392006,
+    "moneyness_restriction_removed": 145656,
+    "premium_threshold_removed": 111559,
+    "research_eligible_false": 163298
+  },
+  "status": "PASS"
+}

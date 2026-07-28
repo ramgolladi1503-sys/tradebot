@@ -1,0 +1,53 @@
+{
+  "best_month_removal": {
+    "pass": true,
+    "period": "calendar_month"
+  },
+  "direction_inversion": {
+    "mean": -0.4059512959670188,
+    "pass": true
+  },
+  "false_previous_session_ownership": {
+    "pass": true,
+    "rows": 4900
+  },
+  "feature_column_permutation": {
+    "hash": "8a612dcf5d790812aac956ef56bc49b918ab9b98f6ea909cc2f8a29b0eb94816",
+    "pass": true
+  },
+  "leave_one_quarter_out": {
+    "folds": 4,
+    "pass": true
+  },
+  "matched_random_sessions": {
+    "hash": "a75e562c8314f63fc35c1adb2348dd052c0b14d97ec66c7a80652c5ec6c622d9",
+    "pass": true,
+    "rows": 490
+  },
+  "matched_random_timestamps": {
+    "mean": 0.4059512959670189,
+    "pass": true,
+    "rows": 4900
+  },
+  "one_bar_delayed_entry": {
+    "pass": true,
+    "status": "EXECUTED"
+  },
+  "post_outcome_mutation_invariance": {
+    "ledger_hash": "668803b2896951f69b1a81087c9b4532b637baab78ba280c367667494008abbb",
+    "pass": true
+  },
+  "session_level_label_permutation": {
+    "hash": "7cb1f8e722327051137221b3ba7e513380937aea8dce208a9bae0e8e829bfd2a",
+    "pass": true,
+    "rows": 4900
+  },
+  "top_five_session_removal": {
+    "pass": true,
+    "rows_removed": 5
+  },
+  "two_bar_delayed_entry": {
+    "pass": true,
+    "status": "EXECUTED"
+  }
+}

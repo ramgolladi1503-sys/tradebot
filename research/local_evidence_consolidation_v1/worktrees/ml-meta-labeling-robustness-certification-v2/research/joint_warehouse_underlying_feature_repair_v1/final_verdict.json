@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/joint-warehouse-underlying-feature-repair-v1",
+  "broker_api_called": false,
+  "current_commit": "dcfbbe8d13dfaebb095884fcb7a32ee9128903f3",
+  "exact_next_action": "Rerun the frozen two-mechanism feasibility and validation campaign using the repaired joint warehouse; do not tune thresholds.",
+  "final_verdict": "JOINT_UNDERLYING_FEATURES_REPAIRED",
+  "is_order_action": false,
+  "read_only": true,
+  "repaired_joint_warehouse": "/Users/madhuram/tradebot-joint-feature-repair-v1/research/joint_warehouse_underlying_feature_repair_v1/repaired_joint_underlying_option_warehouse.parquet",
+  "source_commit": "dcfbbe8d13dfaebb095884fcb7a32ee9128903f3",
+  "worktree": "/Users/madhuram/tradebot-joint-feature-repair-v1"
+}

@@ -1,0 +1,10 @@
+{
+  "altered_previous_high_low": "REJECTED",
+  "changed_peer_leader": "REJECTED",
+  "future_bar_leakage": "REJECTED",
+  "modified_bundle_ordering": "REJECTED",
+  "modified_candidate_side": "REJECTED",
+  "modified_outcome": "REJECTED",
+  "modified_source_row": "REJECTED",
+  "same_bar_entry": "REJECTED"
+}

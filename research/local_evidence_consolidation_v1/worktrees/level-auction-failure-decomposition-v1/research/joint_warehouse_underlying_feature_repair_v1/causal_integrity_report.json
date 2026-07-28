@@ -1,0 +1,10 @@
+{
+  "completed_observations_only": true,
+  "forward_filled_underlying_state": false,
+  "future_bar_leakage_detected": false,
+  "option_alignment": "option rows receive contemporaneous completed underlying features joined by same IST minute",
+  "session_boundaries_reset": true,
+  "sparse_bar_affected_rows": 0,
+  "sparse_gaps_crossed_improperly": false,
+  "status": "PASS"
+}

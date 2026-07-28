@@ -1,0 +1,19 @@
+{
+  "exhausted": [
+    "BUY-only NIFTY options",
+    "current certified joint warehouse",
+    "one-minute bar granularity and governed five-minute aggregates",
+    "currently available option OHLC-derived fields",
+    "next-observable-bar execution",
+    "one-point frozen round-trip cost model",
+    "tested causal mechanism families",
+    "chronological period 2024-09-26 through 2026-07-21"
+  ],
+  "not_claimed": [
+    "all possible trading strategies are impossible",
+    "all option-buying edges are impossible",
+    "other instruments or economic exposures are exhausted",
+    "tick, quote, depth, IV, or Greek mechanisms were tested"
+  ],
+  "statement": "The current BUY-only NIFTY option search space is exhausted only within the certified data, causal families, execution model, costs, granularity, and chronological period recorded here."
+}

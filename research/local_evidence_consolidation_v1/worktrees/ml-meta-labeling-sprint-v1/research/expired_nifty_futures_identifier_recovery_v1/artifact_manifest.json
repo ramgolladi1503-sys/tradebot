@@ -1,0 +1,17 @@
+{
+  "files": {
+    "determinism_report.json": "693ccc90c382e47e629320200c5fb7f49cf90a3e098f04a79ec3176da73ea584",
+    "final_verdict.json": "97f768249b9ac94971dddf9a065439fae12e1161fd2ba9b5104c0f5e49d5ea25",
+    "frozen_expiry_target_ledger.json": "2b281bd885c7d0438d18ae33e425d8894627784390378f886b243e252696820c",
+    "identifier_probe_manifest.json": "813707dad517c512a579cdf8994ba9eeaca0d6ec2bcba1078d62e98e59562eee",
+    "independent_audit.json": "8a5f651d80c49874874b3758063526d74a2555fd1de131dafffca4e62b767e61",
+    "local_identifier_inventory.json": "00c2d87f2ffcd453207f80f9becd45604df77aefc0dcc18eee73a5095ce50a2e",
+    "normalized_contract_manifests.json": "04c9eacef55ac3efc1454545030b4f602c28fadf518d58ad6b5bae2815f41c7d",
+    "official_capability_audit.json": "af9d6f9d155bb1722a9fc287ba6f38b447b8f4bbae8ce911adcfd296d4b24bda",
+    "overlap_and_coverage_report.json": "87a888d29155674941d44a44d273a804dc824b5fa39ee3496311c132cc1fc949",
+    "pre_change_manifest.json": "5d301294def26799291f49a3810ec915028abe5b3d7f16156bf7454b12cc25c0",
+    "raw_acquisition_manifest.json": "948eb0550a85171046c73448f53216975ec42848b7e840092a8576353e57e3fe",
+    "secret_scan_result.json": "52f0eb56d74e929869fb6d38c254a58a5b9f6865ec47f214377177d2657ffe2f"
+  },
+  "semantic_hash": "8cc709a75755376cfd8e84773b0b8eaa56c7529641ed0167dc77bc32de00bf5a"
+}

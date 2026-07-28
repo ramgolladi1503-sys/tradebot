@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "candidate_count_lte_12": true,
+    "contract_freeze_boundary": true,
+    "costs_frozen": true,
+    "frequency_gate_enforced": true,
+    "next_bar_execution": true,
+    "no_production_modifications": true,
+    "pnl_after_frequency_freeze_only": true,
+    "prior_rejected_and_parked_excluded": true,
+    "repaired_warehouse_identity": true
+  },
+  "status": "PASS"
+}

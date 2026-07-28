@@ -1,0 +1,4 @@
+{
+  "excluded_before_freeze": true,
+  "final_retrospective_validation_block": "last 20% accepted sessions"
+}

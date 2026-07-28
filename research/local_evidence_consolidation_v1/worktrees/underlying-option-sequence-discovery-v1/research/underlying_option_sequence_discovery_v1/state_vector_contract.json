@@ -1,0 +1,8 @@
+{
+  "granularity": "1minute",
+  "no_constituents": true,
+  "no_future_labels": true,
+  "no_futures": true,
+  "scope": "candle-derived underlying-option interaction",
+  "semantic_hash": "8abc131add5518924e589c055d879173c779cfa254db3808318928445aecb2cd"
+}

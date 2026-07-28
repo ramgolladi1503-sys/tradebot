@@ -1,0 +1,6 @@
+{
+  "aeron7": "one-minute source requires source-specific parser before inclusion",
+  "kite_late_decision": "data completed through 14:00 IST; entry first 5m open strictly after boundary",
+  "kite_opening_decision": "data completed through 09:45 IST; entry first 5m open strictly after boundary",
+  "timezone": "Asia/Kolkata"
+}

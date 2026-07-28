@@ -1,0 +1,107 @@
+{
+  "mechanisms": [
+    {
+      "algotest_representability": "ALGOTEST_PARTIALLY_TRANSLATABLE",
+      "classification": "READY_FOR_FROZEN_TEST",
+      "current_data_supports_it": true,
+      "entry_sequence": "detect lag, wait for next completed premium acceleration confirmation, enter next observable bar",
+      "exit_logic": "event-resolution exit on premium acceleration failure or max hold",
+      "expected_failure_mode": "lag is noise or decays after costs",
+      "expiry_dte_scope": "separate expiry-week and non-expiry buckets",
+      "minimum_required_sample_size": 250,
+      "missed_dimension": "delayed_option_response and entry_after_confirmation",
+      "name": "delayed_option_convexity_after_underlying_confirmation",
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "stale premium",
+        "provider sparse gap affected window"
+      ],
+      "pre_entry_observables": [
+        "underlying continuation over completed bars",
+        "option premium lag residual",
+        "premium acceleration turning positive"
+      ],
+      "rationale": "Option premium may lag underlying continuation and expand only after a confirmation sequence, which static next-detection entries did not cover.",
+      "requires_bid_ask_iv_greeks": false,
+      "side": "CE for up continuation, PE for down continuation",
+      "strike_rule": "ATM/near OTM observed contract only"
+    },
+    {
+      "algotest_representability": "ALGOTEST_PARTIALLY_TRANSLATABLE",
+      "classification": "READY_FOR_FROZEN_TEST",
+      "current_data_supports_it": true,
+      "entry_sequence": "compression regime then expansion confirmation, enter next observable bar",
+      "exit_logic": "volatility-state resolution exit, not fixed point target only",
+      "expected_failure_mode": "expansion insufficient after costs",
+      "expiry_dte_scope": "exclude final expiry hour unless tested separately",
+      "minimum_required_sample_size": 300,
+      "missed_dimension": "premium_compression_followed_by_expansion and event_sequence_patterns",
+      "name": "premium_compression_release_with_underlying_state_filter",
+      "no_trade_conditions": [
+        "research_eligible=false",
+        "incomplete five-minute bucket",
+        "stale price"
+      ],
+      "pre_entry_observables": [
+        "low realized premium range",
+        "underlying range compression",
+        "first expansion bar"
+      ],
+      "rationale": "Compression followed by expansion is a path transition, not a static premium band or velocity snapshot.",
+      "requires_bid_ask_iv_greeks": false,
+      "side": "CE or PE based on underlying expansion direction",
+      "strike_rule": "ATM/near OTM observed contract only"
+    },
+    {
+      "algotest_representability": "NOT_ALGOTEST_TRANSLATABLE_WITH_CURRENT_EVIDENCE",
+      "classification": "NEEDS_ADDITIONAL_DATA",
+      "current_data_supports_it": false,
+      "entry_sequence": "paired divergence then resolution confirmation",
+      "exit_logic": "resolution failure or fixed max hold",
+      "expected_failure_mode": "requires cleaner chain synchronization than available",
+      "expiry_dte_scope": "same expiry paired contracts",
+      "minimum_required_sample_size": "400 paired events",
+      "missed_dimension": "CE/PE asymmetry and same_side_vs_opposite_side_divergence",
+      "name": "paired_ce_pe_divergence_resolution",
+      "no_trade_conditions": [
+        "missing paired CE/PE contract",
+        "research_eligible=false"
+      ],
+      "pre_entry_observables": [
+        "paired CE and PE premium response at same timestamp",
+        "underlying move residual",
+        "divergence persistence"
+      ],
+      "rationale": "Directionally similar underlying states may differ when CE and PE premium paths disagree; prior campaign did not build paired side features.",
+      "requires_bid_ask_iv_greeks": false,
+      "side": "side resolving with divergence",
+      "strike_rule": "matched distance from spot on CE and PE"
+    },
+    {
+      "algotest_representability": "ALGOTEST_PARTIALLY_TRANSLATABLE",
+      "classification": "NEEDS_ADDITIONAL_DATA",
+      "current_data_supports_it": false,
+      "entry_sequence": "multi-strike confirmation, enter selected liquid strike next bar",
+      "exit_logic": "elasticity normalization or max hold",
+      "expected_failure_mode": "chain incompleteness or stale rows",
+      "expiry_dte_scope": "same expiry, DTE stratified",
+      "minimum_required_sample_size": "300 synchronized multi-strike events",
+      "missed_dimension": "multi_strike_confirmation and elasticity residual",
+      "name": "multi_strike_confirmation_of_premium_elasticity",
+      "no_trade_conditions": [
+        "missing adjacent strikes",
+        "stale price",
+        "research_eligible=false"
+      ],
+      "pre_entry_observables": [
+        "same-side adjacent strike premium elasticity",
+        "underlying displacement",
+        "DTE bucket"
+      ],
+      "rationale": "A single contract can be noisy; coordinated response across adjacent strikes may identify real option demand or convexity.",
+      "requires_bid_ask_iv_greeks": false,
+      "side": "CE for upside elasticity, PE for downside elasticity",
+      "strike_rule": "requires adjacent strikes around ATM"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "files": {
+    "README.md": "d3612ccee0705babdad0263add3e3c9af12c23f396c1e1b4d10a5ec597c43801",
+    "algotest_specs_for_survivors_only.json": "b10fee7b1a039d508f96772d849008033e7e3b37dad832feb378cdf39338c01d",
+    "artifact_manifest.json": "c4e8168c5a2fe41fb3b2ec4706bb5367d39e67e6c716786af447ed13185b3ac3",
+    "auction_state_grammar.json": "81ba89d1edbd01573b023249ddf00a00c585bb16db6825257219bfe5e2b3017c",
+    "concentration_report.json": "12f4c38bd636e31097ca03e995e55fc0600a3493e1cb1e2af546fbaed8c5d0bf",
+    "determinism_report.json": "db2b1dfa4e75709a9de5c368b1db1ca2585fc994edd9cf38be5f2110e810d782",
+    "final_verdict.json": "d99f265191bd55b368aefbc88021268031e148ac6185ed43bac16f286910ea1f",
+    "frozen_evidence_lane_contract.json": "97e13590da29f2cd89b04399aa1100ee28a424ac97475192dccfeeff2b4296de",
+    "holdout_option_outcome_rows.csv": "442fbdab6f8301a3ffae72782faa0d22ab575410757335ad88822974b43963fc",
+    "holdout_report.json": "43944da0771f751124297088e8b83ac1f21ac6361be8d13c109c2266b272f33a",
+    "incremental_information_report.json": "60d2a5cc8a97eaa6cb1efd9dcb61a2c30129d68cca5a15e1d7e410cb99201cb4",
+    "independent_audit.json": "d4d05f7449d1637bf34f9b10ea6b3f2336b8d34294a5e00cba01fb546646d2b9",
+    "input_audit.json": "61d97e874948dfc6e1eec76343b74a010e08a3c7d7eb08e66414877a0877a65c",
+    "lane_a_qualification_report.json": "0507dead37f428153779e5c83b443e4daa78ed9e96d847d534918a175f5ee37e",
+    "lane_b_qualification_report.json": "10340b67de7c778615fd6df93a6c875f91e53f9dc415db89eb29a5d451ad70b2",
+    "negative_control_report.json": "00db0fa5dc27da68537ae7c77f8d6f312c208089c8543dfa4f45b6cc511818a2",
+    "option_monetization_report.json": "645e2e1fed11f11825a6ddde15de769fac39b6199ffab4939c0e247b39562a7b",
+    "pre_change_manifest.json": "1a5dd0e583567eff18da0602977d427a5856a291d3d13be2df7bf3b6b76358df",
+    "pre_outcome_frequency_report.json": "fa453491bcc7048713dbe9780e207f993b669182f5a44b4caefe5e5a0e970d1b",
+    "pre_outcome_signals.csv": "ac3c9d751fcc0cf1ee26f3a4d4949d04ab3e1ee2fb59f19aae3a4c546ad6e928",
+    "reference_level_catalogue.json": "1d21552accbe13b66f9d20378c88b58f1baab086631f81e53815d2b26b63203c",
+    "robustness_report.json": "0b4f55ef4789482c82bd59ced8fcaaab890ad4aeebba71bdd7fd80aa24bb8052",
+    "six_frozen_mechanism_contracts.json": "fd5521913b3c3c641420351409a67576501542c6711cb3be1eb27569f1cd8711",
+    "survivor_report.json": "60b6745648a1279e550a3884e3b821a34f9772c8bbc3a5fd0d1d66057ca1ecfb",
+    "underlying_first_outcome_report.json": "43944da0771f751124297088e8b83ac1f21ac6361be8d13c109c2266b272f33a",
+    "wfa_report.json": "619c76b0af5fb0ef56099ecdba89978e6ffc37d8422ffd2c310b4b1e817ce01f"
+  },
+  "semantic_hash": "7100fdc34edd631e2a23f0f0652d2e344756ab443e667657be2dd55ba8334108"
+}

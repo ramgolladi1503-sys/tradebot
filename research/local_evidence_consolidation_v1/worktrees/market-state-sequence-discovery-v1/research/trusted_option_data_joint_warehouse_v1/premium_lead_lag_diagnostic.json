@@ -1,0 +1,18 @@
+{
+  "controls": {
+    "ce_pe_inversion": "NOT_EVALUABLE_NO_CE_PE_IDENTITY",
+    "count_matched_random_events": 0.85,
+    "delayed_entry": 0.005599129136796054,
+    "lag_shifted_option_series": 0.0007865572490975615,
+    "random_strike_substitution": "NOT_EVALUABLE_NO_STRIKE_IDENTITY",
+    "shuffled_option_timestamps": 0.0028646412411740007,
+    "underlying_only_baseline": 0.0
+  },
+  "development_only": true,
+  "incremental_option_information": "NOT_CERTIFIED_CONTRACT_IDENTITY_MISSING",
+  "joint_score": 0.0022782985376242778,
+  "option_only_score": 0.0022782985376242778,
+  "status": "OBSERVATIONAL_ONLY",
+  "target20_rate": 0.8738778727605286,
+  "underlying_only_score": 0.0
+}

@@ -1,0 +1,10 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "classification": "INVALID_INCOMPLETE_PROXY_CONTRACT",
+  "created_at_utc": "2026-07-23T11:43:25.298155+00:00",
+  "invalidated_head": "8ffdc6c5e46366caf4defd70ce4374e9fc8de748",
+  "invalidated_verdict": "NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT",
+  "is_order_action": false,
+  "reason": "Required proxy evidence contracts were incomplete: global snapshot intervals, provenance, completed sessions, count coverage, unique instrument reporting, authoritative file ownership, computed oracle, matched control, delay/concentration status, and unweighted lane reporting."
+}

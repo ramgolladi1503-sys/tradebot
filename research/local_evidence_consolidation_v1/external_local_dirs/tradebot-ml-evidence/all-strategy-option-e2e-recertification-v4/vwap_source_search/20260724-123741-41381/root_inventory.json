@@ -1,0 +1,176 @@
+[
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "CURRENT_WORKTREE",
+    "root_id": "CURRENT_WORKTREE"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "EXTERNAL_ROOT",
+    "root_id": "MAIN_TRADEBOT"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "EXTERNAL_ROOT",
+    "root_id": "TRADEBOT_DATA"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "EXTERNAL_ROOT",
+    "root_id": "TRADEBOT_ML_EVIDENCE"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_001"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_002"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_003"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_004"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_005"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_006"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_007"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_008"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_009"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_010"
+  },
+  {
+    "available": false,
+    "is_directory": false,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_012"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_013"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_014"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_015"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_016"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_017"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_018"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_019"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_020"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_021"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_022"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_023"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_024"
+  },
+  {
+    "available": true,
+    "is_directory": true,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_025"
+  },
+  {
+    "available": false,
+    "is_directory": false,
+    "root_class": "REGISTERED_TRADEBOT_WORKTREE",
+    "root_id": "REGISTERED_WORKTREE_026"
+  }
+]

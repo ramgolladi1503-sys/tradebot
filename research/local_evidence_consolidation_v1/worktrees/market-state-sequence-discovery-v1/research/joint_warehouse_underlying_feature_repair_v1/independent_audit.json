@@ -1,0 +1,14 @@
+{
+  "checks": {
+    "event_smoke_has_events": true,
+    "final_verdict_repaired": true,
+    "lineage_ret_1_shows_repair": true,
+    "no_broker_calls": true,
+    "no_live_enablement": true,
+    "no_production_modifications": true,
+    "no_synthetic_or_fill_claimed": true,
+    "ret_1_populated": true
+  },
+  "production_touched": [],
+  "status": "PASS"
+}

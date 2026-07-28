@@ -1,0 +1,117 @@
+{
+  "artifacts": {
+    "calibration_object": {
+      "accepted_names": [
+        "calibration_model.joblib",
+        "calibrator.joblib",
+        "calibrated_model.joblib",
+        "calibration_object.pkl"
+      ],
+      "path": null,
+      "present": false,
+      "required": true,
+      "sha256": null
+    },
+    "candidate_dataset": {
+      "accepted_names": [
+        "candidate_level_dataset.parquet"
+      ],
+      "path": null,
+      "present": false,
+      "required": true,
+      "sha256": null
+    },
+    "cost_model": {
+      "accepted_names": [
+        "label_contract.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/label_contract.json",
+      "present": true,
+      "required": true,
+      "sha256": "43ec89a3fbcf85a6229214746ca138678e6b954ccc6ad9c6be3fddfc0a90c953"
+    },
+    "economic_metric_implementation": {
+      "accepted_names": [
+        "scripts/run_ml_meta_labeling_sprint_v1.py"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/scripts/run_ml_meta_labeling_sprint_v1.py",
+      "present": true,
+      "required": true,
+      "sha256": "2abc6ead2cac64ab299d86b18fd6acc4cd3bf064480a6c87acb28e04b7d16e20"
+    },
+    "feature_contract": {
+      "accepted_names": [
+        "feature_contract.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/feature_contract.json",
+      "present": true,
+      "required": true,
+      "sha256": "9dbf491d86234dddd2aa71c80bcadabcaafd5750c03db434132049f9f1c62fcb"
+    },
+    "label_contract": {
+      "accepted_names": [
+        "label_contract.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/label_contract.json",
+      "present": true,
+      "required": true,
+      "sha256": "43ec89a3fbcf85a6229214746ca138678e6b954ccc6ad9c6be3fddfc0a90c953"
+    },
+    "model_configuration": {
+      "accepted_names": [
+        "model_contract.json",
+        "tuning_ledger.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/model_contract.json",
+      "present": true,
+      "required": true,
+      "sha256": "22f18ad50dcae5d8fe5a64017c27146d0f01f65b536a91ee75c42295d0193234"
+    },
+    "sealed_holdout_predictions": {
+      "accepted_names": [
+        "holdout_predictions.csv"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/holdout_predictions.csv",
+      "present": true,
+      "required": true,
+      "sha256": "dd0267c968eaa6c901692baffe0c92894f318161105df3adba0cf152147f99ef"
+    },
+    "split_contract": {
+      "accepted_names": [
+        "split_contract.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/split_contract.json",
+      "present": true,
+      "required": true,
+      "sha256": "dc51d9b16117f8c59ea44860f092961a3d6a81a6c6d8c7c745e8a0fd6dcf075c"
+    },
+    "trained_model": {
+      "accepted_names": [
+        "trained_model.joblib",
+        "trained_model.pkl",
+        "xgboost_model.json",
+        "xgboost_model.ubj"
+      ],
+      "path": null,
+      "present": false,
+      "required": true,
+      "sha256": null
+    },
+    "validation_top_10_threshold": {
+      "accepted_names": [
+        "xgboost_report.json",
+        "calibrated_model_report.json"
+      ],
+      "path": "/Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2/research/ml_meta_labeling_sprint_v1/xgboost_report.json",
+      "present": true,
+      "required": true,
+      "sha256": "457f488b434bbce6727926e28859d596fafbd29182f6015c76e5c7764276754e"
+    }
+  },
+  "missing_required_artifacts": [
+    "candidate_dataset",
+    "trained_model",
+    "calibration_object"
+  ],
+  "semantic_hash": "cb38a38b7a643f3f9e44a79fc7d028135fa87bc9363590ed6f0b4d33543a0645"
+}

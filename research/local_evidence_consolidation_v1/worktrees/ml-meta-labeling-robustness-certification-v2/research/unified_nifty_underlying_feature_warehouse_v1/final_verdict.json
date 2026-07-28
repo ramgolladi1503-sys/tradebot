@@ -1,0 +1,22 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": false,
+  "blockers": [
+    "excluded_sessions_require_authorized_refetch",
+    "index_source_has_zero_volume"
+  ],
+  "broker_api_called": false,
+  "canonical_1m_path": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_1minute.parquet",
+  "canonical_1m_rows": 164745,
+  "canonical_5m_path": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/canonical_nifty_5minute.parquet",
+  "canonical_5m_rows": 32949,
+  "determinism": "PASS",
+  "exact_next_action": "Authorize a read-only historical Upstox refetch for only 2024-12-12, 2025-03-25, 2025-04-04, and 2025-04-23, then rerun this repair build.",
+  "feature_rows": 164745,
+  "feature_warehouse_path": "/Users/madhuram/tradebot-repair-11-nifty-sessions-v1/research/unified_nifty_underlying_feature_warehouse_v1/nifty_causal_feature_warehouse.parquet",
+  "is_order_action": false,
+  "joint_rows": 392006,
+  "joint_sessions": 382,
+  "primary_verdict": "UNDERLYING_WAREHOUSE_PARTIALLY_READY",
+  "read_only": true
+}

@@ -1,0 +1,72 @@
+{
+  "mechanisms": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": {
+      "CE_only_expectancy": -213.519689119171,
+      "PE_only_expectancy": 64.72637554585152,
+      "classification": "HIGH",
+      "max_expiry_share": 0.0971563981042654,
+      "max_month_share": 0.2559241706161137,
+      "top_10_removed_expectancy": -107.96155339805823,
+      "top_1_removed_expectancy": -71.42520190023751,
+      "top_3_removed_expectancy": -88.66684964200478,
+      "top_5_removed_expectancy": -97.48611510791369
+    },
+    "M2_FAILED_AUCTION_RECLAIM": {
+      "CE_only_expectancy": -190.4686046511628,
+      "PE_only_expectancy": 11.444999999999999,
+      "classification": "HIGH",
+      "max_expiry_share": 0.1650485436893204,
+      "max_month_share": 0.30097087378640774,
+      "top_10_removed_expectancy": -116.78924731182798,
+      "top_1_removed_expectancy": -97.90098039215688,
+      "top_3_removed_expectancy": -102.7325,
+      "top_5_removed_expectancy": -106.9811224489796
+    },
+    "M3_REPEATED_TEST_DEPLETION_PROXY": {
+      "CE_only_expectancy": -176.52662196679438,
+      "PE_only_expectancy": 43.29588537839823,
+      "classification": "HIGH",
+      "max_expiry_share": 0.0550051247010591,
+      "max_month_share": 0.19883840109326956,
+      "top_10_removed_expectancy": -88.37747343160781,
+      "top_1_removed_expectancy": -75.72786739576213,
+      "top_3_removed_expectancy": -78.5441655266758,
+      "top_5_removed_expectancy": -81.35405201916495
+    },
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": {
+      "CE_only_expectancy": -207.32919874037793,
+      "PE_only_expectancy": 46.71622785829307,
+      "classification": "HIGH",
+      "max_expiry_share": 0.054848371396480716,
+      "max_month_share": 0.19299887682515912,
+      "top_10_removed_expectancy": -96.92458552138035,
+      "top_1_removed_expectancy": -89.97724957873058,
+      "top_3_removed_expectancy": -91.52498407941565,
+      "top_5_removed_expectancy": -93.06825744800446
+    },
+    "M5_COMPRESSION_NEAR_BOUNDARY": {
+      "CE_only_expectancy": -249.0270343137255,
+      "PE_only_expectancy": 29.1879347826087,
+      "classification": "HIGH",
+      "max_expiry_share": 0.09283625730994152,
+      "max_month_share": 0.25511695906432746,
+      "top_10_removed_expectancy": -166.30962444771723,
+      "top_1_removed_expectancy": -139.83838332114118,
+      "top_3_removed_expectancy": -145.95320146520143,
+      "top_5_removed_expectancy": -152.07143800440207
+    },
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": {
+      "CE_only_expectancy": -167.856015625,
+      "PE_only_expectancy": 29.223127147766323,
+      "classification": "MODERATE",
+      "max_expiry_share": 0.09001636661211129,
+      "max_month_share": 0.21685761047463176,
+      "top_10_removed_expectancy": -97.21352310231022,
+      "top_1_removed_expectancy": -77.36239967239966,
+      "top_3_removed_expectancy": -83.39954060705496,
+      "top_5_removed_expectancy": -89.29337715694331
+    }
+  },
+  "semantic_hash": "ef8fc1a643cfd5738d0e0b5ec8703c52dfc08753ba79262010bc747bba507ca0",
+  "status": "RUN"
+}

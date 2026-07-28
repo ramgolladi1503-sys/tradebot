@@ -1,0 +1,10 @@
+{
+  "FINAL_VERDICT": "RETROSPECTIVE_VALIDATED_STATE_CANDIDATE",
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "determinism_status": "PASS",
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "research_only": true,
+  "result_type": "RETROSPECTIVE_ONLY"
+}

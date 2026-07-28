@@ -1,0 +1,11 @@
+{
+  "exact_next_action": "Close the level-auction candle-derived lane; do not run AlgoTest or production wiring from this campaign.",
+  "reason": "No frozen candidate had positive option expectancy, profit factor above 1, or majority-positive WFA. The present candle-derived level-auction lane lacks enough surviving information; missing tick/book/strike detail is explicitly unavailable in the artifacts.",
+  "rejected_directions": {
+    "Direction 1 - Target-Conditioned Causal Edge Discovery": "not selected because the next action is to close this manually specified candle-derived lane before opening a new campaign",
+    "Direction 2 - Option Monetization Repair": "not selected because only one mechanism had positive underlying directional mean and it still failed option, WFA, concentration, and control gates",
+    "Direction 3 - Regime-Specific Hypothesis": "not selected because no mechanism was positive across independent holdout/WFA periods"
+  },
+  "selected_next_research_direction": "Direction 4 - Close This Data Lane",
+  "semantic_hash": "24a6fcf8d557581d3139645937b2da6d0349af2b2510239f91b84e2d0c007ee7"
+}

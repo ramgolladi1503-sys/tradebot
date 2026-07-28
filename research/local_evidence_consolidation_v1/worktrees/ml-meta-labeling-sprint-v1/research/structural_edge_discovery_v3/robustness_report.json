@@ -1,0 +1,1022 @@
+{
+  "SEDV3_01b2f82b2b69": {
+    "best_month_removal_net": -4606.549999999959,
+    "bootstrap_expectancy_ci": [
+      -7.988406250000033,
+      4.552268750000058
+    ],
+    "entry_delay_perturbation": {
+      "net": -1920.4999999999673,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 302.79999999999563,
+      "2024-06": -946.5000000000036,
+      "2024-07": -3962.8499999999513,
+      "2024-08": 3486.049999999992
+    },
+    "one_trade_removal_worst_net": -1601.2999999999665,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -2320.4999999999673
+    },
+    "target_stop_perturbation": {
+      "target_10": 382,
+      "target_20": 372
+    },
+    "weekday_stability": {
+      "Friday": 407.2000000000189,
+      "Monday": -2544.949999999979,
+      "Thursday": -753.8499999999985,
+      "Tuesday": 1205.450000000019,
+      "Wednesday": 565.6499999999724
+    }
+  },
+  "SEDV3_02e046f49f8d": {
+    "best_month_removal_net": -4606.549999999959,
+    "bootstrap_expectancy_ci": [
+      -7.988406250000033,
+      4.552268750000058
+    ],
+    "entry_delay_perturbation": {
+      "net": -1920.4999999999673,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 302.79999999999563,
+      "2024-06": -946.5000000000036,
+      "2024-07": -3962.8499999999513,
+      "2024-08": 3486.049999999992
+    },
+    "one_trade_removal_worst_net": -1601.2999999999665,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -2320.4999999999673
+    },
+    "target_stop_perturbation": {
+      "target_10": 382,
+      "target_20": 372
+    },
+    "weekday_stability": {
+      "Friday": 407.2000000000189,
+      "Monday": -2544.949999999979,
+      "Thursday": -753.8499999999985,
+      "Tuesday": 1205.450000000019,
+      "Wednesday": 565.6499999999724
+    }
+  },
+  "SEDV3_0623568b1adf": {
+    "best_month_removal_net": -3428.3000000001193,
+    "bootstrap_expectancy_ci": [
+      -10.11125720461114,
+      0.16798991354453618
+    ],
+    "entry_delay_perturbation": {
+      "net": -4128.700000000132,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -207.45000000000073,
+      "2024-06": -6.400000000012369,
+      "2024-07": -2607.550000000043,
+      "2024-08": -613.3000000000757
+    },
+    "one_trade_removal_worst_net": -3823.9500000001317,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -4475.700000000132
+    },
+    "target_stop_perturbation": {
+      "target_10": 339,
+      "target_20": 310
+    },
+    "weekday_stability": {
+      "Friday": 936.2999999999956,
+      "Monday": -1747.450000000048,
+      "Thursday": -122.49999999998909,
+      "Tuesday": -1379.800000000083,
+      "Wednesday": -1121.2500000000073
+    }
+  },
+  "SEDV3_0e76314586ad": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_10659dc9294a": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_1c0b38601852": {
+    "best_month_removal_net": -669.4499999999643,
+    "bootstrap_expectancy_ci": [
+      -6.452304177545407,
+      7.348309399477836
+    ],
+    "entry_delay_perturbation": {
+      "net": -182.94999999995343,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 87.8499999999949,
+      "2024-06": -1183.8000000000065,
+      "2024-07": 426.5000000000473,
+      "2024-08": 869.5000000000109
+    },
+    "one_trade_removal_worst_net": -93.44999999995343,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -374.44999999995343
+    },
+    "target_stop_perturbation": {
+      "target_10": 191,
+      "target_20": 180
+    },
+    "weekday_stability": {
+      "Friday": 1442.1999999999825,
+      "Monday": -1204.2999999999774,
+      "Thursday": -674.6999999999789,
+      "Tuesday": 209.0500000000211,
+      "Wednesday": 427.7999999999993
+    }
+  },
+  "SEDV3_269e552b15c4": {
+    "best_month_removal_net": -669.4499999999643,
+    "bootstrap_expectancy_ci": [
+      -6.452304177545407,
+      7.348309399477836
+    ],
+    "entry_delay_perturbation": {
+      "net": -182.94999999995343,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 87.8499999999949,
+      "2024-06": -1183.8000000000065,
+      "2024-07": 426.5000000000473,
+      "2024-08": 869.5000000000109
+    },
+    "one_trade_removal_worst_net": -93.44999999995343,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -374.44999999995343
+    },
+    "target_stop_perturbation": {
+      "target_10": 191,
+      "target_20": 180
+    },
+    "weekday_stability": {
+      "Friday": 1442.1999999999825,
+      "Monday": -1204.2999999999774,
+      "Thursday": -674.6999999999789,
+      "Tuesday": 209.0500000000211,
+      "Wednesday": 427.7999999999993
+    }
+  },
+  "SEDV3_27f58ab5e984": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_37359995325f": {
+    "best_month_removal_net": -5021.050000000061,
+    "bootstrap_expectancy_ci": [
+      -8.097903125000082,
+      2.506881250000014
+    ],
+    "entry_delay_perturbation": {
+      "net": -3093.7500000000437,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -792.5499999999956,
+      "2024-06": 2727.3000000000175,
+      "2024-07": 1118.100000000024,
+      "2024-08": -5346.6000000000895
+    },
+    "one_trade_removal_worst_net": -2697.900000000045,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -3493.7500000000437
+    },
+    "target_stop_perturbation": {
+      "target_10": 386,
+      "target_20": 375
+    },
+    "weekday_stability": {
+      "Friday": -1752.8500000000022,
+      "Monday": 2611.4500000000116,
+      "Thursday": -1171.9500000000226,
+      "Tuesday": -479.8000000000866,
+      "Wednesday": -1500.599999999944
+    }
+  },
+  "SEDV3_3f58e94495bd": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_403b20f5a528": {
+    "best_month_removal_net": -2290.2499999999745,
+    "bootstrap_expectancy_ci": [
+      -4.7573019271950185,
+      6.063442184154145
+    ],
+    "entry_delay_perturbation": {
+      "net": -172.8000000000102,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -85.65000000000146,
+      "2024-06": 1178.4000000000196,
+      "2024-07": -3382.9999999999927,
+      "2024-08": 2584.4499999999643
+    },
+    "one_trade_removal_worst_net": 43.799999999995634,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -406.3000000000102
+    },
+    "target_stop_perturbation": {
+      "target_10": 229,
+      "target_20": 222
+    },
+    "weekday_stability": {
+      "Friday": -1525.3499999999876,
+      "Monday": 1473.349999999973,
+      "Thursday": 363.4499999999898,
+      "Tuesday": 585.5499999999956,
+      "Wednesday": -602.7999999999811
+    }
+  },
+  "SEDV3_57333935c823": {
+    "best_month_removal_net": -4721.1000000000095,
+    "bootstrap_expectancy_ci": [
+      -10.87339707927693,
+      -1.911460361613372
+    ],
+    "entry_delay_perturbation": {
+      "net": -5246.100000000013,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 193.99999999999636,
+      "2024-06": -549.8499999999985,
+      "2024-07": -2678.750000000022,
+      "2024-08": -1492.499999999989
+    },
+    "one_trade_removal_worst_net": -4905.950000000012,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -5605.600000000013
+    },
+    "target_stop_perturbation": {
+      "target_10": 332,
+      "target_20": 304
+    },
+    "weekday_stability": {
+      "Friday": -3848.9000000000196,
+      "Monday": -730.8499999999804,
+      "Thursday": -79.29999999998836,
+      "Tuesday": 840.6500000000124,
+      "Wednesday": -708.7000000000371
+    }
+  },
+  "SEDV3_5d0b26312590": {
+    "best_month_removal_net": -4466.400000000009,
+    "bootstrap_expectancy_ci": [
+      -16.637541666666785,
+      -1.861510416666502
+    ],
+    "entry_delay_perturbation": {
+      "net": -4367.850000000024,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 421.6499999999942,
+      "2024-06": -778.5499999999884,
+      "2024-07": -4109.500000000015,
+      "2024-08": 578.5499999999847
+    },
+    "one_trade_removal_worst_net": -4275.550000000028,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -4607.850000000024
+    },
+    "target_stop_perturbation": {
+      "target_10": 210,
+      "target_20": 207
+    },
+    "weekday_stability": {
+      "Friday": -554.9999999999782,
+      "Monday": -938.7500000000291,
+      "Thursday": -3507.6000000000313,
+      "Tuesday": -656.3500000000095,
+      "Wednesday": 1769.850000000024
+    }
+  },
+  "SEDV3_653bac2e6a30": {
+    "best_month_removal_net": -906.9499999999862,
+    "bootstrap_expectancy_ci": [
+      -8.16974254742531,
+      9.41096205962062
+    ],
+    "entry_delay_perturbation": {
+      "net": -464.1999999999862,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -98.40000000000146,
+      "2024-06": 811.75,
+      "2024-07": 444.60000000003856,
+      "2024-08": -1253.1500000000233
+    },
+    "one_trade_removal_worst_net": -649.599999999984,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -648.6999999999862
+    },
+    "target_stop_perturbation": {
+      "target_10": 195,
+      "target_20": 194
+    },
+    "weekday_stability": {
+      "Friday": 706.7500000000036,
+      "Monday": -287.84999999999854,
+      "Thursday": 1709.1500000000196,
+      "Tuesday": -282.45000000002256,
+      "Wednesday": -1940.7999999999884
+    }
+  },
+  "SEDV3_6547a0db0e28": {
+    "best_month_removal_net": -906.9499999999862,
+    "bootstrap_expectancy_ci": [
+      -8.16974254742531,
+      9.41096205962062
+    ],
+    "entry_delay_perturbation": {
+      "net": -464.1999999999862,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -98.40000000000146,
+      "2024-06": 811.75,
+      "2024-07": 444.60000000003856,
+      "2024-08": -1253.1500000000233
+    },
+    "one_trade_removal_worst_net": -649.599999999984,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -648.6999999999862
+    },
+    "target_stop_perturbation": {
+      "target_10": 195,
+      "target_20": 194
+    },
+    "weekday_stability": {
+      "Friday": 706.7500000000036,
+      "Monday": -287.84999999999854,
+      "Thursday": 1709.1500000000196,
+      "Tuesday": -282.45000000002256,
+      "Wednesday": -1940.7999999999884
+    }
+  },
+  "SEDV3_7661e3dfbceb": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_79475d997fec": {
+    "best_month_removal_net": -2290.2499999999745,
+    "bootstrap_expectancy_ci": [
+      -4.7573019271950185,
+      6.063442184154145
+    ],
+    "entry_delay_perturbation": {
+      "net": -172.8000000000102,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -85.65000000000146,
+      "2024-06": 1178.4000000000196,
+      "2024-07": -3382.9999999999927,
+      "2024-08": 2584.4499999999643
+    },
+    "one_trade_removal_worst_net": 43.799999999995634,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -406.3000000000102
+    },
+    "target_stop_perturbation": {
+      "target_10": 229,
+      "target_20": 222
+    },
+    "weekday_stability": {
+      "Friday": -1525.3499999999876,
+      "Monday": 1473.349999999973,
+      "Thursday": 363.4499999999898,
+      "Tuesday": 585.5499999999956,
+      "Wednesday": -602.7999999999811
+    }
+  },
+  "SEDV3_7c19230c528f": {
+    "best_month_removal_net": -4466.400000000009,
+    "bootstrap_expectancy_ci": [
+      -16.637541666666785,
+      -1.861510416666502
+    ],
+    "entry_delay_perturbation": {
+      "net": -4367.850000000024,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 421.6499999999942,
+      "2024-06": -778.5499999999884,
+      "2024-07": -4109.500000000015,
+      "2024-08": 578.5499999999847
+    },
+    "one_trade_removal_worst_net": -4275.550000000028,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -4607.850000000024
+    },
+    "target_stop_perturbation": {
+      "target_10": 210,
+      "target_20": 207
+    },
+    "weekday_stability": {
+      "Friday": -554.9999999999782,
+      "Monday": -938.7500000000291,
+      "Thursday": -3507.6000000000313,
+      "Tuesday": -656.3500000000095,
+      "Wednesday": 1769.850000000024
+    }
+  },
+  "SEDV3_82161e8f353f": {
+    "best_month_removal_net": -906.9499999999862,
+    "bootstrap_expectancy_ci": [
+      -8.16974254742531,
+      9.41096205962062
+    ],
+    "entry_delay_perturbation": {
+      "net": -464.1999999999862,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -98.40000000000146,
+      "2024-06": 811.75,
+      "2024-07": 444.60000000003856,
+      "2024-08": -1253.1500000000233
+    },
+    "one_trade_removal_worst_net": -649.599999999984,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -648.6999999999862
+    },
+    "target_stop_perturbation": {
+      "target_10": 195,
+      "target_20": 194
+    },
+    "weekday_stability": {
+      "Friday": 706.7500000000036,
+      "Monday": -287.84999999999854,
+      "Thursday": 1709.1500000000196,
+      "Tuesday": -282.45000000002256,
+      "Wednesday": -1940.7999999999884
+    }
+  },
+  "SEDV3_82706963c73a": {
+    "best_month_removal_net": -5021.050000000061,
+    "bootstrap_expectancy_ci": [
+      -8.097903125000082,
+      2.506881250000014
+    ],
+    "entry_delay_perturbation": {
+      "net": -3093.7500000000437,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -792.5499999999956,
+      "2024-06": 2727.3000000000175,
+      "2024-07": 1118.100000000024,
+      "2024-08": -5346.6000000000895
+    },
+    "one_trade_removal_worst_net": -2697.900000000045,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -3493.7500000000437
+    },
+    "target_stop_perturbation": {
+      "target_10": 386,
+      "target_20": 375
+    },
+    "weekday_stability": {
+      "Friday": -1752.8500000000022,
+      "Monday": 2611.4500000000116,
+      "Thursday": -1171.9500000000226,
+      "Tuesday": -479.8000000000866,
+      "Wednesday": -1500.599999999944
+    }
+  },
+  "SEDV3_86d8f2db4a20": {
+    "best_month_removal_net": -3428.3000000001193,
+    "bootstrap_expectancy_ci": [
+      -10.11125720461114,
+      0.16798991354453618
+    ],
+    "entry_delay_perturbation": {
+      "net": -4128.700000000132,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -207.45000000000073,
+      "2024-06": -6.400000000012369,
+      "2024-07": -2607.550000000043,
+      "2024-08": -613.3000000000757
+    },
+    "one_trade_removal_worst_net": -3823.9500000001317,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -4475.700000000132
+    },
+    "target_stop_perturbation": {
+      "target_10": 339,
+      "target_20": 310
+    },
+    "weekday_stability": {
+      "Friday": 936.2999999999956,
+      "Monday": -1747.450000000048,
+      "Thursday": -122.49999999998909,
+      "Tuesday": -1379.800000000083,
+      "Wednesday": -1121.2500000000073
+    }
+  },
+  "SEDV3_a7c938523fea": {
+    "best_month_removal_net": -906.9499999999862,
+    "bootstrap_expectancy_ci": [
+      -8.16974254742531,
+      9.41096205962062
+    ],
+    "entry_delay_perturbation": {
+      "net": -464.1999999999862,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -98.40000000000146,
+      "2024-06": 811.75,
+      "2024-07": 444.60000000003856,
+      "2024-08": -1253.1500000000233
+    },
+    "one_trade_removal_worst_net": -649.599999999984,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -648.6999999999862
+    },
+    "target_stop_perturbation": {
+      "target_10": 195,
+      "target_20": 194
+    },
+    "weekday_stability": {
+      "Friday": 706.7500000000036,
+      "Monday": -287.84999999999854,
+      "Thursday": 1709.1500000000196,
+      "Tuesday": -282.45000000002256,
+      "Wednesday": -1940.7999999999884
+    }
+  },
+  "SEDV3_bf996ca978cc": {
+    "best_month_removal_net": -669.4499999999643,
+    "bootstrap_expectancy_ci": [
+      -6.452304177545407,
+      7.348309399477836
+    ],
+    "entry_delay_perturbation": {
+      "net": -182.94999999995343,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 87.8499999999949,
+      "2024-06": -1183.8000000000065,
+      "2024-07": 426.5000000000473,
+      "2024-08": 869.5000000000109
+    },
+    "one_trade_removal_worst_net": -93.44999999995343,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -374.44999999995343
+    },
+    "target_stop_perturbation": {
+      "target_10": 191,
+      "target_20": 180
+    },
+    "weekday_stability": {
+      "Friday": 1442.1999999999825,
+      "Monday": -1204.2999999999774,
+      "Thursday": -674.6999999999789,
+      "Tuesday": 209.0500000000211,
+      "Wednesday": 427.7999999999993
+    }
+  },
+  "SEDV3_c06e6b330a3d": {
+    "best_month_removal_net": -4606.549999999959,
+    "bootstrap_expectancy_ci": [
+      -7.988406250000033,
+      4.552268750000058
+    ],
+    "entry_delay_perturbation": {
+      "net": -1920.4999999999673,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 302.79999999999563,
+      "2024-06": -946.5000000000036,
+      "2024-07": -3962.8499999999513,
+      "2024-08": 3486.049999999992
+    },
+    "one_trade_removal_worst_net": -1601.2999999999665,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -2320.4999999999673
+    },
+    "target_stop_perturbation": {
+      "target_10": 382,
+      "target_20": 372
+    },
+    "weekday_stability": {
+      "Friday": 407.2000000000189,
+      "Monday": -2544.949999999979,
+      "Thursday": -753.8499999999985,
+      "Tuesday": 1205.450000000019,
+      "Wednesday": 565.6499999999724
+    }
+  },
+  "SEDV3_c490f16de022": {
+    "best_month_removal_net": -2290.2499999999745,
+    "bootstrap_expectancy_ci": [
+      -4.7573019271950185,
+      6.063442184154145
+    ],
+    "entry_delay_perturbation": {
+      "net": -172.8000000000102,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -85.65000000000146,
+      "2024-06": 1178.4000000000196,
+      "2024-07": -3382.9999999999927,
+      "2024-08": 2584.4499999999643
+    },
+    "one_trade_removal_worst_net": 43.799999999995634,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -406.3000000000102
+    },
+    "target_stop_perturbation": {
+      "target_10": 229,
+      "target_20": 222
+    },
+    "weekday_stability": {
+      "Friday": -1525.3499999999876,
+      "Monday": 1473.349999999973,
+      "Thursday": 363.4499999999898,
+      "Tuesday": 585.5499999999956,
+      "Wednesday": -602.7999999999811
+    }
+  },
+  "SEDV3_e054e5877d59": {
+    "best_month_removal_net": 2602.449999999946,
+    "bootstrap_expectancy_ci": [
+      1.8462239583331412,
+      12.409021577380885
+    ],
+    "entry_delay_perturbation": {
+      "net": 4044.799999999923,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": true,
+    "monthly_stability": {
+      "2024-05": 297.49999999999636,
+      "2024-06": 1248.1500000000015,
+      "2024-07": 1056.7999999999483,
+      "2024-08": 2114.3499999999767
+    },
+    "one_trade_removal_worst_net": 4238.449999999917,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": 3708.799999999923
+    },
+    "target_stop_perturbation": {
+      "target_10": 363,
+      "target_20": 348
+    },
+    "weekday_stability": {
+      "Friday": 434.2499999999891,
+      "Monday": -816.0500000000175,
+      "Thursday": 1449.199999999968,
+      "Tuesday": 3447.4500000000116,
+      "Wednesday": 201.94999999997162
+    }
+  },
+  "SEDV3_e89abf6a9472": {
+    "best_month_removal_net": -4606.549999999959,
+    "bootstrap_expectancy_ci": [
+      -7.988406250000033,
+      4.552268750000058
+    ],
+    "entry_delay_perturbation": {
+      "net": -1920.4999999999673,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 302.79999999999563,
+      "2024-06": -946.5000000000036,
+      "2024-07": -3962.8499999999513,
+      "2024-08": 3486.049999999992
+    },
+    "one_trade_removal_worst_net": -1601.2999999999665,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -2320.4999999999673
+    },
+    "target_stop_perturbation": {
+      "target_10": 382,
+      "target_20": 372
+    },
+    "weekday_stability": {
+      "Friday": 407.2000000000189,
+      "Monday": -2544.949999999979,
+      "Thursday": -753.8499999999985,
+      "Tuesday": 1205.450000000019,
+      "Wednesday": 565.6499999999724
+    }
+  },
+  "SEDV3_f124fafcbf1b": {
+    "best_month_removal_net": -2290.2499999999745,
+    "bootstrap_expectancy_ci": [
+      -4.7573019271950185,
+      6.063442184154145
+    ],
+    "entry_delay_perturbation": {
+      "net": -172.8000000000102,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -85.65000000000146,
+      "2024-06": 1178.4000000000196,
+      "2024-07": -3382.9999999999927,
+      "2024-08": 2584.4499999999643
+    },
+    "one_trade_removal_worst_net": 43.799999999995634,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -406.3000000000102
+    },
+    "target_stop_perturbation": {
+      "target_10": 229,
+      "target_20": 222
+    },
+    "weekday_stability": {
+      "Friday": -1525.3499999999876,
+      "Monday": 1473.349999999973,
+      "Thursday": 363.4499999999898,
+      "Tuesday": 585.5499999999956,
+      "Wednesday": -602.7999999999811
+    }
+  },
+  "SEDV3_f51c21952010": {
+    "best_month_removal_net": -4606.549999999959,
+    "bootstrap_expectancy_ci": [
+      -7.988406250000033,
+      4.552268750000058
+    ],
+    "entry_delay_perturbation": {
+      "net": -1920.4999999999673,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": 302.79999999999563,
+      "2024-06": -946.5000000000036,
+      "2024-07": -3962.8499999999513,
+      "2024-08": 3486.049999999992
+    },
+    "one_trade_removal_worst_net": -1601.2999999999665,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -2320.4999999999673
+    },
+    "target_stop_perturbation": {
+      "target_10": 382,
+      "target_20": 372
+    },
+    "weekday_stability": {
+      "Friday": 407.2000000000189,
+      "Monday": -2544.949999999979,
+      "Thursday": -753.8499999999985,
+      "Tuesday": 1205.450000000019,
+      "Wednesday": 565.6499999999724
+    }
+  },
+  "SEDV3_f577427e60ef": {
+    "best_month_removal_net": -5021.050000000061,
+    "bootstrap_expectancy_ci": [
+      -8.097903125000082,
+      2.506881250000014
+    ],
+    "entry_delay_perturbation": {
+      "net": -3093.7500000000437,
+      "proxy_cost_points": 1.0
+    },
+    "low_concentration": false,
+    "monthly_stability": {
+      "2024-05": -792.5499999999956,
+      "2024-06": 2727.3000000000175,
+      "2024-07": 1118.100000000024,
+      "2024-08": -5346.6000000000895
+    },
+    "one_trade_removal_worst_net": -2697.900000000045,
+    "sample_size_sufficient": true,
+    "slippage_perturbation": {
+      "2x_cost_net": -3493.7500000000437
+    },
+    "target_stop_perturbation": {
+      "target_10": 386,
+      "target_20": 375
+    },
+    "weekday_stability": {
+      "Friday": -1752.8500000000022,
+      "Monday": 2611.4500000000116,
+      "Thursday": -1171.9500000000226,
+      "Tuesday": -479.8000000000866,
+      "Wednesday": -1500.599999999944
+    }
+  }
+}

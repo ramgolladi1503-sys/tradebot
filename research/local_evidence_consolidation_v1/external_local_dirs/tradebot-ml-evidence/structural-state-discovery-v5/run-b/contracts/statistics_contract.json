@@ -1,0 +1,11 @@
+{
+  "bootstrap": "session-block",
+  "p_value": "empirical whole-session label permutation",
+  "permutations": 1000,
+  "q_values": [
+    "family_lane",
+    "target_family",
+    "global"
+  ],
+  "unit": "session"
+}

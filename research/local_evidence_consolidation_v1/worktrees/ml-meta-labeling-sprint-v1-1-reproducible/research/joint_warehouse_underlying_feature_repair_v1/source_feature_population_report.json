@@ -1,0 +1,20 @@
+{
+  "feature_generation_boundary": "leading lookback rows may be null; interior rows must remain populated when source has completed observations",
+  "first_non_null_timestamp": "2024-09-26T09:16:00+05:30",
+  "last_non_null_timestamp": "2026-07-21T15:29:00+05:30",
+  "ret_1_max": 0.008681202385387943,
+  "ret_1_min": -0.004483431240838942,
+  "ret_1_non_null_count": 164304,
+  "ret_1_null_count": 441,
+  "ret_1_quantiles": {
+    "0.01": -0.0008597428501896442,
+    "0.1": -0.00032956699439556925,
+    "0.5": 0.0,
+    "0.9": 0.0003275811456266765,
+    "0.99": 0.0008647654138075712
+  },
+  "row_count": 164745,
+  "session_coverage": 441,
+  "sparse_bar_rows": 0,
+  "status": "PASS"
+}

@@ -1,0 +1,12 @@
+{
+  "accepted_candidate_count": 472,
+  "candidate_count": 1000,
+  "elapsed_seconds": 19.085,
+  "errors": [],
+  "root_id": "TRADEBOT_DATA",
+  "status": "INCOMPLETE",
+  "timed_out": false,
+  "truncated": true,
+  "unresolved_candidate_count": 0,
+  "yielded_path_count": 1000
+}

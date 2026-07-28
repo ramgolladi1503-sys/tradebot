@@ -1,0 +1,32 @@
+{
+  "mappings": [
+    {
+      "artifact": "frozen_joint_mechanisms_v1 zero-event result",
+      "citation_rule": "MUST_NEVER_BE_CITED_AS_FINAL",
+      "reason": "all-null underlying ret_1 propagation produced zero effective events",
+      "replacement": "frozen_joint_mechanisms_repaired_v2",
+      "status": "SUPERSEDED_BY_VALID_RERUN"
+    },
+    {
+      "artifact": "pre-repair joint warehouse",
+      "citation_rule": "MUST_NEVER_BE_CITED_AS_FINAL",
+      "reason": "underlying feature propagation defect",
+      "replacement": "joint_warehouse_underlying_feature_repair_v1",
+      "status": "INVALID_PRIOR_TEST"
+    },
+    {
+      "artifact": "premium compression repaired holdout",
+      "citation_rule": "MAY_BE_CITED_ONLY_AS_UNDERPOWERED; NOT_AS_EDGE",
+      "reason": "21 events, 8 sessions, and 6 expiries; clustered intervals cross zero",
+      "replacement": null,
+      "status": "UNRESOLVED_UNDERPOWERED"
+    },
+    {
+      "artifact": "post-selection or leakage-defective exploratory campaigns",
+      "citation_rule": "MUST_NEVER_BE_CITED_AS_FINAL",
+      "reason": "selection or chronology does not meet frozen holdout standard",
+      "replacement": "chronologically frozen campaigns",
+      "status": "INVALID_PRIOR_TEST"
+    }
+  ]
+}

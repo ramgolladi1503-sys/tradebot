@@ -1,0 +1,20 @@
+{
+  "algotest_called": false,
+  "branch": "research/information-rich-structural-edge-v1",
+  "broker_calls": false,
+  "closed_lanes": [
+    "ORB variants",
+    "VWAP reclaim",
+    "percentage momentum",
+    "candle-only auction-state",
+    "repeated-test depletion",
+    "highest-close vs highest-wick",
+    "boundary compression",
+    "candle-only option confirmation"
+  ],
+  "production_changes": false,
+  "provider_calls": false,
+  "semantic_hash": "bd30bbdd1e119382aa3831832fa1793051a9021147343dfa5e920b5a2a11ec2c",
+  "source_commit": "e72d9c61922e9d862d4197793778d7dc7cc6fc09",
+  "worktree": "/Users/madhuram/tradebot-information-rich-structural-edge-v1"
+}

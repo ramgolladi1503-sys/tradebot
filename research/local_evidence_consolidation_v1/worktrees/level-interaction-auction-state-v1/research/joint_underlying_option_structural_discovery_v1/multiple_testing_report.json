@@ -1,0 +1,5 @@
+{
+  "evaluated_candidate_count": 72,
+  "frozen_candidate_count": 4,
+  "selection_metric": "development expectancy then t-stat; validation uses holdout gates"
+}

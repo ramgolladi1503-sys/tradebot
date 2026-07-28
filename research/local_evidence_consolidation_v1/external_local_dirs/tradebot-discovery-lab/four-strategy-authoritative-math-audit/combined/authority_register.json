@@ -1,0 +1,50 @@
+[
+  {
+    "authority_id": "A_PROFILE",
+    "authority_level": "LEVEL_2",
+    "exact_formula": "frozen strategy profile thresholds",
+    "limitations": "thresholds only, not full thesis",
+    "source_path": "core/strategy_parameter_profiles.py:106",
+    "source_type": "production_contract",
+    "strategies_affected": [
+      "all four"
+    ]
+  },
+  {
+    "authority_id": "A_REGIME",
+    "authority_level": "LEVEL_2",
+    "exact_formula": "movement regime scoring from StrategyContext",
+    "limitations": "heuristic production owner, not approved thesis",
+    "source_path": "core/movement_regime.py:183",
+    "source_type": "production_contract",
+    "strategies_affected": [
+      "trend_pullback_v1",
+      "compression_breakout_v1",
+      "vwap_reclaim_rejection_v1"
+    ]
+  },
+  {
+    "authority_id": "A_ORB_REPLAY",
+    "authority_level": "LEVEL_2",
+    "exact_formula": "expanding typical-price VWAP proxy, TR, ATR 14, ATR short 5, ATR long 30, first-15 ORB",
+    "limitations": "research proxy, not exact live tick/option truth",
+    "source_path": "core/orb_ohlcv_validation.py:129",
+    "source_type": "replay_owner",
+    "strategies_affected": [
+      "opening_range_retest_v1",
+      "compression_breakout_v1"
+    ]
+  },
+  {
+    "authority_id": "A_TR",
+    "authority_level": "LEVEL_3",
+    "exact_formula": "max(high-low, abs(high-prev_close), abs(low-prev_close))",
+    "limitations": "ATR smoothing variant still owner-defined",
+    "source_path": "task canonical TRUE RANGE formula",
+    "source_type": "canonical_indicator_definition",
+    "strategies_affected": [
+      "compression_breakout_v1",
+      "movement_regime"
+    ]
+  }
+]

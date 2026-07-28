@@ -1,0 +1,179 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "clustered_signal_episode_count": 589,
+    "duplicate_suppression_effectiveness": "frozen contract suppresses exact contract-timestamp duplicates only; structural episode repeats remain",
+    "losses_concentrated_in_repeated_entries": false,
+    "marginal_expectancy_by_trade_number": {
+      "first": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.8133333333333366,
+        "net_expectancy_points": -4.813333333333336,
+        "session_count": 45,
+        "trades": 45
+      },
+      "fourth_or_later": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.8514150943396226,
+        "net_expectancy_points": -2.8514150943396226,
+        "session_count": 42,
+        "trades": 2014
+      },
+      "second": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.180681818181817,
+        "net_expectancy_points": -4.180681818181816,
+        "session_count": 44,
+        "trades": 44
+      },
+      "third": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -3.7214285714285698,
+        "net_expectancy_points": -4.72142857142857,
+        "session_count": 42,
+        "trades": 42
+      }
+    },
+    "overlapping_positions_proxy": 1923,
+    "repeated_entries_within_same_structural_episode": 500,
+    "repeated_same_direction_entries": 2061,
+    "time_between_trades_minutes": {
+      "ci95_high": 5.390330547030255,
+      "ci95_low": 4.214431357731649,
+      "mean": 4.802380952380952,
+      "n": 2100,
+      "std": 13.74654858315834
+    },
+    "trades_per_episode": {
+      "ci95_high": 3.7657307722485354,
+      "ci95_low": 3.5178006369195463,
+      "mean": 3.641765704584041,
+      "n": 589,
+      "std": 1.5349735553945576
+    },
+    "trades_per_session": {
+      "ci95_high": 56.15977155869942,
+      "ci95_low": 39.17356177463391,
+      "mean": 47.666666666666664,
+      "n": 45,
+      "std": 29.068101855032527
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "clustered_signal_episode_count": 1844,
+    "duplicate_suppression_effectiveness": "frozen contract suppresses exact contract-timestamp duplicates only; structural episode repeats remain",
+    "losses_concentrated_in_repeated_entries": false,
+    "marginal_expectancy_by_trade_number": {
+      "first": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -4.249999999999998,
+        "net_expectancy_points": -5.249999999999998,
+        "session_count": 81,
+        "trades": 81
+      },
+      "fourth_or_later": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.4315409949731323,
+        "net_expectancy_points": -1.4315409949731326,
+        "session_count": 79,
+        "trades": 5769
+      },
+      "second": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -6.598749999999998,
+        "net_expectancy_points": -7.598749999999998,
+        "session_count": 80,
+        "trades": 80
+      },
+      "third": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -5.638125,
+        "net_expectancy_points": -6.638125,
+        "session_count": 80,
+        "trades": 80
+      }
+    },
+    "overlapping_positions_proxy": 5502,
+    "repeated_entries_within_same_structural_episode": 1695,
+    "repeated_same_direction_entries": 5854,
+    "time_between_trades_minutes": {
+      "ci95_high": 4.384640380313392,
+      "ci95_low": 3.888255554920205,
+      "mean": 4.136447967616799,
+      "n": 5929,
+      "std": 9.750416213080461
+    },
+    "trades_per_episode": {
+      "ci95_high": 3.304900526833352,
+      "ci95_low": 3.213537651040834,
+      "mean": 3.259219088937093,
+      "n": 1844,
+      "std": 1.0008388439078328
+    },
+    "trades_per_session": {
+      "ci95_high": 82.05998877245317,
+      "ci95_low": 66.3350729559419,
+      "mean": 74.19753086419753,
+      "n": 81,
+      "std": 36.103123048112614
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "clustered_signal_episode_count": 1197,
+    "duplicate_suppression_effectiveness": "frozen contract suppresses exact contract-timestamp duplicates only; structural episode repeats remain",
+    "losses_concentrated_in_repeated_entries": false,
+    "marginal_expectancy_by_trade_number": {
+      "first": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -1.710493827160495,
+        "net_expectancy_points": -2.7104938271604957,
+        "session_count": 81,
+        "trades": 81
+      },
+      "fourth_or_later": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.24920394875026242,
+        "net_expectancy_points": -1.2492039487502624,
+        "session_count": 81,
+        "trades": 4761
+      },
+      "second": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -3.116666666666667,
+        "net_expectancy_points": -4.116666666666667,
+        "session_count": 81,
+        "trades": 81
+      },
+      "third": {
+        "expiry_count": 19,
+        "gross_expectancy_points": -1.014197530864198,
+        "net_expectancy_points": -2.014197530864198,
+        "session_count": 81,
+        "trades": 81
+      }
+    },
+    "overlapping_positions_proxy": 4480,
+    "repeated_entries_within_same_structural_episode": 1083,
+    "repeated_same_direction_entries": 4847,
+    "time_between_trades_minutes": {
+      "ci95_high": 5.1850414287701865,
+      "ci95_low": 4.400577096519272,
+      "mean": 4.792809262644729,
+      "n": 4923,
+      "std": 14.04112976077596
+    },
+    "trades_per_episode": {
+      "ci95_high": 4.26874247851184,
+      "ci95_low": 4.092159777127258,
+      "mean": 4.180451127819549,
+      "n": 1197,
+      "std": 1.5585084618778762
+    },
+    "trades_per_session": {
+      "ci95_high": 69.1094050203953,
+      "ci95_low": 54.44615053516026,
+      "mean": 61.77777777777778,
+      "n": 81,
+      "std": 33.6656352977335
+    }
+  }
+}

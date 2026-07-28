@@ -1,0 +1,74 @@
+{
+  "absent_expected_paths": [
+    "tests/test_four_strategy_contract_freeze.py",
+    "tests/test_opening_range_retest_temporal_fixture_contract.py",
+    "tests/vwap_reclaim_test_support.py",
+    "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+    "docs/agent_reviews/trend_pullback_input_provenance_v1.json",
+    "docs/agent_reviews/trend_pullback_replay_provenance_boundary.md",
+    "docs/agent_reviews/compression_breakout_input_provenance_v1.json"
+  ],
+  "actual_thesis": "Production checks current distance from ctx.vwap and confirmation metadata or immediate previous_spot_ltp crossing VWAP. It does not itself validate completed-history establishment, hold, duplicate/order/session/symbol integrity, or distinguish rejection from reclaim beyond metadata flags.",
+  "approved_spec_found": false,
+  "authority_register": [
+    {
+      "authority_id": "A_PROFILE",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "frozen strategy profile thresholds",
+      "limitations": "thresholds only, not full thesis",
+      "source_path": "core/strategy_parameter_profiles.py:106",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "all four"
+      ]
+    },
+    {
+      "authority_id": "A_REGIME",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "movement regime scoring from StrategyContext",
+      "limitations": "heuristic production owner, not approved thesis",
+      "source_path": "core/movement_regime.py:183",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "trend_pullback_v1",
+        "compression_breakout_v1",
+        "vwap_reclaim_rejection_v1"
+      ]
+    },
+    {
+      "authority_id": "A_ORB_REPLAY",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "expanding typical-price VWAP proxy, TR, ATR 14, ATR short 5, ATR long 30, first-15 ORB",
+      "limitations": "research proxy, not exact live tick/option truth",
+      "source_path": "core/orb_ohlcv_validation.py:129",
+      "source_type": "replay_owner",
+      "strategies_affected": [
+        "opening_range_retest_v1",
+        "compression_breakout_v1"
+      ]
+    },
+    {
+      "authority_id": "A_TR",
+      "authority_level": "LEVEL_3",
+      "exact_formula": "max(high-low, abs(high-prev_close), abs(low-prev_close))",
+      "limitations": "ATR smoothing variant still owner-defined",
+      "source_path": "task canonical TRUE RANGE formula",
+      "source_type": "canonical_indicator_definition",
+      "strategies_affected": [
+        "compression_breakout_v1",
+        "movement_regime"
+      ]
+    }
+  ],
+  "design_ambiguities": [
+    "Intended VWAP owner and whether metadata flags are authoritative are unresolved because test support/provenance files are absent. Rejection sequence semantics require design approval."
+  ],
+  "no_forward_returns_calculated": true,
+  "no_pnl_used": true,
+  "objective_defects": [],
+  "reachability": "The distance gate is theoretically reachable for FRACTION units between 0.00035 and 0.0035; edge testing readiness depends on freezing a history/VWAP owner and temporal sequence.",
+  "repository_modified": false,
+  "strategy": "vwap_reclaim_rejection_v1",
+  "variable_matrix_note": "See production line citations in findings; all _pct consumer gates use FRACTION except range_width_pct in regime/profile uses PERCENTAGE_POINTS.",
+  "verdict": "VWAP_RECLAIM_STRATEGY_INTENT_AMBIGUOUS"
+}

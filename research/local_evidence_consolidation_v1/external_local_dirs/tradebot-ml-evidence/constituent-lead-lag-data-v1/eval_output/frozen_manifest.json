@@ -1,0 +1,14 @@
+{
+  "bars_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/upstox_v3/underlying/aggregated_bars.parquet",
+  "bars_sha256": "690295d1bfbc2fde9dcd7c4e26b24b6d80f45684096b6ec0ff7709c59d2f860c",
+  "weights_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/normalized/point_in_time_weights_proxy.csv",
+  "weights_sha256": "9fc3393af3f524c1365ea07bf53b0aaa1c3a8a2ec0319cafd2d3ab2afc64121a",
+  "strategy_source_sha256": "mock_hash",
+  "runner_source_sha256": "mock_hash",
+  "thresholds": "frozen_v1",
+  "decision_times": "frozen_v1",
+  "cost_bps": 5,
+  "delay_rules": "one_bar_delay",
+  "control_rules": "matched_no_lead",
+  "eligible_date_range": "UNKNOWN"
+}

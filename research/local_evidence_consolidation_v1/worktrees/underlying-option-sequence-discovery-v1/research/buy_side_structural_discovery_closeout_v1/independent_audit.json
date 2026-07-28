@@ -1,0 +1,15 @@
+{
+  "checks": {
+    "all_major_campaigns_represented": true,
+    "all_statuses_exact": true,
+    "negative_evidence_preserved": true,
+    "no_algotest_use": true,
+    "no_new_strategy_introduced": true,
+    "no_outcome_reinterpreted": true,
+    "no_production_modifications": true,
+    "no_provider_calls": true,
+    "objective_reopen_conditions": true,
+    "superseded_artifacts_marked": true
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,143 @@
+Sun Jul 19 02:25:13 IST 2026
+From https://github.com/ramgolladi1503-sys/tradebot
+   c83c87e3..4d4cf0a8  main       -> origin/main
+Auto packing the repository in background for optimum performance.
+See "git help gc" for manual housekeeping.
+warning: The last gc run reported the following. Please correct the root cause
+and remove .git/gc.log.
+Automatic cleanup will not be performed until the file is removed.
+
+warning: There are too many unreachable loose objects; run 'git prune' to remove them.
+
+worktree /Users/madhuram/tradebot
+HEAD ebf0c59dcc8fa8d9bb57572c5331282dd89e473b
+branch refs/heads/data/combined-upstox-20260714
+
+worktree /private/tmp/orb_owner_audit
+HEAD c8067877dc004f21aa2e4506643fbeb164d46588
+branch refs/heads/fix/opening-range-retest-owner-integration
+
+worktree /private/tmp/tradebot-four-strategy-baseline
+HEAD 0d0a5301e0f623a3a12f67ef19acbffa5997e3b3
+detached
+
+worktree /private/tmp/tradebot-vwap-final-focused-verification.haa5su
+HEAD 64ddb80ead530dd668b8cb65840bc61b2aa5e8a1
+branch refs/heads/audit/vwap-final-focused-verification
+
+worktree /private/tmp/tradebot-vwap-final-frozen-controls.pjBm9i
+HEAD 64ddb80ead530dd668b8cb65840bc61b2aa5e8a1
+branch refs/heads/audit/vwap-final-frozen-controls
+
+worktree /Users/madhuram/.antigravity/worktrees/tradebot/feed-reconnect-resource-soak
+HEAD e8de8aeb2564ac647a2d5b1c3af1c0f1f997f80c
+branch refs/heads/agent/antigravity-feed-reconnect-resource-soak
+
+worktree /Users/madhuram/.codex/worktrees/tradebot-orb-owner-main-compat
+HEAD 58881fd873c307df3adaa5402ed27936573a1873
+branch refs/heads/audit/orb-owner-main-compat
+
+worktree /Users/madhuram/.codex/worktrees/tradebot/feed-websocket-reconnect-854c
+HEAD 854c12fbbaa0677774f26801ea1620c9d1b281c5
+detached
+
+worktree /Users/madhuram/.codex/worktrees/tradebot/feed-websocket-reconnect-baseline
+HEAD 501e4ca0714a5432f001f11a2da51ba7155b0242
+detached
+
+worktree /Users/madhuram/.codex/worktrees/tradebot/orb-context-cycle-cutoff
+HEAD daef00eeab6c7aede9873d7015627a0d8858810c
+branch refs/heads/fix/orb-context-cycle-cutoff
+
+worktree /Users/madhuram/.config/superpowers/worktrees/tradebot/candidate-lineage-ledger-hardening
+HEAD c778801b7648963d47160a9923665e88b6fc3d7d
+detached
+
+worktree /Users/madhuram/tradebot-opening-range-retest-causal-replay
+HEAD a4b338ca913b703ed35c4772fea8d9e2c3d33894
+branch refs/heads/research/opening-range-retest-causal-replay
+
+worktree /Users/madhuram/tradebot-opening-state-momentum-research
+HEAD c8854b936792b1c0345a17f44837301c4d0d70c9
+branch refs/heads/research/opening-state-momentum-edge
+
+worktree /Users/madhuram/tradebot-orb-certifying-merge
+HEAD a255568ec5a737afd490d10efae984fbdf344160
+branch refs/heads/agent/orb-certifying-merge
+
+worktree /Users/madhuram/tradebot-orb-full-suite-baseline-audit-1784222170
+HEAD 730bd9ae6dfdebb8ed21919954a0c57ebf458ba6
+detached
+
+worktree /Users/madhuram/tradebot-orb-main-baseline-check
+HEAD 58881fd873c307df3adaa5402ed27936573a1873
+detached
+
+worktree /Users/madhuram/tradebot-orb-oracle-hardening
+HEAD 95b22b38eca525eb507eba3d527ace6de296dd28
+branch refs/heads/agent/orb-oracle-hardening
+
+worktree /Users/madhuram/tradebot-orb-owner-caller-audit-1784222170
+HEAD c8067877dc004f21aa2e4506643fbeb164d46588
+detached
+
+worktree /Users/madhuram/tradebot-orb-owner-caller-inventory
+HEAD 03cd2c56a91636ad549e73dc5555a96aa523cce3
+branch refs/heads/ram/orb-owner-caller-inventory
+
+worktree /Users/madhuram/tradebot-orb-owner-evidence-audit-1784222170
+HEAD c8067877dc004f21aa2e4506643fbeb164d46588
+detached
+
+worktree /Users/madhuram/tradebot-orb-owner-exactly-once-audit-1784222170
+HEAD c8067877dc004f21aa2e4506643fbeb164d46588
+detached
+
+worktree /Users/madhuram/tradebot-orb-postmerge-audit-fix
+HEAD a37b04bb24f0c48dfdbc4e46ee247afc6015c5bf
+branch refs/heads/fix/orb-postmerge-audit-metadata
+
+worktree /Users/madhuram/tradebot-orb-postmerge-final-verification
+HEAD ee64f2b622334b6392e29bfe16de96434d7f7bd3
+branch refs/heads/docs/orb-postmerge-final-verification
+
+worktree /Users/madhuram/tradebot-orb-postmerge-verification
+HEAD e305113bce01389628eb1bc49173824838848699
+branch refs/heads/fix/orb-merged-partition-assignments
+
+worktree /Users/madhuram/tradebot-restart-persistence
+HEAD ebe904eaec4f864186ccb49a67b88cbd2c3db8ab
+branch refs/heads/fix/restart-persistence-signal-id
+
+worktree /Users/madhuram/tradebot-strategy-atr-contract
+HEAD 272b80774a0d0afed951783d2eddc40d81e61494
+branch refs/heads/fix/strategy-truth-atr-contract
+
+worktree /Users/madhuram/tradebot-strategy-outcomes-foundation
+HEAD 2219b0a6aa7294e2ff4124a80b5c7b182bd220ca
+branch refs/heads/research/strategy-outcomes-foundation
+
+worktree /Users/madhuram/tradebot-strategy-phase3b
+HEAD 5d11ce2b0a5e16962fd6b6fb4f6ada0823c17f7f
+branch refs/heads/fix/strategy-truth-phase3b
+
+worktree /Users/madhuram/tradebot-strategy-phase3b-integrated
+HEAD c5fa5079d18ceca58d8ab8a18a64a7e1b8e8abe7
+branch refs/heads/fix/strategy-truth-phase3b-integrated
+
+worktree /Users/madhuram/tradebot-strategy-replay-foundation
+HEAD 5d03491b74e383b84ce3cd3adbe3e127a2d0ad8a
+branch refs/heads/research/strategy-replay-foundation
+
+worktree /Users/madhuram/tradebot-trend-provenance-boundary
+HEAD 123b862e0060c133d160a768904662d1ddb8ff9c
+branch refs/heads/docs/trend-pullback-provenance-boundary
+
+worktree /Users/madhuram/tradebot-trend-pullback-causal-replay
+HEAD cb55ebd28a1217d78fce3c9dd199badcb548024e
+branch refs/heads/research/trend-pullback-causal-replay
+
+worktree /Users/madhuram/tradebot_isolated
+HEAD daf6c56f35ac1212b10434cd0816b05e963b6dd4
+detached
+

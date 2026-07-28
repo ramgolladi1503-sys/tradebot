@@ -1,0 +1,11 @@
+{
+  "cost_points_per_trade": 1.5,
+  "frozen_before_candidate_scoring": true,
+  "windows_minutes": [
+    5,
+    10,
+    15,
+    30,
+    60
+  ]
+}

@@ -1,0 +1,1 @@
+Structural Pattern Suite v4 executed as research only. It corrects the Kite legal-entry boundary and occurrence denominators, but fails closed for final prove-or-kill certification because Aeron7 parsing, true independent oracle reconstruction, and real matched controls are not complete.

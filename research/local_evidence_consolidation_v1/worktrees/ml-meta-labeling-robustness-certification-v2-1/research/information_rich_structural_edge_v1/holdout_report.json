@@ -1,0 +1,48 @@
+{
+  "hypotheses": {
+    "IRSEV1_H1": {
+      "development_sessions": 264,
+      "development_trades": 48270,
+      "expiries": 25,
+      "gross_expectancy": -0.5091612,
+      "max_drawdown": -38728.58000000013,
+      "max_expiry_share": 0.07856,
+      "max_month_share": 0.23432,
+      "net_expectancy": -1.5091611999999999,
+      "profit_factor": 0.8620276157382377,
+      "sessions": 115,
+      "trades": 25000,
+      "win_rate": 0.36636
+    },
+    "IRSEV1_H2": {
+      "development_sessions": 266,
+      "development_trades": 48269,
+      "expiries": 25,
+      "gross_expectancy": -0.7286123293338851,
+      "max_drawdown": -42350.960000000174,
+      "max_expiry_share": 0.08158874637980969,
+      "max_month_share": 0.22014894497310716,
+      "net_expectancy": -1.7286123293338849,
+      "profit_factor": 0.8285299235897227,
+      "sessions": 115,
+      "trades": 24170,
+      "win_rate": 0.3205626810095159
+    },
+    "IRSEV1_H3": {
+      "development_sessions": 267,
+      "development_trades": 49330,
+      "expiries": 25,
+      "gross_expectancy": 0.5676350980032974,
+      "max_drawdown": -11012.209999999952,
+      "max_expiry_share": 0.04703242352079135,
+      "max_month_share": 0.19403736948159003,
+      "net_expectancy": -0.43236490199670263,
+      "profit_factor": 0.9429093372977612,
+      "sessions": 115,
+      "trades": 21836,
+      "win_rate": 0.3574830555046712
+    }
+  },
+  "semantic_hash": "a93f8088922a064b98ba3a5314b46abf7b136ef49096389a9296c3c9deb89d65",
+  "status": "RUN"
+}

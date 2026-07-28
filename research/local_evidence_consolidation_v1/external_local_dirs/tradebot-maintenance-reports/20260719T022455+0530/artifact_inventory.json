@@ -1,0 +1,25 @@
+{
+  "tmp_artifact_inventory_source": "tmp_artifact_sizes.tsv",
+  "largest_tmp_artifacts": [
+    {
+      "path": "/private/tmp/orb_owner_audit",
+      "size_kib": 276556,
+      "classification": "registered_git_worktree",
+      "action": "preserve"
+    },
+    {
+      "path": "/private/tmp/orb-postmerge-final-140025d8-12shard-1784401606",
+      "size_kib": 8592,
+      "classification": "orb_postmerge_evidence",
+      "action": "preserve"
+    },
+    {
+      "path": "/private/tmp/opening-range-retest-certifying-b-e17b7e54",
+      "size_kib": 7876,
+      "classification": "orb_certification_artifact",
+      "action": "preserve"
+    }
+  ],
+  "safe_replay_artifact_deletion_performed": false,
+  "reason": "The only medium candidate is a git worktree; remaining replay artifacts are too small to materially affect the 20 GiB outcome gate and may be evidence."
+}

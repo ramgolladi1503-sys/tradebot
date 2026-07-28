@@ -1,0 +1,164 @@
+{
+  "samples": [
+    {
+      "decision_time": "09:45",
+      "decision_timestamp": "2024-07-10T09:45:00+05:30",
+      "entry_timestamp": "2024-07-10T09:45:00+05:30",
+      "relative_range_expansion": 0.36641808455645464,
+      "session": "2024-07-10",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "09:45",
+      "decision_timestamp": "2024-07-10T09:45:00+05:30",
+      "entry_timestamp": "2024-07-10T09:45:00+05:30",
+      "relative_range_expansion": -0.36641808455645464,
+      "session": "2024-07-10",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "10:30",
+      "decision_timestamp": "2024-07-10T10:30:00+05:30",
+      "entry_timestamp": "2024-07-10T10:30:00+05:30",
+      "relative_range_expansion": -1.0130631048221643,
+      "session": "2024-07-10",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "10:30",
+      "decision_timestamp": "2024-07-10T10:30:00+05:30",
+      "entry_timestamp": "2024-07-10T10:30:00+05:30",
+      "relative_range_expansion": 1.0130631048221643,
+      "session": "2024-07-10",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "11:30",
+      "decision_timestamp": "2024-07-10T11:30:00+05:30",
+      "entry_timestamp": "2024-07-10T11:30:00+05:30",
+      "relative_range_expansion": -1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "11:30",
+      "decision_timestamp": "2024-07-10T11:30:00+05:30",
+      "entry_timestamp": "2024-07-10T11:30:00+05:30",
+      "relative_range_expansion": 1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "13:00",
+      "decision_timestamp": "2024-07-10T13:00:00+05:30",
+      "entry_timestamp": "2024-07-10T13:00:00+05:30",
+      "relative_range_expansion": -1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "13:00",
+      "decision_timestamp": "2024-07-10T13:00:00+05:30",
+      "entry_timestamp": "2024-07-10T13:00:00+05:30",
+      "relative_range_expansion": 1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "14:00",
+      "decision_timestamp": "2024-07-10T14:00:00+05:30",
+      "entry_timestamp": "2024-07-10T14:00:00+05:30",
+      "relative_range_expansion": -1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "14:00",
+      "decision_timestamp": "2024-07-10T14:00:00+05:30",
+      "entry_timestamp": "2024-07-10T14:00:00+05:30",
+      "relative_range_expansion": 1.506685904433836,
+      "session": "2024-07-10",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "09:45",
+      "decision_timestamp": "2024-07-11T09:45:00+05:30",
+      "entry_timestamp": "2024-07-11T09:45:00+05:30",
+      "relative_range_expansion": 0.35053190736035045,
+      "session": "2024-07-11",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "09:45",
+      "decision_timestamp": "2024-07-11T09:45:00+05:30",
+      "entry_timestamp": "2024-07-11T09:45:00+05:30",
+      "relative_range_expansion": -0.35053190736035045,
+      "session": "2024-07-11",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "10:30",
+      "decision_timestamp": "2024-07-11T10:30:00+05:30",
+      "entry_timestamp": "2024-07-11T10:30:00+05:30",
+      "relative_range_expansion": 0.7039369296767286,
+      "session": "2024-07-11",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "10:30",
+      "decision_timestamp": "2024-07-11T10:30:00+05:30",
+      "entry_timestamp": "2024-07-11T10:30:00+05:30",
+      "relative_range_expansion": -0.7039369296767286,
+      "session": "2024-07-11",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "11:30",
+      "decision_timestamp": "2024-07-11T11:30:00+05:30",
+      "entry_timestamp": "2024-07-11T11:30:00+05:30",
+      "relative_range_expansion": 0.9087842176694076,
+      "session": "2024-07-11",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "11:30",
+      "decision_timestamp": "2024-07-11T11:30:00+05:30",
+      "entry_timestamp": "2024-07-11T11:30:00+05:30",
+      "relative_range_expansion": -0.9087842176694076,
+      "session": "2024-07-11",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "13:00",
+      "decision_timestamp": "2024-07-11T13:00:00+05:30",
+      "entry_timestamp": "2024-07-11T13:00:00+05:30",
+      "relative_range_expansion": 0.7811413045918821,
+      "session": "2024-07-11",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "13:00",
+      "decision_timestamp": "2024-07-11T13:00:00+05:30",
+      "entry_timestamp": "2024-07-11T13:00:00+05:30",
+      "relative_range_expansion": -0.7811413045918821,
+      "session": "2024-07-11",
+      "symbol": "NIFTY"
+    },
+    {
+      "decision_time": "14:00",
+      "decision_timestamp": "2024-07-11T14:00:00+05:30",
+      "entry_timestamp": "2024-07-11T14:00:00+05:30",
+      "relative_range_expansion": 0.7811413045918821,
+      "session": "2024-07-11",
+      "symbol": "BANKNIFTY"
+    },
+    {
+      "decision_time": "14:00",
+      "decision_timestamp": "2024-07-11T14:00:00+05:30",
+      "entry_timestamp": "2024-07-11T14:00:00+05:30",
+      "relative_range_expansion": -0.7811413045918821,
+      "session": "2024-07-11",
+      "symbol": "NIFTY"
+    }
+  ]
+}

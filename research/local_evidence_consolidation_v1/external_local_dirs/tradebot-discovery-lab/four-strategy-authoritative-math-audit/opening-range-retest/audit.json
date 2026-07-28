@@ -1,0 +1,90 @@
+{
+  "absent_expected_paths": [
+    "tests/test_four_strategy_contract_freeze.py",
+    "tests/test_opening_range_retest_temporal_fixture_contract.py",
+    "tests/vwap_reclaim_test_support.py",
+    "docs/agent_reviews/four_strategy_contract_bundle_v1.json",
+    "docs/agent_reviews/trend_pullback_input_provenance_v1.json",
+    "docs/agent_reviews/trend_pullback_replay_provenance_boundary.md",
+    "docs/agent_reviews/compression_breakout_input_provenance_v1.json"
+  ],
+  "actual_thesis": "Production is a single completed-context breakout-near-boundary snapshot gated by minutes_since_open, spot, vwap, orb_high/orb_low; it does not encode prior breakout event, later retest event, hold event, or resume event as separate temporal stages.",
+  "approved_spec_found": false,
+  "authority_register": [
+    {
+      "authority_id": "A_PROFILE",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "frozen strategy profile thresholds",
+      "limitations": "thresholds only, not full thesis",
+      "source_path": "core/strategy_parameter_profiles.py:106",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "all four"
+      ]
+    },
+    {
+      "authority_id": "A_REGIME",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "movement regime scoring from StrategyContext",
+      "limitations": "heuristic production owner, not approved thesis",
+      "source_path": "core/movement_regime.py:183",
+      "source_type": "production_contract",
+      "strategies_affected": [
+        "trend_pullback_v1",
+        "compression_breakout_v1",
+        "vwap_reclaim_rejection_v1"
+      ]
+    },
+    {
+      "authority_id": "A_ORB_REPLAY",
+      "authority_level": "LEVEL_2",
+      "exact_formula": "expanding typical-price VWAP proxy, TR, ATR 14, ATR short 5, ATR long 30, first-15 ORB",
+      "limitations": "research proxy, not exact live tick/option truth",
+      "source_path": "core/orb_ohlcv_validation.py:129",
+      "source_type": "replay_owner",
+      "strategies_affected": [
+        "opening_range_retest_v1",
+        "compression_breakout_v1"
+      ]
+    },
+    {
+      "authority_id": "A_TR",
+      "authority_level": "LEVEL_3",
+      "exact_formula": "max(high-low, abs(high-prev_close), abs(low-prev_close))",
+      "limitations": "ATR smoothing variant still owner-defined",
+      "source_path": "task canonical TRUE RANGE formula",
+      "source_type": "canonical_indicator_definition",
+      "strategies_affected": [
+        "compression_breakout_v1",
+        "movement_regime"
+      ]
+    }
+  ],
+  "design_ambiguities": [
+    "Approved Level-1 temporal ORB retest contract absent; ORB duration and retest confirmation details require human approval if not already accepted elsewhere."
+  ],
+  "no_forward_returns_calculated": true,
+  "no_pnl_used": true,
+  "objective_defects": [
+    {
+      "authority_level": "LEVEL_4",
+      "baseline": "provisional thesis requires break -> retest same boundary -> hold -> resume causal stages",
+      "current_rule": "candidate if current spot is on/just outside ORB boundary and aligned with VWAP inside minute window",
+      "defect_classification": "IMPLEMENTATION_DIVERGES_FROM_INTENT",
+      "difference": "no stored breakout time, retest time, hold candle, or continuation candle",
+      "line_range": "26-53,56-79",
+      "production_file": "strategies/movement/opening_range_breakout.py",
+      "proof_no_pnl_used": true,
+      "repair_authority": "OBJECTIVE_REPAIR",
+      "smallest_proposed_correction": "add explicit causal stage identity inputs or rename strategy as snapshot breakout-near-boundary variant",
+      "strategy": "opening_range_retest_v1",
+      "variable_or_equation": "temporal ORB retest stages",
+      "why_changes_meaning": "a snapshot near ORB can be labelled retest without proving a prior breakout and later retest sequence"
+    }
+  ],
+  "reachability": "The current snapshot gate is theoretically reachable; true temporal retest reachability cannot be assessed because stages are not represented.",
+  "repository_modified": false,
+  "strategy": "opening_range_retest_v1",
+  "variable_matrix_note": "See production line citations in findings; all _pct consumer gates use FRACTION except range_width_pct in regime/profile uses PERCENTAGE_POINTS.",
+  "verdict": "ORB_OBJECTIVE_DEFECTS_REQUIRE_REPAIR"
+}

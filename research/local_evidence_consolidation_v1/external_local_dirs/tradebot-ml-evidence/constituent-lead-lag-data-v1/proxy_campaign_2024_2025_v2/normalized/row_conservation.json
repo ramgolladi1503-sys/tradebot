@@ -1,0 +1,10 @@
+{
+  "conflicting_duplicates_rejected": 0,
+  "identical_duplicates_collapsed": 0,
+  "invalid_ohlc_quarantined": 9,
+  "malformed": 0,
+  "normalized_accepted": 2532066,
+  "out_of_window": 0,
+  "raw_rows": 2532075,
+  "row_conservation_passed": true
+}

@@ -1,0 +1,260 @@
+{
+  "raw_artifact_hashes": {
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-12_2026-05-18.json": "e33dd63b743a019bfd70c62d6da40e57a634f657373e9866d9a357daeabdce3a",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-19_2026-05-25.json": "1cff2189618fced11b22bf9caca040ae788719fc16f72e4621bbdab2186769d3",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-26_2026-06-01.json": "1c34a5fa99cf58948133636729ceb35e4f2adc58f98c2c4af994366d84dde997",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-02_2026-06-08.json": "13fb0b28bde498419543af8b95710b53d7d9d276a21db0af8c0f88da67a894a2",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-09_2026-06-15.json": "5e8749f59873efb67750cbdaa9ab4ab6d9019a1ab1142039d1324c02c1bdcd0d",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-16_2026-06-22.json": "19069d5185b06ea52adfc5d4e19c4f547105bc74446340f5f72cbea33e3ab15f",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-23_2026-06-29.json": "11723928e50a0632331ac691036e1f18fad1d230cd9364794b119896e9be28d4",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-30_2026-07-06.json": "cc7868a39036b755e204f39e08a97b8e818eea21936b5bb0ac44a6f8c9e6131b",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-07_2026-07-13.json": "bab97279312d17ec4cfc5b114dbe370c9819cd1dd8d4433c84c12262c50ae0e2",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-14_2026-07-20.json": "99a6d480ada0121c7daffd57c1b2279766d9fcee98fd09680d7244014bbaaa5c",
+    "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-21_2026-07-21.json": "f1b5890680bed4f976c8e070fd5330f0d7aa6d3d5c6fbffdb2a030fb1d18f7fc"
+  },
+  "semantic_hash": "4bb35ad9d44a3f510e1c25eac5d1e845a31e767cba7e5f5aa42b0406bf9c1f44",
+  "sidecars": [
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-05-12",
+        "2026-05-18"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-12_2026-05-18.json",
+      "request_timestamp": "2026-07-28T13:16:21+00:00",
+      "response_hash": "e33dd63b743a019bfd70c62d6da40e57a634f657373e9866d9a357daeabdce3a",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "5452fb9209d9ac68469b89546e002a63b43cebdfe395604790aee7612290a61a"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-05-19",
+        "2026-05-25"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-19_2026-05-25.json",
+      "request_timestamp": "2026-07-28T13:16:21+00:00",
+      "response_hash": "1cff2189618fced11b22bf9caca040ae788719fc16f72e4621bbdab2186769d3",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "6a8c9f55e54ea3fab9977fb4efe91c8dbad06521f68ebedf41540978f00b2880"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-05-26",
+        "2026-06-01"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-05-26_2026-06-01.json",
+      "request_timestamp": "2026-07-28T13:16:22+00:00",
+      "response_hash": "1c34a5fa99cf58948133636729ceb35e4f2adc58f98c2c4af994366d84dde997",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1500,
+      "semantic_hash": "0831ab52ea5bdc6a635608ea2390009febfab0b35010a754d41afd0923967d74"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-06-02",
+        "2026-06-08"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-02_2026-06-08.json",
+      "request_timestamp": "2026-07-28T13:16:22+00:00",
+      "response_hash": "13fb0b28bde498419543af8b95710b53d7d9d276a21db0af8c0f88da67a894a2",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "197787b2ba3233c3ee8529ab1bc92bbfafdc15006901371e3211e69440be218a"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-06-09",
+        "2026-06-15"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-09_2026-06-15.json",
+      "request_timestamp": "2026-07-28T13:16:23+00:00",
+      "response_hash": "5e8749f59873efb67750cbdaa9ab4ab6d9019a1ab1142039d1324c02c1bdcd0d",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "b0979256a8f23b58da1c1a3aa2a2f4f40515fbc1966706d6f741454319f8b5f6"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-06-16",
+        "2026-06-22"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-16_2026-06-22.json",
+      "request_timestamp": "2026-07-28T13:16:23+00:00",
+      "response_hash": "19069d5185b06ea52adfc5d4e19c4f547105bc74446340f5f72cbea33e3ab15f",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "ca3c5dd2a6300dfacd05bd61df5367ae7943786733863388f6840afe3342550d"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-06-23",
+        "2026-06-29"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-23_2026-06-29.json",
+      "request_timestamp": "2026-07-28T13:16:23+00:00",
+      "response_hash": "11723928e50a0632331ac691036e1f18fad1d230cd9364794b119896e9be28d4",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1500,
+      "semantic_hash": "aad772cda742348870a77d0754942e862a4bd25ab00ee0732c3c1d3d1d7c6974"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-06-30",
+        "2026-07-06"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-06-30_2026-07-06.json",
+      "request_timestamp": "2026-07-28T13:16:24+00:00",
+      "response_hash": "cc7868a39036b755e204f39e08a97b8e818eea21936b5bb0ac44a6f8c9e6131b",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "552e328a1574b7aac5a76857de526fea41ec5a6089a1465d399d80e356c4f06b"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-07-07",
+        "2026-07-13"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-07_2026-07-13.json",
+      "request_timestamp": "2026-07-28T13:16:24+00:00",
+      "response_hash": "bab97279312d17ec4cfc5b114dbe370c9819cd1dd8d4433c84c12262c50ae0e2",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "7575008e865ed44e6723008c7010b76aa404b0abf515c3d38532aaccd7f7dce5"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-07-14",
+        "2026-07-20"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-14_2026-07-20.json",
+      "request_timestamp": "2026-07-28T13:16:25+00:00",
+      "response_hash": "99a6d480ada0121c7daffd57c1b2279766d9fcee98fd09680d7244014bbaaa5c",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 1875,
+      "semantic_hash": "c1dd99644a7394a06066e91e0ac00c96bed9ba19a50fd409a5f63d20d23a2622"
+    },
+    {
+      "contract_symbol": "NIFTY FUT 28 JUL 26",
+      "date_range": [
+        "2026-07-21",
+        "2026-07-21"
+      ],
+      "empty_response": false,
+      "endpoint_name": "v3_historical_candle_minutes_1",
+      "error_class": null,
+      "expiry": "2026-07-28",
+      "http_status": 200,
+      "instrument_key": "NSE_FO|61093",
+      "interval": "1minute",
+      "provider": "upstox",
+      "raw_path": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1/research/nifty_futures_historical_acquisition_v1/raw/NSE_FO_61093/2026-07-21_2026-07-21.json",
+      "request_timestamp": "2026-07-28T13:16:25+00:00",
+      "response_hash": "f1b5890680bed4f976c8e070fd5330f0d7aa6d3d5c6fbffdb2a030fb1d18f7fc",
+      "result_status": "HTTP_OK",
+      "retry_count": 0,
+      "row_count": 375,
+      "semantic_hash": "30b15964c52d10b58d20ca846dac9b183813ab6a787ecce56a505c2e8955443f"
+    }
+  ]
+}

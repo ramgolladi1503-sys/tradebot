@@ -1,0 +1,19 @@
+{
+  "classification": "INVALID_IMPLEMENTATION_EVIDENCE",
+  "not_usable_for": [
+    "edge claims",
+    "strategy ranking",
+    "production readiness"
+  ],
+  "reason": [
+    "no real candidate reconstruction",
+    "no outcomes",
+    "no WFA",
+    "no controls",
+    "no executed oracle mutations",
+    "no real option replay"
+  ],
+  "usable_for": [
+    "code-contract provenance only"
+  ]
+}

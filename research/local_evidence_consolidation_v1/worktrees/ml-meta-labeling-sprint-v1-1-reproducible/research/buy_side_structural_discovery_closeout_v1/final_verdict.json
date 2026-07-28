@@ -1,0 +1,14 @@
+{
+  "algotest_used": false,
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "exact_next_action": "Keep all discovered BUY-only mechanisms disabled. Reopen research only after an objective condition in reopen_conditions.json is independently certified.",
+  "final_commit": null,
+  "final_verdict": "BUY_SIDE_DISCOVERY_CAMPAIGN_CLOSED",
+  "is_order_action": false,
+  "new_strategy_discovered": false,
+  "production_modified": false,
+  "read_only": true,
+  "source_commit": "4de05576f49313ea28e5ea353759e1dd0bf6388b",
+  "thresholds_tuned": false
+}

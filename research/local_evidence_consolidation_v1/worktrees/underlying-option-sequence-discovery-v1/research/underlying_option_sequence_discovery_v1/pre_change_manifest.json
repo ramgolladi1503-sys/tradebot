@@ -1,0 +1,19 @@
+{
+  "branch": "research/underlying-option-sequence-discovery-v1",
+  "broker_calls": false,
+  "clean_status_at_start": false,
+  "input_hashes": {
+    "expiry_map_hash": "15d212f452b6557ece8435a60bb674e51f0fb88ef2b6892c7c810f94425a9f6e",
+    "option_input_hash": "3e30d3273b7c0498cf0bb28abc2b30e7ae1c3cc0fb1dbc7823f2dbbab3008be3",
+    "prior_blocked_input_audit_hash": "414e744f189061207b591a790ac60f74410385aefee58793cd4f2dcb0d401cc5",
+    "prior_closeout_registry_hash": "c2194fd6db4d6e10fab43bb9f9f5a46ed3e0375e814bf1f218a021df2ff4579a",
+    "sparse_bar_policy_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+    "strike_map_hash": "332b78126d61fe4e7a9bb4aa765af753c8eb7d150c66b1157e43e766a16e14b0",
+    "underlying_input_hash": "3e27a2404360f173b5999832a5fa2d5382bfff60ecc3459d0750ae0a3a8b97fb"
+  },
+  "production_changes": false,
+  "provider_acquisition": false,
+  "semantic_hash": "17386598ef74c1497e553f99879188405c1be09999dc925f10eb6e379733b1b5",
+  "source_commit": "e857a451ff7b93c76a63c2bd7b3d8bf17f499b6c",
+  "worktree": "/Users/madhuram/tradebot-underlying-option-sequence-discovery-v1"
+}

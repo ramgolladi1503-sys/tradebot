@@ -1,0 +1,23 @@
+{
+  "artifact": "lane_authoritative_math_audit_v2",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "backtest_performed": "NO",
+  "current_main_summary": "Entry point validates completed 1m history, builds OR from first 15 bars, scans breakout then retest then terminal continuation; stale snapshot claim is superseded.",
+  "design_ambiguities": [],
+  "forward_returns_calculated": "NO",
+  "mathematical_readiness": false,
+  "no_future_returns": true,
+  "objective_defects": [
+    "retest_distance_pct is computed from breakout_bar.close rather than retest_bar.close, so the evidence/scoring name does not match the retest event."
+  ],
+  "parameter_tuning_performed": "NO",
+  "repository_modified": "NO",
+  "source_refs": [
+    "strategies/movement/opening_range_breakout.py:91",
+    "strategies/movement/opening_range_breakout.py:119",
+    "strategies/movement/opening_range_breakout.py:355",
+    "strategies/movement/opening_range_breakout.py:405"
+  ],
+  "strategy": "opening_range_retest",
+  "verdict": "ORB_OBJECTIVE_DEFECTS_REQUIRE_REPAIR"
+}

@@ -1,0 +1,19 @@
+{
+  "classification": "SUPPORTED_REDUCED_UNDERLYING_OPTION_CANDLES",
+  "expiries": 82,
+  "joint_rows": 392006,
+  "option_contracts": 1198,
+  "phrase": "candle-derived underlying-option interaction",
+  "semantic_hash": "3cf0a72c2c19aa20aef6187eccaa870ad08c8721188c7a6796f3cdb5c7752213",
+  "sessions": 382,
+  "unsupported_exclusions": [
+    "constituent breadth",
+    "sector participation",
+    "heavyweight concentration",
+    "bid/ask spread",
+    "order-book imbalance",
+    "IV surface",
+    "Greeks",
+    "futures basis"
+  ]
+}

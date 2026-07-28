@@ -1,0 +1,8 @@
+{
+  "exact_next_action": "Certify a point-in-time NIFTY constituent membership/weight and sector dataset, or rerun a sequence campaign without breadth claims and with explicit reduced-scope authorization.",
+  "final_verdict": "CONSTITUENT_OR_OPTION_INPUTS_INSUFFICIENT",
+  "pnl_or_backtest_allowed": false,
+  "reason": "Constituent breadth inputs are not independently certified as point-in-time NIFTY membership/weights, and true microstructure/IV/Greeks remain unsupported. Motif discovery and outcomes were not run.",
+  "semantic_hash": "2383e668126807867bbbc8e88150a9c75256aa5d97d3074afc6d3d6b6430a0ac",
+  "strategy_discovery_allowed": false
+}

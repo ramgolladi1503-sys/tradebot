@@ -1,0 +1,12 @@
+{
+  "materially_similar_to_best": false,
+  "semantic_hash": "8b97cb9f92c0835caf9cc3ecbf5b1d92c842ca532dc92f463aea3c22ac381769",
+  "validation": {
+    "brier": 0.26208135275414407,
+    "log_loss": 0.7179241869037759,
+    "positive_rate": 0.11693210393964795,
+    "pr_auc": 0.09515989457772901,
+    "roc_auc": 0.4201713693729555,
+    "rows": 2386
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "eligible_accepted_sessions": 491,
+  "strategies": {
+    "GAP_GO_LEADER_V1": {
+      "candidate_rows": 39,
+      "candidate_sessions": 39,
+      "eligible_accepted_sessions": 491,
+      "no_signal_sessions": 452,
+      "occurrence_probability_by_session": 0.07942973523421588,
+      "occurrence_probability_by_symbol_session": 0.03971486761710794,
+      "rejected_sessions": 0
+    },
+    "LATE_DAY_PERSISTENCE_V1": {
+      "candidate_rows": 296,
+      "candidate_sessions": 208,
+      "eligible_accepted_sessions": 491,
+      "no_signal_sessions": 283,
+      "occurrence_probability_by_session": 0.42362525458248473,
+      "occurrence_probability_by_symbol_session": 0.3014256619144603,
+      "rejected_sessions": 0
+    },
+    "PRIOR_RANGE_LEADER_V1": {
+      "candidate_rows": 113,
+      "candidate_sessions": 111,
+      "eligible_accepted_sessions": 491,
+      "no_signal_sessions": 380,
+      "occurrence_probability_by_session": 0.22606924643584522,
+      "occurrence_probability_by_symbol_session": 0.11507128309572301,
+      "rejected_sessions": 0
+    }
+  }
+}

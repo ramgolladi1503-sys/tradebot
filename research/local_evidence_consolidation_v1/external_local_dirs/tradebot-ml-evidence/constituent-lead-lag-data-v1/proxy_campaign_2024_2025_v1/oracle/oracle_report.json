@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "bars_sha256": "67fc7fd118f5eaec6470e9b2ccb8b37fa3429a9159ab87b5b8c366c8ad3821b3",
+  "control_count": 0,
+  "date_range": [
+    "2024-01-01",
+    "2025-08-29"
+  ],
+  "oracle_imports_strategy": false,
+  "reason_counts": {
+    "dispersion_too_high": 658,
+    "frozen_entry_conditions_not_met": 8,
+    "index_already_caught_up": 3166,
+    "index_range_already_consumed": 98,
+    "insufficient_lead_gap_history": 200
+  },
+  "research_only": true,
+  "sessions": 414,
+  "state_rows": 4130,
+  "unweighted_signals": 0,
+  "verdict": "PASS",
+  "weighted_signals": 0
+}

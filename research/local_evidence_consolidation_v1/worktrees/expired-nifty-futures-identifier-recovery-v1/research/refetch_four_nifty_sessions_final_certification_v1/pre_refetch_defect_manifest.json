@@ -1,0 +1,70 @@
+[
+  {
+    "actual_row_count": 374,
+    "authorized_missing_timestamp": "09:42",
+    "duplicate_timestamps": 0,
+    "expected_row_count": 375,
+    "first_timestamp": "2024-12-12T09:15:00+05:30",
+    "last_timestamp": "2024-12-12T15:29:00+05:30",
+    "malformed_rows": 0,
+    "ohlc_violations": 0,
+    "original_hash": "a1010777a9cbf9cafd8cfa7a0a924b44c3c37123bf08d7cd747a968521ea48d4",
+    "original_path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20241212/underlying/NIFTY_20241212.parquet",
+    "session_date": "2024-12-12",
+    "verification_pass": true,
+    "verified_missing_timestamps": [
+      "09:42"
+    ]
+  },
+  {
+    "actual_row_count": 374,
+    "authorized_missing_timestamp": "10:42",
+    "duplicate_timestamps": 0,
+    "expected_row_count": 375,
+    "first_timestamp": "2025-03-25T09:15:00+05:30",
+    "last_timestamp": "2025-03-25T15:29:00+05:30",
+    "malformed_rows": 0,
+    "ohlc_violations": 0,
+    "original_hash": "abfee8d9caf33a92e71e496feeed8b74a0602aca4f7a50f27bcc94fa659a34c4",
+    "original_path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250325/underlying/NIFTY_20250325.parquet",
+    "session_date": "2025-03-25",
+    "verification_pass": true,
+    "verified_missing_timestamps": [
+      "10:42"
+    ]
+  },
+  {
+    "actual_row_count": 374,
+    "authorized_missing_timestamp": "11:57",
+    "duplicate_timestamps": 0,
+    "expected_row_count": 375,
+    "first_timestamp": "2025-04-04T09:15:00+05:30",
+    "last_timestamp": "2025-04-04T15:29:00+05:30",
+    "malformed_rows": 0,
+    "ohlc_violations": 0,
+    "original_hash": "b58d9c786cd0c7ec6b5cb39b667e1f9e141be43290996fb762bf54537e2c5561",
+    "original_path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250404/underlying/NIFTY_20250404.parquet",
+    "session_date": "2025-04-04",
+    "verification_pass": true,
+    "verified_missing_timestamps": [
+      "11:57"
+    ]
+  },
+  {
+    "actual_row_count": 374,
+    "authorized_missing_timestamp": "10:36",
+    "duplicate_timestamps": 0,
+    "expected_row_count": 375,
+    "first_timestamp": "2025-04-23T09:15:00+05:30",
+    "last_timestamp": "2025-04-23T15:29:00+05:30",
+    "malformed_rows": 0,
+    "ohlc_violations": 0,
+    "original_hash": "e107766853f113bbdb8162698b53982aa6f612b29a9fbec44a32366065ee2bab",
+    "original_path": "/Users/madhuram/tradebot/runtime/upstox_candidate_replay/20250423/underlying/NIFTY_20250423.parquet",
+    "session_date": "2025-04-23",
+    "verification_pass": true,
+    "verified_missing_timestamps": [
+      "10:36"
+    ]
+  }
+]

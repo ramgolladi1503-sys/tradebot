@@ -1,0 +1,37 @@
+{
+  "allowed_for_live_execution": false,
+  "best_candidate": {
+    "average_loss": -87.7564516129036,
+    "average_win": 92.13584905660399,
+    "candidate_id": "SEDV3_1c0b38601852",
+    "charges": 126.0,
+    "gross_pnl": 2288.75,
+    "mae_mean": 77.13690476190546,
+    "max_drawdown": -588.1000000000276,
+    "mfe_mean": 114.00535714285668,
+    "month_breakdown": {
+      "2024-07": 1761.5500000000102,
+      "2024-08": 401.1999999999898
+    },
+    "net_expectancy": 25.74702380952381,
+    "net_pnl": 2162.75,
+    "profit_factor": 1.7949971512065985,
+    "recovery_factor": 3.677520829790679,
+    "slippage_sensitivity": {
+      "cost_points_per_trade": 1.5,
+      "net_at_2x_cost": 2036.75
+    },
+    "target_count": 53,
+    "timeout_count": 31,
+    "top10_trade_contribution": 0.9265980811466848,
+    "top5_trade_contribution": 0.5211189457866122,
+    "trade_count": 84,
+    "win_rate": 0.6309523809523809
+  },
+  "blockers": [
+    "candidate_concentration_too_high"
+  ],
+  "broker_api_called": false,
+  "is_order_action": false,
+  "verdict": "FAILED_ROBUSTNESS"
+}

@@ -1,0 +1,20 @@
+{
+  "consumer_contract": "Structural Edge Discovery consumes only research_eligible=true rows.",
+  "inputs": [
+    "observed OHLC",
+    "provider sparse bars",
+    "partial 5-minute buckets",
+    "feature validity",
+    "session validity",
+    "timestamp validity"
+  ],
+  "row_fields": [
+    "research_eligible",
+    "research_eligibility_blockers",
+    "observed_minutes",
+    "expected_minutes",
+    "five_minute_window_complete",
+    "eligible_for_strict_research"
+  ],
+  "status": "PASS"
+}

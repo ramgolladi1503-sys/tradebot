@@ -1,0 +1,10 @@
+{
+  "accepted_precursors": 0,
+  "definitions_tested": 10,
+  "event_clusters": 11261,
+  "event_sessions": 385,
+  "families_tested": 10,
+  "holdout_status": "NOT_OPENED_NO_FROZEN_MECHANISM",
+  "multiplicity_control": "family-count-limited controlled definitions; no grid search; freeze requires lift >= 2, event rate >= 5%, event rate >= 1.25x near-miss rate, >=30 sessions",
+  "principal_verdict": "NO_DISCRIMINATIVE_PRECURSOR_IN_TESTED_FAMILIES"
+}

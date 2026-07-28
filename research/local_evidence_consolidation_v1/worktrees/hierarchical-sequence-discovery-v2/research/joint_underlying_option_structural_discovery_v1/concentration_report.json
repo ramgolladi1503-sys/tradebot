@@ -1,0 +1,24 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "month_count": 21,
+      "top_month_share": 1.1593263966145315
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "month_count": 21,
+      "top_month_share": 1.6101366583066636
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "month_count": 21,
+      "top_month_share": 1.0
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "month_count": 21,
+      "top_month_share": 1.0
+    }
+  ]
+}

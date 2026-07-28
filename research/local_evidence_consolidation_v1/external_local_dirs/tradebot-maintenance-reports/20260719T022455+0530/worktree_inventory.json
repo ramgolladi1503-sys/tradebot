@@ -1,0 +1,21 @@
+{
+  "source": "git worktree list --porcelain",
+  "worktrees_observed": 32,
+  "protected_open_pr_worktrees": [
+    {
+      "path": "/Users/madhuram/tradebot-strategy-outcomes-foundation",
+      "pr": 674,
+      "branch": "research/strategy-outcomes-foundation",
+      "head": "2219b0a6aa7294e2ff4124a80b5c7b182bd220ca",
+      "status": "clean",
+      "action": "preserve"
+    }
+  ],
+  "open_or_active_worktrees_removed": 0,
+  "manual_review_required": true,
+  "notes": [
+    "No worktree removal was performed.",
+    "The /private/tmp/orb_owner_audit path is a registered git worktree and was not removed.",
+    "Detached or stale-looking worktrees were not removed because the full 13-gate removal audit was not completed and safe reclaim would still not satisfy the 20 GiB outcome gate."
+  ]
+}

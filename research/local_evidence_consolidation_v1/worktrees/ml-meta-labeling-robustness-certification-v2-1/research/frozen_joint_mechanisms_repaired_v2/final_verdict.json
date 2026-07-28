@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/frozen-joint-mechanisms-repaired-warehouse-v2",
+  "broker_api_called": false,
+  "exact_next_action": "Do not proceed to AlgoTest; holdout power remains insufficient after repair.",
+  "final_commit": null,
+  "final_verdict": "INSUFFICIENT_POWER_AFTER_REPAIR",
+  "is_order_action": false,
+  "read_only": true,
+  "source_commit": "41c2c92fe40eedcf35a382463de96f21ac67ff0e",
+  "surviving_mechanisms": [],
+  "worktree": "/Users/madhuram/tradebot-frozen-joint-repaired-v2"
+}

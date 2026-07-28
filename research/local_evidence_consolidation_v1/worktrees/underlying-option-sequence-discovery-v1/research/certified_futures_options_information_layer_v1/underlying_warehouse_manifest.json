@@ -1,0 +1,8 @@
+{
+  "row_count": 164745,
+  "semantic_hash": "58402f218cf37ca631966a0b8487285842c1eacae6a95fd0e920deb8f095070e",
+  "session_count": 441,
+  "source_manifest_hash": "fbf74e66664b92712c451769c94da47ef54f73acbadb208e01d3449bd50be192",
+  "status": "MANIFEST_ONLY_REUSED_PRIOR_CERTIFIED_UNDERLYING",
+  "warehouse_built_in_this_task": false
+}

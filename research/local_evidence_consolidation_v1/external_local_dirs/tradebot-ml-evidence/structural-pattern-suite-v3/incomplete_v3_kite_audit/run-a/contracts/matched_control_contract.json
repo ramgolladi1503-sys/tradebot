@@ -1,0 +1,7 @@
+{
+  "minimum_control_quality": "all candidates matched or gate fails",
+  "replacement": "deterministic",
+  "same_decision_time": true,
+  "same_source": true,
+  "same_symbol": true
+}

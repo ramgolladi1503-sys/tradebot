@@ -1,0 +1,10 @@
+{
+  "algotest_used": false,
+  "broker_api_called": false,
+  "entry_rule": "next_observable_bar",
+  "maximum_holding_period": 15,
+  "round_trip_cost_points": 1.0,
+  "same_bar_hindsight": false,
+  "stop_points": 8.0,
+  "target_points": 12.0
+}

@@ -1,0 +1,1 @@
+Structural-state discovery v2 invalidates v1 and consumes the full Kite archive as retrospective data. Hypotheses tested: 893. Final verdict: RETROSPECTIVE_VALIDATED_STATE_CANDIDATE. No untouched holdout or production decision is claimed.

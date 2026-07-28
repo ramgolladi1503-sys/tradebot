@@ -1,0 +1,7 @@
+{
+  "ambiguous": false,
+  "proof": "Kite rows begin at 09:15 IST and advance in exact five-minute increments; UTC 03:45 maps to IST 09:15.",
+  "sample_count": 12,
+  "source_timestamp_meaning": "bar_start",
+  "status": "PASS"
+}

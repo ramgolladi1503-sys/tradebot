@@ -1,0 +1,709 @@
+{
+  "row_count": 37500,
+  "session_count": 100,
+  "session_end": "15:29",
+  "session_start": "09:15",
+  "sidecars": [
+    {
+      "row_count": 375,
+      "semantic_hash": "305b4ca6af6bc31ffb53f71e05e1eb37ec5eef95dd7282067260df32d5f121ec",
+      "session_id": "NIFTY:2024-05-30",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240530/underlying/NIFTY_20240530.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "c2d427696efe25da590157c8a31e87748cdedc5ef4454055402dd258958dc4da",
+      "session_id": "NIFTY:2024-05-31",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240531/underlying/NIFTY_20240531.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "50c5514ae797bed1185e99c6480933a5cdf787fe1db69257d1a5ee7168df9c4e",
+      "session_id": "NIFTY:2024-06-03",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240603/underlying/NIFTY_20240603.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "43934be62d3a2fc9444c656fd4af52ae51d4932c6dd16aa15fc00e6b0242a203",
+      "session_id": "NIFTY:2024-06-04",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240604/underlying/NIFTY_20240604.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "afb69717d4bfaee194bdc18ff1e84c84ecfb3d0860cc157e3c61090816aad52f",
+      "session_id": "NIFTY:2024-06-05",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240605/underlying/NIFTY_20240605.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "1314bf57ffba233b7ea05c4e7a8604c1ae22290d505e4227963db2d0decd30a8",
+      "session_id": "NIFTY:2024-06-06",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240606/underlying/NIFTY_20240606.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "bd655131dbca1a476700e3a0356a2420c07f9d5aefa6f16d95a87de0344e5e1c",
+      "session_id": "NIFTY:2024-06-07",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240607/underlying/NIFTY_20240607.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "03a4df454248f098bb4c5002cd8ae696afa32feb489861ba96ef3aafbdcab056",
+      "session_id": "NIFTY:2024-06-10",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240610/underlying/NIFTY_20240610.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "136ed25dd5cae0c153ba0251adee9962bfe4003a83e44d4f0d823dec701b3a40",
+      "session_id": "NIFTY:2024-06-11",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240611/underlying/NIFTY_20240611.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "764640b0c76864e8eafb0c60013753a7c8510991513d1ba917ec983e35e82d05",
+      "session_id": "NIFTY:2024-06-12",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240612/underlying/NIFTY_20240612.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "6270601ad676ede1eee3159e5aceff62aea775518cc783e9158bc4762da673e8",
+      "session_id": "NIFTY:2024-06-13",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240613/underlying/NIFTY_20240613.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "fadcedb1a0be53c3cebddd93694b7be20e6f6d82ce4ce075820a3db94bd6d091",
+      "session_id": "NIFTY:2024-06-14",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240614/underlying/NIFTY_20240614.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "1871853b7d7992a24d832d471c53a5e1e176150a2eb1f6707be3d4c9b96b95a9",
+      "session_id": "NIFTY:2024-06-18",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240618/underlying/NIFTY_20240618.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "c2f23ec7193f8bcb9909c15f0c64ba621327aa0ddaf7ca6b8123a31223706293",
+      "session_id": "NIFTY:2024-06-19",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240619/underlying/NIFTY_20240619.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "ef3ed642d3d61e0349cdd28fa26cc33f381b70dca974e58344b2b89eb4fdc777",
+      "session_id": "NIFTY:2024-06-20",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240620/underlying/NIFTY_20240620.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "906bae000b4071664196d07c05c0f615937a95af4a3688697b54c4c3002d3eb4",
+      "session_id": "NIFTY:2024-06-21",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240621/underlying/NIFTY_20240621.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "ec00c74c856714693140a7e162db79449a8119036625730ec794cee17d45c027",
+      "session_id": "NIFTY:2024-06-24",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240624/underlying/NIFTY_20240624.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "415d9130170e14f784c069b6dba7d9e71cee0b48fa43c300cbd6aa707e359972",
+      "session_id": "NIFTY:2024-06-25",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240625/underlying/NIFTY_20240625.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "09149da7c9bf05245adc6dfd2fb35f5301b18e1e1baa776ebb5fe9c8da4484b4",
+      "session_id": "NIFTY:2024-06-26",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240626/underlying/NIFTY_20240626.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "31bdd522b8176cb012a18ab6849914248bb6662d2e467def61c2bd2225d9df7e",
+      "session_id": "NIFTY:2024-06-27",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240627/underlying/NIFTY_20240627.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "27b83f6ef29f60b41aa82deb8e3ea487d3c1c4bebc2e8f217c1f1928b47fcadc",
+      "session_id": "NIFTY:2024-06-28",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240628/underlying/NIFTY_20240628.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "b4c4b5d5378a30c3c5ddd24c4d2fb7ea9bd71151285f191edbb2bbc189dd6ee3",
+      "session_id": "BANKNIFTY:2024-07-01",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240701/underlying/BANKNIFTY_20240701.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "0d62dafb1a0284ac7cb52b8cf1fee2e56f17caecb0ac56b1e6553bc2411926c8",
+      "session_id": "NIFTY:2024-07-01",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240701/underlying/NIFTY_20240701.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "31afb0e4b9cc2654aa826f7af40c008792834ff2922f13bdcf03063abf46e648",
+      "session_id": "BANKNIFTY:2024-07-02",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240702/underlying/BANKNIFTY_20240702.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "aec2a2c307703d96b051538cb8e060d846253737cd3a8cf0a35b374a574975aa",
+      "session_id": "NIFTY:2024-07-02",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240702/underlying/NIFTY_20240702.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "310f9aa672839dfda84621ccdfb7e3b4380facc3a81d4bcd92c9a42c49a88ad7",
+      "session_id": "BANKNIFTY:2024-07-03",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240703/underlying/BANKNIFTY_20240703.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "55a1866c384016a612ba7e31046afbf4afb4cc8659836a707c29b606c80c3763",
+      "session_id": "NIFTY:2024-07-03",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240703/underlying/NIFTY_20240703.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "4ff32c6aaebc06930100b33e490f83adf73ed2d478de1ff039e57d840b1fbaf9",
+      "session_id": "BANKNIFTY:2024-07-04",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240704/underlying/BANKNIFTY_20240704.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "20a9532d26c149c0f28081007c59530f55106606d3a61647888792c0c65866d9",
+      "session_id": "NIFTY:2024-07-04",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240704/underlying/NIFTY_20240704.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "9cc39c2b2444e559d13ce39776ec51218486b7baf7410ad83e790add606eb831",
+      "session_id": "BANKNIFTY:2024-07-05",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240705/underlying/BANKNIFTY_20240705.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "893ae3c74a1ff39c9d0cdcd9126db26452400c772286f558955b13ea91a2feff",
+      "session_id": "NIFTY:2024-07-05",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240705/underlying/NIFTY_20240705.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "4b36296952184289cd2a0d85e6698d7adc09d7d04b0b1666b2dcc25e1cc4d0f2",
+      "session_id": "BANKNIFTY:2024-07-08",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240708/underlying/BANKNIFTY_20240708.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "00b6884820673db9a1f38912d804bac722c7dc5858effd90ab1507f09ef4e56c",
+      "session_id": "NIFTY:2024-07-08",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240708/underlying/NIFTY_20240708.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "bd560837c07c31723ecae07c67c83dd2f3213a53579c61d0c86f9014df08f090",
+      "session_id": "BANKNIFTY:2024-07-09",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240709/underlying/BANKNIFTY_20240709.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "97472db019514b0c6293aaf57fbfdac64bacff9a76d1368bb19d214922f3a68a",
+      "session_id": "NIFTY:2024-07-09",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240709/underlying/NIFTY_20240709.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "e5d46f8c30cb81996de354a65cc1e09baffdbe6e201a814d1e8cc4919e3de059",
+      "session_id": "BANKNIFTY:2024-07-10",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240710/underlying/BANKNIFTY_20240710.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "80000979637e4cac0b17ac12fff2e5dae2bd07ebe1e9f6c9f508d1c280761f8e",
+      "session_id": "NIFTY:2024-07-10",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240710/underlying/NIFTY_20240710.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "1ad36c29e877127e756519ef932c0725e22929aa6683e551540c27e34883ca22",
+      "session_id": "BANKNIFTY:2024-07-11",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240711/underlying/BANKNIFTY_20240711.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "546062686c4053125ad061dd18f024d36a5a5c238fe0b6298e80404573c04973",
+      "session_id": "NIFTY:2024-07-11",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240711/underlying/NIFTY_20240711.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "9b097cc147e057a8a7fc6903c57cd9f904a7ebb0124e39f71e0ee4aa970cfce5",
+      "session_id": "BANKNIFTY:2024-07-12",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240712/underlying/BANKNIFTY_20240712.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "d121a7cf6f0cc23f006c0041ab403fd4cf89f8bb370f332a3a2e05227b7a51f0",
+      "session_id": "NIFTY:2024-07-12",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240712/underlying/NIFTY_20240712.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "f125c3a32a688e241683755982b8dba2115a3bcaa906cf4ab0408e3c41436903",
+      "session_id": "BANKNIFTY:2024-07-15",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240715/underlying/BANKNIFTY_20240715.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "f3ceecd5811f18351fc4a44a31ed20ee797f7ad3ce023bd88965c851662602f5",
+      "session_id": "NIFTY:2024-07-15",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240715/underlying/NIFTY_20240715.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "059819b31351f9967e927368da909f672d8ce5c4b83a5c6f3bdbdee638d9d108",
+      "session_id": "BANKNIFTY:2024-07-16",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240716/underlying/BANKNIFTY_20240716.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "6f708d9186f45c0bcb45671e5d246421e138028becaa71a50b17a2c656370f1a",
+      "session_id": "NIFTY:2024-07-16",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240716/underlying/NIFTY_20240716.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "2e9d5ae37e1d2bd9a8acf81044679ff4ebf08dfb10fcaa9c7d780abee046c15b",
+      "session_id": "BANKNIFTY:2024-07-18",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240718/underlying/BANKNIFTY_20240718.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "bdeaa278c90d410bba08ce96bea35dfd1742b017163a8fa1fb52e21b4d6b2412",
+      "session_id": "NIFTY:2024-07-18",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240718/underlying/NIFTY_20240718.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "bcbbc6309be4008e427d51e4516d87cdd0c2bda08b427a3bd598c01b8b34d62d",
+      "session_id": "BANKNIFTY:2024-07-19",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240719/underlying/BANKNIFTY_20240719.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "f84f474d2d51b6c16886248e3710b73f0d67cd3b32b7b549c36673d6df804771",
+      "session_id": "NIFTY:2024-07-19",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240719/underlying/NIFTY_20240719.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "8e4f8f7dd1df310dabe8e43d5bc0e79e51ffdce1e34961093dde13bbc373a6dd",
+      "session_id": "BANKNIFTY:2024-07-22",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240722/underlying/BANKNIFTY_20240722.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "5644379398848ad8f30cd6662b1521746de058467d82f2ee4618b147232481df",
+      "session_id": "NIFTY:2024-07-22",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240722/underlying/NIFTY_20240722.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "5d1d35d87e33481691e83b04748a61903fc28416c999af91d5fd50a9930a30ac",
+      "session_id": "BANKNIFTY:2024-07-23",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240723/underlying/BANKNIFTY_20240723.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "c0510e044d1eb74733f45bf98c0bc2e047f5f2d99380cb2b4d47703f09f4e533",
+      "session_id": "NIFTY:2024-07-23",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240723/underlying/NIFTY_20240723.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "37e134a05adc775d7874912a8f7452531b10f6539e3c49e44c687fd38dd7859d",
+      "session_id": "BANKNIFTY:2024-07-24",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240724/underlying/BANKNIFTY_20240724.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "ce850739ca7e5c6fe644ae25fdba85931dda8c8c5e035899c2d31d7fb90d25bb",
+      "session_id": "NIFTY:2024-07-24",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240724/underlying/NIFTY_20240724.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "6a2e47b9609fd740980e4d106a0d484a54d8378316afeb6249801f1c52471db9",
+      "session_id": "BANKNIFTY:2024-07-25",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240725/underlying/BANKNIFTY_20240725.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "2e6d5a6103ac65b2ef16585d9a3faac866c7a8def0116592beb5c276048875d8",
+      "session_id": "NIFTY:2024-07-25",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240725/underlying/NIFTY_20240725.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "eaeead494f5515d307e2dbee84e954965f4690d5ac6f8c176da5b5f2da9118c8",
+      "session_id": "BANKNIFTY:2024-07-26",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240726/underlying/BANKNIFTY_20240726.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "60d8e46ca7c19449a232d08e52a9b8a22eb5c7fe81b4098019e23bbcb89ed810",
+      "session_id": "NIFTY:2024-07-26",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240726/underlying/NIFTY_20240726.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "3326106ac7c7f2f7cf7f069bf0e61b7fc433adec7ebc4d0e5191fda6fb7fe55d",
+      "session_id": "BANKNIFTY:2024-07-29",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240729/underlying/BANKNIFTY_20240729.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "228d800c14bf13c7098dd4ca47a39af32cb0fce87714a449e34d81935df82ada",
+      "session_id": "NIFTY:2024-07-29",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240729/underlying/NIFTY_20240729.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "2680efb0f6a506858b3c71b9d43c12a5a48d0cb1f63ab2b0bd38f81ccb296199",
+      "session_id": "BANKNIFTY:2024-07-30",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240730/underlying/BANKNIFTY_20240730.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "58ac633c3be1fbc7090417817f9636ba12f1db8c8d3047c66fb9b7d6863d161f",
+      "session_id": "NIFTY:2024-07-30",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240730/underlying/NIFTY_20240730.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "91a26059825858e9d5481d14fd60b1f8bec98c1572752395c05c14c7debb9197",
+      "session_id": "BANKNIFTY:2024-07-31",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240731/underlying/BANKNIFTY_20240731.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "045043485d1d00cbc844a60c3691af2792a37cda3c96a46cc972688da88ce1af",
+      "session_id": "NIFTY:2024-07-31",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240731/underlying/NIFTY_20240731.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "fd73085dda5e2a50bc09394724ed088a9aaab081a24929905f244c0fa6398fd9",
+      "session_id": "BANKNIFTY:2024-08-01",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240801/underlying/BANKNIFTY_20240801.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "eb2a6cbc56988ff659e4f7307f03c4e381b7eb37e749cfc30ade15bc80bec669",
+      "session_id": "NIFTY:2024-08-01",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240801/underlying/NIFTY_20240801.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "2745ff69dd14edb358d968bd44c96dfae40d8c9e367e8036d52b78347aeddd17",
+      "session_id": "BANKNIFTY:2024-08-02",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240802/underlying/BANKNIFTY_20240802.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "1b4c489a5868d40941842e9d5a6ac563a2d88f996516db31f239d66e38349a5d",
+      "session_id": "NIFTY:2024-08-02",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240802/underlying/NIFTY_20240802.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "f581f75f2834c51dff362168e4b264d321be13715307364e1ec49371f0085930",
+      "session_id": "BANKNIFTY:2024-08-05",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240805/underlying/BANKNIFTY_20240805.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "0f203098fb975e1608f2daebbcf22cc5b86dc107745b41ead0b9255d6d9157bf",
+      "session_id": "NIFTY:2024-08-05",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240805/underlying/NIFTY_20240805.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "98a5b2704b9fce988fef96739b946d48f60deadd5bcca18c874f949c0da70963",
+      "session_id": "BANKNIFTY:2024-08-06",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240806/underlying/BANKNIFTY_20240806.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "d1038d1e40d2704a56b67c04567c2d9479c7139345adb7a561691541285e6098",
+      "session_id": "NIFTY:2024-08-06",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240806/underlying/NIFTY_20240806.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "0048341c1ab12956f5f01d024c0b490ac70a31827e1913b7027c44e03e2b893c",
+      "session_id": "BANKNIFTY:2024-08-07",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240807/underlying/BANKNIFTY_20240807.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "414c587a4bb9ba76ee9bcd925b102c88349ec6e7f6a0e407e87ed0f2a102286f",
+      "session_id": "NIFTY:2024-08-07",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240807/underlying/NIFTY_20240807.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "e0b619c9f719267e558f984d5596224bdf38835edb84d9722988e5c8c2d9e492",
+      "session_id": "BANKNIFTY:2024-08-08",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240808/underlying/BANKNIFTY_20240808.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "91d2f3172d0b6920659fd924422d4c25ab5cbd9cd40c03a7b49ec1b7471f7f3c",
+      "session_id": "NIFTY:2024-08-08",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240808/underlying/NIFTY_20240808.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "8c43017ef3d4cd6dba08868348d6297140ad423db1110f3c8c005b18f6af8a3b",
+      "session_id": "BANKNIFTY:2024-08-09",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240809/underlying/BANKNIFTY_20240809.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "1130367b35c000c12f1a8ef9aa9a348698e1621172631898cc77303d71db269c",
+      "session_id": "NIFTY:2024-08-09",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240809/underlying/NIFTY_20240809.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "18b864e2b88e85e4d50d3b39eac4375f9bccfc77fd2cae8e2ec049a58aab16d1",
+      "session_id": "BANKNIFTY:2024-08-12",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240812/underlying/BANKNIFTY_20240812.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "ed3902e03b74d5e7fa10b3d451e0fad55d50e0134841c60fd0c7d732cdaa7650",
+      "session_id": "NIFTY:2024-08-12",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240812/underlying/NIFTY_20240812.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "4c5549a63fe855b1b719ea27050fa054300122d498f3b7a33e6310aee84b0280",
+      "session_id": "BANKNIFTY:2024-08-13",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240813/underlying/BANKNIFTY_20240813.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "b8a5dddd537f7ee154c9bbfe2ff3973080acbc842a44c8e6b93da1befabd302b",
+      "session_id": "NIFTY:2024-08-13",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240813/underlying/NIFTY_20240813.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "d435d60b1a2757aaaa1619d833514944a7b3527cee697b6691ef9130707b312e",
+      "session_id": "BANKNIFTY:2024-08-14",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240814/underlying/BANKNIFTY_20240814.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "e702101fbfc84e3185e1bd34636bbf2974465db2727c3b9458cb31e764484d5d",
+      "session_id": "NIFTY:2024-08-14",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240814/underlying/NIFTY_20240814.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "0801d91e5e1a8569cbcdaf181334518090cf901f9b77d19debfd79473e26d80d",
+      "session_id": "BANKNIFTY:2024-08-16",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240816/underlying/BANKNIFTY_20240816.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "c291cebfe887153ec80b3293921301db4efc428067798636781f2100802aabfa",
+      "session_id": "NIFTY:2024-08-16",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240816/underlying/NIFTY_20240816.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "c1ca1f764240e00a364b074f1bd514c42f70cb483405b13cd178cbe47d5286ed",
+      "session_id": "BANKNIFTY:2024-08-19",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240819/underlying/BANKNIFTY_20240819.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "d66a29e5a05875c6567cc4f2634c87e9d9292899f3ca7e98265252eb0b81fdbd",
+      "session_id": "NIFTY:2024-08-19",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240819/underlying/NIFTY_20240819.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "84ae8526ce505b040adf72a498883553528dc56a56e202a99e9c056bde918ab8",
+      "session_id": "BANKNIFTY:2024-08-20",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240820/underlying/BANKNIFTY_20240820.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "13d8fc86af8c34f9ea935b00764dc077a89304d224782224dfd0d121b212ccac",
+      "session_id": "NIFTY:2024-08-20",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240820/underlying/NIFTY_20240820.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "82c6c5ee9160d15f9f38055400180e8806ae42dcbf62702b1e5e8a869168e65e",
+      "session_id": "BANKNIFTY:2024-08-21",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240821/underlying/BANKNIFTY_20240821.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "5790d5bab1aa8aeb9b2927a1575bf0b3575babdc1c130a00afa94c20d786fd20",
+      "session_id": "NIFTY:2024-08-21",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240821/underlying/NIFTY_20240821.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "45a8e406ef033c4f64e752c7d3116e66da34b32ad38ef12a967949bc50de986f",
+      "session_id": "BANKNIFTY:2024-08-22",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240822/underlying/BANKNIFTY_20240822.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "70eddbc7b3567509c38983b163f612d440c2aa148a6c51e14cb5a727adc9bd11",
+      "session_id": "NIFTY:2024-08-22",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240822/underlying/NIFTY_20240822.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "b4096c75064678a4a953210869bd94f36b0cb6e1a1efe5a9e65d1d5dc0535200",
+      "session_id": "BANKNIFTY:2024-08-23",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240823/underlying/BANKNIFTY_20240823.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "54544271d15c39087df0fd95c0c1f7cd03e7065b4807e79a43d60bb02801bc23",
+      "session_id": "NIFTY:2024-08-23",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240823/underlying/NIFTY_20240823.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "3fa2495fcf147f69325a16c1d4664974254d4d49bad9eddb3db5f7bbe441d9c2",
+      "session_id": "BANKNIFTY:2024-08-26",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240826/underlying/BANKNIFTY_20240826.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "57b60e1364d355b17d7b5dc16c103c95b2ed465f1a4cf0e7c7d962c61595ead2",
+      "session_id": "NIFTY:2024-08-26",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240826/underlying/NIFTY_20240826.parquet"
+    },
+    {
+      "row_count": 375,
+      "semantic_hash": "39baa2d776cfc86f1c7f36ac3b72ac51f614bf96932e4e5c56aeb65c7a3a4637",
+      "session_id": "BANKNIFTY:2024-08-27",
+      "source_hash": "4357f109ed631802b3774c34db9c318f71742f8e99de307408af71bf00810707",
+      "source_path": "/Users/madhuram/tradebot-structural-edge-discovery-v3/runtime/upstox_candidate_replay.zip!upstox_candidate_replay/20240827/underlying/BANKNIFTY_20240827.parquet"
+    }
+  ],
+  "timezone": "Asia/Kolkata"
+}

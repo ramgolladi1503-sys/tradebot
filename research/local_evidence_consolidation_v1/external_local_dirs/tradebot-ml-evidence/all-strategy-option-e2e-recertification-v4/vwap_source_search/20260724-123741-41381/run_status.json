@@ -1,0 +1,13 @@
+{
+  "accepted_candidate_count": 1055,
+  "aeron7_nifty_f1_lead_resolved": true,
+  "candidate_count": 6119,
+  "conclusion": "SIGNAL_SOURCE_RESOLVED",
+  "output_dir": "/Users/madhuram/tradebot-ml-evidence/all-strategy-option-e2e-recertification-v4/vwap_source_search/20260724-123741-41381",
+  "reason_codes": [],
+  "semantic_sha256": "09d5fc3dd07e1d4f561249f5042795ee42577eca95024e5c1d9d736fe8883c9b",
+  "status": "COMPLETE",
+  "timed_out_root_count": 0,
+  "truncated": true,
+  "unresolved_candidate_count": 24
+}

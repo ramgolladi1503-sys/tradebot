@@ -1,0 +1,811 @@
+{
+  "schema_version": "1.0",
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "delta_paths": [
+    "20260709/underlying/SENSEX 77400 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58000 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY BANK.parquet",
+    "20260709/underlying/BANKNIFTY 56900 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23950 CE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57800 CE 28 JUL 26.parquet",
+    "20250404/underlying/BANKNIFTY_20250404.parquet",
+    "20260709/underlying/SENSEX 77300 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57400 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24000 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76100 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57100 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77500 PE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76500 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24300 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77200 PE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77900 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24450 CE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57500 CE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76000 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57100 CE 28 JUL 26.parquet",
+    "20251021/underlying/BANKNIFTY_20251021.parquet",
+    "20260709/underlying/SENSEX 75900 CE 09 JUL 26.parquet",
+    "20250423/underlying/NIFTY_20250423.parquet",
+    "20260709/underlying/BANKNIFTY 56200 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23800 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77100 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24200 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 75900 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24450 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76400 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23550 CE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57400 PE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56400 CE 28 JUL 26.parquet",
+    "20241212/underlying/BANKNIFTY_20241212.parquet",
+    "20250404/underlying/BSE_INDEX|SENSEX_20250404.parquet",
+    "20260709/underlying/SENSEX 77700 PE 09 JUL 26.parquet",
+    "20250527/underlying/BSE_INDEX|SENSEX_20250527.parquet",
+    "20260709/underlying/NIFTY 23650 PE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56600 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 50.parquet",
+    "20260709/underlying/BANKNIFTY 56700 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76900 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56500 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24250 CE 14 JUL 26.parquet",
+    "20250423/underlying/BANKNIFTY_20250423.parquet",
+    "20260709/underlying/BANKNIFTY 57300 CE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77500 CE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77200 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24250 PE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24400 PE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24200 PE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24000 PE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24350 CE 14 JUL 26.parquet",
+    "20241212/underlying/NIFTY_20241212.parquet",
+    "20260709/underlying/BANKNIFTY 57200 CE 28 JUL 26.parquet",
+    "20250325/underlying/NIFTY_20250325.parquet",
+    "20250425/underlying/NIFTY_20250425.parquet",
+    "20260709/underlying/BANKNIFTY 57800 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24100 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77300 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23700 PE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23500 CE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet",
+    "20250522/underlying/BANKNIFTY_20250522.parquet",
+    "20241101/underlying/BANKNIFTY_20241101.parquet",
+    "20260709/underlying/SENSEX 76800 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24050 PE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56500 PE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57700 CE 28 JUL 26.parquet",
+    "20250521/underlying/NIFTY_20250521.parquet",
+    "20260709/underlying/NIFTY 23500 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77700 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23600 PE 14 JUL 26.parquet",
+    "20250528/underlying/BANKNIFTY_20250528.parquet",
+    "20260709/underlying/SENSEX 77600 PE 09 JUL 26.parquet",
+    "20250521/underlying/BSE_INDEX|SENSEX_20250521.parquet",
+    "20260709/underlying/SENSEX 76400 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24350 PE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57000 PE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58100 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24300 CE 14 JUL 26.parquet",
+    "20250325/underlying/BSE_INDEX|SENSEX_20250325.parquet",
+    "20241212/underlying/BSE_INDEX|SENSEX_20241212.parquet",
+    "20260709/underlying/SENSEX 76000 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58200 CE 28 JUL 26.parquet",
+    "20250502/underlying/BSE_INDEX|SENSEX_20250502.parquet",
+    "20260709/underlying/SENSEX 76200 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57900 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76700 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24500 CE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23700 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77000 CE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX.parquet",
+    "20260709/underlying/BANKNIFTY 56800 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23800 CE 14 JUL 26.parquet",
+    "20250404/underlying/NIFTY_20250404.parquet",
+    "20260709/underlying/BANKNIFTY 56800 PE 28 JUL 26.parquet",
+    "20250505/underlying/BANKNIFTY_20250505.parquet",
+    "20260709/underlying/SENSEX 77900 PE 09 JUL 26.parquet",
+    "20250520/underlying/BSE_INDEX|SENSEX_20250520.parquet",
+    "20260709/underlying/NIFTY 23850 CE 14 JUL 26.parquet",
+    "20250423/underlying/BSE_INDEX|SENSEX_20250423.parquet",
+    "20251021/underlying/BSE_INDEX|SENSEX_20251021.parquet",
+    "20260709/underlying/NIFTY 24150 CE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56300 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76800 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56400 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76600 CE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77800 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23550 PE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58100 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23850 PE 14 JUL 26.parquet",
+    "20250430/underlying/BANKNIFTY_20250430.parquet",
+    "20260709/underlying/NIFTY 24050 CE 14 JUL 26.parquet",
+    "20251111/underlying/BSE_INDEX|SENSEX_20251111.parquet",
+    "20260709/underlying/NIFTY 24400 CE 14 JUL 26.parquet",
+    "20250513/underlying/NIFTY_20250513.parquet",
+    "20260709/underlying/BANKNIFTY 57500 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76900 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57300 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76700 PE 09 JUL 26.parquet",
+    "20250325/underlying/BANKNIFTY_20250325.parquet",
+    "20250508/underlying/NIFTY_20250508.parquet",
+    "20250430/underlying/NIFTY_20250430.parquet",
+    "20260709/underlying/BANKNIFTY 57600 PE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77800 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23950 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76200 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23600 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76300 CE 09 JUL 26.parquet",
+    "20241101/underlying/BSE_INDEX|SENSEX_20241101.parquet",
+    "20251021/underlying/NIFTY_20251021.parquet",
+    "20260709/underlying/NIFTY 23750 CE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76300 PE 09 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77100 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57600 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23900 CE 14 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23650 CE 14 JUL 26.parquet",
+    "20250513/underlying/BANKNIFTY_20250513.parquet",
+    "20260709/underlying/BANKNIFTY 56300 CE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57700 PE 28 JUL 26.parquet",
+    "20250516/underlying/BANKNIFTY_20250516.parquet",
+    "20260709/underlying/BANKNIFTY 57200 PE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56900 PE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24100 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76100 CE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24500 PE 14 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58200 PE 28 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57900 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23750 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77000 PE 09 JUL 26.parquet",
+    "20260709/underlying/NIFTY 24150 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 76600 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 57000 CE 28 JUL 26.parquet",
+    "20260709/underlying/NIFTY 23900 PE 14 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77400 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 58000 CE 28 JUL 26.parquet",
+    "20250425/underlying/BSE_INDEX|SENSEX_20250425.parquet",
+    "20260709/underlying/SENSEX 76500 PE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56600 CE 28 JUL 26.parquet",
+    "20260709/underlying/SENSEX 77600 CE 09 JUL 26.parquet",
+    "20260709/underlying/BANKNIFTY 56700 CE 28 JUL 26.parquet",
+    "20241101/underlying/NIFTY_20241101.parquet"
+  ],
+  "delta_by_instrument": {
+    "SENSEX 77400 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77400 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58000 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58000 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY BANK": [
+      "20260709/underlying/NIFTY BANK.parquet"
+    ],
+    "BANKNIFTY 56900 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56900 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23950 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23950 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57800 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57800 CE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY": [
+      "20250404/underlying/BANKNIFTY_20250404.parquet",
+      "20251021/underlying/BANKNIFTY_20251021.parquet",
+      "20241212/underlying/BANKNIFTY_20241212.parquet",
+      "20250423/underlying/BANKNIFTY_20250423.parquet",
+      "20250522/underlying/BANKNIFTY_20250522.parquet",
+      "20241101/underlying/BANKNIFTY_20241101.parquet",
+      "20250528/underlying/BANKNIFTY_20250528.parquet",
+      "20250505/underlying/BANKNIFTY_20250505.parquet",
+      "20250430/underlying/BANKNIFTY_20250430.parquet",
+      "20250325/underlying/BANKNIFTY_20250325.parquet",
+      "20250513/underlying/BANKNIFTY_20250513.parquet",
+      "20250516/underlying/BANKNIFTY_20250516.parquet"
+    ],
+    "SENSEX 77300 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77300 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57400 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57400 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 24000 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24000 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76100 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76100 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57100 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57100 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 77500 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77500 PE 09 JUL 26.parquet"
+    ],
+    "SENSEX 76500 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76500 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24300 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24300 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77200 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77200 PE 09 JUL 26.parquet"
+    ],
+    "SENSEX 77900 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77900 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24450 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24450 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57500 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57500 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76000 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76000 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57100 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57100 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 75900 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 75900 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY": [
+      "20250423/underlying/NIFTY_20250423.parquet",
+      "20241212/underlying/NIFTY_20241212.parquet",
+      "20250325/underlying/NIFTY_20250325.parquet",
+      "20250425/underlying/NIFTY_20250425.parquet",
+      "20250521/underlying/NIFTY_20250521.parquet",
+      "20250404/underlying/NIFTY_20250404.parquet",
+      "20250513/underlying/NIFTY_20250513.parquet",
+      "20250508/underlying/NIFTY_20250508.parquet",
+      "20250430/underlying/NIFTY_20250430.parquet",
+      "20251021/underlying/NIFTY_20251021.parquet",
+      "20241101/underlying/NIFTY_20241101.parquet"
+    ],
+    "BANKNIFTY 56200 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56200 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23800 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23800 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77100 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77100 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24200 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24200 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 75900 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 75900 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24450 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24450 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76400 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76400 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23550 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23550 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57400 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57400 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56400 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56400 CE 28 JUL 26.parquet"
+    ],
+    "BSE": [
+      "20250404/underlying/BSE_INDEX|SENSEX_20250404.parquet",
+      "20250527/underlying/BSE_INDEX|SENSEX_20250527.parquet",
+      "20250521/underlying/BSE_INDEX|SENSEX_20250521.parquet",
+      "20250325/underlying/BSE_INDEX|SENSEX_20250325.parquet",
+      "20241212/underlying/BSE_INDEX|SENSEX_20241212.parquet",
+      "20250502/underlying/BSE_INDEX|SENSEX_20250502.parquet",
+      "20250520/underlying/BSE_INDEX|SENSEX_20250520.parquet",
+      "20250423/underlying/BSE_INDEX|SENSEX_20250423.parquet",
+      "20251021/underlying/BSE_INDEX|SENSEX_20251021.parquet",
+      "20251111/underlying/BSE_INDEX|SENSEX_20251111.parquet",
+      "20241101/underlying/BSE_INDEX|SENSEX_20241101.parquet",
+      "20250425/underlying/BSE_INDEX|SENSEX_20250425.parquet"
+    ],
+    "SENSEX 77700 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77700 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23650 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23650 PE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56600 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56600 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY 50": [
+      "20260709/underlying/NIFTY 50.parquet"
+    ],
+    "BANKNIFTY 56700 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56700 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76900 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76900 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56500 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56500 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 24250 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24250 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57300 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57300 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 77500 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77500 CE 09 JUL 26.parquet"
+    ],
+    "SENSEX 77200 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77200 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24250 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24250 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24400 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24400 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24200 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24200 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24000 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24000 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24350 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24350 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57200 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57200 CE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57800 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57800 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY 24100 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24100 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77300 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77300 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23700 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23700 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 23500 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23500 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56200 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76800 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76800 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24050 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24050 PE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56500 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56500 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57700 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57700 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23500 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23500 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77700 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77700 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23600 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23600 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77600 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77600 PE 09 JUL 26.parquet"
+    ],
+    "SENSEX 76400 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76400 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24350 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24350 PE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57000 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57000 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58100 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58100 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY 24300 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24300 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76000 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76000 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58200 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58200 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76200 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76200 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57900 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57900 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76700 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76700 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24500 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24500 CE 14 JUL 26.parquet"
+    ],
+    "NIFTY 23700 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23700 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77000 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77000 CE 09 JUL 26.parquet"
+    ],
+    "SENSEX": [
+      "20260709/underlying/SENSEX.parquet"
+    ],
+    "BANKNIFTY 56800 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56800 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23800 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23800 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56800 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56800 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 77900 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77900 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23850 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23850 CE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24150 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24150 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56300 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56300 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76800 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76800 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56400 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56400 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76600 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76600 CE 09 JUL 26.parquet"
+    ],
+    "SENSEX 77800 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77800 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23550 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23550 PE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58100 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58100 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23850 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23850 PE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24050 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24050 CE 14 JUL 26.parquet"
+    ],
+    "NIFTY 24400 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24400 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57500 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57500 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76900 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76900 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57300 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57300 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76700 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76700 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57600 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57600 PE 28 JUL 26.parquet"
+    ],
+    "SENSEX 77800 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77800 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23950 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23950 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76200 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76200 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23600 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23600 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76300 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76300 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 23750 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23750 CE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76300 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76300 PE 09 JUL 26.parquet"
+    ],
+    "SENSEX 77100 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77100 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57600 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57600 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23900 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23900 CE 14 JUL 26.parquet"
+    ],
+    "NIFTY 23650 CE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23650 CE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56300 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56300 CE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57700 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57700 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57200 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57200 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56900 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56900 PE 28 JUL 26.parquet"
+    ],
+    "NIFTY 24100 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24100 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76100 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76100 CE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24500 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24500 PE 14 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58200 PE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58200 PE 28 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57900 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57900 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23750 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23750 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77000 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77000 PE 09 JUL 26.parquet"
+    ],
+    "NIFTY 24150 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 24150 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 76600 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76600 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 57000 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 57000 CE 28 JUL 26.parquet"
+    ],
+    "NIFTY 23900 PE 14 JUL 26": [
+      "20260709/underlying/NIFTY 23900 PE 14 JUL 26.parquet"
+    ],
+    "SENSEX 77400 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77400 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 58000 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 58000 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 76500 PE 09 JUL 26": [
+      "20260709/underlying/SENSEX 76500 PE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56600 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56600 CE 28 JUL 26.parquet"
+    ],
+    "SENSEX 77600 CE 09 JUL 26": [
+      "20260709/underlying/SENSEX 77600 CE 09 JUL 26.parquet"
+    ],
+    "BANKNIFTY 56700 CE 28 JUL 26": [
+      "20260709/underlying/BANKNIFTY 56700 CE 28 JUL 26.parquet"
+    ]
+  },
+  "delta_by_session_date": {
+    "2026-07-09": [
+      "20260709/underlying/SENSEX 77400 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58000 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY BANK.parquet",
+      "20260709/underlying/BANKNIFTY 56900 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23950 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57800 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77300 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57400 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24000 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76100 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57100 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77500 PE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76500 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24300 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77200 PE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77900 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24450 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57500 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76000 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57100 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 75900 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56200 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23800 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77100 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24200 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 75900 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24450 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76400 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23550 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57400 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56400 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77700 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23650 PE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56600 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 50.parquet",
+      "20260709/underlying/BANKNIFTY 56700 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76900 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56500 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24250 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57300 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77500 CE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77200 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24250 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24400 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24200 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24000 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24350 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57200 CE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57800 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24100 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77300 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23700 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23500 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56200 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76800 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24050 PE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56500 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57700 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23500 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77700 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23600 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77600 PE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76400 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24350 PE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57000 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58100 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24300 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76000 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58200 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76200 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57900 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76700 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24500 CE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23700 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77000 CE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX.parquet",
+      "20260709/underlying/BANKNIFTY 56800 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23800 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56800 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77900 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23850 CE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24150 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56300 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76800 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56400 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76600 CE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77800 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23550 PE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58100 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23850 PE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24050 CE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24400 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57500 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76900 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57300 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76700 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57600 PE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77800 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23950 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76200 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23600 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76300 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23750 CE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76300 PE 09 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77100 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57600 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23900 CE 14 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23650 CE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56300 CE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57700 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57200 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56900 PE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24100 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76100 CE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24500 PE 14 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58200 PE 28 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57900 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23750 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77000 PE 09 JUL 26.parquet",
+      "20260709/underlying/NIFTY 24150 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76600 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 57000 CE 28 JUL 26.parquet",
+      "20260709/underlying/NIFTY 23900 PE 14 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77400 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 58000 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 76500 PE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56600 CE 28 JUL 26.parquet",
+      "20260709/underlying/SENSEX 77600 CE 09 JUL 26.parquet",
+      "20260709/underlying/BANKNIFTY 56700 CE 28 JUL 26.parquet"
+    ],
+    "2025-04-04": [
+      "20250404/underlying/BANKNIFTY_20250404.parquet",
+      "20250404/underlying/BSE_INDEX|SENSEX_20250404.parquet",
+      "20250404/underlying/NIFTY_20250404.parquet"
+    ],
+    "2025-10-21": [
+      "20251021/underlying/BANKNIFTY_20251021.parquet",
+      "20251021/underlying/BSE_INDEX|SENSEX_20251021.parquet",
+      "20251021/underlying/NIFTY_20251021.parquet"
+    ],
+    "2025-04-23": [
+      "20250423/underlying/NIFTY_20250423.parquet",
+      "20250423/underlying/BANKNIFTY_20250423.parquet",
+      "20250423/underlying/BSE_INDEX|SENSEX_20250423.parquet"
+    ],
+    "2024-12-12": [
+      "20241212/underlying/BANKNIFTY_20241212.parquet",
+      "20241212/underlying/NIFTY_20241212.parquet",
+      "20241212/underlying/BSE_INDEX|SENSEX_20241212.parquet"
+    ],
+    "2025-05-27": [
+      "20250527/underlying/BSE_INDEX|SENSEX_20250527.parquet"
+    ],
+    "2025-03-25": [
+      "20250325/underlying/NIFTY_20250325.parquet",
+      "20250325/underlying/BSE_INDEX|SENSEX_20250325.parquet",
+      "20250325/underlying/BANKNIFTY_20250325.parquet"
+    ],
+    "2025-04-25": [
+      "20250425/underlying/NIFTY_20250425.parquet",
+      "20250425/underlying/BSE_INDEX|SENSEX_20250425.parquet"
+    ],
+    "2025-05-22": [
+      "20250522/underlying/BANKNIFTY_20250522.parquet"
+    ],
+    "2024-11-01": [
+      "20241101/underlying/BANKNIFTY_20241101.parquet",
+      "20241101/underlying/BSE_INDEX|SENSEX_20241101.parquet",
+      "20241101/underlying/NIFTY_20241101.parquet"
+    ],
+    "2025-05-21": [
+      "20250521/underlying/NIFTY_20250521.parquet",
+      "20250521/underlying/BSE_INDEX|SENSEX_20250521.parquet"
+    ],
+    "2025-05-28": [
+      "20250528/underlying/BANKNIFTY_20250528.parquet"
+    ],
+    "2025-05-02": [
+      "20250502/underlying/BSE_INDEX|SENSEX_20250502.parquet"
+    ],
+    "2025-05-05": [
+      "20250505/underlying/BANKNIFTY_20250505.parquet"
+    ],
+    "2025-05-20": [
+      "20250520/underlying/BSE_INDEX|SENSEX_20250520.parquet"
+    ],
+    "2025-04-30": [
+      "20250430/underlying/BANKNIFTY_20250430.parquet",
+      "20250430/underlying/NIFTY_20250430.parquet"
+    ],
+    "2025-11-11": [
+      "20251111/underlying/BSE_INDEX|SENSEX_20251111.parquet"
+    ],
+    "2025-05-13": [
+      "20250513/underlying/NIFTY_20250513.parquet",
+      "20250513/underlying/BANKNIFTY_20250513.parquet"
+    ],
+    "2025-05-08": [
+      "20250508/underlying/NIFTY_20250508.parquet"
+    ],
+    "2025-05-16": [
+      "20250516/underlying/BANKNIFTY_20250516.parquet"
+    ]
+  },
+  "outside_expected_layout": []
+}

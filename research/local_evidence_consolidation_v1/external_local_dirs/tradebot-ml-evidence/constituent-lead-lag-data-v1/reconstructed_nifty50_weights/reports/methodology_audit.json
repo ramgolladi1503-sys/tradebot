@@ -1,0 +1,21 @@
+{
+  "earliest_date": "2008-01-31",
+  "latest_date": "2025-08-31",
+  "snapshot_count": 216,
+  "monthly_snapshot_count": 216,
+  "event_driven_snapshot_count": 0,
+  "stock_columns": 100,
+  "zero_weight_semantics": "Indicates not a constituent at that snapshot",
+  "weight_units": "Percentages (0-100)",
+  "minimum_snapshot_sum": 99.99999999999996,
+  "maximum_snapshot_sum": 100.00000000000004,
+  "duplicate_dates": 0,
+  "missing_dates": 0,
+  "non_numeric_cells": 0,
+  "reconstructed_periods": "2008-01-31 to 2012-12-31 reconstructed",
+  "extrapolated_periods": "Intra-month periods extrapolated",
+  "corporate_action_adjustments": "Adjusted for mergers/demergers",
+  "ticker_remappings": "Historical tickers preserved",
+  "licence_restrictions": "CC BY-NC-SA 4.0 - Non-commercial research only",
+  "classification": "COMMUNITY_PROXY_ACCEPTED_FOR_EXPLORATION"
+}

@@ -1,0 +1,162 @@
+[
+  {
+    "contract_hash": "92526dc62234a04796ad206c6a0697355b80c6abfd666c50fc5770fe17d646fb",
+    "controls": [
+      "matched_random",
+      "sequence_order_ablation",
+      "underlying_only",
+      "option_only"
+    ],
+    "costs": {
+      "round_trip_points": 1.0
+    },
+    "development_split": [
+      "2024-09-26",
+      "2026-02-28"
+    ],
+    "economic_mechanism": "directional option premium accelerates while the paired opposite option fails to respond proportionally",
+    "entry_timing": "next_observable_bar",
+    "exact_definition": "See candidate_id detector in scripts/run_frequency_qualified_structural_discovery_v2.py",
+    "exit_rules": {
+      "maximum_hold_minutes": 15,
+      "stop_points": 8.0,
+      "target_points": 12.0
+    },
+    "expected_failure_mode": "volatility-wide repricing makes both sides move similarly",
+    "expected_persistence_after_costs": "paired-side asymmetry should persist for at least one next observable bar if repricing is not complete",
+    "family": "relative_option_response_asymmetry",
+    "holdout_split": [
+      "2026-03-01",
+      "2026-07-21"
+    ],
+    "id": "FQSDV2_PAIR_ASYM_01",
+    "materially_distinct_from_prior": "uses CE/PE paired response imbalance, not ORB, pure momentum, delayed under-response, or parked compression release",
+    "observable_sequence": [
+      "underlying impulse",
+      "same-side option positive velocity",
+      "paired opposite-side response failure",
+      "same-side premium persistence"
+    ],
+    "participant_behaviour": "buyers reprice directional optionality faster than hedgers reprice the opposite leg",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "premium_acceleration",
+      "option_type",
+      "expiry",
+      "strike"
+    ],
+    "survival_standard": "all Phase 8 checks required",
+    "thresholds": "Frozen primary thresholds embedded before outcome labeling",
+    "unsupported_assumptions": [
+      "bid/ask depth",
+      "IV decomposition"
+    ]
+  },
+  {
+    "contract_hash": "66da07020c240c70596d5d93fecfce52f5fb435a71257574df194f42dc7e199c",
+    "controls": [
+      "matched_random",
+      "sequence_order_ablation",
+      "underlying_only",
+      "option_only"
+    ],
+    "costs": {
+      "round_trip_points": 1.0
+    },
+    "development_split": [
+      "2024-09-26",
+      "2026-02-28"
+    ],
+    "economic_mechanism": "same-side premium expansion is confirmed by adjacent strikes in the option ladder",
+    "entry_timing": "next_observable_bar",
+    "exact_definition": "See candidate_id detector in scripts/run_frequency_qualified_structural_discovery_v2.py",
+    "exit_rules": {
+      "maximum_hold_minutes": 15,
+      "stop_points": 8.0,
+      "target_points": 12.0
+    },
+    "expected_failure_mode": "adjacent strikes are stale or wide relative to selected strike",
+    "expected_persistence_after_costs": "coordinated ladder repricing should be less noisy than one-contract movement",
+    "family": "cross_strike_confirmation",
+    "holdout_split": [
+      "2026-03-01",
+      "2026-07-21"
+    ],
+    "id": "FQSDV2_LADDER_CONFIRM_02",
+    "materially_distinct_from_prior": "requires cross-strike option confirmation; not a lookback tweak of prior candidates",
+    "observable_sequence": [
+      "underlying impulse",
+      "selected strike premium expands",
+      "adjacent strike premium also expands",
+      "next-bar entry"
+    ],
+    "participant_behaviour": "flow appears across nearby strikes rather than as isolated stale-price noise",
+    "required_fields": [
+      "ret_1",
+      "premium_velocity",
+      "premium_acceleration",
+      "strike",
+      "option_type",
+      "expiry"
+    ],
+    "survival_standard": "all Phase 8 checks required",
+    "thresholds": "Frozen primary thresholds embedded before outcome labeling",
+    "unsupported_assumptions": [
+      "order-book sweep identity"
+    ]
+  },
+  {
+    "contract_hash": "7a0d1d58685829147bc272b2f3691aae9a45171919579f1c0a05bf41405356c7",
+    "controls": [
+      "matched_random",
+      "sequence_order_ablation",
+      "underlying_only",
+      "option_only"
+    ],
+    "costs": {
+      "round_trip_points": 1.0
+    },
+    "development_split": [
+      "2024-09-26",
+      "2026-02-28"
+    ],
+    "economic_mechanism": "expiry-week directional repricing from low vwap displacement into premium acceleration",
+    "entry_timing": "next_observable_bar",
+    "exact_definition": "See candidate_id detector in scripts/run_frequency_qualified_structural_discovery_v2.py",
+    "exit_rules": {
+      "maximum_hold_minutes": 15,
+      "stop_points": 8.0,
+      "target_points": 12.0
+    },
+    "expected_failure_mode": "theta decay dominates directional repricing",
+    "expected_persistence_after_costs": "near-expiry repricing can be abrupt enough to cover fixed point costs",
+    "family": "expiry_state_transition",
+    "holdout_split": [
+      "2026-03-01",
+      "2026-07-21"
+    ],
+    "id": "FQSDV2_EXPIRY_TRANSITION_03",
+    "materially_distinct_from_prior": "DTE is a state transition component, not a simple DTE filter or compression release",
+    "observable_sequence": [
+      "expiry-week state",
+      "underlying remains near VWAP",
+      "same-side premium acceleration",
+      "premium persistence"
+    ],
+    "participant_behaviour": "short-dated gamma demand reprices when balanced intraday state resolves",
+    "required_fields": [
+      "dte",
+      "vwap_distance",
+      "premium_acceleration",
+      "premium_velocity",
+      "ret_1"
+    ],
+    "survival_standard": "all Phase 8 checks required",
+    "thresholds": "Frozen primary thresholds embedded before outcome labeling",
+    "unsupported_assumptions": [
+      "gamma exposure",
+      "dealer positioning"
+    ]
+  }
+]

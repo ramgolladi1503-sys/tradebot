@@ -1,0 +1,21 @@
+{
+  "allowed_for_live_execution": false,
+  "audit_pass": true,
+  "blockers": [],
+  "broker_api_called": false,
+  "capability_support_matrix": {
+    "algotest_comparison": "NOT_SUPPORTED",
+    "iv_oi_research": "PARTIALLY_SUPPORTED_OI_ONLY",
+    "option_premium_replay": "SUPPORTED",
+    "premium_lead_lag_research": "PARTIALLY_SUPPORTED",
+    "spread_aware_fill_simulation": "NOT_SUPPORTED",
+    "strike_selection_research": "SUPPORTED"
+  },
+  "determinism": "PASS",
+  "exact_next_action": "Build or point to a trusted NIFTY underlying feature warehouse covering 2024-09-26 through 2026-07-21, then rerun the joint certification before discovery.",
+  "is_order_action": false,
+  "primary_verdict": "OPTION_DATA_READY_FOR_DISCOVERY",
+  "read_only": true,
+  "warehouse_rows": 392006,
+  "warehouse_sessions": 382
+}

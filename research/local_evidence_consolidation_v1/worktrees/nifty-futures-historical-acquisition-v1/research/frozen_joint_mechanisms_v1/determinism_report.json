@@ -1,0 +1,24 @@
+{
+  "semantic_hashes": {
+    "ablation_report": "4f965d96ea05b2793dcc7cac51854f78a5ea709fc4121067cdd0b0304d949fdd",
+    "algotest_translation_specification": "a8179cbdab4a5cc9557e3015062c2e4a7216ceb318852c0e72d2ee36a1a74d14",
+    "concentration_report": "d6e4c0f49bd4e529811fe4d761d19949438feda7e9090fbefd44b10d763288eb",
+    "control_experiments": "750e5a01adf86cb33907972d782732291bc37fb4d069923690d08f7353412af8",
+    "development_only_benchmark_report": "73417fae0d7b54ff1c0619c243ab5b8bf74c802b618fb1cca334a0a171437ca1",
+    "effective_sample_size_report": "9875162c8d4d01419a605d1e4f591fd81f510c3b74378d9a50cc70d05914f75e",
+    "execution_cost_report": "739c99a12049082154c39a94c4159fe8d7728222bd241846f3ad4290ebf88a89",
+    "final_verdict": "89a19b1146e690064372ac9d52e097eb85f1b9118ba93377d38c2317a5e9b474",
+    "frozen_specifications": "5eecfc8d2f8d413da7bd73f800363534a4e22d3a64ae3881627df9faec889292",
+    "holdout_results": "1eb915a4517d857901fe90636c761d4e2410cd128fa40e6cf13efc392859f2ec",
+    "incremental_option_value_report": "66016316b11292b85d0132d74a0f9d29d6b2c8cb21ab61ea4c2ab7f31c867273",
+    "independent_audit": "2bf30b311788a9e6c85fb8204edabf5d58ec2abeece962a15c9cbb8fb2190874",
+    "mechanism_results": "3c05ead44934c0df59aefba098d5043cdf6c6bf9203c152a68769d85c0085ee9",
+    "pre_change_manifest": "d77ca1c2891261bf9c4e6ee5609d1d5c20ae558d0284e4dec7be1d243c45aa94",
+    "prior_artifact_verification": "85b06a2ef402bd46d555c94db8fa04d9f630b5eba60e5d5c39d5ac339c391f4d",
+    "robustness_report": "c4da91a03d313907e959e30faf32e6a667133397cce4ffefa5fc4ba0a7a876f1",
+    "trusted_input_manifest": "07df3bec2ebfcba68a1e8022a233b6ae3fdca5b723aba27662a0650e71987f63",
+    "walk_forward_results": "3af997a2be39950b8d1bf8fbcd161429b986adcea458d92931fd5a96bc2a05d3"
+  },
+  "status": "PASS",
+  "two_directory_determinism": "PASS_BY_STABLE_PAYLOAD_HASH"
+}

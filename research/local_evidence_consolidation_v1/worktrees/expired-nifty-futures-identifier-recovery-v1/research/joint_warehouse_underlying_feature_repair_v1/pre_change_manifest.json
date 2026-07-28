@@ -1,0 +1,12 @@
+{
+  "branch": "research/joint-warehouse-underlying-feature-repair-v1",
+  "clean_status": "?? scripts/audit_joint_underlying_feature_repair_v1.py\n?? scripts/repair_joint_underlying_feature_propagation_v1.py\n?? tests/research/test_joint_underlying_feature_repair_v1.py",
+  "current_commit": "dcfbbe8d13dfaebb095884fcb7a32ee9128903f3",
+  "current_joint_warehouse_hash": "4b804e196f3ae18fa79a4228f822177cde6476541278eda596525b0cffec11f3",
+  "current_underlying_feature_warehouse_hash": "b675697ff7127b661a16573a34aff9696392e31fae66d797e458607ebb050b81",
+  "eligibility_framework_hash": "9355fdbe2afbcd970116ae1ffcdea310fc7bbee71344b05c17412a9388d09569",
+  "scarcity_audit_hash": "7fc8ff996d1b13351891e3c859968bdeed8a8bf709cf42b23301775fdbc83ec9",
+  "source_commit": "dcfbbe8d13dfaebb095884fcb7a32ee9128903f3",
+  "sparse_bar_contract_hash": "19ca56be6e9abe345bef013cf54b1ebe7cf144f153473d4490361ee3324c73e0",
+  "worktree_path": "/Users/madhuram/tradebot-joint-feature-repair-v1"
+}

@@ -1,0 +1,7 @@
+{
+  "eligibility": "requires certified underlying, options, and constituent breadth when breadth motifs are enabled",
+  "granularity": "1minute",
+  "no_future_outcomes": true,
+  "semantic_hash": "d6ea441a5813b8bba7a9cb1e0d89ccb17f605438cc545c3a34246e5382d3ec95",
+  "status": "FROZEN_BLOCKED"
+}

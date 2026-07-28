@@ -1,0 +1,9 @@
+{
+  "certified_language_allowed": false,
+  "valid_underlying_verdicts": [
+    "NO_UNDERLYING_EDGE",
+    "INSUFFICIENT_SUPPORT",
+    "HISTORICAL_RECURRENCE_ONLY",
+    "HISTORICAL_UNDERLYING_EDGE_CANDIDATE"
+  ]
+}

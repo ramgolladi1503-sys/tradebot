@@ -1,0 +1,110 @@
+{
+  "artifact_count": 21,
+  "artifacts": [
+    {
+      "bytes": 215,
+      "path": "README.md",
+      "sha256": "b6832a8b5a095814fcdbef6a25c5109217d0e7880bf57678e105253498d2cdac"
+    },
+    {
+      "bytes": 6485,
+      "path": "ablation_report.json",
+      "sha256": "da4df524386105c5ac51c1e0c5585a55765a2f961d9e7077c486723099b58c9a"
+    },
+    {
+      "bytes": 46,
+      "path": "algotest_translation_specification.json",
+      "sha256": "7dff1e578e616af4ee8ae4f797a74a36133f6a3dba9cc5ef3420dda2359e18fa"
+    },
+    {
+      "bytes": 293,
+      "path": "concentration_report.json",
+      "sha256": "0aea2327223e3ce2493a4dcf8595aaa033e6c11a17ff689d56d57e4a65857ee5"
+    },
+    {
+      "bytes": 3544,
+      "path": "contract_identity_proof.json",
+      "sha256": "4332e4ad478d98a057313c65ebaceedd733f8e56f9a2689c7af55a001c5b095f"
+    },
+    {
+      "bytes": 4934,
+      "path": "control_experiments.json",
+      "sha256": "123c7361edf17f6c0665a7d025ef80b5dee3a80b832b039b772a3ea65418280f"
+    },
+    {
+      "bytes": 1839,
+      "path": "determinism_report.json",
+      "sha256": "396073e8b7b7b4d1bec08e68a4e7aa0bfd4ca1f7f670f3035393264abdfc91f9"
+    },
+    {
+      "bytes": 20768,
+      "path": "development_only_benchmark_report.json",
+      "sha256": "eed02ee01b25e51635f6b9e70216be314cb4b4c0493d51f588b2b7345bc8c188"
+    },
+    {
+      "bytes": 336,
+      "path": "effective_sample_size_report.json",
+      "sha256": "198c0662d3991195b4aa0f537a27606767388cb11787dc81e67ca877f8a644cd"
+    },
+    {
+      "bytes": 742,
+      "path": "event_funnel_report.json",
+      "sha256": "d0890b768804b9bb2b716fac7e7cfc1d35c1edab5fa4f2b968b5e2c33f68991a"
+    },
+    {
+      "bytes": 241,
+      "path": "execution_cost_report.json",
+      "sha256": "83cb6b914f5f103dcec71216c3f6011ea0ce60132f7850de4fe9dd673adcbd56"
+    },
+    {
+      "bytes": 532,
+      "path": "final_verdict.json",
+      "sha256": "d93423516f64c77c6ebb0f155e9a8c37d31189e5542caa38760c57c51a7e5605"
+    },
+    {
+      "bytes": 1572,
+      "path": "holdout_results.json",
+      "sha256": "7346be0f158505bb7f8109a4561b12bca918c8b53b0f8fc581b13ea923156ff2"
+    },
+    {
+      "bytes": 327,
+      "path": "incremental_option_value_report.json",
+      "sha256": "244cd9467e617d607af7f399462e40d6047898c638a7081c45493f97b2ffde77"
+    },
+    {
+      "bytes": 693,
+      "path": "independent_audit.json",
+      "sha256": "beb0ee9d45a76e583c1e4bea9f861f28d58ed3b2f53c7b1b3c9f1ac1211a3cb1"
+    },
+    {
+      "bytes": 36158,
+      "path": "mechanism_results.json",
+      "sha256": "f54a4b7492ccd2906e5702792bd8ebbb19f3eb45fb301b7c1dcb3e9a5e92f42d"
+    },
+    {
+      "bytes": 1613,
+      "path": "pre_change_manifest.json",
+      "sha256": "67be6540edfb4a6ebd354248199f7c89bfd6a3f93ceda91a75f1e28ce2ad17e7"
+    },
+    {
+      "bytes": 494,
+      "path": "repaired_input_manifest.json",
+      "sha256": "abc29b09f343fb878023f7a0c0cf70a6a29ac88b99497b5ccf28bd3f2b0b5a93"
+    },
+    {
+      "bytes": 13358,
+      "path": "robustness_report.json",
+      "sha256": "6a0284de843a97f5b64f730589b4086aed02f8d484a812b40ead2d7816cfdb21"
+    },
+    {
+      "bytes": 1403762,
+      "path": "trade_ledger.csv",
+      "sha256": "77502f6452b2bccfbdd1e6c0508bdb50dadcf35c9762038cb1486387b283e53b"
+    },
+    {
+      "bytes": 6128,
+      "path": "walk_forward_results.json",
+      "sha256": "86ec13ccba5123d8a5ae492976d58e160210faad783f9083481a904faadba3ee"
+    }
+  ]
+}

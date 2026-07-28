@@ -1,0 +1,73 @@
+{
+  "allowed_for_live_execution": false,
+  "append": false,
+  "broker_api_called": false,
+  "code_commit_sha": "4b63e12ed01428797763f959edef527a4da308c3",
+  "deterministic_seed": 68742,
+  "generated_at": "2026-07-21T14:16:52+00:00",
+  "input_hashes": {
+    "certified_manifest": "3390fad00ae40f0ab77eb05386fb8e04af3127081843dba63b8a3af050b40926",
+    "certified_sidecar": "ae5a035a0bf824ec25e0e08a5fc5298c522031e0695a32fef36356b7e725402f",
+    "long": {
+      "candidates": "374ca9dcf1951c383a619efb4b45525c7be53441010561ccba33496840064f61",
+      "discovery_dataset": "996f138c54c022a9a5481a4d2d04ffd3e13ade28529646f313eca6406c9fa13e",
+      "evidence_manifest": "92e5ed3bc596d85bce530b1c3bc4e71cceb78e46ad0b82156966fcc16433f508",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    },
+    "short": {
+      "candidates": "e0e2f837acaf207716af80fbf57321c5b07cac29902b94f599f7acfc60660caf",
+      "discovery_dataset": "0a45dbd2733d23f65c49ffaf88574bcf0108054acf97976f03983b230b465ceb",
+      "evidence_manifest": "b5536fdda700ac0b121e57f8bdc9a6b05d378a11414c53c36732bd42db48ba6f",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    }
+  },
+  "inventory": {
+    "certified_manifest": "3390fad00ae40f0ab77eb05386fb8e04af3127081843dba63b8a3af050b40926",
+    "certified_sidecar": "ae5a035a0bf824ec25e0e08a5fc5298c522031e0695a32fef36356b7e725402f",
+    "long": {
+      "candidates": "374ca9dcf1951c383a619efb4b45525c7be53441010561ccba33496840064f61",
+      "discovery_dataset": "996f138c54c022a9a5481a4d2d04ffd3e13ade28529646f313eca6406c9fa13e",
+      "evidence_manifest": "92e5ed3bc596d85bce530b1c3bc4e71cceb78e46ad0b82156966fcc16433f508",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    },
+    "short": {
+      "candidates": "e0e2f837acaf207716af80fbf57321c5b07cac29902b94f599f7acfc60660caf",
+      "discovery_dataset": "0a45dbd2733d23f65c49ffaf88574bcf0108054acf97976f03983b230b465ceb",
+      "evidence_manifest": "b5536fdda700ac0b121e57f8bdc9a6b05d378a11414c53c36732bd42db48ba6f",
+      "source_adapter_manifest": "01a09748054f28f14f9810ee622118726468cef53195cf1ce296534188ee93e6"
+    }
+  },
+  "is_order_action": false,
+  "read_only": true,
+  "reasons": [],
+  "schema_version": "ml_strategy_discovery_real_run_audit_v1",
+  "source_count_reconciliation": {
+    "certified_records": 1512,
+    "selected_nifty_records": 510,
+    "sides": {
+      "LONG": {
+        "adapter_records": 510,
+        "adapter_source_rows": 191250,
+        "dataset_rows": 175888,
+        "dataset_sessions": 510,
+        "split_rows": {
+          "DEVELOPMENT": 105508,
+          "HOLDOUT_LOCKED": 35190,
+          "VALIDATION": 35190
+        }
+      },
+      "SHORT": {
+        "adapter_records": 510,
+        "adapter_source_rows": 191250,
+        "dataset_rows": 175888,
+        "dataset_sessions": 510,
+        "split_rows": {
+          "DEVELOPMENT": 105508,
+          "HOLDOUT_LOCKED": 35190,
+          "VALIDATION": 35190
+        }
+      }
+    }
+  },
+  "status": "OK"
+}

@@ -1,0 +1,15 @@
+{
+  "causal": true,
+  "levels": [
+    "previous_day_high_low_close",
+    "opening_range_high_low",
+    "first_30m_high_low",
+    "first_60m_high_low",
+    "session_vwap",
+    "latest_accepted_swing",
+    "repeated_test_boundary",
+    "rolling_2_3_session_high_low"
+  ],
+  "outcome_selected": false,
+  "semantic_hash": "b55bda8691318e04f6db03e452094558605ce372c0d6ef6687e1165310e9230b"
+}

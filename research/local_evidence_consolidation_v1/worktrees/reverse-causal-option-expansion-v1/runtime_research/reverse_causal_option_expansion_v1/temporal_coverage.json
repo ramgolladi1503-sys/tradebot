@@ -1,0 +1,23 @@
+{
+  "ce_contracts": 549,
+  "distinct_expiries": 82,
+  "distinct_instruments": 1199,
+  "distinct_sessions": 390,
+  "first_timestamp": "2024-09-26 09:15:00+05:30",
+  "independent_move_clusters": 11261,
+  "last_timestamp": "2026-07-21 15:28:00+05:30",
+  "max_clusters_per_session": 132,
+  "max_observations_per_session": 10541,
+  "max_strikes_per_session": 15,
+  "median_clusters_per_session": 28.0,
+  "median_observations_per_session": 5040.5,
+  "median_strikes_per_session": 8.0,
+  "min_clusters_per_session": 1,
+  "min_observations_per_session": 600,
+  "min_strikes_per_session": 3,
+  "pe_contracts": 650,
+  "resolved_ticks_first_timestamp": "2026-07-02 10:52:39",
+  "resolved_ticks_last_timestamp": "2026-07-02 17:21:45",
+  "resolved_ticks_rows": 876127,
+  "resolved_ticks_sessions": 1
+}

@@ -1,0 +1,20 @@
+{
+  "entry": "legal next-open",
+  "horizons_minutes": [
+    15,
+    30,
+    60
+  ],
+  "target_stop_grid_bps": {
+    "stops": [
+      10,
+      15,
+      20
+    ],
+    "targets": [
+      10,
+      15,
+      20
+    ]
+  }
+}

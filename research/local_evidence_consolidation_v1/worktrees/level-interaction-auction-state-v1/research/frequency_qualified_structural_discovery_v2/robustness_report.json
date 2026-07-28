@@ -1,0 +1,545 @@
+{
+  "FQSDV2_EXPIRY_TRANSITION_03": {
+    "neighbourhood": {
+      "loose": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.9564568764568762,
+        "mae_points_mean": -21.322564102564105,
+        "max_trade_points": 75.29999999999998,
+        "mfe_points_mean": 20.847878787878788,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -2.9564568764568757,
+        "net_points_ci": {
+          "ci95_high": -2.2871030987247334,
+          "ci95_low": -3.625810654189018,
+          "mean": -2.9564568764568757,
+          "n": 2145,
+          "std": 15.816605980862429
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1215,
+          "PE": 930
+        },
+        "t_stat": -8.657089375798435,
+        "total_net_points": -6341.5999999999985,
+        "trades": 2145,
+        "win_rate": 0.3561771561771562
+      },
+      "primary": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.9564568764568762,
+        "mae_points_mean": -21.322564102564105,
+        "max_trade_points": 75.29999999999998,
+        "mfe_points_mean": 20.847878787878788,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -2.9564568764568757,
+        "net_points_ci": {
+          "ci95_high": -2.2871030987247334,
+          "ci95_low": -3.625810654189018,
+          "mean": -2.9564568764568757,
+          "n": 2145,
+          "std": 15.816605980862429
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1215,
+          "PE": 930
+        },
+        "t_stat": -8.657089375798435,
+        "total_net_points": -6341.5999999999985,
+        "trades": 2145,
+        "win_rate": 0.3561771561771562
+      },
+      "strict": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.9564568764568762,
+        "mae_points_mean": -21.322564102564105,
+        "max_trade_points": 75.29999999999998,
+        "mfe_points_mean": 20.847878787878788,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -2.9564568764568757,
+        "net_points_ci": {
+          "ci95_high": -2.2871030987247334,
+          "ci95_low": -3.625810654189018,
+          "mean": -2.9564568764568757,
+          "n": 2145,
+          "std": 15.816605980862429
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1215,
+          "PE": 930
+        },
+        "t_stat": -8.657089375798435,
+        "total_net_points": -6341.5999999999985,
+        "trades": 2145,
+        "win_rate": 0.3561771561771562
+      }
+    },
+    "top_trade_removal": {
+      "remove_top_1": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -1.9929570895522395,
+        "mae_points_mean": -21.31082089552239,
+        "max_trade_points": 62.15,
+        "mfe_points_mean": 20.822014925373132,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -2.9929570895522395,
+        "net_points_ci": {
+          "ci95_high": -2.3271269238702534,
+          "ci95_low": -3.6587872552342255,
+          "mean": -2.9929570895522395,
+          "n": 2144,
+          "std": 15.729676332433604
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1214,
+          "PE": 930
+        },
+        "t_stat": -8.810348641254265,
+        "total_net_points": -6416.9000000000015,
+        "trades": 2144,
+        "win_rate": 0.3558768656716418
+      },
+      "remove_top_10": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.219414519906323,
+        "mae_points_mean": -21.387447306791568,
+        "max_trade_points": 40.69999999999999,
+        "mfe_points_mean": 20.55838407494145,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -3.219414519906323,
+        "net_points_ci": {
+          "ci95_high": -2.5678181674357043,
+          "ci95_low": -3.8710108723769414,
+          "mean": -3.219414519906323,
+          "n": 2135,
+          "std": 15.361071578549042
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1212,
+          "PE": 923
+        },
+        "t_stat": -9.683989842931057,
+        "total_net_points": -6873.449999999999,
+        "trades": 2135,
+        "win_rate": 0.3531615925058548
+      },
+      "remove_top_3": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.053408029878619,
+        "mae_points_mean": -21.32749766573296,
+        "max_trade_points": 60.349999999999994,
+        "mfe_points_mean": 20.734663865546217,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -3.053408029878619,
+        "net_points_ci": {
+          "ci95_high": -2.3922507447528023,
+          "ci95_low": -3.7145653150044353,
+          "mean": -3.053408029878619,
+          "n": 2142,
+          "std": 15.611996655487074
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1214,
+          "PE": 928
+        },
+        "t_stat": -9.051824540393932,
+        "total_net_points": -6540.4000000000015,
+        "trades": 2142,
+        "win_rate": 0.35527544351073764
+      },
+      "remove_top_5": {
+        "expiry_count": 18,
+        "gross_expectancy_points": -2.1083177570093463,
+        "mae_points_mean": -21.344205607476635,
+        "max_trade_points": 50.599999999999994,
+        "mfe_points_mean": 20.654322429906543,
+        "min_trade_points": -84.80000000000001,
+        "net_expectancy_points": -3.1083177570093454,
+        "net_points_ci": {
+          "ci95_high": -2.45096639399163,
+          "ci95_low": -3.7656691200270607,
+          "mean": -3.1083177570093454,
+          "n": 2140,
+          "std": 15.514878650325532
+        },
+        "session_count": 45,
+        "side_counts": {
+          "CE": 1214,
+          "PE": 926
+        },
+        "t_stat": -9.267954927134051,
+        "total_net_points": -6651.799999999999,
+        "trades": 2140,
+        "win_rate": 0.35467289719626166
+      }
+    }
+  },
+  "FQSDV2_LADDER_CONFIRM_02": {
+    "neighbourhood": {
+      "loose": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.41732092893116973,
+        "mae_points_mean": -26.577071908226078,
+        "max_trade_points": 181.35,
+        "mfe_points_mean": 28.13700335758254,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.4173209289311697,
+        "net_points_ci": {
+          "ci95_high": -0.9614590392979359,
+          "ci95_low": -1.8731828185644035,
+          "mean": -1.4173209289311697,
+          "n": 7148,
+          "std": 19.66389230290691
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 3397,
+          "PE": 3751
+        },
+        "t_stat": -6.093839129522556,
+        "total_net_points": -10131.01,
+        "trades": 7148,
+        "win_rate": 0.39311695579182987
+      },
+      "primary": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6344026622296175,
+        "mae_points_mean": -27.507980033277867,
+        "max_trade_points": 181.35,
+        "mfe_points_mean": 28.621480865224626,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.6344026622296173,
+        "net_points_ci": {
+          "ci95_high": -1.1271866656983334,
+          "ci95_low": -2.141618658760901,
+          "mean": -1.6344026622296173,
+          "n": 6010,
+          "std": 20.061994475062775
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2852,
+          "PE": 3158
+        },
+        "t_stat": -6.31571015085773,
+        "total_net_points": -9822.76,
+        "trades": 6010,
+        "win_rate": 0.3886855241264559
+      },
+      "strict": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.9407662671232877,
+        "mae_points_mean": -28.41093964041096,
+        "max_trade_points": 181.35,
+        "mfe_points_mean": 29.59057148972603,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.9407662671232877,
+        "net_points_ci": {
+          "ci95_high": -1.3546090524497294,
+          "ci95_low": -2.526923481796846,
+          "mean": -1.9407662671232877,
+          "n": 4672,
+          "std": 20.441344642921532
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2201,
+          "PE": 2471
+        },
+        "t_stat": -6.489559094960736,
+        "total_net_points": -9067.26,
+        "trades": 4672,
+        "win_rate": 0.3874143835616438
+      }
+    },
+    "top_trade_removal": {
+      "remove_top_1": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.6648543850890332,
+        "mae_points_mean": -27.51235812947246,
+        "max_trade_points": 175.54999999999998,
+        "mfe_points_mean": 28.595897819936763,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.6648543850890332,
+        "net_points_ci": {
+          "ci95_high": -1.161078463771538,
+          "ci95_low": -2.1686303064065284,
+          "mean": -1.6648543850890332,
+          "n": 6009,
+          "std": 19.924270836305535
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2852,
+          "PE": 3157
+        },
+        "t_stat": -6.47731353701994,
+        "total_net_points": -10004.11,
+        "trades": 6009,
+        "win_rate": 0.38858379098019635
+      },
+      "remove_top_10": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.8958100000000013,
+        "mae_points_mean": -27.54695166666667,
+        "max_trade_points": 128.9,
+        "mfe_points_mean": 28.392266666666668,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.8958100000000013,
+        "net_points_ci": {
+          "ci95_high": -1.4145902517073725,
+          "ci95_low": -2.3770297482926304,
+          "mean": -1.8958100000000013,
+          "n": 6000,
+          "std": 19.01791909187221
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2852,
+          "PE": 3148
+        },
+        "t_stat": -7.721602476173607,
+        "total_net_points": -11374.860000000008,
+        "trades": 6000,
+        "win_rate": 0.38766666666666666
+      },
+      "remove_top_3": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.7220675878142166,
+        "mae_points_mean": -27.520610953887132,
+        "max_trade_points": 163.74999999999997,
+        "mfe_points_mean": 28.54842683535875,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.7220675878142166,
+        "net_points_ci": {
+          "ci95_high": -1.2244106050639025,
+          "ci95_low": -2.219724570564531,
+          "mean": -1.7220675878142166,
+          "n": 6007,
+          "std": 19.678991890632787
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2852,
+          "PE": 3155
+        },
+        "t_stat": -6.7822869749811305,
+        "total_net_points": -10344.46,
+        "trades": 6007,
+        "win_rate": 0.3883802230730814
+      },
+      "remove_top_5": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.7759550374687761,
+        "mae_points_mean": -27.52792006661116,
+        "max_trade_points": 149.8,
+        "mfe_points_mean": 28.498476269775182,
+        "min_trade_points": -161.5,
+        "net_expectancy_points": -1.775955037468776,
+        "net_points_ci": {
+          "ci95_high": -1.2837720527176721,
+          "ci95_low": -2.2681380222198797,
+          "mean": -1.775955037468776,
+          "n": 6005,
+          "std": 19.45929178268119
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2852,
+          "PE": 3153
+        },
+        "t_stat": -7.072312496132048,
+        "total_net_points": -10664.61,
+        "trades": 6005,
+        "win_rate": 0.3881765195670275
+      }
+    }
+  },
+  "FQSDV2_PAIR_ASYM_01": {
+    "neighbourhood": {
+      "loose": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.16746106179869358,
+        "mae_points_mean": -27.617518003684477,
+        "max_trade_points": 149.8,
+        "mfe_points_mean": 30.693644280690002,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.1674610617986936,
+        "net_points_ci": {
+          "ci95_high": -0.692432140689753,
+          "ci95_low": -1.6424899829076343,
+          "mean": -1.1674610617986936,
+          "n": 5971,
+          "std": 18.727832471047016
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 3152,
+          "PE": 2819
+        },
+        "t_stat": -4.817019721206975,
+        "total_net_points": -6970.91,
+        "trades": 5971,
+        "win_rate": 0.4036174845084575
+      },
+      "primary": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.3316566746602718,
+        "mae_points_mean": -28.50818345323741,
+        "max_trade_points": 149.8,
+        "mfe_points_mean": 30.6298860911271,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.3316566746602718,
+        "net_points_ci": {
+          "ci95_high": -0.8109862220168418,
+          "ci95_low": -1.8523271273037019,
+          "mean": -1.3316566746602718,
+          "n": 5004,
+          "std": 18.791675828009005
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2603,
+          "PE": 2401
+        },
+        "t_stat": -5.0128580738219215,
+        "total_net_points": -6663.61,
+        "trades": 5004,
+        "win_rate": 0.40367705835331735
+      },
+      "strict": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.32894723092998934,
+        "mae_points_mean": -29.490909090909096,
+        "max_trade_points": 149.8,
+        "mfe_points_mean": 31.63905433646813,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.3289472309299892,
+        "net_points_ci": {
+          "ci95_high": -0.734334185769038,
+          "ci95_low": -1.9235602760909405,
+          "mean": -1.3289472309299892,
+          "n": 3828,
+          "std": 18.77000231201738
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 1979,
+          "PE": 1849
+        },
+        "t_stat": -4.380557395806415,
+        "total_net_points": -5087.209999999999,
+        "trades": 3828,
+        "win_rate": 0.4054336468129572
+      }
+    },
+    "top_trade_removal": {
+      "remove_top_1": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.3618648810713579,
+        "mae_points_mean": -28.513002198680795,
+        "max_trade_points": 130.7,
+        "mfe_points_mean": 30.60586648011193,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.3618648810713578,
+        "net_points_ci": {
+          "ci95_high": -0.8444684015418352,
+          "ci95_low": -1.8792613606008803,
+          "mean": -1.3618648810713578,
+          "n": 5003,
+          "std": 18.671647915644154
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2603,
+          "PE": 2400
+        },
+        "t_stat": -5.159013005513799,
+        "total_net_points": -6813.4100000000035,
+        "trades": 5003,
+        "win_rate": 0.4035578652808315
+      },
+      "remove_top_10": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.5609451341609948,
+        "mae_points_mean": -28.55790949138967,
+        "max_trade_points": 86.05000000000001,
+        "mfe_points_mean": 30.324849819783736,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.5609451341609941,
+        "net_points_ci": {
+          "ci95_high": -1.0594850275912049,
+          "ci95_low": -2.0624052407307834,
+          "mean": -1.5609451341609941,
+          "n": 4994,
+          "std": 18.080256453119446
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2601,
+          "PE": 2393
+        },
+        "t_stat": -6.101088447261675,
+        "total_net_points": -7795.360000000004,
+        "trades": 4994,
+        "win_rate": 0.40248297957549056
+      },
+      "remove_top_3": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.41417916416716755,
+        "mae_points_mean": -28.522145570885822,
+        "max_trade_points": 116.19999999999999,
+        "mfe_points_mean": 30.56593681263747,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.4141791641671675,
+        "net_points_ci": {
+          "ci95_high": -0.9016824827925506,
+          "ci95_low": -1.9266758455417845,
+          "mean": -1.4141791641671675,
+          "n": 5001,
+          "std": 18.491128362841753
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2602,
+          "PE": 2399
+        },
+        "t_stat": -5.4084080199956786,
+        "total_net_points": -7072.310000000005,
+        "trades": 5001,
+        "win_rate": 0.40331933613277343
+      },
+      "remove_top_5": {
+        "expiry_count": 20,
+        "gross_expectancy_points": -0.46023404680936025,
+        "mae_points_mean": -28.53240648129626,
+        "max_trade_points": 109.1,
+        "mfe_points_mean": 30.5126325265053,
+        "min_trade_points": -92.85,
+        "net_expectancy_points": -1.4602340468093602,
+        "net_points_ci": {
+          "ci95_high": -0.9515252978087804,
+          "ci95_low": -1.96894279580994,
+          "mean": -1.4602340468093602,
+          "n": 4999,
+          "std": 18.35078740448427
+        },
+        "session_count": 81,
+        "side_counts": {
+          "CE": 2601,
+          "PE": 2398
+        },
+        "t_stat": -5.626124452094069,
+        "total_net_points": -7299.709999999992,
+        "trades": 4999,
+        "win_rate": 0.40308061612322466
+      }
+    }
+  }
+}

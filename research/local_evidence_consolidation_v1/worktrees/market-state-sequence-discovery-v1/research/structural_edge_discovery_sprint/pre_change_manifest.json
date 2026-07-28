@@ -1,0 +1,12 @@
+{
+  "base_commit": "8659f49630d1648c3f54f5e74021a878558131fc",
+  "branch": "research/structural-edge-discovery-sprint-one-survivor",
+  "python_version": "3.12.2",
+  "scope": "research_only_large_hypothesis_sprint",
+  "source_artifacts": [
+    "research/structural_edge_discovery_v3/outcome_labels.parquet",
+    "research/structural_edge_discovery_v3/pre_outcome_features.parquet",
+    "research/structural_edge_discovery_v3/final_verdict.json"
+  ],
+  "worktree_path": "/Users/madhuram/tradebot-structural-edge-discovery-sprint-one-survivor"
+}

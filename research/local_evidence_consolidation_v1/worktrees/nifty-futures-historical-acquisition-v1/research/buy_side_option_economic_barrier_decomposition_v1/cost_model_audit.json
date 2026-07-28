@@ -1,0 +1,17 @@
+{
+  "brokerage_assumptions": "represented inside frozen point cost",
+  "defect_found": false,
+  "entry_exit_side_handling": "buy-only entry, sell exit by premium path",
+  "exchange_charges": "represented inside frozen point cost",
+  "expiry_day_treatment": "same frozen target/stop/time exit",
+  "forced_square_off_treatment": "fixed max hold time exit",
+  "frozen_round_trip_cost_points": 1.0,
+  "gst_handling": "represented inside frozen point cost",
+  "lot_size_assumptions": "point-level research; no rupee conversion used",
+  "premium_point_vs_rupee_conversion": "not used in candidate decisions",
+  "spread_slippage_assumptions": "represented inside frozen point cost; bid/ask unavailable for finer audit",
+  "stamp_duty": "represented inside frozen point cost",
+  "status": "PASS",
+  "statutory_charges": "represented inside frozen point cost",
+  "stt_handling": "represented inside frozen point cost"
+}

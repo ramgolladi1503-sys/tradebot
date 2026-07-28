@@ -1,0 +1,17 @@
+{
+  "branch": "research/hierarchical-sequence-discovery-v2",
+  "broker_calls": false,
+  "clean_status_at_start": false,
+  "input_hashes": {
+    "reduced_input_hash": "c9de762129010ecedc7676b6e778ef53e6501c1188223c3431c0ed78c1c6403b",
+    "v1_event_vocabulary_hash": "5457a952e91c2f38b7f45f05a7c08ffbe9743f4b2863b2847be502fa105f1624",
+    "v1_frequency_gate_hash": "dc4c7670e7b17ade4605ebd62ccfbfcfa64f2d3e7ae611e5257c2676c7fdb2fb",
+    "v1_motif_catalogue_hash": "5558d8750241dd2961b46a0b1e51c89e9274695b57b5366ca1491b249310248c"
+  },
+  "outcomes_computed": false,
+  "production_changes": false,
+  "provider_calls": false,
+  "semantic_hash": "345e07f6917d6dd532401aeed1494c490370218cf31b5ab15aab1d8daaceaf36",
+  "source_commit": "51893e121225eed067df7677baba0cdc7a4c458c",
+  "worktree": "/Users/madhuram/tradebot-hierarchical-sequence-discovery-v2"
+}

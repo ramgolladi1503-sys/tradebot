@@ -1,0 +1,12 @@
+{
+  "mechanism_claims": {
+    "M1_ACCEPTANCE_BEYOND_KNOWN_LEVEL": "unsupported: acceptance did not produce positive holdout expectancy and raw crossing/close breach controls are unavailable in the reduced artifact set",
+    "M2_FAILED_AUCTION_RECLAIM": "unsupported: only positive underlying mean, but option net and WFA failed; reversed-order control is positive because it negates a losing stream, not a tradable survivor",
+    "M3_REPEATED_TEST_DEPLETION_PROXY": "unsupported: repeated-test ordering did not survive option or WFA checks",
+    "M4_HIGHEST_CLOSE_VERSUS_HIGHEST_WICK": "unsupported: highest-close/highest-wick distinction was negative and not robust",
+    "M5_COMPRESSION_NEAR_BOUNDARY": "contradicted: compression-near-boundary had the worst option expectancy and failed all economic gates",
+    "M6_OPTION_CONFIRMATION_NON_CONFIRMATION": "unsupported: option overlay did not improve to positive monetization"
+  },
+  "semantic_hash": "822e84ae148a400eef4c12b981d53e57a1389b58872506c49b356d89a5753a62",
+  "status": "RUN"
+}

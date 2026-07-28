@@ -1,0 +1,32 @@
+{
+  "artifact": "previous_audit_claim_reconciliation",
+  "audit_baseline_head": "a48176fc245375f15e316493364915ec37439e29",
+  "claims": [
+    {
+      "claim": "Authority files absent",
+      "reason": "All required authority files are present at verified origin/main and absent only from the dirty shared checkout HEAD.",
+      "v2_verdict": "SUPERSEDED_STALE_BASELINE"
+    },
+    {
+      "claim": "ORB entrypoint is snapshot-style and ignores temporal helpers",
+      "reason": "Current main entrypoint validates completed history and scans breakout, retest, continuation sequence.",
+      "v2_verdict": "SUPERSEDED_STALE_BASELINE"
+    },
+    {
+      "claim": "Trend Pullback uses only regime and spot/VWAP state",
+      "reason": "Current main entrypoint uses validated completed_bar_history and four-bar temporal contract.",
+      "v2_verdict": "SUPERSEDED_STALE_BASELINE"
+    },
+    {
+      "claim": "VWAP Reclaim uses current spot/VWAP metadata only",
+      "reason": "Current main entrypoint validates completed history, computes causal VWAP, and uses establishment/reclaim/hold sequence.",
+      "v2_verdict": "SUPERSEDED_STALE_BASELINE"
+    },
+    {
+      "claim": "Compression breakout production-regime rerun distribution can be carried forward",
+      "reason": "Prior run did not bind to this verified baseline and external adapter unit assumptions are not authoritative for current-main source.",
+      "v2_verdict": "UNSUPPORTED"
+    }
+  ],
+  "previous_audit_verdict": "FOUR_STRATEGY_MATH_AUDIT_COMPLETE_WITH_REPAIRS_AND_AMBIGUITIES"
+}

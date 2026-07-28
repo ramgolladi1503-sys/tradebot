@@ -1,0 +1,39 @@
+{
+  "A_SOURCE_INTEGRITY": {
+    "blockers": [],
+    "can_run": true,
+    "classification": "SOURCE_INTEGRITY_REPAIRED"
+  },
+  "B_CAUSAL_STRUCTURAL_DISCOVERY": {
+    "blockers": [],
+    "can_run": true,
+    "classification": "STRUCTURAL_DISCOVERY_ONLY"
+  },
+  "C_GROSS_OUTCOME_EVALUATION": {
+    "blockers": [],
+    "can_run": true,
+    "classification": "GROSS_OUTCOME_ONLY"
+  },
+  "D_ASSUMPTION_COST_STRESS": {
+    "blockers": [],
+    "can_run": true,
+    "classification": "ASSUMPTION_BASED_COST_STRESS_ONLY"
+  },
+  "E_EXECUTION_CERTIFICATION": {
+    "blockers": [
+      "AUTHORITATIVE_QUOTE_OR_SPREAD_MISSING"
+    ],
+    "can_run": false,
+    "classification": "EXECUTION_CERTIFICATION"
+  },
+  "F_FINAL_VALIDATED_EDGE": {
+    "blockers": [
+      "AUTHORITATIVE_QUOTE_OR_SPREAD_MISSING",
+      "FROZEN_MECHANISM_MISSING",
+      "UNTOUCHED_HOLDOUT_NOT_EXECUTED",
+      "INDEPENDENT_FINAL_AUDIT_NOT_EXECUTED"
+    ],
+    "can_run": false,
+    "classification": "VALIDATED_OPTION_EXPANSION_EDGE"
+  }
+}

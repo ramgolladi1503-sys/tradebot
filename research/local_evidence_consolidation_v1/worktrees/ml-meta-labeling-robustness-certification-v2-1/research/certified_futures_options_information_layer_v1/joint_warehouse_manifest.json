@@ -1,0 +1,9 @@
+{
+  "blocking_gate": "MISSING_FUTURES_LEG",
+  "provenance_hashes": [],
+  "reason": "Futures certification gate failed; immutable warehouse rows were not fabricated.",
+  "row_count": 0,
+  "semantic_hash": "8b66644b6b547d6332abc027281a1458826e9cfafe9adaa772f91806a0d80442",
+  "status": "NOT_BUILT",
+  "synthetic_values": false
+}

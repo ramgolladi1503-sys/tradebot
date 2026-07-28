@@ -1,0 +1,8 @@
+{
+  "algotest_used": false,
+  "broker_api_called": false,
+  "exact_next_action": "Do not proceed to AlgoTest; no frequency-qualified candidate survived all local gates.",
+  "final_verdict": "NO_FREQUENCY_QUALIFIED_EDGE_FOUND",
+  "production_modified": false,
+  "surviving_candidates": []
+}

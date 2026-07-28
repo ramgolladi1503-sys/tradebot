@@ -1,0 +1,21 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/provider-sparse-bar-governance-v1",
+  "broker_api_called": false,
+  "current_commit": "ead2259b7a92c958ec43def4940aee4675798b21",
+  "final_verdict": "DISCOVERY_READY",
+  "is_order_action": false,
+  "promotion_checks": {
+    "audit_passes": true,
+    "causal_features_pass": true,
+    "determinism_passes": true,
+    "joint_warehouse_passes": true,
+    "no_synthetic_data_exists": true,
+    "sparse_bars_fully_governed": true
+  },
+  "provider_authoritative_sparse_bar_count": 4,
+  "read_only": true,
+  "source_commit": "ead2259b7a92c958ec43def4940aee4675798b21",
+  "structural_discovery_input_rule": "Consume only research_eligible=true.",
+  "worktree": "/Users/madhuram/tradebot-provider-sparse-bar-governance-v1"
+}

@@ -1,0 +1,30 @@
+{
+  "allowed_for_live_execution": false,
+  "broker_api_called": false,
+  "execution_eligibility": false,
+  "is_order_action": false,
+  "read_only": true,
+  "reason": "Historical evaluation executed on accepted Kite corpus, but Aeron7 parser completion and authoritative option replay are required before certification; no prospective untouched holdout exists.",
+  "research_only": true,
+  "strategies": {
+    "GAP_GO_LEADER_V1": {
+      "30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY",
+      "FINAL_STRATEGY_VERDICT": "PROMISING_RESEARCH_ONLY",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RESEARCH_EVALUATED_NOT_CERTIFIED"
+    },
+    "LATE_DAY_PERSISTENCE_V1": {
+      "30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY",
+      "FINAL_STRATEGY_VERDICT": "PROMISING_RESEARCH_ONLY",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RESEARCH_EVALUATED_NOT_CERTIFIED"
+    },
+    "PRIOR_RANGE_LEADER_V1": {
+      "30_MINUTE_COMPATIBILITY": "FAIL_PRODUCTION_COMPATIBILITY",
+      "FINAL_STRATEGY_VERDICT": "PROMISING_RESEARCH_ONLY",
+      "OPTION_REPLAY_VERDICT": "NOT_EVALUABLE_NO_AUTHORITATIVE_DATA",
+      "UNDERLYING_EDGE_VERDICT": "HISTORICAL_RESEARCH_EVALUATED_NOT_CERTIFIED"
+    }
+  },
+  "suite_verdict": "CERTIFY_NONE"
+}

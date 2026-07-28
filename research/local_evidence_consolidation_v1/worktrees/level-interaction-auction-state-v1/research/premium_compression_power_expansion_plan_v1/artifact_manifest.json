@@ -1,0 +1,75 @@
+{
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "bytes": 345,
+      "path": "clustered_power_analysis.json",
+      "sha256": "01b50482f72da230d0bc72b39306a3aaff505e0163aff638f75078ae8eed307b"
+    },
+    {
+      "bytes": 1549,
+      "path": "contract_identity_proof.json",
+      "sha256": "b45fcedf279bc2634382ec371a280276ecc3e94fd4e11848ee439207e14a9547"
+    },
+    {
+      "bytes": 1373,
+      "path": "determinism_report.json",
+      "sha256": "d2d31bd7815c6ef6b809af55eb419aceac52bd91f9411043b87e875c1aa35b81"
+    },
+    {
+      "bytes": 3474,
+      "path": "effective_sample_size_report.json",
+      "sha256": "0b6f66d4216c0bfa18b827f18429641daa19e3aae8812d6bc4733972d7936202"
+    },
+    {
+      "bytes": 508928,
+      "path": "exhaustive_local_data_inventory.json",
+      "sha256": "1979bbca1da939f4d820870952e006cb189c374a556bc34e057396453b6bcbf8"
+    },
+    {
+      "bytes": 409,
+      "path": "final_verdict.json",
+      "sha256": "81bf7ee3c1042e5b8d400f6f42825beff14efa86c2de9db12f01366a8b4f9eb8"
+    },
+    {
+      "bytes": 621,
+      "path": "frozen_future_decision_rule.json",
+      "sha256": "f9fb58888693849cb6c6a5d411bab08dd9ad9657218601faea535efd966b10a6"
+    },
+    {
+      "bytes": 299,
+      "path": "independent_audit.json",
+      "sha256": "bf8b0676bc6c04b306cc1d59176ef9be712099c9541a6d528e57e134c036c34a"
+    },
+    {
+      "bytes": 1067,
+      "path": "pre_change_manifest.json",
+      "sha256": "a81a3cc9d5becbddc9bd7c98b4ca5317962a86e5d4021fe48579ea8d87bdfa86"
+    },
+    {
+      "bytes": 883,
+      "path": "prior_result_verification.json",
+      "sha256": "481de4725f45325fa5c952b5435198233e497b60b726cdacefbfc12fd06fc201"
+    },
+    {
+      "bytes": 586,
+      "path": "prospective_chronological_expansion_plan.json",
+      "sha256": "a4dd53545a32f4ee26f98aeb6f798a356c33bce1a4bffe9a745410884c52c5c7"
+    },
+    {
+      "bytes": 709,
+      "path": "provider_feasibility_report.json",
+      "sha256": "d8e94c6d74900f1d6fe3e89927a262c3f2a9b91e43f1ab2c7b5037d9919f9c11"
+    },
+    {
+      "bytes": 2310,
+      "path": "required_additional_evidence_table.json",
+      "sha256": "28d1802320845c2d955fba6ef8f638ad66e55d426b9ba84650bfb17bd363586f"
+    },
+    {
+      "bytes": 2310,
+      "path": "shrinkage_scenario_analysis.json",
+      "sha256": "28d1802320845c2d955fba6ef8f638ad66e55d426b9ba84650bfb17bd363586f"
+    }
+  ]
+}

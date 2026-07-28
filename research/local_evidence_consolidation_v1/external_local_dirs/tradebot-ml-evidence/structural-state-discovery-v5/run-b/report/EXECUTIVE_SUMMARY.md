@@ -1,0 +1,1 @@
+Structural-state discovery v5 invalidates V4 and reruns the frozen predeclared search with repaired statistics, matching, template aggregation, oracle, and mutation gates. Final verdict: NO_STABLE_STATE_EDGE_FOUND_IN_PREDECLARED_SEARCH.

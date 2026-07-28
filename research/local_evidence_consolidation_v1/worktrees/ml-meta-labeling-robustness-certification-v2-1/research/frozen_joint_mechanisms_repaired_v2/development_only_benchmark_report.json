@@ -1,0 +1,773 @@
+{
+  "benchmark_fit_end": "2026-02-28",
+  "causal_fit_rule": "development-only median current-bar premium_velocity by side, moneyness, premium band, and underlying displacement bin",
+  "compression_table": [
+    {
+      "median": -0.05000000000000249,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "std": 3.709126145332939
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "std": 9.43599239120444
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "std": 3.8795154814889483
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "std": 3.658189638987272
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "std": 3.6894971039963336
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "std": 2.707670158852044
+    },
+    {
+      "median": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "std": 5.270587917323207
+    },
+    {
+      "median": -0.04000000000000625,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "std": 4.157295109673721
+    }
+  ],
+  "development_rows": 297284,
+  "expected_response_table": [
+    {
+      "expected_response_points": -0.15000000000000568,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.09999999999999432,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.1,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.05,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.10000000000000142,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.04999999999999716,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.10000000000000142,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -1.5999999999999943,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.09999999999999432,
+      "moneyness_bucket": "ATM",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.35999999999999943,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.02499999999999858,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.8000000000000114,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -1.0999999999999943,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -1.1999999999999886,
+      "moneyness_bucket": "FAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -1.1500000000000057,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.1700000000000017,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.09999999999999432,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.20000000000000284,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.05000000000000071,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.04999999999999716,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.4000000000000341,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.05000000000001137,
+      "moneyness_bucket": "MID",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.7999999999999972,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.04999999999999716,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.04999999999999999,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.14999999999999858,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.04999999999999716,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 1.75,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.10000000000002274,
+      "moneyness_bucket": "NEAR",
+      "option_type": "CE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.05000000000001137,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.050000000000000266,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.05,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.30000000000000426,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.14999999999999858,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.9499999999999886,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.15000000000000568,
+      "moneyness_bucket": "ATM",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.10000000000000142,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.05000000000000071,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -2.4749999999999943,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.22499999999999432,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.025000000000005684,
+      "moneyness_bucket": "FAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 4.199999999999989,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.6999999999999886,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 1.7100000000000364,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "DEEP",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.5999999999999943,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.09999999999999432,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.14999999999999147,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.3000000000000007,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.4749999999999943,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.060000000000002274,
+      "moneyness_bucket": "MID",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.6499999999999915,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": -0.04999999999998295,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.15000000000000568,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "HIGH",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.049999999999998934,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "LOW",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": -0.6000000000000014,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.0,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": -0.04999999999999716,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "MID",
+      "underlying_abs_move_bin": "MID"
+    },
+    {
+      "expected_response_points": 1.7949999999999875,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "HIGH"
+    },
+    {
+      "expected_response_points": 0.13999999999998636,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "LOW"
+    },
+    {
+      "expected_response_points": 0.15000000000000568,
+      "moneyness_bucket": "NEAR",
+      "option_type": "PE",
+      "premium_band": "RICH",
+      "underlying_abs_move_bin": "MID"
+    }
+  ],
+  "holdout_start": "2026-03-01",
+  "no_future_outcome_fields_used": true
+}

@@ -1,0 +1,85 @@
+{
+  "dimensions": [
+    {
+      "coverage": "PARTIAL: only instantaneous velocity and acceleration bins; no sequence shapes.",
+      "current_data_supports_causal_test": true,
+      "dimension": "path_dependent_premium_states"
+    },
+    {
+      "coverage": "UNCOVERED: no lagged confirmation entry sequence.",
+      "current_data_supports_causal_test": true,
+      "dimension": "delayed_option_response"
+    },
+    {
+      "coverage": "UNCOVERED: no explicit premium-before-underlying or underlying-before-premium timing variable.",
+      "current_data_supports_causal_test": true,
+      "dimension": "lead_lag_states"
+    },
+    {
+      "coverage": "PARTIAL: CE and PE separate, but no paired simultaneous asymmetry feature.",
+      "current_data_supports_causal_test": true,
+      "dimension": "ce_pe_asymmetry"
+    },
+    {
+      "coverage": "UNCOVERED: no elasticity residual feature.",
+      "current_data_supports_causal_test": true,
+      "dimension": "underlying_move_vs_premium_elasticity_residual"
+    },
+    {
+      "coverage": "PARTIAL: acceleration used, simple premium return not separately compared.",
+      "current_data_supports_causal_test": true,
+      "dimension": "premium_acceleration_vs_simple_return"
+    },
+    {
+      "coverage": "UNCOVERED: static moneyness bucket only.",
+      "current_data_supports_causal_test": true,
+      "dimension": "moneyness_transitions"
+    },
+    {
+      "coverage": "UNCOVERED: DTE calculated but not in candidate grammar.",
+      "current_data_supports_causal_test": true,
+      "dimension": "dte_interactions"
+    },
+    {
+      "coverage": "UNCOVERED: no expiry-day interaction.",
+      "current_data_supports_causal_test": true,
+      "dimension": "expiry_day_vs_non_expiry"
+    },
+    {
+      "coverage": "PARTIAL: time bucket used only as one of coarse paired conditions.",
+      "current_data_supports_causal_test": true,
+      "dimension": "time_of_day_interactions"
+    },
+    {
+      "coverage": "UNCOVERED: no failed-breakout event state.",
+      "current_data_supports_causal_test": true,
+      "dimension": "failed_underlying_breakout_opposite_side_response"
+    },
+    {
+      "coverage": "UNCOVERED: no compression-to-expansion sequence.",
+      "current_data_supports_causal_test": true,
+      "dimension": "premium_compression_followed_by_expansion"
+    },
+    {
+      "coverage": "UNCOVERED: candidate rows are per contract, no multi-strike confirmation.",
+      "current_data_supports_causal_test": false,
+      "dimension": "multi_strike_confirmation"
+    },
+    {
+      "coverage": "UNCOVERED: no paired CE/PE divergence state.",
+      "current_data_supports_causal_test": false,
+      "dimension": "same_side_vs_opposite_side_divergence"
+    },
+    {
+      "coverage": "UNCOVERED: static snapshot grammar only.",
+      "current_data_supports_causal_test": true,
+      "dimension": "event_sequence_patterns"
+    },
+    {
+      "coverage": "UNCOVERED: entry at detection next bar, not post-confirmation.",
+      "current_data_supports_causal_test": true,
+      "dimension": "entry_after_confirmation"
+    }
+  ],
+  "status": "PASS"
+}

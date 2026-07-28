@@ -1,0 +1,20 @@
+{
+  "clusters": {
+    "call_elasticity_collapse": 324,
+    "call_elasticity_expansion": 318,
+    "call_non_confirmation": 228,
+    "compression": 382,
+    "cross_strike_dispersion": 76,
+    "expiry_day": 81,
+    "expiry_week": 298,
+    "opening_displacement": 286,
+    "put_elasticity_collapse": 252,
+    "put_elasticity_expansion": 245,
+    "put_non_confirmation": 152,
+    "underlying_above_vwap_extension": 76,
+    "underlying_below_vwap_extension": 89,
+    "volatility_expansion": 259
+  },
+  "method": "prototype event-set clustering",
+  "semantic_hash": "07c55de4ffb666c3864ecb8a4d216581b97ecf423df14889d87fa69a24e6672b"
+}

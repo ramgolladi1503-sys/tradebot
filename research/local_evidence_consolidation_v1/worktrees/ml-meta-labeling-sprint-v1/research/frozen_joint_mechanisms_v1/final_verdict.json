@@ -1,0 +1,13 @@
+{
+  "allowed_for_live_execution": false,
+  "branch": "research/frozen-joint-mechanisms-v1",
+  "broker_api_called": false,
+  "current_commit": "7a83c6f7d9c5df2eaee68dc906f03866fd49d3a6",
+  "exact_next_action": "Do not proceed to AlgoTest; frozen contracts produced insufficient effective holdout events.",
+  "final_verdict": "INSUFFICIENT_POWER_FOR_FROZEN_MECHANISMS",
+  "is_order_action": false,
+  "read_only": true,
+  "source_commit": "7a83c6f7d9c5df2eaee68dc906f03866fd49d3a6",
+  "surviving_mechanisms": [],
+  "worktree": "/Users/madhuram/tradebot-frozen-joint-mechanisms-v1"
+}

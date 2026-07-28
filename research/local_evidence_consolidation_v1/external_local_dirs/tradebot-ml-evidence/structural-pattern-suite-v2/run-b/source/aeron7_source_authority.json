@@ -1,0 +1,11 @@
+{
+  "cache": "/Users/madhuram/tradebot-ml-evidence/source-cache/aeron7-nifty-banknifty-intraday-data",
+  "candidate_generation_status": "NOT_INCLUDED_IN_THIS_RUN_REQUIRES_SOURCE_SPECIFIC_1M_PARSER",
+  "relevant_tree_file_count": 29622,
+  "repo": "https://github.com/aeron7/nifty-banknifty-intraday-data.git",
+  "source_commit_sha": "906fc2378b82e50de78f62844a3ecb3f9306a85d",
+  "source_id": "AERON7",
+  "status": "INVENTORIED_TREE",
+  "tree_file_count": 338996,
+  "usable_for": "RETROSPECTIVE_PREHISTORY_RECURRENCE_AFTER_PARSER_COMPLETION"
+}

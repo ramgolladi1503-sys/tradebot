@@ -1,0 +1,43 @@
+{
+  "allowed_for_live_execution": false,
+  "campaign_id": "proxy_campaign_2024_2025_v1",
+  "code_hashes": {
+    "git_head": "64fbb1d52973bb9365da1dad6eec5ea007f2436e"
+  },
+  "commercial_use_allowed": false,
+  "cost_model": "5 bps assumed round trip cost; one-bar delayed entry",
+  "created_at_utc": "2026-07-23T10:49:21.649127+00:00",
+  "decision_times": [
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "12:30",
+    "13:00",
+    "13:30",
+    "14:00",
+    "14:15"
+  ],
+  "end_date": "2025-08-29",
+  "index": "NIFTY",
+  "latest_proxy_snapshot": "2025-08-31",
+  "official_weight_gate_passed": false,
+  "provider": "Upstox V3",
+  "proxy_weights_full_sha256": "55acaac25dbfdd18ead9af20afe3315c12c2f8b7ddf230096266f3c0500f1ca7",
+  "proxy_weights_path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/normalized/point_in_time_weights_proxy.csv",
+  "reason_for_window": "Frozen NIFTY proxy evaluation window ending before latest community proxy snapshot 2025-08-31",
+  "research_only": true,
+  "start_date": "2024-01-01",
+  "strategy_thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "minimum_history_sessions": 20,
+    "minimum_weight_coverage": 0.8,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "z_entry": 2.0
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "feature_count": 7,
+  "feature_names": [
+    "previous_range",
+    "previous_close_location",
+    "gap_bps",
+    "gap_over_previous_range",
+    "open_to_cutoff_return_bps",
+    "open_to_cutoff_range_over_previous_range",
+    "directional_efficiency",
+    "close_location",
+    "distance_from_high_bps",
+    "distance_from_low_bps",
+    "return_spread_bps",
+    "direction_agreement"
+  ]
+}

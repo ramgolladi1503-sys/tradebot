@@ -1,0 +1,28 @@
+{
+  "delayed_status": "REJECTED_POWERED_NEGATIVE_NOT_RETESTED",
+  "premium_status": "UNRESOLVED_POSITIVE_UNDERPOWERED",
+  "prior_holdout": {
+    "confidence_interval": {
+      "ci95_high": 11.690047636177752,
+      "ci95_low": 0.0147142685841537,
+      "mean": 5.852380952380953,
+      "n": 21,
+      "std": 13.648749724704423
+    },
+    "expiry_count": 6,
+    "gross_expectancy_points": 6.852380952380954,
+    "gross_pct_mean": -0.03064677791083849,
+    "mae_points_mean": -7.504761904761905,
+    "max_trade_points": 27.400000000000006,
+    "mfe_points_mean": 23.60714285714286,
+    "min_trade_points": -16.25,
+    "net_expectancy_points": 5.852380952380953,
+    "net_pct_mean": -0.06868778793030612,
+    "session_count": 8,
+    "t_stat": 1.9649403242745926,
+    "total_net_points": 122.90000000000002,
+    "trades": 21,
+    "win_rate": 0.6190476190476191
+  },
+  "status": "PASS"
+}

@@ -1,0 +1,15 @@
+{
+  "branch": "research/nifty-futures-historical-acquisition-v1",
+  "broker_api_called": false,
+  "clean_status_at_start": false,
+  "options_warehouse_hash": "3e30d3273b7c0498cf0bb28abc2b30e7ae1c3cc0fb1dbc7823f2dbbab3008be3",
+  "order_action": false,
+  "pnl_or_strategy": false,
+  "prior_certification_hash": "2b206ff04a9ed18a7f286bea05c4249575909204bd41518a0f297fca4663eb3c",
+  "provider_contract_hash": "5da2bc38bc0f54c9fccd14ad5cd6712c6b9f066766d3c621fb82330e6292fe40",
+  "semantic_hash": "49a7e82ebfe449db1f5386104cc4ea6a0179b8c9cab64f7df47175606005262b",
+  "source_commit": "fee5d0141c53d925e90855311f0c13b4ac05e915",
+  "token_stored": false,
+  "underlying_warehouse_hash": "3e27a2404360f173b5999832a5fa2d5382bfff60ecc3459d0750ae0a3a8b97fb",
+  "worktree": "/Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1"
+}

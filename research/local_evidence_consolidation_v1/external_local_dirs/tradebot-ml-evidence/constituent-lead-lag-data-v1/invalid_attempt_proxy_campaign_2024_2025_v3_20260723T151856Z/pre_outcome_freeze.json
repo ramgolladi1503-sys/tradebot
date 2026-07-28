@@ -1,0 +1,149 @@
+{
+  "allowed_for_live_execution": false,
+  "campaign_window": {
+    "end": "2025-08-29",
+    "start": "2024-01-01"
+  },
+  "chronological_fold_spec": {
+    "folds": 5,
+    "order": "session_ascending"
+  },
+  "concentration_spec": "absolute_net_contribution_v1",
+  "control_spec": "causal_matched_no_lead_v1",
+  "coverage_gates": {
+    "campaign_pass_rate_min": 0.95,
+    "count_min": 0.8,
+    "weight_min": 0.8
+  },
+  "decision_times": [
+    "10:00",
+    "10:30",
+    "11:00",
+    "11:30",
+    "12:00",
+    "12:30",
+    "13:00",
+    "13:30",
+    "14:00",
+    "14:15"
+  ],
+  "delay_spec": "additional_one_bar_delay_v1",
+  "entry_causality": {
+    "base_entry_delay_bars": 1,
+    "sensitivity_entry_delay_bars": 2
+  },
+  "exact_bar_contract": "T,T-5m,T-10m exact timestamps",
+  "final_taxonomy": [
+    "NO_QUALIFYING_SIGNALS_UNDER_VALID_PROXY_CONTRACT",
+    "PROXY_SUPPORTS_PURCHASING_AUTHORITATIVE_DATA",
+    "PROXY_DOES_NOT_SUPPORT_PURCHASING_AUTHORITATIVE_DATA",
+    "INSUFFICIENT_PROXY_OHLCV",
+    "INSUFFICIENT_INSTRUMENT_RESOLUTION",
+    "INSUFFICIENT_CONSTITUENT_COVERAGE",
+    "PROXY_EVALUATION_FAILED_DATA_CONTRACT"
+  ],
+  "freeze_version": "constituent_lead_lag_proxy_v3",
+  "frozen_files": {
+    "accepted_raw_manifest": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/accepted_raw_files.json",
+      "sha256": "87f7c772642f5ba68b49f715a980c4713eed59f63685669e1c8a401a89a36088"
+    },
+    "coverage_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/scripts/calculate_proxy_membership_coverage.py",
+      "sha256": "0c0f05241a2986cf7e93d0107d34ef681a29ee9d25206f6aa13e4cef4455cebd"
+    },
+    "evidence_controls_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/research/constituent_lead_lag/evidence_controls.py",
+      "sha256": "f341e945811f7c66a52f8cb4af1a73d1c052e7a18032600e6c7e859b6970cb5d"
+    },
+    "exact_bar_contract_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/research/constituent_lead_lag/bar_grid.py",
+      "sha256": "a8861007281009a90ef41fcddb8c55ede423ebc4c6e67cd0852634f595f6c563"
+    },
+    "instrument_master": {
+      "path": "/Users/madhuram/tradebot/.runtime/upstox_instruments.json.gz",
+      "sha256": "1b07e99f4bd4d1951d348ef27c197982320270b9068e6d2d5f1605942b25d15b"
+    },
+    "normalized_bars": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/constituent_index_5m.parquet",
+      "sha256": "ae9645a83cb555899145e04ebe5a961fd130df25cba88a8fc8fd43b986bbfad0"
+    },
+    "normalized_weights": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/normalized/point_in_time_weights_proxy.global_intervals.csv",
+      "sha256": "aa403401627f0fb433026f23531b59d61b07c499b9fe6c9095eb04ca35c2c416"
+    },
+    "oracle_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/scripts/audit_reconstructed_proxy_evidence.py",
+      "sha256": "8530d80aa138da5c5a8e6d40dd1c1f6c2dad86dbd13f1050fd797ba5c299400b"
+    },
+    "proxy_source_manifest": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/download_manifest.json",
+      "sha256": "5eb212dd676be7258baf1aec9fb0dcfd2677bb2a35a092a2e1e5f08c451b5a32"
+    },
+    "raw_weights": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/reconstructed_nifty50_weights/raw/weights.csv",
+      "sha256": "3a3441a997b64a54363b38ebc02807e82cc0e0affd2efda147d1b7758a0b10cb"
+    },
+    "rejected_raw_manifest": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/rejected_raw_files.json",
+      "sha256": "95b7d15a0cc61295c4048ab6d9d0c5744151cb9800bf237c2c0705c383e21163"
+    },
+    "session_grid": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3/reports/session_grid.parquet",
+      "sha256": "b6916ead1bd4e38596abb6d5081b184a0f0af04eb508abb8c8a47d9318314a37"
+    },
+    "session_policy": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v3/pre_fetch/session_policy.json",
+      "sha256": "b34f30bc83ad55daf886d2ffdd20721689672c470bb06bedfcc645c78b5cc050"
+    },
+    "ticker_resolution": {
+      "path": "/Users/madhuram/tradebot-ml-evidence/constituent-lead-lag-data-v1/proxy_campaign_2024_2025_v2/manifests/ticker_resolution.csv",
+      "sha256": "8ec27e7ee74e97e2593f42ba4136c902c62bea660a6d57234caca59aa6643e7c"
+    },
+    "unweighted_strategy_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/research/constituent_lead_lag/unweighted.py",
+      "sha256": "982daeb773c6bccb8232ce34cc0c04fdca26c41085734c2b936a5b934c0ee5e1"
+    },
+    "weighted_runner_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/scripts/run_reconstructed_weight_proxy_research.py",
+      "sha256": "0294c3f54f214515707e8717044886a7d5d9b95bb83cfc054b49e0cde3b30d23"
+    },
+    "weighted_strategy_source": {
+      "path": "/Users/madhuram/tradebot-constituent-lead-lag-v1/research/constituent_lead_lag/model.py",
+      "sha256": "80c0dac8a27db890b35ef4046f5cce5ef8a25724945237f1211988e624a2cae6"
+    }
+  },
+  "index": "NIFTY",
+  "official_weight_gate_passed": false,
+  "provider": "Upstox V3",
+  "research_only": true,
+  "thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "max_hold_minutes": 20,
+    "minimum_history_sessions": 20,
+    "minimum_weight_coverage": 0.8,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "reward_risk": 1.5,
+    "stop_fraction_of_median_30m_move": 0.35,
+    "z_entry": 2.0
+  },
+  "unweighted_thresholds": {
+    "assumed_round_trip_cost_bps": 5.0,
+    "breadth_abs_min": 0.4,
+    "catch_up_ratio_max": 0.6,
+    "dispersion_percentile_max": 0.8,
+    "max_hold_minutes": 20,
+    "minimum_constituent_count": 5,
+    "minimum_constituent_coverage": 0.8,
+    "minimum_history_sessions": 20,
+    "participation_min": 0.7,
+    "range_consumed_max": 0.6,
+    "reward_risk": 1.5,
+    "stop_fraction_of_median_30m_move": 0.35,
+    "z_entry": 2.0
+  }
+}

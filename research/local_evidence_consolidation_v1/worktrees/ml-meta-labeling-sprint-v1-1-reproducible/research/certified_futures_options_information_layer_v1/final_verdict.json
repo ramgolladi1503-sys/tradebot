@@ -1,0 +1,8 @@
+{
+  "exact_next_action": "Run an authorized read-only Upstox futures historical acquisition/provenance task for contract-specific NIFTY futures, then rerun this certification.",
+  "final_verdict": "FUTURES_DATA_INSUFFICIENT",
+  "pnl_or_backtest_allowed": false,
+  "reason": "No adequate certified NIFTY futures history exists locally; joint futures-underlying-options warehouse cannot be built without fabricating the futures leg.",
+  "semantic_hash": "f7737f5599dacaae0e140bbf25c937d92b60ac5e708f32396f0b6abc56997ca3",
+  "strategy_discovery_allowed": false
+}

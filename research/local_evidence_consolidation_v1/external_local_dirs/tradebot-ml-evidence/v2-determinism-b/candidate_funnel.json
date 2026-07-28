@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-21T19:04:14.215681+00:00",
+  "code_commit_sha": "6f9fec9de6c4eccb480b0f4f8d414246b61e3c01",
+  "input_hashes": {},
+  "deterministic_seeds": [
+    42
+  ],
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "append": false,
+  "initial": 2,
+  "minimum_support": 1,
+  "base_rate_lift": 1,
+  "stability_and_concentration": 1
+}

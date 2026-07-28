@@ -1,0 +1,4 @@
+{
+  "canonical_entry": "interval_start == cutoff",
+  "features_use": "prior sessions and completed bars with interval_end <= cutoff"
+}

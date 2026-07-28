@@ -1,0 +1,66 @@
+{
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "bytes": 49,
+      "path": "__init__.py",
+      "sha256": "755a03fc98bd1d558a3acbb674cd17d3a83265f675aa34b19a8e79460022eb99"
+    },
+    {
+      "bytes": 3,
+      "path": "algotest_candidates.json",
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "bytes": 549,
+      "path": "final_report.md",
+      "sha256": "d791babc021e09f1ad248b21731e180fc8d174cf5ca07ef48605ad939890421f"
+    },
+    {
+      "bytes": 432,
+      "path": "final_verdict.json",
+      "sha256": "f6e3e9a0bd1b595df7634972050cfcaa2640126a2d2bd1bcf420ddfc0abdefb4"
+    },
+    {
+      "bytes": 5897645,
+      "path": "hypothesis_screen.csv",
+      "sha256": "af83027b4542cabe532aa531d771789978b4276c9f7a00964ab21b267828f8ef"
+    },
+    {
+      "bytes": 229,
+      "path": "independent_audit_report.json",
+      "sha256": "20bd168a77ae262a7c0debbba552403c6f8ca11c59a94c0cb3e096393b9eb51d"
+    },
+    {
+      "bytes": 37471,
+      "path": "negative_controls.json",
+      "sha256": "e1206e49a16558c9fc207980341a2ccac374a5fdebbb807145372522b4b7ccd3"
+    },
+    {
+      "bytes": 543,
+      "path": "pre_change_manifest.json",
+      "sha256": "aab81f46849f7cfcc4ecc3a4552e949f224e84a40d04ad33636e79954a5b734a"
+    },
+    {
+      "bytes": 15996100,
+      "path": "raw_hypotheses.jsonl",
+      "sha256": "a42175aafb708c2aa007926d3e80192e446fb86ddaa3fd1bd5d74bb2376f7b8a"
+    },
+    {
+      "bytes": 670,
+      "path": "rejection_statistics.json",
+      "sha256": "c5c87954c56c3176fb98e84a64fba09955dbedc468bf2a5d4589c0c9dd8de37a"
+    },
+    {
+      "bytes": 18093,
+      "path": "sprint.py",
+      "sha256": "c5645d34e1de00464ea977ead39f7c2ed2a2d0338a8b1086d843bd7258e97bfc"
+    },
+    {
+      "bytes": 18173,
+      "path": "validation_results.jsonl",
+      "sha256": "7a039a038666747f8a0d1fafafa67358a84ccc85e043a03add088600f6adc96b"
+    }
+  ],
+  "semantic_hash": "75e65f3869987a1b65b651929b8e500bc4856bb19ea99a4fa4fdecf210aaf9ba"
+}

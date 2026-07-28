@@ -1,0 +1,113 @@
+{
+  "banknifty_candidate_replay": {
+    "independent_certification": "FAIL",
+    "option_expiries": 1,
+    "option_files": 42,
+    "option_session_dates": [
+      "20260709"
+    ],
+    "option_sessions": 1,
+    "provenance": "local candidate replay; no independent option authority certificate located",
+    "underlying_date_span": [
+      "20240701",
+      "20260721"
+    ],
+    "underlying_sessions": 501
+  },
+  "constituent_data": {
+    "files": 0,
+    "independent_certification": "FAIL",
+    "provenance": "archived independent census",
+    "reason": "NO_REAL_UPSTOX_CANDLES_AVAILABLE"
+  },
+  "expired_nifty_options": {
+    "date_span": [
+      "2024-09-26 09:15:00+05:30",
+      "2026-07-21 15:29:00+05:30"
+    ],
+    "expiries": 83,
+    "independent_certification": "CERTIFIED_BUT_PREVIOUSLY_CONSUMED",
+    "instruments": [
+      "NIFTY"
+    ],
+    "one_minute_rows": 1998358,
+    "provenance": "Upstox historical_candle",
+    "timestamp_semantics": "one-minute historical candle timestamps",
+    "unused_non_overlapping_history": false
+  },
+  "futures": {
+    "independent_certification": "FAIL",
+    "reason": "Only a scoreboard futures proxy was located; no synchronized NIFTY futures observations or expiry mapping.",
+    "trusted_files": 0
+  },
+  "price_snapshot_replay": {
+    "date_span": [
+      "2026-06-25T11:37:58",
+      "2026-06-25T15:31:16"
+    ],
+    "fields": [
+      "timestamp",
+      "scalar last-traded/observed price by symbol"
+    ],
+    "independent_certification": "FAIL",
+    "missing_fields": [
+      "bid",
+      "ask",
+      "bid_size",
+      "ask_size",
+      "depth",
+      "exchange_timestamp",
+      "IV",
+      "Greeks",
+      "executable spread"
+    ],
+    "option_symbols": {
+      "BANKNIFTY": 83,
+      "NIFTY": 83
+    },
+    "rows": 13919,
+    "sessions": 1,
+    "timestamp_semantics": "local snapshot timestamp; no exchange-event ordering proof"
+  },
+  "so_called_tick_parquet": {
+    "BANKNIFTY": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "instrument"
+      ],
+      "row_count": 375
+    },
+    "NIFTY": {
+      "columns": [
+        "date",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "instrument"
+      ],
+      "row_count": 375
+    },
+    "classification": "ONE_MINUTE_OHLC_NOT_TICK_DATA",
+    "date_span": [
+      "2026-06-29 09:15:00",
+      "2026-06-29 15:29:00"
+    ]
+  },
+  "sparse_index_json_ticks": {
+    "files": 3,
+    "rows": 32,
+    "sessions_by_directory": [
+      "19700101",
+      "20260219",
+      "20260703"
+    ],
+    "synchronized_option_ticks": false
+  }
+}

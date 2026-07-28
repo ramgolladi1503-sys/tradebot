@@ -1,0 +1,11 @@
+{
+  "contract_hash": "96a0f0ac753d243803437d6f8e1e57881a5fe9a8f0ceb7e616d32bef42066e67",
+  "cost_points": 1.0,
+  "entry": "next observable same-session same-expiry same-side option-chain aggregate bar after candidate timestamp",
+  "horizon_minutes": 30,
+  "instrument_limitation": "candidate artifact has no selected strike; labels use certified same-expiry same-side option-chain aggregate, not fabricated strike prices",
+  "primary_label": "TARGET_30_BEFORE_STOP_15_WITHIN_30M",
+  "semantic_hash": "43d8dc9974cdcba8021589433f5ecbba35a5ddba4b127866bafbfc1066161baf",
+  "stop_points": 15.0,
+  "target_points": 30.0
+}

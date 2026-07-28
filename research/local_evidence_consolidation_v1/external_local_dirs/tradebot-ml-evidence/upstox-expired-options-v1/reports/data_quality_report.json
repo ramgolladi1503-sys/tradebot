@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "total_contracts_checked": 1199,
+  "total_1m_rows": 1998358,
+  "total_5m_rows": 399844,
+  "issues": []
+}

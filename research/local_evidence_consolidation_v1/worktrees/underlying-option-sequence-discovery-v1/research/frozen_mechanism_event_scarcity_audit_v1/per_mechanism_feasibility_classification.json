@@ -1,0 +1,5 @@
+{
+  "delayed_option_convexity_after_underlying_confirmation": "DATA_SUPPORT_INSUFFICIENT",
+  "premium_compression_release_with_underlying_state_filter": "DATA_SUPPORT_INSUFFICIENT",
+  "rationale": "Both mechanisms require causal underlying displacement/state, but ret_1 has zero non-null observations in the certified joint warehouse."
+}

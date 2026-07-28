@@ -1,0 +1,872 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "JSEDV1_0067_cfc34dc8",
+      "fold_count": 21,
+      "folds": [
+        {
+          "fold": "2024-09",
+          "max_trade_points": 80.25,
+          "min_trade_points": -24.05000000000001,
+          "net_expectancy_points": 6.388181818181818,
+          "t_stat": 3.048614439905228,
+          "total_net_points": 983.78,
+          "trades": 154,
+          "win_rate": 0.42207792207792205
+        },
+        {
+          "fold": "2024-10",
+          "max_trade_points": 68.69999999999999,
+          "min_trade_points": -87.8,
+          "net_expectancy_points": -0.17489557739557715,
+          "t_stat": -0.35585546441438115,
+          "total_net_points": -284.7299999999996,
+          "trades": 1628,
+          "win_rate": 0.457002457002457
+        },
+        {
+          "fold": "2024-11",
+          "max_trade_points": 54.29999999999998,
+          "min_trade_points": -58.05,
+          "net_expectancy_points": -0.6457942708333332,
+          "t_stat": -0.8934772329098689,
+          "total_net_points": -495.9699999999999,
+          "trades": 768,
+          "win_rate": 0.4010416666666667
+        },
+        {
+          "fold": "2024-12",
+          "max_trade_points": 68.20000000000002,
+          "min_trade_points": -40.599999999999994,
+          "net_expectancy_points": 1.540268317853457,
+          "t_stat": 2.618996477934934,
+          "total_net_points": 1492.52,
+          "trades": 969,
+          "win_rate": 0.4551083591331269
+        },
+        {
+          "fold": "2025-01",
+          "max_trade_points": 74.95000000000002,
+          "min_trade_points": -72.55,
+          "net_expectancy_points": -2.314465579710145,
+          "t_stat": -4.260077895717333,
+          "total_net_points": -2555.17,
+          "trades": 1104,
+          "win_rate": 0.37228260869565216
+        },
+        {
+          "fold": "2025-02",
+          "max_trade_points": 60.95,
+          "min_trade_points": -29.549999999999983,
+          "net_expectancy_points": 1.4185592011412267,
+          "t_stat": 2.113498243773788,
+          "total_net_points": 994.4099999999999,
+          "trades": 701,
+          "win_rate": 0.463623395149786
+        },
+        {
+          "fold": "2025-03",
+          "max_trade_points": 97.05000000000001,
+          "min_trade_points": -84.39999999999999,
+          "net_expectancy_points": -1.7767411764705878,
+          "t_stat": -2.671922513818558,
+          "total_net_points": -1510.2299999999996,
+          "trades": 850,
+          "win_rate": 0.39176470588235296
+        },
+        {
+          "fold": "2025-04",
+          "max_trade_points": 1125.3000000000002,
+          "min_trade_points": -55.849999999999994,
+          "net_expectancy_points": 14.840349040139618,
+          "t_stat": 2.7767754239360993,
+          "total_net_points": 8503.52,
+          "trades": 573,
+          "win_rate": 0.4851657940663176
+        },
+        {
+          "fold": "2025-05",
+          "max_trade_points": 134.95999999999998,
+          "min_trade_points": -76.9,
+          "net_expectancy_points": 0.9641060903732813,
+          "t_stat": 1.7914791936943315,
+          "total_net_points": 981.4600000000004,
+          "trades": 1018,
+          "win_rate": 0.4548133595284872
+        },
+        {
+          "fold": "2025-06",
+          "max_trade_points": 42.400000000000006,
+          "min_trade_points": -71.80000000000001,
+          "net_expectancy_points": -4.194900497512438,
+          "t_stat": -7.972808080967254,
+          "total_net_points": -3372.7,
+          "trades": 804,
+          "win_rate": 0.31218905472636815
+        },
+        {
+          "fold": "2025-07",
+          "max_trade_points": 198.15,
+          "min_trade_points": -59.10000000000002,
+          "net_expectancy_points": -0.29003368893879883,
+          "t_stat": -0.6900743817282594,
+          "total_net_points": -516.5500000000008,
+          "trades": 1781,
+          "win_rate": 0.4261650758001123
+        },
+        {
+          "fold": "2025-08",
+          "max_trade_points": 99.5,
+          "min_trade_points": -44.20000000000002,
+          "net_expectancy_points": 0.5356347438752783,
+          "t_stat": 1.2110447956328347,
+          "total_net_points": 721.4999999999999,
+          "trades": 1347,
+          "win_rate": 0.44766146993318484
+        },
+        {
+          "fold": "2025-09",
+          "max_trade_points": 46.89999999999999,
+          "min_trade_points": -32.3,
+          "net_expectancy_points": -2.016203703703706,
+          "t_stat": -1.192515882052433,
+          "total_net_points": -217.75000000000026,
+          "trades": 108,
+          "win_rate": 0.3611111111111111
+        },
+        {
+          "fold": "2025-12",
+          "max_trade_points": 57.849999999999994,
+          "min_trade_points": -63.45,
+          "net_expectancy_points": 0.2653149327671619,
+          "t_stat": 0.5962902926577137,
+          "total_net_points": 374.88999999999976,
+          "trades": 1413,
+          "win_rate": 0.4508138711960368
+        },
+        {
+          "fold": "2026-01",
+          "max_trade_points": 92.94999999999999,
+          "min_trade_points": -71.7,
+          "net_expectancy_points": 1.153083735909823,
+          "t_stat": 2.078576551290417,
+          "total_net_points": 1432.13,
+          "trades": 1242,
+          "win_rate": 0.45652173913043476
+        },
+        {
+          "fold": "2026-02",
+          "max_trade_points": 85.6,
+          "min_trade_points": -42.55000000000001,
+          "net_expectancy_points": 2.9581620718462824,
+          "t_stat": 5.568406768410776,
+          "total_net_points": 3540.92,
+          "trades": 1197,
+          "win_rate": 0.49456975772765244
+        },
+        {
+          "fold": "2026-03",
+          "max_trade_points": 109.1,
+          "min_trade_points": -52.44999999999999,
+          "net_expectancy_points": 1.0162183544303804,
+          "t_stat": 1.4629841324013344,
+          "total_net_points": 642.2500000000005,
+          "trades": 632,
+          "win_rate": 0.495253164556962
+        },
+        {
+          "fold": "2026-04",
+          "max_trade_points": 37.500000000000014,
+          "min_trade_points": -30.549999999999997,
+          "net_expectancy_points": -1.6052032520325201,
+          "t_stat": -2.7420197923328335,
+          "total_net_points": -987.1999999999998,
+          "trades": 615,
+          "win_rate": 0.3853658536585366
+        },
+        {
+          "fold": "2026-05",
+          "max_trade_points": 175.54999999999998,
+          "min_trade_points": -56.900000000000006,
+          "net_expectancy_points": -0.5984639016897085,
+          "t_stat": -1.0753954230763865,
+          "total_net_points": -779.2000000000005,
+          "trades": 1302,
+          "win_rate": 0.43701996927803377
+        },
+        {
+          "fold": "2026-06",
+          "max_trade_points": 181.35,
+          "min_trade_points": -78.14999999999998,
+          "net_expectancy_points": -0.4324261275272164,
+          "t_stat": -0.8012171092163914,
+          "total_net_points": -556.1000000000003,
+          "trades": 1286,
+          "win_rate": 0.4261275272161742
+        },
+        {
+          "fold": "2026-07",
+          "max_trade_points": 87.94999999999999,
+          "min_trade_points": -113.25,
+          "net_expectancy_points": -1.3277638190954766,
+          "t_stat": -1.779770969001516,
+          "total_net_points": -1056.8999999999994,
+          "trades": 796,
+          "win_rate": 0.4183417085427136
+        }
+      ],
+      "positive_folds": 10
+    },
+    {
+      "candidate_id": "JSEDV1_0085_c6780e38",
+      "fold_count": 21,
+      "folds": [
+        {
+          "fold": "2024-09",
+          "max_trade_points": 79.75,
+          "min_trade_points": -24.05000000000001,
+          "net_expectancy_points": 4.670342857142857,
+          "t_stat": 2.6328110829867746,
+          "total_net_points": 817.31,
+          "trades": 175,
+          "win_rate": 0.42857142857142855
+        },
+        {
+          "fold": "2024-10",
+          "max_trade_points": 68.69999999999999,
+          "min_trade_points": -87.8,
+          "net_expectancy_points": -1.1651787842669845,
+          "t_stat": -2.456088643611058,
+          "total_net_points": -1955.17,
+          "trades": 1678,
+          "win_rate": 0.43802145411203813
+        },
+        {
+          "fold": "2024-11",
+          "max_trade_points": 56.05,
+          "min_trade_points": -69.6,
+          "net_expectancy_points": -0.19672209026128284,
+          "t_stat": -0.2922983082993139,
+          "total_net_points": -165.64000000000016,
+          "trades": 842,
+          "win_rate": 0.4156769596199525
+        },
+        {
+          "fold": "2024-12",
+          "max_trade_points": 68.20000000000002,
+          "min_trade_points": -34.5,
+          "net_expectancy_points": 0.5861560975609758,
+          "t_stat": 1.053155916915291,
+          "total_net_points": 600.8100000000002,
+          "trades": 1025,
+          "win_rate": 0.4273170731707317
+        },
+        {
+          "fold": "2025-01",
+          "max_trade_points": 74.95000000000002,
+          "min_trade_points": -72.55,
+          "net_expectancy_points": -2.227154545454545,
+          "t_stat": -4.07911643064681,
+          "total_net_points": -2449.87,
+          "trades": 1100,
+          "win_rate": 0.37727272727272726
+        },
+        {
+          "fold": "2025-02",
+          "max_trade_points": 74.55000000000001,
+          "min_trade_points": -47.55,
+          "net_expectancy_points": 0.7983463541666663,
+          "t_stat": 1.2279613982951354,
+          "total_net_points": 613.1299999999998,
+          "trades": 768,
+          "win_rate": 0.4505208333333333
+        },
+        {
+          "fold": "2025-03",
+          "max_trade_points": 97.05000000000001,
+          "min_trade_points": -84.39999999999999,
+          "net_expectancy_points": -1.9024060150375943,
+          "t_stat": -2.9835068668258207,
+          "total_net_points": -1771.1400000000003,
+          "trades": 931,
+          "win_rate": 0.3694951664876477
+        },
+        {
+          "fold": "2025-04",
+          "max_trade_points": 1087.0,
+          "min_trade_points": -65.66,
+          "net_expectancy_points": 8.84295415959253,
+          "t_stat": 1.9597246507923891,
+          "total_net_points": 5208.5,
+          "trades": 589,
+          "win_rate": 0.4227504244482173
+        },
+        {
+          "fold": "2025-05",
+          "max_trade_points": 134.95999999999998,
+          "min_trade_points": -68.35,
+          "net_expectancy_points": 1.4935310734463283,
+          "t_stat": 2.835583547079074,
+          "total_net_points": 1586.1300000000006,
+          "trades": 1062,
+          "win_rate": 0.4764595103578154
+        },
+        {
+          "fold": "2025-06",
+          "max_trade_points": 42.400000000000006,
+          "min_trade_points": -71.80000000000001,
+          "net_expectancy_points": -4.390977011494252,
+          "t_stat": -8.781305309171254,
+          "total_net_points": -3820.1499999999996,
+          "trades": 870,
+          "win_rate": 0.3
+        },
+        {
+          "fold": "2025-07",
+          "max_trade_points": 198.15,
+          "min_trade_points": -59.10000000000002,
+          "net_expectancy_points": -0.005674128058303252,
+          "t_stat": -0.014088915521893616,
+          "total_net_points": -10.900000000000546,
+          "trades": 1921,
+          "win_rate": 0.43258719416970326
+        },
+        {
+          "fold": "2025-08",
+          "max_trade_points": 99.5,
+          "min_trade_points": -44.20000000000002,
+          "net_expectancy_points": -0.04363143631436332,
+          "t_stat": -0.10604240613420791,
+          "total_net_points": -64.40000000000026,
+          "trades": 1476,
+          "win_rate": 0.43224932249322495
+        },
+        {
+          "fold": "2025-09",
+          "max_trade_points": 46.89999999999999,
+          "min_trade_points": -32.3,
+          "net_expectancy_points": -4.385887096774196,
+          "t_stat": -3.0219339176069084,
+          "total_net_points": -543.8500000000004,
+          "trades": 124,
+          "win_rate": 0.29838709677419356
+        },
+        {
+          "fold": "2025-12",
+          "max_trade_points": 52.849999999999994,
+          "min_trade_points": -63.7,
+          "net_expectancy_points": 1.1973771676300577,
+          "t_stat": 2.6389383114271547,
+          "total_net_points": 1657.17,
+          "trades": 1384,
+          "win_rate": 0.48265895953757226
+        },
+        {
+          "fold": "2026-01",
+          "max_trade_points": 95.35,
+          "min_trade_points": -64.14999999999999,
+          "net_expectancy_points": 0.6260470409711685,
+          "t_stat": 1.184040053665947,
+          "total_net_points": 825.1300000000001,
+          "trades": 1318,
+          "win_rate": 0.4362670713201821
+        },
+        {
+          "fold": "2026-02",
+          "max_trade_points": 169.99999999999997,
+          "min_trade_points": -42.55000000000001,
+          "net_expectancy_points": 4.661499617444529,
+          "t_stat": 8.534280406975835,
+          "total_net_points": 6092.58,
+          "trades": 1307,
+          "win_rate": 0.523335883703137
+        },
+        {
+          "fold": "2026-03",
+          "max_trade_points": 109.1,
+          "min_trade_points": -46.45000000000002,
+          "net_expectancy_points": 0.32230014025245485,
+          "t_stat": 0.5075583649759228,
+          "total_net_points": 229.8000000000003,
+          "trades": 713,
+          "win_rate": 0.4670406732117812
+        },
+        {
+          "fold": "2026-04",
+          "max_trade_points": 104.39999999999999,
+          "min_trade_points": -30.549999999999997,
+          "net_expectancy_points": -0.6617302052785922,
+          "t_stat": -1.16148582307742,
+          "total_net_points": -451.29999999999984,
+          "trades": 682,
+          "win_rate": 0.40175953079178883
+        },
+        {
+          "fold": "2026-05",
+          "max_trade_points": 175.54999999999998,
+          "min_trade_points": -59.650000000000006,
+          "net_expectancy_points": -0.047916666666666656,
+          "t_stat": -0.08870565115275902,
+          "total_net_points": -66.69999999999999,
+          "trades": 1392,
+          "win_rate": 0.4540229885057471
+        },
+        {
+          "fold": "2026-06",
+          "max_trade_points": 192.10000000000002,
+          "min_trade_points": -78.14999999999998,
+          "net_expectancy_points": -0.12896884272997078,
+          "t_stat": -0.21789057594386238,
+          "total_net_points": -173.8500000000006,
+          "trades": 1348,
+          "win_rate": 0.42729970326409494
+        },
+        {
+          "fold": "2026-07",
+          "max_trade_points": 87.94999999999999,
+          "min_trade_points": -113.25,
+          "net_expectancy_points": -2.7697782963827304,
+          "t_stat": -3.7188538237598388,
+          "total_net_points": -2373.7,
+          "trades": 857,
+          "win_rate": 0.38156359393232203
+        }
+      ],
+      "positive_folds": 9
+    },
+    {
+      "candidate_id": "JSEDV1_0064_5881e627",
+      "fold_count": 21,
+      "folds": [
+        {
+          "fold": "2024-09",
+          "max_trade_points": 80.25,
+          "min_trade_points": -24.05000000000001,
+          "net_expectancy_points": 6.558666666666666,
+          "t_stat": 2.1239909624045326,
+          "total_net_points": 491.9,
+          "trades": 75,
+          "win_rate": 0.4666666666666667
+        },
+        {
+          "fold": "2024-10",
+          "max_trade_points": 68.69999999999999,
+          "min_trade_points": -72.45000000000002,
+          "net_expectancy_points": 0.6200741289844333,
+          "t_stat": 1.1344155347425047,
+          "total_net_points": 836.4800000000005,
+          "trades": 1349,
+          "win_rate": 0.4877687175685693
+        },
+        {
+          "fold": "2024-11",
+          "max_trade_points": 62.79999999999998,
+          "min_trade_points": -64.6,
+          "net_expectancy_points": -1.2471383647798742,
+          "t_stat": -1.501403143399396,
+          "total_net_points": -793.18,
+          "trades": 636,
+          "win_rate": 0.38522012578616355
+        },
+        {
+          "fold": "2024-12",
+          "max_trade_points": 66.55000000000001,
+          "min_trade_points": -50.849999999999966,
+          "net_expectancy_points": 0.24705035971223036,
+          "t_stat": 0.3822637277015018,
+          "total_net_points": 206.0400000000001,
+          "trades": 834,
+          "win_rate": 0.4448441247002398
+        },
+        {
+          "fold": "2025-01",
+          "max_trade_points": 81.19999999999999,
+          "min_trade_points": -102.0,
+          "net_expectancy_points": -3.0902222222222218,
+          "t_stat": -5.118721149358887,
+          "total_net_points": -3337.4399999999996,
+          "trades": 1080,
+          "win_rate": 0.36666666666666664
+        },
+        {
+          "fold": "2025-02",
+          "max_trade_points": 60.25000000000003,
+          "min_trade_points": -67.04999999999998,
+          "net_expectancy_points": 0.20835674157303366,
+          "t_stat": 0.30240171698122553,
+          "total_net_points": 148.34999999999997,
+          "trades": 712,
+          "win_rate": 0.4339887640449438
+        },
+        {
+          "fold": "2025-03",
+          "max_trade_points": 105.35,
+          "min_trade_points": -84.39999999999999,
+          "net_expectancy_points": -1.9110622154779968,
+          "t_stat": -2.5249695322153998,
+          "total_net_points": -1259.3899999999999,
+          "trades": 659,
+          "win_rate": 0.3884673748103187
+        },
+        {
+          "fold": "2025-04",
+          "max_trade_points": 1125.3000000000002,
+          "min_trade_points": -41.7,
+          "net_expectancy_points": 12.560735294117645,
+          "t_stat": 2.2288339074556784,
+          "total_net_points": 5978.909999999999,
+          "trades": 476,
+          "win_rate": 0.40756302521008403
+        },
+        {
+          "fold": "2025-05",
+          "max_trade_points": 42.349999999999994,
+          "min_trade_points": -53.550000000000004,
+          "net_expectancy_points": 1.1405359056806006,
+          "t_stat": 2.2186960428806572,
+          "total_net_points": 1064.1200000000003,
+          "trades": 933,
+          "win_rate": 0.45980707395498394
+        },
+        {
+          "fold": "2025-06",
+          "max_trade_points": 59.0,
+          "min_trade_points": -72.1,
+          "net_expectancy_points": -5.398335854765507,
+          "t_stat": -8.149727233028878,
+          "total_net_points": -3568.2999999999997,
+          "trades": 661,
+          "win_rate": 0.29954614220877457
+        },
+        {
+          "fold": "2025-07",
+          "max_trade_points": 198.15,
+          "min_trade_points": -59.10000000000002,
+          "net_expectancy_points": -0.5929775280898878,
+          "t_stat": -1.225205783433225,
+          "total_net_points": -844.4000000000002,
+          "trades": 1424,
+          "win_rate": 0.41292134831460675
+        },
+        {
+          "fold": "2025-08",
+          "max_trade_points": 141.15000000000003,
+          "min_trade_points": -44.20000000000002,
+          "net_expectancy_points": -0.030281051677244118,
+          "t_stat": -0.06031228469937402,
+          "total_net_points": -33.40000000000026,
+          "trades": 1103,
+          "win_rate": 0.3916591115140526
+        },
+        {
+          "fold": "2025-09",
+          "max_trade_points": 46.89999999999999,
+          "min_trade_points": -32.3,
+          "net_expectancy_points": -2.7745000000000033,
+          "t_stat": -1.5866031127589002,
+          "total_net_points": -277.45000000000033,
+          "trades": 100,
+          "win_rate": 0.3
+        },
+        {
+          "fold": "2025-12",
+          "max_trade_points": 57.849999999999994,
+          "min_trade_points": -52.44999999999999,
+          "net_expectancy_points": -0.3545063694267518,
+          "t_stat": -0.8361289774812116,
+          "total_net_points": -445.2600000000002,
+          "trades": 1256,
+          "win_rate": 0.40445859872611467
+        },
+        {
+          "fold": "2026-01",
+          "max_trade_points": 92.94999999999999,
+          "min_trade_points": -71.7,
+          "net_expectancy_points": 0.37847668393782374,
+          "t_stat": 0.642554662714925,
+          "total_net_points": 365.2299999999999,
+          "trades": 965,
+          "win_rate": 0.44455958549222796
+        },
+        {
+          "fold": "2026-02",
+          "max_trade_points": 91.94999999999999,
+          "min_trade_points": -42.55000000000001,
+          "net_expectancy_points": 1.4427012711864402,
+          "t_stat": 2.28027488024256,
+          "total_net_points": 1361.9099999999996,
+          "trades": 944,
+          "win_rate": 0.4417372881355932
+        },
+        {
+          "fold": "2026-03",
+          "max_trade_points": 42.94999999999999,
+          "min_trade_points": -75.39999999999998,
+          "net_expectancy_points": 0.08507067137809304,
+          "t_stat": 0.10260924821948603,
+          "total_net_points": 48.15000000000066,
+          "trades": 566,
+          "win_rate": 0.48939929328621906
+        },
+        {
+          "fold": "2026-04",
+          "max_trade_points": 73.89999999999998,
+          "min_trade_points": -57.099999999999994,
+          "net_expectancy_points": -2.1241620111731843,
+          "t_stat": -3.4032614021919345,
+          "total_net_points": -1520.8999999999999,
+          "trades": 716,
+          "win_rate": 0.39106145251396646
+        },
+        {
+          "fold": "2026-05",
+          "max_trade_points": 137.95,
+          "min_trade_points": -69.85,
+          "net_expectancy_points": -0.5582487309644676,
+          "t_stat": -0.7683989265626195,
+          "total_net_points": -439.9000000000005,
+          "trades": 788,
+          "win_rate": 0.43781725888324874
+        },
+        {
+          "fold": "2026-06",
+          "max_trade_points": 181.35,
+          "min_trade_points": -78.14999999999998,
+          "net_expectancy_points": -2.039555125725338,
+          "t_stat": -3.746721871345774,
+          "total_net_points": -2108.8999999999996,
+          "trades": 1034,
+          "win_rate": 0.3694390715667311
+        },
+        {
+          "fold": "2026-07",
+          "max_trade_points": 93.04999999999998,
+          "min_trade_points": -96.55000000000001,
+          "net_expectancy_points": -1.7867598684210528,
+          "t_stat": -2.285331627009066,
+          "total_net_points": -1086.3500000000001,
+          "trades": 608,
+          "win_rate": 0.3980263157894737
+        }
+      ],
+      "positive_folds": 9
+    },
+    {
+      "candidate_id": "JSEDV1_0063_051fae60",
+      "fold_count": 21,
+      "folds": [
+        {
+          "fold": "2024-09",
+          "max_trade_points": 64.55,
+          "min_trade_points": -19.549999999999997,
+          "net_expectancy_points": 5.001382978723405,
+          "t_stat": 2.003297747567714,
+          "total_net_points": 470.1300000000001,
+          "trades": 94,
+          "win_rate": 0.3829787234042553
+        },
+        {
+          "fold": "2024-10",
+          "max_trade_points": 61.349999999999994,
+          "min_trade_points": -87.8,
+          "net_expectancy_points": -0.5162295081967211,
+          "t_stat": -0.8197536593553642,
+          "total_net_points": -503.83999999999975,
+          "trades": 976,
+          "win_rate": 0.4323770491803279
+        },
+        {
+          "fold": "2024-11",
+          "max_trade_points": 52.410000000000004,
+          "min_trade_points": -52.489999999999995,
+          "net_expectancy_points": 0.2718303571428571,
+          "t_stat": 0.2897078499513552,
+          "total_net_points": 121.77999999999997,
+          "trades": 448,
+          "win_rate": 0.4330357142857143
+        },
+        {
+          "fold": "2024-12",
+          "max_trade_points": 68.20000000000002,
+          "min_trade_points": -43.14999999999998,
+          "net_expectancy_points": 2.635961538461539,
+          "t_stat": 3.2739297190691903,
+          "total_net_points": 1507.7700000000002,
+          "trades": 572,
+          "win_rate": 0.486013986013986
+        },
+        {
+          "fold": "2025-01",
+          "max_trade_points": 70.65,
+          "min_trade_points": -72.55,
+          "net_expectancy_points": -3.142401960784314,
+          "t_stat": -5.0916927215802605,
+          "total_net_points": -2564.2000000000003,
+          "trades": 816,
+          "win_rate": 0.34191176470588236
+        },
+        {
+          "fold": "2025-02",
+          "max_trade_points": 60.95,
+          "min_trade_points": -25.05000000000001,
+          "net_expectancy_points": 2.3995569620253163,
+          "t_stat": 2.383636116022305,
+          "total_net_points": 758.26,
+          "trades": 316,
+          "win_rate": 0.4810126582278481
+        },
+        {
+          "fold": "2025-03",
+          "max_trade_points": 86.65,
+          "min_trade_points": -75.46000000000001,
+          "net_expectancy_points": -1.588554421768707,
+          "t_stat": -2.1650548912027956,
+          "total_net_points": -934.0699999999998,
+          "trades": 588,
+          "win_rate": 0.3741496598639456
+        },
+        {
+          "fold": "2025-04",
+          "max_trade_points": 88.39999999999998,
+          "min_trade_points": -55.849999999999994,
+          "net_expectancy_points": -0.8719138755980868,
+          "t_stat": -1.048625598563963,
+          "total_net_points": -364.46000000000026,
+          "trades": 418,
+          "win_rate": 0.45215311004784686
+        },
+        {
+          "fold": "2025-05",
+          "max_trade_points": 134.95999999999998,
+          "min_trade_points": -76.9,
+          "net_expectancy_points": 0.37538740920096914,
+          "t_stat": 0.5977276658239945,
+          "total_net_points": 310.0700000000005,
+          "trades": 826,
+          "win_rate": 0.4297820823244552
+        },
+        {
+          "fold": "2025-06",
+          "max_trade_points": 47.0,
+          "min_trade_points": -63.39999999999998,
+          "net_expectancy_points": -1.5953608247422681,
+          "t_stat": -2.038480593690231,
+          "total_net_points": -619.0,
+          "trades": 388,
+          "win_rate": 0.39948453608247425
+        },
+        {
+          "fold": "2025-07",
+          "max_trade_points": 171.5,
+          "min_trade_points": -38.74999999999999,
+          "net_expectancy_points": 0.05838976674191097,
+          "t_stat": 0.1326270714617229,
+          "total_net_points": 77.59999999999968,
+          "trades": 1329,
+          "win_rate": 0.40632054176072235
+        },
+        {
+          "fold": "2025-08",
+          "max_trade_points": 85.45,
+          "min_trade_points": -36.800000000000004,
+          "net_expectancy_points": -1.1238996929375638,
+          "t_stat": -2.4270074711320695,
+          "total_net_points": -1098.0499999999997,
+          "trades": 977,
+          "win_rate": 0.3971340839303992
+        },
+        {
+          "fold": "2025-09",
+          "max_trade_points": 42.5,
+          "min_trade_points": -26.900000000000006,
+          "net_expectancy_points": 1.2916666666666665,
+          "t_stat": 0.8065557541785717,
+          "total_net_points": 116.24999999999999,
+          "trades": 90,
+          "win_rate": 0.4
+        },
+        {
+          "fold": "2025-12",
+          "max_trade_points": 80.79999999999998,
+          "min_trade_points": -63.45,
+          "net_expectancy_points": -0.8152063213345042,
+          "t_stat": -1.8664020984657779,
+          "total_net_points": -928.5200000000003,
+          "trades": 1139,
+          "win_rate": 0.4117647058823529
+        },
+        {
+          "fold": "2026-01",
+          "max_trade_points": 84.50000000000001,
+          "min_trade_points": -41.550000000000004,
+          "net_expectancy_points": 1.5117325581395353,
+          "t_stat": 2.3320541344234598,
+          "total_net_points": 1300.0900000000004,
+          "trades": 860,
+          "win_rate": 0.45348837209302323
+        },
+        {
+          "fold": "2026-02",
+          "max_trade_points": 68.25,
+          "min_trade_points": -32.85,
+          "net_expectancy_points": 2.6238666666666672,
+          "t_stat": 4.066836941936824,
+          "total_net_points": 1771.1100000000004,
+          "trades": 675,
+          "win_rate": 0.49925925925925924
+        },
+        {
+          "fold": "2026-03",
+          "max_trade_points": 149.85000000000002,
+          "min_trade_points": -58.60000000000002,
+          "net_expectancy_points": 0.9042274052478126,
+          "t_stat": 0.6537360375412232,
+          "total_net_points": 310.14999999999975,
+          "trades": 343,
+          "win_rate": 0.4227405247813411
+        },
+        {
+          "fold": "2026-04",
+          "max_trade_points": 55.55000000000001,
+          "min_trade_points": -35.05000000000001,
+          "net_expectancy_points": -2.8247272727272734,
+          "t_stat": -4.098778531474225,
+          "total_net_points": -1553.6000000000004,
+          "trades": 550,
+          "win_rate": 0.36
+        },
+        {
+          "fold": "2026-05",
+          "max_trade_points": 175.54999999999998,
+          "min_trade_points": -56.900000000000006,
+          "net_expectancy_points": -0.12632890365448488,
+          "t_stat": -0.14017732089665372,
+          "total_net_points": -76.0499999999999,
+          "trades": 602,
+          "win_rate": 0.45016611295681064
+        },
+        {
+          "fold": "2026-06",
+          "max_trade_points": 164.8,
+          "min_trade_points": -64.75,
+          "net_expectancy_points": 0.557208765859285,
+          "t_stat": 0.813504509159327,
+          "total_net_points": 483.10000000000014,
+          "trades": 867,
+          "win_rate": 0.4279123414071511
+        },
+        {
+          "fold": "2026-07",
+          "max_trade_points": 87.94999999999999,
+          "min_trade_points": -113.25,
+          "net_expectancy_points": -1.1365561694290978,
+          "t_stat": -1.2405687620548165,
+          "total_net_points": -617.1500000000001,
+          "trades": 543,
+          "win_rate": 0.4162062615101289
+        }
+      ],
+      "positive_folds": 11
+    }
+  ]
+}

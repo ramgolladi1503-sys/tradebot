@@ -1,0 +1,66 @@
+{
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "bytes": 987,
+      "path": "coverage_integrity_report.json",
+      "sha256": "0c6ceefa3919d6a75bcbf00d22f8b3556a16ed6729d86a775260c7b5d4021937"
+    },
+    {
+      "bytes": 15975,
+      "path": "daily_coverage_ledger.csv",
+      "sha256": "e7dfd06c4183b856c7d0b2db4d0de411b676d9f09881a185e8ba3b6b197bcc59"
+    },
+    {
+      "bytes": 1429,
+      "path": "feature_inventory.json",
+      "sha256": "5a17b764c19913dd31257d7a886a7c6da34cc6a130301f504e3febb866eb948a"
+    },
+    {
+      "bytes": 1149,
+      "path": "final_verdict.json",
+      "sha256": "4aa181d04ba6cb786b7a18127b897ed43b7cf07b3ec039f9d323199deff7fe20"
+    },
+    {
+      "bytes": 1183,
+      "path": "frozen_data_contract.json",
+      "sha256": "55a19c8c1caf2e45b960d30e992a66cd0972f4275c80c71ef3cd68ef0231c59e"
+    },
+    {
+      "bytes": 846,
+      "path": "independent_audit_report.json",
+      "sha256": "d8fd20b5ccf60089c7824ee29a6c5a650fe82412f81d4e74bba378ddc6f008e4"
+    },
+    {
+      "bytes": 2645,
+      "path": "option_alignment_report.json",
+      "sha256": "1cefa687f0d8ed67bce3d439f4151e9655c161da8109127cfe98a5a5759b354a"
+    },
+    {
+      "bytes": 2331,
+      "path": "post_change_manifest.json",
+      "sha256": "7d96b245281914831f407b1d5d91a08cdcbdc2a0bab8f116841a68686a5ad32c"
+    },
+    {
+      "bytes": 2511,
+      "path": "pre_change_manifest.json",
+      "sha256": "9d8085d2cbb246879c3754c737edaec95a10688c1f4b84532862367bb7d45fc9"
+    },
+    {
+      "bytes": 133236,
+      "path": "selected_source_manifest.json",
+      "sha256": "fbf74e66664b92712c451769c94da47ef54f73acbadb208e01d3449bd50be192"
+    },
+    {
+      "bytes": 352141,
+      "path": "underlying_source_inventory.csv",
+      "sha256": "920fc6d1c6d3dcf0c1ab43c7a61feb172af87ed94280aed8b1958392efbdbdc6"
+    },
+    {
+      "bytes": 684620,
+      "path": "underlying_source_inventory.json",
+      "sha256": "301d76fd495dd34bb5da77878eebc3cacad14741bb1510bc30125f164206683b"
+    }
+  ],
+  "semantic_hash": "b47b4a9a1e3fc595aef3c6b66483db082963e3936dd4fba0f61483be5df387b5"
+}
