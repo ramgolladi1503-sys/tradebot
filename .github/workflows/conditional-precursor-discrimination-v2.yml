@@ -10,6 +10,12 @@ on:
       - 'tests/research/test_conditional_precursor_discrimination_v2.py'
       - 'research/conditional_precursor_discrimination_v2/**'
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
+  pull_request:
+    paths:
+      - 'scripts/run_conditional_precursor_discrimination_v2.py'
+      - 'tests/research/test_conditional_precursor_discrimination_v2.py'
+      - 'research/conditional_precursor_discrimination_v2/**'
+      - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
   contents: write
@@ -54,7 +60,7 @@ jobs:
           python scripts/run_conditional_precursor_discrimination_v2.py --repo-root "$GITHUB_WORKSPACE"
 
       - name: Preserve deterministic research diagnostics on branch
-        if: always()
+        if: always() && github.event_name == 'push'
         run: |
           if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ]; then
             echo "No runtime research evidence directory was produced."
