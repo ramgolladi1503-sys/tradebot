@@ -12,7 +12,7 @@ on:
       - '.github/workflows/conditional-precursor-discrimination-v2.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify-and-reproduce:
@@ -49,6 +49,23 @@ jobs:
       - name: Verify corpus and reproduce prior campaign
         run: |
           python scripts/run_conditional_precursor_discrimination_v2.py --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Preserve deterministic research diagnostics on branch
+        if: always()
+        run: |
+          if [ ! -d runtime/research/conditional_precursor_discrimination_v2 ]; then
+            echo "No runtime research evidence directory was produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f runtime/research/conditional_precursor_discrimination_v2/*.json || true
+          if git diff --cached --quiet; then
+            echo "No deterministic diagnostic changes to preserve."
+            exit 0
+          fi
+          git commit -m "research: preserve conditional precursor diagnostics [skip ci]"
+          git push origin HEAD:research/conditional-precursor-discrimination-v2
 
       - name: Upload research evidence
         if: always()
