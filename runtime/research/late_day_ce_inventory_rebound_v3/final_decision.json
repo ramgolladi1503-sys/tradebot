@@ -6,9 +6,13 @@
   "holdout_control_gate": true,
   "holdout_outcomes_materialized": true,
   "holdout_primary_gate": true,
+  "invalidation_reason": "declared_20_minute_exit_but_consumed_label_horizon_is_5_minutes",
   "oof_gate": true,
   "paper_or_live_authorized": false,
-  "principal_verdict": "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_CANDLE_PROXY",
+  "principal_verdict": "INVALID_EXIT_HORIZON_CONTRACT_MISMATCH",
+  "prior_principal_verdict": "STRUCTURAL_EDGE_FOUND_LATE_DAY_CE_INVENTORY_REBOUND_CANDLE_PROXY",
+  "publication_invalidated": true,
   "research_only": true,
-  "structural_edge_found": true
+  "structural_edge_found": false,
+  "superseded_by": "late_day_ce_inventory_rebound_v4_horizon_audit"
 }
