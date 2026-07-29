@@ -56,7 +56,9 @@ def test_fetch_live_market_data_passes_cycle_cutoff_to_orb(monkeypatch):
         rows = market_data.fetch_live_market_data(allow_history_seed=False)
 
         row = next(item for item in rows if item["symbol"] == symbol)
+        assert captured_now_dt != []
         assert captured_now_dt == [cycle_cutoff]
+        assert captured_now_dt[0] != cycle_cutoff - timedelta(seconds=1)
         assert row["orb_bias"] == "UP"
         assert row["orb_state"]["status"] == "CONFIRMED"
         assert row["timestamp_ist"] == cycle_cutoff.isoformat()
