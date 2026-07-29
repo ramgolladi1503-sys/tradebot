@@ -180,42 +180,22 @@ def build_candidate_pool_report(
             "dominant_option_direction": option_assessment.dominant_direction,
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
+            "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
         },
     )
 
 
 def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
-    """Return the read-only movement strategy generators."""
+    """Return only the frozen market-event graph for default shadow observation.
 
-    from strategies.movement import (  # noqa: PLC0415
-        generate_compression_breakout_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_late_day_momentum_candidates,
-        generate_market_event_graph_reversal_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_option_pressure_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-    )
+    Previously implemented strategies remain importable and available for explicit
+    research/replay calls, but they are intentionally excluded from the default
+    live candidate pool because they have not met the current structural-edge bar.
+    """
 
-    return (
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_compression_breakout_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_market_event_graph_reversal_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_option_pressure_candidates,
-        generate_late_day_momentum_candidates,
-    )
+    from strategies.movement import generate_market_event_graph_reversal_candidates  # noqa: PLC0415
+
+    return (generate_market_event_graph_reversal_candidates,)
 
 
 def _build_no_trade_candidates(
