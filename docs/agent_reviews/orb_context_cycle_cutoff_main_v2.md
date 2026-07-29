@@ -1,5 +1,14 @@
 # ORB Context Cycle Cutoff Main V2
 
+- mode: RUNTIME_REPAIR
+- candidate_id: orb-context-cycle-cutoff-main-v2
+- decision: MERGE_AFTER_REQUIRED_CHECKS_PASS
+- reason: Replace an undefined ORB timestamp argument with the already-frozen per-cycle cutoff and prove the production caller forwards that exact value.
+- timestamp: 2026-07-29T08:10:00Z
+- is_order_action: false
+- broker_api_called: false
+- source: docs/agent_reviews/orb_context_cycle_cutoff_main_v2.md
+
 ## Agent Work Contract
 
 Repair only the ORB context timestamp propagation defect in `core/market_data.py`, add focused regression coverage, and avoid all strategy, risk, execution, broker, configuration, and live-permission changes.
@@ -22,7 +31,7 @@ Answer: the previous code passed an undefined variable and the exception could b
 
 Challenge: could the test pass while production still uses another timestamp?
 
-Answer: the regression test intercepts `_orb_state_from_candles()` through `fetch_live_market_data()` and asserts identity with the frozen `cycle_cutoff`, then verifies the resulting ORB state reaches the market-data row.
+Answer: the regression test intercepts `_orb_state_from_candles()` through `fetch_live_market_data()` and asserts equality with the frozen `cycle_cutoff`. It also rejects a one-second-shifted value and verifies the resulting ORB state reaches the market-data row.
 
 ## Hermes Review
 
