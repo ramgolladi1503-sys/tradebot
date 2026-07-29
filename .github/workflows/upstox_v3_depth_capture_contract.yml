@@ -36,10 +36,11 @@ jobs:
       PYTHONHASHSEED: "0"
 
     steps:
-      - name: Checkout repair branch
+      - name: Checkout exact repair head
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve actual comparison base
         id: comparison
