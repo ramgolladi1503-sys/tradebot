@@ -13,3 +13,5 @@ Governance:
 - 0.1% base friction and 1.0% stress friction;
 - mirror-side and five-minute-delay holdout controls;
 - no broker calls, paper trading, live trading or production registration.
+
+Execution trigger: frozen campaign revision 1.
