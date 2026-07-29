@@ -1,0 +1,66 @@
+{
+  "broker_api_called": false,
+  "commands": [
+    {
+      "cmd": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "duration_sec": 0.749,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": " M runtime/strategy_validation/regime_timeline.jsonl\n?? research/module_robustness_ranking_audit_v1/SHA256SUMS_v2\n?? research/module_robustness_ranking_audit_v1/artifact_manifest_v2.json\n?? research/module_robustness_ranking_audit_v1/audit_limitations.md\n?? research/module_robustness_ranking_audit_v1/authority_transition_audit.csv\n?? research/module_robustness_ranking_audit_v1/candidate_pool_integrity_audit.md\n?? research/module_robustness_ranking_audit_v1/commands_run_v2.txt\n?? research/module_robustness_ranking_audit_v1/end_to_end_actual_pipeline_map.md\n?? research/module_robustness_ranking_audit_v1/end_to_end_trace_events.jsonl\n?? research/module_robustness_ranking_audit_v1/executive_verdict_v2.md\n?? research/module_robustness_ranking_audit_v1/fault_injection_results.csv\n?? research/module_robustness_ranking_audit_v1/identity_lineage_matrix.csv\n?? research/module_robustness_ranking_audit_v1/lifecycle_entity_contracts.md\n?? research/module_robustness_ranking_audit_v1/master_end_to_end_module_fix_matrix.csv\n?? research/module_robustness_ranking_audit_v1/master_end_to_end_module_fix_matrix.md\n?? research/module_robustness_ranking_audit_v1/migration_and_rollback_plan.md\n?? research/module_robustness_ranking_audit_v1/orchestration_failure_mode_audit.md\n?? research/module_robustness_ranking_audit_v1/order_intent_broker_boundary_audit.md\n?? research/module_robustness_ranking_audit_v1/order_reconciliation_audit.md\n?? research/module_robustness_ranking_audit_v1/prioritized_repair_program.md\n?? research/module_robustness_ranking_audit_v1/ranking_snapshot_audit.md\n?? research/module_robustness_ranking_audit_v1/reason_code_preservation_audit.csv\n?? research/module_robustness_ranking_audit_v1/risk_executable_truth_audit.md\n?? research/module_robustness_ranking_audit_v1/runtime_module_inventory.csv\n?? research/module_robustness_ranking_audit_v1/runtime_reachability_graph.json\n?? research/module_robustness_ranking_audit_v1/scenario_results.csv\n?? research/module_robustness_ranking_audit_v1/stage_gate_contract_matrix.csv\n?? research/module_robustness_ranking_audit_v1/stage_row_event_accounting.csv\n?? research/module_robustness_ranking_audit_v1/strategy_coverage_matrix.csv\n?? research/module_robustness_ranking_audit_v1/test_results_v2.json\n?? research/module_robustness_ranking_audit_v1/timestamp_semantics_matrix.csv\n?? research/module_robustness_ranking_audit_v1/tradebuilder_phase1_phase2_audit.md\n?? research/module_robustness_ranking_audit_v1/ui_approval_integrity_audit.md\n?? research/module_robustness_ranking_audit_v1/unexplained_loss_creation_mutation.csv\n?? scripts/generate_e2e_robustness_audit_v2.py\n"
+    },
+    {
+      "cmd": [
+        "git",
+        "submodule",
+        "status"
+      ],
+      "duration_sec": 0.729,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "cmd": [
+        "python",
+        "scripts/generate_module_robustness_ranking_audit.py"
+      ],
+      "duration_sec": 0.0,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "not rerun inside v2; v1 artifacts already present and SHA-manifested"
+    },
+    {
+      "cmd": [
+        "pytest",
+        "-q",
+        "tests/test_dashboard_advisory_ranking_source.py",
+        "tests/test_ranked_pipeline_runtime_evidence_wiring.py",
+        "tests/test_feed_truth_audit.py"
+      ],
+      "duration_sec": 6.251,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ".................                                                        [100%]\n17 passed in 4.68s\n"
+    },
+    {
+      "cmd": [
+        "pytest",
+        "-q",
+        "tests/test_edge_69_candidate_intent_contract.py",
+        "tests/test_edge58_top_opportunity_executable_truth.py",
+        "tests/test_edge61_capital_selection_policy_contract.py",
+        "tests/test_edge_84_paper_outcome_reducer.py"
+      ],
+      "duration_sec": 1.41,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "...............................                                          [100%]\n31 passed in 0.85s\n"
+    }
+  ],
+  "no_live_orders_placed": true,
+  "production_behavior_changed": false
+}

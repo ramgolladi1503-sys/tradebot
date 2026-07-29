@@ -1,0 +1,3 @@
+finding_id,stage,module,description,severity
+E2E-GAP-UI-001,ui_manual_approval,dashboard/streamlit_app_runtime.py,fallback-visible UI rows are not proven one-to-one ranked snapshot rows,P1
+E2E-GAP-TB-001,tradebuilder,strategies/trade_builder.py,full valid/reject/fallback TradeBuilder lifecycle not proven,P1

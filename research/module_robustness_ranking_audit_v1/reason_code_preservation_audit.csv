@@ -1,0 +1,3 @@
+stage,module,verdict,gap
+phase2_gates,core/_engine_phase2_adapter_base.py,PARTIALLY_VERIFIED,candidate dict mutation and phase2 fallback/soft penalty fields require fixture reason-preservation tests
+ui_manual_approval,dashboard/streamlit_app_runtime.py,FAILED_PARTIAL_PROOF,fallback source labels are present but ranked identity binding is not fully proven

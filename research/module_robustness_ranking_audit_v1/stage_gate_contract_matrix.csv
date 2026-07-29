@@ -1,0 +1,4 @@
+gate,input_requirement,pass_output,reject_output,downgrade_output,reason_code,authority_effect,evidence
+TradeBuilder,strategy signal + market/option context,candidate/trade dict,reason/blocker,advisory/fallback candidate when policy permits,varies,candidate construction,tradebuilder_phase1_phase2_audit.md
+Phase2,raw candidates,rankable candidate dict,drop/reason counters,phase2 soft penalties/fallback fields,phase2_*,eligibility/scoring input,tradebuilder_phase1_phase2_audit.md
+Approval chokepoint,order intent hash + valid approval,approved_and_consumed,manual_approval_required:*,none,manual_approval_required,broker submission permission,order_intent_broker_boundary_audit.md

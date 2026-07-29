@@ -1,0 +1,10 @@
+timestamp,status,risk
+exchange_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+broker_event_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+local_receipt_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+processing_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+candle_cutoff_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+quote_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+signal_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+approval_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract
+broker_submission_timestamp,PARTIALLY_VERIFIED_OR_AMBIGUOUS,mixed clock domains require trace contract

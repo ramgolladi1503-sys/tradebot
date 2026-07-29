@@ -1,0 +1,44 @@
+# Master End-to-End Module Fix Matrix
+
+See `master_end_to_end_module_fix_matrix.csv`. This matrix is scoped to reachable or conditionally reachable runtime callables, not arbitrary tracked files.
+
+- P1: `core/_engine_phase2_adapter_base.py:safe_get` - Phase 2 mutates candidate dictionaries and uses fallback/soft penalty fields; full reason preservation is only partially proven.
+- P1: `core/_engine_phase2_adapter_base.py:validate_candidate` - Phase 2 mutates candidate dictionaries and uses fallback/soft penalty fields; full reason preservation is only partially proven.
+- P1: `core/_engine_phase2_adapter_base.py:build_candidates_phase2` - Phase 2 mutates candidate dictionaries and uses fallback/soft penalty fields; full reason preservation is only partially proven.
+- P1: `core/_engine_phase2_adapter_base.py:run_engine_phase2` - Phase 2 mutates candidate dictionaries and uses fallback/soft penalty fields; full reason preservation is only partially proven.
+- P2: `core/auth_manager.py:access_token_path` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/auth_manager.py:auth_state_path` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/auth_manager.py:load_auth_state` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_interface.py:BrokerHealth` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_interface.py:BrokerOrderRequest` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_interface.py:BrokerOrderResponse` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_interface.py:BrokerFillUpdate` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_interface.py:BrokerAdapter` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/broker_truth_reconciler.py:BrokerTruthReconciler` - Reconciliation exists but restart/partial-fill/out-of-order update certification is not proven in v2.
+- P2: `core/candidate_ranking.py:FeedRiskVerdict` - Synthetic rank determinism is proven, full replay snapshot determinism remains partial.
+- P2: `core/candidate_ranking.py:is_feed_risk_candidate` - Synthetic rank determinism is proven, full replay snapshot determinism remains partial.
+- P2: `core/candidate_ranking.py:CandidateRankRecord` - Synthetic rank determinism is proven, full replay snapshot determinism remains partial.
+- P2: `core/candidate_ranking.py:CandidateRankingReport` - Synthetic rank determinism is proven, full replay snapshot determinism remains partial.
+- P2: `core/candidate_ranking.py:rank_candidates` - Synthetic rank determinism is proven, full replay snapshot determinism remains partial.
+- P1: `core/execution_engine/router.py:ExecutionRouterError` - Broker submission mapping is isolated but broker timeout/rejection/idempotency scenarios are not proven with mocks in v2.
+- P1: `core/execution_engine/router.py:execute_intent` - Broker submission mapping is isolated but broker timeout/rejection/idempotency scenarios are not proven with mocks in v2.
+- P2: `core/portfolio_risk_allocator.py:AllocationResult` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/risk_utils.py:safe_div` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/risk_utils.py:to_pct` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/trade_builder_backtest_adapter.py:TradeBuilderBacktestAdapter` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P2: `core/trade_builder_backtest_adapter_v2.py:TradeBuilderBacktestAdapterV2` - Safety-critical reachable callable lacks direct semantic test evidence in v2 inventory.
+- P1: `dashboard/streamlit_app_runtime.py:fmt_conf` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:read_market_snapshot_for_dashboard` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:get_market_snapshot_view_model` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:filter_trades_for_panel` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:build_display_row` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:start_micro_training_subprocess` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:cancel_micro_training` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:get_underlying_candles` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:get_option_candles_or_snapshots` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:get_candles` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:build_option_series` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:detect_stale_points` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:build_dual_axis_figure` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `dashboard/streamlit_app_runtime.py:build_chart` - Fallback display paths can show rows not proven to be ranked-snapshot backed.
+- P1: `strategies/trade_builder.py:TradeBuilder` - TradeBuilder is reachable and safety-critical but not fully covered by v2 frozen end-to-end scenarios.
