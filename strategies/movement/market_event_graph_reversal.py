@@ -1,19 +1,18 @@
 """Advisory-only market-event graph reversal strategy.
 
-Implements the frozen discovered sequence:
+Frozen sequence:
     breadth_down_1:HIGH -> index_breadth_divergence:LOW -> breadth_down_1:LOW
     => BUY_CALL
 
-The strategy is deliberately non-executable. It emits a raw candidate only when
-three completed breadth-event snapshots are supplied through
-``StrategyContext.metadata['market_event_graph_history']``. Missing, stale, or
-malformed breadth evidence produces no candidate.
+The strategy consumes completed constituent-breadth events only. It remains
+shadow/advisory-only and cannot submit or authorize orders.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from core.market_event_graph_live_adapter import build_market_event_graph_history
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
 from strategies.movement._utils import clamp_score, make_candidate, side_evidence
@@ -32,7 +31,7 @@ def generate_market_event_graph_reversal_candidates(
     ctx: StrategyContext,
     regime: MovementRegimeResult,
 ) -> tuple[StrategyCandidate, ...]:
-    """Emit one advisory BUY_CALL candidate after the frozen three-event graph."""
+    """Emit one advisory BUY_CALL candidate after the frozen graph."""
 
     history = _history(ctx.metadata)
     if history is None:
@@ -41,7 +40,6 @@ def generate_market_event_graph_reversal_candidates(
     labels = tuple(_label(row) for row in history[-3:])
     if labels != FROZEN_GRAPH:
         return ()
-
     if not _fresh(history[-1], ctx.ts_epoch):
         return ()
 
@@ -108,13 +106,8 @@ def generate_market_event_graph_reversal_candidates(
 
 
 def _history(metadata: dict[str, Any]) -> list[dict[str, Any]] | None:
-    raw = metadata.get("market_event_graph_history")
-    if not isinstance(raw, (list, tuple)) or len(raw) < 3:
-        return None
-    rows = [row for row in raw if isinstance(row, dict)]
-    if len(rows) < 3:
-        return None
-    return rows
+    rows = build_market_event_graph_history(metadata)
+    return rows if len(rows) >= 3 else None
 
 
 def _label(row: dict[str, Any]) -> str:
