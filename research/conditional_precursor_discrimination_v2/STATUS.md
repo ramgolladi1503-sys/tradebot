@@ -1,13 +1,11 @@
-# Campaign Status
+# Conditional Precursor Discrimination V2 — Current Status
 
-Current gate: `VERIFY_CONSOLIDATED_EVIDENCE_AND_REPRODUCE_PRIOR_CAMPAIGN`
+Principal verdict: `INVALID_FUTURE_ENTRY_PRICE_SIGNAL_MEMBERSHIP_LEAK`
 
-The conditional-discrimination stage is intentionally blocked until GitHub Actions confirms that:
+The late-day CE rebound candidate is not currently a valid causal structural edge.
 
-1. PR #723 Git LFS objects resolve to real files;
-2. consolidation manifest hashes and byte sizes match;
-3. preserved parquet files are readable;
-4. prior reverse-causal counts and family definitions reproduce;
-5. focused evidence-verification tests pass.
+The V5 signal-membership oracle used `entry_price_next_open`, a value observed one minute after the completed signal, both as an eligibility filter and as a candidate tie-break. Exact reconstruction therefore reproduced the same future-information dependency rather than proving signal-time causality.
 
-No holdout has been opened. No production implementation is allowed.
+The V9 result, final decision and frozen contract are invalidated. No paper or live authorization exists.
+
+Next valid step: rerun the candidate with signal membership frozen using only completed-bar observables, then rebuild OOF, controls, chronological holdout, concentration and friction evidence from scratch.
