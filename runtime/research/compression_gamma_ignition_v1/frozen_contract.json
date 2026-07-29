@@ -1,0 +1,40 @@
+{
+  "allowed_for_live_execution": false,
+  "cooldown_minutes": 20,
+  "days_to_expiry": [
+    0,
+    7
+  ],
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "holdout_policy": "latest_25pct_unopened_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "max_signals_per_session": 2,
+  "mechanism_hypothesis": "quiet_low_range_option_contract_or_wing_first_participation_shock_before_short_convex_expansion",
+  "mechanisms": [
+    "quiet_contract_volume_ignition",
+    "quiet_surface_breadth_ignition",
+    "low_premium_gamma_kick",
+    "near_expiry_compression_ignition",
+    "oi_volume_spark_after_compression",
+    "mirror_decay_compression_ignite",
+    "two_bar_compression_acceptance",
+    "mass_shift_after_quiet_surface",
+    "midday_gamma_ignition",
+    "late_day_gamma_ignition"
+  ],
+  "multiplicity_policy": "ten_preregistered_mechanisms_top_two_only_open_holdout",
+  "normal_cost_pct": 0.1,
+  "outcome_horizon_minutes": 5,
+  "paper_or_live_authorized": false,
+  "premium_range": [
+    20.0,
+    180.0
+  ],
+  "research_only": true,
+  "research_sessions": 291,
+  "schema_version": "compression_gamma_ignition_v1",
+  "semantic_sha256": "4fca7437ed3be84a638dc8d4a06926ada770657c6496407fa639fbf5d5106f05",
+  "side": "BUY_CE_OR_PE_ONLY",
+  "stress_cost_pct": 1.0,
+  "threshold_policy": "prior_training_session_quantiles_per_expanding_fold"
+}
