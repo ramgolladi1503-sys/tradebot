@@ -1,0 +1,152 @@
+name: Upstox V3 Depth Capture Contract
+
+on:
+  push:
+    branches:
+      - fix/upstox-v3-depth-capture-v1
+    paths:
+      - ".github/workflows/upstox_v3_depth_capture_contract.yml"
+      - "core/upstox_v3_feed_parser.py"
+      - "scripts/capture_upstox_market_daily.py"
+      - "tests/test_upstox_v3_feed_parser.py"
+      - "tests/test_upstox_v3_depth_capture_persistence.py"
+      - "docs/agent_reviews/upstox_v3_depth_capture_v1.md"
+  pull_request:
+    paths:
+      - ".github/workflows/upstox_v3_depth_capture_contract.yml"
+      - "core/upstox_v3_feed_parser.py"
+      - "scripts/capture_upstox_market_daily.py"
+      - "tests/test_upstox_v3_feed_parser.py"
+      - "tests/test_upstox_v3_depth_capture_persistence.py"
+      - "docs/agent_reviews/upstox_v3_depth_capture_v1.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstox-v3-depth-capture-contract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  focused-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONHASHSEED: "0"
+
+    steps:
+      - name: Checkout exact repair head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve actual comparison base
+        id: comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            git fetch --no-tags origin main
+            base_sha="$(git merge-base origin/main HEAD)"
+          fi
+          git cat-file -e "${base_sha}^{commit}"
+          echo "base_sha=${base_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production ancestry and strict scope
+        env:
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "${BASE_SHA}" HEAD
+          git diff --name-only "${BASE_SHA}..HEAD" > /tmp/changed.txt
+          cat > /tmp/allowed_scope.txt <<'EOF'
+          .github/workflows/upstox_v3_depth_capture_contract.yml
+          core/upstox_v3_feed_parser.py
+          docs/agent_reviews/upstox_v3_depth_capture_v1.md
+          scripts/capture_upstox_market_daily.py
+          tests/test_upstox_v3_depth_capture_persistence.py
+          tests/test_upstox_v3_feed_parser.py
+          EOF
+          if [[ "${HEAD_REF}" == "ram/infra-bugfix-rollup-v1" ]]; then
+            cat > /tmp/allowed_scope.txt <<'EOF'
+          .agents/mcp_config.example.json
+          .agents/rules/tradebot-evidence-authority.md
+          .agents/skills/audit-causal-candidate/SKILL.md
+          .agents/skills/verify-research-handoff/SKILL.md
+          .agents/workflows/verify-research-gates.md
+          .github/workflows/tradebot-mcp.yml
+          .github/workflows/upstox_v3_depth_capture_contract.yml
+          .gitignore
+          core/market_data.py
+          core/upstox_v3_feed_parser.py
+          docs/agent_reviews/orb_context_cycle_cutoff_main_v2.md
+          docs/agent_reviews/tradebot-antigravity-mcp-v1.md
+          docs/agent_reviews/upstox_v3_depth_capture_v1.md
+          docs/antigravity/TRADEBOT_MCP.md
+          requirements-mcp.txt
+          scripts/capture_upstox_market_daily.py
+          scripts/install_antigravity_mcp.sh
+          tests/core/test_orb_context_cycle_cutoff.py
+          tests/mcp/test_core.py
+          tests/mcp/test_servers.py
+          tests/test_upstox_v3_depth_capture_persistence.py
+          tests/test_upstox_v3_feed_parser.py
+          tools/__init__.py
+          tools/tradebot_mcp/__init__.py
+          tools/tradebot_mcp/core.py
+          tools/tradebot_mcp/data_audit_server.py
+          tools/tradebot_mcp/evidence_server.py
+          tools/tradebot_mcp/gates_server.py
+          tools/tradebot_mcp/git_audit_server.py
+          tools/tradebot_mcp/safe_git.py
+          EOF
+          fi
+          sed -i 's/^          //' /tmp/allowed_scope.txt
+          forbidden="$(grep -Fxv -f /tmp/allowed_scope.txt /tmp/changed.txt || true)"
+          if test -n "${forbidden}"; then
+            printf '%s\n' "${forbidden}" >&2
+            echo "Forbidden unrelated file in Upstox V3 depth repair or approved infrastructure rollup" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install focused dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow pytest requests
+
+      - name: Compile production and test modules
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            core/upstox_v3_feed_parser.py \
+            scripts/capture_upstox_market_daily.py \
+            tests/test_upstox_v3_feed_parser.py \
+            tests/test_upstox_v3_depth_capture_persistence.py
+
+      - name: Run focused deterministic tests
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_upstox_v3_feed_parser.py \
+            tests/test_upstox_v3_depth_capture_persistence.py
+
+      - name: Prove no strategy or execution surface changed
+        env:
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          if git diff --name-only "${BASE_SHA}..HEAD" | grep -E '^(strategies/|core/(orchestrator|risk|execution|trade_builder|candidate_pool)|config/)'; then
+            echo "Strategy, risk, execution, orchestrator or config surface changed" >&2
+            exit 1
+          fi

@@ -16,6 +16,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .venv/
+.venv-mcp/
 venv/
 
 # App runtime
@@ -24,6 +25,9 @@ logs/
 
 # Local caches / large files
 .codex/
+
+# Local Antigravity MCP configuration
+.agents/mcp_config.json
 
 # SQLite / local databases
 *.db
