@@ -1,0 +1,50 @@
+name: Underlying Evidence Locator V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/underlying-auction-option-response-v1
+    paths:
+      - '.github/workflows/underlying-evidence-locator-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository pointers
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Inventory tracked parquet paths
+        run: |
+          mkdir -p runtime/research/underlying_evidence_locator_v1
+          git ls-files '*.parquet' | sort > runtime/research/underlying_evidence_locator_v1/all_parquet_paths.txt
+          grep -Ei '(NIFTY_|canonical_nifty|option_underlying|underlying_backfill|underlying.*parquet)' \
+            runtime/research/underlying_evidence_locator_v1/all_parquet_paths.txt \
+            > runtime/research/underlying_evidence_locator_v1/nifty_underlying_candidates.txt || true
+          grep -Ei '(event_universe_5m|option_underlying_joint|canonical_nifty)' \
+            runtime/research/underlying_evidence_locator_v1/all_parquet_paths.txt \
+            > runtime/research/underlying_evidence_locator_v1/priority_candidates.txt || true
+          printf 'all_parquet_count=' > runtime/research/underlying_evidence_locator_v1/counts.txt
+          wc -l < runtime/research/underlying_evidence_locator_v1/all_parquet_paths.txt >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          printf 'underlying_candidate_count=' >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          wc -l < runtime/research/underlying_evidence_locator_v1/nifty_underlying_candidates.txt >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          printf 'priority_candidate_count=' >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          wc -l < runtime/research/underlying_evidence_locator_v1/priority_candidates.txt >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          cat runtime/research/underlying_evidence_locator_v1/counts.txt
+          cat runtime/research/underlying_evidence_locator_v1/priority_candidates.txt
+
+      - name: Upload locator report
+        uses: actions/upload-artifact@v4
+        with:
+          name: underlying-evidence-locator-v1
+          path: runtime/research/underlying_evidence_locator_v1/**
+          if-no-files-found: error
+          retention-days: 7
