@@ -60,6 +60,63 @@ def _load_nifty_sessions(root: Path, limit: int | None) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+def _fit_model(states: pd.DataFrame, target: str, features: list[str], train_sessions: set[str], test_sessions: set[str]) -> dict[str, object]:
+    usable = states[["session_date", target, *features]].replace([np.inf, -np.inf], np.nan).dropna()
+    train = usable[usable["session_date"].astype(str).isin(train_sessions)]
+    test = usable[usable["session_date"].astype(str).isin(test_sessions)]
+    if len(train) < 100 or len(test) < 50 or not features:
+        return {"status": "insufficient", "train_rows": len(train), "test_rows": len(test)}
+    mean = train[features].mean()
+    std = train[features].std(ddof=0).replace(0, 1.0)
+    pred = _ridge_fit_predict(
+        ((train[features] - mean) / std).to_numpy(float),
+        train[target].to_numpy(float),
+        ((test[features] - mean) / std).to_numpy(float),
+    )
+    return {"features": features, "train_rows": len(train), "test_rows": len(test), "metrics": _metrics(test[target].to_numpy(float), pred)}
+
+
+def _discover_motifs(states: pd.DataFrame, features: list[str], train_sessions: set[str], validation_sessions: set[str], holdout_sessions: set[str]) -> list[dict[str, object]]:
+    target = "future_abs_return_15"
+    train = states[states["session_date"].astype(str).isin(train_sessions)]
+    validation = states[states["session_date"].astype(str).isin(validation_sessions)]
+    holdout = states[states["session_date"].astype(str).isin(holdout_sessions)]
+    motifs: list[dict[str, object]] = []
+    for feature in features:
+        series = train[feature].replace([np.inf, -np.inf], np.nan).dropna()
+        if len(series) < 1000:
+            continue
+        for tail, quantile, op in (("low", 0.10, "le"), ("high", 0.90, "ge")):
+            threshold = float(series.quantile(quantile))
+            def evaluate(frame: pd.DataFrame) -> dict[str, float]:
+                clean = frame[[feature, target]].replace([np.inf, -np.inf], np.nan).dropna()
+                selected = clean[clean[feature] <= threshold] if op == "le" else clean[clean[feature] >= threshold]
+                baseline = float(clean[target].mean()) if len(clean) else float("nan")
+                mean = float(selected[target].mean()) if len(selected) else float("nan")
+                return {"rows": float(len(selected)), "mean": mean, "baseline": baseline, "lift": mean - baseline}
+            train_eval = evaluate(train)
+            validation_eval = evaluate(validation)
+            holdout_eval = evaluate(holdout)
+            stable = (
+                validation_eval["rows"] >= 300
+                and holdout_eval["rows"] >= 300
+                and validation_eval["lift"] > 0
+                and holdout_eval["lift"] > 0
+            )
+            if stable:
+                motifs.append({
+                    "feature": feature,
+                    "tail": tail,
+                    "threshold": threshold,
+                    "train": train_eval,
+                    "validation": validation_eval,
+                    "holdout": holdout_eval,
+                    "minimum_lift": min(validation_eval["lift"], holdout_eval["lift"]),
+                })
+    motifs.sort(key=lambda row: float(row["minimum_lift"]), reverse=True)
+    return motifs[:20]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-root", required=True, type=Path)
@@ -75,10 +132,6 @@ def main() -> int:
     states["future_abs_return_15"] = states["future_return_15"].abs()
 
     sessions = sorted(states["session_date"].astype(str).unique())
-    if len(sessions) < 30:
-        verdict = "MARKET_STATE_INPUTS_INSUFFICIENT"
-    else:
-        verdict = "MARKET_STATE_REPRESENTATION_PARTIALLY_VALID"
     cut1 = max(1, int(len(sessions) * 0.60))
     cut2 = max(cut1 + 1, int(len(sessions) * 0.80))
     train_sessions = set(sessions[:cut1])
@@ -86,57 +139,53 @@ def main() -> int:
     holdout_sessions = set(sessions[cut2:])
 
     contract = state_contract()
-    full_features = [c for family in contract["families"].values() for c in family if c not in {"underlying_observable", "option_observable", "state_reliability"}]
-    full_features = [c for c in full_features if c in states.columns and states[c].notna().mean() >= 0.50]
-    baseline_features = [c for c in ["trend_return_short", "trend_return_medium", "vwap_distance_atr", "range_short_long_ratio"] if c in states.columns]
+    excluded = {"underlying_observable", "option_observable", "state_reliability"}
+    full_features = [c for family in contract["families"].values() for c in family if c not in excluded]
+    full_features = [c for c in full_features if c in states.columns and states[c].replace([np.inf, -np.inf], np.nan).notna().mean() >= 0.50]
+    baseline_candidates = ["trend_return_short", "trend_return_medium", "range_short_long_ratio", "range_zscore", "close_location_value"]
+    baseline_features = [c for c in baseline_candidates if c in states.columns and states[c].replace([np.inf, -np.inf], np.nan).notna().mean() >= 0.50]
 
     results: dict[str, object] = {}
+    incremental_wins = 0
     for target in ("future_return_5", "future_return_15", "future_abs_return_15"):
         target_results: dict[str, object] = {}
-        for name, features in (("baseline", baseline_features), ("full_state", full_features)):
-            usable = states[["session_date", target, *features]].replace([np.inf, -np.inf], np.nan).dropna()
-            train = usable[usable["session_date"].astype(str).isin(train_sessions)]
-            holdout = usable[usable["session_date"].astype(str).isin(holdout_sessions)]
-            if len(train) < 100 or len(holdout) < 50 or not features:
-                target_results[name] = {"status": "insufficient", "train_rows": len(train), "holdout_rows": len(holdout)}
-                continue
-            mean = train[features].mean()
-            std = train[features].std(ddof=0).replace(0, 1.0)
-            x_train = ((train[features] - mean) / std).to_numpy(float)
-            x_holdout = ((holdout[features] - mean) / std).to_numpy(float)
-            pred = _ridge_fit_predict(x_train, train[target].to_numpy(float), x_holdout)
-            target_results[name] = {
-                "features": features,
-                "train_rows": len(train),
-                "holdout_rows": len(holdout),
-                "metrics": _metrics(holdout[target].to_numpy(float), pred),
-            }
+        for split_name, split_sessions in (("validation", validation_sessions), ("holdout", holdout_sessions)):
+            baseline = _fit_model(states, target, baseline_features, train_sessions, split_sessions)
+            full = _fit_model(states, target, full_features, train_sessions, split_sessions)
+            target_results[split_name] = {"baseline": baseline, "full_state": full}
+        valid = target_results["validation"]
+        hold = target_results["holdout"]
+        try:
+            valid_win = valid["full_state"]["metrics"]["mae"] < valid["baseline"]["metrics"]["mae"] and valid["full_state"]["metrics"]["correlation"] > valid["baseline"]["metrics"]["correlation"]
+            hold_win = hold["full_state"]["metrics"]["mae"] < hold["baseline"]["metrics"]["mae"] and hold["full_state"]["metrics"]["correlation"] > hold["baseline"]["metrics"]["correlation"]
+        except KeyError:
+            valid_win = hold_win = False
+        if valid_win and hold_win:
+            incremental_wins += 1
         results[target] = target_results
 
-    incremental_wins = 0
-    for target_result in results.values():
-        if not isinstance(target_result, dict):
-            continue
-        base = target_result.get("baseline", {})
-        full = target_result.get("full_state", {})
-        if isinstance(base, dict) and isinstance(full, dict) and "metrics" in base and "metrics" in full:
-            if full["metrics"]["mae"] < base["metrics"]["mae"] and full["metrics"]["correlation"] > base["metrics"]["correlation"]:
-                incremental_wins += 1
-
-    if verdict != "MARKET_STATE_INPUTS_INSUFFICIENT":
-        verdict = "MARKET_STATE_REPRESENTATION_PARTIALLY_VALID" if incremental_wins >= 1 else "NO_USEFUL_MARKET_STATE_REPRESENTATION_FOUND"
+    motifs = _discover_motifs(states, full_features, train_sessions, validation_sessions, holdout_sessions)
+    if len(sessions) < 30:
+        verdict = "MARKET_STATE_INPUTS_INSUFFICIENT"
+    elif incremental_wins >= 1 or motifs:
+        verdict = "MARKET_STATE_REPRESENTATION_PARTIALLY_VALID"
+    else:
+        verdict = "NO_USEFUL_MARKET_STATE_REPRESENTATION_FOUND"
 
     report = {
         "verdict": verdict,
-        "scope": "underlying-only first empirical screen; exact-option families remain unvalidated",
+        "scope": "underlying-only empirical screen; exact-option execution remains unvalidated",
         "rows": int(len(states)),
         "sessions": len(sessions),
         "first_session": sessions[0] if sessions else None,
         "last_session": sessions[-1] if sessions else None,
         "split": {"train": len(train_sessions), "validation": len(validation_sessions), "holdout": len(holdout_sessions)},
         "state_contract_hash": _hash(contract),
+        "baseline_features": baseline_features,
         "full_feature_count": len(full_features),
         "incremental_wins": incremental_wins,
+        "stable_motif_count": len(motifs),
+        "stable_motifs": motifs,
         "results": results,
     }
     states.to_parquet(args.output_dir / "market_state_dataset_with_labels.parquet", index=False)
