@@ -17,7 +17,7 @@ Changed scope is limited to the candidate-pool orchestrator, the movement-strate
 - default-pool wiring adds observation only and does not make candidates executable;
 - existing option confirmation, classification, downgrade, ranking, feed-hold, and execution firewalls remain authoritative.
 
-## Grill Me
+## Grill Me Review
 
 **Could the adapter invent a signal from raw prices?** No. It accepts only explicitly labelled completed breadth events and never estimates thresholds.
 
@@ -31,14 +31,14 @@ Changed scope is limited to the candidate-pool orchestrator, the movement-strate
 
 **Does this prove option profitability?** No. The discovery result used underlying returns and contained zero actual option rows.
 
-## Hermes
+## Hermes Review
 Data lineage is:
 
 `completed constituent-breadth snapshot` → `market_event_graph_live_adapter` → canonical chronological/deduplicated event rows → `StrategyContext.metadata` → frozen graph strategy → raw advisory candidate → existing option-confirmation and ranking layers.
 
 The adapter preserves event timestamps and selected numeric evidence for auditability.
 
-## GSD
+## GSD Review
 Implementation is intentionally small and deterministic:
 
 1. canonicalize completed labelled event rows;
@@ -48,7 +48,7 @@ Implementation is intentionally small and deterministic:
 5. emit one BUY_CALL advisory candidate;
 6. run through the existing default read-only candidate pool.
 
-## QA/Safety
+## QA / Safety Review
 Focused tests cover:
 
 - exact graph emits one BUY_CALL advisory candidate;
