@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_FIVE_MINUTE_CANDLE_PROXY_RESEARCH_ONLY",
+  "contract_semantic_sha256": "4c4407e8fab9773a3e3535c3d9641a188fd9368d7104fb12f1cc525b49f3599d",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_outcomes_materialized": false,
+  "holdout_survivors": [],
+  "oof_survivors": [],
+  "paper_or_live_authorized": false,
+  "principal_verdict": "NO_OOF_SURVIVOR_IN_SYNCHRONISED_SURFACE_DISCOUNT_REBOUND_FAMILY",
+  "research_only": true,
+  "semantic_sha256": "ac2aea16e45e46c9781a6647e5517ded38a6797b2be4f924ed228984eb811484",
+  "structural_edge_found": false
+}
