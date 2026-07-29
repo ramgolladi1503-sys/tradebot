@@ -10,6 +10,12 @@ on:
       - 'tests/research/test_inventory_absorption_transition_v1.py'
       - 'research/inventory_absorption_transition_v1/**'
       - '.github/workflows/inventory-absorption-transition-v1.yml'
+  pull_request:
+    paths:
+      - 'scripts/run_inventory_absorption_transition_v1.py'
+      - 'tests/research/test_inventory_absorption_transition_v1.py'
+      - 'research/inventory_absorption_transition_v1/**'
+      - '.github/workflows/inventory-absorption-transition-v1.yml'
 
 permissions:
   contents: write
