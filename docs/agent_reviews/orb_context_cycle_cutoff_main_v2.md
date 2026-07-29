@@ -4,7 +4,7 @@
 - candidate_id: orb-context-cycle-cutoff-main-v2
 - decision: MERGE_AFTER_REQUIRED_CHECKS_PASS
 - reason: Replace an undefined ORB timestamp argument with the already-frozen per-cycle cutoff and prove the production caller forwards that exact value.
-- timestamp: 2026-07-29T08:10:00Z
+- timestamp: 2026-07-29T10:20:00Z
 - is_order_action: false
 - broker_api_called: false
 - source: docs/agent_reviews/orb_context_cycle_cutoff_main_v2.md
@@ -62,6 +62,8 @@ Previously recorded focused verification:
 - `git diff --check`: passed.
 
 Repository GitHub Actions must rerun on the updated branch before merge.
+
+Validation refresh: this evidence-only update intentionally retriggers all required checks against the current protected-branch merge base after GitHub reported the named `repo-forensics-pr-gate` context as expected despite the prior visible green run.
 
 ## Runtime Proof Required After Merge
 
