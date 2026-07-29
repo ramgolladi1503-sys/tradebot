@@ -1,82 +1,16 @@
 {
   "allowed_for_live_execution": false,
   "candidate_id": "late_day_ce_inventory_rebound_5m_v9",
-  "contract_status": "FROZEN_RESEARCH_CONTRACT",
-  "cost_contract": {
-    "historical_acceptance_total_friction_pct": 1.0,
-    "historical_failure_begins_at_tested_total_friction_pct": 1.5,
-    "live_fail_closed_max_round_trip_friction_pct": 1.0,
-    "spread_or_slippage_observed_historically": false
-  },
-  "data_contract": {
-    "instrument_family": "NIFTY_OPTIONS",
-    "option_side": "CE",
-    "required_same_strike_mirror": "PE",
-    "required_surface_contract_count": 3,
-    "source_event_universe_sha256": "c484f70c1235e819a97ee311554baf863e5fa61173718ff07eceb464149afbfc",
-    "timeframe": "ONE_MINUTE_OPTION_OHLCV_WITH_CAUSAL_FIVE_MINUTE_FEATURES"
-  },
-  "entry_contract": {
-    "entry_price": "first_same_contract_option_open_at_signal_timestamp_plus_one_minute",
-    "maximum_entry_delay_minutes": 1,
-    "same_bar_entry_forbidden": true
-  },
-  "exit_contract": {
-    "exit_price": "same_contract_option_close_at_signal_timestamp_plus_five_minutes",
-    "holding_horizon_minutes_from_signal": 5,
-    "stop_or_target_overlay": null
-  },
-  "final_research_thresholds": {
-    "ce_prior_5m_return_pct_max": -8.407482109605729,
-    "ce_return_acceleration_max": -5.6106492995639305,
-    "ce_minus_same_strike_pe_return_asymmetry_max": -14.863275187296637,
-    "ce_prior_5m_volume_ratio_min": 2.727272727272727,
-    "same_strike_pe_prior_5m_return_pct_min": 3.4688480159588675
-  },
-  "holdout_policy": {
-    "chronological_research_fraction": 0.75,
-    "chronological_holdout_fraction": 0.25,
-    "holdout_sessions": 98,
-    "holdout_was_untouched_before_v3_open": true,
-    "primary_holdout_trades": 12
-  },
-  "instrument_filters": {
-    "days_to_expiry_max": 7,
-    "days_to_expiry_min": 0,
-    "entry_premium_max_inr": 150.0,
-    "entry_premium_min_inr": 30.0,
-    "positive_volume_required": true
+  "contract_status": "INVALID_FUTURE_ENTRY_PRICE_SIGNAL_MEMBERSHIP_LEAK",
+  "invalidation": {
+    "future_field": "entry_price_next_open",
+    "used_for": [
+      "signal_eligibility_entry_premium_between_30_and_150",
+      "candidate_tie_break_entry_premium_closest_to_150"
+    ],
+    "reason": "the next-minute entry open is unavailable when the completed signal bar closes",
+    "required_repair": "freeze membership using signal-time-observable fields before reading next-bar fills or outcomes"
   },
   "paper_or_live_authorized": false,
-  "research_only": true,
-  "selection_contract": {
-    "maximum_signals_per_session": 1,
-    "primary_selection": "earliest_qualifying_signal_timestamp",
-    "secondary_tie_break": "highest_extremity_score",
-    "tertiary_tie_break": "entry_premium_closest_to_150_then_instrument_key",
-    "threshold_source": "prior_training_sessions_only"
-  },
-  "session_filter": {
-    "latest_signal_minute_of_day_ist": 890,
-    "latest_signal_time_ist": "14:50",
-    "minimum_signal_minute_of_day_ist": 780,
-    "minimum_signal_time_ist": "13:00"
-  },
-  "signal_contract": [
-    "completed_CE_prior_5m_return_at_or_below_training_p10",
-    "completed_CE_prior_5m_volume_ratio_at_or_above_training_p90",
-    "completed_CE_return_acceleration_at_or_below_training_p10",
-    "same_strike_PE_completed_prior_5m_return_at_or_above_training_p80",
-    "CE_minus_PE_return_asymmetry_at_or_below_training_p10",
-    "same_expiry_CE_surface_contains_at_least_three_contracts",
-    "entry_premium_between_30_and_150_rupees",
-    "days_to_expiry_between_zero_and_seven",
-    "prior_completed_CE_return_exists"
-  ],
-  "signal_membership_oracle": {
-    "exact_match": true,
-    "oracle_signals": 52,
-    "published_primary_signals": 52,
-    "verdict": "PASS_INDEPENDENT_SIGNAL_MEMBERSHIP_ORACLE"
-  }
+  "research_only": true
 }
