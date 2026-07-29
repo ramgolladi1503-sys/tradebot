@@ -1,0 +1,9 @@
+{
+  "allowed_for_live_execution": false,
+  "certification_gate": false,
+  "certification_materialized": false,
+  "principal_verdict": "NO_RESEARCH_CALIBRATION_SPEC_POST_OPENING",
+  "semantic_sha256": "c9e0d7281bad2db6e4e139e35c650ed984353a006e77d079f2bf3a30c8fbce62",
+  "structural_edge_found": false,
+  "validation_gate": false
+}

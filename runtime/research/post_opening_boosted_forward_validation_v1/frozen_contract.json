@@ -1,0 +1,28 @@
+{
+  "allowed_for_live_execution": false,
+  "candidate_confidence_quantiles": [
+    0.85,
+    0.9,
+    0.95
+  ],
+  "candidate_horizons_minutes": [
+    5,
+    10,
+    15,
+    20
+  ],
+  "certification_seal": "not_materialized_unless_validation_gate_passes",
+  "certification_sessions": 43,
+  "development_origin": "10am_gate_selected_after_inspection_of_parent_OOF_and_not_counted_as_independent_WFA",
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "model": "frozen_parent_HistGradientBoostingRegressor_configuration",
+  "model_selection": "research_sessions_only_chronological_70_30_discovery_calibration",
+  "no_retraining_after_validation": true,
+  "paper_or_live_authorized": false,
+  "research_only": true,
+  "schema_version": "post_opening_boosted_forward_validation_v1",
+  "semantic_sha256": "97fada15b69c83f956dfc176792c0834a1b16e7e73b828041b2ab757c1ea75df",
+  "start_minute_ist": 600,
+  "training_objective": "return_after_1pct_total_friction",
+  "validation_sessions": 42
+}
