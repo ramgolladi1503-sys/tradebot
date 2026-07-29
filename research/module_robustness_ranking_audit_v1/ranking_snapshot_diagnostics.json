@@ -1,0 +1,19 @@
+{
+  "deterministic_order_same_frozen_input": true,
+  "first_order": [
+    "probe_a",
+    "probe_b"
+  ],
+  "limitation": "synthetic in-process probe only; not replay-labelled calibration evidence",
+  "rank_contiguous": true,
+  "rank_ids_unique": true,
+  "score_values": [
+    0.35,
+    0.35
+  ],
+  "second_order": [
+    "probe_a",
+    "probe_b"
+  ],
+  "status": "PARTIALLY_VERIFIED"
+}

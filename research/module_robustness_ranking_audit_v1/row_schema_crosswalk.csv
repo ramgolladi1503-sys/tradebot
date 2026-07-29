@@ -1,0 +1,5 @@
+stage,row_type,required_fields,optional_fields,status
+candidate_pool,StrategyCandidate,"strategy_id,symbol,direction,movement_type","evidence,blockers,warnings,source_flags",PARTIALLY_VERIFIED
+scoring,OpportunityScoreRecord,"strategy_id,symbol,direction,final_score,bucket,score_eligibility","outcome_contract,feed_risk_reasons",VERIFIED
+ranking,CandidateRankRecord,"rank,strategy_id,symbol,direction,final_score,bucket,score_eligibility","candidate_id,lineage_id,outcome_contract",VERIFIED
+ui,DataFrame row,trade_id or candidate_id varies,"execution_status,permission,rank",PARTIALLY_VERIFIED

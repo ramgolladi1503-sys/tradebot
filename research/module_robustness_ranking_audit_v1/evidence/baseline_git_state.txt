@@ -1,0 +1,105 @@
+$ git status --short
+rc=0
+ M runtime/strategy_validation/regime_timeline.jsonl
+?? research/module_robustness_ranking_audit_v1/
+?? scripts/generate_module_robustness_ranking_audit.py
+
+
+
+$ git rev-parse --abbrev-ref HEAD
+rc=0
+audit/module-robustness-ranking-pipeline-v1
+
+
+
+$ git rev-parse HEAD
+rc=0
+24d2e8b97859250598aef8cd706c43f71209475b
+
+
+
+$ git worktree list --porcelain
+rc=0
+worktree /Users/madhuram/tradebot
+HEAD ebf0c59dcc8fa8d9bb57572c5331282dd89e473b
+branch refs/heads/data/combined-upstox-20260714
+
+worktree /Users/madhuram/tradebot-certified-futures-options-information-layer-v1
+HEAD fee5d0141c53d925e90855311f0c13b4ac05e915
+branch refs/heads/research/certified-futures-options-information-layer-v1
+
+worktree /Users/madhuram/tradebot-expired-nifty-futures-identifier-recovery-v1
+HEAD 65a3316bbf64d7f97fff2817996e24a375ab696a
+branch refs/heads/research/expired-nifty-futures-identifier-recovery-v1
+
+worktree /Users/madhuram/tradebot-hierarchical-sequence-discovery-v2
+HEAD 2e29fa5a1d8619c6ee5ed69f6b1bf42cb6ca586b
+branch refs/heads/research/hierarchical-sequence-discovery-v2
+
+worktree /Users/madhuram/tradebot-information-rich-structural-edge-v1
+HEAD c533a6d5332c6c6183c9128cc4f1e7a8a4057aff
+branch refs/heads/research/information-rich-structural-edge-v1
+
+worktree /Users/madhuram/tradebot-level-auction-failure-decomposition-v1
+HEAD e72d9c61922e9d862d4197793778d7dc7cc6fc09
+branch refs/heads/audit/level-auction-failure-decomposition-v1
+
+worktree /Users/madhuram/tradebot-level-interaction-auction-state-v1
+HEAD d4eccb96da755aed7686b85e0d68c41b6793c745
+branch refs/heads/research/level-interaction-auction-state-v1
+
+worktree /Users/madhuram/tradebot-local-evidence-consolidation
+HEAD 7cb4c36fb1f9938c441ba1dd141533b56e1633a2
+branch refs/heads/research/local-evidence-consolidation-v1
+
+worktree /Users/madhuram/tradebot-market-state-sequence-discovery-v1
+HEAD e857a451ff7b93c76a63c2bd7b3d8bf17f499b6c
+branch refs/heads/research/market-state-sequence-discovery-v1
+
+worktree /Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2
+HEAD 47fbc616dbe02f9b678dd333ed8b18a6aa92e5ba
+branch refs/heads/research/ml-meta-labeling-robustness-certification-v2
+
+worktree /Users/madhuram/tradebot-ml-meta-labeling-robustness-certification-v2-1
+HEAD c992fec19c6fd3284b7df888da23f3124b280b86
+branch refs/heads/research/ml-meta-labeling-robustness-certification-v2-1
+
+worktree /Users/madhuram/tradebot-ml-meta-labeling-sprint-v1
+HEAD 2eead6378ffa6bad1127bd1d815e204ac5af0a77
+branch refs/heads/research/ml-meta-labeling-sprint-v1
+
+worktree /Users/madhuram/tradebot-ml-meta-labeling-sprint-v1-1-reproducible
+HEAD 5a8a82256d3caebaa618acc961ff8304414a0925
+branch refs/heads/research/ml-meta-labeling-sprint-v1-1-reproducible
+
+worktree /Users/madhuram/tradebot-module-robustness-ranking-audit-v1
+HEAD 24d2e8b97859250598aef8cd706c43f71209475b
+branch refs/heads/audit/module-robustness-ranking-pipeline-v1
+
+worktree /Users/madhuram/tradebot-nifty-futures-historical-acquisition-v1
+HEAD c5e3bca912b705c73f934e59de8c3965555f8693
+branch refs/heads/research/nifty-futures-historical-acquisition-v1
+
+worktree /Users/madhuram/tradebot-reverse-causal-option-expansion-v1
+HEAD 6f74d6a0ea9b284ecc7dbe1975c5bf2b8fadcf3d
+branch refs/heads/research/reverse-causal-option-expansion-v1
+
+worktree /Users/madhuram/tradebot-structural-edge-reopen-gate-v1
+HEAD 147c4a97490c6bae2a3d1e3807831c3c1e385dd2
+branch refs/heads/research/structural-edge-reopen-gate-v1
+
+worktree /Users/madhuram/tradebot-underlying-option-sequence-discovery-v1
+HEAD 51893e121225eed067df7677baba0cdc7a4c458c
+branch refs/heads/research/underlying-option-sequence-discovery-v1
+
+worktree /Users/madhuram/tradebot-useful-artifacts-v1
+HEAD d7ed6391c874197da32939852f818c974b2b0afc
+branch refs/heads/research/buy-side-structural-discovery-closeout-v1
+
+
+
+
+$ python --version
+rc=0
+Python 3.12.2
+

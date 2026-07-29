@@ -1,0 +1,22 @@
+{
+  "audited_module_count": 4310,
+  "branch": "audit/module-robustness-ranking-pipeline-v1",
+  "dependency_files": [
+    "requirements.txt",
+    "pytest.ini",
+    "Makefile"
+  ],
+  "environment_assumptions": [
+    "offline audit mode",
+    "no broker credentials required",
+    "no broker API calls made"
+  ],
+  "excluded_module_count": 16634,
+  "generated_at_epoch": 1785323725.169357,
+  "head_sha": "24d2e8b97859250598aef8cd706c43f71209475b",
+  "origin_main_sha": "24d2e8b97859250598aef8cd706c43f71209475b",
+  "platform": "macOS-26.3-arm64-arm-64bit",
+  "python": "3.12.2 | packaged by conda-forge | (main, Feb 16 2024, 20:54:21) [Clang 16.0.6 ]",
+  "repository_path": "/Users/madhuram/tradebot-module-robustness-ranking-audit-v1",
+  "tracked_file_count": 20944
+}

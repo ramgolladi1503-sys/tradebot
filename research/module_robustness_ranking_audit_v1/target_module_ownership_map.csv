@@ -1,0 +1,6 @@
+owner,module,status
+canonical_market_data_snapshot,core/feed/runtime_snapshot_builder.py,PARTIALLY_VERIFIED
+freshness_quality_authority,core/feed_truth_state.py;core/feed_health_truth.py,PARTIALLY_VERIFIED
+candidate_pool,core/candidate_pool_orchestrator.py,VERIFIED
+score_and_confidence_semantics,core/opportunity_scoring.py;core/candidate_ranking.py,PARTIALLY_VERIFIED
+ui_projection,dashboard/streamlit_app_runtime.py,VERIFIED

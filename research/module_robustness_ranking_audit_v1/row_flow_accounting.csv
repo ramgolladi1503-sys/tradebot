@@ -1,0 +1,3 @@
+stage,rows_entering,rows_leaving,rows_rejected,rows_suppressed,rows_deduplicated,rows_failed,reconciles
+synthetic_probe_scoring,2,2,0,0,0,0,True
+full_replay,,,,,,,BLOCKED_BY_MISSING_EVIDENCE

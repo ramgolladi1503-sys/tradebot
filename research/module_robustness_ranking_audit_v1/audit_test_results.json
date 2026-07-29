@@ -1,0 +1,14 @@
+{
+  "commands": [
+    {
+      "cmd": "pytest -q tests/test_dashboard_advisory_ranking_source.py tests/test_ranked_pipeline_runtime_evidence_wiring.py tests/test_feed_truth_audit.py",
+      "returncode": 0,
+      "summary": "17 passed, 1 warning in 7.30s",
+      "warning": "core/orchestrator.py:7696 SyntaxWarning: break in a finally block"
+    }
+  ],
+  "generated_at_epoch": 1785323745.719933,
+  "no_broker_api_called": true,
+  "production_behavior_changed": false,
+  "status": "passed"
+}

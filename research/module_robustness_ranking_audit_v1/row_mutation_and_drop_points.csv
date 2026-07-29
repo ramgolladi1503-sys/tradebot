@@ -1,0 +1,7 @@
+stage,producer,consumer,drop_or_mutation,status
+candidate_pool,candidate generators,normalizer,generator exceptions become warnings; non-candidates ignored,VERIFIED
+normalization,candidate_pool,classifier,dedupe/normalization key may merge candidates depending on key policy,PARTIALLY_VERIFIED
+hard_downgrade,classifier,scoring,unsafe metadata becomes blocked/advisory bucket,VERIFIED
+scoring,downgrade,ranking,"fixed weights, penalties, bucket caps compute final_score",VERIFIED
+ranking,scoring,top/UI,sort by eligibility/bucket/score/safety tie keys,PARTIALLY_VERIFIED
+dashboard,ranked top snapshot or fallback visible filters,user display,fallback display can bypass ranked top snapshot source,VERIFIED

@@ -1,0 +1,2 @@
+gap_id,stage,description,finding_id
+GAP-UI-001,dashboard,Fallback visible rows may not carry ranked snapshot identity,F-P1-001

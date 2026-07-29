@@ -1,0 +1,7 @@
+git status --short # rc=0 duration=0.78
+git rev-parse --abbrev-ref HEAD # rc=0 duration=0.044
+git rev-parse HEAD # rc=0 duration=0.043
+git worktree list --porcelain # rc=0 duration=0.062
+python --version # rc=0 duration=0.007
+python scripts/generate_module_robustness_ranking_audit.py # rc=0
+pytest -q tests/test_dashboard_advisory_ranking_source.py tests/test_ranked_pipeline_runtime_evidence_wiring.py tests/test_feed_truth_audit.py # rc=0 17 passed
