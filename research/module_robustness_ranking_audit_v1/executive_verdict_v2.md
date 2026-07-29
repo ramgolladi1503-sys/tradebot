@@ -39,3 +39,8 @@ Top defects/gaps:
 3. `core/_engine_phase2_adapter_base.py:build_candidates_phase2` mutates candidate dictionaries and fallback/soft-penalty fields; full reason preservation is partial.
 4. `core/execution_engine/router.py` broker-boundary mapping lacks v2 mock timeout/rejection/idempotency proof.
 5. `core/broker_truth_reconciler.py` reconciliation exists but partial-fill/out-of-order/restart recovery is not proven.
+
+
+## Vertical Slice Certification V1
+
+Principal verdict: `VERTICAL_SLICE_NOT_CERTIFIED`. Selected lane: `compression_breakout_v1`. Artifact root: `vertical_slice_certification_v1/`. This does not certify full production end-to-end behavior.

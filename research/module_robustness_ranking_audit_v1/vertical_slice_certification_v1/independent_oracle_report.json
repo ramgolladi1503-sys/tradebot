@@ -1,0 +1,37 @@
+{
+  "blocking_reasons": [
+    "approval_unranked_fallback_row",
+    "broker_timeout_before_ack",
+    "duplicate_approval_submission",
+    "duplicate_broker_request_idempotency",
+    "empty_ranked_snapshot_ui_fallback",
+    "excessive_spread",
+    "executable_truth_failure",
+    "malformed_tradebuilder_output",
+    "missing_quote",
+    "out_of_order_tick",
+    "partial_fill",
+    "phase1_hard_reject",
+    "phase2_contextual_reject",
+    "phase2_downgrade_advisory",
+    "recovered_fallback_quote",
+    "restart_before_reconciliation",
+    "retry_after_timeout",
+    "risk_limit_rejection",
+    "stale_quote",
+    "strategy_exception",
+    "strategy_no_signal"
+  ],
+  "campaign_all_scenarios_certified": false,
+  "checks": {
+    "all_required_fixtures_present": true,
+    "authority_monotonicity": true,
+    "deterministic_rerun_equivalence": true,
+    "identity_chain_complete": true,
+    "no_live_broker": true,
+    "reason_code_preservation": true
+  },
+  "oracle_version": "vertical_slice_independent_oracle_v1",
+  "passed": true,
+  "principal_verdict": "VERTICAL_SLICE_NOT_CERTIFIED"
+}

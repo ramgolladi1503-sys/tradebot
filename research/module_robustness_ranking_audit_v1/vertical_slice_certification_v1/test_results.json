@@ -1,0 +1,18 @@
+{
+  "commands": [
+    {
+      "cmd": "python scripts/run_vertical_slice_certification_v1.py",
+      "returncode": 0,
+      "summary": "33 scenarios, 12 certified, deterministic semantic match, VERTICAL_SLICE_NOT_CERTIFIED"
+    },
+    {
+      "cmd": "pytest -q tests/test_vertical_slice_certification_v1.py tests/test_compression_trend_movement_strategies.py tests/test_movement_contract.py",
+      "returncode": 0,
+      "summary": "19 passed in 3.08s"
+    }
+  ],
+  "generated_at_epoch": 1785343753.963148,
+  "no_live_broker_api_called": true,
+  "no_real_order_placed": true,
+  "production_behavior_changed": false
+}

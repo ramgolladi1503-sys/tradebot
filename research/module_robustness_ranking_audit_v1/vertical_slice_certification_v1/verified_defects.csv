@@ -1,0 +1,2 @@
+defect_id,classification,module,summary,fixture
+VSC-UI-001,VERIFIED_PRODUCT_DEFECT,dashboard/streamlit_app_runtime.py,Existing v2 audit proved fallback-visible UI source; vertical-slice harness keeps fallback rows non-actionable.,empty_ranked_snapshot_ui_fallback

@@ -1,0 +1,2 @@
+fix_id,summary,files
+NONE,No production fixes implemented; audit harness only.,scripts/run_vertical_slice_certification_v1.py;tests/test_vertical_slice_certification_v1.py

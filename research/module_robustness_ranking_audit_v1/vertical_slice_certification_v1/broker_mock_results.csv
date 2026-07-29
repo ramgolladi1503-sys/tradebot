@@ -1,0 +1,18 @@
+fixture_id,broker_request_id,idempotency_key,status,reason,broker_order_id,fills,reconciled_qty,open_qty
+valid_ce_buy,br-6bba73b6cea7,6bba73b6cea776bc84c73a15b5b61e27b11a8701cebdb14c2f53f13979f5faa1,accepted,mock_broker_accepted,bo-6bba73b6ce,"[{'qty': 50, 'seq': 1}]",50,0
+valid_pe_buy,br-0a921573f287,0a921573f287b4e281b42f3a3428ab430183e447140c9d61eeed39adf575ef8e,accepted,mock_broker_accepted,bo-0a921573f2,"[{'qty': 50, 'seq': 1}]",50,0
+duplicate_market_event,br-85102f8d8a2d,85102f8d8a2de81605d090e47504a8940b19d0e4430575ddad6ecd88a9c6bcad,accepted,mock_broker_accepted,bo-85102f8d8a,"[{'qty': 50, 'seq': 1}]",50,0
+duplicate_candidate_insertion,br-1b17a0efb268,1b17a0efb268ed294cd44e35cff2ced106d36835e2af650650be65f8449a86f2,accepted,mock_broker_accepted,bo-1b17a0efb2,"[{'qty': 50, 'seq': 1}]",50,0
+candidate_mutation_reason_preservation,br-f0b9e50bedb1,f0b9e50bedb1a1dd0cbc1ed63635a186c6a0407b53815281f76631e2b5ca5d8d,accepted,mock_broker_accepted,bo-f0b9e50bed,"[{'qty': 50, 'seq': 1}]",50,0
+ranking_tie,br-b3de5c0a9974,b3de5c0a9974d98f2a1aed73faee5155881084311bd06f54906d91cdcc17450e,accepted,mock_broker_accepted,bo-b3de5c0a99,"[{'qty': 50, 'seq': 1}]",50,0
+approval_ranked_actionable_row,br-b2a9a1ab2fa3,b2a9a1ab2fa3096c9636e1e53db32362ec5d5a403322ff175548d85682ed4802,accepted,mock_broker_accepted,bo-b2a9a1ab2f,"[{'qty': 50, 'seq': 1}]",50,0
+broker_acceptance,br-21aa404c6bb2,21aa404c6bb29fee873bde5ecda20396011e194cbe3376536ab54439f992691a,accepted,mock_broker_accepted,bo-21aa404c6b,"[{'qty': 50, 'seq': 1}]",50,0
+broker_rejection,br-141265b31e4d,141265b31e4d76bef16007ef173604d54fff93e0f04098961585ba840a16729a,rejected,mock_broker_rejected,,[],0,50
+broker_timeout_before_ack,br-c817c691a5a0,c817c691a5a00f85d6970f96c2518d1e2ba22692d0c46ae12b8155e2fcbbdffa,timeout_unresolved,mock_timeout_before_ack,,[],0,50
+retry_after_timeout,br-bf8cdb05fca1,bf8cdb05fca1204236cc3e51f4e5e17a02873e538eebed15b0bc2863c536669a,timeout_unresolved,mock_timeout_before_ack,,[],0,50
+duplicate_broker_request_idempotency,br-679169017a72,679169017a72cb835b13e424d436434700dfc18e843314a1a50fa6094a22c7e8,duplicate_collapsed,duplicate_idempotency_key,bo-679169017a,[],0,50
+partial_fill,br-0c686fbd9b93,0c686fbd9b936e2c0ca60415456c21927413aeea73a08d6007ddb84a61d8636e,partially_filled,mock_partial_fill,bo-0c686fbd9b,"[{'qty': 25, 'seq': 1}]",25,25
+multiple_partial_fills,br-15e879b66a85,15e879b66a855e21b9c81eaf420b696e3c0a737f3b7499b2c93b648e0b16c6fc,filled,mock_fills_reconciled_monotonic,bo-15e879b66a,"[{'qty': 25, 'seq': 1}, {'qty': 25, 'seq': 2}]",50,0
+out_of_order_order_updates,br-31c8c6b10c44,31c8c6b10c441aabb0e5b6fcddcfed4e54abb67e3791a29dcaa80974d00bf664,filled,mock_fills_reconciled_monotonic,bo-31c8c6b10c,"[{'qty': 25, 'seq': 1}, {'qty': 25, 'seq': 2}]",50,0
+restart_before_reconciliation,br-ce8e3d800d49,ce8e3d800d49f6a258c074117c028c7ba069952face0a06c81d6151c54e7e762,restart_recovered_unresolved,mock_restart_before_final_fill,bo-ce8e3d800d,[],0,50
+restart_recovery_final_reconciliation,br-971d75ea2d03,971d75ea2d03d1d753143df3e413bb61685172713fe745d8663b64206ae65195,filled,mock_fills_reconciled_monotonic,bo-971d75ea2d,"[{'qty': 25, 'seq': 1}, {'qty': 25, 'seq': 2}]",50,0

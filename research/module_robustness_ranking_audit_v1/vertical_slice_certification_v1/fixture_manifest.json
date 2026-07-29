@@ -1,0 +1,424 @@
+[
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "broker_reconciled",
+    "fixture_id": "valid_ce_buy",
+    "frozen_input_hash": "2421cdffba98c83dc592cdd8715ea88995cd3de5b91ab1494578162218106ab9",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "broker_reconciled",
+    "fixture_id": "valid_pe_buy",
+    "frozen_input_hash": "e8651b8aedae5bfca5065834256ea01ac5a3e6a459d2555f538f7d0525aa2379",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "stale_option_quote"
+    ],
+    "expected_stage_outcome": "non_executable",
+    "fixture_id": "stale_quote",
+    "frozen_input_hash": "8209fc25de4e75b6917267ad7077713ab9e58d4c353520ea8190b2da47b8a1e8",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "missing_option_quote"
+    ],
+    "expected_stage_outcome": "non_executable",
+    "fixture_id": "missing_quote",
+    "frozen_input_hash": "07d772a4dbbfc74e188d58e4a15b65d6699e391c3f0531f08d1fee648848ee2c",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "recovered_fallback_quote"
+    ],
+    "expected_stage_outcome": "advisory_only",
+    "fixture_id": "recovered_fallback_quote",
+    "frozen_input_hash": "40e647b485885f670c1ba54ba0bd6e2ec2fc4bf3758a23d85fe3462057bba030",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "excessive_spread"
+    ],
+    "expected_stage_outcome": "non_executable",
+    "fixture_id": "excessive_spread",
+    "frozen_input_hash": "a749e5f5e943d8ce0ce9b050d981ac26455b0f46c9a5eef33777c55ae87a89ab",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "duplicate_market_event",
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "deduplicated",
+    "fixture_id": "duplicate_market_event",
+    "frozen_input_hash": "f61439d3f284a87cb09966452bc159a969b47297703fb511663484f4b41421c3",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "quarantined",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "out_of_order_tick"
+    ],
+    "expected_stage_outcome": "quarantined",
+    "fixture_id": "out_of_order_tick",
+    "frozen_input_hash": "dc0a1676b9f59663197a5472be2f4ad25d2acb8d4755d393700f02708b51b7d4",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "no_signal",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "strategy_no_signal"
+    ],
+    "expected_stage_outcome": "no_signal",
+    "fixture_id": "strategy_no_signal",
+    "frozen_input_hash": "388143d54ac509a0f85df768355963dfedcafa7ecce7e413e20348cf6c62abd7",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "strategy_exception_fail_closed",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "RuntimeError",
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "fail_closed",
+    "fixture_id": "strategy_exception",
+    "frozen_input_hash": "22fb8c81072e295d917a85d64eb63f6ad134ec777f8a2fc0f8e0274fd228766e",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "phase1_blocked",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "malformed_tradebuilder_output"
+    ],
+    "expected_stage_outcome": "phase1_blocked",
+    "fixture_id": "malformed_tradebuilder_output",
+    "frozen_input_hash": "c5784ae651d75f1b51ef5ca78a8204afee1644bf71e41f171ecea8688888212a",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "phase1_rejected",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "phase1_hard_reject"
+    ],
+    "expected_stage_outcome": "phase1_rejected",
+    "fixture_id": "phase1_hard_reject",
+    "frozen_input_hash": "8c45990a149d7c83e50bb183788887de9fc5b27fd73ad61d96ccbf5301d6ace9",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "phase2_rejected",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "phase2_contextual_reject"
+    ],
+    "expected_stage_outcome": "phase2_rejected",
+    "fixture_id": "phase2_contextual_reject",
+    "frozen_input_hash": "a6f33aa9403ae84dc890946eea84be57e94f4f69997cc92ea5281b4308879e50",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "advisory_only",
+    "fixture_id": "phase2_downgrade_advisory",
+    "frozen_input_hash": "15580063612f5fd3662d47bae53220f8e5737b45066e4ff9dcd5a1e16328d330",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "deduplicated",
+    "fixture_id": "duplicate_candidate_insertion",
+    "frozen_input_hash": "8fd3097af4741368214e29558b5feb70971e131c4aed9ae56bbe9f46084381b6",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted",
+      "reason_code_preserved_after_mutation"
+    ],
+    "expected_stage_outcome": "reason_preserved",
+    "fixture_id": "candidate_mutation_reason_preservation",
+    "frozen_input_hash": "531b2a466230e571b52c28d2e36208da60ed3ebecf6556f6a0d8dc5e9a9b99d9",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "risk_rejected",
+    "fixture_id": "risk_limit_rejection",
+    "frozen_input_hash": "69f1c15be440260e1ee66af8463e4e3761b6131ff5655eafbb3c055819c54808",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "non_executable",
+    "fixture_id": "executable_truth_failure",
+    "frozen_input_hash": "ab752be8939757ab818f0a67f927847618a99e33c049ef0e3909a154a7ab4ff2",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "deterministic_tie",
+    "fixture_id": "ranking_tie",
+    "frozen_input_hash": "41feea580ef66fcbab4d654a396ae1cafc04f39ac0730af6ed0f8d863e267845",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "fallback_not_actionable",
+    "fixture_id": "empty_ranked_snapshot_ui_fallback",
+    "frozen_input_hash": "91df60b59d73128ecd92059c8de822c9d696d2f51a3eda4b5bbdc0a1210ef01f",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "approved",
+    "fixture_id": "approval_ranked_actionable_row",
+    "frozen_input_hash": "8027da86156d10910122018cc69dc3cffccce5eb3385f6df172cad685574c818",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "approval_blocked_unranked",
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "approval_blocked",
+    "fixture_id": "approval_unranked_fallback_row",
+    "frozen_input_hash": "1ac1392b20e4427639fd29677d5227643f13156ea0bb8f1010ec72984f6778a4",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "approval_blocked_or_advisory",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "duplicate_approval_rejected",
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "idempotent_reject",
+    "fixture_id": "duplicate_approval_submission",
+    "frozen_input_hash": "18c74b227e2052f31ad3155d8dd4ae404e29def03f4b35deeb9fd62b3929781f",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_accepted"
+    ],
+    "expected_stage_outcome": "broker_accepted",
+    "fixture_id": "broker_acceptance",
+    "frozen_input_hash": "f60d6cf47cbfa752f04df8e2b3621b466c9b6fa7967c83f2ac93e51ff589daa4",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_broker_rejected"
+    ],
+    "expected_stage_outcome": "broker_rejected",
+    "fixture_id": "broker_rejection",
+    "frozen_input_hash": "33e6d41daf40f54d947613e5ed971c7b9a394b9c210d65e1705c25b246ae3acd",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "unresolved",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_timeout_before_ack"
+    ],
+    "expected_stage_outcome": "unresolved_no_duplicate",
+    "fixture_id": "broker_timeout_before_ack",
+    "frozen_input_hash": "9faa7d8fa7f0c76f6842531c2139739c1472431da8d905624abd4b582c82989a",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "unresolved",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_timeout_before_ack"
+    ],
+    "expected_stage_outcome": "same_idempotency_key",
+    "fixture_id": "retry_after_timeout",
+    "frozen_input_hash": "7937dbf18d2dd952edf2dd8b6681f6b42391021ddead3186063fcfae62deb0bd",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "unresolved",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "duplicate_idempotency_key",
+      "fresh_live_quote"
+    ],
+    "expected_stage_outcome": "collapsed_duplicate",
+    "fixture_id": "duplicate_broker_request_idempotency",
+    "frozen_input_hash": "8f326b3db67ae2f97ba2c7c3dd8c78885cff14b84fdedf7159eac71a8734dbd0",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "unresolved",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_partial_fill"
+    ],
+    "expected_stage_outcome": "open_qty_reduced",
+    "fixture_id": "partial_fill",
+    "frozen_input_hash": "47bb75ac3b1c232a426d1aad36af30cc568138758e61847a50301c9a06cfdfdd",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_fills_reconciled_monotonic"
+    ],
+    "expected_stage_outcome": "filled",
+    "fixture_id": "multiple_partial_fills",
+    "frozen_input_hash": "e9c87d02a638e10e0eda490be38093ef0b1301755fdd7b2e17cc2f811c6fe8da",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_fills_reconciled_monotonic"
+    ],
+    "expected_stage_outcome": "monotonic_state",
+    "fixture_id": "out_of_order_order_updates",
+    "frozen_input_hash": "dc7b64576be4cfc4f442a9a72463dd984923c00bc48fdb905136b9ed3ee469cd",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "unresolved",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_restart_before_final_fill"
+    ],
+    "expected_stage_outcome": "recovered_unresolved",
+    "fixture_id": "restart_before_reconciliation",
+    "frozen_input_hash": "f1a0888eaf03af64ee73fbe2137c3293b3d5ea414061b22181fd0f3453e628d0",
+    "source": "frozen audit harness"
+  },
+  {
+    "expected_accounting": "no_unexplained_delta_in_harness",
+    "expected_final_authority_state": "reconciled",
+    "expected_identity_continuity": "complete_chain_declared",
+    "expected_reason_codes": [
+      "fresh_live_quote",
+      "mock_fills_reconciled_monotonic"
+    ],
+    "expected_stage_outcome": "reconciled_after_restart",
+    "fixture_id": "restart_recovery_final_reconciliation",
+    "frozen_input_hash": "2383d1e6c78347f06deb3400ac763b2685449867549563daa050b82d19b64fd9",
+    "source": "frozen audit harness"
+  }
+]

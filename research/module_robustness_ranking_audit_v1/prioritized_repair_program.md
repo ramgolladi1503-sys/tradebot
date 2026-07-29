@@ -16,3 +16,9 @@
 14. Order-intent idempotency and revalidation: mock broker timeout/rejection/ambiguous outcome.
 15. Broker update/reconciliation recovery: partial fill/out-of-order/restart fixtures.
 16. Observability and fault-injection regression suite: run deterministic scenario pack in CI.
+
+
+## Vertical Slice Certification V1 Follow-up
+
+- Promote `compression_breakout_v1` from audit harness to production-fixture certification only after TradeBuilder, broker timeout/retry, and restart reconciliation use real local fixtures.
+- Fix UI fallback actionability in a narrow PR before considering approval certification complete.
