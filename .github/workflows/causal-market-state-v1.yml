@@ -12,6 +12,7 @@ on:
       - 'core/causal_market_state/**'
       - 'scripts/*causal_market_state*'
       - 'scripts/derive_downside_impulse_strategy_v1.py'
+      - 'scripts/run_multievent_directional_discovery_v1.py'
       - 'tests/market_state/**'
       - '.github/workflows/causal-market-state-v1.yml'
   workflow_dispatch:
@@ -19,7 +20,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout feature implementation
         uses: actions/checkout@v4
@@ -34,7 +35,10 @@ jobs:
           path: evidence
           lfs: true
           sparse-checkout: |
-            research/local_evidence_consolidation_v1/external_local_dirs/tradebot-data/independent_underlying_confirmation_v3/sessions
+            research/local_evidence_consolidation_v1/external_local_dirs/tradebot-data/independent_underlying_confirmation_v3
+            research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/constituent-lead-lag-data-v1
+            research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/all-strategy-option-pf-v1
+            research/local_evidence_consolidation_v1/external_local_dirs/tradebot-ml-evidence/kite-underlying-directional-edge-campaign-v1
           sparse-checkout-cone-mode: false
 
       - name: Set up Python
@@ -69,6 +73,15 @@ jobs:
             --dataset runtime/research/causal_market_state_v1/market_state_dataset_with_labels.parquet \
             --output-dir runtime/research/downside_impulse_strategy_v1
 
+      - name: Run non-candle multi-event discovery
+        working-directory: feature
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/run_multievent_directional_discovery_v1.py \
+            --evidence-root ../evidence/research/local_evidence_consolidation_v1/external_local_dirs \
+            --output-dir runtime/research/multievent_directional_discovery_v1
+
       - name: Upload empirical evidence
         uses: actions/upload-artifact@v4
         with:
@@ -76,4 +89,5 @@ jobs:
           path: |
             feature/runtime/research/causal_market_state_v1
             feature/runtime/research/downside_impulse_strategy_v1
+            feature/runtime/research/multievent_directional_discovery_v1
           if-no-files-found: error
