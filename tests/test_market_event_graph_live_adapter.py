@@ -53,7 +53,6 @@ def test_attach_marks_ready_and_copies_metadata():
     assert "market_event_graph_history" not in source
 
 
-def test_default_candidate_pool_contains_shadow_graph_generator():
-    names = {generator.__name__ for generator in get_default_candidate_generators()}
-    assert "generate_market_event_graph_reversal_candidates" in names
-    assert "generate_market_event_graph_reversal_candidates" != "generate_exhaustion_reversal_candidates"
+def test_default_candidate_pool_isolated_to_shadow_graph_generator():
+    names = tuple(generator.__name__ for generator in get_default_candidate_generators())
+    assert names == ("generate_market_event_graph_reversal_candidates",)
