@@ -14,6 +14,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Iterable
 
+from core.causal_constituent_breadth_producer import enrich_metadata_with_constituent_breadth
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult, classify_movement_regime
 from core.no_trade_engine import NoTradeAssessment, assess_no_trade
@@ -84,7 +85,14 @@ def build_candidate_pool_report(
 
     if isinstance(ctx, dict):
         from core.movement_contract import context_from_dict
-        ctx = context_from_dict(ctx)
+
+        payload = dict(ctx)
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        payload["metadata"] = enrich_metadata_with_constituent_breadth(
+            metadata,
+            context_ts=payload.get("ts_epoch"),
+        )
+        ctx = context_from_dict(payload)
     if not isinstance(ctx, StrategyContext):
         raise TypeError("candidate_pool_context_invalid")
 
@@ -181,6 +189,9 @@ def build_candidate_pool_report(
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
             "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
+            "constituent_breadth_producer_status": ctx.metadata.get("constituent_breadth_producer_status"),
+            "constituent_breadth_producer_reason": ctx.metadata.get("constituent_breadth_producer_reason"),
+            "constituent_breadth_producer_metrics": ctx.metadata.get("constituent_breadth_producer_metrics", {}),
         },
     )
 
