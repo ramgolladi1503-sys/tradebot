@@ -25,7 +25,6 @@ from core.option_confirmation import (
 )
 
 CandidateGenerator = Callable[[StrategyContext, MovementRegimeResult], Iterable[StrategyCandidate]]
-
 REPORT_SCHEMA_VERSION = 1
 
 
@@ -35,9 +34,9 @@ class CandidatePoolReport:
 
     schema_version: int
     symbol: str
-    read_only: bool = True  # read_only=True
-    is_order_action: bool = False  # is_order_action=False
-    append: bool = False  # append=False
+    read_only: bool = True
+    is_order_action = False
+    append: bool = False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
     no_trade_assessment: NoTradeAssessment
@@ -59,6 +58,7 @@ class CandidatePoolReport:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        data["is_order_action"] = False
         data["regime"] = self.regime.to_dict()
         data["option_pressure"] = self.option_pressure.to_dict()
         data["no_trade_assessment"] = self.no_trade_assessment.to_dict()
@@ -80,14 +80,7 @@ def build_candidate_pool_report(
     option_pressure: OptionPressureAssessment | None = None,
     include_no_trade_candidate: bool = True,
 ) -> CandidatePoolReport:
-    """Build a read-only report from strategy candidates.
-
-    The function is missing-data safe and generator-failure tolerant. A broken
-    strategy contributes a warning, not a broker action and not a crash. The
-    report can show executable eligibility, but it cannot make anything
-    executable. If no-trade suppression is active, report-level executable count
-    is forced to zero even when a raw candidate individually looks eligible.
-    """
+    """Build a read-only report from strategy candidates."""
 
     if isinstance(ctx, dict):
         from core.movement_contract import context_from_dict
@@ -123,7 +116,6 @@ def build_candidate_pool_report(
         movement_candidates,
         option_pressure=option_assessment,
     )
-
     no_trade_candidates: tuple[StrategyCandidate, ...] = ()
     if include_no_trade_candidate and no_trade_assessment.no_trade:
         no_trade_candidates = _build_no_trade_candidates(ctx, regime_result, movement_candidates)
@@ -134,7 +126,6 @@ def build_candidate_pool_report(
         for candidate in movement_candidates
         if candidate.direction in {"BUY_CALL", "BUY_PUT"}
     )
-
     blockers = tuple(
         sorted(
             set(
@@ -165,7 +156,6 @@ def build_candidate_pool_report(
         schema_version=REPORT_SCHEMA_VERSION,
         symbol=ctx.symbol,
         read_only=True,
-        is_order_action=False,
         append=False,
         regime=regime_result,
         option_pressure=option_assessment,
@@ -190,44 +180,22 @@ def build_candidate_pool_report(
             "dominant_option_direction": option_assessment.dominant_direction,
             "no_trade": no_trade_assessment.no_trade,
             "no_trade_primary_reason": no_trade_assessment.primary_reason,
+            "default_strategy_mode": "MARKET_EVENT_GRAPH_SHADOW_ONLY",
         },
     )
 
 
 def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
-    """Return the read-only movement strategy generators.
+    """Return only the frozen market-event graph for default shadow observation.
 
-    Imports stay lazy so importing this module cannot accidentally load strategy
-    modules in unrelated legacy paths.
+    Previously implemented strategies remain importable and available for explicit
+    research/replay calls, but they are intentionally excluded from the default
+    live candidate pool because they have not met the current structural-edge bar.
     """
 
-    from strategies.movement import (  # noqa: PLC0415
-        generate_compression_breakout_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_late_day_momentum_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_option_pressure_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-    )
+    from strategies.movement import generate_market_event_graph_reversal_candidates  # noqa: PLC0415
 
-    return (
-        generate_opening_drive_candidates,
-        generate_opening_range_retest_candidates,
-        generate_compression_breakout_candidates,
-        generate_trend_pullback_candidates,
-        generate_vwap_reclaim_rejection_candidates,
-        generate_failed_breakout_trap_candidates,
-        generate_exhaustion_reversal_candidates,
-        generate_mean_reversion_extension_candidates,
-        generate_event_volatility_expansion_candidates,
-        generate_option_pressure_candidates,
-        generate_late_day_momentum_candidates,
-    )
+    return (generate_market_event_graph_reversal_candidates,)
 
 
 def _build_no_trade_candidates(
