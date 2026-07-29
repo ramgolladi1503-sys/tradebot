@@ -12,6 +12,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.market_event_graph_contract import (
+    CONTRACT_STATUS,
+    DATASET_SHA256,
+    FROZEN_DISCOVERY_SPEC_SHA256,
+)
 from core.market_event_graph_breadth_producer import attach_completed_constituent_breadth_snapshots
 from core.market_event_graph_live_adapter import build_market_event_graph_history
 from core.movement_contract import StrategyCandidate, StrategyContext
@@ -43,6 +48,12 @@ def generate_market_event_graph_reversal_candidates(
         return ()
     if not _fresh(history[-1], ctx.ts_epoch):
         return ()
+    if not _entry_delay_satisfied(history[-1], ctx.ts_epoch):
+        return ()
+    triplet_id = str(history[-1].get("market_event_graph_triplet_id") or "").strip()
+    emitted = ctx.metadata.get("market_event_graph_emitted_triplet_ids") if isinstance(ctx.metadata, dict) else None
+    if triplet_id and isinstance(emitted, (list, tuple, set)) and triplet_id in {str(item) for item in emitted}:
+        return ()
 
     side = side_evidence(ctx, "BUY_CALL")
     evidence = {
@@ -61,6 +72,14 @@ def generate_market_event_graph_reversal_candidates(
         "research_validation_profit_factor": 2.4567905524,
         "research_holdout_trades": 25,
         "research_holdout_profit_factor": 4.1738554594,
+        "certification_state": list(CONTRACT_STATUS),
+        "dataset_sha256": DATASET_SHA256,
+        "frozen_spec_sha256": FROZEN_DISCOVERY_SPEC_SHA256,
+        "delayed_entry_bar_ts_epoch": history[-1].get("market_event_graph_entry_bar_ts_epoch"),
+        "triplet_id": triplet_id,
+        "allowed_for_live_execution": False,
+        "is_order_action": False,
+        "broker_api_called": False,
         "option_ltp": side.option_ltp,
         "premium_change": side.premium_change,
         "spread_pct": side.spread_pct,
@@ -76,7 +95,7 @@ def generate_market_event_graph_reversal_candidates(
         price_structure_score=clamp_score(0.72),
         side=side,
         entry_trigger="next_completed_bar_after_frozen_breadth_exhaustion_graph",
-        invalid_if="breadth_selling_reexpands_before_entry_or_event_evidence_becomes_stale",
+        invalid_if="event_evidence_becomes_stale_before_the_next_completed_bar",
         rank_reason="broad selling expanded, index underperformed breadth, then selling participation contracted",
         evidence=evidence,
         warnings=(
@@ -124,6 +143,16 @@ def _fresh(row: dict[str, Any], context_ts: float | None) -> bool:
         return False
     age = now_ts - event_ts
     return 0.0 <= age <= MAX_EVENT_AGE_SEC
+
+
+def _entry_delay_satisfied(row: dict[str, Any], context_ts: float | None) -> bool:
+    try:
+        signal_ts = float(row["ts_epoch"])
+        entry_ts = float(row["market_event_graph_entry_bar_ts_epoch"])
+        now_ts = float(context_ts)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return signal_ts < entry_ts <= now_ts
 
 
 __all__ = [

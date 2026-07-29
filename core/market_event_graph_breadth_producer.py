@@ -13,6 +13,15 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping, Sequence
 
+from core.market_event_graph_contract import (
+    DATASET_SHA256,
+    FROZEN_DISCOVERY_SPEC_SHA256,
+    FROZEN_THRESHOLDS,
+    STRATEGY_ID,
+    metadata_has_frozen_contract,
+    thresholds_match_frozen,
+)
+
 _REQUIRED_THRESHOLD_KEYS = (
     "breadth_high",
     "breadth_low",
@@ -33,6 +42,9 @@ def produce_completed_constituent_breadth_snapshots(
         return []
     if not isinstance(thresholds, Mapping):
         return []
+    if not bool(metadata.get("market_event_graph_allow_test_thresholds")):
+        if not metadata_has_frozen_contract(metadata) or not thresholds_match_frozen(thresholds):
+            return []
 
     parsed_thresholds = _parse_thresholds(thresholds)
     if parsed_thresholds is None:
@@ -42,30 +54,41 @@ def produce_completed_constituent_breadth_snapshots(
     rows: list[dict[str, Any]] = []
     for raw in bars:
         row = _compute_row(raw, min_constituents=min_constituents)
-        if row is not None:
-            rows.append(row)
+        if row is None:
+            return []
+        rows.append(row)
+    if any(rows[index]["ts_epoch"] <= rows[index - 1]["ts_epoch"] for index in range(1, len(rows))):
+        return []
     rows.sort(key=lambda item: item["ts_epoch"])
+    if any(rows[index]["ts_epoch"] <= rows[index - 1]["ts_epoch"] for index in range(1, len(rows))):
+        return []
     if len(rows) < 3:
         return []
 
     events: list[dict[str, Any]] = []
-    for index in range(2, len(rows)):
+    emitted_triplets = set()
+    for index in range(2, len(rows) - 1):
         first, second, third = rows[index - 2 : index + 1]
+        entry_bar = rows[index + 1]
+        if not _valid_consecutive_window(first, second, third):
+            continue
         if not (
             first["breadth_down_1"] >= breadth_high
             and second["index_breadth_divergence"] <= divergence_low
             and third["breadth_down_1"] <= breadth_low
         ):
             continue
+        triplet_id = (first["ts_epoch"], second["ts_epoch"], third["ts_epoch"])
+        if triplet_id in emitted_triplets:
+            continue
+        emitted_triplets.add(triplet_id)
         events.extend(
             (
-                {**first, "event_label": "breadth_down_1:HIGH", "completed": True},
+                _event(first, "breadth_down_1:HIGH", triplet_id, entry_bar),
                 {
-                    **second,
-                    "event_label": "index_breadth_divergence:LOW",
-                    "completed": True,
+                    **_event(second, "index_breadth_divergence:LOW", triplet_id, entry_bar),
                 },
-                {**third, "event_label": "breadth_down_1:LOW", "completed": True},
+                _event(third, "breadth_down_1:LOW", triplet_id, entry_bar),
             )
         )
 
@@ -110,6 +133,55 @@ def _parse_thresholds(values: Mapping[str, Any]) -> tuple[float, float, float, i
     )
 
 
+def frozen_threshold_metadata() -> dict[str, Any]:
+    return {
+        "market_event_graph_strategy_id": STRATEGY_ID,
+        "market_event_graph_dataset_sha256": DATASET_SHA256,
+        "market_event_graph_frozen_spec_sha256": FROZEN_DISCOVERY_SPEC_SHA256,
+        "market_event_graph_thresholds": dict(FROZEN_THRESHOLDS),
+    }
+
+
+def _valid_consecutive_window(
+    first: Mapping[str, Any],
+    second: Mapping[str, Any],
+    third: Mapping[str, Any],
+) -> bool:
+    if not (first["ts_epoch"] < second["ts_epoch"] < third["ts_epoch"]):
+        return False
+    sessions = {first.get("session_date"), second.get("session_date"), third.get("session_date")}
+    if len(sessions) != 1 or None in sessions:
+        return False
+    return (
+        first["source_bar_end_epoch"] <= first["ts_epoch"]
+        and second["source_bar_end_epoch"] <= second["ts_epoch"]
+        and third["source_bar_end_epoch"] <= third["ts_epoch"]
+    )
+
+
+def _event(
+    row: Mapping[str, Any],
+    label: str,
+    triplet_id: tuple[float, float, float],
+    entry_bar: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        **row,
+        "event_label": label,
+        "completed": True,
+        "market_event_graph_strategy_id": STRATEGY_ID,
+        "market_event_graph_dataset_sha256": DATASET_SHA256,
+        "market_event_graph_frozen_spec_sha256": FROZEN_DISCOVERY_SPEC_SHA256,
+        "market_event_graph_thresholds": dict(FROZEN_THRESHOLDS),
+        "market_event_graph_triplet_id": "|".join(f"{value:.6f}" for value in triplet_id),
+        "market_event_graph_signal_ts_epoch": triplet_id[-1],
+        "market_event_graph_entry_bar_ts_epoch": entry_bar["ts_epoch"],
+        "allowed_for_live_execution": False,
+        "is_order_action": False,
+        "broker_api_called": False,
+    }
+
+
 def _compute_row(raw: Any, *, min_constituents: int) -> dict[str, Any] | None:
     if not isinstance(raw, Mapping):
         return None
@@ -121,6 +193,15 @@ def _compute_row(raw: Any, *, min_constituents: int) -> dict[str, Any] | None:
     except (KeyError, TypeError, ValueError):
         return None
     if ts_epoch <= 0 or not math.isfinite(index_ret1):
+        return None
+    try:
+        source_bar_end_epoch = float(raw.get("source_bar_end_epoch", ts_epoch))
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(source_bar_end_epoch) or source_bar_end_epoch > ts_epoch:
+        return None
+    session_date = str(raw.get("session_date") or "").strip()
+    if not session_date:
         return None
 
     values = raw.get("constituent_ret1")
@@ -144,7 +225,8 @@ def _compute_row(raw: Any, *, min_constituents: int) -> dict[str, Any] | None:
     breadth_mean = sum(returns) / len(returns)
     return {
         "ts_epoch": ts_epoch,
-        "source_bar_end_epoch": float(raw.get("source_bar_end_epoch", ts_epoch)),
+        "source_bar_end_epoch": source_bar_end_epoch,
+        "session_date": session_date,
         "breadth_down_1": breadth_down,
         "breadth_mean_ret1": breadth_mean,
         "index_ret1": index_ret1,
@@ -155,5 +237,6 @@ def _compute_row(raw: Any, *, min_constituents: int) -> dict[str, Any] | None:
 
 __all__ = [
     "attach_completed_constituent_breadth_snapshots",
+    "frozen_threshold_metadata",
     "produce_completed_constituent_breadth_snapshots",
 ]

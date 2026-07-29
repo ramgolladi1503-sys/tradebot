@@ -102,6 +102,17 @@ def _canonical_row(row: Any) -> dict[str, Any] | None:
         "index_breadth_divergence",
         "participation_count",
         "source_bar_end_epoch",
+        "session_date",
+        "market_event_graph_strategy_id",
+        "market_event_graph_dataset_sha256",
+        "market_event_graph_frozen_spec_sha256",
+        "market_event_graph_thresholds",
+        "market_event_graph_triplet_id",
+        "market_event_graph_signal_ts_epoch",
+        "market_event_graph_entry_bar_ts_epoch",
+        "allowed_for_live_execution",
+        "is_order_action",
+        "broker_api_called",
     ):
         if row.get(key) is not None:
             item[key] = row.get(key)

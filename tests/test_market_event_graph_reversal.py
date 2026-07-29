@@ -25,7 +25,9 @@ def _context(labels=FROZEN_GRAPH, *, now=1_000.0) -> StrategyContext:
     history = [
         {
             "event_label": label,
-            "ts_epoch": now - (2 - index) * 60.0,
+            "ts_epoch": now - (3 - index) * 60.0,
+            "market_event_graph_entry_bar_ts_epoch": now,
+            "market_event_graph_triplet_id": "820.000000|880.000000|940.000000",
             "breadth_down_1": 0.8 if label.endswith(":HIGH") else 0.1,
             "index_breadth_divergence": -0.001,
         }
@@ -60,6 +62,9 @@ def test_emits_advisory_buy_call_for_exact_frozen_graph():
     assert "no_auto_execution" in candidate.suppression_tags
     assert "SHADOW_ADVISORY_ONLY" in candidate.warnings
     assert candidate.evidence["observed_graph"] == list(FROZEN_GRAPH)
+    assert candidate.evidence["allowed_for_live_execution"] is False
+    assert candidate.evidence["is_order_action"] is False
+    assert candidate.evidence["broker_api_called"] is False
 
 
 def test_refuses_non_matching_graph():
@@ -80,4 +85,17 @@ def test_refuses_stale_event_graph():
     ctx = _context(now=10_000.0)
     stale = [dict(row, ts_epoch=1_000.0) for row in ctx.metadata["market_event_graph_history"]]
     ctx = StrategyContext(symbol="NIFTY", ts_epoch=10_000.0, metadata={"market_event_graph_history": stale})
+    assert generate_market_event_graph_reversal_candidates(ctx, _regime()) == ()
+
+
+def test_refuses_same_bar_before_delayed_entry_completes():
+    ctx = _context(now=1_000.0)
+    ctx.metadata["market_event_graph_history"][-1]["ts_epoch"] = 1_000.0
+    ctx.metadata["market_event_graph_history"][-1]["market_event_graph_entry_bar_ts_epoch"] = 1_060.0
+    assert generate_market_event_graph_reversal_candidates(ctx, _regime()) == ()
+
+
+def test_refuses_duplicate_triplet_signal():
+    ctx = _context(now=1_000.0)
+    ctx.metadata["market_event_graph_emitted_triplet_ids"] = ["820.000000|880.000000|940.000000"]
     assert generate_market_event_graph_reversal_candidates(ctx, _regime()) == ()

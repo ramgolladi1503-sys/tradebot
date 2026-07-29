@@ -37,26 +37,45 @@ Original CE evidence:
 
 Secondary PE graph is also preserved in `frozen_discovery_spec.json`.
 
-## Merge blockers
+## Exact reproduction result
 
-This PR must not be merged as an edge-preserving implementation until all of the following are resolved:
+The original Parquet has now been recovered from the verified archive and reproduced
+without discovery, retuning, broadening, or substitution.
 
-1. Recover the exact numeric training 20th/80th percentile values from the frozen dataset.
-2. Reproduce the original CE signal ledger and exact 115/25 split counts.
-3. Enforce exact consecutive-row graph semantics `A(t-2), B(t-1), C(t)` rather than allowing arbitrary gaps between state-machine transitions.
-4. Enforce the original 15-minute cooldown.
-5. Keep the result shadow/advisory-only.
-6. Do not claim option-premium validation because the original report contains `option_rows = 0`.
+Recovered CE thresholds:
 
-## Important implementation mismatch found
+- `breadth_down_1` p20: `0.10121457489878542`
+- `breadth_down_1` p80: `0.21862348178137653`
+- `index_breadth_divergence` p20: `-0.000238836424541256`
 
-The current producer uses a persistent state machine:
+Preserved secondary PE thresholds:
 
-```text
-WAIT_HIGH -> WAIT_DIVERGENCE -> WAIT_LOW
+- `breadth_up_1` p20: `0.09716599190283401`
+- `volume_shock_share` p80: `0.2793522267206478`
+- `breadth_mean_ret1` p20: `-0.00019076586779298327`
+
+The reproduction command is:
+
+```bash
+python scripts/reproduce_market_event_graph_reversal_v1.py --archive /Users/madhuram/Downloads/causal-market-state-v1-evidence-v3.zip
 ```
 
-That can accept events separated by arbitrary intervening bars. The recovered research protocol requires the three labels on exact consecutive rows. Therefore the current producer is not yet a faithful reproduction of the discovered edge.
+Generated evidence lives under:
+
+```text
+research/market_event_graph_reversal_v1/
+├── frozen_thresholds.json
+├── frozen_strategy_contract.json
+├── dataset_manifest.json
+├── split_manifest.json
+├── reproduction_report.json
+├── ledgers/
+│   ├── ce_train.csv
+│   ├── ce_validation.csv
+│   └── ce_holdout.csv
+├── reproduction_command.txt
+└── SHA256SUMS
+```
 
 ## Prohibited actions
 
@@ -67,4 +86,9 @@ That can accept events separated by arbitrary intervening bars. The recovered re
 
 Current truthful status:
 
-`FROZEN_DISCOVERY_RECOVERED_REPRODUCTION_INCOMPLETE`
+```text
+EXACT_UNDERLYING_DISCOVERY_REPRODUCED
+NOT_OPTION_PREMIUM_VALIDATED
+NOT_INDEPENDENTLY_CERTIFIED
+SHADOW_ADVISORY_ONLY
+```
