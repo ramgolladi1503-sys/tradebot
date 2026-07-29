@@ -25,7 +25,6 @@ from core.option_confirmation import (
 )
 
 CandidateGenerator = Callable[[StrategyContext, MovementRegimeResult], Iterable[StrategyCandidate]]
-
 REPORT_SCHEMA_VERSION = 1
 
 
@@ -36,7 +35,7 @@ class CandidatePoolReport:
     schema_version: int
     symbol: str
     read_only: bool = True
-    is_order_action: bool = False
+    is_order_action = False
     append: bool = False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
@@ -59,6 +58,7 @@ class CandidatePoolReport:
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
+        data["is_order_action"] = False
         data["regime"] = self.regime.to_dict()
         data["option_pressure"] = self.option_pressure.to_dict()
         data["no_trade_assessment"] = self.no_trade_assessment.to_dict()
@@ -116,7 +116,6 @@ def build_candidate_pool_report(
         movement_candidates,
         option_pressure=option_assessment,
     )
-
     no_trade_candidates: tuple[StrategyCandidate, ...] = ()
     if include_no_trade_candidate and no_trade_assessment.no_trade:
         no_trade_candidates = _build_no_trade_candidates(ctx, regime_result, movement_candidates)
@@ -127,7 +126,6 @@ def build_candidate_pool_report(
         for candidate in movement_candidates
         if candidate.direction in {"BUY_CALL", "BUY_PUT"}
     )
-
     blockers = tuple(
         sorted(
             set(
@@ -158,7 +156,6 @@ def build_candidate_pool_report(
         schema_version=REPORT_SCHEMA_VERSION,
         symbol=ctx.symbol,
         read_only=True,
-        is_order_action=False,
         append=False,
         regime=regime_result,
         option_pressure=option_assessment,
