@@ -1,0 +1,40 @@
+{
+  "allowed_for_live_execution": false,
+  "cooldown_minutes": 20,
+  "days_to_expiry": [
+    0,
+    7
+  ],
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "holdout_policy": "latest_25pct_unopened_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "max_signals_per_session": 2,
+  "mechanism_hypothesis": "leading_option_wing_informed_pressure_with_mirror_decay_and_surface_confirmation",
+  "mechanisms": [
+    "wing_lead_second_push",
+    "opposing_wing_decay_persistence",
+    "oi_volume_informed_pressure",
+    "breadth_mass_migration",
+    "accepted_two_bar_pressure",
+    "low_dispersion_directional_lift",
+    "volume_acceleration_continuation",
+    "mirror_decay_breadth_acceleration",
+    "near_expiry_informed_pressure",
+    "late_session_informed_pressure"
+  ],
+  "multiplicity_policy": "ten_preregistered_mechanisms_top_two_only_open_holdout",
+  "normal_cost_pct": 0.1,
+  "outcome_horizon_minutes": 5,
+  "paper_or_live_authorized": false,
+  "premium_range": [
+    30.0,
+    300.0
+  ],
+  "research_only": true,
+  "research_sessions": 291,
+  "schema_version": "leading_wing_pressure_persistence_v1",
+  "semantic_sha256": "7398b9ce8e554391c27038739d305ed13ef1f4ce1ca15ec18d791e580efeae83",
+  "side": "BUY_CE_OR_PE_ONLY",
+  "stress_cost_pct": 1.0,
+  "threshold_policy": "prior_training_session_quantiles_per_expanding_fold"
+}

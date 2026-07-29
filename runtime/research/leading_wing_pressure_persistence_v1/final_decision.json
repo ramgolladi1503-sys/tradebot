@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_FIVE_MINUTE_CANDLE_PROXY_RESEARCH_ONLY",
+  "contract_semantic_sha256": "7398b9ce8e554391c27038739d305ed13ef1f4ce1ca15ec18d791e580efeae83",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_outcomes_materialized": false,
+  "holdout_survivors": [],
+  "oof_survivors": [],
+  "paper_or_live_authorized": false,
+  "principal_verdict": "NO_OOF_SURVIVOR_IN_LEADING_WING_PRESSURE_FAMILY",
+  "research_only": true,
+  "semantic_sha256": "8fa3fcc31ff0b9386e79b952486c3fb3d63fb2e8159b6c670d5c38fc553b61c9",
+  "structural_edge_found": false
+}
