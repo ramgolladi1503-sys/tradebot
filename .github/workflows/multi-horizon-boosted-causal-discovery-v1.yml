@@ -1,0 +1,88 @@
+name: Multi-Horizon Boosted Causal Discovery V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/multi-horizon-boosted-causal-discovery-v1
+    paths:
+      - 'scripts/run_multi_horizon_boosted_causal_discovery_v1.py'
+      - 'tests/research/test_multi_horizon_boosted_causal_discovery_v1.py'
+      - 'research/multi_horizon_boosted_causal_discovery_v1/**'
+      - '.github/workflows/multi-horizon-boosted-causal-discovery-v1.yml'
+  pull_request:
+    paths:
+      - 'scripts/run_multi_horizon_boosted_causal_discovery_v1.py'
+      - 'tests/research/test_multi_horizon_boosted_causal_discovery_v1.py'
+      - 'research/multi_horizon_boosted_causal_discovery_v1/**'
+      - '.github/workflows/multi-horizon-boosted-causal-discovery-v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository pointers
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Materialize required LFS evidence
+        run: |
+          git lfs install
+          git lfs pull \
+            --include='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/*' \
+            --exclude=''
+          test -s research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/event_universe_5m.parquet
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow pytest scikit-learn
+
+      - name: Run focused tests
+        run: |
+          python -m pytest -q \
+            tests/research/test_inventory_absorption_transition_v1.py \
+            tests/research/test_nested_causal_rule_discovery_v1.py \
+            tests/research/test_multi_horizon_boosted_causal_discovery_v1.py
+
+      - name: Run nested multi-horizon discovery
+        run: |
+          python -m scripts.run_multi_horizon_boosted_causal_discovery_v1 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Preserve deterministic evidence
+        if: always() && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f runtime/research/multi_horizon_boosted_causal_discovery_v1/*.json || true
+          git add -f runtime/research/multi_horizon_boosted_causal_discovery_v1/*.csv || true
+          git add -f research/multi_horizon_boosted_causal_discovery_v1/RESULT.md || true
+          if git diff --cached --quiet; then
+            echo "No deterministic evidence changes to preserve."
+            exit 0
+          fi
+          git commit -m "research: preserve multi-horizon boosted evidence [skip ci]"
+          git push origin HEAD:research/multi-horizon-boosted-causal-discovery-v1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multi-horizon-boosted-causal-discovery-v1-evidence
+          path: |
+            runtime/research/multi_horizon_boosted_causal_discovery_v1/**
+            research/multi_horizon_boosted_causal_discovery_v1/RESULT.md
+          if-no-files-found: warn
+          retention-days: 30
