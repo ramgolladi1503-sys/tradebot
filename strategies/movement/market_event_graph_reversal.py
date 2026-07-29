@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.market_event_graph_breadth_producer import attach_completed_constituent_breadth_snapshots
 from core.market_event_graph_live_adapter import build_market_event_graph_history
 from core.movement_contract import StrategyCandidate, StrategyContext
 from core.movement_regime import MovementRegimeResult
@@ -106,7 +107,8 @@ def generate_market_event_graph_reversal_candidates(
 
 
 def _history(metadata: dict[str, Any]) -> list[dict[str, Any]] | None:
-    rows = build_market_event_graph_history(metadata)
+    enriched = attach_completed_constituent_breadth_snapshots(metadata)
+    rows = build_market_event_graph_history(enriched)
     return rows if len(rows) >= 3 else None
 
 
