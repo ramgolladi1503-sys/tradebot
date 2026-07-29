@@ -1,0 +1,50 @@
+{
+  "holdout_outcomes_materialized": false,
+  "oof_gate": false,
+  "permutation_control": {
+    "bootstrap_mean_ci_high": 2.7146101196155947,
+    "bootstrap_mean_ci_low": -2.677315230385879,
+    "largest_session_share": 0.11948377868845499,
+    "largest_winner_share": 0.07111901501924137,
+    "mean_return_pct": 0.0909573341612889,
+    "median_return_pct": -0.9048970739879535,
+    "net_return_pct_sum": 6.730842727935379,
+    "positive_folds": 1,
+    "positive_halves": 1,
+    "profit_factor": 1.0209748912146155,
+    "remove_top_five_profit_factor": 0.7156305491142293,
+    "remove_top_three_profit_factor": 0.8197414625339233,
+    "sessions": 37,
+    "stress_profit_factor": 0.8327074755310045,
+    "total_folds": 1,
+    "total_halves": 2,
+    "trades": 74,
+    "win_rate": 0.4594594594594595
+  },
+  "primary": {
+    "bootstrap_mean_ci_high": 2.469330514084455,
+    "bootstrap_mean_ci_low": -0.5289754602938,
+    "largest_session_share": 0.08043772919006054,
+    "largest_winner_share": 0.05393910876959466,
+    "mean_return_pct": 0.9212012188862176,
+    "median_return_pct": -0.06580027359781573,
+    "net_return_pct_sum": 254.25153641259607,
+    "positive_folds": 2,
+    "positive_halves": 1,
+    "profit_factor": 1.2359910234643166,
+    "remove_top_five_profit_factor": 0.9900262349069352,
+    "remove_top_three_profit_factor": 1.0658714088646462,
+    "sessions": 141,
+    "stress_profit_factor": 1.0048449553664693,
+    "total_folds": 4,
+    "total_halves": 2,
+    "trades": 276,
+    "win_rate": 0.4963768115942029
+  },
+  "selected_horizons": [
+    10,
+    15,
+    10,
+    10
+  ]
+}

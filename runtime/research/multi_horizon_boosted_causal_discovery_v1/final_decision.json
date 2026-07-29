@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_EXACT_MULTI_HORIZON_OPTION_OHLCV_RESEARCH_ONLY",
+  "contract_semantic_sha256": "236597b187c8ae066d0e2b96fb6b597c057c8caca00143606f0ebda7ea9537c8",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_BID_ASK_AND_SLIPPAGE_MISSING",
+  "holdout_gate": false,
+  "holdout_outcomes_materialized": false,
+  "oof_gate": false,
+  "paper_or_live_authorized": false,
+  "principal_verdict": "NO_MULTI_HORIZON_BOOSTED_OOF_EDGE",
+  "research_only": true,
+  "semantic_sha256": "2d4e7ed2334655215f4eaa7ef95a6ce1ea860e1efbc7fcab6a96b4d032ad9042",
+  "structural_edge_found": false
+}

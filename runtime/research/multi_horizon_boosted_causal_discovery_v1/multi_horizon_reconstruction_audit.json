@@ -1,0 +1,18 @@
+{
+  "eligible_rows_all_horizons": 617761,
+  "entry_value_match_rows": 1991699,
+  "exact_10m_exit_rows": 1942619,
+  "exact_15m_exit_rows": 1915388,
+  "exact_20m_exit_rows": 1888192,
+  "exact_5m_exit_rows": 1969881,
+  "exact_next_minute_entry_rows": 1991699,
+  "horizons": [
+    5,
+    10,
+    15,
+    20
+  ],
+  "representative_decision_rows": 149355,
+  "sessions": 337,
+  "source_rows": 1997159
+}
