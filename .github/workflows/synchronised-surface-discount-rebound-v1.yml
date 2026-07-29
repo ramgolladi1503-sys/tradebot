@@ -1,0 +1,90 @@
+name: Synchronised Surface Discount Rebound V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/synchronised-surface-discount-rebound-v1
+    paths:
+      - 'scripts/run_synchronised_surface_discount_rebound_v1.py'
+      - 'tests/research/test_synchronised_surface_discount_rebound_v1.py'
+      - 'research/synchronised_surface_discount_rebound_v1/**'
+      - '.github/workflows/synchronised-surface-discount-rebound-v1.yml'
+  pull_request:
+    paths:
+      - 'scripts/run_synchronised_surface_discount_rebound_v1.py'
+      - 'tests/research/test_synchronised_surface_discount_rebound_v1.py'
+      - 'research/synchronised_surface_discount_rebound_v1/**'
+      - '.github/workflows/synchronised-surface-discount-rebound-v1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository pointers
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Materialize required LFS evidence
+        run: |
+          git lfs install
+          git lfs pull \
+            --include='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/*' \
+            --exclude=''
+          required='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1'
+          find "$required" -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas pyarrow pytest numpy
+
+      - name: Run focused tests
+        run: |
+          python -m pytest -q tests/research/test_synchronised_surface_discount_rebound_v1.py
+
+      - name: Run chronological discovery
+        run: |
+          python -m scripts.run_synchronised_surface_discount_rebound_v1 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Preserve deterministic evidence
+        if: always() && github.event_name == 'push'
+        run: |
+          if [ ! -d runtime/research/synchronised_surface_discount_rebound_v1 ]; then
+            echo 'No runtime research evidence directory was produced.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f runtime/research/synchronised_surface_discount_rebound_v1/*.json || true
+          git add -f runtime/research/synchronised_surface_discount_rebound_v1/*.csv || true
+          git add -f research/synchronised_surface_discount_rebound_v1/RESULT.md || true
+          if git diff --cached --quiet; then
+            echo 'No deterministic diagnostic changes to preserve.'
+            exit 0
+          fi
+          git commit -m 'research: preserve synchronised surface discount evidence [skip ci]'
+          git push origin HEAD:research/synchronised-surface-discount-rebound-v1
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synchronised-surface-discount-rebound-v1-evidence
+          path: |
+            runtime/research/synchronised_surface_discount_rebound_v1/**
+            research/synchronised_surface_discount_rebound_v1/RESULT.md
+          if-no-files-found: warn
+          retention-days: 30
