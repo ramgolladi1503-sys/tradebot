@@ -3,6 +3,9 @@
 The producer is read-only and fail-closed. It consumes completed index/constituent
 return snapshots plus frozen thresholds supplied by research evidence. It never
 fetches data, tunes thresholds, calls a broker, or creates an order action.
+
+The frozen research graph is positional, not an open-ended state machine:
+A(t-2) -> B(t-1) -> C(t) on three consecutive completed rows.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ _REQUIRED_THRESHOLD_KEYS = (
 def produce_completed_constituent_breadth_snapshots(
     metadata: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Build ordered labelled events from completed bars, or return [] on invalid input."""
+    """Return only exact consecutive-row graph matches, or [] on invalid input."""
 
     if not isinstance(metadata, Mapping):
         return []
@@ -42,27 +45,29 @@ def produce_completed_constituent_breadth_snapshots(
         if row is not None:
             rows.append(row)
     rows.sort(key=lambda item: item["ts_epoch"])
-    if not rows:
+    if len(rows) < 3:
         return []
 
     events: list[dict[str, Any]] = []
-    state = "WAIT_HIGH"
-    for row in rows:
-        breadth = row["breadth_down_1"]
-        divergence = row["index_breadth_divergence"]
-        label: str | None = None
-        if state == "WAIT_HIGH" and breadth >= breadth_high:
-            label = "breadth_down_1:HIGH"
-            state = "WAIT_DIVERGENCE"
-        elif state == "WAIT_DIVERGENCE" and divergence <= divergence_low:
-            label = "index_breadth_divergence:LOW"
-            state = "WAIT_LOW"
-        elif state == "WAIT_LOW" and breadth <= breadth_low:
-            label = "breadth_down_1:LOW"
-            state = "WAIT_HIGH"
-
-        if label is not None:
-            events.append({**row, "event_label": label, "completed": True})
+    for index in range(2, len(rows)):
+        first, second, third = rows[index - 2 : index + 1]
+        if not (
+            first["breadth_down_1"] >= breadth_high
+            and second["index_breadth_divergence"] <= divergence_low
+            and third["breadth_down_1"] <= breadth_low
+        ):
+            continue
+        events.extend(
+            (
+                {**first, "event_label": "breadth_down_1:HIGH", "completed": True},
+                {
+                    **second,
+                    "event_label": "index_breadth_divergence:LOW",
+                    "completed": True,
+                },
+                {**third, "event_label": "breadth_down_1:LOW", "completed": True},
+            )
+        )
 
     return events
 
