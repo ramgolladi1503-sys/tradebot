@@ -1,0 +1,48 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_FIVE_MINUTE_CANDLE_PROXY_RESEARCH_ONLY",
+  "cooldown_minutes": 10,
+  "days_to_expiry": [
+    0,
+    7
+  ],
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "holdout_policy": "latest_25pct_chronological_outcomes_unopened_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "max_signals_per_session": 3,
+  "mechanism_count": 10,
+  "mechanism_hypothesis": "causal_event_tensor_across_time_strike_neighbourhood_and_ce_pe_mirror_context",
+  "mechanisms": [
+    "local_cluster_washout_repair",
+    "strike_tube_absorption",
+    "isolated_contract_reclaim",
+    "mirror_pin_reversal_3d",
+    "local_volume_node_repair",
+    "oi_tube_defence_3d",
+    "wing_edge_convexity_snapback",
+    "center_mass_snapback_3d",
+    "late_session_3d_repair",
+    "near_expiry_3d_repair"
+  ],
+  "multiplicity_policy": "ten_preregistered_mechanisms_top_two_oof_survivors_only_open_holdout",
+  "normal_cost_pct": 0.1,
+  "outcome_horizon_minutes": 5,
+  "paper_or_live_authorized": false,
+  "premium_range": [
+    30.0,
+    300.0
+  ],
+  "research_only": true,
+  "research_sessions": 291,
+  "schema_version": "three_dimensional_option_event_discovery_v1",
+  "selection_policy": "state_onset_then_best_contract_per_timestamp_then_max_three_session_signals_with_10m_cooldown",
+  "semantic_sha256": "f19bf3fe7bd97f5ecb7118f825ffe7eed6ef331534b8cb39e5de661d424eb51e",
+  "side": "BUY_CE_OR_PE_ONLY",
+  "stress_cost_pct": 1.0,
+  "three_dimensions": [
+    "time_transition",
+    "local_strike_neighbourhood",
+    "same_strike_ce_pe_mirror"
+  ],
+  "threshold_policy": "quantiles_recomputed_using_prior_training_sessions_only_per_expanding_fold"
+}
