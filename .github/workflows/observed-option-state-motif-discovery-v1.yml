@@ -41,7 +41,7 @@ jobs:
         run: python -m pytest -q tests/research/test_observed_option_state_motif_discovery_v1.py
 
       - name: Run observe-first chronological discovery
-        run: python scripts/run_observed_option_state_motif_discovery_v1.py --repo-root .
+        run: python -m scripts.run_observed_option_state_motif_discovery_v1 --repo-root .
 
       - name: Upload evidence
         uses: actions/upload-artifact@v4
