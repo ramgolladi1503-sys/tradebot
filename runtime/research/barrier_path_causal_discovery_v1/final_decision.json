@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_ONE_MINUTE_OHLC_BARRIER_PATH_RESEARCH_ONLY",
+  "contract_semantic_sha256": "a8dd04b208eee2d93b01c1b9aac3469e66e90765e6f13fe0e33bb4e412c677e9",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_BID_ASK_AND_STOP_SLIPPAGE_MISSING",
+  "holdout_gate": false,
+  "holdout_outcomes_materialized": false,
+  "oof_gate": false,
+  "paper_or_live_authorized": false,
+  "principal_verdict": "NO_BARRIER_PATH_OOF_EDGE",
+  "research_only": true,
+  "semantic_sha256": "b5172a9b217870d01ccf1317bd260ff62a4ac573a9de4c434268c1baa1cf6b26",
+  "structural_edge_found": false
+}
