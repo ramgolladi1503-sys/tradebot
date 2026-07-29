@@ -1,35 +1,67 @@
 # ORB Context Cycle Cutoff Main V2
 
-## Scope
+## Agent Work Contract
 
-- Branch: `fix/orb-cycle-cutoff-main-v2`
-- Base: `origin/main` at `a48176fc245375f15e316493364915ec37439e29`
-- Worktree: `/Users/madhuram/tradebot-orb-cycle-cutoff-main-v2`
-- Purpose: integrate the verified ORB runtime repair into current main without merging historical worktree history.
+Repair only the ORB context timestamp propagation defect in `core/market_data.py`, add focused regression coverage, and avoid all strategy, risk, execution, broker, configuration, and live-permission changes.
 
-## Change
+## Scope Guard
 
-- Replaced the undefined ORB context timestamp argument `now_dt=now` with the frozen per-cycle `cycle_cutoff`.
-- Removed unused local/import symbols in `core/market_data.py` so the required scoped `ruff` gate passes without weakening runtime behavior.
+Changed scope is limited to:
 
-## Safety Boundaries
+- `core/market_data.py`;
+- `tests/core/test_orb_context_cycle_cutoff.py`;
+- this review-evidence document.
 
-- Broker APIs called: `NO`
-- Order actions placed/modified/cancelled: `NO`
-- Runtime live configuration changed: `NO`
-- Strategy thresholds changed: `NO`
-- WFA, parameter search, or production strategy execution run: `NO`
-- Audit worktree runtime files touched: `NO`
-- Research data or runtime parquet artifacts staged: `NO`
+The branch replaces the undefined `now` argument with the already-frozen per-cycle `cycle_cutoff`. No strategy threshold, signal equation, risk gate, order path, broker call, feed subscription, dashboard behaviour, or runtime configuration is changed.
 
-## Evidence
+## Grill Me Review
 
-- `pytest -q tests/core/test_orb_context_cycle_cutoff.py`: `1 passed`
-- `pytest -q tests/core/test_canonical_strategy_input_truth.py`: `21 passed`
-- `python3 -m py_compile core/market_data.py tests/core/test_orb_context_cycle_cutoff.py`: passed
-- `ruff check core/market_data.py tests/core/test_orb_context_cycle_cutoff.py`: passed
-- `git diff --check`: passed
+Challenge: could changing the timestamp alter ORB eligibility?
 
-## Regression Proof
+Answer: the previous code passed an undefined variable and the exception could be swallowed by the surrounding feed path. The repair supplies the exact cycle timestamp already captured by `now_ist()`. It does not introduce a new clock read or change ORB calculations.
 
-`tests/core/test_orb_context_cycle_cutoff.py` verifies `fetch_live_market_data()` passes the exact frozen `cycle_cutoff` from `now_ist()` into `_orb_state_from_candles()` and that the returned ORB state propagates into the market-data row.
+Challenge: could the test pass while production still uses another timestamp?
+
+Answer: the regression test intercepts `_orb_state_from_candles()` through `fetch_live_market_data()` and asserts identity with the frozen `cycle_cutoff`, then verifies the resulting ORB state reaches the market-data row.
+
+## Hermes Review
+
+The change is deterministic and minimal. It removes unused symbols only where required for the scoped lint gate. No fallback behaviour or silent substitution was added.
+
+## GSD Review
+
+The implementation directly fixes the named runtime defect rather than adding architecture. The focused test exercises the production caller boundary and fails if `now`, a second clock read, or another timestamp is supplied.
+
+## QA / Safety Review
+
+- Broker APIs called: `NO`.
+- Orders placed, modified, or cancelled: `NO`.
+- Strategy formulas or thresholds changed: `NO`.
+- Risk or kill-switch behaviour changed: `NO`.
+- Feed freshness rules changed: `NO`.
+- Live configuration changed: `NO`.
+- Research data or runtime artifacts committed: `NO`.
+
+## Acceptance Proof
+
+Previously recorded focused verification:
+
+- `pytest -q tests/core/test_orb_context_cycle_cutoff.py`: `1 passed`;
+- `pytest -q tests/core/test_canonical_strategy_input_truth.py`: `21 passed`;
+- `python3 -m py_compile core/market_data.py tests/core/test_orb_context_cycle_cutoff.py`: passed;
+- `ruff check core/market_data.py tests/core/test_orb_context_cycle_cutoff.py`: passed;
+- `git diff --check`: passed.
+
+Repository GitHub Actions must rerun on the updated branch before merge.
+
+## Runtime Proof Required After Merge
+
+During the next market-data smoke run, confirm that ORB context generation completes without the prior swallowed `NameError`, and that the logged/snapshotted ORB cutoff equals the cycle cutoff used for the same market-data iteration.
+
+## What This PR Does Not Prove
+
+This PR does not prove ORB profitability, structural edge, option execution quality, feed availability, paper readiness, or live trading readiness. It only repairs timestamp propagation into the existing ORB context calculation.
+
+## Human Approval
+
+The user explicitly requested that valuable infrastructure and runtime fixes be repaired, validated, and merged. Merge remains conditional on current required checks passing and GitHub branch protection permitting the merge.
