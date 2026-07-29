@@ -1,3 +1,5 @@
+"""Integration wiring and fail-closed safety tests for live graph evidence."""
+
 from core.candidate_pool_orchestrator import get_default_candidate_generators
 from core.market_event_graph_live_adapter import (
     attach_market_event_graph_history,
@@ -17,12 +19,12 @@ def test_builds_canonical_history_from_completed_snapshots():
     history = build_market_event_graph_history(
         {"completed_constituent_breadth_snapshots": _rows()}
     )
-    assert [row["event_label"] for row in history] == [
+    assert tuple(row["event_label"] for row in history) == (
         "breadth_down_1:HIGH",
         "index_breadth_divergence:LOW",
         "breadth_down_1:LOW",
-    ]
-    assert all(row["completed"] is True for row in history)
+    )
+    assert tuple(row["completed"] for row in history) == (True, True, True)
 
 
 def test_rejects_incomplete_unknown_and_missing_timestamp_rows():
@@ -43,10 +45,15 @@ def test_attach_marks_ready_and_copies_metadata():
     metadata = attach_market_event_graph_history(source)
     assert metadata["other"] == "value"
     assert metadata["market_event_graph_history_status"] == "READY"
-    assert len(metadata["market_event_graph_history"]) == 3
+    assert tuple(row["event_label"] for row in metadata["market_event_graph_history"]) == (
+        "breadth_down_1:HIGH",
+        "index_breadth_divergence:LOW",
+        "breadth_down_1:LOW",
+    )
     assert "market_event_graph_history" not in source
 
 
 def test_default_candidate_pool_contains_shadow_graph_generator():
     names = {generator.__name__ for generator in get_default_candidate_generators()}
     assert "generate_market_event_graph_reversal_candidates" in names
+    assert "generate_market_event_graph_reversal_candidates" != "generate_exhaustion_reversal_candidates"
