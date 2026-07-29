@@ -9,18 +9,22 @@ on:
       - 'scripts/run_cross_strike_diffusion_discovery_v1.py'
       - 'scripts/run_cross_strike_diffusion_campaign_v2.py'
       - 'scripts/run_selective_option_leadership_campaign_v3.py'
+      - 'scripts/run_post_imbalance_digestion_campaign_v4.py'
       - 'tests/research/test_cross_strike_diffusion_discovery_v1.py'
       - 'tests/research/test_cross_strike_diffusion_campaign_v2.py'
       - 'tests/research/test_selective_option_leadership_campaign_v3.py'
+      - 'tests/research/test_post_imbalance_digestion_campaign_v4.py'
       - '.github/workflows/cross-strike-diffusion-discovery-v1.yml'
   pull_request:
     paths:
       - 'scripts/run_cross_strike_diffusion_discovery_v1.py'
       - 'scripts/run_cross_strike_diffusion_campaign_v2.py'
       - 'scripts/run_selective_option_leadership_campaign_v3.py'
+      - 'scripts/run_post_imbalance_digestion_campaign_v4.py'
       - 'tests/research/test_cross_strike_diffusion_discovery_v1.py'
       - 'tests/research/test_cross_strike_diffusion_campaign_v2.py'
       - 'tests/research/test_selective_option_leadership_campaign_v3.py'
+      - 'tests/research/test_post_imbalance_digestion_campaign_v4.py'
       - '.github/workflows/cross-strike-diffusion-discovery-v1.yml'
 
 permissions:
@@ -29,7 +33,7 @@ permissions:
 jobs:
   discover:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout repository pointers
         uses: actions/checkout@v4
@@ -68,7 +72,8 @@ jobs:
           python -m pytest -q \
             tests/research/test_cross_strike_diffusion_discovery_v1.py \
             tests/research/test_cross_strike_diffusion_campaign_v2.py \
-            tests/research/test_selective_option_leadership_campaign_v3.py
+            tests/research/test_selective_option_leadership_campaign_v3.py \
+            tests/research/test_post_imbalance_digestion_campaign_v4.py
 
       - name: Run laggard-catchup WFA and validation iteration
         run: |
@@ -77,6 +82,10 @@ jobs:
       - name: Run reverse selective-leadership WFA and validation iteration
         run: |
           python -m scripts.run_selective_option_leadership_campaign_v3 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Run post-imbalance digestion WFA and validation iteration
+        run: |
+          python -m scripts.run_post_imbalance_digestion_campaign_v4 --repo-root "$GITHUB_WORKSPACE"
 
       - name: Verify sealed master holdout and safety boundaries
         if: always()
@@ -88,6 +97,7 @@ jobs:
           paths = [
               Path('runtime/research/cross_strike_diffusion_campaign_v2/final_decision.json'),
               Path('runtime/research/selective_option_leadership_campaign_v3/final_decision.json'),
+              Path('runtime/research/post_imbalance_digestion_campaign_v4/final_decision.json'),
           ]
           for path in paths:
               if not path.exists():
@@ -116,5 +126,7 @@ jobs:
             research/cross_strike_diffusion_campaign_v2/**
             runtime/research/selective_option_leadership_campaign_v3/**
             research/selective_option_leadership_campaign_v3/**
+            runtime/research/post_imbalance_digestion_campaign_v4/**
+            research/post_imbalance_digestion_campaign_v4/**
           if-no-files-found: error
           retention-days: 30
