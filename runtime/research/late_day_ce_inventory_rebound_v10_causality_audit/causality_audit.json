@@ -1,0 +1,24 @@
+{
+  "allowed_for_live_execution": false,
+  "candidate_id": "late_day_ce_inventory_rebound_5m_v9",
+  "causal_rule": "next-bar open may be used only after signal membership is frozen, for fill and PnL reconstruction",
+  "current_structural_edge_claim_valid": false,
+  "defects": [
+    "NEXT_BAR_ENTRY_PRICE_USED_AS_SIGNAL_ELIGIBILITY_FILTER",
+    "NEXT_BAR_ENTRY_PRICE_USED_TO_RANK_SIMULTANEOUS_CANDIDATES",
+    "FROZEN_SIGNAL_CONTRACT_REQUIRES_UNOBSERVABLE_ENTRY_FILL",
+    "FROZEN_TIE_BREAK_REQUIRES_UNOBSERVABLE_ENTRY_FILL"
+  ],
+  "future_or_outcome_fields_detected_in_membership_logic": [
+    "entry_price_next_open"
+  ],
+  "paper_or_live_authorized": false,
+  "principal_verdict": "INVALID_FUTURE_ENTRY_PRICE_SIGNAL_MEMBERSHIP_LEAK",
+  "required_repair": [
+    "replace entry-price eligibility with a signal-time observable field such as completed-bar close",
+    "replace entry-price tie-break with a signal-time observable tie-break",
+    "freeze the repaired rule before re-opening chronological holdout",
+    "rebuild OOF, controls, holdout, concentration, and friction evidence from scratch"
+  ],
+  "research_only": true
+}
