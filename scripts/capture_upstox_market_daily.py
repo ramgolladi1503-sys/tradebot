@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import gzip
+import json
+import logging
 import os
 import sys
 import time
-import json
-import logging
-import argparse
+import urllib.request
+from collections import Counter
 from datetime import datetime, time as datetime_time
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 import requests
 
-# We try to import Upstox SDK
+from core.upstox_v3_feed_parser import (
+    UpstoxV3ParseError,
+    assess_capture_quality,
+    parse_upstox_v3_message,
+)
+
 try:
     import upstox_client
     from upstox_client import MarketDataStreamerV3
@@ -22,15 +33,20 @@ try:
 except ImportError:
     UPSTOX_AVAILABLE = False
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
 logger = logging.getLogger("capture_upstox_daily")
 
+MIN_ACTIVE_FO_DEPTH_COVERAGE_RATIO = 0.50
+MIN_VALID_DEPTH_RECORDS_PER_INSTRUMENT = 1
+DEPTH_CANARY_MIN_FO_RECORDS = 100
 
-def fetch_bod_master():
-    """Refresh Upstox’s BOD JSON instrument master after approximately 06:00 IST."""  # noqa: E501
+
+def fetch_bod_master() -> bool:
+    """Refresh Upstox's BOD JSON instrument master after approximately 06:00 IST."""
     now = datetime.now()
     cutoff = now.replace(hour=6, minute=0, second=0, microsecond=0)
 
@@ -41,444 +57,423 @@ def fetch_bod_master():
     if out_path.exists():
         mtime = datetime.fromtimestamp(out_path.stat().st_mtime)
         if mtime > cutoff:
-            logger.info(
-                "BOD JSON master already refreshed today after 06:00 IST."
-            )
+            logger.info("BOD JSON master already refreshed today after 06:00 IST.")
             return True
 
     logger.info("Refreshing Upstox BOD JSON instrument master...")
-    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"  # noqa: E501
+    url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
     try:
-        import urllib.request
-        import gzip
-
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "tradebot_local/1.0"}
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "tradebot_local/1.0"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = resp.read()
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = response.read()
 
-        with open(out_path.with_suffix(".json.gz"), "wb") as f:
-            f.write(data)
-
-        with gzip.open(
-            out_path.with_suffix(".json.gz"), "rt", encoding="utf-8"
-        ) as f:
-            jdata = json.load(f)
-
-        # Convert dict to list if needed
-        if isinstance(jdata, dict):
-            jdata = list(jdata.values())
-
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(jdata, f)
-
-        logger.info(
-            f"Successfully refreshed BOD JSON. Saved {len(jdata)} instruments."
-        )
+        compressed_path = out_path.with_suffix(".json.gz")
+        compressed_path.write_bytes(data)
+        with gzip.open(compressed_path, "rt", encoding="utf-8") as handle:
+            instruments = json.load(handle)
+        if isinstance(instruments, dict):
+            instruments = list(instruments.values())
+        out_path.write_text(json.dumps(instruments), encoding="utf-8")
+        logger.info("Successfully refreshed BOD JSON. Saved %s instruments.", len(instruments))
         return True
-    except Exception as e:
-        logger.error(f"Failed to fetch BOD master: {e}")
+    except Exception as exc:
+        logger.error("Failed to fetch BOD master: %s", exc)
         return False
 
 
-def preflight_auth(token):
-    """Generate a fresh access token before the session and perform a harmless authorization preflight."""  # noqa: E501
+def preflight_auth(token: str) -> bool:
+    """Perform a harmless authorization preflight before subscribing."""
     url = "https://api.upstox.com/v2/user/profile"
     headers = {
         "accept": "application/json",
         "Api-Version": "2.0",
         "Authorization": f"Bearer {token}",
     }
-
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code == 200:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
             logger.info("Preflight auth successful.")
             return True
-        else:
+        logger.error(
+            "Preflight auth failed. Status: %s, Response: %s",
+            response.status_code,
+            response.text,
+        )
+        if "UDAPI1221" in response.text:
             logger.error(
-                f"Preflight auth failed. Status: {resp.status_code}, "
-                f"Response: {resp.text}"
+                "UPSTOX IP WHITELIST ERROR: whitelist this machine in the Upstox Developer Console."
             )
-            if "UDAPI1221" in resp.text:
-                logger.error(
-                    "=> UPSTOX IP WHITELIST ERROR: The API key does not allow "
-                    "this machine's IP. Please whitelist this VPS/machine IP in "  # noqa: E501
-                    "the Upstox Developer Console."
-                )
-            return False
-    except Exception as e:
-        logger.error(f"Preflight auth exception: {e}")
+        return False
+    except Exception as exc:
+        logger.error("Preflight auth exception: %s", exc)
         return False
 
 
-def _find_nearest_expiry(instruments, symbol_name):
-    # filtered by symbol_name and expiry > today
-    today = datetime.now().date()
-    opts = [
-        i
-        for i in instruments
-        if i.get("name") == symbol_name
-        and i.get("instrument_type") in ["CE", "PE"]
-        and i.get("expiry")
-    ]
-
-    if not opts:
-        return []
-
-    valid = []
-    for opt in opts:
+def _expiry_date(value: Any):
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (int, float)):
         try:
-            exp_date = datetime.strptime(opt["expiry"], "%Y-%m-%d").date()
-            if exp_date >= today:
-                opt["_exp_date"] = exp_date
-                valid.append(opt)
-        except BaseException:
-            # maybe timestamp
-            if isinstance(opt["expiry"], (int, float)):
-                exp_date = datetime.fromtimestamp(opt["expiry"] / 1000).date()
-                if exp_date >= today:
-                    opt["_exp_date"] = exp_date
-                    valid.append(opt)
+            return datetime.fromtimestamp(float(value) / 1000.0).date()
+        except (OverflowError, OSError, ValueError):
+            return None
+    return None
 
+
+def _find_nearest_expiry(instruments: list[dict[str, Any]], symbol_name: str) -> list[dict[str, Any]]:
+    today = datetime.now().date()
+    valid: list[dict[str, Any]] = []
+    for instrument in instruments:
+        if instrument.get("name") != symbol_name:
+            continue
+        if instrument.get("instrument_type") not in {"CE", "PE"}:
+            continue
+        expiry = _expiry_date(instrument.get("expiry"))
+        if expiry is None or expiry < today:
+            continue
+        row = dict(instrument)
+        row["_exp_date"] = expiry
+        valid.append(row)
     if not valid:
         return []
-
-    valid.sort(key=lambda x: x["_exp_date"])
-    nearest = valid[0]["_exp_date"]
-    return [o for o in valid if o["_exp_date"] == nearest]
+    nearest = min(row["_exp_date"] for row in valid)
+    return [row for row in valid if row["_exp_date"] == nearest]
 
 
-def _find_futures(instruments, symbol_name):
+def _find_futures(instruments: list[dict[str, Any]], symbol_name: str) -> list[dict[str, Any]]:
     today = datetime.now().date()
-    futs = [
-        i
-        for i in instruments
-        if i.get("name") == symbol_name and i.get("instrument_type") == "FUT"
-    ]
-    valid = []
-    for fut in futs:
-        try:
-            exp_date = datetime.strptime(
-                fut.get("expiry", ""), "%Y-%m-%d"
-            ).date()
-            if exp_date >= today:
-                fut["_exp_date"] = exp_date
-                valid.append(fut)
-        except BaseException:
-            pass
-    valid.sort(key=lambda x: x["_exp_date"])
-    # Return up to 2 (current and next)
-    unique_expiries = sorted(list(set([x["_exp_date"] for x in valid])))
-    if not unique_expiries:
-        return []
-    targets = unique_expiries[:2]
-    return [x for x in valid if x["_exp_date"] in targets]
+    valid: list[dict[str, Any]] = []
+    for instrument in instruments:
+        if instrument.get("name") != symbol_name:
+            continue
+        if instrument.get("instrument_type") != "FUT":
+            continue
+        expiry = _expiry_date(instrument.get("expiry"))
+        if expiry is None or expiry < today:
+            continue
+        row = dict(instrument)
+        row["_exp_date"] = expiry
+        valid.append(row)
+    expiries = sorted({row["_exp_date"] for row in valid})[:2]
+    return [row for row in valid if row["_exp_date"] in expiries]
 
 
-def resolve_instruments():
-    """Resolve instruments safely and strictly fail-closed."""
+def resolve_instruments() -> list[str] | None:
+    """Resolve index, nearest-expiry option and current/next future instrument keys."""
     out_path = Path("runtime/upstox_instruments/complete.json")
     if not out_path.exists():
-        logger.error("BOD JSON missing. Cannot resolve.")
+        logger.error("BOD JSON missing. Cannot resolve instruments.")
         return None
+    instruments = json.loads(out_path.read_text(encoding="utf-8"))
 
-    with open(out_path, "r", encoding="utf-8") as f:
-        instruments = json.load(f)
+    resolved: set[str] = set()
+    spot_contracts = (
+        ("NIFTY 50", "NIFTY"),
+        ("NIFTY BANK", "BANKNIFTY"),
+        ("SENSEX", "SENSEX"),
+    )
+    for trading_symbol, derivative_name in spot_contracts:
+        spot = [
+            row
+            for row in instruments
+            if row.get("trading_symbol") == trading_symbol
+            and row.get("instrument_type") == "INDEX"
+        ]
+        if not spot:
+            logger.error("Could not resolve %s spot", trading_symbol)
+            return None
+        resolved.add(str(spot[0]["instrument_key"]))
 
-    resolved_keys = set()
+        options = _find_nearest_expiry(instruments, derivative_name)
+        if not options:
+            logger.error("Could not resolve %s nearest options", derivative_name)
+            return None
+        resolved.update(str(row["instrument_key"]) for row in options)
+        if derivative_name in {"NIFTY", "BANKNIFTY"}:
+            resolved.update(
+                str(row["instrument_key"])
+                for row in _find_futures(instruments, derivative_name)
+            )
 
-    # 1. NIFTY 50 spot + options + futures
-    nifty_spot = [
-        i
-        for i in instruments
-        if i.get("trading_symbol") == "NIFTY 50"
-        and i.get("instrument_type") == "INDEX"
+    vix = [
+        row
+        for row in instruments
+        if row.get("trading_symbol") == "INDIA VIX"
+        and row.get("instrument_type") == "INDEX"
     ]
-    if not nifty_spot:
-        logger.error("Could not resolve NIFTY 50 spot")
-        return None
-    resolved_keys.add(nifty_spot[0]["instrument_key"])
-
-    opts = _find_nearest_expiry(instruments, "NIFTY")
-    if not opts:
-        logger.error("Could not resolve NIFTY nearest options")
-        return None
-    for o in opts:
-        resolved_keys.add(o["instrument_key"])
-
-    futs = _find_futures(instruments, "NIFTY")
-    for f in futs:
-        resolved_keys.add(f["instrument_key"])
-
-    # 2. NIFTY BANK spot + options + futures
-    bank_spot = [
-        i
-        for i in instruments
-        if i.get("trading_symbol") == "NIFTY BANK"
-        and i.get("instrument_type") == "INDEX"
-    ]
-    if not bank_spot:
-        logger.error("Could not resolve NIFTY BANK spot")
-        return None
-    resolved_keys.add(bank_spot[0]["instrument_key"])
-
-    opts = _find_nearest_expiry(instruments, "BANKNIFTY")
-    if not opts:
-        logger.error("Could not resolve BANKNIFTY nearest options")
-        return None
-    for o in opts:
-        resolved_keys.add(o["instrument_key"])
-
-    futs = _find_futures(instruments, "BANKNIFTY")
-    for f in futs:
-        resolved_keys.add(f["instrument_key"])
-
-    # 3. SENSEX spot + options
-    sensex_spot = [
-        i
-        for i in instruments
-        if i.get("trading_symbol") == "SENSEX"
-        and i.get("instrument_type") == "INDEX"
-    ]
-    if not sensex_spot:
-        logger.error("Could not resolve SENSEX spot")
-        return None
-    resolved_keys.add(sensex_spot[0]["instrument_key"])
-
-    opts = _find_nearest_expiry(instruments, "SENSEX")
-    if not opts:
-        logger.error("Could not resolve SENSEX nearest options")
-        return None
-    for o in opts:
-        resolved_keys.add(o["instrument_key"])
-
-    # 4. India VIX
-    vix_spot = [
-        i
-        for i in instruments
-        if i.get("trading_symbol") == "INDIA VIX"
-        and i.get("instrument_type") == "INDEX"
-    ]
-    if not vix_spot:
+    if not vix:
         logger.error("Could not resolve INDIA VIX")
         return None
-    resolved_keys.add(vix_spot[0]["instrument_key"])
+    resolved.add(str(vix[0]["instrument_key"]))
 
-    logger.info(f"Successfully resolved {len(resolved_keys)} instrument keys.")
-    return list(resolved_keys)
+    logger.info("Successfully resolved %s instrument keys.", len(resolved))
+    return sorted(resolved)
 
 
 class DataCollector:
-    def __init__(self, token, keys):
+    def __init__(self, token: str, keys: list[str]):
         self.token = token
-        self.keys = keys
+        self.keys = sorted({str(key) for key in keys})
         if UPSTOX_AVAILABLE:
-            self.streamer = MarketDataStreamerV3(
-                upstox_client.ApiClient(upstox_client.Configuration()),
-                list(keys),
-                "full",
-            )
-            self.streamer.api_client.configuration.access_token = token
+            configuration = upstox_client.Configuration()
+            configuration.access_token = token
+            api_client = upstox_client.ApiClient(configuration)
+            self.streamer = MarketDataStreamerV3(api_client, self.keys, "full")
         else:
             self.streamer = None
 
-        self.buffer = []
-        self.raw_buffer = []
+        self.buffer: list[dict[str, Any]] = []
         self.msg_count = 0
+        self.control_message_count = 0
+        self.record_count = 0
+        self.records_written = 0
         self.dropped_msg_count = 0
         self.parse_failures = 0
+        self.persistence_failures = 0
         self.reconnects = 0
+        self.last_parse_error: str | None = None
+        self.record_counts_by_instrument: Counter[str] = Counter()
+        self.valid_depth_counts_by_instrument: Counter[str] = Counter()
+        self.depth_canary_warned = False
 
-        self.chunk_interval = 10  # 10 mins
+        self.chunk_interval_minutes = 10
         self.last_flush = time.time()
         self.date_str = datetime.now().strftime("%Y%m%d")
         self.out_dir = Path(f"runtime/market_data/upstox/{self.date_str}")
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
+        depth_level = pa.struct(
+            [
+                pa.field("bid_price", pa.float64()),
+                pa.field("bid_quantity", pa.int64()),
+                pa.field("ask_price", pa.float64()),
+                pa.field("ask_quantity", pa.int64()),
+            ]
+        )
         self.schema = pa.schema(
             [
                 ("ts", pa.float64()),
+                ("source_ts_epoch_ms", pa.int64()),
                 ("instrument_key", pa.string()),
+                ("message_type", pa.string()),
+                ("feed_kind", pa.string()),
                 ("ltp", pa.float64()),
                 ("bid_price", pa.float64()),
                 ("ask_price", pa.float64()),
+                ("bid_quantity", pa.int64()),
+                ("ask_quantity", pa.int64()),
+                ("depth", pa.list_(depth_level)),
+                ("depth_level_count", pa.int32()),
+                ("depth_valid", pa.bool_()),
                 ("delta", pa.float64()),
                 ("theta", pa.float64()),
                 ("gamma", pa.float64()),
                 ("vega", pa.float64()),
+                ("rho", pa.float64()),
                 ("iv", pa.float64()),
                 ("volume", pa.int64()),
                 ("oi", pa.float64()),
             ]
         )
 
-    def flush(self):
+    def flush(self) -> bool:
         if not self.buffer:
-            return
-
+            return True
         now_ts = int(time.time())
-        df = pd.DataFrame(self.buffer)
-        table = pa.Table.from_pandas(df, schema=self.schema)
-        pq_path = self.out_dir / f"ticks_{now_ts}.parquet"
-        pq.write_table(table, pq_path)
+        rows = list(self.buffer)
+        try:
+            frame = pd.DataFrame(rows)
+            table = pa.Table.from_pandas(frame, schema=self.schema, preserve_index=False)
+            parquet_path = self.out_dir / f"ticks_{now_ts}.parquet"
+            pq.write_table(table, parquet_path)
+            self.records_written += len(rows)
+            self.buffer.clear()
+            self.last_flush = time.time()
+            logger.info("Flushed %s records to %s", len(rows), parquet_path)
+            return True
+        except Exception as exc:
+            self.persistence_failures += 1
+            logger.exception("Failed to persist Upstox V3 records: %s", exc)
+            return False
 
-        logger.info(f"Flushed {len(self.buffer)} records to {pq_path}")
-        self.buffer.clear()
-        self.last_flush = time.time()
+    def _warn_on_empty_fo_depth(self) -> None:
+        if self.depth_canary_warned:
+            return
+        fo_records = sum(
+            count
+            for key, count in self.record_counts_by_instrument.items()
+            if key.split("|", 1)[0].upper().endswith("_FO")
+        )
+        valid_depth = sum(self.valid_depth_counts_by_instrument.values())
+        if fo_records >= DEPTH_CANARY_MIN_FO_RECORDS and valid_depth == 0:
+            self.depth_canary_warned = True
+            logger.error(
+                "DEPTH CAPTURE CANARY FAILED: %s F&O records parsed with zero valid depth records.",
+                fo_records,
+            )
 
-    def on_market_update(self, message):
+    def on_market_update(self, message: Any) -> None:
         self.msg_count += 1
-        # Check chunk interval
-        if time.time() - self.last_flush >= self.chunk_interval * 60:
+        if time.time() - self.last_flush >= self.chunk_interval_minutes * 60:
             self.flush()
 
         try:
-            # We must parse the message payload correctly. Upstox returns
-            # dictionary for V3
-            for key, data in message.items():
-                if isinstance(data, dict):
-                    # parse
-                    rec = {
-                        "ts": time.time(),
-                        "instrument_key": key,
-                        "ltp": (
-                            float(data.get("ltpc", {}).get("ltp", 0.0))
-                            if data.get("ltpc")
-                            else None
-                        ),
-                        "volume": (
-                            int(
-                                data.get("ff", {})
-                                .get("market_ff", {})
-                                .get("vtt", 0)
-                            )
-                            if data.get("ff")
-                            else None
-                        ),
-                        "oi": (
-                            float(
-                                data.get("ff", {})
-                                .get("market_ff", {})
-                                .get("oi", 0.0)
-                            )
-                            if data.get("ff")
-                            else None
-                        ),
-                    }
-
-                    # Depth
-                    depth = data.get("depth", {})
-                    buy = depth.get("buy", [])
-                    sell = depth.get("sell", [])
-                    rec["bid_price"] = (
-                        float(buy[0].get("price", 0.0)) if buy else None
-                    )
-                    rec["ask_price"] = (
-                        float(sell[0].get("price", 0.0)) if sell else None
-                    )
-
-                    # Greeks
-                    option_greeks = data.get("option_greeks", {})
-                    rec["delta"] = (
-                        float(option_greeks.get("delta", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["theta"] = (
-                        float(option_greeks.get("theta", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["gamma"] = (
-                        float(option_greeks.get("gamma", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["vega"] = (
-                        float(option_greeks.get("vega", 0.0))
-                        if option_greeks
-                        else None
-                    )
-                    rec["iv"] = (
-                        float(option_greeks.get("iv", 0.0))
-                        if option_greeks
-                        else None
-                    )
-
-                    self.buffer.append(rec)
-        except Exception:
+            records = parse_upstox_v3_message(message, received_ts_epoch=time.time())
+        except UpstoxV3ParseError as exc:
             self.parse_failures += 1
+            self.dropped_msg_count += 1
+            self.last_parse_error = str(exc)
+            logger.error("Upstox V3 parse failure: %s", exc)
+            return
+        except Exception as exc:
+            self.parse_failures += 1
+            self.dropped_msg_count += 1
+            self.last_parse_error = f"{type(exc).__name__}: {exc}"
+            logger.exception("Unexpected Upstox V3 parse failure")
+            return
 
-    def on_error(self, error):
-        logger.error(f"Upstox WebSocket error: {error}")
+        if not records:
+            self.control_message_count += 1
+            return
+
+        for record in records:
+            instrument_key = str(record["instrument_key"])
+            self.record_count += 1
+            self.record_counts_by_instrument[instrument_key] += 1
+            if bool(record.get("depth_valid")):
+                self.valid_depth_counts_by_instrument[instrument_key] += 1
+            self.buffer.append(record)
+        self._warn_on_empty_fo_depth()
+
+    def on_error(self, error: Any) -> None:
+        logger.error("Upstox WebSocket error: %s", error)
         self.reconnects += 1
 
-    def on_close(self, code, reason):
-        logger.warning(
-            f"Upstox WebSocket closed (Code: {code}, Reason: {reason})."
+    def on_close(self, code: Any, reason: Any) -> None:
+        logger.warning("Upstox WebSocket closed (Code: %s, Reason: %s).", code, reason)
+        self.reconnects += 1
+
+    def finalize(self) -> bool:
+        flush_ok = self.flush()
+        quality = assess_capture_quality(
+            subscribed_instrument_keys=self.keys,
+            record_counts=self.record_counts_by_instrument,
+            valid_depth_counts=self.valid_depth_counts_by_instrument,
+            minimum_active_fo_depth_coverage_ratio=MIN_ACTIVE_FO_DEPTH_COVERAGE_RATIO,
+            minimum_valid_depth_records_per_instrument=MIN_VALID_DEPTH_RECORDS_PER_INSTRUMENT,
         )
-        self.reconnects += 1
+        additional_reasons: list[str] = []
+        if not flush_ok or self.persistence_failures:
+            additional_reasons.append(
+                f"PERSISTENCE_FAILURES:{self.persistence_failures}"
+            )
+        if self.parse_failures:
+            additional_reasons.append(f"PARSE_FAILURES:{self.parse_failures}")
+        if self.dropped_msg_count:
+            additional_reasons.append(
+                f"DROPPED_MESSAGES:{self.dropped_msg_count}"
+            )
+        if self.records_written != self.record_count:
+            additional_reasons.append(
+                f"RECORD_RECONCILIATION_FAILED:{self.records_written}!={self.record_count}"
+            )
 
-    def finalize(self):
-        self.flush()
+        reasons = list(quality.reasons) + additional_reasons
+        capture_valid = quality.research_depth_eligible and not additional_reasons
         manifest = {
+            "schema_version": 2,
             "session_date": self.date_str,
+            "capture_classification": (
+                "UPSTOX_V3_DEPTH_CAPTURE_VALID"
+                if capture_valid
+                else "UPSTOX_V3_DEPTH_CAPTURE_INVALID"
+            ),
+            "capture_valid": capture_valid,
+            "research_depth_eligible": capture_valid,
+            "reasons": reasons,
             "total_messages": self.msg_count,
+            "control_messages": self.control_message_count,
+            "parsed_records": self.record_count,
+            "records_written": self.records_written,
             "dropped_messages": self.dropped_msg_count,
             "parse_failures": self.parse_failures,
+            "persistence_failures": self.persistence_failures,
+            "last_parse_error": self.last_parse_error,
             "reconnects": self.reconnects,
             "coverage_keys": len(self.keys),
+            "record_counts_by_instrument": dict(
+                sorted(self.record_counts_by_instrument.items())
+            ),
+            "valid_depth_counts_by_instrument": dict(
+                sorted(self.valid_depth_counts_by_instrument.items())
+            ),
+            "depth_quality": quality.as_dict(),
+            "minimum_active_fo_depth_coverage_ratio": MIN_ACTIVE_FO_DEPTH_COVERAGE_RATIO,
+            "minimum_valid_depth_records_per_instrument": MIN_VALID_DEPTH_RECORDS_PER_INSTRUMENT,
             "finalized_at": datetime.now().isoformat(),
         }
-        with open(self.out_dir / "manifest.json", "w") as f:
-            json.dump(manifest, f, indent=2)
-        logger.info(f"Session finalized. {manifest}")
+        manifest_path = self.out_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        if not capture_valid:
+            invalid_path = self.out_dir / "INVALID_DEPTH_CAPTURE.json"
+            invalid_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            logger.error("Session finalized INVALID. Reasons: %s", reasons)
+        else:
+            logger.info("Session finalized VALID with %s records.", self.records_written)
+        return capture_valid
 
 
-def main():
+def _close_streamer(streamer: Any) -> None:
+    if streamer is None:
+        return
+    if hasattr(streamer, "disconnect"):
+        streamer.disconnect()
+    elif hasattr(streamer, "close"):
+        streamer.close()
+
+
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--auth-only", action="store_true", help="Perform preflight only"
+        "--auth-only",
+        action="store_true",
+        help="Perform instrument refresh and authentication preflight only.",
     )
     args = parser.parse_args()
 
     token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
     if not token:
         logger.error("UPSTOX_ACCESS_TOKEN not found in env.")
-        sys.exit(1)
-
+        return 1
     if not fetch_bod_master():
-        sys.exit(1)
-
+        return 1
     if not preflight_auth(token):
-        sys.exit(1)
+        return 1
 
     keys = resolve_instruments()
     if not keys:
-        sys.exit(1)
-
+        return 1
     if args.auth_only:
         logger.info("Auth-only mode requested. Preflight successful. Exiting.")
-        sys.exit(0)
+        return 0
 
-    # Wait for connect time
     now = datetime.now()
     connect_time = now.replace(hour=9, minute=10, second=0, microsecond=0)
     if now < connect_time:
-        wait_sec = (connect_time - now).total_seconds()
-        logger.info(f"Waiting {wait_sec:.1f}s until 09:10 IST to connect...")
-        time.sleep(wait_sec)
-
-    collector = DataCollector(token, keys)
+        wait_seconds = (connect_time - now).total_seconds()
+        logger.info("Waiting %.1fs until 09:10 IST to connect...", wait_seconds)
+        time.sleep(wait_seconds)
 
     if not UPSTOX_AVAILABLE:
-        logger.error(
-            "Upstox client not available (pip install upstox-python-sdk). Exiting."  # noqa: E501
-        )
-        sys.exit(1)
+        logger.error("Upstox client not available (pip install upstox-python-sdk).")
+        return 1
 
+    collector = DataCollector(token, keys)
     logger.info("Starting V3 Full Market Data Streamer...")
     collector.streamer.on("message", collector.on_market_update)
     collector.streamer.on("error", collector.on_error)
@@ -486,20 +481,16 @@ def main():
     collector.streamer.connect()
 
     stop_time = datetime_time(15, 35)
-
     try:
-        while True:
+        while datetime.now().time() < stop_time:
             time.sleep(1)
-            now_time = datetime.now().time()
-            if now_time >= stop_time:
-                logger.info("Market close (15:35). Shutting down.")
-                break
     except KeyboardInterrupt:
         logger.info("Interrupted by user.")
+    finally:
+        _close_streamer(collector.streamer)
 
-    collector.streamer.close()
-    collector.finalize()
+    return 0 if collector.finalize() else 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

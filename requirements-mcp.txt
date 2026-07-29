@@ -1,0 +1,6 @@
+# Isolated dependencies for the read-only Antigravity MCP services.
+# The official MCP Python SDK v1 is the stable line as of July 2026.
+mcp>=1.27,<2
+pandas
+pyarrow
+pytest
