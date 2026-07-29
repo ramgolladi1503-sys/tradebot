@@ -1,0 +1,1 @@
+Frozen before result inspection.
