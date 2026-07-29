@@ -23,12 +23,20 @@ def _timestamp_column(frame: pd.DataFrame) -> str | None:
     return None
 
 
+def _to_utc_ns(series: pd.Series) -> pd.Series:
+    """Normalize heterogeneous timestamp inputs to exact datetime64[ns, UTC]."""
+    parsed = pd.to_datetime(series, errors="coerce", utc=True)
+    # pandas/pyarrow inputs can retain microsecond precision; merge_asof requires
+    # identical datetime units on both sides, so force nanosecond precision.
+    return parsed.astype("datetime64[ns, UTC]")
+
+
 def _normalise(frame: pd.DataFrame, source: Path) -> pd.DataFrame | None:
     ts_col = _timestamp_column(frame)
     if ts_col is None:
         return None
     out = frame.copy()
-    out["timestamp"] = pd.to_datetime(out[ts_col], errors="coerce", utc=True)
+    out["timestamp"] = _to_utc_ns(out[ts_col])
     out = out.dropna(subset=["timestamp"]).sort_values("timestamp")
     out["source_file"] = str(source)
     return out
@@ -79,12 +87,17 @@ def _merge_sources(files: list[Path]) -> tuple[pd.DataFrame, list[dict[str, obje
         if not cols:
             continue
         slim = norm[["timestamp", *cols]].drop_duplicates("timestamp")
+        slim["timestamp"] = _to_utc_ns(slim["timestamp"])
         prefix = path.stem[:24].replace("-", "_")
         slim = slim.rename(columns={c: f"{prefix}__{c}" for c in cols})
-        merged = slim if merged is None else pd.merge_asof(
-            merged.sort_values("timestamp"), slim.sort_values("timestamp"), on="timestamp",
-            direction="backward", tolerance=pd.Timedelta("5min")
-        )
+        if merged is None:
+            merged = slim
+        else:
+            merged["timestamp"] = _to_utc_ns(merged["timestamp"])
+            merged = pd.merge_asof(
+                merged.sort_values("timestamp"), slim.sort_values("timestamp"), on="timestamp",
+                direction="backward", tolerance=pd.Timedelta("5min")
+            )
     return (merged if merged is not None else pd.DataFrame()), inventory
 
 
@@ -100,7 +113,7 @@ def _find_underlying(root: Path) -> pd.DataFrame:
         if ts is None or "close" not in frame.columns:
             continue
         frame = frame.copy()
-        frame["timestamp"] = pd.to_datetime(frame[ts], errors="coerce", utc=True)
+        frame["timestamp"] = _to_utc_ns(frame[ts])
         frame = frame.dropna(subset=["timestamp"])
         if "session_date" not in frame.columns:
             frame["session_date"] = frame["timestamp"].dt.tz_convert("Asia/Kolkata").dt.date.astype(str)
@@ -108,6 +121,7 @@ def _find_underlying(root: Path) -> pd.DataFrame:
     if not frames:
         raise FileNotFoundError("no NIFTY underlying parquet files found")
     out = pd.concat(frames, ignore_index=True).drop_duplicates("timestamp").sort_values("timestamp")
+    out["timestamp"] = _to_utc_ns(out["timestamp"])
     return out
 
 
@@ -148,6 +162,8 @@ def main() -> int:
         print(json.dumps(report, indent=2, default=str))
         return 0
 
+    underlying["timestamp"] = _to_utc_ns(underlying["timestamp"])
+    events["timestamp"] = _to_utc_ns(events["timestamp"])
     data = pd.merge_asof(underlying, events.sort_values("timestamp"), on="timestamp", direction="backward", tolerance=pd.Timedelta("5min"))
     data["future_return_5"] = data.groupby("session_date")["close"].shift(-5) / data["close"] - 1.0
     data["future_return_15"] = data.groupby("session_date")["close"].shift(-15) / data["close"] - 1.0
