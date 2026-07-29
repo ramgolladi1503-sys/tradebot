@@ -1,0 +1,74 @@
+name: Late-Day CE Rebound Causality V10
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/conditional-precursor-discrimination-v2
+    paths:
+      - 'scripts/audit_late_day_ce_inventory_rebound_v10_causality.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v10_causality.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v5_signal_oracle.py'
+      - 'runtime/research/late_day_ce_inventory_rebound_v9_final/frozen_strategy_contract.json'
+      - '.github/workflows/late-day-ce-rebound-causality-v10.yml'
+  pull_request:
+    paths:
+      - 'scripts/audit_late_day_ce_inventory_rebound_v10_causality.py'
+      - 'tests/research/test_late_day_ce_inventory_rebound_v10_causality.py'
+      - 'scripts/audit_late_day_ce_inventory_rebound_v5_signal_oracle.py'
+      - 'runtime/research/late_day_ce_inventory_rebound_v9_final/frozen_strategy_contract.json'
+      - '.github/workflows/late-day-ce-rebound-causality-v10.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-causality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependency
+        run: python -m pip install pytest
+
+      - name: Run focused test
+        run: python -m pytest -q tests/research/test_late_day_ce_inventory_rebound_v10_causality.py
+
+      - name: Generate independent causality evidence
+        id: audit
+        continue-on-error: true
+        run: python -m scripts.audit_late_day_ce_inventory_rebound_v10_causality --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Enforce truthful invalidation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('runtime/research/late_day_ce_inventory_rebound_v10_causality_audit/causality_audit.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          expected = 'INVALID_FUTURE_ENTRY_PRICE_SIGNAL_MEMBERSHIP_LEAK'
+          if payload.get('principal_verdict') != expected:
+              raise SystemExit(f"Expected {expected}, got {payload.get('principal_verdict')}")
+          if payload.get('paper_or_live_authorized') is not False:
+              raise SystemExit('Invalid candidate must not authorize paper or live trading.')
+          print(expected)
+          PY
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: late-day-ce-rebound-causality-v10
+          path: |
+            runtime/research/late_day_ce_inventory_rebound_v10_causality_audit/**
+            research/late_day_ce_inventory_rebound_v10_causality_audit/RESULT.md
+          if-no-files-found: error
+          retention-days: 30
