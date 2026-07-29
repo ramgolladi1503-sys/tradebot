@@ -53,11 +53,11 @@ def _context(labels=FROZEN_GRAPH, *, now=1_000.0) -> StrategyContext:
 
 def test_emits_advisory_buy_call_for_exact_frozen_graph():
     candidates = generate_market_event_graph_reversal_candidates(_context(), _regime())
-    assert len(candidates) == 1
+    assert tuple(candidate.direction for candidate in candidates) == ("BUY_CALL",)
     candidate = candidates[0]
-    assert candidate.direction == "BUY_CALL"
     assert candidate.strategy_id == "market_event_graph_reversal_v1"
     assert candidate.lineage["promotion_state"] == "ADVISORY_ONLY"
+    assert candidate.is_order_action is False
     assert "SHADOW_ADVISORY_ONLY" in candidate.warnings
     assert candidate.evidence["observed_graph"] == list(FROZEN_GRAPH)
 
