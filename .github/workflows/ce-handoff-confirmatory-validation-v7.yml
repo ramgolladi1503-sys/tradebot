@@ -1,0 +1,99 @@
+name: CE Handoff Confirmatory Validation V7
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/cross-strike-diffusion-discovery-v1
+    paths:
+      - 'scripts/run_ce_handoff_confirmatory_validation_v7.py'
+      - 'tests/research/test_ce_handoff_confirmatory_validation_v7.py'
+      - '.github/workflows/ce-handoff-confirmatory-validation-v7.yml'
+  pull_request:
+    paths:
+      - 'scripts/run_ce_handoff_confirmatory_validation_v7.py'
+      - 'tests/research/test_ce_handoff_confirmatory_validation_v7.py'
+      - '.github/workflows/ce-handoff-confirmatory-validation-v7.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository pointers
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 1
+
+      - name: Materialize preserved event universe
+        run: |
+          git lfs install
+          git lfs pull \
+            --include='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/event_universe_5m.parquet' \
+            --exclude=''
+          target='research/local_evidence_consolidation_v1/worktrees/reverse-causal-option-expansion-v1/runtime_research/reverse_causal_option_expansion_v1/event_universe_5m.parquet'
+          test -f "$target"
+          if head -c 80 "$target" | grep -q 'version https://git-lfs.github.com/spec'; then
+            echo 'Unresolved Git LFS pointer.' >&2
+            exit 1
+          fi
+          test "$(stat -c%s "$target")" -gt 90000000
+          sha256sum "$target"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install focused dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pandas numpy pyarrow pytest
+
+      - name: Run focused confirmatory tests
+        run: |
+          python -m pytest -q \
+            tests/research/test_leadership_handoff_campaign_v6.py \
+            tests/research/test_ce_handoff_confirmatory_validation_v7.py
+
+      - name: Run frozen middle-partition validation
+        run: |
+          python -m scripts.run_ce_handoff_confirmatory_validation_v7 --repo-root "$GITHUB_WORKSPACE"
+
+      - name: Verify master holdout remains sealed
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('runtime/research/ce_handoff_confirmatory_validation_v7/validation_decision.json')
+          if not path.exists():
+              raise SystemExit('Validation decision missing.')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          if payload.get('master_holdout_outcomes_materialized') is not False:
+              raise SystemExit('Master holdout was opened by validation runner.')
+          if payload.get('master_holdout_status') != 'SEALED_FOR_SINGLE_CANDIDATE_FINAL_CERTIFICATION':
+              raise SystemExit('Master holdout is not sealed for final certification.')
+          if payload.get('paper_or_live_authorized') is not False:
+              raise SystemExit('Validation must not authorize paper or live trading.')
+          if payload.get('allowed_for_live_execution') is not False:
+              raise SystemExit('Live execution must remain disabled.')
+          print(payload['principal_verdict'])
+          PY
+
+      - name: Upload confirmatory validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ce-handoff-confirmatory-validation-v7
+          path: |
+            runtime/research/ce_handoff_confirmatory_validation_v7/**
+            research/ce_handoff_confirmatory_validation_v7/**
+          if-no-files-found: error
+          retention-days: 30
