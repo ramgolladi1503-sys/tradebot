@@ -24,7 +24,7 @@ def _frame() -> pd.DataFrame:
             "surface_count": [4, 4, 4, 4],
             "volume": [10, 30, 10, 30],
             "prior_10m_range_pct": [0.2, 0.1, 0.2, 0.1],
-            "prior_5m_return_pct": [0.0, 0.6, 0.0, 0.5],
+            "prior_5m_return_pct": [0.0, 0.005, 0.0, 0.004],
             "previous_return": [-0.1, 0.0, -0.1, 0.0],
             "return_acceleration": [0.1, 0.6, 0.1, 0.5],
             "prior_5m_volume_ratio": [0.9, 3.0, 0.9, 2.8],
