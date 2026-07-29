@@ -1,5 +1,14 @@
 # PR #743 Agent Review Evidence
 
+mode: PAPER
+candidate_id: PR-743-MARKET-EVENT-GRAPH-SHADOW
+ decision: ADVISORY_ONLY
+reason: Frozen breadth graph is integrated for read-only shadow observation with fail-closed input validation.
+timestamp: 2026-07-29T11:45:00Z
+is_order_action: false
+broker_api_called: false
+source: PR_743_AGENT_REVIEW_EVIDENCE
+
 ## Agent Work Contract
 Implement the frozen market-event graph as a read-only TradeBot candidate generator and connect a fail-closed adapter for completed constituent-breadth event snapshots. Do not change broker calls, order placement, execution permissions, risk limits, option selection, or production certification.
 
@@ -13,7 +22,7 @@ Changed scope is limited to the candidate-pool orchestrator, the movement-strate
 - promotion state remains `ADVISORY_ONLY`;
 - the strategy contains no broker or order imports;
 - input validation is fail-closed;
-- incomplete, unknown, malformed, missing, and stale event evidence emits no candidate;
+- incomplete, unknown, malformed, absent, and stale event evidence emits no candidate;
 - default-pool wiring adds observation only and does not make candidates executable;
 - existing option confirmation, classification, downgrade, ranking, feed-hold, and execution firewalls remain authoritative.
 
@@ -25,7 +34,7 @@ Changed scope is limited to the candidate-pool orchestrator, the movement-strate
 
 **Could arbitrary event labels trigger?** No. Labels are restricted to the frozen graph vocabulary.
 
-**Could missing timestamps trigger?** No. Positive numeric `ts_epoch` is mandatory.
+**Could a row without a timestamp trigger?** No. Positive numeric `ts_epoch` is mandatory.
 
 **Could the strategy auto-execute?** No. It produces a raw advisory candidate and carries explicit shadow/no-auto-execution suppression evidence.
 
@@ -53,11 +62,12 @@ Focused tests cover:
 
 - exact graph emits one BUY_CALL advisory candidate;
 - nonmatching graph emits nothing;
-- missing evidence emits nothing;
+- absent evidence emits nothing;
 - stale evidence emits nothing;
 - incomplete, unknown, and timestamp-less rows are rejected;
 - canonical history ordering and attachment;
-- new generator is present in the default candidate pool.
+- new generator is present in the default candidate pool;
+- emitted candidate explicitly reports `is_order_action is False`.
 
 No execution-path tests were weakened or bypassed.
 
