@@ -35,9 +35,9 @@ class CandidatePoolReport:
 
     schema_version: int
     symbol: str
-    read_only: bool = True  # read_only=True
-    is_order_action: bool = False  # is_order_action=False
-    append: bool = False  # append=False
+    read_only: bool = True
+    is_order_action: bool = False
+    append: bool = False
     regime: MovementRegimeResult
     option_pressure: OptionPressureAssessment
     no_trade_assessment: NoTradeAssessment
@@ -80,14 +80,7 @@ def build_candidate_pool_report(
     option_pressure: OptionPressureAssessment | None = None,
     include_no_trade_candidate: bool = True,
 ) -> CandidatePoolReport:
-    """Build a read-only report from strategy candidates.
-
-    The function is missing-data safe and generator-failure tolerant. A broken
-    strategy contributes a warning, not a broker action and not a crash. The
-    report can show executable eligibility, but it cannot make anything
-    executable. If no-trade suppression is active, report-level executable count
-    is forced to zero even when a raw candidate individually looks eligible.
-    """
+    """Build a read-only report from strategy candidates."""
 
     if isinstance(ctx, dict):
         from core.movement_contract import context_from_dict
@@ -195,11 +188,7 @@ def build_candidate_pool_report(
 
 
 def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
-    """Return the read-only movement strategy generators.
-
-    Imports stay lazy so importing this module cannot accidentally load strategy
-    modules in unrelated legacy paths.
-    """
+    """Return the read-only movement strategy generators."""
 
     from strategies.movement import (  # noqa: PLC0415
         generate_compression_breakout_candidates,
@@ -207,6 +196,7 @@ def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
         generate_exhaustion_reversal_candidates,
         generate_failed_breakout_trap_candidates,
         generate_late_day_momentum_candidates,
+        generate_market_event_graph_reversal_candidates,
         generate_mean_reversion_extension_candidates,
         generate_opening_drive_candidates,
         generate_opening_range_retest_candidates,
@@ -223,6 +213,7 @@ def get_default_candidate_generators() -> tuple[CandidateGenerator, ...]:
         generate_vwap_reclaim_rejection_candidates,
         generate_failed_breakout_trap_candidates,
         generate_exhaustion_reversal_candidates,
+        generate_market_event_graph_reversal_candidates,
         generate_mean_reversion_extension_candidates,
         generate_event_volatility_expansion_candidates,
         generate_option_pressure_candidates,
