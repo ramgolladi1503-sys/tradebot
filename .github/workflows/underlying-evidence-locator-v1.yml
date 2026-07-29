@@ -38,6 +38,7 @@ jobs:
           wc -l < runtime/research/underlying_evidence_locator_v1/nifty_underlying_candidates.txt >> runtime/research/underlying_evidence_locator_v1/counts.txt
           printf 'priority_candidate_count=' >> runtime/research/underlying_evidence_locator_v1/counts.txt
           wc -l < runtime/research/underlying_evidence_locator_v1/priority_candidates.txt >> runtime/research/underlying_evidence_locator_v1/counts.txt
+          printf 'inventory_schema_version=1\n' >> runtime/research/underlying_evidence_locator_v1/counts.txt
           cat runtime/research/underlying_evidence_locator_v1/counts.txt
           cat runtime/research/underlying_evidence_locator_v1/priority_candidates.txt
 
