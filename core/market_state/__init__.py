@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import sys
 
 from .representation import MarketStateConfig, build_market_state_frame, state_contract
 
 _legacy_path = Path(__file__).resolve().parents[1] / "market_state.py"
-_spec = importlib.util.spec_from_file_location("core._legacy_market_state", _legacy_path)
+_legacy_module_name = "core._legacy_market_state"
+_spec = importlib.util.spec_from_file_location(_legacy_module_name, _legacy_path)
 if _spec is None or _spec.loader is None:
     raise ImportError(f"unable to load legacy market-state module: {_legacy_path}")
 _legacy = importlib.util.module_from_spec(_spec)
+# dataclasses resolves annotation metadata through sys.modules while the module
+# is executing, so register the compatibility module before exec_module().
+sys.modules[_legacy_module_name] = _legacy
 _spec.loader.exec_module(_legacy)
 
 for _name in dir(_legacy):
