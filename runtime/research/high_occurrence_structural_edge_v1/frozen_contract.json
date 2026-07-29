@@ -1,0 +1,23 @@
+{
+  "allowed_for_live_execution": false,
+  "holdout_policy": "sealed_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "mechanisms": [
+    "surface_breadth_impulse_continuation",
+    "surface_breadth_exhaustion_rebound",
+    "compression_breadth_release",
+    "cross_wing_absorption_rebound",
+    "surface_consensus_continuation",
+    "failed_extension_reversal",
+    "underreaction_with_participation",
+    "midday_acceptance_break"
+  ],
+  "normal_cost_pct": 0.1,
+  "research_only": true,
+  "research_sessions": 292,
+  "schema_version": "high_occurrence_structural_edge_v1",
+  "selection": "maximum_two_signals_per_session_with_30_minute_cooldown",
+  "semantic_sha256": "af7cad2ad098bbae33a022496132513e0cf7cce0419ba93864e430130c6d99e4",
+  "stress_cost_pct": 1.0,
+  "threshold_policy": "fixed_quantiles_recomputed_from_prior_fold_sessions_only"
+}
