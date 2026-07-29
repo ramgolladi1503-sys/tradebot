@@ -1,0 +1,42 @@
+{
+  "allowed_for_live_execution": false,
+  "cooldown_minutes": 15,
+  "days_to_expiry": [
+    0,
+    7
+  ],
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "holdout_policy": "latest_25pct_chronological_outcomes_unopened_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "max_signals_per_session": 2,
+  "mechanism_count": 10,
+  "mechanism_hypothesis": "failed_option_premium_extension_after_volume_or_oi_shock_then_inventory_absorption_rebound",
+  "mechanisms": [
+    "decelerating_capitulation",
+    "mirror_stall_absorption",
+    "surface_breadth_recovery",
+    "oi_absorption_turn",
+    "volume_climax_failed_extension",
+    "compression_failed_breakdown",
+    "near_expiry_absorption",
+    "morning_absorption",
+    "midday_absorption",
+    "late_day_absorption"
+  ],
+  "multiplicity_policy": "ten_preregistered_mechanisms_top_two_oof_survivors_only_open_holdout",
+  "normal_cost_pct": 0.1,
+  "outcome_horizon_minutes": 5,
+  "paper_or_live_authorized": false,
+  "premium_range": [
+    30.0,
+    300.0
+  ],
+  "research_only": true,
+  "research_sessions": 291,
+  "schema_version": "inventory_absorption_transition_v1",
+  "selection_policy": "state_onset_then_best_contract_per_timestamp_then_max_two_session_signals_with_15m_cooldown",
+  "semantic_sha256": "28cedd7cf22a746246baff6eb51d3354b842c54a45b8c7bf343d676166914207",
+  "side": "BUY_CE_OR_PE_ONLY",
+  "stress_cost_pct": 1.0,
+  "threshold_policy": "quantiles_recomputed_using_prior_training_sessions_only_per_expanding_fold"
+}
