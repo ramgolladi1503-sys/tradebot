@@ -14,6 +14,7 @@ on:
       - 'scripts/derive_downside_impulse_strategy_v1.py'
       - 'scripts/run_multievent_directional_discovery_v1.py'
       - 'scripts/run_explicit_event_sequence_discovery_v2.py'
+      - 'scripts/run_market_event_graph_discovery_v3.py'
       - 'tests/market_state/**'
       - '.github/workflows/causal-market-state-v1.yml'
   workflow_dispatch:
@@ -92,6 +93,15 @@ jobs:
             --evidence-root ../evidence/research/local_evidence_consolidation_v1/external_local_dirs \
             --output-dir runtime/research/explicit_event_sequence_discovery_v2
 
+      - name: Run causal market event graph discovery v3
+        working-directory: feature
+        env:
+          PYTHONPATH: .
+        run: |
+          python scripts/run_market_event_graph_discovery_v3.py \
+            --evidence-root ../evidence/research/local_evidence_consolidation_v1/external_local_dirs \
+            --output-dir runtime/research/market_event_graph_discovery_v3
+
       - name: Upload empirical evidence
         uses: actions/upload-artifact@v4
         with:
@@ -101,4 +111,5 @@ jobs:
             feature/runtime/research/downside_impulse_strategy_v1
             feature/runtime/research/multievent_directional_discovery_v1
             feature/runtime/research/explicit_event_sequence_discovery_v2
+            feature/runtime/research/market_event_graph_discovery_v3
           if-no-files-found: error
