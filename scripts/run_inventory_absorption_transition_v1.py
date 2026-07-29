@@ -104,7 +104,8 @@ def _positive_halves(trades: pd.DataFrame) -> tuple[int, int]:
     if len(trades) < 8:
         return 0, 0
     ordered = trades.sort_values(["session_id", "timestamp"], kind="mergesort")
-    halves = [part for part in np.array_split(ordered, 2) if len(part) >= 4]
+    index_parts = [part for part in np.array_split(np.arange(len(ordered)), 2) if len(part) >= 4]
+    halves = [ordered.iloc[index_part] for index_part in index_parts]
     return int(sum(float(part["net_return_pct"].mean()) > 0 for part in halves)), int(len(halves))
 
 
