@@ -23,6 +23,7 @@ freshness logic, feed logic, broker wiring, or execution gates.
 | `strategies/movement/vwap_reclaim.py` | `core/strategy_spec.py` | `MOVEMENT` reclaim subtype | Movement contract; candidate boundary before Phase-2 truth |
 | `strategies/movement/failed_breakout_trap.py` | `core/strategy_spec.py` | `MOVEMENT` trap subtype | Movement contract; candidate boundary before Phase-2 truth |
 | `strategies/movement/exhaustion_reversal.py` | `core/strategy_spec.py` | `MOVEMENT` reversal subtype | Movement contract; candidate boundary before Phase-2 truth |
+| `strategies/movement/market_event_graph_reversal.py` | `core/strategy_spec.py` | `MOVEMENT` breadth-event reversal subtype | Shadow/advisory-only movement contract; completed breadth history and freshness required before candidate emission |
 | `strategies/movement/mean_reversion_extension.py` | `core/strategy_spec.py` | `MEAN_REVERSION` extension subtype | Movement/mean-reversion contract; candidate freshness before ranking |
 | `strategies/movement/event_volatility_expansion.py` | `core/strategy_spec.py` | `EVENT` volatility subtype | Event/volatility contract; freshness-sensitive and fragile to stale data |
 | `strategies/movement/option_pressure.py` | `core/strategy_spec.py` | `MOVEMENT` option-pressure subtype | Order-flow/option-pressure contract; quote freshness and depth sensitive |
