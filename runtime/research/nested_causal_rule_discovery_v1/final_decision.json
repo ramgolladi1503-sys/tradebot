@@ -1,0 +1,14 @@
+{
+  "allowed_for_live_execution": false,
+  "claim_boundary": "HISTORICAL_FIVE_MINUTE_CANDLE_PROXY_RESEARCH_ONLY",
+  "contract_semantic_sha256": "4fd581d0e063deb5dad2d986a6653f004584db1df2823a49e4692b613519e9a2",
+  "execution_certification": "BLOCKED_AUTHORITATIVE_TIMESTAMP_ALIGNED_SPREAD_MISSING",
+  "holdout_gate": false,
+  "holdout_outcomes_materialized": false,
+  "oof_gate": false,
+  "paper_or_live_authorized": false,
+  "principal_verdict": "NO_NESTED_RULE_OOF_EDGE",
+  "research_only": true,
+  "semantic_sha256": "d34544c44848c00cf0894f29a4b87426c43a46014021e0e0916212057c90babc",
+  "structural_edge_found": false
+}
