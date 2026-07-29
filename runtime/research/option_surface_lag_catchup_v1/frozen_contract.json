@@ -1,0 +1,44 @@
+{
+  "allowed_for_live_execution": false,
+  "controls": [
+    "same_strike_opposite_wing",
+    "five_minute_delay",
+    "same_surface_leader"
+  ],
+  "cooldown_minutes": 20,
+  "days_to_expiry": [
+    0,
+    7
+  ],
+  "entry": "same_contract_open_exactly_one_minute_after_completed_signal",
+  "holdout_policy": "latest_25pct_unopened_until_oof_survivor_freeze",
+  "holdout_sessions": 98,
+  "max_signals_per_session": 2,
+  "mechanism_hypothesis": "liquid_contract_underreaction_to_confirmed_positive_same_wing_surface_transition",
+  "mechanisms": [
+    "broad_surface_contract_lag",
+    "accelerating_surface_lag",
+    "liquid_laggard_catchup",
+    "oi_supported_surface_lag",
+    "mass_migration_surface_lag",
+    "mirror_confirmed_surface_lag",
+    "high_dispersion_deep_lag",
+    "near_expiry_surface_lag",
+    "midday_surface_lag",
+    "late_session_surface_lag"
+  ],
+  "normal_cost_pct": 0.1,
+  "outcome_horizon_minutes": 5,
+  "paper_or_live_authorized": false,
+  "premium_range": [
+    30.0,
+    300.0
+  ],
+  "research_only": true,
+  "research_sessions": 291,
+  "schema_version": "option_surface_lag_catchup_v1",
+  "semantic_sha256": "70d9fb1482f83c80c30a98e5c205f2dc5daa6eb57c365640d70e90d37f3f6dc4",
+  "side": "BUY_CE_OR_PE_ONLY",
+  "stress_cost_pct": 1.0,
+  "threshold_policy": "prior_training_session_quantiles_per_expanding_fold"
+}
