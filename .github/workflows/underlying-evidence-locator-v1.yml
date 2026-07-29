@@ -7,6 +7,10 @@ on:
       - research/underlying-auction-option-response-v1
     paths:
       - '.github/workflows/underlying-evidence-locator-v1.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/underlying-evidence-locator-v1.yml'
+      - 'research/underlying_evidence_locator_v1/**'
 
 permissions:
   contents: read
