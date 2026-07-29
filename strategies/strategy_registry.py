@@ -68,6 +68,17 @@ def load_strategy_registry() -> Dict[str, StrategyRegistryEntry]:
             certification_track="candidate_generator_contract_only",
             blocked_reason=""
         )
+
+    registry["MARKET_EVENT_GRAPH_REVERSAL"] = StrategyRegistryEntry(
+        strategy_id="MARKET_EVENT_GRAPH_REVERSAL",
+        module_path="strategies/movement/market_event_graph_reversal.py",
+        strategy_kind="candidate_generator_strategy",
+        instrument_family="EQUITY_INDEX_OPTIONS",
+        callable_name="generate_market_event_graph_reversal_candidates",
+        certification_supported=False,
+        certification_track="shadow_live_observation_only",
+        blocked_reason="Underlying-only discovery; actual option premium validation and independent certification pending."
+    )
         
     # 3. Aggregate Engine
     registry["PRO_STRATEGY_ENGINE"] = StrategyRegistryEntry(
