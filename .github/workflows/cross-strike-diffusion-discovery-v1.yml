@@ -1,4 +1,4 @@
-name: Cross-Strike Diffusion Discovery V1
+name: Cross-Strike Diffusion Campaign V2
 
 on:
   workflow_dispatch:
@@ -7,12 +7,16 @@ on:
       - research/cross-strike-diffusion-discovery-v1
     paths:
       - 'scripts/run_cross_strike_diffusion_discovery_v1.py'
+      - 'scripts/run_cross_strike_diffusion_campaign_v2.py'
       - 'tests/research/test_cross_strike_diffusion_discovery_v1.py'
+      - 'tests/research/test_cross_strike_diffusion_campaign_v2.py'
       - '.github/workflows/cross-strike-diffusion-discovery-v1.yml'
   pull_request:
     paths:
       - 'scripts/run_cross_strike_diffusion_discovery_v1.py'
+      - 'scripts/run_cross_strike_diffusion_campaign_v2.py'
       - 'tests/research/test_cross_strike_diffusion_discovery_v1.py'
+      - 'tests/research/test_cross_strike_diffusion_campaign_v2.py'
       - '.github/workflows/cross-strike-diffusion-discovery-v1.yml'
 
 permissions:
@@ -57,23 +61,29 @@ jobs:
 
       - name: Run focused tests
         run: |
-          python -m pytest -q tests/research/test_cross_strike_diffusion_discovery_v1.py
+          python -m pytest -q \
+            tests/research/test_cross_strike_diffusion_discovery_v1.py \
+            tests/research/test_cross_strike_diffusion_campaign_v2.py
 
-      - name: Run frozen chronological WFA and holdout campaign
+      - name: Run frozen WFA and validation campaign
         run: |
-          python -m scripts.run_cross_strike_diffusion_discovery_v1 --repo-root "$GITHUB_WORKSPACE"
+          python -m scripts.run_cross_strike_diffusion_campaign_v2 --repo-root "$GITHUB_WORKSPACE"
 
-      - name: Verify fail-closed research boundaries
+      - name: Verify sealed master holdout and safety boundaries
         if: always()
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          path = Path('runtime/research/cross_strike_diffusion_discovery_v1/final_decision.json')
+          path = Path('runtime/research/cross_strike_diffusion_campaign_v2/final_decision.json')
           if not path.exists():
               raise SystemExit('Final decision missing.')
           payload = json.loads(path.read_text(encoding='utf-8'))
+          if payload.get('master_holdout_outcomes_materialized') is not False:
+              raise SystemExit('Master holdout was opened by a discovery runner.')
+          if payload.get('master_holdout_status') != 'SEALED_FOR_CROSS_FAMILY_FINAL_CERTIFICATION':
+              raise SystemExit('Master holdout status is not sealed.')
           if payload.get('research_only') is not True:
               raise SystemExit('Research-only flag missing.')
           if payload.get('paper_or_live_authorized') is not False:
@@ -87,9 +97,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cross-strike-diffusion-discovery-v1
+          name: cross-strike-diffusion-campaign-v2
           path: |
-            runtime/research/cross_strike_diffusion_discovery_v1/**
-            research/cross_strike_diffusion_discovery_v1/**
+            runtime/research/cross_strike_diffusion_campaign_v2/**
+            research/cross_strike_diffusion_campaign_v2/**
           if-no-files-found: error
           retention-days: 30
