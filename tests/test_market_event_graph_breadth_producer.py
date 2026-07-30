@@ -103,7 +103,7 @@ def test_does_not_match_open_ended_sequence_with_intervening_row():
     metadata = _metadata()
     metadata["completed_constituent_bars"] = [
         metadata["completed_constituent_bars"][0],
-        _bar(130.0, 120.0, negative_count=25, index_ret1=0.001),
+        _bar(130.0, 120.0, negative_count=5, index_ret1=0.001),
         metadata["completed_constituent_bars"][1],
         metadata["completed_constituent_bars"][2],
         metadata["completed_constituent_bars"][3],
@@ -322,7 +322,7 @@ def test_strategy_does_not_emit_when_graph_has_a_gap():
     metadata = _metadata()
     metadata["completed_constituent_bars"].insert(
         1,
-        _bar(130.0, 120.0, negative_count=25, index_ret1=0.001),
+        _bar(130.0, 120.0, negative_count=5, index_ret1=0.001),
     )
 
     assert generate_market_event_graph_reversal_candidates(_context(metadata), _regime()) == ()
