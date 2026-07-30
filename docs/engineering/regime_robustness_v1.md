@@ -4,7 +4,7 @@
 
 `DETERMINISTIC_IMPLEMENTATION_READY_LIVE_CERTIFICATION_PENDING`
 
-This branch repairs regime probability construction, entropy semantics, strategy-policy routing, and read-only evidence propagation without modifying feed, broker, order, execution, risk, tick-store, depth-store, or launcher modules.
+This branch repairs regime probability construction, entropy semantics, strategy-policy routing, scorer policy authority, and read-only evidence propagation without modifying feed, broker, order, execution, risk, tick-store, depth-store, or launcher modules.
 
 ## Defects repaired
 
@@ -21,10 +21,11 @@ This branch repairs regime probability construction, entropy semantics, strategy
 11. Entropy interpretation is centralized; real probability vectors cannot use circular label-based TREND/RANGE overrides.
 12. Real movement strategy IDs and legacy session labels now resolve to canonical policy families and buckets.
 13. Session, entropy, trend confirmation, stable-regime status, liquidity, event, no-trade, and unknown-strategy policies are enforced.
-14. Unknown strategies cannot inherit executable scorer buckets.
+14. Unknown strategies with regime context cannot inherit executable scorer buckets.
 15. Existing snapshot regime truth is preserved through StrategyContext metadata, candidate evidence, and scoring policy without new feed reads or network calls.
 16. Existing snapshot metadata, evidence, lineage, and strict boolean values remain preserved.
-17. A completed-bar stabilizer exists with duplicate suppression, confirmation bars, dwell, and a high-evidence EVENT/PANIC fast path; it is not live-authoritative.
+17. Regime policy authority is scoped to canonical strategies, movement-strategy lineage, or explicit regime evidence. Generic scorer-only candidates without those signals retain the established scorer contract.
+18. A completed-bar stabilizer exists with duplicate suppression, confirmation bars, dwell, and a high-evidence EVENT/PANIC fast path; it is not live-authoritative.
 
 ## Probability semantics
 
@@ -56,7 +57,9 @@ Actual runtime IDs are mapped into policy families:
 - event-volatility IDs -> `EVENT_VOLATILITY`;
 - explicit no-trade IDs -> `NO_TRADE`.
 
-Unknown strategies resolve to ADVISORY_ONLY for low/normal entropy and BLOCKED for high/extreme entropy. They never inherit executable scorer state.
+Unknown strategies with explicit regime evidence resolve to ADVISORY_ONLY for low/normal entropy and BLOCKED for high/extreme entropy. Unknown movement-strategy lineage is also governed even when regime evidence is absent, so it cannot inherit executable scorer state.
+
+Generic scorer-only fixtures and non-runtime candidates with no canonical strategy, no movement lineage, and no regime evidence remain outside regime-policy authority. This preserves the existing scorer contract without weakening runtime safety.
 
 ## Runtime safety boundary
 
@@ -99,7 +102,7 @@ PYTHONPATH=. python scripts/certify_regime_robustness_v1.py
 PYTHONPATH=. python scripts/certify_strategy_regime_policy_v2.py
 ```
 
-The focused suite contains 45 tests. The two runners contain 26 independent checks covering probability truth, structural separation, mixed-state uncertainty, model schema, policy aliases, session routing, unknown-strategy downgrade, and completed-bar hysteresis. Final pass results must come from CI on the current branch head.
+The focused suite contains 47 tests. The two runners contain 26 independent checks covering probability truth, structural separation, mixed-state uncertainty, model schema, policy aliases, session routing, unknown-strategy policy, and completed-bar hysteresis. The focused tests additionally prove both sides of scorer policy authority: runtime movement candidates remain fail-closed, while generic scorer-only candidates retain compatibility. Final pass results must come from CI on the current branch head.
 
 ## Known integration limits
 
