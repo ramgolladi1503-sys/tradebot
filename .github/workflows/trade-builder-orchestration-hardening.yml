@@ -12,10 +12,12 @@ on:
       - "core/trade_builder_stage_pipeline.py"
       - "core/orchestrator_stage_pipeline.py"
       - "scripts/run_architecture_hardening_campaign.py"
+      - "scripts/audit_kite_candidate_replay_corpus.py"
       - "tests/test_execution_decision_contract.py"
       - "tests/test_runtime_authority_audit.py"
       - "tests/test_architecture_hardening_proofs.py"
       - "tests/test_architecture_hardening_campaign.py"
+      - "tests/test_kite_candidate_replay_corpus_audit.py"
       - "docs/architecture/trade_builder_orchestration_hardening_v1.md"
       - ".github/workflows/trade-builder-orchestration-hardening.yml"
   workflow_dispatch:
@@ -34,8 +36,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install focused test dependency
-        run: python -m pip install --upgrade pip pytest
+      - name: Install focused test dependencies
+        run: python -m pip install --upgrade pip pytest pandas pyarrow
       - name: Compile hardening modules
         run: |
           python -m py_compile \
@@ -48,10 +50,12 @@ jobs:
             core/trade_builder_stage_pipeline.py \
             core/orchestrator_stage_pipeline.py \
             scripts/run_architecture_hardening_campaign.py \
+            scripts/audit_kite_candidate_replay_corpus.py \
             tests/test_execution_decision_contract.py \
             tests/test_runtime_authority_audit.py \
             tests/test_architecture_hardening_proofs.py \
-            tests/test_architecture_hardening_campaign.py
+            tests/test_architecture_hardening_campaign.py \
+            tests/test_kite_candidate_replay_corpus_audit.py
       - name: Run focused tests
         env:
           DISABLE_ML: "true"
@@ -60,7 +64,8 @@ jobs:
             tests/test_execution_decision_contract.py \
             tests/test_runtime_authority_audit.py \
             tests/test_architecture_hardening_proofs.py \
-            tests/test_architecture_hardening_campaign.py
+            tests/test_architecture_hardening_campaign.py \
+            tests/test_kite_candidate_replay_corpus_audit.py
       - name: Prove feed implementation untouched
         shell: bash
         run: |
