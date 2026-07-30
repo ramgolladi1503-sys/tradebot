@@ -11,6 +11,7 @@ class AuthorityKind(str, Enum):
     EXECUTION = "EXECUTION"
     EXECUTION_GUARD = "EXECUTION_GUARD"
     CANDIDATE_CONSTRUCTION = "CANDIDATE_CONSTRUCTION"
+    CANDIDATE_SELECTION = "CANDIDATE_SELECTION"
     UI_ONLY = "UI_ONLY"
     RESEARCH_ONLY = "RESEARCH_ONLY"
     OBSERVABILITY_ONLY = "OBSERVABILITY_ONLY"
@@ -74,13 +75,13 @@ _STAGES: tuple[RuntimeAuthorityStage, ...] = (
     ),
     RuntimeAuthorityStage(
         40,
-        "legacy_opportunity_engine",
+        "legacy_opportunity_selection",
         "core.opportunity_engine",
-        "annotate_ranked_opportunities",
-        AuthorityKind.UNKNOWN_PENDING_PROOF,
+        "select_best_opportunity",
+        AuthorityKind.CANDIDATE_SELECTION,
         True,
         False,
-        "Imported by legacy builder, but execution authority must be proven by call-path evidence.",
+        "TradeBuilder uses this selector to choose best_trade before downstream risk, manual approval and execution guards.",
     ),
     RuntimeAuthorityStage(
         50,
@@ -100,7 +101,7 @@ _STAGES: tuple[RuntimeAuthorityStage, ...] = (
         AuthorityKind.UI_ONLY,
         True,
         False,
-        "Writes dashboard/evidence snapshots; must never create broker intents.",
+        "Writes dashboard and evidence snapshots; must never create broker intents.",
     ),
     RuntimeAuthorityStage(
         70,
@@ -110,7 +111,7 @@ _STAGES: tuple[RuntimeAuthorityStage, ...] = (
         AuthorityKind.EXECUTION_GUARD,
         True,
         False,
-        "Risk authority must remain downstream of candidate construction.",
+        "Risk authority remains downstream of candidate selection.",
     ),
     RuntimeAuthorityStage(
         80,
@@ -141,6 +142,11 @@ def validate_runtime_authority_map(
     execution_stages = [row for row in rows if row.authority is AuthorityKind.EXECUTION]
     if len(execution_stages) != 1:
         errors.append("execution_authority_must_be_unique")
+    selection_stages = [
+        row for row in rows if row.authority is AuthorityKind.CANDIDATE_SELECTION
+    ]
+    if len(selection_stages) != 1:
+        errors.append("candidate_selection_authority_must_be_unique")
     for row in rows:
         if row.authority in {
             AuthorityKind.UI_ONLY,
