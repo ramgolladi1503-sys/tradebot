@@ -1,0 +1,162 @@
+name: QA Truth Baseline
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: qa-truth-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test_integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Prove integrity auditor behavior
+        run: PYTHONPATH=. pytest -q tests/test_test_integrity_audit.py
+
+      - name: Audit repository test integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--roots tests testing/tests --report-dir .runtime/qa)
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            args+=(--changed-base "origin/${{ github.base_ref }}")
+          fi
+          PYTHONPATH=. python scripts/audit_test_integrity.py "${args[@]}"
+
+      - name: Upload test integrity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-integrity-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/qa/test_integrity_report.json
+            .runtime/qa/test_integrity_report.md
+
+  auth_behavior_coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .
+      DATA_ROOT: ${{ github.workspace }}/.runtime
+      EXECUTION_MODE: PAPER
+      KITE_USE_API: "false"
+      KITE_ALLOW_ENV_TOKEN_FOR_CI: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and coverage tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+
+      - name: Run authentication behavior and branch coverage baseline
+        run: >-
+          PYTHONPATH=. pytest -q -o addopts=''
+          tests/auth/test_auth_manager_behavior_contracts.py
+          tests/auth/test_auth_safety.py
+          tests/test_kite_client_auth_guard.py
+          tests/test_runtime_auth_freshness.py
+          --cov=core.auth_manager
+          --cov=core.auth
+          --cov-branch
+          --cov-report=term-missing
+          --cov-report=json:.runtime/qa/auth_coverage.json
+          --junitxml=.runtime/qa/auth_pytest.xml
+
+      - name: Upload authentication QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-qa-evidence
+          if-no-files-found: error
+          path: |
+            .runtime/qa/auth_coverage.json
+            .runtime/qa/auth_pytest.xml
+
+  auth_static_security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit
+
+      - name: Scan authentication boundary for medium/high findings
+        run: |
+          mkdir -p .runtime/qa
+          bandit -r core/auth.py core/auth_manager.py -ll -f json -o .runtime/qa/bandit_auth.json
+
+      - name: Upload Bandit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-static-security-evidence
+          if-no-files-found: error
+          path: .runtime/qa/bandit_auth.json
+
+  dependency_vulnerability_audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit declared dependencies
+        run: |
+          mkdir -p .runtime/qa
+          pip-audit -r requirements.txt --format json --output .runtime/qa/pip_audit.json
+
+      - name: Upload dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-evidence
+          if-no-files-found: error
+          path: .runtime/qa/pip_audit.json
