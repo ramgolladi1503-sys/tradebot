@@ -1,0 +1,1 @@
+{"captured_at_utc":"2026-07-30T05:08:40Z","event_type":"PREFLIGHT_BLOCKER","exception_type":"LIVE_CAPTURE_SOURCE_UNRESOLVED","reconnect_attempted":false,"restart_attempted":false,"broker_api_called":false,"order_api_called":false,"reason":"No live captured metadata JSONL source was resolved."}

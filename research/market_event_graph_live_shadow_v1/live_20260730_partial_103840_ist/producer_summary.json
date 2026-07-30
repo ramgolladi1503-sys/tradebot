@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "intervals_observed": 0,
+  "accepted_intervals": 0,
+  "rejected_intervals": 0,
+  "valid_ratio": 0.0,
+  "minimum_intervals_required": 60,
+  "minimum_valid_ratio_required": 0.9,
+  "minimum_constituents_required": 40,
+  "future_source_end_violations": 0,
+  "verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "reason": "No live captured metadata JSONL source was available to feed the producer."
+}

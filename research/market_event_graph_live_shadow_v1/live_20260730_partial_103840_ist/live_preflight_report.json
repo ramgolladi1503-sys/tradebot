@@ -1,0 +1,58 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "captured_at_asia_kolkata": "2026-07-30T10:38:40+0530",
+  "market_session_observation": {
+    "exchange": "NSE",
+    "session_date": "2026-07-30",
+    "observation_started_after_open": true,
+    "start_time_asia_kolkata": "2026-07-30T10:38:40+0530",
+    "standard_cash_market_open_asia_kolkata": "2026-07-30T09:15:00+0530",
+    "missed_wall_clock_minutes_after_open": 83,
+    "missed_interval_count_estimate_1m": 83,
+    "full_session_certification_allowed": false,
+    "partial_session_reason": "Preflight began after the normal NSE open and no already-running captured metadata source was found."
+  },
+  "captured_metadata_source": {
+    "status": "UNRESOLVED",
+    "input_jsonl_path": null,
+    "reachable": false,
+    "reason": "The durable command requires --input PATH_TO_LIVE_CAPTURED_METADATA_JSONL, and repository/runtime searches found no current live captured metadata JSONL source."
+  },
+  "live_constituent_universe_source": {
+    "status": "UNRESOLVED",
+    "source_path": null,
+    "constituent_count": null,
+    "identities_recorded": false,
+    "reason": "No live captured metadata source was resolved, so constituent identities could not be proven from the actual live path."
+  },
+  "bar_semantics": {
+    "completed_bar_required": true,
+    "completed_bar_semantics_proven_from_live_source": false,
+    "timezone": "Asia/Kolkata",
+    "interval": "UNPROVEN_FROM_LIVE_SOURCE"
+  },
+  "quote_and_fallback_observability": {
+    "quote_ledger_written": false,
+    "fallback_path_observed": false,
+    "reason": "No raw live intervals were available to audit."
+  },
+  "storage": {
+    "artifact_directory": "research/market_event_graph_live_shadow_v1/live_20260730_partial_103840_ist",
+    "writable": true
+  },
+  "authority_isolation": {
+    "broker_reachability_attempted": false,
+    "order_reachability_attempted": false,
+    "secrets_read": false,
+    "read_only": true,
+    "is_order_action": false,
+    "broker_api_called": false,
+    "allowed_for_live_execution": false
+  },
+  "restart_duplicate_control": {
+    "restart_executed": false,
+    "duplicate_replay_check_executed": false,
+    "reason": "No observation process was started because the live metadata input path was unresolved."
+  },
+  "preflight_verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE"
+}

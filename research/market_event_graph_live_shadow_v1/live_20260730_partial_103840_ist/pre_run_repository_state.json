@@ -1,0 +1,33 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "captured_at_asia_kolkata": "2026-07-30T10:38:40+0530",
+  "worktree": "/Users/madhuram/tradebot-market-event-graph-live-shadow-v1",
+  "branch": "integration/market-event-graph-live-shadow-v1",
+  "head": "97d8db23398ea834c1bd04e940a40011442a062e",
+  "origin_main": "17262b4b6a42eb09d4d508bfdf6fe0d649ee32af",
+  "expected_head_from_task": "97d8db23398ea834c1bd04e940a40011442a062e",
+  "expected_head_matches": true,
+  "pr": {
+    "number": 748,
+    "state": "OPEN",
+    "draft": true,
+    "head_ref": "integration/market-event-graph-live-shadow-v1",
+    "head_oid": "97d8db23398ea834c1bd04e940a40011442a062e",
+    "base_ref": "main",
+    "merge_state_status": "CLEAN",
+    "url": "https://github.com/ramgolladi1503-sys/tradebot/pull/748"
+  },
+  "worktree_state_before_artifact_creation": {
+    "short_branch_status": "## integration/market-event-graph-live-shadow-v1...origin/integration/market-event-graph-live-shadow-v1",
+    "dirty": false
+  },
+  "github_check_summary_before_artifact_creation": {
+    "head_oid": "97d8db23398ea834c1bd04e940a40011442a062e",
+    "total": 18,
+    "success": 17,
+    "skipped": 1,
+    "failure": 0,
+    "pending": 0,
+    "note": "GitHub check rollup was green at the pre-run head. The skipped check was the gitleaks job in the tests workflow; a separate gitleaks check succeeded."
+  }
+}

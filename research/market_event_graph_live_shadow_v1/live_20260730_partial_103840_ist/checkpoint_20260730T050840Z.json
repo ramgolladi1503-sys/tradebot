@@ -1,0 +1,14 @@
+{
+  "checkpoint_at_utc": "2026-07-30T05:08:40Z",
+  "checkpoint_at_asia_kolkata": "2026-07-30T10:38:40+0530",
+  "observation_running": false,
+  "accepted_intervals": 0,
+  "rejected_intervals": 0,
+  "raw_interval_rows": 0,
+  "graph_rows": 0,
+  "candidate_rows": 0,
+  "quote_rows": 0,
+  "exception_rows": 1,
+  "verdict_so_far": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "reason": "Preflight failed closed before observation start because the live captured metadata input path was unresolved."
+}

@@ -1,0 +1,61 @@
+{
+  "evaluated_at_utc": "2026-07-30T05:08:40Z",
+  "frozen_contract_sha256": "3c65141518299ebe9fc176a1c192d42e894b50891213bbafa1fc1c140f3b6240",
+  "verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "gates": [
+    {
+      "gate": "observation_mode_live",
+      "required": "LIVE",
+      "observed": "NOT_STARTED_NO_INPUT",
+      "status": "FAIL"
+    },
+    {
+      "gate": "captured_metadata_source_reachable",
+      "required": true,
+      "observed": false,
+      "status": "FAIL"
+    },
+    {
+      "gate": "constituent_universe_resolved_from_live_path",
+      "required": true,
+      "observed": false,
+      "status": "FAIL"
+    },
+    {
+      "gate": "minimum_intervals",
+      "required": 60,
+      "observed": 0,
+      "status": "FAIL"
+    },
+    {
+      "gate": "minimum_valid_ratio",
+      "required": 0.9,
+      "observed": 0.0,
+      "status": "FAIL"
+    },
+    {
+      "gate": "minimum_constituents_per_accepted_interval",
+      "required": 40,
+      "observed": null,
+      "status": "UNEVALUATED_NO_LIVE_INTERVALS"
+    },
+    {
+      "gate": "completed_bar_semantics",
+      "required": true,
+      "observed": false,
+      "status": "UNEVALUATED_NO_LIVE_INTERVALS"
+    },
+    {
+      "gate": "future_source_end_violations",
+      "required": 0,
+      "observed": 0,
+      "status": "PASS_NO_ROWS"
+    },
+    {
+      "gate": "authority_isolation",
+      "required": "read_only_no_broker_no_order_no_live_execution",
+      "observed": "read_only_no_broker_no_order_no_live_execution",
+      "status": "PASS"
+    }
+  ]
+}

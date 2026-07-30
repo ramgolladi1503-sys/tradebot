@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "candidate_rows": 0,
+  "hypothetical_outcome_rows": 0,
+  "orders_or_broker_calls": 0,
+  "read_only": true,
+  "is_order_action": false,
+  "broker_api_called": false,
+  "allowed_for_live_execution": false,
+  "verdict": "PRESERVED_NO_LIVE_AUTHORITY"
+}

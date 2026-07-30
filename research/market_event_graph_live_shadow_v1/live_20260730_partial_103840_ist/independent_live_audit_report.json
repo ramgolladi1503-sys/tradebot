@@ -1,0 +1,26 @@
+{
+  "audited_at_utc": "2026-07-30T05:08:40Z",
+  "auditor": "codex_independent_live_evidence_audit",
+  "source_artifacts": [
+    "raw_live_interval_evidence.jsonl",
+    "breadth_ledger.jsonl",
+    "graph_ledger.jsonl",
+    "candidate_trace.jsonl",
+    "quote_ledger.jsonl",
+    "exception_reconnect_restart_ledger.jsonl"
+  ],
+  "recomputed_counts": {
+    "raw_live_interval_rows": 0,
+    "accepted_intervals": 0,
+    "breadth_rows": 0,
+    "graph_rows": 0,
+    "candidate_rows": 0,
+    "quote_rows": 0,
+    "exception_rows": 1
+  },
+  "frozen_contract_sha256": "3c65141518299ebe9fc176a1c192d42e894b50891213bbafa1fc1c140f3b6240",
+  "stage_a_requirements_met": false,
+  "authority_isolation_verified": true,
+  "verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "reason": "Independent recount found zero raw live intervals; Stage A live breadth cannot be certified."
+}

@@ -1,0 +1,8 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "previous_stage_b_artifact": "research/market_event_graph_live_shadow_v1/stage_b_report.json",
+  "previous_stage_b_verdict": "PASS_GRAPH_FORWARD_SHADOW_CORRECTNESS",
+  "new_live_stage_b_rows": 0,
+  "preservation_verdict": "PRESERVED",
+  "statement": "This live evidence package does not overwrite or weaken the existing replay-backed Stage B result. No new live graph-forward rows were produced because Stage A live capture preflight failed closed."
+}

@@ -1,0 +1,25 @@
+{
+  "generated_at_utc": "2026-07-30T05:08:40Z",
+  "artifact_directory": "research/market_event_graph_live_shadow_v1/live_20260730_partial_103840_ist",
+  "frozen_contract_sha256": "3c65141518299ebe9fc176a1c192d42e894b50891213bbafa1fc1c140f3b6240",
+  "files": {
+    "breadth_ledger.jsonl": "cfe42f45b01f7bee72b51eb3b5c3880baa862a907c46d0149a42168cf748411b",
+    "candidate_trace.jsonl": "8bdcbc63ade7fc40b246bfc89f4094b8861880452873824e951eab41ff0f65f0",
+    "checkpoint_20260730T050840Z.json": "0119efcefef357a1be799d6a8155c60209d4a97a1d88c0717d7fd5a9a4a3e53c",
+    "command_invocation_and_environment.json": "3c4780d7e8d5adeb68c90b6c837867b420b0cca9d7dcf0ee00f29be6d4f72fe7",
+    "exception_reconnect_restart_ledger.jsonl": "8819e88e6bd656165dd07ba309a09e0edaca94db3ffddc48b7c2c95462a147c6",
+    "frozen_stage_a_gate_inventory.json": "723edcb2561314a46f758ecd9965d6a3d3b401ecd67acb3e27e34aaa64f731b3",
+    "graph_ledger.jsonl": "a99d25fa8cfd5a5af9ae721c2fd46fae710345798e5e241d1d8d86a78c47a61c",
+    "hypothetical_separation_evidence.json": "56e7f6d73a79b3ccd6b4c780e2955d418951a353dae867e3b0bf79c4fede2efc",
+    "independent_live_audit_report.json": "a19c98e85d1bd98a81f09c6e55a25b2f64a3ae03c87c13496a18f1069bef2bbb",
+    "live_constituent_universe_manifest.json": "94d66bd29d119e50e972d5b77766ac7d2a75673284ed1565aefd44eeee82dae7",
+    "live_preflight_report.json": "3c569d6cf2710d59b7bb610aafa8636454488a399ad233289b7befae340968c5",
+    "pre_run_repository_state.json": "d8c9d11e35be3ef8627c85766101028c8d029d9c2523085b5d2e66fd6bd90ded",
+    "principal_final_verdict.json": "d1d395c6183f3a42e0a641b2042c960fc4ae117f3675e7fc7d3091066e551d36",
+    "producer_summary.json": "ed8ba7d4f5087c1c47d2b390d30e70d89109900228d9be0fe57fea2a9ea23728",
+    "quote_ledger.jsonl": "93554f631fce67ea6e06d9388e742f2abc53e2db7bfb2f6703f39a738f953a80",
+    "raw_live_interval_evidence.jsonl": "9deeab26dd87305bfa5fee3875d5658a093a11bb74f168fef3c7b795e0b20187",
+    "stage_a_gate_matrix.json": "ca36bf8efcc77745cca15be6140fb61cf4d1b8463d6c19d019c88e1244428c80",
+    "stage_b_preservation_statement.json": "3b5cb32b06dc6f22d3585bb4557ca27725261022011029dd730cc65c40602161"
+  }
+}

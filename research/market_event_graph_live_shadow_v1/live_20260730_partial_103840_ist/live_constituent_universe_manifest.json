@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "status": "UNRESOLVED_NO_LIVE_SOURCE",
+  "source": null,
+  "constituent_count": null,
+  "constituents": [],
+  "identities_recorded_from_actual_live_path": false,
+  "minimum_constituents_required": 40,
+  "verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE"
+}

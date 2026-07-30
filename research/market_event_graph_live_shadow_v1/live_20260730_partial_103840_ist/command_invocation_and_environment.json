@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "durable_command_source": "research/market_event_graph_live_shadow_v1/live_observation_command.txt",
+  "durable_command_sha256": "efc1839b60ed089b1178eac19f9b02668dab7111d0b2c75c3dfae3698106e7cc",
+  "durable_command_text": "python scripts/run_market_event_graph_live_shadow_v1.py --input PATH_TO_LIVE_CAPTURED_METADATA_JSONL --output research/market_event_graph_live_shadow_v1 --mode LIVE",
+  "execution_status": "NOT_EXECUTED",
+  "not_executed_reason": "The command contains a placeholder input path and no actual live captured metadata JSONL path was discoverable in the worktree/runtime/log/data paths.",
+  "environment": {
+    "cwd": "/Users/madhuram/tradebot-market-event-graph-live-shadow-v1",
+    "python_entrypoint": "scripts/run_market_event_graph_live_shadow_v1.py",
+    "mode": "LIVE",
+    "secrets_or_credentials_read": false,
+    "broker_or_order_api_called": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "finalized_at_utc": "2026-07-30T05:08:40Z",
+  "finalized_at_asia_kolkata": "2026-07-30T10:38:40+0530",
+  "stage_a_live_verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "stage_b_preserved_verdict": "PASS_GRAPH_FORWARD_SHADOW_CORRECTNESS",
+  "independent_live_audit_verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "principal_verdict": "INSUFFICIENT_LIVE_BREADTH_EVIDENCE",
+  "certification": {
+    "stage_a_live_certified": false,
+    "stage_b_replay_shadow_preserved": true,
+    "production_ready_claimed": false,
+    "paper_ready_claimed": false,
+    "broker_success_claimed": false
+  },
+  "blockers": [
+    "No reachable live captured metadata JSONL source was found for the durable LIVE command.",
+    "Observation preflight began after the normal 2026-07-30 market open, so a full-session live certification would not be valid from a new start.",
+    "No live constituent universe identities were proven from the actual live path.",
+    "No raw live intervals, breadth rows, graph rows, candidate rows, or quote rows were available for independent certification."
+  ]
+}

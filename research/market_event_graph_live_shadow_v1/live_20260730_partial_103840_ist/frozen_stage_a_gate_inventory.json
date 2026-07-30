@@ -1,0 +1,52 @@
+{
+  "captured_at_utc": "2026-07-30T05:08:40Z",
+  "gate_anchor": {
+    "contract_path": "research/market_event_graph_live_shadow_v1/frozen_runtime_contract.json",
+    "contract_sha256": "3c65141518299ebe9fc176a1c192d42e894b50891213bbafa1fc1c140f3b6240",
+    "live_observation_command_path": "research/market_event_graph_live_shadow_v1/live_observation_command.txt",
+    "live_observation_command_sha256": "efc1839b60ed089b1178eac19f9b02668dab7111d0b2c75c3dfae3698106e7cc"
+  },
+  "stage_a_thresholds": {
+    "observation_mode_required": "LIVE",
+    "minimum_intervals": 60,
+    "minimum_valid_ratio": 0.9,
+    "minimum_constituents": 40,
+    "future_source_end_violations_allowed": 0
+  },
+  "required_interval_fields": [
+    "session_date",
+    "ts_epoch",
+    "source_bar_end_epoch",
+    "index_bar_available",
+    "completed_constituent_bars",
+    "expected_constituents",
+    "frozen_thresholds",
+    "frozen_graph",
+    "frozen_discovery_spec_sha256",
+    "runtime_state"
+  ],
+  "rejection_taxonomy": [
+    "MISSING_INDEX_BAR",
+    "MISSING_CONSTITUENT_BARS",
+    "INSUFFICIENT_COVERAGE",
+    "PARTIAL_INTERVAL",
+    "TIMESTAMP_MISALIGNMENT",
+    "NON_MONOTONIC_TS",
+    "NON_MONOTONIC_SOURCE_BAR_END",
+    "DUPLICATE_INTERVAL",
+    "STALE_CONSTITUENT",
+    "MALFORMED_ROW",
+    "FROZEN_PROVENANCE_MISMATCH",
+    "RUNTIME_STATE_INVALID",
+    "SESSION_MISMATCH",
+    "NO_GRAPH_EVENT",
+    "ACCEPTED"
+  ],
+  "execution_authority_constraints": {
+    "read_only": true,
+    "is_order_action": false,
+    "broker_api_called": false,
+    "allowed_for_live_execution": false,
+    "append": false
+  }
+}
